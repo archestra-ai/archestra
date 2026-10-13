@@ -15,6 +15,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import db, { schema } from "@/database";
 import {
   AgentModel,
@@ -26,6 +27,8 @@ import {
   OAuthClientModel,
   VirtualApiKeyModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import ServiceAccountModel from "@/models/service-account";
 import authRoutes from "@/routes/auth";
 import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import {
@@ -658,6 +661,99 @@ describe("model router proxy routes", () => {
     vi.restoreAllMocks();
   });
 
+  test("service-account credentials retain their principal through Model Router and stop working when disabled", async ({
+    makeOrganization,
+    makeServiceAccount,
+    makeAgent,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    const org = await makeOrganization();
+    const account = await makeServiceAccount(org.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+      isDefault: true,
+    });
+    await upsertModel({ provider: "openai", modelId: "gpt-4o" });
+    const model = await ModelModel.findByProviderAndModelId("openai", "gpt-4o");
+    if (!model) throw new Error("model not persisted");
+    const target = {
+      organizationId: org.id,
+      resource: "llmModel" as const,
+      scope: model.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(target);
+    await ResourcePermissionPolicyModel.replace({
+      ...target,
+      revision: policy?.revision ?? 0,
+      grants: [
+        {
+          subject: { type: "serviceAccount", id: account.id },
+          actions: ["read", "use"],
+        },
+      ],
+    });
+    const secret = await makeSecret({ secret: { apiKey: "sk-test" } });
+    const providerKey = await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+    });
+    await linkAllProviderModelsToApiKey("openai", providerKey.id);
+    const virtual = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "worker",
+      authorId: serviceAccountUserId(account.id),
+      providerApiKeys: [
+        { provider: "openai", providerApiKeyId: providerKey.id },
+      ],
+    });
+    const { oauthClient } = await LlmOauthClientModel.create({
+      organizationId: org.id,
+      authorId: crypto.randomUUID(),
+      name: "worker",
+      serviceAccountId: account.id,
+      providerApiKeys: [
+        { provider: "openai", providerApiKeyId: providerKey.id },
+      ],
+    });
+    const token = crypto.randomUUID();
+    await OAuthAccessTokenModel.createClientCredentialsToken({
+      tokenHash: OAuthAccessTokenModel.hashTokenForLookup(token),
+      clientId: oauthClient.clientId,
+      scopes: [LLM_PROXY_OAUTH_SCOPE],
+      expiresAt: new Date(Date.now() + 3600000),
+    });
+    const request = (credential: string) =>
+      app.inject({
+        method: "POST",
+        url: `/v1/model-router/${agent.id}/chat/completions`,
+        headers: { authorization: `Bearer ${credential}` },
+        payload: {
+          model: "openai:gpt-4o",
+          messages: [{ role: "user", content: "Hello" }],
+        },
+      });
+    for (const credential of [virtual.value, token]) {
+      const response = await request(credential);
+      expect(response.statusCode, response.body).toBe(200);
+    }
+    const interactions = await db
+      .select()
+      .from(schema.interactionsTable)
+      .where(eq(schema.interactionsTable.profileId, agent.id));
+    expect(interactions).toHaveLength(2);
+    expect(
+      interactions.every(
+        (row) => row.serviceAccountId === account.id && row.userId === null,
+      ),
+    ).toBe(true);
+    await ServiceAccountModel.update(account.id, org.id, { disabled: true });
+    for (const credential of [virtual.value, token])
+      expect((await request(credential)).statusCode).toBe(401);
+    await app.close();
+  });
   for (const { provider, modelId } of ROUTABLE_PROVIDER_CASES) {
     test(`routes ${provider} models through chat completions`, async ({
       makeAgent,

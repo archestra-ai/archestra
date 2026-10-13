@@ -18,18 +18,24 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import mcpGatewayRoutes from "./index";
-import { pendingInboundRequests } from "./pending-inbound-requests";
+import { PendingInboundRequests } from "./pending-inbound-requests";
+import { cachedPendingRequests } from "./pending-inbound-shared";
 import { MCP_CLIENT_CAPABILITIES_META_KEY } from "./protocol";
+
+// Pending forms are shared through the cache so any replica can take an answer.
+setupTestCacheManager();
 
 describe("MCP Gateway - in-band elicitation round trip", () => {
   let app: FastifyInstance;
+  let pendingInboundRequests: PendingInboundRequests;
 
   beforeEach(async () => {
-    app = Fastify().withTypeProvider<ZodTypeProvider>();
-    app.setValidatorCompiler(validatorCompiler);
-    app.setSerializerCompiler(serializerCompiler);
-    await app.register(mcpGatewayRoutes);
+    pendingInboundRequests = new PendingInboundRequests({
+      shared: cachedPendingRequests,
+    });
+    app = await gatewayApp(pendingInboundRequests);
   });
 
   afterEach(async () => {
@@ -236,6 +242,93 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
     });
   });
 
+  test("a legacy client's answer reaches the replica that asked when the load balancer sends it to another", async ({
+    makeAgent,
+    makeOrganization,
+    makeServiceAccountToken,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
+    // A second replica: its own routes and registry, the same shared cache.
+    const otherReplica = await gatewayApp(
+      new PendingInboundRequests({ shared: cachedPendingRequests }),
+    );
+    try {
+      const urlOf = async (replica: FastifyInstance) => {
+        await replica.listen({ port: 0, host: "127.0.0.1" });
+        const { port } = replica.server.address() as AddressInfo;
+        return `http://127.0.0.1:${port}/v1/mcp/${agent.id}`;
+      };
+      const asking = await urlOf(app);
+      const other = await urlOf(otherReplica);
+      const post = (url: string, body: unknown) =>
+        fetch(url, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            accept: "application/json, text/event-stream",
+            authorization: `Bearer ${token.value}`,
+          },
+          body: JSON.stringify(body),
+        });
+
+      await (
+        await post(asking, {
+          jsonrpc: "2.0",
+          method: "initialize",
+          params: {
+            protocolVersion: "2025-06-18",
+            capabilities: { elicitation: {} },
+            clientInfo: { name: "legacy-test-client", version: "1" },
+          },
+          id: 1,
+        })
+      ).arrayBuffer();
+      const call = readEvents(
+        await post(asking, {
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: {
+            name: "archestra__ask_user",
+            arguments: {
+              question: "Accept this change for the rest of this session?",
+              options: [
+                { label: "Accept for this session" },
+                { label: "Do not accept" },
+              ],
+            },
+          },
+          id: 2,
+        }),
+      );
+      const question = await call.next();
+      expect(question.method).toBe("elicitation/create");
+
+      const answer = await post(other, {
+        jsonrpc: "2.0",
+        id: question.id,
+        result: {
+          action: "accept",
+          content: { choice: "Accept for this session" },
+        },
+      });
+      expect(answer.status).toBe(202);
+
+      expect(await call.next()).toMatchObject({
+        id: 2,
+        result: {
+          structuredContent: {
+            action: "accept",
+            selected: ["Accept for this session"],
+          },
+        },
+      });
+    } finally {
+      await otherReplica.close();
+    }
+  });
+
   test("a client without elicitation keeps a plain JSON response", async ({
     makeAgent,
     makeOrganization,
@@ -300,7 +393,7 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
       onmessage,
     } as unknown as StreamableHTTPServerTransport;
     const caller = `token:${token.tokenId}`;
-    const wireId = pendingInboundRequests.register({
+    const wireId = await pendingInboundRequests.register({
       id: 17,
       transport,
       agentId: agent.id,
@@ -617,6 +710,17 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
     });
   });
 });
+
+/** One replica: the gateway routes with its own pending-request registry. */
+async function gatewayApp(
+  pendingRequests: PendingInboundRequests,
+): Promise<FastifyInstance> {
+  const app = Fastify().withTypeProvider<ZodTypeProvider>();
+  app.setValidatorCompiler(validatorCompiler);
+  app.setSerializerCompiler(serializerCompiler);
+  await app.register(mcpGatewayRoutes, { pendingRequests });
+  return app;
+}
 
 /** Reads the SSE frames of a gateway response one JSON-RPC message at a time. */
 function readEvents(response: Response) {

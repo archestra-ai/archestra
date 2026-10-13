@@ -4,7 +4,6 @@ import {
   TOOL_RUN_COMMAND_SHORT_NAME,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { userHasPermission } from "@/auth";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
@@ -19,8 +18,8 @@ import {
   openappaDeclarations,
   type PolicyResolution,
 } from "@/openappa/declarations";
-import { parsePolicyToml } from "@/openappa/policy-text";
 import { GUARDRAILS_NOOP_ANNOTATOR_PATH } from "@/routes/route-paths";
+import { CredentialAccess } from "@/services/credential-access";
 import { ApiError } from "@/types";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
 import type { PolicyTestFile } from "@/types/openappa-policy-tests";
@@ -198,7 +197,6 @@ export const guardrailsPolicyService = {
             : `include: no battery answers ${JSON.stringify(entry.entry)}`,
         );
     errors.push(...duplicateEntryErrors(resolution));
-    if (statesResultBodyLimit(content)) warnings.push(RESULT_BODY_LIMIT_NOTE);
     if (errors.length === 0) {
       const composed = await openappaDeclarations.composeForCheck({
         root: content,
@@ -238,10 +236,7 @@ export const guardrailsPolicyService = {
     requireEnabled();
     const { organizationId, userId, content } = params;
     if ((await OpenAppaGithubSyncModel.find(organizationId))?.interval)
-      throw new ApiError(
-        409,
-        "Stop GitHub syncing before editing this policy.",
-      );
+      throw new ApiError(409, "Stop Git sync before editing this policy.");
     const latest = await this.get(organizationId);
     const resolved = await resolveBoth({
       organizationId,
@@ -294,23 +289,28 @@ export const guardrailsPolicyService = {
   },
 };
 
-/** A write that adds or rekeys a credential grant takes `credential:update`. */
+/**
+ * A write that adds or rekeys a credential grant hands that credential's value
+ * to helper code, so it takes `use` on the credential. A key with no credential
+ * behind it yet would hand over whichever one is created under it later, so it
+ * takes `use` on every credential.
+ */
 export async function requireGrantPermission(params: {
   organizationId: string;
   userId: string;
   granted: ReturnType<typeof addedGrants>;
 }): Promise<void> {
   const { organizationId, userId, granted } = params;
-  if (
-    granted.length > 0 &&
-    !(await userHasPermission(userId, organizationId, "credential", "update"))
-  )
-    throw new ApiError(
-      403,
-      `Credential update permission is required: this policy hands ${granted
-        .map((grant) => `${grant.variable} to ${grant.battery}`)
-        .join(", ")}`,
-    );
+  const message = `Use access to the credential is required: this policy hands ${granted
+    .map((grant) => `${grant.variable} to ${grant.battery}`)
+    .join(", ")}`;
+  for (const key of new Set(granted.map((grant) => grant.key)))
+    await CredentialAccess.requireUseOfKey({
+      organizationId,
+      userId,
+      key,
+      message,
+    });
 }
 
 function requireEnabled() {
@@ -396,17 +396,4 @@ builtin = "hitl"
 [externals.annotators.noop]
 url = "${noopAnnotatorUrl()}"
 `;
-}
-
-const RESULT_BODY_LIMIT_NOTE =
-  "externals.max_body_bytes has no effect: the platform sets the body size limit from its LLM proxy body limit.";
-
-/** Whether the document's `[externals]` table states `max_body_bytes`. */
-function statesResultBodyLimit(content: string): boolean {
-  const externals = parsePolicyToml(content)?.externals;
-  return (
-    typeof externals === "object" &&
-    externals !== null &&
-    "max_body_bytes" in externals
-  );
 }

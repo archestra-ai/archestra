@@ -1,6 +1,6 @@
 {
-  "id": "623bb062-e905-4525-bd87-cbcc1f7cef72",
-  "prevId": "19644f67-8172-4ec3-a199-cec4a88e4c4e",
+  "id": "279670c1-c100-436d-88ee-e45ee253d7e3",
+  "prevId": "60720f54-f78f-4140-b40d-f5f9ffa1afac",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -10364,12 +10364,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "service_account_id": {
-          "name": "service_account_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "virtual_key_id": {
           "name": "virtual_key_id",
           "type": "uuid",
@@ -10813,19 +10807,6 @@
           "tableTo": "user",
           "columnsFrom": [
             "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "interactions_service_account_id_service_accounts_id_fk": {
-          "name": "interactions_service_account_id_service_accounts_id_fk",
-          "tableFrom": "interactions",
-          "tableTo": "service_accounts",
-          "columnsFrom": [
-            "service_account_id"
           ],
           "columnsTo": [
             "id"
@@ -17373,12 +17354,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "service_account_id": {
-          "name": "service_account_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "reference_id": {
           "name": "reference_id",
           "type": "text",
@@ -17462,19 +17437,6 @@
           "tableTo": "user",
           "columnsFrom": [
             "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "oauth_client_service_account_id_service_accounts_id_fk": {
-          "name": "oauth_client_service_account_id_service_accounts_id_fk",
-          "tableFrom": "oauth_client",
-          "tableTo": "service_accounts",
-          "columnsFrom": [
-            "service_account_id"
           ],
           "columnsTo": [
             "id"
@@ -19212,6 +19174,12 @@
           "notNull": true,
           "default": "''"
         },
+        "icon": {
+          "name": "icon",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "content_hash": {
           "name": "content_hash",
           "type": "text",
@@ -19294,6 +19262,24 @@
         },
         "github_pat_id": {
           "name": "github_pat_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_provider": {
+          "name": "source_provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_origin": {
+          "name": "source_origin",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gitlab_token_id": {
+          "name": "gitlab_token_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -19573,6 +19559,19 @@
           "tableTo": "credential_definitions",
           "columnsFrom": [
             "github_pat_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "plugins_gitlab_token_id_credential_definitions_id_fk": {
+          "name": "plugins_gitlab_token_id_credential_definitions_id_fk",
+          "tableFrom": "plugins",
+          "tableTo": "credential_definitions",
+          "columnsFrom": [
+            "gitlab_token_id"
           ],
           "columnsTo": [
             "id"
@@ -20653,6 +20652,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "gitlab_url": {
+          "name": "gitlab_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "description": {
           "name": "description",
           "type": "text",
@@ -21308,12 +21313,6 @@
           "notNull": true,
           "default": false
         },
-        "secret_id": {
-          "name": "secret_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "last_used_at": {
           "name": "last_used_at",
           "type": "timestamp",
@@ -21379,22 +21378,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "service_account_tokens_platform_token_unique_idx": {
-          "name": "service_account_tokens_platform_token_unique_idx",
-          "columns": [
-            {
-              "expression": "service_account_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"service_account_tokens\".\"secret_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -21404,19 +21387,6 @@
           "tableTo": "service_accounts",
           "columnsFrom": [
             "service_account_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "service_account_tokens_secret_id_secret_id_fk": {
-          "name": "service_account_tokens_secret_id_secret_id_fk",
-          "tableFrom": "service_account_tokens",
-          "tableTo": "secret",
-          "columnsFrom": [
-            "secret_id"
           ],
           "columnsTo": [
             "id"
@@ -21467,19 +21437,6 @@
           "notNull": true,
           "default": false
         },
-        "team_id": {
-          "name": "team_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "is_system": {
-          "name": "is_system",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
         "created_by": {
           "name": "created_by",
           "type": "text",
@@ -21523,21 +21480,6 @@
           "method": "btree",
           "with": {}
         },
-        "service_accounts_team_id_idx": {
-          "name": "service_accounts_team_id_idx",
-          "columns": [
-            {
-              "expression": "team_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "service_accounts_organization_id_name_unique_idx": {
           "name": "service_accounts_organization_id_name_unique_idx",
           "columns": [
@@ -21558,22 +21500,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "service_accounts_organization_id_system_unique_idx": {
-          "name": "service_accounts_organization_id_system_unique_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"service_accounts\".\"is_system\"",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -21588,19 +21514,6 @@
             "id"
           ],
           "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "service_accounts_team_id_team_id_fk": {
-          "name": "service_accounts_team_id_team_id_fk",
-          "tableFrom": "service_accounts",
-          "tableTo": "team",
-          "columnsFrom": [
-            "team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
           "onUpdate": "no action"
         },
         "service_accounts_created_by_user_id_fk": {
@@ -24162,6 +24075,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "icon": {
+          "name": "icon",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "content": {
           "name": "content",
           "type": "text",
@@ -24269,6 +24188,18 @@
         },
         "github_pat_id": {
           "name": "github_pat_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_provider": {
+          "name": "source_provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gitlab_token_id": {
+          "name": "gitlab_token_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -24434,6 +24365,19 @@
           "tableTo": "credential_definitions",
           "columnsFrom": [
             "github_pat_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "skills_gitlab_token_id_credential_definitions_id_fk": {
+          "name": "skills_gitlab_token_id_credential_definitions_id_fk",
+          "tableFrom": "skills",
+          "tableTo": "credential_definitions",
+          "columnsFrom": [
+            "gitlab_token_id"
           ],
           "columnsTo": [
             "id"
@@ -27925,6 +27869,93 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.openappa_thread_states": {
+      "name": "openappa_thread_states",
+      "schema": "",
+      "columns": {
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "message_id": {
+          "name": "message_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "root_message_id": {
+          "name": "root_message_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tools": {
+          "name": "tools",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "calls": {
+          "name": "calls",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "diverged": {
+          "name": "diverged",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "openappa_thread_states_created_at_idx": {
+          "name": "openappa_thread_states_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "openappa_thread_states_organization_id_message_id_pk": {
+          "name": "openappa_thread_states_organization_id_message_id_pk",
+          "columns": [
+            "organization_id",
+            "message_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.openappa_unenforced_calls": {
       "name": "openappa_unenforced_calls",
       "schema": "",
@@ -28492,6 +28523,12 @@
         },
         "github_app_config_id": {
           "name": "github_app_config_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gitlab_token_id": {
+          "name": "gitlab_token_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false

@@ -109,3 +109,38 @@ describe("EditableUserMessage actions", () => {
     expect(screen.queryByRole("button", { name: "Regenerate" })).toBeNull();
   });
 });
+
+describe("EditableUserMessage attachments", () => {
+  const viewProps = {
+    messageId: "message-1",
+    partIndex: 0,
+    partKey: "part-1",
+    text: "What does this say?",
+    isEditing: false,
+    onCancelEdit: vi.fn(),
+    onSave: vi.fn().mockResolvedValue(undefined),
+  };
+
+  it("keeps one image per attachment when identical files swap to their saved url", () => {
+    // The same image attached twice: identical inline urls while sending, then
+    // one shared stored-attachment url once the saved message merges in.
+    const inline = {
+      url: "data:image/png;base64,iVBORw0KGgo=",
+      mediaType: "image/png",
+    };
+    const saved = {
+      url: "/api/chat/attachments/11111111-1111-4111-8111-111111111111",
+      mediaType: "image/png",
+    };
+    const { rerender } = render(
+      <EditableUserMessage {...viewProps} attachments={[inline, inline]} />,
+    );
+    expect(screen.getAllByRole("img")).toHaveLength(2);
+
+    rerender(
+      <EditableUserMessage {...viewProps} attachments={[saved, saved]} />,
+    );
+
+    expect(screen.getAllByRole("img")).toHaveLength(2);
+  });
+});

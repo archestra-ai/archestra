@@ -11,6 +11,7 @@ import { SectionNav } from "@/components/section-nav";
 import { useDisableInvitations } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useSecretsType } from "@/lib/secrets.query";
+import { MessagingProvidersSubnav } from "./messaging-channels/_components/messaging-providers";
 import { resolveSettingsSection, useSettingsTabs } from "./settings-tabs";
 
 const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
@@ -31,8 +32,7 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
   },
   "/settings/messaging-channels": {
     title: "Messaging Channels",
-    description:
-      "Configure the providers that carry agent conversations. Channel-to-agent assignments are managed on each agent's page.",
+    description: "Connect chat apps and choose where each agent answers.",
   },
   "/settings/apps": {
     title: "Apps",
@@ -226,7 +226,11 @@ export default function SettingsLayout({
           <div className="min-w-0 lg:sticky lg:top-6 lg:max-h-[calc(100dvh-6rem)] lg:overflow-y-auto lg:rounded-lg scrollbar-sidebar">
             <SectionNav
               label="Settings sections"
-              items={tabs}
+              items={tabs.map((tab) =>
+                tab.href === "/settings/messaging-channels"
+                  ? { ...tab, subnav: <MessagingProvidersSubnav /> }
+                  : tab,
+              )}
               activeHref={sectionHref}
             />
           </div>

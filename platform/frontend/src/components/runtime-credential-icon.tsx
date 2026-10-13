@@ -16,7 +16,7 @@ export function RuntimeCredentialIcon({
   return <AgentIcon icon={icon} className={className} size={size} />;
 }
 
-/** A definition's own icon, or GitHub's for a GitHub App credential that has none. */
+/** A definition's own icon, or its Git host's for a GitHub App or GitLab token. */
 export function runtimeCredentialIconOf(
   definition: Pick<RuntimeCredentialDefinition, "icon" | "kind">,
 ): string | null {
@@ -24,6 +24,8 @@ export function runtimeCredentialIconOf(
     definition.icon ??
     (definition.kind === "github_app" || definition.kind === "github_app_user"
       ? "logo:github"
-      : null)
+      : definition.kind === "gitlab_token"
+        ? "logo:gitlab"
+        : null)
   );
 }

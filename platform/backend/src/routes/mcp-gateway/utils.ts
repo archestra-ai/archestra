@@ -1947,6 +1947,9 @@ async function validateMcpClientAccessToken(params: {
         organizationId,
       })
     : null;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   if (
     account &&
     !(await AgentTeamModel.userHasAgentAccess({
@@ -1957,6 +1960,7 @@ async function validateMcpClientAccessToken(params: {
     }))
   )
     return null;
+  // SPDX-SnippetEnd
   return {
     tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
     teamId: account?.teamId ?? null,

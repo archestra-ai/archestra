@@ -1,6 +1,9 @@
 "use client";
 
+import { AlertTriangle } from "lucide-react";
 import { useId } from "react";
+import { Button } from "@/components/ui/button";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useServiceAccounts } from "@/lib/service-account.query";
@@ -13,7 +16,12 @@ export function OAuthServiceAccountField({
   onChange: (id: string | null) => void;
 }) {
   const id = useId();
-  const { data: accounts = [], isLoading, isError } = useServiceAccounts();
+  const {
+    data: accounts = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useServiceAccounts();
   const available = accounts.filter((account) => !account.disabled);
   return (
     <div className="space-y-2">
@@ -39,6 +47,20 @@ export function OAuthServiceAccountField({
         placeholder="Choose a service account"
         searchPlaceholder="Search service accounts…"
       />
+      {isError && (
+        <InlineNotice variant="error">
+          <AlertTriangle />
+          <InlineNoticeText>Could not load service accounts.</InlineNoticeText>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => void refetch()}
+          >
+            Retry
+          </Button>
+        </InlineNotice>
+      )}
       <p className="text-sm text-muted-foreground">
         A2A runs belong to this account. Access follows its grants. Changing the
         account revokes issued OAuth tokens.

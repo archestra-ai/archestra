@@ -68,6 +68,7 @@ import {
   LocalServerInstallDialog,
   type LocalServerInstallResult,
 } from "./local-server-install-dialog";
+import { mcpServerLogsHref } from "./mcp-server-actions-model";
 import type { CatalogItem } from "./mcp-server-card";
 import {
   RemoteServerInstallDialog,
@@ -251,6 +252,10 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
     }
   };
 
+  // The failed connection's own pod logs. A remote server has no logs view;
+  // its failure reason is the inline error above, so it gets Retry only.
+  const failureLogsHref = mcpServerLogsHref({ item, serverId: target?.id });
+
   const isInstalling =
     installMutation.isPending ||
     status === "pending" ||
@@ -311,9 +316,11 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
             <Button variant="outline" size="sm" onClick={startInstall}>
               Retry
             </Button>
-            <Button variant="ghost" size="sm" asChild>
-              <Link href={`/mcp/registry/${item.id}?tab=logs`}>View logs</Link>
-            </Button>
+            {failureLogsHref && (
+              <Button variant="ghost" size="sm" asChild>
+                <Link href={failureLogsHref}>View logs</Link>
+              </Button>
+            )}
           </div>
         </div>
       ) : (
@@ -322,6 +329,7 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
             status={isInstalling && !status ? "pending" : (status ?? null)}
             serverId={target?.id}
             deploymentStatuses={deploymentStatuses}
+            serverType={item.serverType}
           />
         </div>
       )}

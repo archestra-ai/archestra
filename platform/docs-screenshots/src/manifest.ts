@@ -346,8 +346,8 @@ export const SHOTS: Shot[] = [
     asset: "automated_screenshots/platform-agent-skills_import-from-github",
     route: () => "/skills/new",
     prepare: async (page) => {
-      await page.getByText("Custom GitHub URL", { exact: true }).click();
-      await page.getByLabel("Repository URL").fill("acme-corp/agent-skills");
+      await page.getByText("Git repository", { exact: true }).click();
+      await page.getByRole("button", { name: /^GitLab/ }).waitFor();
     },
     target: (page) => page.getByRole("dialog"),
   },
@@ -485,12 +485,14 @@ export const SHOTS: Shot[] = [
     route: (seed) => `/agents/${seed.agents["Support Triage"]}?section=tools`,
     viewport: { width: 1440, height: 1200 },
     beforeNavigate: async (page) => {
-      await page.route("**/api/config", async (route) => {
+      // Bootstrap primes the config cache before useConfig can fetch /api/config.
+      await page.route(/\/api\/(config|bootstrap)$/, async (route) => {
         const response = await route.fetch();
         const json = await response.json();
-        if (json?.features) {
-          json.features.agentHooksEnabled = true;
-          json.features.sandbox = true;
+        const config = json.config ?? json;
+        if (config?.features) {
+          config.features.agentHooksEnabled = true;
+          config.features.sandbox = true;
         }
         await route.fulfill({ response, json });
       });
@@ -508,8 +510,14 @@ export const SHOTS: Shot[] = [
         .scrollIntoViewIfNeeded();
       await page.getByText("pre-tool-use.py").waitFor();
       await page.getByRole("button", { name: "Edit pre-tool-use.py" }).click();
-      await page.locator(".monaco-editor").first().waitFor();
-      await page.waitForTimeout(500);
+      // Other wizard steps keep their editors mounted but hidden.
+      await page
+        .locator("section")
+        .filter({
+          has: page.getByRole("heading", { name: "Hooks", exact: true }),
+        })
+        .locator(".monaco-editor")
+        .waitFor();
     },
     target: (page) =>
       page.locator("section").filter({
@@ -534,7 +542,10 @@ export const SHOTS: Shot[] = [
     route: (seed) =>
       `/agents/${seed.agents["Support Triage"]}?section=messaging`,
     prepare: async (page) => {
-      await page.getByText("support-escalations").first().waitFor();
+      // Slack channels live in the agent's Slack bot section now.
+      await page
+        .getByRole("listitem", { name: "MS Teams channel Support › Tier 2" })
+        .waitFor();
     },
     target: (page) =>
       page.locator("section").filter({

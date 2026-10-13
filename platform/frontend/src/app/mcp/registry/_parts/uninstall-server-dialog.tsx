@@ -13,15 +13,26 @@ import {
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useDeleteMcpServer } from "@/lib/mcp/mcp-server.query";
 import { agentOwnerLabel } from "./mcp-server-agent-usage";
+import {
+  agentsLosingAccessOnUninstall,
+  uninstallConsequence,
+} from "./uninstall-scope";
 
 export interface UninstallServerInstall {
-  server: { id: string; name: string };
+  server: {
+    id: string;
+    name: string;
+    scope?: "personal" | "team" | "org";
+    teamId?: string | null;
+  };
   /** Agents with tools explicitly assigned from this install. */
   assignedAgents?: Array<{
     id: string;
     name: string;
     scope: string;
     ownerEmail: string | null;
+    /** Bound to this install rather than resolved to one at call time. */
+    pinned: boolean;
   }>;
 }
 
@@ -46,10 +57,13 @@ export function UninstallServerDialog({
 
   const server = installs[0]?.server ?? null;
   const servers = installs.map((install) => install.server);
+  // Only the agents that route through the installs being removed: nobody
+  // but its owner resolves to a personal connection, so the catalog's other
+  // agents keep resolving to their own connections.
   const assignedAgents = Array.from(
     new Map(
       installs
-        .flatMap((install) => install.assignedAgents ?? [])
+        .flatMap((install) => agentsLosingAccessOnUninstall(install))
         .map((agent) => [agent.id, agent]),
     ).values(),
   );
@@ -81,7 +95,9 @@ export function UninstallServerDialog({
     ? `Are you sure you want to cancel the installation of "${server?.name || ""}"?`
     : isBulk
       ? `Are you sure you want to uninstall ${installs.length} selected MCP server connections?`
-      : `Are you sure you want to uninstall "${server?.name || ""}"?`;
+      : `Are you sure you want to uninstall "${server?.name || ""}"? ${
+          server ? uninstallConsequence(server) : ""
+        }`;
   const confirmButtonText = isCancelingInstallation
     ? "Cancel Installation"
     : isBulk
@@ -146,7 +162,7 @@ export function UninstallServerDialog({
                     })
                     .join(", ")}{" "}
                   {assignedAgents.length === 1 ? "has" : "have"} tools assigned
-                  from this server and may lose access to them.
+                  from this connection and may lose access to them.
                 </InlineNoticeText>
               </InlineNotice>
             )}

@@ -3,7 +3,7 @@ title: Guardrails
 description: Stop agents from leaking data, with OpenAPPA policies on every tool call
 order: 1
 alpha: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-12
+lastUpdated: 2026-10-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -40,7 +40,7 @@ You need [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:up
 1. Go to **Guardrails** and click **Create my policy**. A chat with the configuration agent opens.
 2. The agent drafts a starting policy from your tools and explains what it allows and blocks.
 3. Approve the policy. Saving the first policy turns enforcement on.
-4. Optionally, click **Set up GitHub sync** in the saved-policy banner to keep the policy in GitHub. See [GitHub sync](/docs/agents/guardrails/policies#github-sync).
+4. Optionally, click **Set up Git sync** in the saved-policy banner to keep the policy in GitHub or GitLab. See [Git sync](/docs/agents/guardrails/policies#git-sync).
 
 The **Enforcement** card on **Overview** now shows **On**.
 
@@ -48,7 +48,7 @@ What to know:
 
 - The starting policy covers only Archestra's own tools. Every other tool runs without restrictions. The [code sandbox](/docs/agents#code-sandbox) tool [`run_command`](/docs/reference/archestra-mcp-server#run_command) is labeled by your organization's default model before each command, so reading a credentials file narrows who can see the result. A policy you already saved keeps its own rules. Next, [cover your other tools](/docs/agents/guardrails/policies#policy-coverage).
 - Enforcement applies to sessions that start while it is on. Start a new session after you turn it on.
-- **Settings → Guardrails** holds three settings: **Enforce the policy**, which you can switch once a policy exists; **Other clients**, for [unrecognized clients](/docs/agents/guardrails/clients#unrecognized-clients); and **GitHub sync**.
+- **Settings → Guardrails** holds three settings: **Enforce the policy**, which you can switch once a policy exists; **Other clients**, for [unrecognized clients](/docs/agents/guardrails/clients#unrecognized-clients); and Git sync.
 
 ## Validations
 
@@ -74,6 +74,7 @@ Guardrails check tool calls. They do not contain the machine the agent runs on. 
 - **Shell, files, and network:** Guardrails do not sandbox them. Run the agent in [Agent Runtime](/docs/agents/runtime) instead. It gets its own container, and an [egress policy](/docs/admin/environments#network-egress-policies) limits where it can send data.
 - **Traffic around the proxy:** Guardrails check only requests through the [LLM Proxy](/docs/llm-proxy). [Connect every client](/docs/agents/guardrails/clients) to it, and block the clients Guardrails do not recognize.
 - Provider-hosted tools, such as a provider's own web search: most run before the proxy sees the call. Where you need the check, use a tool that runs in the client or through the [MCP Gateway](/docs/mcp/gateway).
-- **Sessions that cannot be checked:** the proxy rejects them with HTTP 400. These are Codex in code mode and client-run `local_shell` or `computer_use` tools.
+- **Sessions that cannot be checked:** the proxy rejects them with HTTP 400. These are Codex in code mode, client-run `local_shell` or `computer_use` tools, and Responses requests that continue a stored response with `previous_response_id`.
+- **Conversations stored by the provider:** Claude Code can keep a conversation on Anthropic's side and send only the new messages. Guardrails check these too. When the proxy has no record of the stored conversation, for example one that started before Guardrails were on, Claude Code sends the whole conversation once more.
 - **Images, documents, and audio in tool results:** the policy sees the type, size, and hash of each one, not its content. A sanitizer cannot read or clean them. The result's restrictions come from the rule for the tool that returned it.
 - **Tools behind a tool search:** some clients load a tool only after the agent searches for it. The proxy refuses a call to a tool that is not loaded yet and tells the agent to search for it first.

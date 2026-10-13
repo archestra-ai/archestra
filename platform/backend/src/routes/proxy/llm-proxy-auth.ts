@@ -143,6 +143,11 @@ export async function validateVirtualApiKeyToken(
     throw new ApiError(401, "Virtual API key expired");
   }
 
+  if (resolved.virtualKey.createdByServiceAccountId)
+    await resolveOauthServiceAccount({
+      serviceAccountId: resolved.virtualKey.createdByServiceAccountId,
+      organizationId: resolved.virtualKey.organizationId,
+    });
   return resolved;
 }
 
@@ -182,11 +187,6 @@ export async function validateVirtualApiKey(params: {
       "Virtual API key does not belong to this organization.",
     );
   }
-  if (resolved.virtualKey.createdByServiceAccountId)
-    await resolveOauthServiceAccount({
-      serviceAccountId: resolved.virtualKey.createdByServiceAccountId,
-      organizationId: resolved.virtualKey.organizationId,
-    });
   if (resolved.virtualKey.keyType === "passthrough") {
     throw new ApiError(
       400,
@@ -970,6 +970,9 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
         organizationId: params.agent.organizationId,
       })
     : null;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   if (
     account &&
     !(params.agent.agentType === "llm_proxy" && params.agent.isDefault) &&
@@ -987,6 +990,7 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
     }))
   )
     throw new ApiError(403, "Service account cannot access this LLM proxy.");
+  // SPDX-SnippetEnd
   const mappedProviderKey = isSupportedProvider(params.expectedProvider)
     ? await selectMappedProviderKey({
         mappings: oauthClient.providerApiKeys,

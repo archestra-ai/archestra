@@ -114,6 +114,8 @@ export const RouteId = {
   GetInternalMcpCatalog: "getInternalMcpCatalog",
   CreateInternalMcpCatalogItem: "createInternalMcpCatalogItem",
   GetInternalMcpCatalogItem: "getInternalMcpCatalogItem",
+  GetInternalMcpCatalogCredentialPreflight:
+    "getInternalMcpCatalogCredentialPreflight",
   GetInternalMcpCatalogTools: "getInternalMcpCatalogTools",
   GetInternalMcpCatalogToolsBatch: "getInternalMcpCatalogToolsBatch",
   UpdateInternalMcpCatalogItem: "updateInternalMcpCatalogItem",
@@ -640,6 +642,10 @@ export const RouteId = {
   DeleteGithubAppConfig: "deleteGithubAppConfig",
 
   // Stored GitHub personal access tokens
+  ListGitCredentials: "listGitCredentials",
+  CreateGitlabToken: "createGitlabToken",
+  ListGitCredentialRepositories: "listGitCredentialRepositories",
+  ListGitCredentialNamespaces: "listGitCredentialNamespaces",
   ListGithubPats: "listGithubPats",
   CreateGithubPat: "createGithubPat",
   UpdateGithubPat: "updateGithubPat",

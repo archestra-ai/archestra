@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  type StatisticsTimeFrame,
-  StatisticsTimeFrameSchema,
-} from "@archestra/shared";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import type { StatisticsTimeFrame } from "@archestra/shared";
 import { ContextSizeCard } from "@/app/llm/usage/_parts/context-size-card";
 import { TokenMixCard } from "@/app/llm/usage/_parts/token-mix-card";
 import { TopSessionsCard } from "@/app/llm/usage/_parts/top-sessions-card";
@@ -15,56 +10,25 @@ import {
 } from "@/app/llm/usage/_parts/usage-dimension-cards";
 import { MyUsageSummary } from "@/components/my-usage-summary";
 import { PageLayout } from "@/components/page-layout";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { useStatisticsTimeRange } from "@/components/time-range-picker/statistics-time-range";
+import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMyStatistics, useMyUsageBreakdown } from "@/lib/statistics.query";
-
-const TIMEFRAMES = [
-  { value: "24h", label: "Last 24 hours" },
-  { value: "7d", label: "Last 7 days" },
-  { value: "30d", label: "Last 30 days" },
-  { value: "90d", label: "Last 90 days" },
-  { value: "12m", label: "Last 12 months" },
-  { value: "all", label: "All time" },
-] as const satisfies readonly { value: StatisticsTimeFrame; label: string }[];
 
 const TIMEFRAME_STORAGE_KEY = "my-usage-timeframe";
 const DEFAULT_TIMEFRAME: StatisticsTimeFrame = "7d";
 
 export default function MyUsagePage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const [timeframe, setTimeframe] =
-    useState<StatisticsTimeFrame>(DEFAULT_TIMEFRAME);
-  const [isTimeframeResolved, setIsTimeframeResolved] = useState(false);
-
-  useEffect(() => {
-    const { success, data } = StatisticsTimeFrameSchema.safeParse(
-      searchParams.get("timeframe") ??
-        localStorage.getItem(TIMEFRAME_STORAGE_KEY),
-    );
-    if (success) setTimeframe(data);
-    setIsTimeframeResolved(true);
-  }, [searchParams]);
-
-  const handleTimeframeChange = useCallback(
-    (value: string) => {
-      const { success, data } = StatisticsTimeFrameSchema.safeParse(value);
-      if (!success) return;
-      setTimeframe(data);
-      localStorage.setItem(TIMEFRAME_STORAGE_KEY, data);
-      const params = new URLSearchParams(searchParams);
-      params.set("timeframe", data);
-      router.push(`/llm/usage?${params.toString()}`, { scroll: false });
-    },
-    [router, searchParams],
-  );
+  // Queries wait until the range is read from the URL or this browser.
+  const {
+    range,
+    setRange,
+    timeframe,
+    isResolved: isTimeframeResolved,
+  } = useStatisticsTimeRange({
+    storageKey: TIMEFRAME_STORAGE_KEY,
+    defaultTimeframe: DEFAULT_TIMEFRAME,
+  });
 
   const statisticsQuery = useMyStatistics({
     timeframe,
@@ -81,18 +45,7 @@ export default function MyUsagePage() {
       title="My Usage"
       description="Review your own LLM activity, token mix, clients, models, sessions, and billed spend."
       actionButton={
-        <Select value={timeframe} onValueChange={handleTimeframeChange}>
-          <SelectTrigger size="sm" className="w-48" aria-label="Timeframe">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {TIMEFRAMES.map(({ value, label }) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <TimeRangePicker value={range} onChange={setRange} allowAllTime />
       }
     >
       <div className="min-w-0 space-y-6">

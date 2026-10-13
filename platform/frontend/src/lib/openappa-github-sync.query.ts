@@ -77,12 +77,15 @@ export function useCreateAppaGithubRepository() {
       }
       return data;
     },
-    onSuccess: (data) =>
+    onSuccess: (data) => {
+      const gitlab = !!data?.source?.gitlabTokenId;
+      const repository = gitlab ? "Project" : "Repository";
       toast.success(
         data?.source?.setupPullRequestNumber
-          ? "Repository connected. Merge the initial policy pull request to finish setup."
-          : "Repository connected with your current policy.",
-      ),
+          ? `${repository} connected. Merge the initial policy ${gitlab ? "merge request" : "pull request"} to finish setup.`
+          : `${repository} connected with your current policy.`,
+      );
+    },
     onSettled: () => invalidatePolicyViews(client),
   });
 }

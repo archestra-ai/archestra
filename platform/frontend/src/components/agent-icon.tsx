@@ -1,7 +1,15 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import { Bot, Folder, Network, Route, Server } from "lucide-react";
+import {
+  Bot,
+  Folder,
+  Network,
+  Puzzle,
+  Route,
+  Server,
+  Sparkles,
+} from "lucide-react";
 import Image from "next/image";
 import {
   getBuiltInServiceIconPath,
@@ -17,7 +25,12 @@ export type AgentIconVariant = Exclude<
 >;
 
 /** Fallback glyphs supported by the shared icon display/picker. */
-type IconFallbackType = AgentIconVariant | "project" | "server";
+type IconFallbackType =
+  | AgentIconVariant
+  | "project"
+  | "server"
+  | "skill"
+  | "plugin";
 
 interface AgentIconProps {
   icon?: string | null;
@@ -44,7 +57,11 @@ export function AgentIcon({
             ? Folder
             : fallbackType === "server"
               ? Server
-              : Bot;
+              : fallbackType === "skill"
+                ? Sparkles
+                : fallbackType === "plugin"
+                  ? Puzzle
+                  : Bot;
 
     return (
       <FallbackIcon

@@ -34,28 +34,6 @@ export async function resolveGithubPatToken(params: {
   return token;
 }
 
-/** Existing plugin and OpenAPPA imports remain restricted to github.com. */
-export async function resolveGithubAppInstallationToken(params: {
-  githubAppConfigId: string;
-  organizationId: string;
-}): Promise<string> {
-  const appConfig = await GithubAppConfigModel.findByIdForOrganization({
-    id: params.githubAppConfigId,
-    organizationId: params.organizationId,
-  });
-  if (!appConfig) {
-    throw new ApiError(404, "GitHub App configuration not found");
-  }
-  if (!isGithubDotComUrl(appConfig.githubUrl)) {
-    throw new ApiError(
-      400,
-      "Skill import via GitHub App is only supported for github.com",
-    );
-  }
-
-  return resolveInstallationToken(params);
-}
-
 /** Skill imports support the configured Enterprise API as well as github.com. */
 export async function resolveGithubSkillAppCredentials(params: {
   githubAppConfigId: string;
@@ -88,12 +66,4 @@ async function resolveInstallationToken(params: {
   if (!token)
     throw new ApiError(400, "GitHub App credential has no private key");
   return token;
-}
-
-function isGithubDotComUrl(url: string): boolean {
-  try {
-    return new URL(url).host === "api.github.com";
-  } catch {
-    return false;
-  }
 }

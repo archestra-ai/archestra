@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/inline-notice";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
+import { useCanUseEveryCredential } from "@/lib/runtime-credentials.query";
 import { HeldPullReviewDialog } from "./held-pull-review-dialog";
 
 /**
@@ -35,10 +36,9 @@ export function HeldPullNotice({
   const { data: canEditPolicy } = useHasPermissions({
     openappaPolicy: ["update"],
   });
-  const { data: canBindCredentials } = useHasPermissions({
-    openappaPolicy: ["update"],
-    credential: ["update"],
-  });
+  const { data: canUseEveryCredential } = useCanUseEveryCredential();
+  const canBindCredentials =
+    canEditPolicy === true && canUseEveryCredential === true;
   const { reasons } = held;
   if (reasons.length === 0) return null;
   const mayApprove = reasons.includes("changes_credentials")

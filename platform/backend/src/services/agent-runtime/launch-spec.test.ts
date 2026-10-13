@@ -373,7 +373,7 @@ describe("buildAgentRunLaunchSpec", () => {
       organizationId: setup.agent.organizationId,
     });
 
-    const { spec } = await buildAgentRunLaunchSpec({
+    const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
       runtime: runtime(setup.agent, "openai_responses"),
       taskId: crypto.randomUUID(),
       runId: crypto.randomUUID(),
@@ -391,6 +391,11 @@ describe("buildAgentRunLaunchSpec", () => {
       task: "Process an incoming message.",
     });
 
+    assert(virtualApiKeyId);
+    expect(
+      (await VirtualApiKeyModel.findById(virtualApiKeyId))
+        ?.createdByServiceAccountId,
+    ).toBe(serviceAccount.id);
     const platformToken = await ServiceAccountModel.ensurePlatformTokenValue(
       serviceAccount.id,
     );

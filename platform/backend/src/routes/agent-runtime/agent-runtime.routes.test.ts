@@ -20,6 +20,7 @@ import {
   InteractionModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
+  RuntimeCredentialDefinitionModel,
 } from "@/models";
 import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
@@ -1153,6 +1154,49 @@ describe("Agent Runtime routes", () => {
       url: `/api/agents/${agent.id}/runtime/preflight`,
     });
     expect(preflight.statusCode).toBe(403);
+  });
+
+  test("refuses a personal value for a credential the caller may not use", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    // Keep the saved credential behind PERSONAL_TOKEN from members: no
+    // grant on it reaches them, so neither does storing a value of it.
+    const definition = await RuntimeCredentialDefinitionModel.find({
+      organizationId,
+      key: "github",
+    });
+    assert(definition);
+    const scope = {
+      organizationId,
+      resource: "credential" as const,
+      scope: definition.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(scope);
+    await ResourcePermissionPolicyModel.replace({
+      ...scope,
+      revision: policy?.revision ?? 0,
+      grants: [],
+    });
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: "member" });
+    user = member;
+
+    const refused = await app.inject({
+      method: "PUT",
+      url: `/api/agents/${agent.id}/runtime/credentials/PERSONAL_TOKEN`,
+      payload: { value: "personal-value" },
+    });
+
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json().error.message).toBe(
+      'You don\'t have access to the "Personal token" credential. Ask an admin to share it with you.',
+    );
+    const rows = await db
+      .select({ userId: schema.runtimeCredentialConnectionsTable.userId })
+      .from(schema.runtimeCredentialConnectionsTable)
+      .where(eq(schema.runtimeCredentialConnectionsTable.userId, member.id));
+    expect(rows).toEqual([]);
   });
 
   test("reuses a typed personal connection across Agents without copying its value", async ({

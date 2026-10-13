@@ -18,6 +18,7 @@ import {
   TOOL_START_RUN_SHORT_NAME,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import { readRunToolArgs } from "@/archestra-mcp-server/run-tool-target";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
@@ -150,6 +151,8 @@ import {
 import { withCallerScope, withoutCallerScope } from "./utils";
 
 type AppaPluginBinding = {
+  /** The request continues a provider thread that holds the system prompt. */
+  threadContinue: boolean;
   session: OpenAppaSession;
   identity: AppaTrustedContext["toolIdentity"];
   adapter: AppaClientAdapter | undefined;
@@ -269,6 +272,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       completedHandbackReturn: undefined,
       chat,
       compaction: trustedContext.compaction === true,
+      threadContinue: trustedContext.thread === "continue",
       requestHeaders: context.headers,
       requiresQuestionContinuation: false,
       requiresRemedyContinuation: false,
@@ -561,7 +565,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         binding.returnContract = started.contract ?? binding.returnContract;
         binding.sessionInitialized = true;
       }
-      if (binding.returnContract) {
+      if (binding.returnContract && !binding.threadContinue) {
         deliverReturnContract({
           request: context.request,
           interactionType: context.interactionType,
@@ -584,6 +588,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           request: context.request,
           interactionType: context.interactionType,
           guidance: EXTERNAL_REMEDY_WORKFLOW_GUIDANCE,
+          onContinue: binding.threadContinue ? "skip" : undefined,
         });
       }
       const askUser = binding.request.tools?.askUser;
@@ -607,6 +612,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             askUserToolName: askUserTool,
             nativeQuestionToolName: nativeQuestion,
           }),
+          onContinue: binding.threadContinue ? "skip" : undefined,
         });
       }
     }
@@ -617,6 +623,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         request: context.request,
         interactionType: context.interactionType,
         guidance: unreadNativeAnswerGuidance(offerIds),
+        onContinue: binding.threadContinue ? "turn" : undefined,
       });
       requireCodexToolCall({ binding, context });
     }
@@ -627,6 +634,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         request: context.request,
         interactionType: context.interactionType,
         guidance: hitlQuestionGuidance(offerIds),
+        onContinue: binding.threadContinue ? "turn" : undefined,
       });
       requireCodexToolCall({ binding, context });
     }
@@ -636,6 +644,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         request: context.request,
         interactionType: context.interactionType,
         guidance: REMEDY_OFFER_CONTINUATION_GUIDANCE,
+        onContinue: binding.threadContinue ? "turn" : undefined,
       });
       requireCodexToolCall({ binding, context });
     }
@@ -646,6 +655,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         request: context.request,
         interactionType: context.interactionType,
         guidance: hitlDecisionGuidance(rulings),
+        onContinue: binding.threadContinue ? "turn" : undefined,
       });
       if (rulings.some((entry) => entry.ruling === "approve")) {
         requireCodexToolCall({ binding, context });
@@ -655,6 +665,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       appendQuestionContinuation({
         request: context.request,
         interactionType: context.interactionType,
+        onContinue: binding.threadContinue ? "turn" : undefined,
       });
     }
     if (!binding || (!binding.request.tools && !binding.session.parent_id))
@@ -1351,7 +1362,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             : binding.request.defersTools
               ? `${decision.feedback}\n\n[appa] This client defers tools it has not loaded, and the ${archestraMcpBranding.serverName} MCP gateway remedy tools are not loaded in this session, so the ruling could not be offered as a remedy and the call is refused. Search for ${TOOL_GET_REMEDY_PLANS_SHORT_NAME} and ${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME} with your tool search, then call the denied tool again to receive the remedy.`
               : binding.request.declaredTools.length === 0
-                ? `${decision.feedback}\n\n[appa] This client declared no tools, so the ruling cannot be delivered as a remedy notice and the call is refused. A client whose tools are not on the wire cannot be governed. Declare the tools on the wire; for Codex, set code_mode_host = false.`
+                ? `${decision.feedback}\n\n[appa] This request listed no tools, so the ruling could not be offered as a remedy and the call is refused. Remedies need the ${archestraMcpBranding.serverName} MCP gateway tools in the request. Connect the gateway, then start a new session. In Codex, also set code_mode_host = false: code mode keeps its tools out of the request.`
                 : `${decision.feedback}\n\n[appa] This client did not declare the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the call is refused. Connect the MCP gateway and allow both remedy tools to use approval plans.`;
         return {
           decision: "refuse",
@@ -1965,6 +1976,9 @@ async function resolveRuntimeCalls(params: {
     const wrapper = target.isRunToolDispatchTarget
       ? argumentRecordOf(call.arguments)
       : undefined;
+    // run_tool refuses tool_args it cannot read, so that call never runs and
+    // gets no proof.
+    if (wrapper && !readRunToolArgs(wrapper.tool_args)) continue;
     result.set(call.id, {
       action,
       args,
@@ -4807,7 +4821,9 @@ async function pendingNativeHitlOfferIds(params: {
 }): Promise<string[]> {
   const control = params.binding.request.tools?.control;
   if (!control) return [];
-  const offerIds = new Set<string>();
+  // The newest result that asked for this review, per offer: the history is
+  // in order, so a later execute_remedy_plan call replaces an earlier one.
+  const offerIds = new Map<string, string>();
   for (const result of params.results) {
     if (result.isError) continue;
     const canonicalResult = params.binding.identity.canonicalize(
@@ -4827,20 +4843,57 @@ async function pendingNativeHitlOfferIds(params: {
     )
       continue;
     const offerId = reviewRequiredOfferId(result, 0);
-    if (offerId && !params.resolvedOfferIds.has(offerId)) offerIds.add(offerId);
+    if (offerId && !params.resolvedOfferIds.has(offerId)) {
+      offerIds.set(offerId, result.id);
+    }
   }
   const pending = await Promise.all(
-    [...offerIds].map(async (offerId) => ({
+    [...offerIds].map(async ([offerId, resultId]) => ({
       offerId,
+      resultId,
       review: await getHitlReview({
         session: params.binding.session,
         offerId,
       }),
     })),
   );
-  return pending
-    .filter((entry) => entry.review !== undefined)
-    .map((entry) => entry.offerId);
+  const asked: string[] = [];
+  for (const entry of pending) {
+    if (entry.review === undefined) continue;
+    // A client that resends the whole conversation (Codex) carries this
+    // result in every later request. The question is asked once per result:
+    // asking again for a review the client cannot show forces Codex into
+    // another ask_user call on every turn, with no way to end its turn.
+    if (
+      await reviewQuestionAskedBefore({
+        session: params.binding.session,
+        resultId: entry.resultId,
+      })
+    ) {
+      continue;
+    }
+    asked.push(entry.offerId);
+  }
+  return asked;
+}
+
+/**
+ * Whether the proxy already asked for the user's approval after this
+ * review_required result. Records the current ask so the next one counts.
+ * Not atomic: a client sends a session's requests one after another, and two
+ * parallel requests could at worst ask once more, never skip the question.
+ */
+async function reviewQuestionAskedBefore(params: {
+  session: OpenAppaSession;
+  resultId: string;
+}): Promise<boolean> {
+  const key: AllowedCacheKey = `${CacheKey.OpenAppaHitlQuestionAsked}-${Buffer.from(
+    `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.resultId)}`,
+  ).toString("base64url")}`;
+  if (await cacheManager.get<boolean>(key)) return true;
+  // Outlives the review it asked about, which expires after ten minutes.
+  await cacheManager.set(key, true, TimeInMs.Hour);
+  return false;
 }
 
 async function hasRemedyOfferResult(params: {
@@ -5117,6 +5170,8 @@ function insertRequestGuidance(params: {
   request: unknown;
   interactionType: string;
   guidance: string;
+  /** A provider-thread continue: the thread already holds this guidance. */
+  onContinue?: "skip";
 }): void {
   const { request, interactionType, guidance } = params;
   if (
@@ -5151,9 +5206,20 @@ function appendQuestionContinuation(params: {
   request: unknown;
   interactionType: string;
   guidance?: string;
+  /**
+   * On a provider-thread continue: `skip` guidance the thread already holds
+   * (fixed for the session), or deliver `turn` guidance in the new user turn,
+   * which the thread keeps, instead of the system prompt it owns.
+   */
+  onContinue?: "skip" | "turn";
 }): void {
   const guidance = params.guidance ?? QUESTION_CONTINUATION_GUIDANCE;
   if (!isRecord(params.request)) return;
+  if (params.onContinue === "skip") return;
+  if (params.onContinue === "turn") {
+    appendToLastUserTurn(params.request, guidance);
+    return;
+  }
   if (params.interactionType === "openai:responses") {
     let input: unknown[];
     if (typeof params.request.input === "string") {
@@ -5229,6 +5295,27 @@ function appendQuestionContinuation(params: {
     }
     appendInstruction(params.request, "system", guidance);
   }
+}
+
+/** Adds a text block to the newest user message of a Messages request. */
+function appendToLastUserTurn(
+  request: Record<string, unknown>,
+  text: string,
+): void {
+  const messages = request.messages;
+  if (!Array.isArray(messages)) return;
+  const last = messages.findLast(
+    (message) => isRecord(message) && message.role === "user",
+  );
+  if (!isRecord(last)) return;
+  if (typeof last.content === "string")
+    last.content = [
+      { type: "text", text: last.content },
+      { type: "text", text },
+    ];
+  else if (Array.isArray(last.content))
+    last.content.push({ type: "text", text });
+  else last.content = [{ type: "text", text }];
 }
 
 /** Prevents Codex from converting a required HITL workflow step into prose. */

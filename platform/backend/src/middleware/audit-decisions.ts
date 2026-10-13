@@ -934,6 +934,11 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "ephemeral browser tab state; per-user UI cache",
   },
+  browserStorageStatesTable: {
+    audited: false,
+    reason:
+      "per-user browser cookies synced automatically after tool calls; no API mutates it",
+  },
 
   // =========================================================================
   // Chat active run (streaming execution state)
@@ -1016,6 +1021,10 @@ export const AUDIT_DECISIONS = {
   openappaUnenforcedSessionsTable: {
     audited: false,
     reason: "proxy record of sessions that started while enforcement was off",
+  },
+  openappaThreadStatesTable: {
+    audited: false,
+    reason: "proxy record of what a governed provider thread was ruled on",
   },
   openappaUnenforcedCallsTable: {
     audited: false,

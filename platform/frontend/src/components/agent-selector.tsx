@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, ChevronDown, ExternalLink, Plus, X } from "lucide-react";
+import type * as React from "react";
 import { useMemo, useRef, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
@@ -23,20 +24,17 @@ import {
 import { cn } from "@/lib/utils/tailwind";
 
 /**
- * The dialog a selector is rendered in, or null outside one.
+ * Keeps the list scrollable inside a modal dialog.
  *
- * A modal dialog locks scrolling and preventDefaults every wheel event whose
- * target sits outside its own subtree. The popover defaults to a `<body>`
- * portal, so its list renders at full height and simply refuses to scroll —
- * portaling into the dialog puts it back inside the lock's allowed subtree.
+ * The list portals to `<body>` so a short dialog cannot clip it (the dialog is
+ * `overflow-hidden`). A modal dialog locks scrolling by preventDefaulting, at
+ * the document, every wheel and touch move outside its own subtree; stopping
+ * them at the list keeps them from reaching that lock.
  */
-function dialogPortalContainer(
-  trigger: HTMLElement | null,
-): HTMLElement | null {
-  // Keyed on the data-slot rather than [role=dialog], which Radix also puts on
-  // popover and hover-card content.
-  return trigger?.closest<HTMLElement>("[data-slot=dialog-content]") ?? null;
-}
+const keepScrollInList = {
+  onWheelCapture: (event: React.WheelEvent) => event.stopPropagation(),
+  onTouchMoveCapture: (event: React.TouchEvent) => event.stopPropagation(),
+};
 
 export type AgentSelectorAgent = {
   id: string;
@@ -79,6 +77,12 @@ type AgentSelectorProps =
        * still there to read in the open dropdown.
        */
       compactTrigger?: boolean;
+      /**
+       * Render the trigger as a small text button with this label (e.g.
+       * "Change") instead of a field showing the selection. For rows that
+       * already show the selected agent's name beside it.
+       */
+      triggerLabel?: string;
       /**
        * An extra choice rendered above the agent list whose value is not an
        * agent id — e.g. "All agents" in a log filter, or "Each user personal"
@@ -144,12 +148,12 @@ function SingleAgentSelector({
   hint,
   flat,
   compactTrigger,
+  triggerLabel,
   sentinelOption,
 }: Extract<AgentSelectorProps, { mode: "single" }>) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const dialogContainer = dialogPortalContainer(triggerRef.current);
   const selectedAgent = agents.find((agent) => agent.id === value);
   const isSentinelSelected = sentinelOption?.value === value;
   const groupedAgents = useGroupedAgents(agents, search);
@@ -172,42 +176,55 @@ function SingleAgentSelector({
       }}
     >
       <PopoverTrigger asChild>
-        <Button
-          ref={triggerRef}
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          disabled={disabled}
-          className={cn(
-            // h-auto + min-h-9 so a two-line row (name + owner email) isn't
-            // vertically smushed, while single-line values keep the 9-height.
-            "h-auto min-h-9 justify-between bg-transparent py-1.5 font-normal shadow-xs hover:bg-transparent hover:text-foreground",
-            !value && "text-muted-foreground",
-            className,
-          )}
-        >
-          <span className="min-w-0 flex-1 truncate text-left">
-            {selectedAgent ? (
-              <AgentSelectorRow
-                agent={selectedAgent}
-                variant={compactTrigger ? "compact" : "trigger"}
-              />
-            ) : isSentinelSelected ? (
-              <span>{sentinelOption.label}</span>
-            ) : (
-              <span>{placeholder}</span>
+        {triggerLabel ? (
+          <Button
+            ref={triggerRef}
+            variant="ghost"
+            size="xs"
+            role="combobox"
+            aria-expanded={open}
+            disabled={disabled}
+            className={cn("text-muted-foreground", className)}
+          >
+            {triggerLabel}
+          </Button>
+        ) : (
+          <Button
+            ref={triggerRef}
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            disabled={disabled}
+            className={cn(
+              // h-auto + min-h-9 so a two-line row (name + owner email) isn't
+              // vertically smushed, while single-line values keep the 9-height.
+              "h-auto min-h-9 justify-between bg-transparent py-1.5 font-normal shadow-xs hover:bg-transparent hover:text-foreground",
+              !value && "text-muted-foreground",
+              className,
             )}
-          </span>
-          <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </Button>
+          >
+            <span className="min-w-0 flex-1 truncate text-left">
+              {selectedAgent ? (
+                <AgentSelectorRow
+                  agent={selectedAgent}
+                  variant={compactTrigger ? "compact" : "trigger"}
+                />
+              ) : isSentinelSelected ? (
+                <span>{sentinelOption.label}</span>
+              ) : (
+                <span>{placeholder}</span>
+              )}
+            </span>
+            <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        )}
       </PopoverTrigger>
       <PopoverContent
+        align={triggerLabel ? "end" : undefined}
         // Rows carry a description and an owner email, so the
         // list keeps a readable floor even when the trigger is a narrow filter
         // control — capped to the viewport so it can't overflow a phone.
         className="flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] min-w-[min(20rem,calc(100vw-2rem))] flex-col p-0"
-        portalContainer={dialogContainer}
-        collisionBoundary={dialogContainer ?? undefined}
         collisionPadding={8}
       >
         <Command shouldFilter={false} className="min-h-0">
@@ -221,7 +238,7 @@ function SingleAgentSelector({
               {hint}
             </div>
           )}
-          <CommandList className="min-h-0 flex-1">
+          <CommandList className="min-h-0 flex-1" {...keepScrollInList}>
             <CommandEmpty>{emptyMessage}</CommandEmpty>
             {sentinelOption && matchesSearch(sentinelOption.label, search) && (
               <CommandGroup>
@@ -284,7 +301,6 @@ function MultiAgentSelector({
   const [search, setSearch] = useState("");
   const anchorRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef(false);
-  const dialogContainer = dialogPortalContainer(anchorRef.current);
   const selectedAgents = agents.filter((agent) => value.includes(agent.id));
   const groupedAgents = useGroupedAgents(agents, search);
   const visibleAgents = useVisibleAgents(agents, search);
@@ -402,8 +418,6 @@ function MultiAgentSelector({
           }
           restoreFocusRef.current = false;
         }}
-        portalContainer={dialogContainer}
-        collisionBoundary={dialogContainer ?? undefined}
         collisionPadding={8}
       >
         <Command shouldFilter={false} className="min-h-0">
@@ -412,7 +426,10 @@ function MultiAgentSelector({
             onValueChange={setSearch}
             placeholder={searchPlaceholder}
           />
-          <CommandList className="max-h-[260px] min-h-0 flex-1 overflow-y-auto">
+          <CommandList
+            className="max-h-[260px] min-h-0 flex-1 overflow-y-auto"
+            {...keepScrollInList}
+          >
             <CommandEmpty>{emptyMessage}</CommandEmpty>
             {flat ? (
               <>

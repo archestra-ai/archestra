@@ -19,6 +19,7 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { CredentialField } from "../_components/credential-field";
 import { LlmKeySetupStep } from "../_components/llm-key-setup-step";
+import { ProviderChannels } from "../_components/provider-channels";
 import { SetupSection } from "../_components/setup-section";
 import { SetupStep } from "../_components/setup-step";
 import { useTriggerStatuses } from "../_components/use-trigger-statuses";
@@ -176,6 +177,8 @@ export default function TelegramPage() {
           />
         )}
       </SetupSection>
+
+      {telegram?.configured && <ProviderChannels provider="telegram" />}
 
       <TelegramSetupDialog open={setupOpen} onOpenChange={setSetupOpen} />
     </div>

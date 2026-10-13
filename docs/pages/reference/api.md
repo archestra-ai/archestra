@@ -31,7 +31,6 @@ Service account keys authenticate REST, MCP Gateway, and A2A calls as one accoun
 
 LLM calls through a bound OAuth client or an account-owned virtual key record `serviceAccountId`. Filter `/api/statistics/llm-proxy` by that ID to combine its spend across credentials.
 
-
 A service account is an organization-owned identity for CI, scheduled jobs, and shared integrations. Its keys keep working when the person who created them leaves.
 
 1. Go to **Settings → Service Accounts** and click **Create service account**.

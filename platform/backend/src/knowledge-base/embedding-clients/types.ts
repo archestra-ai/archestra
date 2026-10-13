@@ -6,7 +6,12 @@ export interface EmbeddingApiResponse {
   object: string;
   data: Array<{ object: string; embedding: number[]; index: number }>;
   model: string;
-  usage: { prompt_tokens: number; total_tokens: number };
+  usage: {
+    prompt_tokens: number;
+    total_tokens: number;
+    /** USD the provider reports it billed for this call (OpenRouter's `usage.cost`). */
+    cost?: number;
+  };
 }
 
 /**

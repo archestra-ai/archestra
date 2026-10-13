@@ -279,7 +279,13 @@ describe("a2a route-level authentication", () => {
       method: "POST",
       url: `/v2/a2a/${agent.id}`,
       headers: bearer(raw),
-      payload: { ...v2Payload(), params: { ...v2Payload().params, configuration: { returnImmediately: true } } },
+      payload: {
+        ...v2Payload(),
+        params: {
+          ...v2Payload().params,
+          configuration: { returnImmediately: true },
+        },
+      },
     });
 
     expect(res.json().error).toBeUndefined();

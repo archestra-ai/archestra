@@ -207,10 +207,9 @@ export async function getHitlAskUserArguments(params: {
     { label: "Approve", description: "Allow this exact tool call." },
     { label: "Deny", description: "Keep this tool call blocked." },
   ];
-  const question = formatReviewQuestion(review.text);
   if (!review.tool) {
     return {
-      question,
+      question: formatReviewQuestion(review.text),
       header: "Approval",
       options,
       allowMultiple: false,
@@ -218,14 +217,14 @@ export async function getHitlAskUserArguments(params: {
     };
   }
   // Hosts with option previews (Claude Code) ask the short question and show
-  // the reviewed arguments beside each choice. Other hosts keep the full
-  // review text and ignore the previews.
-  const argumentLines = formatArgumentLines(
-    parseReviewedArguments(review.arguments) ?? {},
-    REVIEW_PREVIEW_WIDTH,
-  );
+  // the reviewed arguments beside each choice. Forms and other hosts ask the
+  // same call in one text.
+  const args = parseReviewedArguments(review.arguments) ?? {};
+  const argumentLines = formatArgumentLines(args, REVIEW_PREVIEW_WIDTH);
   return {
-    question,
+    question:
+      approvalQuestion({ review, tool: review.tool, args }) ??
+      formatReviewQuestion(review.text),
     previewQuestion: `Approve ${reviewedToolLabel(review.tool)}?`,
     header: "Approval",
     options: options.map((option) => ({
@@ -379,6 +378,54 @@ export function hitlRulingFromLabels(
   if (labels[0] === "Deny") return "deny";
   return undefined;
 }
+
+/**
+ * The review as one question: the call by the name the user knows it under,
+ * its arguments as named values, and what an approval accepts besides the
+ * person's attention, such as a wider audience. Undefined when the review
+ * text's coverage is not in the shape read here, so the full text is shown
+ * and nothing it covers is left out.
+ */
+function approvalQuestion(params: {
+  review: PendingHitlReview;
+  tool: string;
+  args: Record<string, unknown>;
+}): string | undefined {
+  const coverage = reviewCoverage(params.review.text);
+  if (!coverage) return undefined;
+  const accepted = coverage.filter((line) => !line.startsWith("attention: "));
+  const argumentLines = formatArgumentLines(params.args);
+  return [
+    `Approve ${reviewedToolLabel(params.tool)}?`,
+    ...(argumentLines ? [argumentLines] : []),
+    ...(accepted.length > 0
+      ? [
+          [
+            "Approving also accepts:",
+            ...accepted.map((line) => `  - ${line}`),
+          ].join("\n"),
+        ]
+      : []),
+    "Approve lets this exact call run. Deny keeps it blocked.",
+  ].join("\n\n");
+}
+
+/** The runtime's "What this ruling would cover" lines, or undefined. */
+function reviewCoverage(text: string): string[] | undefined {
+  const lines = text.split("\n");
+  const start = lines.indexOf(COVERAGE_HEADING);
+  if (start < 0) return undefined;
+  const coverage: string[] = [];
+  for (const line of lines.slice(start + 1)) {
+    if (line === "") return coverage;
+    if (line === "  (none)") continue;
+    if (!line.startsWith("  - ")) return undefined;
+    coverage.push(line.slice("  - ".length));
+  }
+  return coverage;
+}
+
+const COVERAGE_HEADING = "What this ruling would cover:";
 
 function formatReviewQuestion(text: string): string {
   // Native question renderers fold/indent rows independently, breaking pixel art.

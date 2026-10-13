@@ -6,6 +6,7 @@ import { parseWorkloadPrincipal } from "@/services/agent-runtime/runtime-identit
 import { sessionCallerId } from "./actor";
 import { isCommandExecutionTool } from "./command-normalization";
 import {
+  formatArgumentBlock,
   formatArgumentLines,
   parseReviewedArguments,
   reviewedToolLabel,
@@ -224,7 +225,12 @@ export async function getHitlAskUserArguments(params: {
     review.tool,
     parseReviewedArguments(review.arguments) ?? {},
   );
-  const argumentLines = formatArgumentLines(args, REVIEW_PREVIEW_WIDTH);
+  const argumentLines = formatArgumentBlock(args, REVIEW_PREVIEW_WIDTH);
+  // The host already names the highlighted choice above its preview, and both
+  // choices rule on the same call, so each preview shows only the call.
+  const preview = argumentLines
+    ? codeBlock(argumentLines)
+    : "This call has no arguments.";
   const accepted = acceptedCoverage(review.text);
   return {
     question:
@@ -235,19 +241,18 @@ export async function getHitlAskUserArguments(params: {
       ...acceptedBlock(accepted),
     ].join("\n\n"),
     header: "Approval",
-    options: options.map((option) => ({
-      ...option,
-      preview: argumentLines
-        ? `${option.label}\n\n${argumentLines}`
-        : option.label,
-    })),
+    options: options.map((option) => ({ ...option, preview })),
     allowMultiple: false,
     remedy_offer_ids: [offerId],
   };
 }
 
-/** Columns of Claude Code's preview pane beside the option list. */
-const REVIEW_PREVIEW_WIDTH = 56;
+/**
+ * Columns of Claude Code's narrowest preview pane: VS Code beside the option
+ * list at its 576px breakpoint, with the default 14px editor font. That pane
+ * cuts longer lines; the terminal wraps them.
+ */
+const REVIEW_PREVIEW_WIDTH = 34;
 
 export async function recordHitlRuling(params: {
   session: OpenAppaSession;
@@ -458,6 +463,21 @@ function reviewCoverage(text: string): string[] | undefined {
 }
 
 const COVERAGE_HEADING = "What this ruling would cover:";
+
+/**
+ * The text as a fenced block. Claude Code renders previews as markdown, so
+ * outside a block it would drop the `**`, `__` and backticks of a reviewed
+ * command. The fence is longer than any backtick run in the text, so the
+ * text cannot end the block early.
+ */
+function codeBlock(text: string): string {
+  const longestRun = Math.max(
+    0,
+    ...(text.match(/`+/g) ?? []).map((run) => run.length),
+  );
+  const fence = "`".repeat(Math.max(3, longestRun + 1));
+  return `${fence}text\n${text}\n${fence}`;
+}
 
 function formatReviewQuestion(text: string): string {
   // Native question renderers fold/indent rows independently, breaking pixel art.

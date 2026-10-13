@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   approvalPromptCall,
+  formatArgumentBlock,
   formatArgumentLines,
   parseReviewedArguments,
   reviewedToolLabel,
@@ -103,5 +104,41 @@ describe("formatArgumentLines", () => {
 
   test("returns an empty string without arguments", () => {
     expect(formatArgumentLines({})).toBe("");
+  });
+});
+
+describe("formatArgumentBlock", () => {
+  test("keeps names and values on one line when every value fits", () => {
+    expect(
+      formatArgumentBlock({ channel: "#general", text: "Hello" }, 38),
+    ).toBe("channel  #general\ntext     Hello");
+  });
+
+  test("puts each name on its own line when a value does not fit beside the names", () => {
+    expect(
+      formatArgumentBlock(
+        { command: "git push -u origin feature", description: "Push" },
+        38,
+      ),
+    ).toBe(
+      ["command", "  git push -u origin feature", "description", "  Push"].join(
+        "\n",
+      ),
+    );
+  });
+
+  test("wraps a long value within the width and leaves blank lines empty", () => {
+    expect(
+      formatArgumentBlock(
+        { body: "first paragraph of the body\n\nsecond" },
+        20,
+      ),
+    ).toBe(
+      ["body", "  first paragraph of", "  the body", "", "  second"].join("\n"),
+    );
+  });
+
+  test("returns an empty string without arguments", () => {
+    expect(formatArgumentBlock({}, 38)).toBe("");
   });
 });

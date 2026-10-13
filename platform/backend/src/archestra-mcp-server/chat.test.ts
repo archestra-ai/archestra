@@ -492,7 +492,7 @@ describe("chat tool execution", () => {
       session,
       offerIds: [offerId],
     });
-    expect(rewritten?.options[0].preview).toBe("Approve\n\nvalue  1");
+    expect(rewritten?.options[0].preview).toBe("```text\nvalue  1\n```");
     const requests: Array<{ message: string }> = [];
     mockContext = {
       ...mockContext,

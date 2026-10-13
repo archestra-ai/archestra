@@ -313,7 +313,7 @@ test("asks preview hosts about a structured tool by name and previews its argume
     },
   });
 
-  const argumentLines = "channel  #general\ntext     Hello";
+  const preview = "```text\nchannel  #general\ntext     Hello\n```";
   expect(
     await getHitlAskUserArguments({ session: active, offerIds: ["offer-1"] }),
   ).toEqual({
@@ -324,12 +324,12 @@ test("asks preview hosts about a structured tool by name and previews its argume
       {
         label: "Approve",
         description: "Allow this exact tool call.",
-        preview: `Approve\n\n${argumentLines}`,
+        preview,
       },
       {
         label: "Deny",
         description: "Keep this tool call blocked.",
-        preview: `Deny\n\n${argumentLines}`,
+        preview,
       },
     ],
     allowMultiple: false,
@@ -337,7 +337,7 @@ test("asks preview hosts about a structured tool by name and previews its argume
   });
 });
 
-test("wraps long argument values to the preview pane width", async () => {
+test("wraps long argument values to the narrowest preview pane", async () => {
   const active = session("wrapped-preview");
   const text = Array.from({ length: 20 }, (_, i) => `word${i}`).join(" ");
   await stageHitlReview({
@@ -354,23 +354,58 @@ test("wraps long argument values to the preview pane width", async () => {
     session: active,
     offerIds: ["offer-1"],
   });
-  const lines = question?.options[0].preview?.split("\n") ?? [];
-  expect(lines.slice(0, 2)).toEqual(["Approve", ""]);
-  expect(lines.length).toBeGreaterThan(3);
-  expect(lines.slice(2).every((line) => line.length <= 56)).toBe(true);
+  const preview = question?.options[0].preview ?? "";
+  expect(question?.options[1].preview).toBe(preview);
+  const lines = preview.split("\n");
+  expect([lines[0], lines.at(-1)]).toEqual(["```text", "```"]);
+  const block = lines.slice(1, -1);
+  expect(block[0]).toBe("text");
+  expect(block.length).toBeGreaterThan(2);
+  expect(block.every((line) => line.length <= 34)).toBe(true);
   expect(
-    lines
-      .slice(2)
-      .map((line) => line.slice("text  ".length))
+    block
+      .slice(1)
+      .map((line) => line.slice("  ".length))
       .join(" "),
   ).toBe(text);
+});
+
+test("shows a reviewed command exactly as written, markdown and fences included", async () => {
+  const active = session("markdown-preview");
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "offer-1",
+      text: "Full review text.",
+      tool: "Bash",
+      arguments: JSON.stringify({
+        command: "rm -rf __pycache__ && echo **done** `whoami`\n```\nEOF",
+      }),
+    },
+  });
+
+  const question = await getHitlAskUserArguments({
+    session: active,
+    offerIds: ["offer-1"],
+  });
+  expect(question?.options[0].preview).toBe(
+    [
+      "````text",
+      "command",
+      "  rm -rf __pycache__ && echo",
+      "  **done** `whoami`",
+      "  ```",
+      "  EOF",
+      "````",
+    ].join("\n"),
+  );
 });
 
 test.each([
   ["no arguments", undefined],
   ["empty arguments", "{}"],
   ["arguments that are not an object", "[1,2]"],
-])("previews only the choice when the review has %s", async (_, reviewedArguments) => {
+])("says the call has no arguments when the review has %s", async (_, reviewedArguments) => {
   const active = session("bare-preview");
   await stageHitlReview({
     session: active,
@@ -389,8 +424,8 @@ test.each([
   expect(question?.question).toBe("Full review text.");
   expect(question?.previewQuestion).toBe("Approve local_tool?");
   expect(question?.options.map((option) => option.preview)).toEqual([
-    "Approve",
-    "Deny",
+    "This call has no arguments.",
+    "This call has no arguments.",
   ]);
 });
 
@@ -474,11 +509,11 @@ test("shows a command once although the proxy reviews it under both spellings", 
     session: active,
     offerIds: ["offer-1"],
   });
-  const argumentLines =
-    "command      git push -u origin feature\ndescription  Push the branch";
-  expect(question?.options[0].preview).toBe(`Approve\n\n${argumentLines}`);
+  expect(question?.options[0].preview).toBe(
+    "```text\ncommand\n  git push -u origin feature\ndescription\n  Push the branch\n```",
+  );
   expect(question?.question).toBe(
-    `Approve Bash?\n\n${argumentLines}\n\nApproving also accepts:\n  - the readers must be the public audience\n\nApprove lets this exact call run. Deny keeps it blocked.`,
+    "Approve Bash?\n\ncommand      git push -u origin feature\ndescription  Push the branch\n\nApproving also accepts:\n  - the readers must be the public audience\n\nApprove lets this exact call run. Deny keeps it blocked.",
   );
 });
 
@@ -499,7 +534,7 @@ test("keeps both arguments when a command tool's cmd and command differ", async 
     offerIds: ["offer-1"],
   });
   expect(question?.options[0].preview).toBe(
-    "Approve\n\ncmd      ls\ncommand  rm -rf build",
+    "```text\ncmd      ls\ncommand  rm -rf build\n```",
   );
 });
 

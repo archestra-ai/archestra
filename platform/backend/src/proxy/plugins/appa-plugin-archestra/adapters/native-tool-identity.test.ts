@@ -89,12 +89,12 @@ describe("native local tool identities", () => {
       {
         label: "Approve",
         description: "Allow this exact tool call.",
-        preview: "Approve\n\ntext  Hello",
+        preview: "```text\ntext  Hello\n```",
       },
       {
         label: "Deny",
         description: "Keep this tool call blocked.",
-        preview: "Deny\n\ntext  Hello",
+        preview: "```text\ntext  Hello\n```",
       },
     ],
     allowMultiple: false,

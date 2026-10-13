@@ -2084,12 +2084,12 @@ describe("asking through the client's own question tool", () => {
                 {
                   label: "Approve",
                   description: "Allow this exact tool call.",
-                  preview: "Approve",
+                  preview: "This call has no arguments.",
                 },
                 {
                   label: "Deny",
                   description: "Keep this tool call blocked.",
-                  preview: "Deny",
+                  preview: "This call has no arguments.",
                 },
               ],
               multiSelect: false,

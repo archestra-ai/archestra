@@ -571,7 +571,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     }
     if (binding && binding.adapter?.id !== "archestra-chat") {
       if (binding.request.tools?.control) {
-        appendQuestionContinuation({
+        insertRequestGuidance({
           request: context.request,
           interactionType: context.interactionType,
           guidance: EXTERNAL_REMEDY_WORKFLOW_GUIDANCE,
@@ -4283,7 +4283,7 @@ function appendNativeDelegationGuidance(
   const waitDeclared = declared.some(
     (tool) => tool.namespace === "collaboration" && tool.name === "wait_agent",
   );
-  appendQuestionContinuation({
+  insertRequestGuidance({
     request: context.request,
     interactionType: context.interactionType,
     guidance: nativeDelegationGuidance(waitDeclared),
@@ -5019,6 +5019,49 @@ function requestCarriesInstruction(params: {
     return typeof request.system === "string" && request.system.includes(text);
   }
   return false;
+}
+
+/**
+ * Adds guidance that holds for the whole request before the conversation,
+ * next to the client's own developer instructions. Placed after the user's
+ * message, it made models served to Codex answer a greeting twice, as
+ * commentary and again as the final answer, and Codex showed both. The
+ * question guidance and turn-specific continuations still go last through
+ * appendQuestionContinuation: placed earlier, the question guidance was
+ * followed less often.
+ */
+function insertRequestGuidance(params: {
+  request: unknown;
+  interactionType: string;
+  guidance: string;
+}): void {
+  const { request, interactionType, guidance } = params;
+  if (
+    interactionType !== "openai:responses" ||
+    !isRecord(request) ||
+    !Array.isArray(request.input)
+  ) {
+    appendQuestionContinuation(params);
+    return;
+  }
+  if (requestCarriesInstruction({ request, interactionType, text: guidance })) {
+    return;
+  }
+  const input = request.input;
+  const conversationStart = input.findIndex(
+    (item) =>
+      !(
+        isRecord(item) &&
+        (item.type === "additional_tools" ||
+          ((item.type === undefined || item.type === "message") &&
+            (item.role === "developer" || item.role === "system")))
+      ),
+  );
+  input.splice(conversationStart === -1 ? input.length : conversationStart, 0, {
+    type: "message",
+    role: "developer",
+    content: [{ type: "input_text", text: guidance }],
+  });
 }
 
 function appendQuestionContinuation(params: {

@@ -893,6 +893,105 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
+  test("keeps only the question guidance after the user's message in a Codex request", async () => {
+    // Fixed guidance after the user's message made models answer a Codex
+    // greeting twice, as commentary and again as the final answer.
+    const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+    const context = requestContext({ sessionId: "codex-guidance-placement" });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: { name: "archestra__ask_user" },
+        platformToolNames: new Set(),
+        namespaces: new Map(),
+      },
+      customTools: new Set(),
+      declaredTools: [{ name: "request_user_input" }],
+    };
+    context.headers = {
+      originator: "codex_cli_rs",
+      "x-archestra-native-question": "request_user_input",
+    };
+    context.interactionType = "openai:responses";
+    const clientInstructions = {
+      type: "message",
+      role: "developer",
+      content: [{ type: "input_text", text: "Client developer instructions." }],
+    };
+    const environment = {
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: "<environment_context />" }],
+    };
+    const greeting = {
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: "Hi" }],
+    };
+    const request = {
+      input: [
+        {
+          type: "additional_tools",
+          role: "developer",
+          tools: [
+            {
+              type: "namespace",
+              name: "collaboration",
+              tools: [
+                { type: "function", name: "spawn_agent" },
+                { type: "function", name: "wait_agent" },
+              ],
+            },
+          ],
+        },
+        clientInstructions,
+        environment,
+        greeting,
+      ] as Record<string, unknown>[],
+    };
+    const texts = (items: Record<string, unknown>[]) =>
+      items.flatMap((item) =>
+        Array.isArray(item.content)
+          ? item.content.map((block: { text?: string }) => block.text ?? "")
+          : [],
+      );
+
+    try {
+      await plugin.onSessionInit(context);
+      for (let pass = 0; pass < 2; pass++) {
+        await plugin.onBeforeModel({ ...context, request });
+        const input = request.input;
+        const afterGreeting = input.slice(input.indexOf(greeting) + 1);
+        expect(afterGreeting).toHaveLength(1);
+        expect(afterGreeting[0].role).toBe("developer");
+        expect(texts(afterGreeting).join("\n")).toContain(
+          "ask with request_user_input",
+        );
+
+        const beforeConversation = input.slice(
+          input.indexOf(clientInstructions) + 1,
+          input.indexOf(environment),
+        );
+        const prefix = texts(beforeConversation);
+        expect(prefix).toHaveLength(2);
+        expect(prefix).toEqual(
+          expect.arrayContaining([
+            expect.stringMatching(/^collaboration\.spawn_agent is declared\./),
+            expect.stringMatching(
+              /^The organization's guardrails policy can block a tool call/,
+            ),
+          ]),
+        );
+      }
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+
   test("does not add native-delegation guidance without a collaboration spawn declaration", async () => {
     const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
     const context = requestContext({ sessionId: "codex-no-native-spawn" });

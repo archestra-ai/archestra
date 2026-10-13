@@ -124,7 +124,7 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
 };
 
 export default function ApiKeysPage() {
-  const docsUrl = getFrontendDocsUrl("platform-supported-llm-providers");
+  const docsUrl = getFrontendDocsUrl("llm-proxy/providers");
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
   const search = searchParams.get("search") || "";
   const providerFilter = searchParams.get("provider") || "all";

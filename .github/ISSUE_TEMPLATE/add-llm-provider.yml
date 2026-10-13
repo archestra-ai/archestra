@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        To add the provider yourself, see [Adding LLM Providers](https://archestra.ai/docs/platform-adding-llm-providers).
+        Maintainers build providers from these issues. [Adding LLM Providers](https://archestra.ai/docs/contributing/adding-llm-providers) lists what they need to know about the API.
   - type: input
     id: provider
     attributes:

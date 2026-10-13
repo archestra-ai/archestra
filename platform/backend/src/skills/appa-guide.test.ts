@@ -67,22 +67,14 @@ describe("APPA Guide feature availability", () => {
     expect(JSON.stringify(loaded)).toContain(
       "archestra__get_guardrails_policy",
     );
-    const reference = await executeArchestraTool(
-      "archestra__load_skill",
-      { name: APPA_GUIDE_SKILL.name, path: "references/policy-writing.md" },
-      context,
-    );
-    expect(reference.isError).not.toBe(true);
-    expect(JSON.stringify(reference)).toContain("Writing OpenAPPA policies");
-    const contracts = await executeArchestraTool(
-      "archestra__load_skill",
-      { name: APPA_GUIDE_SKILL.name, path: "references/contracts.md" },
-      context,
-    );
-    expect(contracts.isError).not.toBe(true);
-    expect(JSON.stringify(contracts)).toContain(
-      "OpenAPPA policy configuration and contracts reference",
-    );
+    for (const path of ["references/contracts.md", "references/archestra.md"]) {
+      const reference = await executeArchestraTool(
+        "archestra__load_skill",
+        { name: APPA_GUIDE_SKILL.name, path },
+        context,
+      );
+      expect(reference.isError).not.toBe(true);
+    }
   });
 
   test("disabling APPA hides persisted and assigned guides without deleting user edits", async ({
@@ -167,47 +159,24 @@ describe("APPA Guide feature availability", () => {
     config.openappa.enabled = true;
     const organizationId = (await makeOrganization()).id;
     const reference = APPA_GUIDE_SKILL.files.find(
-      (file) => file.path === "references/policy-writing.md",
+      (file) => file.path === "references/archestra.md",
     )?.content;
-    if (!reference) throw new Error("policy-writing reference not found");
-    const blocks = [...reference.matchAll(/```toml\n([\s\S]*?)```/g)].map(
-      (match) => match[1],
-    );
-    const [header, read, write, fallback, remote, declarations] = blocks;
-    expect(blocks).toHaveLength(6);
-    expect(header).toContain("[policy.deployment]\ncontext_control = true");
+    if (!reference) throw new Error("Archestra reference not found");
+    const [fallback, declarations] = [
+      ...reference.matchAll(/```toml\n([\s\S]*?)```/g),
+    ].map((match) => match[1]);
+    const header =
+      "[policy]\nversion = 2\n\n[policy.deployment]\ncontext_control = true\n";
     expect(initialPolicy()).toContain(
       "[policy.deployment]\ncontext_control = true",
     );
     const binding =
       '\n[externals.annotators.noop]\nurl = "http://127.0.0.1:9000/api/guardrails-policy/annotators/noop"\n';
     for (const candidate of [
-      header,
-      header + read,
-      header + write,
       header + fallback + binding,
-      header + remote,
       // Declarations are root-level keys, so they precede the first table.
       declarations + header,
     ]) {
-      expect(
-        await guardrailsPolicyService.validate(candidate, { organizationId }),
-      ).toEqual({
-        valid: true,
-        errors: [],
-        warnings: [],
-      });
-    }
-
-    const contracts = APPA_GUIDE_SKILL.files.find(
-      (f) => f.path === "references/contracts.md",
-    );
-    expect(contracts).toBeDefined();
-    if (!contracts) throw new Error("contracts not found");
-    const contractBlocks = [
-      ...contracts.content.matchAll(/```toml\n([\s\S]*?)```/g),
-    ].map((match) => match[1]);
-    for (const candidate of contractBlocks) {
       expect(
         await guardrailsPolicyService.validate(candidate, { organizationId }),
       ).toEqual({
@@ -227,5 +196,17 @@ describe("APPA Guide feature availability", () => {
     expect(
       APPA_GUIDE_SKILL.files.some((file) => file.content.includes(core)),
     ).toBe(false);
+  });
+
+  test("serves OpenAPPA's policy reference unchanged", () => {
+    const contracts = readFileSync(
+      new URL("./appa-guide.contracts.generated.md", import.meta.url),
+      "utf8",
+    );
+    expect(
+      APPA_GUIDE_SKILL.files.find(
+        (file) => file.path === "references/contracts.md",
+      )?.content,
+    ).toBe(contracts);
   });
 });

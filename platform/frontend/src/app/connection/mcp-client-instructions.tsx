@@ -10,7 +10,7 @@ import {
   Loader2,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   SECRET_PLACEHOLDER_TOKEN,
   SecretCopyButton,
@@ -399,6 +399,13 @@ function DeeplinkHero({
 
 const PERSONAL_TOKEN_ID = "__personal__";
 
+export type SelectedGatewayToken = {
+  /** Changes when another token is picked. */
+  id: string;
+  tokenStart: string;
+  resolve: () => Promise<string | null>;
+};
+
 /**
  * Auth-header row for the generic "Any Client" flow. Lets the user pick
  * which token (personal / team / org) to embed, and reveal the real value
@@ -408,12 +415,18 @@ export function GenericAuthRow({
   gatewayId,
   placeholder,
   bare = false,
+  onTokenChange,
 }: {
   gatewayId: string;
   placeholder: string;
   /** When true, render just the raw token (no `Bearer ` prefix). Used by clients
    *  whose credential UI prepends the scheme automatically (e.g. n8n Bearer Auth). */
   bare?: boolean;
+  /**
+   * Told which token is selected, so an example elsewhere can use it: its
+   * masked form and how to read its value; null while none is selected.
+   */
+  onTokenChange?: (token: SelectedGatewayToken | null) => void;
 }) {
   const { data: userToken } = useUserToken();
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
@@ -498,6 +511,22 @@ export function GenericAuthRow({
   // The on-screen value is masked once a token is selected, so putting the
   // real token on the clipboard is an explicit menu choice (SecretCopyButton).
   const canResolveToken = isPersonal || !!selectedTeamToken;
+  const selectedTokenStart = isPersonal
+    ? userToken?.tokenStart
+    : selectedTeamToken?.tokenStart;
+  const fetchTokenValueRef = useRef(fetchTokenValue);
+  fetchTokenValueRef.current = fetchTokenValue;
+  useEffect(() => {
+    onTokenChange?.(
+      canResolveToken && selectedTokenStart
+        ? {
+            id: selectedId ?? "",
+            tokenStart: selectedTokenStart,
+            resolve: () => fetchTokenValueRef.current(),
+          }
+        : null,
+    );
+  }, [onTokenChange, canResolveToken, selectedId, selectedTokenStart]);
   const getSecretText = async (): Promise<string | null> => {
     const value = exposedValue ?? (await fetchTokenValue());
     if (!value) return null; // fetch failed; the mutation already surfaced a toast

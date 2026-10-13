@@ -162,7 +162,7 @@ describe("SidebarWarningsAccordion network policy warning", () => {
     expect(link).toHaveAttribute(
       "href",
       expect.stringContaining(
-        "platform-deployment#ssrf-protection-for-mcp-server-pods",
+        "admin/deployment#ssrf-protection-for-mcp-server-pods",
       ),
     );
     expect(link).toHaveAttribute("target", "_blank");

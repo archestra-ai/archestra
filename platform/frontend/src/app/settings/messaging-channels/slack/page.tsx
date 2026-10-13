@@ -81,7 +81,7 @@ export default function SlackPage() {
         allStepsCompleted={allStepsCompleted}
         isLoading={setupDataLoading}
         providerLabel={channelLabel}
-        docsUrl={getFrontendDocsUrl("platform-slack")}
+        docsUrl={getFrontendDocsUrl("agents/triggers-and-channels/slack")}
       >
         <LlmKeySetupStep />
         <SetupStep

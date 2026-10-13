@@ -151,7 +151,7 @@ export default function TelegramPage() {
         allStepsCompleted={allStepsCompleted}
         isLoading={statusLoading}
         providerLabel={channelLabel}
-        docsUrl={getFrontendDocsUrl("platform-telegram")}
+        docsUrl={getFrontendDocsUrl("agents/triggers-and-channels/telegram")}
       >
         <LlmKeySetupStep />
         <SetupStep

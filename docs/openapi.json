@@ -85215,7 +85215,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Send a message to Anthropic using the default agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Send a message to Anthropic using the default agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -85519,7 +85519,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Send a message to Anthropic using a specific agent (n8n URL format)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Send a message to Anthropic using a specific agent (n8n URL format)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -85833,7 +85833,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "List Anthropic models (default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "List Anthropic models (default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "parameters": [
           {
             "schema": {
@@ -86147,7 +86147,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "List Anthropic models (specific agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "List Anthropic models (specific agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "parameters": [
           {
             "schema": {
@@ -101846,7 +101846,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with Archestra (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with Archestra (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -102125,7 +102125,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with Archestra for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with Archestra for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -108926,7 +108926,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create embeddings with Azure AI Foundry (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create embeddings with Azure AI Foundry (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -109299,7 +109299,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create embeddings with Azure AI Foundry for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create embeddings with Azure AI Foundry for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -109682,7 +109682,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with Azure AI Foundry (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with Azure AI Foundry (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -110197,7 +110197,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a response with Azure AI Foundry (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a response with Azure AI Foundry (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -110779,7 +110779,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a response with Azure AI Foundry for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a response with Azure AI Foundry for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -111371,7 +111371,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with Azure AI Foundry for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with Azure AI Foundry for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -111896,7 +111896,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Call Amazon Bedrock models using the OpenAI ChatCompletions wire format (default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Call Amazon Bedrock models using the OpenAI ChatCompletions wire format (default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -111940,7 +111940,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Call Amazon Bedrock models using the OpenAI ChatCompletions wire format (specific agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Call Amazon Bedrock models using the OpenAI ChatCompletions wire format (specific agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -111994,7 +111994,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "List Amazon Bedrock models (via ListInferenceProfiles) in OpenAI models-list format\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "List Amazon Bedrock models (via ListInferenceProfiles) in OpenAI models-list format\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "parameters": [
           {
             "schema": {
@@ -112297,7 +112297,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "List Amazon Bedrock models (via ListInferenceProfiles) in OpenAI models-list format (specific agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "List Amazon Bedrock models (via ListInferenceProfiles) in OpenAI models-list format (specific agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "parameters": [
           {
             "schema": {
@@ -112610,7 +112610,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Send a message to Amazon Bedrock using the default agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Send a message to Amazon Bedrock using the default agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -114029,7 +114029,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Send a message to Amazon Bedrock for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Send a message to Amazon Bedrock for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -115458,7 +115458,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Stream a message response from Amazon Bedrock using the default agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Stream a message response from Amazon Bedrock using the default agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -116338,7 +116338,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Stream a message response from Amazon Bedrock for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Stream a message response from Amazon Bedrock for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -117228,7 +117228,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Send a message to Amazon Bedrock for a specific agent (AI SDK format)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Send a message to Amazon Bedrock for a specific agent (AI SDK format)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -118662,7 +118662,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Stream a message response from Amazon Bedrock for a specific agent (AI SDK format)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Stream a message response from Amazon Bedrock for a specific agent (AI SDK format)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -119557,7 +119557,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Invoke an Anthropic model on Amazon Bedrock (Anthropic Messages format, default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Invoke an Anthropic model on Amazon Bedrock (Anthropic Messages format, default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -121198,7 +121198,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Invoke an Anthropic model on Amazon Bedrock (Anthropic Messages format) for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Invoke an Anthropic model on Amazon Bedrock (Anthropic Messages format) for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -122849,7 +122849,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Stream an Anthropic model response from Amazon Bedrock (Anthropic Messages format, default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Stream an Anthropic model response from Amazon Bedrock (Anthropic Messages format, default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -124255,7 +124255,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Stream an Anthropic model response from Amazon Bedrock (Anthropic Messages format) for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Stream an Anthropic model response from Amazon Bedrock (Anthropic Messages format) for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -125671,7 +125671,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with Cerebras (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with Cerebras (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -125950,7 +125950,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with Cerebras for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with Cerebras for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -146903,7 +146903,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Send a chat request to Cohere using the default agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Send a chat request to Cohere using the default agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -147182,7 +147182,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Send a chat request to Cohere using a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Send a chat request to Cohere using a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -147660,9 +147660,6 @@
                         "mcpIdleHibernationBetaEnabled": {
                           "type": "boolean"
                         },
-                        "mcpServerAlertingEnabled": {
-                          "type": "boolean"
-                        },
                         "sandbox": {
                           "type": "boolean"
                         },
@@ -147904,7 +147901,6 @@
                         "betaEnabled",
                         "orchestratorK8sRuntime",
                         "mcpIdleHibernationBetaEnabled",
-                        "mcpServerAlertingEnabled",
                         "sandbox",
                         "agentRuntime",
                         "agentRuntimeCatalogImages",
@@ -150298,7 +150294,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with DeepSeek (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with DeepSeek (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -150577,7 +150573,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with DeepSeek for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with DeepSeek for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -156226,7 +156222,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create embeddings with Gemini (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create embeddings with Gemini (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -156599,7 +156595,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create embeddings with Gemini for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create embeddings with Gemini for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -156982,7 +156978,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Generate content using Gemini (default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Generate content using Gemini (default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -157297,7 +157293,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Stream generated content using Gemini (default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Stream generated content using Gemini (default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -157602,7 +157598,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Generate content using Gemini with specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Generate content using Gemini with specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -157927,7 +157923,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Stream generated content using Gemini with specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Stream generated content using Gemini with specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -160397,7 +160393,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with GitHub Copilot (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with GitHub Copilot (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -161942,7 +161938,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with GitHub Copilot for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with GitHub Copilot for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -163497,7 +163493,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a response with GitHub Copilot (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a response with GitHub Copilot (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -164070,7 +164066,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a response with GitHub Copilot for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a response with GitHub Copilot for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -164653,7 +164649,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "List GitHub Copilot models (default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "List GitHub Copilot models (default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "parameters": [
           {
             "schema": {
@@ -164955,7 +164951,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "List GitHub Copilot models (specific agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "List GitHub Copilot models (specific agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "parameters": [
           {
             "schema": {
@@ -166452,7 +166448,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with Groq (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with Groq (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -166731,7 +166727,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with Groq for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with Groq for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -255318,7 +255314,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Request decisions from Jev (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Request decisions from Jev (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -255597,7 +255593,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Request decisions from Jev for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Request decisions from Jev for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -256227,7 +256223,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with Kimi (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with Kimi (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -257777,7 +257773,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with Kimi for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with Kimi for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -300137,7 +300133,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Get the LLM Proxy\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmProxy:read`: View the LLM Proxy and its connection details",
+        "description": "Get the LLM Proxy\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmProxy:read`: View the LLM Proxy and its connection details",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -300406,7 +300402,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Update the LLM Proxy configuration\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmProxy:update`: Modify LLM Proxy configuration",
+        "description": "Update the LLM Proxy configuration\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmProxy:update`: Modify LLM Proxy configuration",
         "requestBody": {
           "required": true,
           "content": {
@@ -313635,7 +313631,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with Microsoft 365 Copilot (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with Microsoft 365 Copilot (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -315185,7 +315181,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with Microsoft 365 Copilot for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with Microsoft 365 Copilot for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -316745,7 +316741,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "List Microsoft 365 Copilot models (default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "List Microsoft 365 Copilot models (default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "parameters": [
           {
             "schema": {
@@ -317047,7 +317043,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "List Microsoft 365 Copilot models (specific agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "List Microsoft 365 Copilot models (specific agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "parameters": [
           {
             "schema": {
@@ -317359,7 +317355,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with MiniMax (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with MiniMax (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -317628,7 +317624,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with MiniMax for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with MiniMax for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -317907,7 +317903,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create embeddings with Mistral (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create embeddings with Mistral (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -318280,7 +318276,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create embeddings with Mistral for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create embeddings with Mistral for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -318663,7 +318659,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with Mistral (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with Mistral (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -318942,7 +318938,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with Mistral for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with Mistral for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -319231,7 +319227,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "List OpenAI-compatible model ids available through the model router (default LLM proxy)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "List OpenAI-compatible model ids available through the model router (default LLM proxy)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -319523,7 +319519,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "List OpenAI-compatible model ids available through the model router (specific attribution Agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "List OpenAI-compatible model ids available through the model router (specific attribution Agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "parameters": [
           {
             "schema": {
@@ -319827,7 +319823,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a response through the OpenAI-compatible model router (default LLM proxy)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a response through the OpenAI-compatible model router (default LLM proxy)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -320409,7 +320405,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a response through the OpenAI-compatible model router (specific attribution Agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a response through the OpenAI-compatible model router (specific attribution Agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -321001,7 +320997,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create embeddings through the OpenAI-compatible model router (default LLM proxy)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create embeddings through the OpenAI-compatible model router (default LLM proxy)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -321374,7 +321370,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create embeddings through the OpenAI-compatible model router (specific attribution Agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create embeddings through the OpenAI-compatible model router (specific attribution Agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -321757,7 +321753,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion through the OpenAI-compatible model router (default LLM proxy)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion through the OpenAI-compatible model router (default LLM proxy)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -322036,7 +322032,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion through the OpenAI-compatible model router (specific attribution Agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion through the OpenAI-compatible model router (specific attribution Agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -323075,7 +323071,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with Ollama native /api/chat (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with Ollama native /api/chat (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -323354,7 +323350,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with Ollama native /api/chat for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with Ollama native /api/chat for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -323643,7 +323639,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create embeddings with Ollama (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create embeddings with Ollama (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -324016,7 +324012,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create embeddings with Ollama for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create embeddings with Ollama for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -324399,7 +324395,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with Ollama (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with Ollama (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -324678,7 +324674,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with Ollama for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with Ollama for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -326358,7 +326354,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create embeddings with OpenAI (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create embeddings with OpenAI (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -326731,7 +326727,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create embeddings with OpenAI for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create embeddings with OpenAI for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -327114,7 +327110,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a response with OpenAI (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a response with OpenAI (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -327696,7 +327692,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a response with OpenAI for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a response with OpenAI for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -328288,7 +328284,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Compact an OpenAI response (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Compact an OpenAI response (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -328782,7 +328778,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Compact an OpenAI response for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Compact an OpenAI response for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -329286,7 +329282,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with OpenAI (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with OpenAI (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -329565,7 +329561,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with OpenAI for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with OpenAI for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -329854,7 +329850,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "List OpenAI models (default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "List OpenAI models (default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "parameters": [
           {
             "schema": {
@@ -330175,7 +330171,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "List OpenAI models (specific agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "List OpenAI models (specific agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "parameters": [
           {
             "schema": {
@@ -341581,7 +341577,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with OpenRouter (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with OpenRouter (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -341860,7 +341856,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with OpenRouter for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with OpenRouter for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -359722,7 +359718,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with Perplexity (uses default agent). Note: this endpoint does not support external tool calling; the /responses Agent API endpoint does.\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with Perplexity (uses default agent). Note: this endpoint does not support external tool calling; the /responses Agent API endpoint does.\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -360001,7 +359997,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with Perplexity for a specific agent. Note: this endpoint does not support external tool calling; the /responses Agent API endpoint does.\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with Perplexity for a specific agent. Note: this endpoint does not support external tool calling; the /responses Agent API endpoint does.\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -360290,7 +360286,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a response with the Perplexity Agent API (uses default agent).\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a response with the Perplexity Agent API (uses default agent).\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -360872,7 +360868,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a response with the Perplexity Agent API for a specific agent.\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a response with the Perplexity Agent API for a specific agent.\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -425785,7 +425781,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create embeddings with vLLM (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create embeddings with vLLM (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -426158,7 +426154,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create embeddings with vLLM for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create embeddings with vLLM for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -426541,7 +426537,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with vLLM (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with vLLM (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -426820,7 +426816,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with vLLM for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with vLLM for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -427109,7 +427105,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with xAI (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with xAI (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -427388,7 +427384,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with xAI for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with xAI for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -428279,7 +428275,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create embeddings with Zhipu AI (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create embeddings with Zhipu AI (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -428652,7 +428648,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create embeddings with Zhipu AI for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create embeddings with Zhipu AI for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -429035,7 +429031,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with Zhipu AI (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with Zhipu AI (uses default agent)\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {
@@ -429322,7 +429318,7 @@
         "tags": [
           "LLM Proxy"
         ],
-        "description": "Create a chat completion with Zhipu AI for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).",
+        "description": "Create a chat completion with Zhipu AI for a specific agent\n\nAuthentication:\n\nThis route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).",
         "requestBody": {
           "required": true,
           "content": {

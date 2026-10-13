@@ -9,6 +9,7 @@ packages:
   - "archestra-rs/app-runtime-rs"
   - "archestra-rs/image-rs"
   - "e2e-tests"
+  - "docs-screenshots"
 
 catalog:
   ai: ^6.0.193

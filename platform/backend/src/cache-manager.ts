@@ -53,6 +53,8 @@ export const CacheKey = {
   OpenAppaHitlRuling: "openappa-hitl-ruling",
   /** Pending OpenAPPA review indexed by a verified runtime workspace */
   OpenAppaRuntimeHitlReview: "openappa-runtime-hitl-review",
+  /** Sessions already told once to resend a request that lacked the gateway remedy tools */
+  OpenAppaRemedyToolsMissing: "openappa-remedy-tools-missing",
   /** OpenAI credentials that cannot generate reasoning summaries (unverified org) */
   OpenaiReasoningSummaryUnsupported: "openai-reasoning-summary-unsupported",
   /** Channel discovery TTL per workspace */

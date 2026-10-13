@@ -71,7 +71,7 @@ cd backend && pnpm knip   # runs knip:dev AND knip:production — CI runs both; 
 
 ## Adding config / env vars
 
-- Name: `ARCHESTRA_<PRODUCT_AREA>_<THING>`. Then: parse/validate in `backend/src/config.ts` (+ tests in `config.test.ts` for custom parsers) → list in `platform/.env.example` with a comment → document in `../docs/pages/platform-deployment.md` → expose via `backend/src/routes/config.ts` + `useFeature()` if the frontend needs it.
+- Name: `ARCHESTRA_<PRODUCT_AREA>_<THING>`. Then: parse/validate in `backend/src/config.ts` (+ tests in `config.test.ts` for custom parsers) → list in `platform/.env.example` with a comment → document in `../docs/pages/reference/configuration.md` → expose via `backend/src/routes/config.ts` + `useFeature()` if the frontend needs it.
 
 ## Related skills
 

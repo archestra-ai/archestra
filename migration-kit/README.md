@@ -1,12 +1,12 @@
-# Migrate from Claude, OpenClaw, Hermes
+# Migrate Your Agents to Archestra
 
 Turn an existing agentic PoC into an [Archestra](https://github.com/archestra-ai/archestra) pilot.
 
 The migration kit turns an existing agentic setup into an Archestra setup. Typical sources are the
-unsorted configs left by tools like Claude Code, OpenClaw, or Hermes: project instruction files, MCP
+unsorted configs left by tools like Claude Code or OpenClaw: project instruction files, MCP
 configs, hooks, local scripts, and whatever else accumulated during evaluation.
 
-It ships as a Skill (`migrate-to-archestra`) for your favorite coding agent (e.g. Claude Code), so the migration runs as a guided,
+It ships as a Skill (`migrate-to-archestra`) for your coding agent (Claude Code, Cursor, OpenCode, or any agent that runs skills), so the migration runs as a guided,
 agentic flow rather than a one-shot script. The deterministic work — discovering source artifacts,
 redacting secrets, building and validating API payloads — lives in zero-dependency Python helpers;
 the model owns the judgment calls (what maps to what, what to skip, what needs review).
@@ -30,9 +30,11 @@ curl -fsSL https://raw.githubusercontent.com/archestra-ai/archestra/main/migrati
 ```
 
 Zero-dependency (stock `python3` ≥ 3.10, stdlib only). The installer pulls **only the files the skill
-needs** — `SKILL.md`, `scripts/`, `references/` (~90 KB) — into `~/.claude/skills/migrate-to-archestra/`.
+needs** — `SKILL.md`, `scripts/`, `references/` (~90 KB) — into the skills folder of every coding agent
+it finds: Claude Code (`~/.claude/skills/`), Cursor (`~/.cursor/skills/`), and OpenCode
+(`~/.config/opencode/skills/`). With none found, it uses Claude Code's folder. For another agent, pass `--dest`.
 
-Then open Claude Code near the source project and ask:
+Then open your coding agent near the source project and ask:
 
 ```text
 Use the migrate-to-archestra skill to migrate this pilot into my Archestra instance.
@@ -49,7 +51,7 @@ Use the migrate-to-archestra skill to migrate /path/to/pilot into http://localho
 | Flag | Default | Meaning |
 | --- | --- | --- |
 | `--ref` | `main` | Git ref (branch, tag, or commit SHA) to install from. |
-| `--dest` | `~/.claude/skills/migrate-to-archestra` | Install directory. |
+| `--dest` | each detected agent's skills folder | Install directory. |
 | `--force` | off | Overwrite an existing non-empty destination. |
 
 To pin a commit or avoid piping to a shell:

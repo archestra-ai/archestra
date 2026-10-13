@@ -1312,7 +1312,7 @@ function UploadPackageDialog({
         <span>
           Pick the package folder: its manifest, policy and helper scripts.{" "}
           <a
-            href={getDocsUrl(DocsPage.PlatformAiToolGuardrails, "batteries")}
+            href={getDocsUrl(DocsPage.PlatformAiToolGuardrailsBatteries)}
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-1 underline underline-offset-4"

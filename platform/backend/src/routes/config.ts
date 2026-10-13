@@ -88,7 +88,6 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               // organization toggle sit behind it.
               mcpIdleHibernationBetaEnabled: z.boolean(),
               /** BETA: MCP registry attention and alert dismissal surfaces. */
-              mcpServerAlertingEnabled: z.boolean(),
               // SPDX-SnippetEnd
               sandbox: z.boolean(),
               /**
@@ -244,7 +243,6 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // per-server control with it, or the UI renders an operational
           // feature nothing behind it will ever run.
           mcpIdleHibernationBetaEnabled: isIdleHibernationOffered(),
-          mcpServerAlertingEnabled: config.mcpServer.alertingEnabled,
           // SPDX-SnippetEnd
           sandbox: skillSandboxRuntimeService.isEnabled,
           agentRuntime: isAnyAgentRuntimeBackendDriverEnabled(),

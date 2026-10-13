@@ -49,6 +49,8 @@ archestra:
   # Environment variables for e2e testing
   env:
     ENABLE_E2E_TEST_ENDPOINTS: "true"
+    # Beta features on, so the K8s e2e jobs cover idle hibernation.
+    ARCHESTRA_BETA: "true"
     ARCHESTRA_ANALYTICS: disabled
     # LLM Proxy base URLs (for LLM proxy routes)
     # Each provider uses a distinct path prefix to avoid WireMock stub conflicts
@@ -108,8 +110,6 @@ archestra:
     # BETA: auto-sync-permissions connectors — required by the
     # knowledge-permission-sync e2e spec (off by default).
     ARCHESTRA_KNOWLEDGE_BASE_AUTO_SYNC_PERMISSIONS_ENABLED: "true"
-    # Exercise plugin create/edit alongside the other sticky form footers.
-    ARCHESTRA_PLUGINS_ENABLED: "true"
     # Enable test MCP server seeding
     ENABLE_TEST_MCP_SERVER: "true"
     # Disable better-auth rate limit for e2e tests
@@ -138,9 +138,6 @@ archestra:
           key: dummy_var
 
   orchestrator:
-    # Exercise the public chart values, not an env-var bypass, in every K8s
-    # hibernation run.
-    mcpIdleHibernationEnabled: true
     # The shortest accepted idle window keeps negative assertions meaningful.
     mcpIdleHibernationSeconds: 120
     kubernetes:

@@ -639,7 +639,7 @@ function CopyField({
 }
 
 /** Stands in for a key the reader has not asked to reveal. */
-const MASKED_KEY = "arch_••••••••••••••••";
+export const MASKED_KEY = "arch_••••••••••••••••";
 
 /**
  * A key the reader may see once they ask. The caller owns `revealed` so every
@@ -656,7 +656,7 @@ export type RevealableSecret = {
  * examples: the eye reveals it in place, and copying is an explicit choice
  * between the real key and a placeholder.
  */
-function MaskedCodeExample({
+export function MaskedCodeExample({
   language,
   code,
   placeholder,
@@ -726,7 +726,13 @@ function MaskedCodeExample({
 }
 
 /** A multi-line example with a header bar naming the language. */
-function CodeExample({ language, code }: { language: string; code: string }) {
+export function CodeExample({
+  language,
+  code,
+}: {
+  language: string;
+  code: string;
+}) {
   return (
     <div className="overflow-hidden rounded-md border border-terminal-edge bg-terminal">
       <div className="flex items-center justify-between border-b border-terminal-edge py-1 pr-1 pl-3">

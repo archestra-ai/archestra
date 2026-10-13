@@ -28,8 +28,7 @@ describe("SystemPromptEditor", () => {
     true,
     false,
   ])("opens templating help without submitting or losing instructions (docs visible: %s)", async (docsVisible) => {
-    const docsUrl =
-      "https://archestra.ai/docs/platform-agents#system-prompt-templating";
+    const docsUrl = "https://archestra.ai/docs/agents#prompt-templates";
     mockGetFrontendDocsUrl.mockReturnValue(docsVisible ? docsUrl : null);
     const user = userEvent.setup();
     const onSubmit = vi.fn((event) => event.preventDefault());

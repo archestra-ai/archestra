@@ -18,7 +18,7 @@ For a chat-capable provider, check all of these (use `github-copilot` as the wor
 - `backend/src/routes/chat/model-fetchers/` — add a fetcher and register it in the `modelFetchers` record in `model-fetchers/index.ts`; its `Record<SupportedProvider, ModelFetcher>` type makes a missing provider a compile error. `registry.ts#testProviderApiKey` uses it to validate keys on creation. Simple bearer `/models` endpoints reuse `makeBearerFetcher`/`makeStaticFetcher` from `bearer-fetcher.ts`.
 - Message normalization for the chat feature lives in `backend/src/routes/chat/normalization/` (notably `prepare-for-provider.ts`) and `prepare-model-messages.ts` — provider-specific message-shape rules go here, not in the proxy adapters.
 - Frontend: provider key management at `frontend/src/app/llm/model-providers/page.tsx` + `frontend/src/components/create-llm-provider-api-key-dialog.tsx`; provider icon at `frontend/public/icons/<provider>.png`; model pickers (`components/llm-model-select.tsx`, `components/chat/model-selector.tsx`) use `providerDisplayNames`.
-- Also: `backend/src/config.ts` + `.env.example` for base-URL/key env vars, `../docs/pages/platform-supported-llm-providers.md`.
+- Also: `backend/src/config.ts` + `.env.example` for base-URL/key env vars, `../docs/pages/llm-proxy/providers.md`.
 
 For embeddings-only providers, follow `voyage`: register the provider and model fetcher, wire the embedding client, and add it to `EMBEDDING_ONLY_PROVIDER_LIST` in `shared/model-constants.ts`. Chat surfaces use `providerSupportsChat` and `ChatProvider`; do not invent chat routes, adapters, or chat-matrix entries for a provider with no chat API.
 

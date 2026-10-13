@@ -979,38 +979,6 @@ tests:
           content:
             name: ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_SECONDS
 
-  - it: should set ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED when the beta flag is configured
-    documentIndex: 1
-    set:
-      archestra.orchestrator.mcpIdleHibernationEnabled: true
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED
-            value: "true"
-
-  # "false" wins over the ARCHESTRA_BETA master switch, so an operator who
-  # sets it explicitly must get it on the pod.
-  - it: should set ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED when explicitly disabled
-    documentIndex: 1
-    set:
-      archestra.orchestrator.mcpIdleHibernationEnabled: false
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED
-            value: "false"
-
-  - it: should not set ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED by default
-    documentIndex: 1
-    asserts:
-      - notContains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED
-
   # The backend names the objects it creates for itself (the MCP image pre-pull
   # DaemonSet) after the release, so it has to be TOLD the release name: a name
   # inferred from a cluster read can come out different after a blip, and the

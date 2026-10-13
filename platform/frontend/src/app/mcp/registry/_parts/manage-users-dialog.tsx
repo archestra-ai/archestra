@@ -51,7 +51,6 @@ import {
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
 import {
   useInternalMcpCatalog,
   useUpdateInternalMcpCatalogItem,
@@ -615,7 +614,6 @@ function ConnectionsTable({
   rows: ConnectionRow[];
   testId: string;
 } & RowRenderProps) {
-  const alertingEnabled = useFeature("mcpServerAlertingEnabled") === true;
   const hasDeploymentStatuses = rows.some(
     (r) => deploymentStatuses[r.server.id],
   );
@@ -747,7 +745,7 @@ function ConnectionsTable({
             </TableCell>
             <TableCell>
               <div className="flex items-center justify-end gap-2 whitespace-nowrap">
-                {alertingEnabled && server.oauthRefreshError && (
+                {server.oauthRefreshError && (
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>

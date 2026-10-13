@@ -37,7 +37,7 @@ export function SlackSetupDialog({
   onOpenChange,
   connectionMode,
 }: SlackSetupDialogProps) {
-  const docsUrl = getFrontendDocsUrl("platform-slack");
+  const docsUrl = getFrontendDocsUrl("agents/triggers-and-channels/slack");
   const configuredAppName = useAppName();
   const publicBaseUrl = usePublicBaseUrl();
 

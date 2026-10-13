@@ -21,8 +21,8 @@ vi.mock("@archestra/shared", () => ({
     getAgentCatalog: getAgentCatalogMock,
     getTeams: getTeamsMock,
   },
-  DocsPage: { PlatformOrchestrator: "platform-orchestrator" },
-  getDocsUrl: () => "/docs/platform-orchestrator",
+  DocsPage: { PlatformOrchestrator: "mcp/orchestrator" },
+  getDocsUrl: () => "/docs/mcp/orchestrator",
 }));
 
 vi.mock("@/lib/utils/server", () => ({

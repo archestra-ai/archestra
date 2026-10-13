@@ -53,7 +53,7 @@ export function SmallTeamTierBanner({
     return null;
   }
 
-  const pricingUrl = getDocsUrl(DocsPage.PlatformPricingModel);
+  const pricingUrl = getDocsUrl(DocsPage.PlatformOverview, "licensing");
   const enabled = tier.smallTeam || tier.envFlag;
   const userWord = tier.userCount === 1 ? "user" : "users";
 

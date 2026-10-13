@@ -22,7 +22,7 @@ case "$kind" in
   platform)
     {
       printf 'context\n'
-      git ls-tree "HEAD:platform" | awk -F '\t' '$2 != "e2e-tests"'
+      git ls-tree "HEAD:platform" | awk -F '\t' '$2 != "e2e-tests" && $2 != "docs-screenshots"'
       definition
     } | git hash-object --stdin
     ;;

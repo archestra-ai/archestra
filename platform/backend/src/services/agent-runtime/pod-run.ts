@@ -296,7 +296,10 @@ async function startAgentRunSession(params: {
     // Settle the task before cleanup is visible: the reconciler cancels any
     // unfinished task whose workspace is being deleted, which would otherwise
     // replace this launch error with a generic reason.
-    await recordLaunchFailure({ taskId: params.taskId, failure: launchFailure });
+    await recordLaunchFailure({
+      taskId: params.taskId,
+      failure: launchFailure,
+    });
     // A publication can succeed before its exec connection fails. Keep the
     // claim until stopping that possibly-running turn has been acknowledged.
     try {

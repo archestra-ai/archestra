@@ -171,6 +171,8 @@ test("a throttled launch settles the task as failed before its workspace cleanup
   makeOrganization,
   makeAdmin,
   makeMember,
+  makeSecret,
+  makeLlmProviderApiKey,
   makeAgent,
 }) => {
   config.agentRuntime.platformBaseUrl = "https://platform.example.test";
@@ -178,10 +180,26 @@ test("a throttled launch settles the task as failed before its workspace cleanup
   const org = await makeOrganization();
   const user = await makeAdmin();
   await makeMember(user.id, org.id, { role: "admin" });
+  const secret = await makeSecret({ secret: { apiKey: "test-upstream-key" } });
+  const key = await makeLlmProviderApiKey(org.id, secret.id, {
+    provider: "openai",
+  });
+  const model = await ModelModel.create({
+    externalId: "openai/test-throttle-model",
+    provider: "openai",
+    modelId: "test-throttle-model",
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    supportsToolCalling: true,
+    lastSyncedAt: new Date(),
+  });
+  await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [model.id]);
   const agent = await makeAgent({
     organizationId: org.id,
     authorId: user.id,
     agentType: "agent",
+    modelId: model.id,
+    llmApiKeyId: key.id,
   });
   const context = await A2AContextModel.create({
     actorKind: "user",
@@ -204,7 +222,9 @@ test("a throttled launch settles the task as failed before its workspace cleanup
       }),
     }),
   );
-  let taskDuringCleanup: Awaited<ReturnType<typeof A2ATaskModel.findById>>;
+  let taskDuringCleanup:
+    | Awaited<ReturnType<typeof A2ATaskModel.findById>>
+    | undefined;
   vi.spyOn(backend, "teardown").mockImplementation(async () => {
     // The workspace is "deleting" now, which is what the reconciler acts on.
     taskDuringCleanup = await A2ATaskModel.findById(task.id);

@@ -2280,14 +2280,27 @@ describe("asking through the client's own question tool", () => {
           "could not read the answer to the last approval question",
         );
         expect(continuation).toContain(offerId);
+        // The model need not repeat its first call: only the offer ID
+        // decides what the form asks.
         const again = await plugin.onPrepareToolCalls({
           ...context,
-          toolCalls: [{ ...askUser, id: "call_review_again" }],
+          toolCalls: [
+            {
+              id: "call_review_again",
+              name: "archestra__ask_user",
+              arguments: JSON.stringify({
+                question: "Can I go ahead?",
+                options: [{ label: "Yes" }, { label: "No" }],
+                remedy_offer_ids: [offerId],
+              }),
+            },
+          ],
         });
         const [repeated] =
           again?.decision === "allow" ? again.toolCalls : [askUser];
         expect(repeated.name).toBe("archestra__ask_user");
         expect(repeated.arguments).toContain("Canonical HITL review.");
+        expect(repeated.arguments).not.toContain("Can I go ahead?");
       } else {
         // A client without forms has no second way to ask: no approval.
         await expect(

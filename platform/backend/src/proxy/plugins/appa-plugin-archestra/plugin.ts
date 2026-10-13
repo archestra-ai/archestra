@@ -4990,8 +4990,9 @@ function reviewResultStatus(
 function unreadNativeAnswerGuidance(offerIds: readonly string[]): string {
   return [
     "The platform could not read the answer to the last approval question, so it recorded nothing and the call stays blocked.",
-    "Ask once more with the declared ask_user tool, one call for each offer ID below, with the same question, header, options, and remedy_offer_ids as before.",
-    "This time the question opens as a form.",
+    "Ask once more with the declared ask_user tool, one call for each offer ID below.",
+    HITL_ASK_USER_CALL,
+    "The platform replaces the question text with the exact review. This time it opens as a form.",
     `Offer IDs: ${JSON.stringify(offerIds)}.`,
   ].join(" ");
 }
@@ -5000,11 +5001,16 @@ function hitlQuestionGuidance(offerIds: readonly string[]): string {
   return [
     "The policy needs the user's approval for the last execute_remedy_plan result.",
     "Ask the user with the declared ask_user tool, one call for each offer ID below.",
-    "In each call, use the question 'Open the pending HITL review.', the header 'Approval', the options Approve and Deny, and remedy_offer_ids with only that offer ID.",
+    HITL_ASK_USER_CALL,
     "The platform replaces the question text with the exact review, and shows it in the client's question interface when one is available.",
     `Offer IDs: ${JSON.stringify(offerIds)}.`,
   ].join(" ");
 }
+
+// Only remedy_offer_ids decides what is asked: the platform puts the review it
+// holds in place of the rest.
+const HITL_ASK_USER_CALL =
+  "In each call, use the question 'Open the pending HITL review.', the header 'Approval', the options Approve and Deny, and remedy_offer_ids with only that offer ID.";
 
 function hitlDecisionGuidance(
   rulings: readonly RecordedNativeHitlRuling[],

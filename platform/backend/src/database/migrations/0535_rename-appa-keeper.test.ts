@@ -8,7 +8,7 @@ import ToolModel from "@/models/tool";
 import { expect, test } from "@/test";
 
 const statements = fs
-  .readFileSync(path.join(__dirname, "0534_rename-appa-keeper.sql"), "utf8")
+  .readFileSync(path.join(__dirname, "0535_rename-appa-keeper.sql"), "utf8")
   .split("--> statement-breakpoint");
 
 test("renames only the built-in identity and its delegation tools, preserving settings", async ({

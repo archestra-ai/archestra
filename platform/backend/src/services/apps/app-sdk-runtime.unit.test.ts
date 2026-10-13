@@ -379,6 +379,87 @@ describe("Apps SDK runtime", () => {
     calls.pop();
   });
 
+  test("tools.call keeps embedded resource contents alongside the text (file-read tools)", async () => {
+    // The shape a file-read tool returns: a one-line confirmation in a text
+    // block and the file body as an embedded resource.
+    results.push({
+      content: [
+        { type: "text", text: "successfully downloaded text file (SHA: abc)" },
+        {
+          type: "resource",
+          resource: {
+            uri: "repo://acme/web/contents/package.json",
+            mimeType: "text/plain; charset=utf-8",
+            text: '{"name": "web"}',
+          },
+        },
+        {
+          type: "resource",
+          resource: {
+            uri: "repo://acme/web/contents/logo.png",
+            mimeType: "image/png",
+            blob: "aGk=",
+          },
+        },
+      ],
+    });
+    expect(await archestra.tools.call("t", {})).toEqual({
+      text: "successfully downloaded text file (SHA: abc)",
+      resources: [
+        {
+          uri: "repo://acme/web/contents/package.json",
+          mimeType: "text/plain; charset=utf-8",
+          text: '{"name": "web"}',
+        },
+        {
+          uri: "repo://acme/web/contents/logo.png",
+          mimeType: "image/png",
+          dataUrl: "data:image/png;base64,aGk=",
+        },
+      ],
+    });
+    calls.pop();
+  });
+
+  test("tools.call keeps an unsafe embedded blob out of its data URL", async () => {
+    results.push({
+      content: [
+        {
+          type: "resource",
+          resource: {
+            uri: "repo://acme/web/contents/a.bin",
+            mimeType: 'image/png" onerror="alert(1)',
+            blob: "aGk=",
+          },
+        },
+        {
+          type: "resource",
+          resource: {
+            uri: "repo://acme/web/contents/b.bin",
+            mimeType: "image/png",
+            blob: 'aGk="><script>',
+          },
+        },
+      ],
+    });
+    expect(await archestra.tools.call("t", {})).toEqual({
+      text: "",
+      resources: [
+        {
+          uri: "repo://acme/web/contents/a.bin",
+          mimeType: 'image/png" onerror="alert(1)',
+          dataUrl: "data:application/octet-stream;base64,aGk=",
+        },
+        {
+          uri: "repo://acme/web/contents/b.bin",
+          mimeType: "image/png",
+          dataUrl: null,
+        },
+      ],
+    });
+    calls.pop();
+  });
+
   test("tools.call resolves null when the result has no text, structured, or media data", async () => {
     results.push({ content: [] });
     expect(await archestra.tools.call("t", {})).toBeNull();

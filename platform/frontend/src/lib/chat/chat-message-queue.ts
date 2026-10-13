@@ -8,6 +8,13 @@
 // switches. The in-memory map is the source of truth once a conversation's
 // queue has been loaded; arrays are treated as immutable (replaced on every
 // change) so useSyncExternalStore snapshots stay referentially stable.
+//
+// Attachments ride along as base64 `data:` URLs, which can be megabytes, so
+// persistence is best-effort: a message whose attachments would push the
+// persisted queue past PERSISTED_QUEUE_BUDGET_CHARS (or past the browser's
+// storage quota) stays in memory only and does not survive a reload. Such a
+// message is dropped from the persisted copy whole — never persisted without
+// its files — so a reload never sends it stripped of its attachments.
 
 import type {
   ChatExternalMcpSkillMetadata,
@@ -28,6 +35,14 @@ export interface QueuedChatMessage {
   externalMcpSkill?: ChatExternalMcpSkillMetadata;
   /** Marks a `!`-prefixed message for direct sandbox execution. */
   sandboxCommand?: true;
+  /** Attachments, each `url` already the base64 `data:` URL sent on the wire. */
+  files?: QueuedChatFile[];
+}
+
+export interface QueuedChatFile {
+  url: string;
+  mediaType: string;
+  filename?: string;
 }
 
 export type EnqueueChatMessageInput = Omit<
@@ -116,12 +131,7 @@ class ChatMessageQueueStore {
       this.queues.set(conversationId, queue);
     }
     if (typeof window !== "undefined") {
-      const key = storageKey(conversationId);
-      if (queue.length === 0) {
-        localStorage.removeItem(key);
-      } else {
-        localStorage.setItem(key, JSON.stringify(queue));
-      }
+      persistQueue(storageKey(conversationId), queue);
     }
     for (const listener of this.listeners) {
       listener();
@@ -146,8 +156,44 @@ export function useConversationMessageQueue(
 
 const EMPTY_QUEUE: readonly QueuedChatMessage[] = [];
 
+/**
+ * Upper bound on a persisted queue's serialized size. Browsers cap an origin's
+ * localStorage at ~5MB shared with every other chat key (drafts, settings), so
+ * a few queued screenshots must not crowd those out.
+ */
+const PERSISTED_QUEUE_BUDGET_CHARS = 1_000_000;
+
 function storageKey(conversationId: string): string {
   return conversationStorageKeys(conversationId).messageQueue;
+}
+
+function persistQueue(key: string, queue: readonly QueuedChatMessage[]): void {
+  if (queue.length === 0) {
+    localStorage.removeItem(key);
+    return;
+  }
+  const full = JSON.stringify(queue);
+  if (full.length <= PERSISTED_QUEUE_BUDGET_CHARS && trySetItem(key, full)) {
+    return;
+  }
+  // Too large to persist whole: keep the attachment-free messages durable and
+  // hold the rest in memory only (see the module comment).
+  const withoutAttachments = queue.filter((message) => !message.files?.length);
+  if (withoutAttachments.length === 0) {
+    localStorage.removeItem(key);
+  } else if (!trySetItem(key, JSON.stringify(withoutAttachments))) {
+    localStorage.removeItem(key);
+  }
+}
+
+function trySetItem(key: string, value: string): boolean {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch {
+    // QuotaExceededError (or storage disabled): the in-memory queue still works.
+    return false;
+  }
 }
 
 /**
@@ -166,9 +212,24 @@ function parsePersistedQueue(raw: string): QueuedChatMessage[] {
         typeof entry === "object" &&
         entry !== null &&
         typeof (entry as QueuedChatMessage).id === "string" &&
-        typeof (entry as QueuedChatMessage).text === "string",
+        typeof (entry as QueuedChatMessage).text === "string" &&
+        isValidPersistedFiles((entry as QueuedChatMessage).files),
     );
   } catch {
     return [];
   }
+}
+
+function isValidPersistedFiles(files: unknown): boolean {
+  return (
+    files === undefined ||
+    (Array.isArray(files) &&
+      files.every(
+        (file) =>
+          typeof file === "object" &&
+          file !== null &&
+          typeof (file as QueuedChatFile).url === "string" &&
+          typeof (file as QueuedChatFile).mediaType === "string",
+      ))
+  );
 }

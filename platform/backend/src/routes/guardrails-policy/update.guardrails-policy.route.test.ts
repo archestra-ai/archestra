@@ -191,29 +191,62 @@ describe("guardrails policy authoring", () => {
     expect(await GuardrailsPolicyModel.findLatest(other.id)).toBeNull();
   });
 
-  test("a stated max_body_bytes is accepted and the check says it has no effect", async () => {
+  test("an explicit max_body_bytes is saved and validated without a no-effect warning", async () => {
     const stated = `${content}[externals]\nmax_body_bytes = 65536\n`;
     const validated = await app.inject({
       method: "POST",
       url: "/api/guardrails-policy/validate",
       payload: { content: stated },
     });
-    expect(validated.json()).toMatchObject({ valid: true, errors: [] });
-    expect(validated.json().warnings).toEqual([
-      expect.stringContaining("max_body_bytes has no effect"),
-    ]);
+    expect(validated.json()).toMatchObject({
+      valid: true,
+      errors: [],
+      warnings: [],
+    });
     const saved = await app.inject({
       method: "PUT",
       url: "/api/guardrails-policy",
       payload: { content: stated, expectedRevision: 0 },
     });
     expect(saved.statusCode, saved.body).toBe(200);
+    expect((await GuardrailsPolicyModel.findLatest(orgId))?.content).toContain(
+      "max_body_bytes = 65536",
+    );
     const plain = await app.inject({
       method: "POST",
       url: "/api/guardrails-policy/validate",
       payload: { content },
     });
-    expect(plain.json().warnings).toEqual([]);
+    expect(plain.json()).toMatchObject({
+      valid: true,
+      errors: [],
+      warnings: [],
+    });
+    for (const invalid of [
+      `${content}[externals]\nmax_body_bytes = 0\n`,
+      `${content}[externals]\nmax_body_bytes = -1\n`,
+      `${content}[externals]\nmax_body_bytes = "65536"\n`,
+    ]) {
+      const check = await app.inject({
+        method: "POST",
+        url: "/api/guardrails-policy/validate",
+        payload: { content: invalid },
+      });
+      expect(check.json().valid, invalid).toBe(false);
+      expect(JSON.stringify(check.json().errors), invalid).toContain(
+        "max_body_bytes",
+      );
+      const refused = await app.inject({
+        method: "PUT",
+        url: "/api/guardrails-policy",
+        payload: { content: invalid, expectedRevision: 1 },
+      });
+      expect(refused.statusCode, invalid).toBe(400);
+    }
+    expect((await GuardrailsPolicyModel.findLatest(orgId))?.revision).toBe(1);
+    expect((await GuardrailsPolicyModel.findLatest(orgId))?.content).toContain(
+      "max_body_bytes = 65536",
+    );
   });
 
   test("rejects invalid contracts and container access without replacing a saved policy", async () => {

@@ -15,7 +15,16 @@ import {
   XIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { toast } from "sonner";
 import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connector-icons";
 import { LocalServerInstallDialog } from "@/app/mcp/registry/_parts/local-server-install-dialog";
 import { NoAuthInstallDialog } from "@/app/mcp/registry/_parts/no-auth-install-dialog";
@@ -239,9 +248,10 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
     return catalogItems.filter((c) => catalogIds.has(c.id));
   }, [currentAgentDetail, catalogItems]);
 
+  // Loaded with the composer, not deferred to the picker opening: the trigger
+  // shows these icons from the start, and a short id list is cheap.
   const { data: triggerDelegations = [] } = useAgentDelegations(
     effectiveAgentId ?? undefined,
-    { enabled: shouldLoadAgentManagementDetails },
   );
   const triggerSubagents = useMemo(() => {
     const targetIds = new Set(triggerDelegations.map((d) => d.id));
@@ -1198,16 +1208,21 @@ function AssignedToolsGrid({
   const handleRemove = async (catalogId: string) => {
     const entry = assignedByCatalog.get(catalogId);
     if (!entry) return;
-    await Promise.all(
-      entry.toolIds.map((id) =>
-        unassignTool.mutateAsync({
-          agentId,
-          toolId: id,
-          skipInvalidation: true,
-        }),
-      ),
-    );
-    invalidateAllQueries(agentId);
+    try {
+      await Promise.all(
+        entry.toolIds.map((id) =>
+          unassignTool.mutateAsync({
+            agentId,
+            toolId: id,
+            skipInvalidation: true,
+          }),
+        ),
+      );
+    } catch (error) {
+      toastToolAssignmentError(error);
+    } finally {
+      invalidateAllQueries(agentId);
+    }
   };
 
   return (
@@ -1314,6 +1329,11 @@ function AddToolView({
   const assignTool = useAssignTool();
   const invalidateAllQueries = useInvalidateToolAssignmentQueries();
   const [addingCatalogId, setAddingCatalogId] = useState<string | null>(null);
+  // A server installed from this view is installed to be added: once it is
+  // connected and its tools are discovered, add them without a second click.
+  const [installingCatalogId, setInstallingCatalogId] = useState<string | null>(
+    null,
+  );
 
   const { data: assignedToolsData } = useAllProfileTools({
     filters: { agentId },
@@ -1378,26 +1398,47 @@ function AddToolView({
     return ids;
   }, [readyCatalogIds, toolCountQueries]);
 
+  const addInstalledCatalog = useEffectEvent((catalog: CatalogItem) => {
+    void handleAddAllTools(catalog);
+  });
+
+  useEffect(() => {
+    if (!installingCatalogId) return;
+    const index = readyCatalogIds.indexOf(installingCatalogId);
+    const toolsQuery = toolCountQueries[index];
+    if (index === -1 || !toolsQuery?.isSuccess) return;
+    setInstallingCatalogId(null);
+    const catalog = catalogItems.find((c) => c.id === installingCatalogId);
+    if (catalog && toolsQuery.data.length > 0) addInstalledCatalog(catalog);
+  }, [installingCatalogId, readyCatalogIds, toolCountQueries, catalogItems]);
+
   const handleAddAllTools = async (catalog: CatalogItem) => {
     setAddingCatalogId(catalog.id);
     try {
       const tools = await fetchCatalogTools(catalog.id);
       if (tools.length === 0) return;
-      const servers = allCredentials?.[catalog.id] ?? [];
       const isBuiltin = catalog.serverType === "builtin";
-      const credentialId = servers[0]?.id;
+      // Same default as "Select specific tools": resolve the credential at
+      // call time. Pinning the first install statically is refused whenever
+      // that install is a personal connection — the default for a fresh one.
       await Promise.all(
         tools.map((tool) =>
           assignTool.mutateAsync({
             agentId,
             toolId: tool.id,
-            mcpServerId: !isBuiltin ? (credentialId ?? undefined) : undefined,
+            ...(!isBuiltin && {
+              resolveAtCallTime: true,
+              credentialResolutionMode: "dynamic" as const,
+            }),
             skipInvalidation: true,
           }),
         ),
       );
       invalidateAllQueries(agentId);
       onBack();
+    } catch (error) {
+      invalidateAllQueries(agentId);
+      toastToolAssignmentError(error);
     } finally {
       setAddingCatalogId(null);
     }
@@ -1489,13 +1530,15 @@ function AddToolView({
                     disabled={
                       isAssigned || isServerInstalling || isAdding || hasNoTools
                     }
-                    onClick={() =>
-                      isAssigned
-                        ? undefined
-                        : isReady
-                          ? handleAddAllTools(catalog)
-                          : installer.triggerInstallByCatalogId(catalog.id)
-                    }
+                    onClick={() => {
+                      if (isAssigned) return;
+                      if (isReady) {
+                        void handleAddAllTools(catalog);
+                        return;
+                      }
+                      setInstallingCatalogId(catalog.id);
+                      installer.triggerInstallByCatalogId(catalog.id);
+                    }}
                     className={cn(
                       "relative flex flex-col items-center gap-2 rounded-lg border p-4 text-center transition-colors flex-1",
                       isAssigned
@@ -1693,6 +1736,9 @@ function ConfigureToolView({
         invalidateAllQueries(agentId);
       }
       onDone();
+    } catch (error) {
+      invalidateAllQueries(agentId);
+      toastToolAssignmentError(error);
     } finally {
       setIsSaving(false);
     }
@@ -2324,3 +2370,11 @@ const ToolServerAvatarGroup = memo(function ToolServerAvatarGroup({
     </div>
   );
 });
+
+// The assign/unassign mutations throw without toasting, and these views fire
+// them in bulk, so a refusal would otherwise leave the dialog silently unchanged.
+function toastToolAssignmentError(error: unknown) {
+  toast.error(
+    error instanceof Error ? error.message : "Failed to update agent tools",
+  );
+}

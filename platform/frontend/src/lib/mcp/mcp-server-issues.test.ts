@@ -88,9 +88,10 @@ const member: IssueViewer = {
   canReauthenticate: (s) => s.ownerId === ME,
   canManageInstalls: false,
 };
+// Re-authenticating a personal connection is its owner's alone, admin or not.
 const admin: IssueViewer = {
   userId: ME,
-  canReauthenticate: () => true,
+  canReauthenticate: (s) => s.scope !== "personal" || s.ownerId === ME,
   canManageInstalls: true,
 };
 

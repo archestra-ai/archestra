@@ -52,6 +52,12 @@ export function McpServerIssueBadge({
   showDetail?: boolean;
 }) {
   const meta = getMcpServerIssueKindMeta(issue.kind);
+  // A colleague's lost sign-in is theirs to fix; the plain label reads as if
+  // the viewer had to sign in again.
+  const label =
+    issue.kind === "needs-reauth" && issue.onViewerConnection === false
+      ? OTHERS_REAUTH_LABEL
+      : meta.label;
   const badge = (
     <Badge
       variant="secondary"
@@ -63,7 +69,7 @@ export function McpServerIssueBadge({
       data-testid={`mcp-server-issue-${issue.kind}`}
     >
       {issue.muted && <BellOff aria-hidden className="size-3" />}
-      <span className="truncate">{meta.label}</span>
+      <span className="truncate">{label}</span>
     </Badge>
   );
   if (!showDetail || !issue.detail) return badge;
@@ -77,7 +83,7 @@ export function McpServerIssueBadge({
         <span
           role="note"
           className="max-w-full"
-          aria-label={`${meta.label}: ${issue.detail}`}
+          aria-label={`${label}: ${issue.detail}`}
         >
           {badge}
         </span>
@@ -129,3 +135,5 @@ export function McpServerIssueStatusCell({
     </div>
   );
 }
+
+const OTHERS_REAUTH_LABEL = "Someone else's sign-in expired";

@@ -517,7 +517,8 @@ function computeItemIssues({
     if (!s.oauthRefreshError) continue;
     const onViewerConnection = viewerConnections.has(s.id);
     const canReauthenticate = viewer.canReauthenticate(s);
-    if (!onViewerConnection && !canReauthenticate) continue;
+    if (!onViewerConnection && !canReauthenticate && !viewer.canManageInstalls)
+      continue;
     push({
       kind: "needs-reauth",
       audience: onViewerConnection && canReauthenticate ? "you" : "others",

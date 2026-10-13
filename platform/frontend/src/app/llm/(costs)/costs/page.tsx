@@ -1,20 +1,14 @@
 "use client";
 
-import {
-  type archestraApiTypes,
-  parseCustomStatisticsTimeframe,
-  type StatisticsTimeFrame,
-  StatisticsTimeFrameSchema,
-} from "@archestra/shared";
+import type { archestraApiTypes, StatisticsTimeFrame } from "@archestra/shared";
 import { format } from "date-fns";
-import { Calendar as CalendarIcon, Clock } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import { useSetCostsAction } from "@/app/llm/(costs)/layout";
 import { BilledCost } from "@/components/billed-cost";
+import { useStatisticsTimeRange } from "@/components/time-range-picker/statistics-time-range";
+import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -30,14 +24,6 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import { CustomDateTimeRangeDialog } from "@/components/ui/custom-date-time-range-dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -165,6 +151,7 @@ function StatisticsSkeletonRows({
 }
 
 const TIMEFRAME_STORAGE_KEY = "cost-statistics-timeframe";
+const DEFAULT_TIMEFRAME: StatisticsTimeFrame = "1h";
 const STATISTICS_TABLE_MAX_HEIGHT_CLASS = "max-h-[280px]";
 /**
  * `table-fixed` plus `wrap-break-word` (the shared Table) shrinks every
@@ -201,22 +188,19 @@ const ENTITY_STATISTICS_PAGE_SIZE = 10;
 const modelSeriesKey = (rank: number) => `model-${rank}`;
 
 export default function StatisticsPage() {
-  const router = useRouter();
   const setActionButton = useSetCostsAction();
-  const searchParams = useSearchParams();
   const appName = useAppName();
 
-  const [timeframe, setTimeframe] = useState<StatisticsTimeFrame>("1h");
-  // The real timeframe (URL param or localStorage) is only known once the
-  // init effect below has run; hold the statistics queries until then so a
-  // page load doesn't fire a throwaway round of default-timeframe requests
-  // that gets discarded one render later.
-  const [isTimeframeResolved, setIsTimeframeResolved] = useState(false);
-  const [customFrom, setCustomFrom] = useState<Date | undefined>();
-  const [customTo, setCustomTo] = useState<Date | undefined>();
-  const [isCustomDialogOpen, setIsCustomDialogOpen] = useState(false);
-
-  const organizationStatisticsEnabled = isTimeframeResolved;
+  // Queries wait until the range is read from the URL or this browser.
+  const {
+    range,
+    setRange,
+    timeframe,
+    isResolved: organizationStatisticsEnabled,
+  } = useStatisticsTimeRange({
+    storageKey: TIMEFRAME_STORAGE_KEY,
+    defaultTimeframe: DEFAULT_TIMEFRAME,
+  });
 
   // Statistics data fetching hooks
   const { data: teamStatistics = [], isPending: isTeamStatisticsPending } =
@@ -267,105 +251,6 @@ export default function StatisticsPage() {
     });
   const skillStatistics = skillStatisticsPage?.data ?? [];
   const skillStatisticsTotal = skillStatisticsPage?.pagination?.total ?? 0;
-
-  /**
-   * Initialize from URL parameters or localStorage
-   */
-  useEffect(() => {
-    const urlTimeframe = searchParams.get("timeframe");
-    const storedTimeframe = localStorage.getItem(TIMEFRAME_STORAGE_KEY);
-
-    // URL params take precedence, then localStorage, then default
-    const { success, data } = StatisticsTimeFrameSchema.safeParse(
-      urlTimeframe ?? storedTimeframe,
-    );
-    if (success) {
-      setTimeframe(data);
-      const customRange = parseCustomStatisticsTimeframe(data);
-      setCustomFrom(customRange?.startTime);
-      setCustomTo(customRange?.endTime);
-    } else {
-      setTimeframe("1h");
-      setCustomFrom(undefined);
-      setCustomTo(undefined);
-    }
-    setIsTimeframeResolved(true);
-  }, [searchParams]);
-
-  // Update URL when timeframe changes
-  const updateURL = useCallback(
-    (newTimeframe?: string) => {
-      const params = new URLSearchParams(searchParams);
-
-      if (newTimeframe !== undefined) {
-        params.set("timeframe", newTimeframe);
-      }
-
-      router.push(`/llm/costs?${params.toString()}`, {
-        scroll: false,
-      });
-    },
-    [router, searchParams],
-  );
-
-  const handleTimeframeChange = useCallback(
-    (tf: StatisticsTimeFrame) => {
-      setTimeframe(tf);
-      localStorage.setItem(TIMEFRAME_STORAGE_KEY, tf);
-      updateURL(tf);
-    },
-    [updateURL],
-  );
-
-  const handleCustomTimeframe = useCallback(() => {
-    if (!customFrom || !customTo) return;
-
-    const fromDateTime = new Date(customFrom);
-    const toDateTime = new Date(customTo);
-    toDateTime.setSeconds(59, 999);
-
-    const customValue =
-      `custom:${fromDateTime.toISOString()}_${toDateTime.toISOString()}` as const;
-    handleTimeframeChange(customValue);
-    setIsCustomDialogOpen(false);
-  }, [customFrom, customTo, handleTimeframeChange]);
-
-  const getTimeframeDisplay = useCallback((tf: StatisticsTimeFrame) => {
-    // Falls through to the preset labels below when the bounds are unparseable,
-    // rather than formatting an Invalid Date and taking the page down with it.
-    const customRange = parseCustomStatisticsTimeframe(tf);
-    if (customRange) {
-      const { startTime, endTime } = customRange;
-      // A range picked as whole days runs local midnight to 23:59; any other
-      // bound was given an explicit time that belongs in the label.
-      const isWholeDayRange =
-        startTime.getHours() === 0 &&
-        startTime.getMinutes() === 0 &&
-        endTime.getHours() === 23 &&
-        endTime.getMinutes() === 59;
-      const pattern = isWholeDayRange ? "MMM d" : "MMM d, HH:mm";
-
-      return `${format(startTime, pattern)} - ${format(endTime, pattern)}`;
-    }
-    switch (tf) {
-      case "1h":
-        return "hour";
-      case "24h":
-        return "24 hours";
-      case "7d":
-        return "7 days";
-      case "30d":
-        return "30 days";
-      case "90d":
-        return "90 days";
-      case "12m":
-        return "12 months";
-      case "all":
-        return "";
-      default:
-        return tf;
-    }
-  }, []);
 
   const formatTimestamp = useCallback(
     (timestamp: string) => formatStatisticsAxisLabel(timestamp, timeframe),
@@ -573,75 +458,14 @@ export default function StatisticsPage() {
 
   useEffect(() => {
     setActionButton(
-      <div className="flex gap-2">
-        <Select
-          value={timeframe.startsWith("custom:") ? "custom" : timeframe}
-          onValueChange={(value) => {
-            if (value === "custom") {
-              setIsCustomDialogOpen(true);
-            } else {
-              handleTimeframeChange(value as StatisticsTimeFrame);
-            }
-          }}
-        >
-          <SelectTrigger size="sm" className="w-[320px]">
-            <CalendarIcon className="mr-2 h-4 w-4" />
-            <SelectValue>
-              {timeframe.startsWith("custom:")
-                ? `Custom: ${getTimeframeDisplay(timeframe)}`
-                : timeframe === "all"
-                  ? "All time"
-                  : `Last ${getTimeframeDisplay(timeframe)}`}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="5m">5 Minutes</SelectItem>
-            <SelectItem value="15m">15 Minutes</SelectItem>
-            <SelectItem value="30m">30 Minutes</SelectItem>
-            <SelectItem value="1h">Last hour</SelectItem>
-            <SelectItem value="24h">Last 24 hours</SelectItem>
-            <SelectItem value="7d">Last 7 days</SelectItem>
-            <SelectItem value="30d">Last 30 days</SelectItem>
-            <SelectItem value="90d">Last 90 days</SelectItem>
-            <SelectItem value="12m">Last 12 months</SelectItem>
-            <SelectItem value="all">All time</SelectItem>
-            <SelectItem value="custom">
-              <Clock className="h-4 w-4" />
-              Custom timeframe...
-            </SelectItem>
-          </SelectContent>
-        </Select>
-
-        {timeframe.startsWith("custom:") && (
-          <Button
-            variant="outline"
-            onClick={() => setIsCustomDialogOpen(true)}
-            className="h-9 flex items-center gap-1 px-3"
-          >
-            <Clock className="h-4 w-4" />
-            Edit
-          </Button>
-        )}
-      </div>,
+      <TimeRangePicker value={range} onChange={setRange} allowAllTime />,
     );
 
     return () => setActionButton(null);
-  }, [getTimeframeDisplay, handleTimeframeChange, setActionButton, timeframe]);
+  }, [range, setRange, setActionButton]);
 
   return (
     <div className="min-w-0 space-y-6 [&_[data-slot=card]]:min-w-0 [&_[data-slot=card-content]]:min-w-0">
-      <CustomDateTimeRangeDialog
-        open={isCustomDialogOpen}
-        onOpenChange={setIsCustomDialogOpen}
-        startDate={customFrom}
-        endDate={customTo}
-        onStartDateChange={setCustomFrom}
-        onEndDateChange={setCustomTo}
-        onApply={handleCustomTimeframe}
-        title="Custom timeframe"
-        description="Set a custom time period for the statistics view."
-      />
-
       <OrganizationSummary
         billedSpend={costSavingsData?.totalActualCost ?? 0}
         subscriptionCost={costSavingsData?.totalSubscriptionCost ?? 0}

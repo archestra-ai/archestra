@@ -33,6 +33,7 @@ beforeEach(() => {
     hasPolicy: true,
     validationDirectory: "",
     githubWebUrl: "https://github.com",
+    provider: "github",
     source: null,
   };
   server.use(
@@ -218,13 +219,13 @@ test("published PR stays reviewable outside collapsed tool details", () => {
   expect(screen.queryByText(/Saved revision/)).not.toBeInTheDocument();
 });
 
-test("a locally saved policy suggests GitHub sync to admins who have not set it up", async () => {
+test("a locally saved policy suggests Git sync to admins who have not set it up", async () => {
   render(
     withQueries(
       <OpenAppaPolicyCompletion output={{ structuredContent: saved }} />,
     ),
   );
-  const link = await screen.findByRole("link", { name: "Set up GitHub sync" });
+  const link = await screen.findByRole("link", { name: "Set up Git sync" });
   expect(link).toHaveAttribute(
     "href",
     "/settings/guardrails?setup=github-sync",
@@ -246,6 +247,7 @@ test.each([
           path: "appa.toml",
           interval: "1h",
           githubPatId: null,
+          gitlabTokenId: null,
           githubAppConfigId: null,
           revision: "revision",
           sourceCommit: null,
@@ -280,7 +282,7 @@ test.each([
       );
     },
   ],
-])("no GitHub sync tip when %s", async (_name, arrange) => {
+])("no Git sync tip when %s", async (_name, arrange) => {
   arrange();
   let requested = false;
   server.use(
@@ -297,7 +299,7 @@ test.each([
   await vi.waitFor(() => expect(requested).toBe(true));
   await new Promise((resolve) => setTimeout(resolve, 50));
   expect(
-    screen.queryByRole("link", { name: "Set up GitHub sync" }),
+    screen.queryByRole("link", { name: "Set up Git sync" }),
   ).not.toBeInTheDocument();
   expect(screen.getByText("Saved revision 1")).toBeInTheDocument();
 });

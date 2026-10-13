@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  GIT_PROVIDER_LABELS,
   ResourcePermissionGrantSchema,
   TOOL_CREATE_PLUGIN_SHORT_NAME,
   TOOL_DELETE_PLUGIN_SHORT_NAME,
@@ -289,7 +290,7 @@ const registry = defineArchestraTools([
       const lines = plugins.map((plugin) => {
         const source =
           plugin.sourceKind === "github"
-            ? `github ${plugin.sourceRepo ?? ""}`.trim()
+            ? `${plugin.sourceProvider ?? "github"} ${plugin.sourceRepo ?? ""}`.trim()
             : "manual";
         const state = plugin.enabled ? "enabled" : "disabled";
         return (
@@ -576,7 +577,7 @@ const registry = defineArchestraTools([
     title: "Delete Plugin",
     description:
       "Delete a plugin. The plugin disappears from the catalog and future " +
-      "setup commands, and its GitHub sync stops. Copies already installed " +
+      "setup commands, and its Git sync stops. Copies already installed " +
       "on developer machines are not removed.",
     schema: DeletePluginSchema,
     async handler({ args, context }) {
@@ -667,12 +668,15 @@ function unknownPluginError(id: string) {
   return errorResult(`No plugin with id "${id}" exists.`);
 }
 
-/** A GitHub-sourced plugin's bytes are owned by its source repository. */
+/** A Git-sourced plugin's bytes are owned by its source repository. */
 function githubReadOnlyMessage(
-  plugin: Pick<PluginWithFiles, "displayName" | "sourceRepo">,
+  plugin: Pick<
+    PluginWithFiles,
+    "displayName" | "sourceRepo" | "sourceProvider"
+  >,
 ): string {
   return (
-    `Plugin "${plugin.displayName}" is synced from GitHub` +
+    `Plugin "${plugin.displayName}" is synced from ${GIT_PROVIDER_LABELS[plugin.sourceProvider ?? "github"]}` +
     (plugin.sourceRepo ? ` (${plugin.sourceRepo})` : "") +
     " and its files are read-only here. Tell the user to edit them in the " +
     "source repository, then review and apply the update in the Plugins UI."
@@ -680,7 +684,10 @@ function githubReadOnlyMessage(
 }
 
 function checkManualFilesUpdate(
-  plugin: Pick<PluginWithFiles, "displayName" | "sourceKind" | "sourceRepo">,
+  plugin: Pick<
+    PluginWithFiles,
+    "displayName" | "sourceKind" | "sourceRepo" | "sourceProvider"
+  >,
   files: PluginFileInput[] | undefined,
 ): string | null {
   if (files && plugin.sourceKind === "github") {

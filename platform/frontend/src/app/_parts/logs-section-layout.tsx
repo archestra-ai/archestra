@@ -1,6 +1,14 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { PageLayout } from "@/components/page-layout";
 import { useLogsLayoutConfig } from "@/lib/audit-log/use-logs-layout-config";
 
@@ -19,22 +27,40 @@ import { useLogsLayoutConfig } from "@/lib/audit-log/use-logs-layout-config";
  */
 export function LogsSectionLayout({
   listPath,
-  actionButton,
   children,
 }: {
   /** The list route this segment's header belongs to, e.g. `/llm/logs`. */
   listPath: string;
-  actionButton?: React.ReactNode;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   const pathname = usePathname();
   const config = useLogsLayoutConfig();
+  const [actionButton, setActionButton] = useState<ReactNode>(null);
+  const contextValue = useMemo(() => ({ setActionButton }), []);
 
   if (pathname !== listPath) return <>{children}</>;
 
   return (
-    <PageLayout {...config} actionButton={actionButton}>
-      {children}
-    </PageLayout>
+    <LogsActionContext.Provider value={contextValue}>
+      <PageLayout {...config} actionButton={actionButton}>
+        {children}
+      </PageLayout>
+    </LogsActionContext.Provider>
   );
 }
+
+/**
+ * Puts `action` in the Logs header's top-right corner while the calling page
+ * is shown — where every log page keeps its time range.
+ */
+export function useLogsHeaderAction(action: ReactNode) {
+  const { setActionButton } = useContext(LogsActionContext);
+  useEffect(() => {
+    setActionButton(action);
+  }, [action, setActionButton]);
+  useEffect(() => () => setActionButton(null), [setActionButton]);
+}
+
+const LogsActionContext = createContext<{
+  setActionButton: (action: ReactNode) => void;
+}>({ setActionButton: () => {} });

@@ -89,11 +89,10 @@ if (input) {
   for (const [id, provider] of Object.entries(input.providers)) {
     state.sections[section][id] = config[section][id] ?? null;
     const models = Object.fromEntries(provider.models.map(model => {
-      const limit = {};
-      if (model.context > 0) limit.context = model.context;
-      if (model.output > 0) limit.output = model.output;
+      // OpenCode requires both limit fields once limit is set; 0 is its value for unknown.
+      const context = model.context > 0 ? model.context : 0, output = model.output > 0 ? model.output : 0;
       return [model.id, { name: model.name, [v2 ? "modelID" : "id"]: model.wireId,
-        ...(Object.keys(limit).length ? { limit } : {}) }];
+        ...(context || output ? { limit: { context, output } } : {}) }];
     }));
     const settings = { baseURL: provider.baseURL, apiKey: "{file:~/.archestra/opencode-primary.key}" };
     config[section][id] = v2

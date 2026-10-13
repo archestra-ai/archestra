@@ -1103,7 +1103,10 @@ function ${client.binary} {
   $archUtilityCommand = $args.Count -gt 0 -and $args[0] -in @(${client.utilitySubcommands.map(psq).join(", ")}, '--help', '-h', '--version', '-v')
   ${
     ctx.managedInstructionsSource
-      ? `if (-not $archUtilityCommand -and (Test-Path $archGuard) -and -not (Select-String -Path (Join-Path $env:USERPROFILE '${client.skipRelpath}') -Pattern '^mcp$' -Quiet -ErrorAction SilentlyContinue)) {
+      ? `# Windows PowerShell 5.1 Select-String reports a missing file even with
+  # -ErrorAction SilentlyContinue, so check that the skip file exists first.
+  $archSkip = Join-Path $env:USERPROFILE '${client.skipRelpath}'
+  if (-not $archUtilityCommand -and (Test-Path $archGuard) -and -not ((Test-Path $archSkip) -and (Select-String -Path $archSkip -Pattern '^mcp$' -Quiet))) {
     try { & ($archGuard + '.instructions-refresh.ps1') ($archGuard + '.instructions-source.json') ($archGuard + '.prompt.md') ${client.clientId === "copilot-cli" ? "($archGuard + '.instructions/AGENTS.md')" : ""} } catch { }
   }`
       : ""

@@ -743,6 +743,27 @@ describe("Windows startup guard here-strings", () => {
       "Write-Host 'a@b'",
     );
   });
+
+  // Windows PowerShell 5.1 Select-String reports a missing -Path file even with
+  // -ErrorAction SilentlyContinue, which pwsh cannot reproduce.
+  test("every Select-String in a rendered Windows setup checks that its file exists first", () => {
+    const unguarded: string[] = [];
+    for (const { name, ctx } of windowsSetupVariants()) {
+      for (const line of renderSetupScript(ctx).split("\n")) {
+        for (const [, target] of line.matchAll(
+          /Select-String -Path (\$\w+)/g,
+        )) {
+          if (!line.includes(`(Test-Path ${target}) -and`)) {
+            unguarded.push(`${name}: ${line.trim()}`);
+          }
+        }
+        if (/Select-String -Path [^$]/.test(line)) {
+          unguarded.push(`${name}: ${line.trim()}`);
+        }
+      }
+    }
+    expect([...new Set(unguarded)]).toEqual([]);
+  });
 });
 
 function windowsSetupVariants(): Array<{
@@ -824,6 +845,12 @@ function windowsSetupVariants(): Array<{
                   : null,
                 runtimeHandoffInstructions: handoff
                   ? DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS
+                  : null,
+                managedInstructionsSource: mcp
+                  ? {
+                      url: "https://proxy.example.com/api/connection-instructions",
+                      token: "instructions-token",
+                    }
                   : null,
               },
             });

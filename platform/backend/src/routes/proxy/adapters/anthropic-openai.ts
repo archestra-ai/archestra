@@ -366,6 +366,7 @@ export function makeAnthropicOpenaiAdapterFactory(
 > {
   return {
     ...anthropicAdapterFactory,
+    translatesWireFormat: true,
     extractApiKey(headers) {
       const authorization = (headers as Record<string, unknown>).authorization;
       if (typeof authorization !== "string") {

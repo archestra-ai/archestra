@@ -72,6 +72,7 @@ Some clients need one more step. The installer prints any other steps under **Go
 
 - **Launch check:** setup adds a block to your shell profile. Each time Claude Code, Codex, Copilot CLI, or OpenCode starts, it checks the connection. Press `C` there to disconnect. To turn it off, set `ARCHESTRA_CLAUDE_GUARD=0`, `ARCHESTRA_CODEX_GUARD=0`, `ARCHESTRA_COPILOT_GUARD=0`, or `ARCHESTRA_OPENCODE_GUARD=0`.
 - **Backups:** setup saves each config file it changes as a `.archestra-backup` file next to the original.
+- **Setup reference:** when an agent runs the installer in its own conversation, Guardrails do not apply to that conversation for ten minutes, so the agent can finish the setup. The reference the installer prints marks that conversation. Every other session follows your Guardrails policy from its first request.
 - **Setup failed or expired:** run it again. Approval requests expire after ten minutes. Only approve a request you started.
 
 **Next:** [See it work](/docs/get-started/see-it-work).

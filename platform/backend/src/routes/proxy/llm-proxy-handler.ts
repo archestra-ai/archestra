@@ -161,6 +161,7 @@ import {
   runtimeSessionConflicts,
 } from "@/services/agent-runtime/runtime-identity";
 import {
+  carriesConnectionSetupReference,
   connectionProxySetupContext,
   verifyConnectionProxySetupContext,
 } from "@/services/connection-proxy-setup-context";
@@ -1520,11 +1521,27 @@ export async function handleLLMProxy<
             secret: config.auth.secret,
           }),
       );
-    const installerSetupBypass = appaActive && approvedProxySetup;
+    // The setup URL stays in the client's settings for the whole window, so
+    // sessions started after the setup send it too. Only the conversation
+    // that ran the installer holds the setup reference the installer printed.
+    const installerConversation =
+      approvedProxySetup &&
+      !!approvedProxySetupContext &&
+      carriesConnectionSetupReference({
+        token: approvedProxySetupContext,
+        requestBody: body,
+        secret: config.auth.secret,
+      });
+    const installerSetupBypass = appaActive && installerConversation;
     if (installerSetupBypass) {
       logger.info(
         { profileId: resolvedAgent.id, proof: "approved-installer" },
         "Connection setup APPA bypass active",
+      );
+    } else if (appaActive && approvedProxySetup) {
+      logger.info(
+        { profileId: resolvedAgent.id },
+        "Connection setup URL outside the installer's conversation; Guardrails apply",
       );
     }
     let appaCallerId: string | undefined;

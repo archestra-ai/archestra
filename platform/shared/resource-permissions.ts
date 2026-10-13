@@ -176,6 +176,32 @@ export function hasScopedPermission(params: {
   );
 }
 
+/**
+ * Drops each single-object grant that a `*` grant for the same organization,
+ * resource and action already covers, so {@link hasScopedPermission} answers
+ * every check the same. An admin's list is mostly such rows: every object they
+ * created carries its own grant next to their organization-wide one.
+ *
+ * Sharing one chat is the exception: a `*` grant on conversations is project
+ * oversight and never manages a single chat's sharing, so those rows stay.
+ */
+export function withoutWildcardCoveredGrants<T extends ScopedPermission>(
+  grants: readonly T[],
+): T[] {
+  const key = (grant: ScopedPermission) =>
+    `${grant.organizationId}:${grant.resource}:${grant.action}`;
+  const wildcards = new Set(
+    grants.filter((grant) => grant.scope === "*").map(key),
+  );
+  return grants.filter(
+    (grant) =>
+      grant.scope === "*" ||
+      (grant.resource === "conversation" &&
+        grant.action === "manage-permissions") ||
+      !wildcards.has(key(grant)),
+  );
+}
+
 /** Grant management alone never authorizes delegating actions not held. */
 export function canDelegateScopedPermissions(params: {
   grants: readonly ScopedPermission[];

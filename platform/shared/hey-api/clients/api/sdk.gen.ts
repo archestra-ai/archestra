@@ -12065,7 +12065,7 @@ export const updateIdentityProvider = <ThrowOnError extends boolean = false>(opt
 export const searchInitialPermissionSubjects = <ThrowOnError extends boolean = false>(options: Options<SearchInitialPermissionSubjectsData, ThrowOnError>) => (options.client ?? client).get<SearchInitialPermissionSubjectsResponses, SearchInitialPermissionSubjectsErrors, ThrowOnError>({ url: '/api/resource-permissions/{resource}/creation-subjects', ...options });
 
 /**
- * The signed-in actor's explicit scoped capabilities. Used for discovery; each operation still authorizes its target.
+ * The signed-in actor's explicit scoped capabilities. Single-object grants that a `*` grant for the same resource and action covers are left out. Used for discovery; each operation still authorizes its target.
  *
  * Authentication:
  *

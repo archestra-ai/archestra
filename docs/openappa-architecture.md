@@ -796,7 +796,7 @@ The Rust binding stores event batches, policy snapshots, sessions, operations, a
 
 Execution follows three steps: claim a pending receipt under a lease, run the native hook to append events, and mark the receipt complete. The lease names the dispatch and ends 30 seconds after its last renewal; the dispatch renews it every 5 seconds while it works. A crash leaves the receipt pending until its lease ends and the client resubmits that operation. Other operations in the family run at the same time.
 
-A request for an operation that another live request is working on waits up to 30 seconds for that answer, without holding a connection, and then gets a retryable 503. Only the lease owner completes a pending receipt, so a dispatch that lost its lease to a takeover cannot overwrite the new owner's answer.
+A request for an operation that another live request is working on waits up to 45 seconds for that answer, without holding a connection, and then gets a retryable 503. Only the lease owner completes a pending receipt, so a dispatch that lost its lease to a takeover cannot overwrite the new owner's answer.
 
 On resubmission, the runtime replays a committed decision or continues work it did not record. Operational failures remain retryable; genuine policy denials stay saved. A failed dispatch removes the receipts it created when the family's event log did not change, and ends its leases on the rest, so the retry takes them over at once and earlier dispatches' recovery evidence stays.
 

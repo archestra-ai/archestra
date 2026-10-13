@@ -1274,6 +1274,11 @@ url = "https://example.com/v1/mcp/gateway"
 
 [mcp_servers."gateway".tools."gateway__ask_user"]
 approval_mode = "approve"
+
+# >>> archestra:codex-direct:tools >>>
+[tools]
+web_search = false
+# <<< archestra:codex-direct:tools <<<
 `;
   try {
     await writeFile(helper, CODEX_HANDOFF_HELPER);

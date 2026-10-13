@@ -221,7 +221,8 @@ function restoreManagedConfig(original) {
       const lines = match.split(/\r?\n/).slice(1);
       // Codex adds a new table before the comments at the end of the file, so
       // a table that Codex added later can be inside this block. Keep it.
-      const foreign = lines.findIndex(line => /^\s*\[/.test(line) && !/^\s*\[features\]\s*$/.test(line));
+      const own = block === 'root' ? null : '[' + block + ']';
+      const foreign = lines.findIndex(line => /^\s*\[/.test(line) && line.trim() !== own);
       const managed = foreign < 0 ? lines : lines.slice(0, foreign);
       const kept = foreign < 0 ? [] : lines.slice(foreign).filter(line => line !== end);
       return managed.filter(line => line.startsWith('# original: ')).map(line => line.slice(12) + newline).join('')

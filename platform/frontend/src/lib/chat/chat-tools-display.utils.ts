@@ -3,6 +3,7 @@ import {
   extractMcpHumanRuling,
   extractMcpToolError,
   type McpHumanRuling,
+  OPENAPPA_POLICY_CHANGE_TOOL_SHORT_NAMES,
   TOOL_TODO_WRITE_SHORT_NAME,
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
@@ -182,6 +183,17 @@ export function isCompactEligible(params: {
     }
 
     return true;
+  }
+
+  // A proposed policy is what the operator is asked to approve: its card
+  // stays open in the reply instead of folding into a circle.
+  if (
+    shortName &&
+    (OPENAPPA_POLICY_CHANGE_TOOL_SHORT_NAMES as readonly string[]).includes(
+      shortName,
+    )
+  ) {
+    return false;
   }
 
   const rawOutput = toolResultPart?.output ?? part.output;

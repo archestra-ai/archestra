@@ -195,6 +195,24 @@ describe("tool display helpers", () => {
     ).toContain('Expired or invalid authentication for "id-jag test"');
   });
 
+  it("keeps a proposed policy change as a full card", () => {
+    expect(
+      isCompactEligible({
+        toolName: "archestra__preview_guardrails_policy_change",
+        getToolShortName: (name) =>
+          name === "archestra__preview_guardrails_policy_change"
+            ? "preview_guardrails_policy_change"
+            : null,
+        part: {
+          type: "tool-archestra__preview_guardrails_policy_change",
+          state: "output-available",
+          output: { structuredContent: { stage: "preview" } },
+        } as never,
+        toolResultPart: null,
+      }),
+    ).toBe(false);
+  });
+
   it("marks generic tool failures as compact-eligible", () => {
     expect(
       isCompactEligible({

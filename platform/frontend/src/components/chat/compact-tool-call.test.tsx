@@ -168,7 +168,7 @@ describe("CompactToolGroup", () => {
       }),
     );
     expect(screen.getByLabelText("Policy diff")).toHaveTextContent(
-      '+name = "new"',
+      'Added: name = "new"',
     );
     expect(
       screen.getByText("1 passed, 1 failed, 1 could not run."),

@@ -8,13 +8,15 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import {
-  CodeBlock,
-  CodeBlockCopyButton,
-} from "@/components/ai-elements/code-block";
+  TRUNCATED_CONTENT_MAX_LINES,
+  TruncatedContent,
+} from "@/components/ai-elements/truncated-content";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
+import { cn } from "@/lib/utils/tailwind";
+import { getPolicyDiffRows, type PolicyDiffRow } from "./policy-diff-rows";
 
 type PolicyChange = {
   stage?: "preview";
@@ -46,7 +48,7 @@ export function OpenAppaPolicyChange({
     ? parseReplayCounts(parseOutput(output)?.counts)
     : null;
   const path = change.path ?? "organization.appa.toml";
-  // Previewing the unsaved starter changes no line; show the policy itself.
+  // Previewing the unsaved starter changes no line.
   const unchanged = change.before === change.after;
   const pullUrl =
     change.delivery === "pull_request" &&
@@ -70,19 +72,16 @@ export function OpenAppaPolicyChange({
       {validationChange && (
         <p className="font-mono text-xs text-muted-foreground">{path}</p>
       )}
-      {unchanged ? (
-        <CodeBlock code={change.after} language="toml" aria-label="Policy">
-          <CodeBlockCopyButton />
-        </CodeBlock>
-      ) : (
-        <CodeBlock
-          code={change.diff || policyDiff(change.before, change.after, path)}
-          language="diff"
-          aria-label="Policy diff"
-        >
-          <CodeBlockCopyButton />
-        </CodeBlock>
-      )}
+      <PolicyDiff
+        rows={getPolicyDiffRows({
+          before: change.before,
+          after: change.after,
+          // Previewing the unsaved starter changes no line: every line is new.
+          diff: unchanged
+            ? null
+            : change.diff || policyDiff(change.before, change.after, path),
+        })}
+      />
       {counts && (
         <InlineNotice variant={replayPassed(counts) ? "success" : "warning"}>
           {replayPassed(counts) ? <CheckCircle2 /> : <TriangleAlert />}
@@ -104,6 +103,74 @@ export function OpenAppaPolicyChange({
           <InlineNoticeText>{error}</InlineNoticeText>
         </InlineNotice>
       ))}
+    </div>
+  );
+}
+
+/**
+ * The proposed policy as numbered lines: new lines green, removed lines red,
+ * unchanged runs folded. Long views cut off like a tool's Input and Output.
+ */
+function PolicyDiff({ rows }: { rows: PolicyDiffRow[] }) {
+  return (
+    <TruncatedContent lineCount={rows.length}>
+      {(showAll) => (
+        <section
+          aria-label="Policy diff"
+          className="overflow-hidden rounded-md border border-border/50 bg-background py-1 font-mono text-[0.6875rem] leading-4"
+        >
+          {(showAll ? rows : rows.slice(0, TRUNCATED_CONTENT_MAX_LINES)).map(
+            (row, index) => (
+              <PolicyDiffLine
+                // biome-ignore lint/suspicious/noArrayIndexKey: static, ordered rows
+                key={index}
+                row={row}
+              />
+            ),
+          )}
+        </section>
+      )}
+    </TruncatedContent>
+  );
+}
+
+function PolicyDiffLine({ row }: { row: PolicyDiffRow }) {
+  if (row.kind === "gap") {
+    return (
+      <div className="bg-muted/40 pl-11 font-sans leading-5 text-muted-foreground">
+        <span aria-hidden>···</span>
+        <span className="sr-only">Unchanged lines hidden</span>
+      </div>
+    );
+  }
+  return (
+    <div
+      className={cn(
+        // Long lines wrap under their own text instead of scrolling sideways.
+        "flex whitespace-pre-wrap [overflow-wrap:anywhere]",
+        row.kind === "add" && "bg-emerald-500/10",
+        row.kind === "remove" && "bg-destructive/10",
+      )}
+    >
+      <span className="w-10 shrink-0 select-none pr-2 text-right text-muted-foreground/70">
+        {row.line ?? ""}
+      </span>
+      <span
+        className={cn(
+          "min-w-0 flex-1 border-l-[3px] border-transparent pl-2",
+          row.kind === "add" &&
+            "border-emerald-600 text-emerald-800 dark:text-emerald-300",
+          row.kind === "remove" &&
+            "border-destructive text-destructive line-through decoration-destructive/40",
+        )}
+      >
+        {row.kind === "add" ? (
+          <span className="sr-only">Added: </span>
+        ) : row.kind === "remove" ? (
+          <span className="sr-only">Removed: </span>
+        ) : null}
+        <span>{row.text || " "}</span>
+      </span>
     </div>
   );
 }

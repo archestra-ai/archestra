@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
-import { DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS } from "@archestra/shared/consts";
+import { defaultRuntimeHandoffInstructions } from "@archestra/shared/consts";
 import { expect, test, vi } from "vitest";
 import { OPENCODE_GUARD_CLIENT } from "../guard/clients";
 import {
@@ -26,11 +26,11 @@ const ctx: StartupGuardContext = {
     url: "https://example.com/mcp",
     ref: "gateway",
   },
-  runtimeHandoffInstructions: DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
+  runtimeHandoffInstructions: defaultRuntimeHandoffInstructions("Archestra"),
 };
 
 test.each([
-  DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
+  defaultRuntimeHandoffInstructions("Archestra"),
   'Custom handoff.\n"quoted" $HOME',
 ])("handoff guidance reaches roots but not tool-free or nested children", async (instructions) => {
   const home = await mkdtemp(path.join(tmpdir(), "opencode handoff "));
@@ -186,7 +186,7 @@ const fs = require("node:fs");
       expect(result.config).not.toHaveProperty("instructions");
       expect(result.root).toEqual([
         "Keep existing rules.",
-        DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
+        defaultRuntimeHandoffInstructions("Archestra"),
       ]);
       expect(result.child).toEqual(["Keep existing rules."]);
       const ownConfig = { instructions: ["/user/rules.md"] };
@@ -346,7 +346,7 @@ exit 0
       ]);
       expect(result.root).toEqual([
         "User rules.",
-        DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
+        defaultRuntimeHandoffInstructions("Archestra"),
       ]);
       expect(result.child).toEqual(["User rules."]);
     } finally {

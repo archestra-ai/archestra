@@ -2,7 +2,7 @@
 title: Claude Code
 description: Connect Claude Code with subscription or API-key inference
 order: 1
-lastUpdated: 2026-10-12
+lastUpdated: 2026-10-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -17,7 +17,7 @@ Install Claude Code and sign in to your Claude account for subscription inferenc
 
 1. Open **Connect** in Archestra and select **Claude Code**.
 2. Copy the command and run it in a terminal. It opens an approval page in your browser.
-3. On the approval page, use **Customize setup** to choose inference, gateway, and skills. Subscription setup keeps your subscription as the inference credential. API-key setup uses an Archestra virtual key. Then click **Approve connection**.
+3. On the approval page, click **Approve connection**. To change the gateway or leave out the proxy or skills first, open **Setup options**. If your admin picked provider keys for Claude Code, its models use an Archestra virtual key. Otherwise Claude Code keeps your own subscription or key.
 4. When the installer asks **Sign in now?**, press Enter. Sign in to Archestra in the browser and approve the gateway connection. If you skipped it, start Claude Code, run `/mcp`, select the Archestra gateway, and choose **Authenticate**.
 5. Open a new terminal and run the `claude` command the installer prints last. It starts a new session that loads the updated settings.
 

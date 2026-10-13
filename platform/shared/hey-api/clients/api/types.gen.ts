@@ -34381,8 +34381,11 @@ export type GetBootstrapResponses = {
                 isDefault: boolean;
                 visible: boolean;
             }> | null;
-            connectionDefaultProviderKeys: {
-                [key: string]: string;
+            connectionClientProviderKeys: {
+                [key: string]: Array<{
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    providerApiKeyId: string;
+                }>;
             } | null;
             connectionSkillsEnabled: boolean;
             connectionLlmProxyEnabled: boolean;
@@ -93160,8 +93163,11 @@ export type GetOrganizationResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        connectionDefaultProviderKeys: {
-            [key: string]: string;
+        connectionClientProviderKeys: {
+            [key: string]: Array<{
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                providerApiKeyId: string;
+            }>;
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
@@ -93491,8 +93497,11 @@ export type UpdateAppearanceSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        connectionDefaultProviderKeys: {
-            [key: string]: string;
+        connectionClientProviderKeys: {
+            [key: string]: Array<{
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                providerApiKeyId: string;
+            }>;
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
@@ -93700,8 +93709,11 @@ export type UpdateSecuritySettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        connectionDefaultProviderKeys: {
-            [key: string]: string;
+        connectionClientProviderKeys: {
+            [key: string]: Array<{
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                providerApiKeyId: string;
+            }>;
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
@@ -93906,8 +93918,11 @@ export type UpdateMcpSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        connectionDefaultProviderKeys: {
-            [key: string]: string;
+        connectionClientProviderKeys: {
+            [key: string]: Array<{
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                providerApiKeyId: string;
+            }>;
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
@@ -94112,8 +94127,11 @@ export type UpdateSkillsSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        connectionDefaultProviderKeys: {
-            [key: string]: string;
+        connectionClientProviderKeys: {
+            [key: string]: Array<{
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                providerApiKeyId: string;
+            }>;
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
@@ -94319,8 +94337,11 @@ export type UpdateAgentSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        connectionDefaultProviderKeys: {
-            [key: string]: string;
+        connectionClientProviderKeys: {
+            [key: string]: Array<{
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                providerApiKeyId: string;
+            }>;
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
@@ -94373,8 +94394,11 @@ export type UpdateAgentSettingsResponse = UpdateAgentSettingsResponses[keyof Upd
 export type UpdateConnectionSettingsData = {
     body: {
         connectionDefaultMcpGatewayId?: string | null;
-        connectionDefaultProviderKeys?: {
-            [key: string]: string;
+        connectionClientProviderKeys?: {
+            [key: string]: Array<{
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                providerApiKeyId: string;
+            }>;
         } | null;
         connectionDefaultClientId?: string | null;
         connectionClientOrder?: Array<string> | null;
@@ -94542,8 +94566,11 @@ export type UpdateConnectionSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        connectionDefaultProviderKeys: {
-            [key: string]: string;
+        connectionClientProviderKeys: {
+            [key: string]: Array<{
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                providerApiKeyId: string;
+            }>;
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
@@ -94784,8 +94811,11 @@ export type UpdateIntegrationSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        connectionDefaultProviderKeys: {
-            [key: string]: string;
+        connectionClientProviderKeys: {
+            [key: string]: Array<{
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                providerApiKeyId: string;
+            }>;
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
@@ -95000,8 +95030,11 @@ export type UpdateDefaultEnvironmentResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        connectionDefaultProviderKeys: {
-            [key: string]: string;
+        connectionClientProviderKeys: {
+            [key: string]: Array<{
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                providerApiKeyId: string;
+            }>;
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
@@ -95211,8 +95244,11 @@ export type UpdateAuthSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        connectionDefaultProviderKeys: {
-            [key: string]: string;
+        connectionClientProviderKeys: {
+            [key: string]: Array<{
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                providerApiKeyId: string;
+            }>;
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
@@ -95424,8 +95460,11 @@ export type UpdateKnowledgeSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        connectionDefaultProviderKeys: {
-            [key: string]: string;
+        connectionClientProviderKeys: {
+            [key: string]: Array<{
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                providerApiKeyId: string;
+            }>;
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
@@ -95627,8 +95666,11 @@ export type DropEmbeddingConfigResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        connectionDefaultProviderKeys: {
-            [key: string]: string;
+        connectionClientProviderKeys: {
+            [key: string]: Array<{
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                providerApiKeyId: string;
+            }>;
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
@@ -96192,8 +96234,11 @@ export type CompleteOnboardingResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
-        connectionDefaultProviderKeys: {
-            [key: string]: string;
+        connectionClientProviderKeys: {
+            [key: string]: Array<{
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                providerApiKeyId: string;
+            }>;
         } | null;
         connectionSkillsEnabled: boolean;
         connectionLlmProxyEnabled: boolean;
@@ -97594,7 +97639,7 @@ export type GetPluginsResponses = {
         organizationId: string;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
-        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms: Array<'posix' | 'windows'>;
         pluginSlug: string;
         displayName: string;
@@ -97662,7 +97707,7 @@ export type CreatePluginData = {
          * Emoji or base64 image data URL shown with the name.
          */
         icon?: string | null;
-        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms?: Array<'posix' | 'windows'>;
         files: Array<{
             path: string;
@@ -97778,7 +97823,7 @@ export type CreatePluginResponses = {
         organizationId: string;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
-        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms: Array<'posix' | 'windows'>;
         pluginSlug: string;
         displayName: string;
@@ -97951,7 +97996,7 @@ export type DiscoverGithubPluginMarketplaceResponses = {
             name: string;
             description: string;
             version: string;
-            clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+            clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
             sourceRepoUrl: string | null;
             sourceRef: string | null;
             sourceSubdir: string;
@@ -97988,7 +98033,7 @@ export type ImportGithubPluginMarketplaceData = {
             name: string;
             displayName: string;
             description?: string;
-            clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+            clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
             supportedPlatforms: Array<'posix' | 'windows'>;
             sourceRepoUrl: string;
             sourceRef: string | null;
@@ -98100,7 +98145,7 @@ export type ImportGithubPluginMarketplaceResponses = {
             organizationId: string;
             authorId: string | null;
             scope: 'personal' | 'team' | 'org';
-            clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+            clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
             supportedPlatforms: Array<'posix' | 'windows'>;
             pluginSlug: string;
             displayName: string;
@@ -98305,7 +98350,7 @@ export type ImportGithubPluginData = {
     } & {
         displayName: string;
         description?: string;
-        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms?: Array<'posix' | 'windows'>;
         initialGrants?: Array<{
             subject: {
@@ -98411,7 +98456,7 @@ export type ImportGithubPluginResponses = {
         organizationId: string;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
-        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms: Array<'posix' | 'windows'>;
         pluginSlug: string;
         displayName: string;
@@ -98689,7 +98734,7 @@ export type ApplyGithubPluginUpdateResponses = {
         organizationId: string;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
-        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms: Array<'posix' | 'windows'>;
         pluginSlug: string;
         displayName: string;
@@ -98849,7 +98894,7 @@ export type UpdatePluginGithubSyncResponses = {
         organizationId: string;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
-        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms: Array<'posix' | 'windows'>;
         pluginSlug: string;
         displayName: string;
@@ -99183,7 +99228,7 @@ export type GetPluginResponses = {
         organizationId: string;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
-        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms: Array<'posix' | 'windows'>;
         pluginSlug: string;
         displayName: string;
@@ -99372,7 +99417,7 @@ export type UpdatePluginResponses = {
         organizationId: string;
         authorId: string | null;
         scope: 'personal' | 'team' | 'org';
-        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms: Array<'posix' | 'windows'>;
         pluginSlug: string;
         displayName: string;
@@ -99532,7 +99577,7 @@ export type GetPluginSkillsResponses = {
         sourceMarketplaceRepo: string | null;
         pluginEnabled: boolean;
         scope: 'personal' | 'team' | 'org';
-        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms: Array<'posix' | 'windows'>;
         skillPath: string;
         name: string;
@@ -99743,7 +99788,7 @@ export type GetPluginSkillResponses = {
         sourceMarketplaceRepo: string | null;
         pluginEnabled: boolean;
         scope: 'personal' | 'team' | 'org';
-        clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
+        clientType: 'claude-code' | 'claude-desktop' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms: Array<'posix' | 'windows'>;
         skillPath: string;
         name: string;

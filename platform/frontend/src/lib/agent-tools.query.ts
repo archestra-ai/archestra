@@ -1,10 +1,5 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import {
-  keepPreviousData,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { invalidateToolAssignmentQueries } from "./agent-tools.hook";
 import {
   getApiErrorMessage,
@@ -432,8 +427,9 @@ export function useAgentDelegations(
       return response.data ?? [];
     },
     enabled: !!agentId && (params?.enabled ?? true),
+    // No `keepPreviousData`: the key is the agent, so a placeholder would show
+    // (and, in the agent form, seed and save) the previous agent's subagents.
     staleTime: 30 * 1000,
-    placeholderData: keepPreviousData,
   });
 }
 

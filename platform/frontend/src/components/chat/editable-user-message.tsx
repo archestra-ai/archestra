@@ -170,9 +170,10 @@ export const EditableUserMessage = memo(function EditableUserMessage({
         {/* Image attachments above the message bubble */}
         {imageAttachments.length > 0 && (
           <div className="flex flex-wrap gap-1 justify-end mb-2">
-            {imageAttachments.map((attachment) => (
+            {imageAttachments.map((attachment, index) => (
               <AttachmentImage
-                key={attachment.url}
+                // biome-ignore lint/suspicious/noArrayIndexKey: the same file attached twice shares one url (and, once saved, one stored attachment), so the url is not unique; a message's attachments never reorder
+                key={index}
                 url={attachment.url}
                 conversationId={conversationId}
                 alt={attachment.filename || "Attached image"}
@@ -184,9 +185,10 @@ export const EditableUserMessage = memo(function EditableUserMessage({
         {/* Other file attachments above the message bubble */}
         {otherAttachments.length > 0 && (
           <div className="flex flex-wrap gap-1 justify-end mb-2">
-            {otherAttachments.map((attachment) => (
+            {otherAttachments.map((attachment, index) => (
               <div
-                key={attachment.url}
+                // biome-ignore lint/suspicious/noArrayIndexKey: see the image attachments above — urls repeat when a file is attached twice
+                key={index}
                 className="group/attachment flex items-center gap-1 rounded-lg border bg-muted/50 p-1"
               >
                 <AttachmentLink

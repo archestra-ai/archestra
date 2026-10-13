@@ -379,8 +379,10 @@ type StreamProbeOutcome =
 // reaches `tool-call` is an abortive (truncated) tool call we want to retry, so
 // the probe holds commit until the completed `tool-call` arrives. The cost is a
 // slightly later tool indicator (after args finish streaming) for healthy turns.
+// `text-start` is absent too: a provider's empty first chunk (OpenAI-compatible
+// streams open with `content: ""`) opens a text part with no text, and a turn
+// that stops there has no reply. Only a text delta counts.
 const RENDERABLE_EVENT_TYPES: ReadonlySet<string> = new Set([
-  "text-start",
   "text-delta",
   "reasoning-start",
   "reasoning-delta",
@@ -480,8 +482,9 @@ export async function probeFirstRenderableEvent(
           ? { kind: "abortive", finishReason, ...rawFinishReason }
           : { kind: "empty", finishReason, ...rawFinishReason };
       }
-      // control parts (start, start-step, finish-step, text-end, ...) carry no
-      // content on their own — keep pulling until content, finish, or error.
+      // control parts (start, start-step, text-start, text-end, finish-step,
+      // ...) carry no content on their own — keep pulling until content,
+      // finish, or error.
       default:
         break;
     }

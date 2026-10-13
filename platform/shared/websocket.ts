@@ -49,6 +49,15 @@ const BrowserPressKeyPayloadSchema = z.object({
   key: z.string(), // Key name like "Enter", "Tab", "ArrowDown", "PageDown"
 });
 
+const BrowserScrollPayloadSchema = z.object({
+  conversationId: z.string().uuid(),
+  // Pointer position in viewport coordinates; the page under it scrolls
+  x: z.number().finite().min(0).max(10_000),
+  y: z.number().finite().min(0).max(10_000),
+  deltaX: z.number().finite().min(-10_000).max(10_000),
+  deltaY: z.number().finite().min(-10_000).max(10_000),
+});
+
 const BrowserGetSnapshotPayloadSchema = z.object({
   conversationId: z.string().uuid(),
 });
@@ -139,6 +148,10 @@ export const ClientWebSocketMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("browser_press_key"),
     payload: BrowserPressKeyPayloadSchema,
+  }),
+  z.object({
+    type: z.literal("browser_scroll"),
+    payload: BrowserScrollPayloadSchema,
   }),
   z.object({
     type: z.literal("browser_get_snapshot"),
@@ -274,6 +287,15 @@ export type BrowserTypeResultMessage = {
 
 export type BrowserPressKeyResultMessage = {
   type: "browser_press_key_result";
+  payload: {
+    conversationId: string;
+    success: boolean;
+    error?: string;
+  };
+};
+
+export type BrowserScrollResultMessage = {
+  type: "browser_scroll_result";
   payload: {
     conversationId: string;
     success: boolean;
@@ -580,6 +602,7 @@ export type ServerWebSocketMessage =
   | BrowserClickResultMessage
   | BrowserTypeResultMessage
   | BrowserPressKeyResultMessage
+  | BrowserScrollResultMessage
   | BrowserSnapshotMessage
   | BrowserSetZoomResultMessage
   | McpLogsMessage

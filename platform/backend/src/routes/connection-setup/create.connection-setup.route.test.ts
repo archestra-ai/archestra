@@ -229,7 +229,7 @@ describe("POST /api/connection-setups", () => {
     ).toEqual([]);
   });
 
-  test("primary routing is OpenCode-only and requires virtual-key creation permission", async () => {
+  test("primary routing is OpenCode- and Cursor-only and requires virtual-key creation permission", async () => {
     const request = {
       baseUrl: "http://localhost:9000/v1",
       proxyAuth: "primary-providers",
@@ -239,7 +239,6 @@ describe("POST /api/connection-setups", () => {
       "claude-desktop",
       "codex",
       "copilot-cli",
-      "cursor",
     ]) {
       const response = await app.inject({
         method: "POST",
@@ -248,7 +247,7 @@ describe("POST /api/connection-setups", () => {
       });
       expect(response.statusCode).toBe(400);
       expect(response.json().error.message).toContain(
-        "only supported for OpenCode",
+        "only supported for OpenCode and Cursor",
       );
     }
     mockUserHasPermission.mockImplementation(
@@ -805,7 +804,7 @@ describe("POST /api/connection-setups", () => {
     await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "openai",
     });
-    // Reuse a personal connection key that already has another provider.
+    // Another client's setup gets its own key, so its mapping can't leak in.
     const previous = await app.inject({
       method: "POST",
       url: "/api/connection-setups",
@@ -858,7 +857,7 @@ describe("POST /api/connection-setups", () => {
       await VirtualApiKeyModel.getProviderApiKeys(
         setup?.virtualApiKeyId as string,
       ),
-    ).toHaveLength(2);
+    ).toEqual([expect.objectContaining({ provider })]);
     const script = await app.inject({
       method: "GET",
       url: `/api/connection-setups/script/${rawToken}`,
@@ -1012,7 +1011,7 @@ describe("POST /api/connection-setups", () => {
     expect(response.json().error.message).toContain("llmVirtualKey:create");
   });
 
-  test("uses the admin-configured default provider key for auto-provisioning", async ({
+  test("uses the provider key the admin mapped for the client", async ({
     makeAgent,
     makeSecret,
     makeLlmProviderApiKey,
@@ -1024,30 +1023,98 @@ describe("POST /api/connection-setups", () => {
       (await makeSecret()).id,
       { provider: "anthropic", userId: user.id },
     );
-    // ...and an org key the admin explicitly mapped as the connection default
+    // ...an org key the admin mapped for Claude Code...
     const mappedKey = await makeLlmProviderApiKey(
+      organizationId,
+      (await makeSecret()).id,
+      { provider: "anthropic" },
+    );
+    // ...and one mapped for another client, which must not apply here.
+    const otherClientKey = await makeLlmProviderApiKey(
       organizationId,
       (await makeSecret()).id,
       { provider: "anthropic" },
     );
     const { OrganizationModel } = await import("@/models");
     await OrganizationModel.patch(organizationId, {
-      connectionDefaultProviderKeys: { anthropic: mappedKey.id },
+      connectionClientProviderKeys: {
+        "claude-code": [
+          { provider: "anthropic", providerApiKeyId: mappedKey.id },
+        ],
+        "claude-desktop": [
+          { provider: "anthropic", providerApiKeyId: otherClientKey.id },
+        ],
+      },
+    });
+
+    const mappingsFor = async (clientId: "claude-code" | "codex") => {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connection-setups",
+        payload: {
+          clientId,
+          baseUrl: "http://localhost:9000/v1",
+          llmProxyId: proxy.id,
+          provider: "anthropic",
+          proxyAuth: "virtual-key",
+        },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      const rawToken = response
+        .json()
+        .command.match(/script\/([^']+)'/)?.[1] as string;
+      const setup = await ConnectionSetupModel.findByToken(rawToken);
+      return VirtualApiKeyModel.getProviderApiKeys(
+        setup?.virtualApiKeyId as string,
+      );
+    };
+
+    expect(await mappingsFor("claude-code")).toEqual([
+      expect.objectContaining({ providerApiKeyId: mappedKey.id }),
+    ]);
+    expect(personalKey.id).not.toBe(mappedKey.id);
+  });
+
+  test("Cursor mints one Model Router key with the admin-mapped keys", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    // A primary key the user could use, which an admin mapping replaces.
+    await makeLlmProviderApiKey(organizationId, (await makeSecret()).id, {
+      provider: "openai",
+      isPrimary: true,
+      userId: user.id,
+    });
+    const anthropicKey = await makeLlmProviderApiKey(
+      organizationId,
+      (await makeSecret()).id,
+      { provider: "anthropic" },
+    );
+    const geminiKey = await makeLlmProviderApiKey(
+      organizationId,
+      (await makeSecret()).id,
+      { provider: "gemini" },
+    );
+    const { OrganizationModel } = await import("@/models");
+    await OrganizationModel.patch(organizationId, {
+      connectionClientProviderKeys: {
+        cursor: [
+          { provider: "anthropic", providerApiKeyId: anthropicKey.id },
+          { provider: "gemini", providerApiKeyId: geminiKey.id },
+        ],
+      },
     });
 
     const response = await app.inject({
       method: "POST",
       url: "/api/connection-setups",
       payload: {
-        clientId: "claude-code",
+        clientId: "cursor",
         baseUrl: "http://localhost:9000/v1",
-        llmProxyId: proxy.id,
-        provider: "anthropic",
-        proxyAuth: "virtual-key",
+        proxyAuth: "primary-providers",
       },
     });
-    expect(response.statusCode).toBe(200);
-
+    expect(response.statusCode, response.body).toBe(200);
     const rawToken = response
       .json()
       .command.match(/script\/([^']+)'/)?.[1] as string;
@@ -1055,10 +1122,55 @@ describe("POST /api/connection-setups", () => {
     const mappings = await VirtualApiKeyModel.getProviderApiKeys(
       setup?.virtualApiKeyId as string,
     );
-    expect(mappings).toEqual([
-      expect.objectContaining({ providerApiKeyId: mappedKey.id }),
-    ]);
-    expect(personalKey.id).not.toBe(mappedKey.id);
+    expect(mappings.map((mapping) => mapping.providerApiKeyId).sort()).toEqual(
+      [anthropicKey.id, geminiKey.id].sort(),
+    );
+  });
+
+  test("Cursor falls back to the user's primary keys without a mapping", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const primaryKey = await makeLlmProviderApiKey(
+      organizationId,
+      (await makeSecret()).id,
+      { provider: "openai", isPrimary: true, userId: user.id },
+    );
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "cursor",
+        baseUrl: "http://localhost:9000/v1",
+        proxyAuth: "primary-providers",
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const rawToken = response
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    const setup = await ConnectionSetupModel.findByToken(rawToken);
+    expect(
+      await VirtualApiKeyModel.getProviderApiKeys(
+        setup?.virtualApiKeyId as string,
+      ),
+    ).toEqual([expect.objectContaining({ providerApiKeyId: primaryKey.id })]);
+  });
+
+  test("Cursor refuses a single-provider proxy setup", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "cursor",
+        baseUrl: "http://localhost:9000/v1",
+        provider: "openai",
+        proxyAuth: "virtual-key",
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.message).toContain("Model Router");
   });
 
   test("403s a proxy setup when the org has disabled connecting the LLM Proxy", async () => {

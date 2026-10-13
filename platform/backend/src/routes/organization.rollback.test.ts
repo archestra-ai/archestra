@@ -769,7 +769,9 @@ describe("organization routes", () => {
         method: "PATCH",
         url: "/api/organization/connection-settings",
         payload: {
-          connectionDefaultProviderKeys: { "github-copilot": key.id },
+          connectionClientProviderKeys: {
+            cursor: [{ provider: "github-copilot", providerApiKeyId: key.id }],
+          },
         },
       });
 
@@ -792,11 +794,45 @@ describe("organization routes", () => {
         method: "PATCH",
         url: "/api/organization/connection-settings",
         payload: {
-          connectionDefaultProviderKeys: { anthropic: key.id },
+          connectionClientProviderKeys: {
+            "claude-code": [
+              { provider: "anthropic", providerApiKeyId: key.id },
+            ],
+            cursor: [{ provider: "anthropic", providerApiKeyId: key.id }],
+          },
         },
       });
 
       expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().connectionClientProviderKeys).toEqual({
+        "claude-code": [{ provider: "anthropic", providerApiKeyId: key.id }],
+        cursor: [{ provider: "anthropic", providerApiKeyId: key.id }],
+      });
+    });
+
+    test("rejects a key for a provider the client can't route", async () => {
+      const key = await LlmProviderApiKeyModel.create({
+        organizationId,
+        secretId: null,
+        name: "OpenAI",
+        provider: "openai",
+        scope: "org",
+        userId: null,
+        teamId: null,
+      });
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/connection-settings",
+        payload: {
+          connectionClientProviderKeys: {
+            "claude-code": [{ provider: "openai", providerApiKeyId: key.id }],
+          },
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(400);
+      expect(response.json().error.message).toMatch(/Claude Code/);
     });
   });
 

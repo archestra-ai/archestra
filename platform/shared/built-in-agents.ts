@@ -14,6 +14,9 @@ export const BUILT_IN_AGENT_NAMES = {
   APP_RUNTIME: "App Runtime LLM Agent",
 } as const;
 
+/** The APPA Keeper's agent icon, drawn by the frontend's agent icon control. */
+export const APPA_KEEPER_AGENT_ICON = "logo:appa-keeper";
+
 export const OPENAPPA_CONFIG_SUGGESTED_PROMPTS = [
   {
     summaryTitle: "Explain my current policy",

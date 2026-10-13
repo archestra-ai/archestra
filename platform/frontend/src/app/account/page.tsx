@@ -1,7 +1,7 @@
 "use client";
 
 import { AccessSection } from "@/app/account/_components/access-section";
-import { ConnectionsSection } from "@/app/account/_components/connections-section";
+import { CredentialsSection } from "@/app/account/_components/credentials-section";
 import { ProfileSection } from "@/app/account/_components/profile-section";
 import { SecuritySection } from "@/app/account/_components/security-section";
 import { SettingsSectionGroup } from "@/components/settings-section";
@@ -18,7 +18,7 @@ export default function AccountProfilePage() {
       <ProfileSection />
       <AccessSection />
       <SecuritySection />
-      <ConnectionsSection />
+      <CredentialsSection />
     </SettingsSectionGroup>
   );
 }

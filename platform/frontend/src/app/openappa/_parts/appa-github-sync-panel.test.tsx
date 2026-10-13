@@ -243,7 +243,7 @@ test("only someone who may bind credentials can approve a credential change", as
   ).toBeDisabled();
   expect(
     within(dialog).getByText(
-      "Approving takes permission to update guardrails and credentials.",
+      "Approving takes permission to update guardrails, and Can use on every credential.",
     ),
   ).toBeVisible();
 });

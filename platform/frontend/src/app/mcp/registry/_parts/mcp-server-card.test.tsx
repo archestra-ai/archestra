@@ -22,6 +22,7 @@ vi.mock("@/lib/environment.query", () => ({
 }));
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  useMcpCatalogCredentialPreflight: () => ({ data: [] }),
   useInternalMcpCatalogAccessIds: () => ({ data: undefined }),
   useInternalMcpCatalog: ({
     initialData,

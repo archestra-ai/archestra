@@ -61,6 +61,7 @@ import { ConversationFilesPanel } from "@/components/chat/conversation-files-pan
 import { ConversationHeader } from "@/components/chat/conversation-header";
 import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
+import { getComposerAnswer } from "@/components/chat/mcp-elicitation-fields";
 import { OnboardingWizardButton } from "@/components/chat/onboarding-wizard-button";
 import {
   AppsPanelContent,
@@ -2245,6 +2246,27 @@ export function ChatPageContent({
         messageLength: message.text?.length ?? 0,
       });
     };
+
+    // An open single-pick question takes the composer's text as its typed
+    // answer instead of a new message waiting behind it in the queue.
+    const composerAnswer =
+      chatSession &&
+      !message.files?.length &&
+      !options?.skill &&
+      !options?.externalMcpSkill &&
+      !options?.sandboxCommand
+        ? getComposerAnswer({
+            requests: chatSession.pendingMcpElicitations ?? [],
+            text: message.text ?? "",
+          })
+        : null;
+    if (composerAnswer && chatSession) {
+      if (!(await chatSession.resolveMcpElicitation(composerAnswer))) {
+        // Already reported; keep the text for another try (onSubmit contract).
+        throw new Error("elicitation-answer-not-saved");
+      }
+      return;
+    }
 
     const queueEnabled = !!conversationId;
     const submitAction = classifyChatSubmitAction({

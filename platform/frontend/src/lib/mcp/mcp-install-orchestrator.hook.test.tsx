@@ -25,6 +25,7 @@ const {
 }));
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  useMcpCatalogCredentialPreflight: () => ({ data: [] }),
   useInternalMcpCatalog: () => ({
     data: [
       {

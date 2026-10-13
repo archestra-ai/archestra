@@ -21,6 +21,7 @@ import {
   PermissionsPanel,
   presetDescription,
   presetFor,
+  showsAudience,
   subjectLabels,
   YouPill,
 } from "@/components/resource-permissions";
@@ -84,6 +85,7 @@ export function InitialResourcePermissions({
     disabled: !canGrantPreset(preset.actions),
   }));
   const audience = grantsAudience(grants);
+  const audienceShown = showAudience && showsAudience(resource);
   // The author gets a Full access grant when the object is created, so the
   // form lists it the way the object's own policy will. Bulk additions to
   // existing objects create nothing, so they have no author row.
@@ -196,12 +198,15 @@ export function InitialResourcePermissions({
   return (
     <>
       {layout === "settings" ? (
-        <PermissionsSettingsSection audience={showAudience ? audience : null}>
+        <PermissionsSettingsSection audience={audienceShown ? audience : null}>
           {accessRows}
         </PermissionsSettingsSection>
       ) : (
         <PermissionsPanel embedded standalone={standalone}>
-          {showAudience && <AccessAudienceHeader audience={audience} />}
+          {audienceShown && <AccessAudienceHeader audience={audience} />}
+          {showAudience && !audienceShown && (
+            <h2 className="text-sm font-semibold">Permissions</h2>
+          )}
           {accessRows}
         </PermissionsPanel>
       )}

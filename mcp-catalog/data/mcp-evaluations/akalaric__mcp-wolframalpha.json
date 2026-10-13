@@ -1,0 +1,66 @@
+{
+  "name": "akalaric__mcp-wolframalpha",
+  "display_name": "mcp-wolframalpha",
+  "description": "A Python-powered Model Context Protocol MCP server and client that uses Wolfram Alpha via API.",
+  "author": {
+    "name": "ricocf"
+  },
+  "server": {
+    "command": "python3",
+    "args": ["${__dirname}/src/core/server.py"],
+    "env": {
+      "WOLFRAM_API_KEY": "${user_config.wolfram_api_key}",
+      "GeminiAPI": "${user_config.gemini_api}"
+    },
+    "type": "local"
+  },
+  "tools": [],
+  "prompts": [],
+  "keywords": [],
+  "user_config": {
+    "wolfram_api_key": {
+      "type": "string",
+      "title": "Wolfram Alpha API Key",
+      "description": "Your Wolfram Alpha App ID",
+      "sensitive": true,
+      "required": true
+    },
+    "gemini_api": {
+      "type": "string",
+      "title": "Google Gemini API Key",
+      "description": "Your Google Gemini API key (optional, primarily for client usage)",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "readme": "# MCP Wolfram Alpha (Server + Client)\nSeamlessly integrate Wolfram Alpha into your chat applications.\n\nThis project implements an MCP (Model Context Protocol) server designed to interface with the Wolfram Alpha API. It enables chat-based applications to perform computational queries and retrieve structured knowledge, facilitating advanced conversational capabilities.\n\nIncluded is an MCP-Client example utilizing Gemini via LangChain, demonstrating how to connect large language models to the MCP server for real-time interactions with Wolfram Alpha’s knowledge engine.\n\n[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/akalaric/mcp-wolframalpha)\n---\n\n## Features\n\n-  **Wolfram|Alpha Integration** for math, science, and data queries.\n\n-  **Modular Architecture** Easily extendable to support additional APIs and functionalities.\n\n-  **Multi-Client Support** Seamlessly handle interactions from multiple clients or interfaces.\n\n-  **MCP-Client example** using Gemini (via LangChain).\n-  **UI Support** using Gradio for a user-friendly web interface to interact with Google AI and Wolfram Alpha MCP server.\n\n---\n\n##  Installation\n\n\n### Clone the Repo\n   ```bash\n   git clone https://github.com/ricocf/mcp-wolframalpha.git\n\n   cd mcp-wolframalpha\n   ```\n  \n\n### Set Up Environment Variables\n\nCreate a .env file based on the example:\n\n- WOLFRAM_API_KEY=your_wolframalpha_appid\n\n- GeminiAPI=your_google_gemini_api_key *(Optional if using Client method below.)*\n\n### Install Requirements\n   ```bash\n   pip install -r requirements.txt\n   ```\n\n  Install the required dependencies with uv:\n  Ensure [`uv`](https://github.com/astral-sh/uv) is installed.\n\n   ```bash\n   uv sync\n   ```\n\n### Configuration\n\nTo use with the VSCode MCP Server:\n1.  Create a configuration file at `.vscode/mcp.json` in your project root.\n2.  Use the example provided in `configs/vscode_mcp.json` as a template.\n3.  For more details, refer to the [VSCode MCP Server Guide](https://sebastian-petrus.medium.com/vscode-mcp-server-42286eed3ee7).\n\nTo use with Claude Desktop:\n```json\n{\n  \"mcpServers\": {\n    \"WolframAlphaServer\": {\n      \"command\": \"python3\",\n      \"args\": [\n        \"/path/to/src/core/server.py\"\n      ]\n    }\n  }\n}\n```\n## Client Usage Example\n\nThis project includes an LLM client that communicates with the MCP server.\n\n#### Run with Gradio UI\n- Required: GeminiAPI\n- Provides a local web interface to interact with Google AI and Wolfram Alpha.\n- To run the client directly from the command line:\n```bash\npython main.py --ui\n```\n#### Docker\nTo build and run the client inside a Docker container:\n```bash\ndocker build -t wolframalphaui -f .devops/ui.Dockerfile .\n\ndocker run wolframalphaui\n```\n#### UI\n- Intuitive interface built with Gradio to interact with both Google AI (Gemini) and the Wolfram Alpha MCP server.\n- Allows users to switch between Wolfram Alpha, Google AI (Gemini), and query history.\n  \n![UI](configs/gradio_ui.png)\n\n#### Run as CLI Tool\n- Required: GeminiAPI\n- To run the client directly from the command line:\n```bash\npython main.py\n```\n#### Docker\nTo build and run the client inside a Docker container:\n```bash\ndocker build -t wolframalpha -f .devops/llm.Dockerfile .\n\ndocker run -it wolframalpha\n```\n\n## Contact\n\nFeel free to give feedback. The e-mail address is shown if you execute this in a shell:\n\n```sh\nprintf \"\\x61\\x6b\\x61\\x6c\\x61\\x72\\x69\\x63\\x31\\x40\\x6f\\x75\\x74\\x6c\\x6f\\x6f\\x6b\\x2e\\x63\\x6f\\x6d\\x0a\"\n```\n\n",
+  "category": "AI Tools",
+  "archestra_config": {
+    "client_config_permutations": {
+      "WolframAlphaServer": {
+        "command": "python3",
+        "args": ["/path/to/src/core/server.py"],
+        "env": {}
+      }
+    },
+    "oauth": {
+      "provider": null,
+      "required": false
+    },
+    "works_in_archestra": false
+  },
+  "github_info": {
+    "owner": "akalaric",
+    "repo": "mcp-wolframalpha",
+    "url": "https://github.com/akalaric/mcp-wolframalpha",
+    "name": "akalaric__mcp-wolframalpha",
+    "path": null,
+    "stars": 34,
+    "contributors": 0,
+    "issues": 1,
+    "releases": false,
+    "ci_cd": false,
+    "latest_commit_hash": "286cdfd8f6defb9bca132f4fe51c04013e42bbed"
+  },
+  "programming_language": "Python"
+}

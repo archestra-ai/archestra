@@ -80,7 +80,6 @@ Required RBAC permission: None (no additional RBAC permission required)
 | `options[].label` | `string` | Yes | The option shown to the user. |
 | `options[].description` | `string` | No | Optional extra detail shown next to the option. |
 | `allowMultiple` | `boolean` | No | When true, the user may select more than one option. Defaults to false (exactly one). |
-| `allowText` | `boolean` | No | When true, the user may type an answer of their own instead of picking, returned as `text`. Defaults to false. Not for secrets: never use it to collect a password, token, or key. |
 | `remedy_offer_ids` | `string[]` | No | Exact offer IDs from the blocked ruling that this question asks the user to decide: a review execute_remedy_plan requires, or a plan that would prevent what the user asked for. Say in the question what it would prevent. Omit for ordinary questions. |
 
 ##### Output
@@ -89,7 +88,7 @@ Required RBAC permission: None (no additional RBAC permission required)
 |-------|------|----------|-------------|
 | `action` | `"accept" \| "decline" \| "cancel"` | Yes | Whether the choice form was submitted, declined, or canceled. |
 | `selected` | `string[]` | Yes | The labels the user selected. Empty when declined or canceled. |
-| `text` | `string` | No | What the user typed, when allowText offered a free-text answer. |
+| `text` | `string` | No | What the user typed instead of picking an option. |
 | `timedOut` | `boolean` | No | True when the question expired without an answer. |
 
 ### Tool Discovery
@@ -2957,8 +2956,8 @@ Required RBAC permission: `update` on the MCP gateway (granted per item)
 | `list_runtime_credentials` | List reusable credential definitions visible to the caller, including whether a personal or organization connection is configured. | [`credential:read`](/docs/reference/permissions#credential:read) |
 | `get_runtime_credential` | Read one reusable credential definition and its usage. | [`credential:read`](/docs/reference/permissions#credential:read) |
 | `create_runtime_credential` | Create credential metadata. | [`credential:create`](/docs/reference/permissions#credential:create) |
-| `update_runtime_credential` | Update metadata for an existing credential. | [`credential:update`](/docs/reference/permissions#credential:update) |
-| `delete_runtime_credential` | Delete an unused credential and its connection. | [`credential:delete`](/docs/reference/permissions#credential:delete) |
+| `update_runtime_credential` | Update metadata for an existing credential. | `update` on the credential (granted per item) |
+| `delete_runtime_credential` | Delete an unused credential and its connection. | `delete` on the credential (granted per item) |
 | `request_runtime_credential_setup` | Ask the person to create and connect a GitHub App through the native chat dialog. | [`credential:create`](/docs/reference/permissions#credential:create) |
 | `request_battery_credentials` | Show the person one card in Archestra chat for the tokens these batteries need: what each battery adds, how to make its token, and a picker of the organization's credentials with an option to add a... | [`credential:create`](/docs/reference/permissions#credential:create) |
 
@@ -3314,7 +3313,7 @@ Required RBAC permission: [`credential:create`](/docs/reference/permissions#cred
 
 #### update_runtime_credential
 
-Required RBAC permission: [`credential:update`](/docs/reference/permissions#credential:update)
+Required RBAC permission: `update` on the credential (granted per item)
 
 ##### Input
 
@@ -3334,7 +3333,7 @@ Required RBAC permission: [`credential:update`](/docs/reference/permissions#cred
 
 #### delete_runtime_credential
 
-Required RBAC permission: [`credential:delete`](/docs/reference/permissions#credential:delete)
+Required RBAC permission: `delete` on the credential (granted per item)
 
 ##### Input
 

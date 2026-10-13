@@ -2,6 +2,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import config from "@/config";
 import AuditLogModel from "@/models/audit-log";
 import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import { ARCHESTRA_BATTERY } from "@/openappa/archestra-audience";
@@ -35,6 +36,9 @@ beforeEach(
     await seedAndAssignArchestraTools(created.id);
     agent = { id: created.id, name: created.name };
     await RuntimeCredentialDefinitionModel.create({
+      // Not shared with the organization, which a new credential is by
+      // default: these tests decide who else may use it.
+      initialPermissionGrants: [],
       organizationId,
       createdBy: adminId,
       definition: {
@@ -158,7 +162,7 @@ describe("bind_guardrails_credential", () => {
     ]);
   });
 
-  test("takes credential update on top of policy update", async ({
+  test("takes use on the credential on top of policy update", async ({
     makeUser,
     makeMember,
     makeCustomRole,
@@ -168,19 +172,19 @@ describe("bind_guardrails_credential", () => {
     });
     const editor = (await makeUser()).id;
     await makeMember(editor, organizationId, { role: policyOnly.role });
+    // Without a grant the credential is not even visible to them.
     await expect(bind("github-token", editor)).rejects.toMatchObject({
-      statusCode: 403,
+      statusCode: 404,
     });
     expect(await storedKey()).toBeNull();
 
-    const both = await makeCustomRole(organizationId, {
-      permission: {
-        openappaPolicy: ["read", "update"],
-        credential: ["update"],
-      },
-    });
     const binder = (await makeUser()).id;
-    await makeMember(binder, organizationId, { role: both.role });
+    await makeMember(binder, organizationId, { role: policyOnly.role });
+    await grantCredentialUse({
+      organizationId,
+      key: "github-token",
+      userId: binder,
+    });
     expect((await bind("github-token", binder)).isError).toBeFalsy();
     expect(await storedKey()).toBe("github-token");
   });
@@ -264,7 +268,7 @@ describe("[credentials] lines on the agent path", () => {
     );
   });
 
-  test("a line a root external reads takes credential update on every agent path", async ({
+  test("a line a root external reads takes use on the credential on every agent path", async ({
     makeUser,
     makeCustomRole,
     makeMember,
@@ -375,3 +379,30 @@ describe("[credentials] lines on the agent path", () => {
     ]);
   });
 });
+
+/** Grant one person `use` on a credential, the way its Permissions tab would. */
+async function grantCredentialUse(params: {
+  organizationId: string;
+  key: string;
+  userId: string;
+}) {
+  const definition = await RuntimeCredentialDefinitionModel.find(params);
+  if (!definition) throw new Error(`No credential ${params.key}`);
+  const scope = {
+    organizationId: params.organizationId,
+    resource: "credential" as const,
+    scope: definition.id,
+  };
+  const policy = await ResourcePermissionPolicyModel.find(scope);
+  await ResourcePermissionPolicyModel.replace({
+    ...scope,
+    revision: policy?.revision ?? 0,
+    grants: [
+      ...(policy?.grants ?? []),
+      {
+        subject: { type: "user", id: params.userId },
+        actions: ["read", "use"],
+      },
+    ],
+  });
+}

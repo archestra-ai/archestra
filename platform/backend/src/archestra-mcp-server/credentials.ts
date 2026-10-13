@@ -19,8 +19,10 @@ import {
   listRuntimeCredentialDefinitions,
   updateRuntimeCredentialDefinition,
 } from "@/services/agent-runtime/runtime-credentials";
+import { CredentialAccess } from "@/services/credential-access";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
+  ApiError,
   InsertRuntimeCredentialDefinitionSchema,
   UpdateRuntimeCredentialDefinitionSchema,
 } from "@/types";
@@ -164,6 +166,12 @@ const registry = defineArchestraTools([
     async handler({ args, context }) {
       const actor = requireActor(context);
       try {
+        await CredentialAccess.requireByKey({
+          organizationId: actor.organizationId,
+          userId: actor.id,
+          key: args.key,
+          action: "update",
+        });
         const updated = await updateRuntimeCredentialDefinition({
           organizationId: actor.organizationId,
           key: args.key,
@@ -175,7 +183,7 @@ const registry = defineArchestraTools([
           name: updated.name,
         });
       } catch (error) {
-        return catchError(error, "updating the credential");
+        return credentialError(error, "updating the credential");
       }
     },
   }),
@@ -188,13 +196,19 @@ const registry = defineArchestraTools([
     async handler({ args, context }) {
       const actor = requireActor(context);
       try {
+        await CredentialAccess.requireByKey({
+          organizationId: actor.organizationId,
+          userId: actor.id,
+          key: args.key,
+          action: "delete",
+        });
         await deleteRuntimeCredentialDefinition({
           organizationId: actor.organizationId,
           key: args.key,
         });
         return structuredSuccessResult({ deleted: args.key });
       } catch (error) {
-        return catchError(error, "deleting the credential");
+        return credentialError(error, "deleting the credential");
       }
     },
   }),
@@ -413,4 +427,11 @@ function batteryTitle(name: string): string {
     .split("-")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
+}
+
+/** A refusal names its reason; anything else stays a generic failure. */
+function credentialError(error: unknown, action: string) {
+  if (error instanceof ApiError && error.statusCode < 500)
+    return errorResult(error.message);
+  return catchError(error, action);
 }

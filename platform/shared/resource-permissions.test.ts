@@ -8,6 +8,7 @@ import {
   ResourcePermissionScopeSchema,
   type ScopedPermission,
   widenToPreset,
+  withoutWildcardCoveredGrants,
 } from "./resource-permissions";
 
 const engineering = "00000000-0000-4000-8000-000000000001";
@@ -114,6 +115,39 @@ describe("scoped permission composition", () => {
         false,
       );
     }
+  });
+});
+
+describe("withoutWildcardCoveredGrants", () => {
+  test("drops single-object grants a wildcard covers and keeps the rest", () => {
+    const wildcard = permission({ scope: "*" });
+    const otherAction = permission({ action: "update" });
+    const otherOrganization = permission({ organizationId: "organization-b" });
+    expect(
+      withoutWildcardCoveredGrants([
+        permission(),
+        permission({ scope: finance }),
+        wildcard,
+        otherAction,
+        otherOrganization,
+      ]),
+    ).toEqual([wildcard, otherAction, otherOrganization]);
+  });
+
+  test("keeps single-chat sharing grants, which a wildcard does not cover", () => {
+    const shareOne = permission({
+      resource: "conversation",
+      action: "manage-permissions",
+    });
+    const shareAll = permission({
+      resource: "conversation",
+      action: "manage-permissions",
+      scope: "*",
+    });
+    expect(withoutWildcardCoveredGrants([shareOne, shareAll])).toEqual([
+      shareOne,
+      shareAll,
+    ]);
   });
 });
 

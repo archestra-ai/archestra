@@ -15,6 +15,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  useMcpCatalogCredentialPreflight: () => ({ data: [] }),
   useReinstallInternalMcpCatalogItem: () => ({
     mutate: vi.fn(),
     isPending: false,

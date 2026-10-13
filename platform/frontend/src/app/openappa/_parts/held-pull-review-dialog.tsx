@@ -112,7 +112,7 @@ export function HeldPullReviewDialog({
       {!mayApprove && held && (
         <p className="text-xs text-muted-foreground">
           {held.reasons.includes("changes_credentials")
-            ? "Approving takes permission to update guardrails and credentials."
+            ? "Approving takes permission to update guardrails, and Can use on every credential."
             : "Approving takes permission to update guardrails."}
         </p>
       )}

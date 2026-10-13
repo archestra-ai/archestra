@@ -63,7 +63,7 @@ function prepareDirectCatalog(executable, clientArgs = [], persist = true) {
     // Discovery uses the native provider, not the inference proxy or our own
     // model override. Enabling API-key discovery applies only to this process.
     result = spawnSync(command, [...args, 'debug', 'models', '-c', 'model_provider="openai"', '-c', 'cli_auth_credentials_store="file"', '--enable', 'api_key_model_discovery'], { cwd: shadow, encoding: 'utf8', windowsHide: true, maxBuffer: 10 * 1024 * 1024, timeout: 30000, env: { ...process.env, CODEX_HOME: shadow } });
-    if (result.error || result.status !== 0) throw new Error('Could not read the Codex model catalog.');
+    if (result.error || result.status !== 0) throw new Error('Could not read the Codex model catalog.' + codexErrorDetail(result, shadow, home));
     // Codex can return the bundled catalog with a successful exit after a network/auth
     // failure. A newly written cache is evidence of an actual remote refresh.
     const cacheFile = path.join(shadow, 'models_cache.json');
@@ -107,6 +107,12 @@ function prepareDirectCatalog(executable, clientArgs = [], persist = true) {
     throw error;
   }
   return { home, filename };
+}
+// A config that Codex cannot load fails discovery too. Show what Codex said,
+// with the path of the real config rather than the deleted copy.
+function codexErrorDetail(result, shadow, home) {
+  const output = String(result.stderr || result.error?.message || '').split(shadow).join(home).trim();
+  return output ? ' Codex reported:\n  ' + output.split(/\r?\n/).slice(0, 12).join('\n  ').slice(0, 1200) : '';
 }
 function modelCompatibilityError(requested, executable, catalog) {
   let version = 'version unavailable';

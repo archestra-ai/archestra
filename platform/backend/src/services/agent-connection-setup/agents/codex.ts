@@ -165,7 +165,11 @@ echo "Codex uses your existing ChatGPT or OpenAI API-key login."`
   warn ${sh(`Could not deliver plugin — run 'codex plugin add ${ref}'.`)}
 fi`;
     });
+    // Each setup gets a new clone URL, and Codex refuses to add a marketplace
+    // name again from a different source. Remove the earlier registration
+    // first; plugins installed from it stay installed.
     sections.push(`say ${sh(`Registering the "${ctx.skills.marketplaceName}" marketplace`)}
+cli codex plugin marketplace remove ${sh(ctx.skills.marketplaceName)} >/dev/null 2>&1 || true
 if ! cli codex plugin marketplace add ${sh(ctx.skills.cloneUrl)}; then
   err "Marketplace registration failed. Review the Git error above; HTTP 502 means the server could not serve the repository. Registration has not been verified. Run /plugins to inspect existing registrations, then retry setup after resolving the error."
   exit 1
@@ -269,7 +273,9 @@ Write-Host 'Codex uses your existing ChatGPT or OpenAI API-key login.'`
 if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not deliver plugin — run 'codex plugin add ${ref}'.`)} }`;
       })
       .join("\n");
+    // Remove the earlier registration first, as in the bash script.
     sections.push(`Say ${psq(`Registering the "${ctx.skills.marketplaceName}" marketplace`)}
+try { codex plugin marketplace remove ${psq(ctx.skills.marketplaceName)} 2>$null | Out-Null } catch { }
 codex plugin marketplace add ${psq(ctx.skills.cloneUrl)}
 if ($LASTEXITCODE -ne 0) { throw 'Marketplace registration failed. Review the Git error above; HTTP 502 means the server could not serve the repository. Registration has not been verified. Run /plugins to inspect existing registrations, then retry setup after resolving the error.' }
 ${pluginInstalls}`);

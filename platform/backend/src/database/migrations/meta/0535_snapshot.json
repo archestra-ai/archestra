@@ -1,5 +1,5 @@
 {
-  "id": "636b44ef-2781-4060-9431-336ec4d38776",
+  "id": "96af2c48-3a45-4aa6-af45-143e674b7033",
   "prevId": "b79379c2-1da1-4a37-8a06-8888396e90a2",
   "version": "7",
   "dialect": "postgresql",
@@ -6589,6 +6589,52 @@
             "id"
           ],
           "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.browser_storage_states": {
+      "name": "browser_storage_states",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "encrypted_state": {
+          "name": "encrypted_state",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "browser_storage_states_user_id_user_id_fk": {
+          "name": "browser_storage_states_user_id_user_id_fk",
+          "tableFrom": "browser_storage_states",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
@@ -19522,12 +19568,6 @@
               "expression": "lower(\"source_marketplace_plugin_name\")",
               "asc": true,
               "isExpression": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "client_type",
-              "isExpression": false,
-              "asc": true,
               "nulls": "last"
             }
           ],

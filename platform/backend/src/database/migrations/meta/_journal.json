@@ -3750,8 +3750,15 @@
     {
       "idx": 535,
       "version": "7",
-      "when": 1791921667448,
-      "tag": "0535_mixed_mentallo",
+      "when": 1791921477945,
+      "tag": "0535_cool_power_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 536,
+      "version": "7",
+      "when": 1791922639443,
+      "tag": "0536_mixed_mentallo",
       "breakpoints": true
     }
   ]

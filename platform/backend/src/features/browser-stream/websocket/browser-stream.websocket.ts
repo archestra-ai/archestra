@@ -16,6 +16,8 @@ type BrowserStreamSubscription = {
   userContext: BrowserUserContext;
   intervalId: NodeJS.Timeout;
   isSending: boolean;
+  /** An immediate screenshot was requested while one was in flight. */
+  refreshPending?: boolean;
   /** Set when screenshots were skipped due to active subagents */
   wasBlockedBySubagent: boolean;
 };
@@ -141,6 +143,15 @@ export class BrowserStreamSocketClientContext {
         );
         return true;
 
+      case "browser_scroll":
+        await this.handleBrowserScroll(ws, conversationId, {
+          x: typeof payload?.x === "number" ? payload.x : 0,
+          y: typeof payload?.y === "number" ? payload.y : 0,
+          deltaX: typeof payload?.deltaX === "number" ? payload.deltaX : 0,
+          deltaY: typeof payload?.deltaY === "number" ? payload.deltaY : 0,
+        });
+        return true;
+
       case "browser_press_key":
         await this.handleBrowserPressKey(
           ws,
@@ -215,6 +226,14 @@ export class BrowserStreamSocketClientContext {
     },
     initialUrl?: string,
   ): Promise<void> {
+    // Re-subscribing to the same conversation is a no-op: tearing down and
+    // rebuilding would leave a gap where input fails as "not subscribed"
+    const existing = this.browserSubscriptions.get(ws);
+    if (existing?.conversationId === conversationId) {
+      await this.sendImmediateScreenshot(ws, conversationId);
+      return;
+    }
+
     // Unsubscribe from any existing stream first (for this WebSocket)
     this.unsubscribeBrowserStream(ws);
 
@@ -317,6 +336,9 @@ export class BrowserStreamSocketClientContext {
         await this.sendScreenshot(ws, agentId, conversationId, userContext);
       } finally {
         subscription.isSending = false;
+      }
+      if (subscription.refreshPending) {
+        await this.sendImmediateScreenshot(ws, conversationId);
       }
     };
 
@@ -483,6 +505,7 @@ export class BrowserStreamSocketClientContext {
       });
 
       if (result.success) {
+        this.sendInputFrame(ws, conversationId, result.frame);
         await this.sendImmediateScreenshot(ws, conversationId);
       }
     } catch (error) {
@@ -538,6 +561,7 @@ export class BrowserStreamSocketClientContext {
       });
 
       if (result.success) {
+        this.sendInputFrame(ws, conversationId, result.frame);
         await this.sendImmediateScreenshot(ws, conversationId);
       }
     } catch (error) {
@@ -588,6 +612,7 @@ export class BrowserStreamSocketClientContext {
       });
 
       if (result.success) {
+        this.sendInputFrame(ws, conversationId, result.frame);
         await this.sendImmediateScreenshot(ws, conversationId);
       }
     } catch (error) {
@@ -598,6 +623,57 @@ export class BrowserStreamSocketClientContext {
           conversationId,
           success: false,
           error: error instanceof Error ? error.message : "Press key failed",
+        },
+      });
+    }
+  }
+
+  async handleBrowserScroll(
+    ws: WebSocket,
+    conversationId: string,
+    params: { x: number; y: number; deltaX: number; deltaY: number },
+  ): Promise<void> {
+    const subscription = this.browserSubscriptions.get(ws);
+    if (!subscription || subscription.conversationId !== conversationId) {
+      this.sendToClient(ws, {
+        type: "browser_scroll_result",
+        payload: {
+          conversationId,
+          success: false,
+          error: "Not subscribed to this conversation's browser stream",
+        },
+      });
+      return;
+    }
+
+    try {
+      const result = await browserStreamFeature.scroll(
+        subscription.agentId,
+        conversationId,
+        subscription.userContext,
+        params,
+      );
+      this.sendToClient(ws, {
+        type: "browser_scroll_result",
+        payload: {
+          conversationId,
+          success: result.success,
+          error: result.error,
+        },
+      });
+
+      if (result.success) {
+        this.sendInputFrame(ws, conversationId, result.frame);
+        await this.sendImmediateScreenshot(ws, conversationId);
+      }
+    } catch (error) {
+      logger.error({ error, conversationId }, "Browser scroll failed");
+      this.sendToClient(ws, {
+        type: "browser_scroll_result",
+        payload: {
+          conversationId,
+          success: false,
+          error: error instanceof Error ? error.message : "Scroll failed",
         },
       });
     }
@@ -738,11 +814,14 @@ export class BrowserStreamSocketClientContext {
     if (ws.readyState !== WS.OPEN) {
       return;
     }
+    // A capture in flight may predate the action; take another right after it
     if (subscription.isSending) {
+      subscription.refreshPending = true;
       return;
     }
 
     subscription.isSending = true;
+    subscription.refreshPending = false;
     try {
       await this.sendScreenshot(
         ws,
@@ -753,5 +832,30 @@ export class BrowserStreamSocketClientContext {
     } finally {
       subscription.isSending = false;
     }
+    if (subscription.refreshPending) {
+      await this.sendImmediateScreenshot(ws, conversationId);
+    }
+  }
+
+  /** Send the frame an input action captured, ahead of the settled screenshot. */
+  private sendInputFrame(
+    ws: WebSocket,
+    conversationId: string,
+    frame: { screenshot: string; url: string } | undefined,
+  ): void {
+    if (!frame) return;
+    const subscription = this.browserSubscriptions.get(ws);
+    if (!subscription || subscription.conversationId !== conversationId) {
+      return;
+    }
+    this.sendToClient(ws, {
+      type: "browser_screenshot",
+      payload: {
+        conversationId,
+        screenshot: frame.screenshot,
+        url: frame.url || undefined,
+        canGoBack: frame.url ? !this.isBlankUrl(frame.url) : false,
+      },
+    });
   }
 }

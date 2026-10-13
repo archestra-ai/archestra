@@ -73,6 +73,13 @@ interface UseBrowserStreamReturn {
   click: (x: number, y: number) => void;
   type: (text: string) => void;
   pressKey: (key: string) => void;
+  reconnect: () => void;
+  scroll: (params: {
+    x: number;
+    y: number;
+    deltaX: number;
+    deltaY: number;
+  }) => void;
   setUrlInput: (url: string) => void;
   setIsEditingUrl: (isEditing: boolean) => void;
   isEditingUrl: boolean;
@@ -190,6 +197,22 @@ export function useBrowserStream({
 
     websocketService.connect();
 
+    // The server lost this socket's subscription (it was paused or the server
+    // restarted): re-subscribe right away so the next action works
+    const handleResultError = (error: string) => {
+      if (error.startsWith(NOT_SUBSCRIBED_ERROR_PREFIX)) {
+        isPausedDueToFocusRef.current = false;
+        websocketService.send({
+          type: "subscribe_browser_stream",
+          payload: { conversationId },
+        });
+        subscribedConversationIdRef.current = conversationId;
+        setError("Reconnected to the browser. Repeat your last action.");
+        return;
+      }
+      setError(error);
+    };
+
     const unsubScreenshot = websocketService.subscribe(
       "browser_screenshot",
       (message) => {
@@ -215,7 +238,7 @@ export function useBrowserStream({
           if (message.payload.success && message.payload.url) {
             // Navigation message removed - user doesn't want these in chat
           } else if (message.payload.error) {
-            setError(message.payload.error);
+            handleResultError(message.payload.error);
           }
         }
       },
@@ -237,7 +260,7 @@ export function useBrowserStream({
         if (message.payload.conversationId === conversationId) {
           setIsInteracting(false);
           if (!message.payload.success && message.payload.error) {
-            setError(message.payload.error);
+            handleResultError(message.payload.error);
           }
         }
       },
@@ -249,7 +272,7 @@ export function useBrowserStream({
         if (message.payload.conversationId === conversationId) {
           setIsInteracting(false);
           if (!message.payload.success && message.payload.error) {
-            setError(message.payload.error);
+            handleResultError(message.payload.error);
           }
         }
       },
@@ -261,7 +284,19 @@ export function useBrowserStream({
         if (message.payload.conversationId === conversationId) {
           setIsInteracting(false);
           if (!message.payload.success && message.payload.error) {
-            setError(message.payload.error);
+            handleResultError(message.payload.error);
+          }
+        }
+      },
+    );
+
+    const unsubScroll = websocketService.subscribe(
+      "browser_scroll_result",
+      (message) => {
+        if (message.payload.conversationId === conversationId) {
+          setIsInteracting(false);
+          if (!message.payload.success && message.payload.error) {
+            handleResultError(message.payload.error);
           }
         }
       },
@@ -275,7 +310,7 @@ export function useBrowserStream({
           if (message.payload.success) {
             // Navigation message removed - user doesn't want these in chat
           } else if (message.payload.error) {
-            setError(message.payload.error);
+            handleResultError(message.payload.error);
           }
         }
       },
@@ -289,14 +324,36 @@ export function useBrowserStream({
       subscribedConversationIdRef.current = conversationId;
     }, 100);
 
+    // The server forgets subscriptions with the socket (e.g. on a backend
+    // restart), so re-subscribe on every new connection unless paused
+    const unsubConnection = websocketService.onConnectionChange((open) => {
+      // A result in flight on the dropped socket will never arrive
+      if (!open) {
+        setIsInteracting(false);
+        return;
+      }
+      if (
+        subscribedConversationIdRef.current !== conversationId ||
+        isPausedDueToFocusRef.current
+      ) {
+        return;
+      }
+      websocketService.send({
+        type: "subscribe_browser_stream",
+        payload: { conversationId },
+      });
+    });
+
     return () => {
       clearTimeout(subscribeTimeout);
+      unsubConnection();
       unsubScreenshot();
       unsubNavigate();
       unsubError();
       unsubClick();
       unsubType();
       unsubPressKey();
+      unsubScroll();
       unsubNavigateBack();
 
       if (subscribedConversationIdRef.current) {
@@ -345,22 +402,10 @@ export function useBrowserStream({
       }
     };
 
-    const handleBlur = () => {
-      pauseSubscription();
-    };
-
-    const handleFocus = () => {
-      resumeSubscription();
-    };
-
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("blur", handleBlur);
-    window.addEventListener("focus", handleFocus);
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("blur", handleBlur);
-      window.removeEventListener("focus", handleFocus);
     };
   }, [isActive, conversationId, initialUrl]);
 
@@ -448,7 +493,38 @@ export function useBrowserStream({
     [conversationId],
   );
 
+  const scroll = useCallback(
+    (params: { x: number; y: number; deltaX: number; deltaY: number }) => {
+      if (!websocketService.isConnected() || !conversationId) return;
+
+      setIsInteracting(true);
+      setError(null);
+
+      websocketService.send({
+        type: "browser_scroll",
+        payload: { conversationId, ...params },
+      });
+    },
+    [conversationId],
+  );
+
+  /** Manually re-subscribe to this conversation's browser stream. */
+  const reconnect = useCallback(() => {
+    if (!conversationId) return;
+    websocketService.connect();
+    isPausedDueToFocusRef.current = false;
+    setError(null);
+    setIsInteracting(false);
+    setIsNavigating(false);
+    websocketService.send({
+      type: "subscribe_browser_stream",
+      payload: { conversationId },
+    });
+    subscribedConversationIdRef.current = conversationId;
+  }, [conversationId]);
+
   return {
+    reconnect,
     screenshot,
     urlInput,
     isConnected,
@@ -462,8 +538,13 @@ export function useBrowserStream({
     click,
     type,
     pressKey,
+    scroll,
     setUrlInput,
     setIsEditingUrl,
     isEditingUrl: isEditingUrlState,
   };
 }
+
+// Prefix of the server's error when an action arrives on a socket that holds
+// no subscription for the conversation
+const NOT_SUBSCRIBED_ERROR_PREFIX = "Not subscribed to this conversation";

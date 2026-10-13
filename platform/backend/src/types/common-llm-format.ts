@@ -76,6 +76,12 @@ export type CommonToolResult = {
    */
   arguments?: Record<string, unknown>;
   content: unknown;
+  /**
+   * `content` is the structure the client sent (blocks, parts, a JSON object),
+   * not a JSON string the adapter parsed. Only then are binary parts replaced
+   * by markers in the body handed to the policy runtime.
+   */
+  structured?: boolean;
   isError: boolean;
   error?: string;
   _meta?: Record<string, unknown>;

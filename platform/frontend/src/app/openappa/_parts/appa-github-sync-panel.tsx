@@ -21,7 +21,11 @@ import { SettingsBlock } from "@/components/settings/settings-block";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import {
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -49,6 +53,7 @@ import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { appaGitHost } from "./appa-git-host";
 import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
+import { HeldPullNotice } from "./held-pull-notice";
 
 type Source = NonNullable<
   archestraApiTypes.GetAppaGithubSyncResponses["200"]["source"]
@@ -100,17 +105,21 @@ export function AppaGithubSyncPanel() {
       ? "Waiting for the first sync"
       : "Automatic updates stopped";
   const connected = !!source?.interval;
+  // A held pull is not a failure: it waits for someone here to approve it.
+  const held = !!source?.heldReasons?.length;
   const status = !enabled
     ? "Disabled"
-    : source?.lastSyncError
-      ? "Sync failed"
-      : connected && source?.setupPullRequestNumber
-        ? `Waiting for setup ${git.changeRequestShort}`
-        : connected
-          ? "Connected"
-          : hasPolicy
-            ? "Sync stopped"
-            : null;
+    : held
+      ? "Needs approval"
+      : source?.lastSyncError
+        ? "Sync failed"
+        : connected && source?.setupPullRequestNumber
+          ? `Waiting for setup ${git.changeRequestShort}`
+          : connected
+            ? "Connected"
+            : hasPolicy
+              ? "Sync stopped"
+              : null;
   return (
     <>
       <SettingsBlock
@@ -120,7 +129,9 @@ export function AppaGithubSyncPanel() {
             {/* No badge until sync is set up: there is no state to report. */}
             {status && (
               <Badge
-                variant={source?.lastSyncError ? "destructive" : "outline"}
+                variant={
+                  source?.lastSyncError && !held ? "destructive" : "outline"
+                }
               >
                 {status}
               </Badge>
@@ -247,12 +258,22 @@ export function AppaGithubSyncPanel() {
                     </InlineNotice>
                   </GitSourceNotice>
                 )}
-                {source.lastSyncError && (
+                {held ? (
+                  <GitSourceNotice>
+                    <HeldPullNotice
+                      batteriesLink
+                      held={{
+                        reasons: source.heldReasons,
+                        message: source.lastSyncError,
+                      }}
+                    />
+                  </GitSourceNotice>
+                ) : source.lastSyncError ? (
                   <GitSourceError
                     title="Could not sync policy"
                     message={source.lastSyncError}
                   />
-                )}
+                ) : null}
               </GitSourceCard>
             ) : null}
           </div>

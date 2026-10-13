@@ -883,20 +883,8 @@ const registry = defineArchestraTools([
     handler: ({ args, context }) =>
       refusalAsResult(async () => {
         const { organizationId, userId } = organizationUser(context);
-        // TOOL_PERMISSIONS checks openappaPolicy:update; a binding also hands
-        // a credential's value to helper code, as the REST route requires.
-        if (
-          !(await userHasPermission(
-            userId,
-            organizationId,
-            "credential",
-            "update",
-          ))
-        )
-          throw new ApiError(
-            403,
-            "Credential update permission is required to bind a battery credential",
-          );
+        // TOOL_PERMISSIONS checks openappaPolicy:update; the service also
+        // requires `use` on the credential, as the REST route does.
         return result(
           await openappaBatteriesService.setCredentialBinding({
             userId,

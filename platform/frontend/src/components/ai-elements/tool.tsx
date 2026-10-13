@@ -5,7 +5,6 @@ import { ChevronDownIcon } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import { createContext, useContext, useRef, useState } from "react";
 import { CopyButton } from "@/components/copy-button";
-import { Button } from "@/components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
@@ -13,6 +12,10 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils/tailwind";
 import { CodeBlock } from "./code-block";
+import {
+  TRUNCATED_CONTENT_MAX_LINES,
+  TruncatedContent,
+} from "./truncated-content";
 
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
@@ -275,13 +278,11 @@ const COMPACT_CODE_STYLE = {
 const COMPACT_CODE_CLASS =
   "[&_code]:!text-[0.6875rem] [&_code]:!leading-[1rem] [&>pre]:!text-[0.6875rem]";
 
-const TRUNCATED_CODE_MAX_LINES = 20;
-
 /**
- * Renders a CodeBlock that collapses long content to TRUNCATED_CODE_MAX_LINES
- * with a "Show N more lines" affordance over a gradient fade. Used for both
- * tool request bodies and tool response output so neither side overruns the
- * chat when a tool dumps a large JSON payload.
+ * Renders a CodeBlock that collapses long content to
+ * TRUNCATED_CONTENT_MAX_LINES with a "Show N more lines" affordance over a
+ * gradient fade. Used for both tool request bodies and tool response output
+ * so neither side overruns the chat when a tool dumps a large JSON payload.
  */
 const TruncatedCodeBlock = ({
   code,
@@ -294,63 +295,29 @@ const TruncatedCodeBlock = ({
   copyText: string;
   wrapLongLines?: boolean;
 }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
   const lines = code.split("\n");
-  const isLarge = lines.length > TRUNCATED_CODE_MAX_LINES;
-
-  const displayCode =
-    isExpanded || !isLarge
-      ? code
-      : `${lines.slice(0, TRUNCATED_CODE_MAX_LINES).join("\n")}\n... (${
-          lines.length - TRUNCATED_CODE_MAX_LINES
-        } more lines)`;
 
   return (
-    <div ref={containerRef} className="relative group">
-      <CodeBlock
-        code={displayCode}
-        language={language}
-        wrapLongLines={wrapLongLines}
-        contentStyle={COMPACT_CODE_STYLE}
-        contentClassName={COMPACT_CODE_CLASS}
-        className="border-border/50"
-      >
-        <CopyButton text={copyText} className="-translate-y-1" />
-      </CodeBlock>
-      {isLarge && (
-        <div
-          className={cn(
-            "absolute bottom-1 left-0 right-0 flex justify-center transition-all duration-200",
-            !isExpanded &&
-              "pt-12 pb-1 bg-gradient-to-t from-background/80 to-transparent",
-          )}
+    <TruncatedContent lineCount={lines.length}>
+      {(showAll) => (
+        <CodeBlock
+          code={
+            showAll
+              ? code
+              : `${lines.slice(0, TRUNCATED_CONTENT_MAX_LINES).join("\n")}\n... (${
+                  lines.length - TRUNCATED_CONTENT_MAX_LINES
+                } more lines)`
+          }
+          language={language}
+          wrapLongLines={wrapLongLines}
+          contentStyle={COMPACT_CODE_STYLE}
+          contentClassName={COMPACT_CODE_CLASS}
+          className="border-border/50"
         >
-          <Button
-            variant="secondary"
-            size="xs"
-            onClick={(e) => {
-              e.stopPropagation();
-              const el = containerRef.current;
-              const scrollTop = el ? el.getBoundingClientRect().top : undefined;
-              setIsExpanded(!isExpanded);
-              if (el && scrollTop !== undefined) {
-                requestAnimationFrame(() => {
-                  const newTop = el.getBoundingClientRect().top;
-                  window.scrollBy(0, newTop - scrollTop);
-                });
-              }
-            }}
-            className="shadow-sm bg-background/80 backdrop-blur-sm hover:bg-background border"
-          >
-            {isExpanded
-              ? "Show Less"
-              : `Show ${lines.length - TRUNCATED_CODE_MAX_LINES} more lines`}
-          </Button>
-        </div>
+          <CopyButton text={copyText} className="-translate-y-1" />
+        </CodeBlock>
       )}
-    </div>
+    </TruncatedContent>
   );
 };
 

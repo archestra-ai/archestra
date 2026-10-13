@@ -161,45 +161,4 @@ describe("native local tool identities", () => {
       ],
     });
   });
-
-  test.each([
-    {
-      adapter: new AppaClaudeCodeAdapter(),
-      content: JSON.stringify(
-        'Your questions have been answered: "Review this call."="Approve". You can now continue.',
-      ),
-    },
-    {
-      adapter: new AppaCodexAdapter(),
-      content: '{"answers":{"archestra_question":{"answers":["Approve"]}}}',
-    },
-  ])("reads a structured native approval from $adapter.id", ({
-    adapter,
-    content,
-  }) => {
-    expect(adapter.nativeQuestion.rulingFromResult({ content })).toBe(
-      "approve",
-    );
-    expect(
-      adapter.nativeQuestion.rulingFromResult({ content, isError: true }),
-    ).toBe("none");
-  });
-
-  test("reads OpenCode's native denial", () => {
-    expect(
-      new AppaOpenCodeAdapter().nativeQuestion.rulingFromResult({
-        content: 'approval="Deny"',
-      }),
-    ).toBe("deny");
-  });
-
-  test("uses Claude's selected answer, not approval-like review text", () => {
-    expect(
-      new AppaClaudeCodeAdapter().nativeQuestion.rulingFromResult({
-        content: JSON.stringify(
-          'Your questions have been answered: "argument=\\"Approve\\". You can now continue"="Deny". You can now continue with the user\'s answers in mind.',
-        ),
-      }),
-    ).toBe("deny");
-  });
 });

@@ -38,7 +38,7 @@ class OpenAppaGitlab {
       if (!bytes)
         throw new ApiError(
           400,
-          `${params.path} is missing at ${commitSha.slice(0, 7)} or exceeds the 1 MiB limit`,
+          `Policy file not found: ${params.path} in ${params.repo} at ${commitSha.slice(0, 7)}, or it exceeds the 1 MiB limit. Check the policy file with Edit source.`,
         );
       return {
         pending: null,

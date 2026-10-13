@@ -15,7 +15,7 @@ A [battery](https://www.openappa.com/batteries) is a ready-made policy for a set
 
 ## Include a Battery
 
-Including a battery needs [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update). Binding a credential or uploading a package also needs [`credential:update`](/docs/reference/permissions#credential:update).
+Including a battery needs [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update). Binding a credential also needs **Can use** on that credential. Uploading a package with helper scripts needs **Can use** on every credential. See [Who Can Manage a Credential](/docs/admin/security/credentials#who-can-manage-a-credential).
 
 - **Ask the agent:** click the **Batteries** card on **Overview**. The agent finds the batteries that fit your servers.
 - **Do it yourself:** on the **Batteries** tab, click a battery's edit button and attach it to an installed MCP server.

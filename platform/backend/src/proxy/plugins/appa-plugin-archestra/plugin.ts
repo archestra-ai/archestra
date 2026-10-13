@@ -45,10 +45,12 @@ import {
   verifyDelegatedPrompt,
 } from "@/openappa/delegation";
 import {
+  askHitlReviewInForm,
   getHitlAskUserArguments,
   getHitlReview,
   getHitlReviewResult,
   type HitlReviewOutcome,
+  hitlReviewAskedInForm,
   recordHitlRuling,
 } from "@/openappa/hitl-review";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
@@ -148,6 +150,8 @@ import {
 import { withCallerScope, withoutCallerScope } from "./utils";
 
 type AppaPluginBinding = {
+  /** The request continues a provider thread that holds the system prompt. */
+  threadContinue: boolean;
   session: OpenAppaSession;
   identity: AppaTrustedContext["toolIdentity"];
   adapter: AppaClientAdapter | undefined;
@@ -176,6 +180,8 @@ type AppaPluginBinding = {
   pendingHitlReviewOfferIds: string[];
   /** Verified native answers that must control the next model action. */
   nativeHitlRulings: RecordedNativeHitlRuling[];
+  /** Offers whose native answer could not be read; asked again in a form. */
+  unreadNativeAnswerOfferIds: string[];
   /** The native id this request's children will report as their parent. */
   spawnerNativeId: string | undefined;
   /** Server-bound child metadata needed to correlate its terminal return. */
@@ -265,11 +271,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       completedHandbackReturn: undefined,
       chat,
       compaction: trustedContext.compaction === true,
+      threadContinue: trustedContext.thread === "continue",
       requestHeaders: context.headers,
       requiresQuestionContinuation: false,
       requiresRemedyContinuation: false,
       pendingHitlReviewOfferIds: [],
       nativeHitlRulings: [],
+      unreadNativeAnswerOfferIds: [],
       spawnerNativeId: trajectory.adapter?.nativeConversationId(
         trajectory.matchContext,
       ),
@@ -360,16 +368,20 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       binding,
       results: toolResults,
     });
-    binding.nativeHitlRulings = await recordNativeHitlRulings({
+    const nativeAnswers = await recordNativeHitlRulings({
       binding,
       verifiedNativeQuestionResults,
     });
+    binding.nativeHitlRulings = nativeAnswers.rulings;
+    // An unread answer leaves its review pending. Its own guidance asks again.
+    binding.unreadNativeAnswerOfferIds = nativeAnswers.unreadOfferIds;
     binding.pendingHitlReviewOfferIds = await pendingNativeHitlOfferIds({
       binding,
       results: toolResults,
-      resolvedOfferIds: new Set(
-        binding.nativeHitlRulings.map((entry) => entry.offerId),
-      ),
+      resolvedOfferIds: new Set([
+        ...binding.nativeHitlRulings.map((entry) => entry.offerId),
+        ...nativeAnswers.unreadOfferIds,
+      ]),
     });
     // A handback's result and a message's delivery receipt are the client's
     // acknowledgements of calls the runtime already governed as crossings. A
@@ -552,7 +564,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         binding.returnContract = started.contract ?? binding.returnContract;
         binding.sessionInitialized = true;
       }
-      if (binding.returnContract) {
+      if (binding.returnContract && !binding.threadContinue) {
         deliverReturnContract({
           request: context.request,
           interactionType: context.interactionType,
@@ -571,30 +583,48 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     }
     if (binding && binding.adapter?.id !== "archestra-chat") {
       if (binding.request.tools?.control) {
-        appendQuestionContinuation({
+        insertRequestGuidance({
           request: context.request,
           interactionType: context.interactionType,
           guidance: EXTERNAL_REMEDY_WORKFLOW_GUIDANCE,
+          onContinue: binding.threadContinue ? "skip" : undefined,
         });
       }
       const askUser = binding.request.tools?.askUser;
+      // Name the native question tool only when asNativeQuestion would send
+      // ask_user to it. Otherwise the model calls a tool that cannot return
+      // the user's answer, and then asks again in prose.
       const nativeQuestion =
         !binding.runtimeSessionId &&
         binding.adapter?.nativeQuestion &&
+        binding.adapter.nativeQuestion.isAvailable?.(binding.requestHeaders) !==
+          false &&
         declaresNativeQuestion(binding, binding.adapter.nativeQuestion.toolName)
           ? binding.adapter.nativeQuestion.toolName
           : undefined;
       const askUserTool = askUser?.name;
       if (askUserTool || nativeQuestion) {
-        appendQuestionContinuation({
+        insertRequestGuidance({
           request: context.request,
           interactionType: context.interactionType,
           guidance: buildElicitationMandateInstruction({
             askUserToolName: askUserTool,
             nativeQuestionToolName: nativeQuestion,
           }),
+          onContinue: binding.threadContinue ? "skip" : undefined,
         });
       }
+    }
+    if (binding && binding.unreadNativeAnswerOfferIds.length > 0) {
+      const offerIds = binding.unreadNativeAnswerOfferIds;
+      binding.unreadNativeAnswerOfferIds = [];
+      appendQuestionContinuation({
+        request: context.request,
+        interactionType: context.interactionType,
+        guidance: unreadNativeAnswerGuidance(offerIds),
+        onContinue: binding.threadContinue ? "turn" : undefined,
+      });
+      requireCodexToolCall({ binding, context });
     }
     if (binding && binding.pendingHitlReviewOfferIds.length > 0) {
       const offerIds = binding.pendingHitlReviewOfferIds;
@@ -603,6 +633,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         request: context.request,
         interactionType: context.interactionType,
         guidance: hitlQuestionGuidance(offerIds),
+        onContinue: binding.threadContinue ? "turn" : undefined,
       });
       requireCodexToolCall({ binding, context });
     }
@@ -612,6 +643,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         request: context.request,
         interactionType: context.interactionType,
         guidance: REMEDY_OFFER_CONTINUATION_GUIDANCE,
+        onContinue: binding.threadContinue ? "turn" : undefined,
       });
       requireCodexToolCall({ binding, context });
     }
@@ -622,6 +654,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         request: context.request,
         interactionType: context.interactionType,
         guidance: hitlDecisionGuidance(rulings),
+        onContinue: binding.threadContinue ? "turn" : undefined,
       });
       if (rulings.some((entry) => entry.ruling === "approve")) {
         requireCodexToolCall({ binding, context });
@@ -631,6 +664,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       appendQuestionContinuation({
         request: context.request,
         interactionType: context.interactionType,
+        onContinue: binding.threadContinue ? "turn" : undefined,
       });
     }
     if (!binding || (!binding.request.tools && !binding.session.parent_id))
@@ -846,8 +880,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         changed ||= prepared !== call;
       }
       // Before any policy sees it: the call the policies rule on is the one
-      // the client will run.
-      const nativeQuestion = this.asNativeQuestion(binding, prepared);
+      // the client will run. A review whose native answer could not be read
+      // stays on the gateway, whose form returns the choice as data.
+      const nativeQuestion =
+        offerIds.length > 0 &&
+        (await hitlReviewAskedInForm({ session: binding.session, offerIds }))
+          ? prepared
+          : this.asNativeQuestion(binding, prepared);
       changed ||= nativeQuestion !== prepared;
       prepared = nativeQuestion;
       const issued =
@@ -1322,7 +1361,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             : binding.request.defersTools
               ? `${decision.feedback}\n\n[appa] This client defers tools it has not loaded, and the ${archestraMcpBranding.serverName} MCP gateway remedy tools are not loaded in this session, so the ruling could not be offered as a remedy and the call is refused. Search for ${TOOL_GET_REMEDY_PLANS_SHORT_NAME} and ${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME} with your tool search, then call the denied tool again to receive the remedy.`
               : binding.request.declaredTools.length === 0
-                ? `${decision.feedback}\n\n[appa] This client declared no tools, so the ruling cannot be delivered as a remedy notice and the call is refused. A client whose tools are not on the wire cannot be governed. Declare the tools on the wire; for Codex, set code_mode_host = false.`
+                ? `${decision.feedback}\n\n[appa] This request listed no tools, so the ruling could not be offered as a remedy and the call is refused. Remedies need the ${archestraMcpBranding.serverName} MCP gateway tools in the request. Connect the gateway, then start a new session. In Codex, also set code_mode_host = false: code mode keeps its tools out of the request.`
                 : `${decision.feedback}\n\n[appa] This client did not declare the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the call is refused. Connect the MCP gateway and allow both remedy tools to use approval plans.`;
         return {
           decision: "refuse",
@@ -4283,7 +4322,7 @@ function appendNativeDelegationGuidance(
   const waitDeclared = declared.some(
     (tool) => tool.namespace === "collaboration" && tool.name === "wait_agent",
   );
-  appendQuestionContinuation({
+  insertRequestGuidance({
     request: context.request,
     interactionType: context.interactionType,
     guidance: nativeDelegationGuidance(waitDeclared),
@@ -4472,22 +4511,63 @@ async function claimNativeQuestionResults(params: {
 async function recordNativeHitlRulings(params: {
   binding: AppaPluginBinding;
   verifiedNativeQuestionResults: ReadonlyMap<object, NativeQuestionClaim>;
-}): Promise<RecordedNativeHitlRuling[]> {
-  const parse = params.binding.adapter?.nativeQuestion?.rulingFromResult;
-  if (!parse) return [];
+}): Promise<{
+  rulings: RecordedNativeHitlRuling[];
+  unreadOfferIds: string[];
+}> {
+  const native = params.binding.adapter?.nativeQuestion;
+  const parse = native?.rulingFromResult;
+  if (!parse) return { rulings: [], unreadOfferIds: [] };
   const recorded: RecordedNativeHitlRuling[] = [];
+  const unreadOfferIds: string[] = [];
   for (const [answer, claim] of params.verifiedNativeQuestionResults) {
     if (!claim.offerIds || claim.offerIds.length === 0 || !isRecord(answer))
       continue;
-    const ruling = parse({
-      content:
-        typeof answer.content === "string"
-          ? answer.content
-          : JSON.stringify(answer.content ?? null),
-      ...(typeof answer.isError === "boolean"
-        ? { isError: answer.isError }
-        : {}),
+    // The question the answer is read against comes from the review this
+    // server holds, the same source the question was issued from. Without
+    // that review the answer is not a ruling.
+    const asked = await getHitlAskUserArguments({
+      session: params.binding.session,
+      offerIds: claim.offerIds,
     });
+    const reading = asked
+      ? parse(
+          {
+            content:
+              typeof answer.content === "string"
+                ? answer.content
+                : JSON.stringify(answer.content ?? null),
+            ...(typeof answer.isError === "boolean"
+              ? { isError: answer.isError }
+              : {}),
+          },
+          asked,
+        )
+      : "none";
+    if (reading === "unrecognized") {
+      // A client version may word its answer differently. Nothing is read
+      // from it; a client with forms is asked again there.
+      logger.warn(
+        {
+          client: params.binding.adapter?.id,
+          userAgent: params.binding.requestHeaders["user-agent"],
+          offerIds: claim.offerIds,
+          askedAgainInForm: native.formFallback === true,
+        },
+        "OpenAPPA could not read the answer to a native approval question",
+      );
+      if (native.formFallback) {
+        for (const offerId of claim.offerIds) {
+          await askHitlReviewInForm({
+            session: params.binding.session,
+            offerId,
+          });
+          unreadOfferIds.push(offerId);
+        }
+        continue;
+      }
+    }
+    const ruling = reading === "unrecognized" ? "none" : reading;
     logger.debug(
       {
         ruling,
@@ -4519,7 +4599,7 @@ async function recordNativeHitlRulings(params: {
       }
     }
   }
-  return recorded;
+  return { rulings: recorded, unreadOfferIds };
 }
 
 function assertUniqueNativeQuestionResultIds(params: {
@@ -4922,15 +5002,30 @@ function reviewResultStatus(
   return null;
 }
 
+function unreadNativeAnswerGuidance(offerIds: readonly string[]): string {
+  return [
+    "The platform could not read the answer to the last approval question, so it recorded nothing and the call stays blocked.",
+    "Ask once more with the declared ask_user tool, one call for each offer ID below.",
+    HITL_ASK_USER_CALL,
+    "The platform replaces the question text with the exact review. This time it opens as a form.",
+    `Offer IDs: ${JSON.stringify(offerIds)}.`,
+  ].join(" ");
+}
+
 function hitlQuestionGuidance(offerIds: readonly string[]): string {
   return [
     "The policy needs the user's approval for the last execute_remedy_plan result.",
     "Ask the user with the declared ask_user tool, one call for each offer ID below.",
-    "In each call, use the question 'Open the pending HITL review.', the header 'Approval', the options Approve and Deny, and remedy_offer_ids with only that offer ID.",
+    HITL_ASK_USER_CALL,
     "The platform replaces the question text with the exact review, and shows it in the client's question interface when one is available.",
     `Offer IDs: ${JSON.stringify(offerIds)}.`,
   ].join(" ");
 }
+
+// Only remedy_offer_ids decides what is asked: the platform puts the review it
+// holds in place of the rest.
+const HITL_ASK_USER_CALL =
+  "In each call, use the question 'Open the pending HITL review.', the header 'Approval', the options Approve and Deny, and remedy_offer_ids with only that offer ID.";
 
 function hitlDecisionGuidance(
   rulings: readonly RecordedNativeHitlRuling[],
@@ -5021,13 +5116,67 @@ function requestCarriesInstruction(params: {
   return false;
 }
 
+/**
+ * Adds guidance for the whole request before the conversation, next to the
+ * client's own developer instructions. After the user's message, such guidance
+ * made the model answer a Codex greeting twice: once as commentary and again
+ * as the final answer. Codex showed both. A continuation for one turn follows
+ * a tool result, so it still goes last through appendQuestionContinuation.
+ */
+function insertRequestGuidance(params: {
+  request: unknown;
+  interactionType: string;
+  guidance: string;
+  /** A provider-thread continue: the thread already holds this guidance. */
+  onContinue?: "skip";
+}): void {
+  const { request, interactionType, guidance } = params;
+  if (
+    interactionType !== "openai:responses" ||
+    !isRecord(request) ||
+    !Array.isArray(request.input)
+  ) {
+    appendQuestionContinuation(params);
+    return;
+  }
+  if (requestCarriesInstruction({ request, interactionType, text: guidance })) {
+    return;
+  }
+  const input = request.input;
+  const conversationStart = input.findIndex(
+    (item) =>
+      !(
+        isRecord(item) &&
+        (item.type === "additional_tools" ||
+          ((item.type === undefined || item.type === "message") &&
+            (item.role === "developer" || item.role === "system")))
+      ),
+  );
+  input.splice(conversationStart === -1 ? input.length : conversationStart, 0, {
+    type: "message",
+    role: "developer",
+    content: [{ type: "input_text", text: guidance }],
+  });
+}
+
 function appendQuestionContinuation(params: {
   request: unknown;
   interactionType: string;
   guidance?: string;
+  /**
+   * On a provider-thread continue: `skip` guidance the thread already holds
+   * (fixed for the session), or deliver `turn` guidance in the new user turn,
+   * which the thread keeps, instead of the system prompt it owns.
+   */
+  onContinue?: "skip" | "turn";
 }): void {
   const guidance = params.guidance ?? QUESTION_CONTINUATION_GUIDANCE;
   if (!isRecord(params.request)) return;
+  if (params.onContinue === "skip") return;
+  if (params.onContinue === "turn") {
+    appendToLastUserTurn(params.request, guidance);
+    return;
+  }
   if (params.interactionType === "openai:responses") {
     let input: unknown[];
     if (typeof params.request.input === "string") {
@@ -5103,6 +5252,27 @@ function appendQuestionContinuation(params: {
     }
     appendInstruction(params.request, "system", guidance);
   }
+}
+
+/** Adds a text block to the newest user message of a Messages request. */
+function appendToLastUserTurn(
+  request: Record<string, unknown>,
+  text: string,
+): void {
+  const messages = request.messages;
+  if (!Array.isArray(messages)) return;
+  const last = messages.findLast(
+    (message) => isRecord(message) && message.role === "user",
+  );
+  if (!isRecord(last)) return;
+  if (typeof last.content === "string")
+    last.content = [
+      { type: "text", text: last.content },
+      { type: "text", text },
+    ];
+  else if (Array.isArray(last.content))
+    last.content.push({ type: "text", text });
+  else last.content = [{ type: "text", text }];
 }
 
 /** Prevents Codex from converting a required HITL workflow step into prose. */

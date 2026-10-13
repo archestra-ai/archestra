@@ -8,7 +8,6 @@ import {
   BatteryCharging,
   ExternalLink,
   Eye,
-  GitPullRequestArrow,
   KeyRound,
   Loader2,
   Pencil,
@@ -77,8 +76,6 @@ import {
   type BatterySummary,
   batteryMatchesQueryKey,
   type PolicyBattery,
-  type PolicyDeclarations,
-  useAcceptHeldPull,
   useBatteries,
   useBatteryMatches,
   useCreateBatteryInstall,
@@ -93,6 +90,7 @@ import { useCoverageSummary } from "@/lib/openappa-coverage.query";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import {
   type RuntimeCredentialDefinition,
+  useCanUseEveryCredential,
   useRuntimeCredentials,
 } from "@/lib/runtime-credentials.query";
 import { cn } from "@/lib/utils/tailwind";
@@ -106,6 +104,7 @@ import {
   BATTERY_STATUS_GROUPS,
   type BatteryStatusGroup,
 } from "./battery-status";
+import { DialogSection } from "./dialog-section";
 import {
   GithubManagedPolicyNotice,
   githubPolicyFileUrl,
@@ -154,10 +153,11 @@ const knownFilter = (
 export function BatteriesUploadAction() {
   const pathname = usePathname();
   const declarations = usePolicyDeclarations();
-  const { data: canBind } = useHasPermissions({
+  const { data: canEditPolicy } = useHasPermissions({
     openappaPolicy: ["update"],
-    credential: ["update"],
   });
+  const { data: canUseEveryCredential } = useCanUseEveryCredential();
+  const canBind = canEditPolicy === true && canUseEveryCredential === true;
   const [uploading, setUploading] = useState(false);
   if (
     pathname !== "/openappa/batteries" ||
@@ -187,11 +187,9 @@ export function BatteriesPanel() {
     openappaPolicy: ["update"],
   });
   // Binding a credential hands its value to helper code, and an uploaded
-  // package may carry such code, so both take the credential permission too.
-  const { data: canBind } = useHasPermissions({
-    openappaPolicy: ["update"],
-    credential: ["update"],
-  });
+  // package may carry such code, so both take Can use on every credential too.
+  const { data: canUseEveryCredential } = useCanUseEveryCredential();
+  const canBind = canManage === true && canUseEveryCredential === true;
   // Filters and page live in the URL, so a reload or a shared link keeps them.
   const {
     searchParams,
@@ -376,14 +374,7 @@ export function BatteriesPanel() {
           <InlineNoticeText>{lastError}</InlineNoticeText>
         </InlineNotice>
       )}
-      {managedInGithub && <GithubManagedPolicyNotice />}
-      {heldPull !== null && (
-        <HeldPullNotice
-          heldPull={heldPull}
-          canManage={canManage === true}
-          canBind={canBind === true}
-        />
-      )}
+      {managedInGithub && <GithubManagedPolicyNotice held={heldPull} />}
       {writable && servers.data?.length === 0 && (
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <span>
@@ -509,45 +500,6 @@ type BatteryTableRow = {
 };
 
 const UNBOUND = "__unbound__";
-
-function HeldPullNotice({
-  heldPull,
-  canManage,
-  canBind,
-}: {
-  heldPull: NonNullable<PolicyDeclarations["heldPull"]>;
-  canManage: boolean;
-  canBind: boolean;
-}) {
-  const accept = useAcceptHeldPull();
-  // Publishing the held text performs what it was held for: dropping an entry
-  // is a policy edit, rebinding a variable hands a credential to other code.
-  const mayAccept = heldPull.reasons.includes("changes_credentials")
-    ? canBind
-    : canManage;
-  return (
-    <InlineNotice variant="warning">
-      <GitPullRequestArrow />
-      <span className="font-medium">Repository text held</span>
-      <InlineNoticeText>
-        {heldPull.reasons.map((reason) => (
-          <div key={reason}>{HELD_PULL_REASONS[reason]}</div>
-        ))}
-      </InlineNoticeText>
-      {mayAccept && (
-        <Button
-          size="sm"
-          variant="outline"
-          className="ml-auto"
-          disabled={accept.isPending}
-          onClick={() => accept.mutate()}
-        >
-          <span>Accept repository text</span>
-        </Button>
-      )}
-    </InlineNotice>
-  );
-}
 
 /** A row's mark, as the shared battery icon resolves it. */
 function RowBatteryIcon({
@@ -778,33 +730,6 @@ function BatteryDialog({
         />
       )}
     </StandardDialog>
-  );
-}
-
-function DialogSection({
-  title,
-  description,
-  action,
-  children,
-}: {
-  title: string;
-  description?: string;
-  action?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <section aria-label={title} className="space-y-3">
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <h3 className="text-sm font-medium">{title}</h3>
-          {description && (
-            <p className="text-xs text-muted-foreground">{description}</p>
-          )}
-        </div>
-        {action}
-      </div>
-      {children}
-    </section>
   );
 }
 
@@ -1461,16 +1386,6 @@ function UploadPackageDialog({
     </StandardFormDialog>
   );
 }
-
-const HELD_PULL_REASONS: Record<
-  NonNullable<PolicyDeclarations["heldPull"]>["reasons"][number],
-  string
-> = {
-  drops_batteries:
-    "The repository text drops batteries this deployment declared",
-  changes_credentials:
-    "The repository text changes which credentials batteries read",
-};
 
 /** Package files keyed by their path inside the picked folder. */
 async function readPackage(files: File[]) {

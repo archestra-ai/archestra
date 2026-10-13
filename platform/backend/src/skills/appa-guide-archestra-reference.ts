@@ -14,7 +14,7 @@ Archestra stores one root policy per organization, \`organization.appa.toml\`. W
 
 The document's \`[policy] version = 2\` names the format. The API \`revision\` is a separate save number that prevents overwriting concurrent edits. Change a saved policy with \`edits\` that name only the text you replace; send the complete text only for a first policy or a full rewrite. Merge rules into the existing document and never add a second \`[policy]\` header.
 
-The supported format is \`[policy]\`, \`[policy.deployment]\`, \`[externals]\`, and battery declarations.
+The supported format is \`[policy]\`, \`[policy.deployment]\`, \`[externals]\`, and battery declarations. Archestra sets the body size limit from its LLM proxy body limit, so \`max_body_bytes\` in \`[externals]\` has no effect; do not add it.
 
 ## Tool names
 

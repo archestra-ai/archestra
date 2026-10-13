@@ -74,6 +74,7 @@ vi.mock("@/lib/app.query", () => ({
 vi.mock("@/lib/auth/auth.query");
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  useMcpCatalogCredentialPreflight: () => ({ data: [] }),
   useInternalMcpCatalog: useInternalMcpCatalogMock,
   fetchCatalogTools: fetchCatalogToolsMock,
 }));

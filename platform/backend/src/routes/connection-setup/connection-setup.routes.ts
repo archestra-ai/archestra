@@ -48,7 +48,10 @@ import {
 import { buildDesktopInstallerBundle } from "@/services/agent-connection-setup/desktop/connection-setup-desktop-bundle";
 import { issueConnectionInstructionsToken } from "@/services/connection-instructions-token";
 import { getConnectionManagedInstructions } from "@/services/connection-managed-instructions";
-import { issueConnectionProxySetupContext } from "@/services/connection-proxy-setup-context";
+import {
+  connectionSetupReference,
+  issueConnectionProxySetupContext,
+} from "@/services/connection-proxy-setup-context";
 import {
   type ConnectionCreditWarning,
   ensureConnectionPassthroughKey,
@@ -488,6 +491,18 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   organization.connectionDefaultProviderKeys?.[provider] ??
                   null,
               }));
+          }
+          // Fail here, where the Connect page shows the message, rather than
+          // when the installer downloads its script.
+          if (clientId === "opencode" && virtualApiKeyId && provider) {
+            await getVirtualKeyProviderCatalog({
+              supportedProviders: OPENCODE_PRIMARY_PROVIDERS,
+              provider: allPrimary ? undefined : provider,
+              organizationId,
+              userId: user.id,
+              userTeamIds: await TeamModel.getUserTeamIds(user.id),
+              virtualApiKeyId,
+            });
           }
         } else if (
           // provider-key mode is passthrough: the script only rewires the base
@@ -1103,7 +1118,9 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
 
     // The approved installer can change settings in a running conversation.
     // Carry server-authorized setup scope on the URL, independent of client
-    // headers, prompt history, session IDs, or declared tools.
+    // headers, session IDs, or declared tools. The installer also prints the
+    // setup reference; the proxy honors the scope only in the conversation
+    // that holds it, so sessions started after the setup are governed.
     const setupProxyContext =
       setup.virtualApiKeyId && (virtualKeyValue || passthroughVirtualKey)
         ? issueConnectionProxySetupContext({
@@ -1140,6 +1157,14 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       provider: setup.provider,
       providerLabel: providerDisplayNames[setup.provider] ?? setup.provider,
       baseUrl: proxyBaseUrl,
+      ...(setupProxyContext
+        ? {
+            setupReference: connectionSetupReference({
+              setupId: setup.id,
+              secret: config.auth.secret,
+            }),
+          }
+        : {}),
       url: `${proxyBaseUrl}/${setup.provider}`,
       proxyName: toProxyName(proxyAgent.name),
       virtualKey: virtualKeyValue,

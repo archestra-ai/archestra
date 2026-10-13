@@ -1,11 +1,14 @@
 "use client";
 
+import { DEFAULT_CREDENTIAL_GRANTS } from "@archestra/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowLeft } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useCallback, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
+import type { InitialPermissionGrant } from "@/components/initial-resource-permissions";
+import { ResourceAccessSection } from "@/components/resource-access-section";
 import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
@@ -28,6 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   type RuntimeCredentialDefinition,
   useCreateRuntimeCredential,
@@ -73,6 +77,30 @@ export function RuntimeCredentialDefinitionDialog({
       entry.organizationConfigured,
   );
   const update = useUpdateRuntimeCredential();
+  // Editing is a grant on this one credential, not a role action.
+  const { data: canUpdate } = useHasPermissions(
+    { credential: ["update"] },
+    definition?.id ?? "",
+  );
+  // The Permissions section keeps its edits in its own form. For someone who may
+  // edit the credential, the dialog's Save is the only Save and commits both.
+  const permissionsSave = useRef<(() => Promise<void>) | null>(null);
+  const registerPermissionsSave = useCallback(
+    (save: (() => Promise<void>) | null) => {
+      permissionsSave.current = save;
+    },
+    [],
+  );
+  const [permissionsDirty, setPermissionsDirty] = useState(false);
+  // A new credential has no policy yet, so its starting grants travel with it.
+  // It starts shared with everyone; remove that to keep it to a team.
+  const [initialGrants, setInitialGrants] = useState<InitialPermissionGrant[]>(
+    () =>
+      DEFAULT_CREDENTIAL_GRANTS.map((grant) => ({
+        ...grant,
+        name: "Everyone in the organization",
+      })),
+  );
   const form = useForm<DefinitionFormValues>({
     resolver: zodResolver(DefinitionFormSchema),
     defaultValues: {
@@ -92,8 +120,9 @@ export function RuntimeCredentialDefinitionDialog({
   });
   const pending = create.isPending || update.isPending;
 
-  const save = (values: DefinitionFormValues) => {
+  const save = async (values: DefinitionFormValues) => {
     if (definition) {
+      await permissionsSave.current?.();
       update.mutate(
         {
           key: definition.key,
@@ -140,6 +169,10 @@ export function RuntimeCredentialDefinitionDialog({
         icon: values.icon,
         allowPersonal: values.scope === "personal",
         allowOrganization: values.scope === "organization",
+        initialGrants: initialGrants.map(({ subject, actions }) => ({
+          subject,
+          actions,
+        })),
       },
       {
         onSuccess: (created) => {
@@ -149,6 +182,289 @@ export function RuntimeCredentialDefinitionDialog({
       },
     );
   };
+
+  const fields = (
+    <>
+      {setupNotice}
+      <FormField
+        control={form.control}
+        name="name"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Name</FormLabel>
+            <FormDescription>
+              Use a name people will recognize when selecting this credential.
+            </FormDescription>
+            <div className="flex items-center gap-3">
+              <FormField
+                control={form.control}
+                name="icon"
+                render={({ field: iconField }) => (
+                  <AgentIconPicker
+                    value={iconField.value}
+                    onChange={iconField.onChange}
+                    showLogos
+                    className="size-9 rounded-md"
+                  />
+                )}
+              />
+              <FormControl>
+                <Input
+                  {...field}
+                  autoFocus={!definition}
+                  placeholder="GitLab access token"
+                />
+              </FormControl>
+            </div>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
+        name="description"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Description</FormLabel>
+            <FormDescription>
+              Tell people what access the credential needs.
+            </FormDescription>
+            <FormControl>
+              <Textarea
+                {...field}
+                placeholder="Repository access for delegated coding tasks"
+                rows={2}
+              />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      <FormField
+        control={form.control}
+        name="kind"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Credential type</FormLabel>
+            {field.value === "github_app" && initialKind !== "github_app" && (
+              <FormDescription>
+                Add the App details, then connect its private key after saving.
+              </FormDescription>
+            )}
+            <Select
+              value={field.value}
+              onValueChange={(value) => {
+                field.onChange(value);
+                if (value === "github_app_user")
+                  form.setValue("scope", "personal", { shouldDirty: true });
+                if (value === "github_app")
+                  form.setValue("scope", "organization", {
+                    shouldDirty: true,
+                  });
+              }}
+              disabled={Boolean(definition)}
+            >
+              <FormControl>
+                <SelectTrigger className="w-full">
+                  <span className="flex items-center gap-2">
+                    {field.value && (
+                      <RuntimeCredentialIcon
+                        icon={
+                          field.value === "github_app"
+                            ? "logo:github"
+                            : field.value === "gitlab_token"
+                              ? "logo:gitlab"
+                              : null
+                        }
+                        className="size-4 text-muted-foreground"
+                      />
+                    )}
+                    <SelectValue placeholder="Select credential type" />
+                  </span>
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent position="popper">
+                <SelectItem
+                  value="secret"
+                  icon={
+                    <RuntimeCredentialIcon icon={null} className="size-4" />
+                  }
+                >
+                  Custom secret
+                </SelectItem>
+                <SelectItem
+                  value="github_app"
+                  icon={
+                    <RuntimeCredentialIcon
+                      icon="logo:github"
+                      className="size-4"
+                    />
+                  }
+                >
+                  GitHub App
+                </SelectItem>
+                <SelectItem
+                  value="github_app_user"
+                  disabled={githubApps.length === 0}
+                  description="Requires a connected organization GitHub App with an OAuth client ID."
+                  icon={
+                    <RuntimeCredentialIcon
+                      icon="logo:github"
+                      className="size-4"
+                    />
+                  }
+                >
+                  GitHub user credential
+                </SelectItem>
+                {field.value === "gitlab_token" ? (
+                  <SelectItem
+                    value="gitlab_token"
+                    icon={
+                      <RuntimeCredentialIcon
+                        icon="logo:gitlab"
+                        className="size-4"
+                      />
+                    }
+                  >
+                    GitLab token
+                  </SelectItem>
+                ) : null}
+              </SelectContent>
+            </Select>
+            {!definition &&
+              initialKind !== "github_app" &&
+              credentialsFailed && (
+                <InlineNotice variant="error">
+                  <InlineNoticeText>
+                    Couldn&apos;t check GitHub Apps.
+                  </InlineNoticeText>
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    className="ml-auto h-auto p-0 text-xs"
+                    onClick={() => refetchCredentials()}
+                  >
+                    Retry
+                  </Button>
+                </InlineNotice>
+              )}
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      {form.watch("kind") === "github_app" && (
+        <div
+          className={
+            size === "medium" ? "grid gap-4 sm:grid-cols-2" : "space-y-4"
+          }
+        >
+          {(
+            ["githubUrl", "appId", "installationId", "githubClientId"] as const
+          ).map((name) => (
+            <FormField
+              key={name}
+              control={form.control}
+              name={name}
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    {name === "githubUrl"
+                      ? "GitHub API URL"
+                      : name === "appId"
+                        ? "App ID"
+                        : name === "installationId"
+                          ? "Installation ID"
+                          : "OAuth client ID (optional)"}
+                  </FormLabel>
+                  <FormControl>
+                    <Input {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          ))}
+        </div>
+      )}
+      {form.watch("kind") === "github_app_user" && (
+        <FormField
+          control={form.control}
+          name="githubAppCredentialKey"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Organization GitHub App</FormLabel>
+              <FormDescription>
+                Each user authorizes this App once. Their connection is shared
+                across agents and harnesses.
+              </FormDescription>
+              <Select value={field.value} onValueChange={field.onChange}>
+                <FormControl>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select an App" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {githubApps.map((entry) => (
+                    <SelectItem key={entry.key} value={entry.key}>
+                      {entry.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      )}
+      {!definition &&
+        (!hideProvidedBy || form.watch("kind") !== "github_app") && (
+          <FormField
+            control={form.control}
+            name="scope"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Provided by</FormLabel>
+                {form.watch("kind") === "github_app" && (
+                  <FormDescription>
+                    GitHub Apps use an organization-managed installation and
+                    private key.
+                  </FormDescription>
+                )}
+                <Select
+                  value={field.value}
+                  onValueChange={field.onChange}
+                  disabled={form.watch("kind") !== "secret"}
+                >
+                  <FormControl>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent position="popper">
+                    <SelectItem
+                      value="personal"
+                      description="Each person connects a private value for runs they start."
+                    >
+                      Each user
+                    </SelectItem>
+                    <SelectItem
+                      value="organization"
+                      description="Admins connect one value used by everyone in the organization."
+                    >
+                      The organization
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
+    </>
+  );
 
   return (
     <StandardFormDialog
@@ -164,311 +480,63 @@ export function RuntimeCredentialDefinitionDialog({
             : "Add credential"
       }
       description={
-        initialKind === "github_app" && !definition
-          ? "Enter the App details, then connect its private key."
-          : "Choose the credential type and who provides its value. Use it across the platform."
+        definition
+          ? undefined
+          : initialKind === "github_app"
+            ? "Enter the App details, then connect its private key."
+            : "Choose the credential type and who provides its value. Use it across the platform."
       }
       size={size}
-      onSubmit={form.handleSubmit(save)}
+      onSubmit={(event) => {
+        if (definition && !canUpdate) {
+          event.preventDefault();
+          return;
+        }
+        void form.handleSubmit(save)(event);
+      }}
+      isDirty={form.formState.isDirty || permissionsDirty}
       bodyClassName="space-y-4"
       footer={
-        <>
+        definition && !canUpdate ? (
           <Button type="button" variant="outline" onClick={onClose}>
-            {backLabel && <ArrowLeft className="size-4" />}
-            {backLabel ?? "Cancel"}
+            Close
           </Button>
-          <Button type="submit" disabled={pending}>
-            {pending ? "Saving…" : definition ? "Save changes" : "Add"}
-          </Button>
-        </>
+        ) : (
+          <>
+            <Button type="button" variant="outline" onClick={onClose}>
+              {backLabel && <ArrowLeft className="size-4" />}
+              {backLabel ?? "Cancel"}
+            </Button>
+            <Button type="submit" disabled={pending}>
+              {pending ? "Saving…" : definition ? "Save changes" : "Add"}
+            </Button>
+          </>
+        )
       }
     >
-      <Form {...form}>
-        {setupNotice}
-        <FormField
-          control={form.control}
-          name="name"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Name</FormLabel>
-              <FormDescription>
-                Use a name people will recognize when selecting this credential.
-              </FormDescription>
-              <div className="flex items-center gap-3">
-                <FormField
-                  control={form.control}
-                  name="icon"
-                  render={({ field: iconField }) => (
-                    <AgentIconPicker
-                      value={iconField.value}
-                      onChange={iconField.onChange}
-                      showLogos
-                      className="size-9 rounded-md"
-                    />
-                  )}
-                />
-                <FormControl>
-                  <Input
-                    {...field}
-                    autoFocus={!definition}
-                    placeholder="GitLab access token"
-                  />
-                </FormControl>
-              </div>
-              <FormMessage />
-            </FormItem>
-          )}
+      <fieldset disabled={!!definition && !canUpdate} className="space-y-4">
+        <Form {...form}>{fields}</Form>
+      </fieldset>
+      {/* SPDX-SnippetBegin
+          SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+          SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
+      {/* Someone who may edit the credential saves its permissions with the
+          dialog's Save; someone who may only share it saves them on their own. */}
+      {definition ? (
+        <ResourceAccessSection
+          resource="credential"
+          id={definition.id}
+          onDirtyChange={setPermissionsDirty}
+          registerSave={canUpdate ? registerPermissionsSave : undefined}
         />
-
-        <FormField
-          control={form.control}
-          name="description"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Description</FormLabel>
-              <FormDescription>
-                Tell people what access the credential needs.
-              </FormDescription>
-              <FormControl>
-                <Textarea
-                  {...field}
-                  placeholder="Repository access for delegated coding tasks"
-                  rows={2}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
+      ) : (
+        <ResourceAccessSection
+          resource="credential"
+          grants={initialGrants}
+          onGrantsChange={setInitialGrants}
         />
-
-        <FormField
-          control={form.control}
-          name="kind"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Credential type</FormLabel>
-              {field.value === "github_app" && initialKind !== "github_app" && (
-                <FormDescription>
-                  Add the App details, then connect its private key after
-                  saving.
-                </FormDescription>
-              )}
-              <Select
-                value={field.value}
-                onValueChange={(value) => {
-                  field.onChange(value);
-                  if (value === "github_app_user")
-                    form.setValue("scope", "personal", { shouldDirty: true });
-                  if (value === "github_app")
-                    form.setValue("scope", "organization", {
-                      shouldDirty: true,
-                    });
-                }}
-                disabled={Boolean(definition)}
-              >
-                <FormControl>
-                  <SelectTrigger className="w-full">
-                    <span className="flex items-center gap-2">
-                      {field.value && (
-                        <RuntimeCredentialIcon
-                          icon={
-                            field.value === "github_app"
-                              ? "logo:github"
-                              : field.value === "gitlab_token"
-                                ? "logo:gitlab"
-                                : null
-                          }
-                          className="size-4 text-muted-foreground"
-                        />
-                      )}
-                      <SelectValue placeholder="Select credential type" />
-                    </span>
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent position="popper">
-                  <SelectItem
-                    value="secret"
-                    icon={
-                      <RuntimeCredentialIcon icon={null} className="size-4" />
-                    }
-                  >
-                    Custom secret
-                  </SelectItem>
-                  <SelectItem
-                    value="github_app"
-                    icon={
-                      <RuntimeCredentialIcon
-                        icon="logo:github"
-                        className="size-4"
-                      />
-                    }
-                  >
-                    GitHub App
-                  </SelectItem>
-                  <SelectItem
-                    value="github_app_user"
-                    disabled={githubApps.length === 0}
-                    description="Requires a connected organization GitHub App with an OAuth client ID."
-                    icon={
-                      <RuntimeCredentialIcon
-                        icon="logo:github"
-                        className="size-4"
-                      />
-                    }
-                  >
-                    GitHub user connection
-                  </SelectItem>
-                  {field.value === "gitlab_token" ? (
-                    <SelectItem
-                      value="gitlab_token"
-                      icon={
-                        <RuntimeCredentialIcon
-                          icon="logo:gitlab"
-                          className="size-4"
-                        />
-                      }
-                    >
-                      GitLab token
-                    </SelectItem>
-                  ) : null}
-                </SelectContent>
-              </Select>
-              {!definition &&
-                initialKind !== "github_app" &&
-                credentialsFailed && (
-                  <InlineNotice variant="error">
-                    <InlineNoticeText>
-                      Couldn&apos;t check GitHub Apps.
-                    </InlineNoticeText>
-                    <Button
-                      type="button"
-                      variant="link"
-                      size="sm"
-                      className="ml-auto h-auto p-0 text-xs"
-                      onClick={() => refetchCredentials()}
-                    >
-                      Retry
-                    </Button>
-                  </InlineNotice>
-                )}
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        {form.watch("kind") === "github_app" && (
-          <div
-            className={
-              size === "medium" ? "grid gap-4 sm:grid-cols-2" : "space-y-4"
-            }
-          >
-            {(
-              [
-                "githubUrl",
-                "appId",
-                "installationId",
-                "githubClientId",
-              ] as const
-            ).map((name) => (
-              <FormField
-                key={name}
-                control={form.control}
-                name={name}
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>
-                      {name === "githubUrl"
-                        ? "GitHub API URL"
-                        : name === "appId"
-                          ? "App ID"
-                          : name === "installationId"
-                            ? "Installation ID"
-                            : "OAuth client ID (optional)"}
-                    </FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            ))}
-          </div>
-        )}
-        {form.watch("kind") === "github_app_user" && (
-          <FormField
-            control={form.control}
-            name="githubAppCredentialKey"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Organization GitHub App</FormLabel>
-                <FormDescription>
-                  Each user authorizes this App once. Their connection is shared
-                  across agents and harnesses.
-                </FormDescription>
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <FormControl>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select an App" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {githubApps.map((entry) => (
-                      <SelectItem key={entry.key} value={entry.key}>
-                        {entry.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        )}
-        {!definition &&
-          (!hideProvidedBy || form.watch("kind") !== "github_app") && (
-            <FormField
-              control={form.control}
-              name="scope"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Provided by</FormLabel>
-                  {form.watch("kind") === "github_app" && (
-                    <FormDescription>
-                      GitHub Apps use an organization-managed installation and
-                      private key.
-                    </FormDescription>
-                  )}
-                  <Select
-                    value={field.value}
-                    onValueChange={field.onChange}
-                    disabled={form.watch("kind") !== "secret"}
-                  >
-                    <FormControl>
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent position="popper">
-                      <SelectItem
-                        value="personal"
-                        description="Each person connects a private value for runs they start."
-                      >
-                        Each user
-                      </SelectItem>
-                      <SelectItem
-                        value="organization"
-                        description="Admins connect one value used by everyone in the organization."
-                      >
-                        The organization
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-      </Form>
+      )}
+      {/* SPDX-SnippetEnd */}
     </StandardFormDialog>
   );
 }

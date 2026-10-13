@@ -10,8 +10,8 @@ use appa_eventlog::{Backend, LogStore};
 use appa_runtime::{
     api::{ConsultRecord, ConsultRecorder, ExternalOutcome, ExternalRole, OfferKind, Runtime},
     config::{
-        AnnotatorImplementation, ArchestraEndpoint, AudienceImplementation, Config, Endpoint,
-        HostDefaults, Implementation,
+        ArchestraEndpoint, AudienceImplementation, Config, Endpoint, HostDefaults, Implementation,
+        Transport,
     },
     replay::{self, Expect, Got, StepOutcome, Trace, TraceReport, Verdict},
 };
@@ -337,12 +337,14 @@ async fn offline_runtime(content: &str, noop: Option<&NoopAnnotator>) -> Result<
         ));
     }
     let consults = OfflineConsults::start(noop).await?;
-    let mut defaults = HostDefaults::new(Duration::from_secs(1), 65536);
+    let mut defaults =
+        HostDefaults::new(Duration::from_secs(1), crate::policy::host_max_body_bytes());
     defaults.archestra = Some(ArchestraEndpoint::new(
         consults.refuse_url.clone(),
         "offline-replay".into(),
     ));
     let mut config = Config::hosted(content, defaults, |_| Some("offline-replay".into()))
+        .map(crate::policy::enforce_host_limits)
         .map_err(|error| format!("The effective policy cannot load offline: {error}"))?;
     let externals = &mut config.externals;
     // Replay opens without an elicitation channel or a supplied human ruling.
@@ -358,9 +360,9 @@ async fn offline_runtime(content: &str, noop: Option<&NoopAnnotator>) -> Result<
     {
         return Err("Offline replay cannot run a policy with external authorities or sanitizers, or model profiles".into());
     }
-    let stand_in = |url: &str| AnnotatorImplementation::Resolver(Endpoint::new(url.into(), None));
+    let stand_in = |url: &str| Transport::Url(Endpoint::new(url.into(), None));
     for binding in externals.annotators.values_mut() {
-        let noop_bound = matches!(binding, AnnotatorImplementation::Resolver(endpoint)
+        let noop_bound = matches!(binding, Transport::Url(endpoint)
             if endpoint.token.is_none() && noop.is_some_and(|noop| noop.url == endpoint.url));
         *binding = stand_in(match noop_bound {
             true => &consults.noop_url,
@@ -372,8 +374,9 @@ async fn offline_runtime(content: &str, noop: Option<&NoopAnnotator>) -> Result<
     }
     for binding in externals.audience.values_mut() {
         if !matches!(binding.implementation, AudienceImplementation::Readers(_)) {
-            binding.implementation =
-                AudienceImplementation::Resolver(Endpoint::new(consults.refuse_url.clone(), None));
+            binding.implementation = AudienceImplementation::Transport(Transport::Url(
+                Endpoint::new(consults.refuse_url.clone(), None),
+            ));
         }
     }
     let store = Arc::new(LogStore::open(Backend::Memory).map_err(|error| error.to_string())?);

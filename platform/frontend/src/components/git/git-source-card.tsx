@@ -11,7 +11,11 @@ import type { ReactNode } from "react";
 import { GitProviderLogo } from "@/components/git/git-setup-chrome";
 import { PageHeaderBanner } from "@/components/page-header-banner";
 import { Button } from "@/components/ui/button";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import {
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
 import {
   Tooltip,
   TooltipContent,
@@ -171,8 +175,10 @@ export function GitSourceError({
     <GitSourceNotice>
       <InlineNotice variant="error">
         <AlertTriangle className="size-4 shrink-0" />
-        <span className="font-medium">{title}</span>
-        <InlineNoticeText>{message}</InlineNoticeText>
+        <InlineNoticeBody>
+          <span className="font-medium">{title}</span>
+          <InlineNoticeText>{message}</InlineNoticeText>
+        </InlineNoticeBody>
       </InlineNotice>
     </GitSourceNotice>
   );

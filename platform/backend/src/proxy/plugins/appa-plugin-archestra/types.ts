@@ -52,6 +52,13 @@ export type AppaTrustedContext = {
    * switch, so a change between requests does not land mid-stream.
    */
   enforcement?: "active" | "inactive";
+  /**
+   * The provider-thread step of this request, when it carries one. A continue
+   * is a delta: the thread already holds the system prompt, so guidance that
+   * is fixed for the session is not repeated and per-turn guidance travels in
+   * the new user turn.
+   */
+  thread?: "create" | "continue";
 };
 
 export type AppaMatchContext = {
@@ -114,7 +121,21 @@ export type AppaClientAdapter = {
     isAvailable?(headers: IncomingHttpHeaders): boolean;
     supportsMultiple?: boolean;
     fromAskUser?(args: AskUserArguments): Record<string, unknown>;
-    rulingFromResult?(result: NativeQuestionResult): NativeQuestionRuling;
+    /**
+     * Approve or Deny from the tool's result. `asked` is the question the
+     * platform wrote for the review; the ruling is read against it, never
+     * found by a search of the result text.
+     */
+    rulingFromResult?(
+      result: NativeQuestionResult,
+      asked: AskUserArguments,
+    ): NativeQuestionReading;
+    /**
+     * The client also shows the gateway's MCP form (elicitation), which
+     * returns the choice as data. An answer in a wording the proxy does not
+     * know is then asked once more there, instead of counting as no answer.
+     */
+    formFallback?: boolean;
   };
   /**
    * The client's own tool that waits for MCP servers which are still
@@ -330,3 +351,9 @@ export type NativeQuestionResult = {
 };
 
 export type NativeQuestionRuling = "approve" | "deny" | "none";
+
+/**
+ * A ruling, or "unrecognized" for an answer in a wording the adapter does not
+ * know. An unrecognized answer is never read as a choice.
+ */
+export type NativeQuestionReading = NativeQuestionRuling | "unrecognized";

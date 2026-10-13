@@ -14,6 +14,7 @@ import {
 } from "@/openappa/declarations";
 import { OPENAPPA_TEMPLATE } from "@/openappa/template.generated";
 import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
+import { CredentialAccess } from "@/services/credential-access";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import {
   resolveOpenAppaGithubAccess,
@@ -508,6 +509,29 @@ export async function updateAppaGithubSync(params: {
  * cannot give itself: `drops_batteries` takes the permissions a policy write
  * takes, `changes_credentials` the one a credential grant takes.
  */
+export async function getHeldAppaGithubPull(organizationId: string) {
+  assertEnabled();
+  const row = await OpenAppaGithubSyncModel.find(organizationId);
+  if (!row?.heldContent) return null;
+  const local = await guardrailsPolicyService.get(organizationId);
+  const changes = heldChanges({
+    ...(await resolvePair({
+      organizationId,
+      local: local.content,
+      pulled: row.heldContent,
+    })),
+    pendingPublish:
+      row.declarationsPendingPublish ||
+      row.heldReasons.includes("drops_batteries"),
+  });
+  return {
+    sourceCommit: row.heldSourceCommit,
+    reasons: row.heldReasons,
+    grants: changes.granted,
+    droppedBatteries: changes.dropped,
+  };
+}
+
 export async function acceptHeldAppaGithubPull(params: {
   organizationId: string;
   userId: string;
@@ -533,14 +557,16 @@ export async function acceptHeldAppaGithubPull(params: {
   // Bindings can change while a pull is held, so the grants are judged as they
   // stand now as well as by the reasons recorded at hold time.
   if (
-    (row.heldReasons.includes("changes_credentials") ||
-      changes.granted.length > 0) &&
-    !(await userHasPermission(userId, organizationId, "credential", "update"))
+    row.heldReasons.includes("changes_credentials") ||
+    changes.granted.length > 0
   )
-    throw new ApiError(
-      403,
-      "Credential update permission is required: this pull changes which credentials batteries or the root policy read",
-    );
+    await CredentialAccess.requireOnEvery({
+      organizationId,
+      userId,
+      action: "use",
+      message:
+        "Use access to every credential is required: this pull changes which credentials batteries or the root policy read",
+    });
   const published = await OpenAppaGithubSyncModel.publishHeld({
     organizationId,
     userId,
@@ -754,21 +780,23 @@ async function resolvePair(params: {
 
 function holdMessage(changes: {
   reasons: HeldPullReason[];
-  granted: Array<{ battery: string; variable: string }>;
+  granted: Array<{ battery: string; key: string }>;
   dropped: string[];
 }): string {
-  const parts: string[] = [];
-  if (changes.reasons.includes("drops_batteries"))
-    parts.push(
-      `drops_batteries: the repository does not include ${changes.dropped.join(", ")}`,
-    );
+  const sentences: string[] = [];
   if (changes.reasons.includes("changes_credentials"))
-    parts.push(
-      `changes_credentials: it hands ${changes.granted
-        .map((grant) => `${grant.variable} to ${grant.battery}`)
-        .join(", ")}`,
+    sentences.push(
+      `The repository's policy gives ${changes.granted
+        .map(
+          (grant) => `the ${grant.battery} battery the ${grant.key} credential`,
+        )
+        .join(", and ")}.`,
     );
-  return `This pull was not published. ${parts.join("; ")}. Accept it in the guardrails panel.`;
+  if (changes.reasons.includes("drops_batteries"))
+    sentences.push(
+      `${sentences.length ? "It also removes" : "The repository's policy removes"} batteries added here: ${changes.dropped.join(", ")}.`,
+    );
+  return sentences.join(" ");
 }
 
 async function saveSource(params: {
@@ -881,6 +909,9 @@ async function readGithubPolicy(params: {
   const commitResponse = await githubFetch(
     `${base}/commits/${encodeURIComponent(row.ref ?? "HEAD")}`,
     headers,
+    row.ref
+      ? `Repository not found: ${repo}, or its ${row.ref} branch. It may have been deleted or renamed, or the App lost access. Pick another with Edit source.`
+      : `Repository not found: ${repo}. It may have been deleted or renamed, or the App lost access. Pick another with Edit source.`,
   );
   const commitBytes = await readResponseBodyWithLimit(
     commitResponse,
@@ -894,6 +925,7 @@ async function readGithubPolicy(params: {
   const response = await githubFetch(
     `${base}/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${commit.sha}`,
     { ...headers, Accept: "application/vnd.github.raw+json" },
+    `Policy file not found: ${path} in ${repo}. Check the policy file with Edit source.`,
   );
   const bytes = await readResponseBodyWithLimit(response, 1024 * 1024);
   if (!bytes) throw new ApiError(400, "APPA policy exceeds the 1 MiB limit");
@@ -935,12 +967,17 @@ function assertEnabled() {
       "Enable OpenAPPA on the server before configuring Git sync",
     );
 }
-async function githubFetch(url: string, headers: Record<string, string>) {
+async function githubFetch(
+  url: string,
+  headers: Record<string, string>,
+  notFound?: string,
+) {
   const response = await fetch(url, {
     headers,
     redirect: "error",
     signal: AbortSignal.timeout(15000),
   });
+  if (response.status === 404 && notFound) throw new ApiError(400, notFound);
   if (!response.ok)
     throw new ApiError(
       400,

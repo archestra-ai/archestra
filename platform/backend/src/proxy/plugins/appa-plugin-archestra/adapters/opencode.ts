@@ -6,6 +6,7 @@ import type {
   AppaMatchContext,
   AppaSpawnPromptField,
   AskUserArguments,
+  NativeQuestionResult,
 } from "../types";
 import { questionHeader, readHeader } from "../utils";
 import { openCodeQuestionRuling } from "./native-question-ruling";
@@ -47,7 +48,8 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
         },
       ],
     }),
-    rulingFromResult: openCodeQuestionRuling,
+    rulingFromResult: (result: NativeQuestionResult, asked: AskUserArguments) =>
+      openCodeQuestionRuling(result, asked.question),
   };
 
   matches(context: AppaMatchContext): boolean {

@@ -21,6 +21,8 @@ import {
   SkillShareLinkModel,
   VirtualApiKeyModel,
 } from "@/models";
+import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
+import ModelModel from "@/models/model";
 import {
   accessGrants,
   afterEach,
@@ -43,7 +45,10 @@ import { userHasPermission } from "@/auth";
 import config, { parseOpenAppaConfig } from "@/config";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { clientConnectionService } from "@/services/client-connection";
-import { verifyConnectionProxySetupContext } from "@/services/connection-proxy-setup-context";
+import {
+  connectionSetupReference,
+  verifyConnectionProxySetupContext,
+} from "@/services/connection-proxy-setup-context";
 import { grantEverywhere } from "@/test/wildcard-grants";
 
 const mockUserHasPermission = vi.mocked(userHasPermission);
@@ -138,9 +143,25 @@ describe("GET /api/connection-setups/script/:token", () => {
               : clientId === "copilot-cli"
                 ? "openai"
                 : "anthropic";
-        await makeLlmProviderApiKey(organizationId, (await makeSecret()).id, {
-          provider,
-        });
+        const providerKey = await makeLlmProviderApiKey(
+          organizationId,
+          (await makeSecret()).id,
+          { provider },
+        );
+        if (clientId === "opencode") {
+          // OpenCode setups only publish providers that have a usable model.
+          const model = await ModelModel.create({
+            provider,
+            modelId: "claude-test",
+            externalId: "claude-test",
+            inputModalities: ["text"],
+            outputModalities: ["text"],
+          });
+          await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(
+            providerKey.id,
+            [model.id],
+          );
+        }
         const { rawToken } = await createSetup({
           clientId,
           baseUrl: "http://localhost:9000/v1",
@@ -197,6 +218,16 @@ describe("GET /api/connection-setups/script/:token", () => {
             secret: config.auth.secret,
           }),
         ).toBe(false);
+        if (clientId !== "claude-desktop") {
+          // The installer prints the reference the proxy looks for in the
+          // conversation that ran it, as plain text in its ending.
+          expect(response.body).toContain(
+            `Setup reference   ${connectionSetupReference({
+              setupId: setup.id,
+              secret: config.auth.secret,
+            })}`,
+          );
+        }
       });
     }
   }

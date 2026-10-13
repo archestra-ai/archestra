@@ -31,6 +31,8 @@ export async function getGithubAppConfig(params: {
 
 export async function createGithubAppConfig(params: {
   organizationId: string;
+  /** Becomes the credential's author, who is granted full access to it. */
+  userId?: string;
   data: CreateGithubAppConfigRequest;
 }): Promise<PublicGithubAppConfig> {
   const { organizationId, data } = params;
@@ -39,14 +41,17 @@ export async function createGithubAppConfig(params: {
     `github-app-${data.name}`,
   );
 
-  const config = await GithubAppConfigModel.create({
-    organizationId,
-    name: data.name,
-    githubUrl: data.githubUrl ?? DEFAULT_GITHUB_URL,
-    appId: data.appId,
-    installationId: data.installationId,
-    secretId: secret.id,
-  });
+  const config = await GithubAppConfigModel.create(
+    {
+      organizationId,
+      name: data.name,
+      githubUrl: data.githubUrl ?? DEFAULT_GITHUB_URL,
+      appId: data.appId,
+      installationId: data.installationId,
+      secretId: secret.id,
+    },
+    params.userId,
+  );
 
   return toPublicGithubAppConfig(config);
 }

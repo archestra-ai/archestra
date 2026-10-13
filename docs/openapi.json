@@ -74571,6 +74571,9 @@
                           },
                           "description": {
                             "type": "string"
+                          },
+                          "canConnect": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -74596,6 +74599,9 @@
                           },
                           "description": {
                             "type": "string"
+                          },
+                          "canConnect": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -122099,6 +122105,7 @@
                               "llmOauthClient",
                               "environment",
                               "serviceAccount",
+                              "credential",
                               "scheduledTask"
                             ]
                           },
@@ -160899,7 +160906,7 @@
         "tags": [
           "Git credentials"
         ],
-        "description": "List the organization's GitHub Apps and GitLab access tokens. Token values are never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "description": "List the organization's GitHub Apps and GitLab access tokens. Token values are never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: Open Credentials",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -161531,7 +161538,7 @@
         "tags": [
           "Git credentials"
         ],
-        "description": "Repositories a Git credential can reach: the GitHub App's installed repositories, or the GitLab projects the token is a member of.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "description": "Repositories a Git credential can reach: the GitHub App's installed repositories, or the GitLab projects the token is a member of.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: Open Credentials",
         "parameters": [
           {
             "schema": {
@@ -161832,7 +161839,7 @@
         "tags": [
           "Git credentials"
         ],
-        "description": "Where a Git credential can create repositories: the GitHub App's account, or the GitLab groups the token can create projects in. An empty string is the GitLab token owner's own namespace.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "description": "Where a Git credential can create repositories: the GitHub App's account, or the GitLab groups the token can create projects in. An empty string is the GitLab token owner's own namespace.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: Open Credentials",
         "parameters": [
           {
             "schema": {
@@ -162106,7 +162113,7 @@
         "tags": [
           "GitHub App Configs"
         ],
-        "description": "List organization GitHub App configurations. The private key is never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "description": "List organization GitHub App configurations. The private key is never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: Open Credentials",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -162746,7 +162753,7 @@
         "tags": [
           "GitHub App Configs"
         ],
-        "description": "Get a GitHub App configuration. The private key is never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "description": "Get a GitHub App configuration. The private key is never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -163045,10 +163052,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "put": {
@@ -163056,7 +163062,7 @@
         "tags": [
           "GitHub App Configs"
         ],
-        "description": "Update a GitHub App configuration. Provide a private key only to rotate it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:update`: Modify saved credentials",
+        "description": "Update a GitHub App configuration. Provide a private key only to rotate it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -163388,10 +163394,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "delete": {
@@ -163399,7 +163404,7 @@
         "tags": [
           "GitHub App Configs"
         ],
-        "description": "Delete a GitHub App configuration and its stored private key.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:delete`: Delete saved credentials",
+        "description": "Delete a GitHub App configuration and its stored private key.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -163666,10 +163671,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:delete"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -169185,7 +169189,7 @@
         "tags": [
           "GitHub PATs"
         ],
-        "description": "List organization GitHub personal access tokens. The token value is never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "description": "List organization GitHub personal access tokens. The token value is never returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: Open Credentials",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -169787,7 +169791,7 @@
         "tags": [
           "GitHub PATs"
         ],
-        "description": "Rename a stored GitHub token. Provide a token only to rotate it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:update`: Modify saved credentials",
+        "description": "Rename a stored GitHub token. Provide a token only to rotate it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -170095,10 +170099,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "delete": {
@@ -170106,7 +170109,7 @@
         "tags": [
           "GitHub PATs"
         ],
-        "description": "Delete a stored GitHub token and its secret. Rejected while synced skills authenticate with it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:delete`: Delete saved credentials",
+        "description": "Delete a stored GitHub token and its secret. Rejected while synced skills authenticate with it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -170373,10 +170376,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:delete"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -247572,6 +247574,328 @@
                   },
                   "required": [
                     "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
+        }
+      }
+    },
+    "/api/internal_mcp_catalog/{id}/credential-preflight": {
+      "get": {
+        "operationId": "getInternalMcpCatalogCredentialPreflight",
+        "tags": [
+          "MCP Catalog"
+        ],
+        "description": "List the saved credentials that would stop the caller installing this MCP server, and why\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "personal",
+                "team",
+                "org"
+              ]
+            },
+            "in": "query",
+            "name": "scope",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "blockers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "envKey": {
+                            "type": "string"
+                          },
+                          "credentialId": {
+                            "type": "string"
+                          },
+                          "credentialName": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": "string",
+                            "enum": [
+                              "no_access",
+                              "not_connected",
+                              "not_set_up",
+                              "personal_only"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "envKey",
+                          "credentialId",
+                          "credentialName",
+                          "reason"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "blockers"
                   ],
                   "additionalProperties": false
                 }
@@ -331962,12 +332286,17 @@
                               "changes_credentials"
                             ]
                           }
+                        },
+                        "message": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
                         "contentHash",
                         "sourceCommit",
-                        "reasons"
+                        "reasons",
+                        "message"
                       ],
                       "additionalProperties": false
                     },
@@ -334865,12 +335194,17 @@
                               "changes_credentials"
                             ]
                           }
+                        },
+                        "message": {
+                          "nullable": true,
+                          "type": "string"
                         }
                       },
                       "required": [
                         "contentHash",
                         "sourceCommit",
-                        "reasons"
+                        "reasons",
+                        "message"
                       ],
                       "additionalProperties": false
                     },
@@ -335144,11 +335478,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "credential:update",
             "openappaPolicy:update"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:update`: Modify saved credentials\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
       }
     },
     "/api/openappa/battery-packages/{name}": {
@@ -341593,7 +341926,7 @@
         "tags": [
           "OpenAPPA"
         ],
-        "description": "The GitHub account each organization GitHub App is installed on\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "description": "The GitHub account each organization GitHub App is installed on\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: Open Credentials",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -342171,6 +342504,318 @@
           "kind": "static",
           "permissions": [
             "organizationSettings:update"
+          ]
+        }
+      }
+    },
+    "/api/openappa/github-sync/held": {
+      "get": {
+        "operationId": "getHeldAppaGithubPull",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "description": "Itemize the pull waiting for approval: the credentials it gives batteries and the batteries it removes\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "nullable": true,
+                  "type": "object",
+                  "properties": {
+                    "sourceCommit": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "reasons": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "drops_batteries",
+                          "changes_credentials"
+                        ]
+                      }
+                    },
+                    "grants": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "battery": {
+                            "type": "string"
+                          },
+                          "variable": {
+                            "type": "string"
+                          },
+                          "key": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "battery",
+                          "variable",
+                          "key"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "droppedBatteries": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "sourceCommit",
+                    "reasons",
+                    "grants",
+                    "droppedBatteries"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "openappaPolicy:read"
           ]
         }
       }
@@ -387172,12 +387817,11 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)"
       }
     },
     "/api/credentials/github/callback": {
@@ -387482,7 +388126,7 @@
             "credential:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: Open Credentials"
       }
     },
     "/api/credentials": {
@@ -387491,7 +388135,55 @@
         "tags": [
           "Credentials"
         ],
-        "description": "List reusable credentials available to platform integrations\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "description": "List reusable credentials available to platform integrations\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: Open Credentials",
+        "parameters": [
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "mine",
+                  "shared",
+                  "org",
+                  "others"
+                ]
+              }
+            },
+            "in": "query",
+            "name": "access",
+            "required": false,
+            "description": "Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object."
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "in": "query",
+            "name": "sharedWith",
+            "required": false,
+            "description": "Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering."
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "in": "query",
+            "name": "owner",
+            "required": false,
+            "description": "Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering."
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -387903,6 +388595,137 @@
                   },
                   "allowOrganization": {
                     "type": "boolean"
+                  },
+                  "initialGrants": {
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "subject": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "user"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "team"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "serviceAccount"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "role"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "organization"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "enum": [
+                                    "*"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            }
+                          ]
+                        },
+                        "actions": {
+                          "minItems": 1,
+                          "maxItems": 6,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "read",
+                              "use",
+                              "update",
+                              "delete",
+                              "manage-permissions",
+                              "configure-deployment-spec"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "subject",
+                        "actions"
+                      ]
+                    }
                   }
                 },
                 "required": [
@@ -388273,7 +389096,7 @@
         "tags": [
           "Credentials"
         ],
-        "description": "List resources using a saved credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "description": "List resources using a saved credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -388590,10 +389413,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -388603,7 +389425,7 @@
         "tags": [
           "Credentials"
         ],
-        "description": "Update a credential definition\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:update`: Modify saved credentials",
+        "description": "Update a credential definition\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -389007,10 +389829,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "delete": {
@@ -389018,7 +389839,7 @@
         "tags": [
           "Credentials"
         ],
-        "description": "Delete a credential definition\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:delete`: Delete saved credentials",
+        "description": "Delete a credential definition\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -389288,10 +390109,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:delete"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -389301,7 +390121,7 @@
         "tags": [
           "Credentials"
         ],
-        "description": "Connect a personal credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "description": "Connect a personal credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -389591,10 +390411,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "delete": {
@@ -389602,7 +390421,7 @@
         "tags": [
           "Credentials"
         ],
-        "description": "Disconnect a personal credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:read`: View saved credentials",
+        "description": "Disconnect a personal credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -389869,10 +390688,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -389882,7 +390700,7 @@
         "tags": [
           "Credentials"
         ],
-        "description": "Connect an organization credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:update`: Modify saved credentials",
+        "description": "Connect an organization credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -390172,10 +390990,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       },
       "delete": {
@@ -390183,7 +391000,7 @@
         "tags": [
           "Credentials"
         ],
-        "description": "Disconnect an organization credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:update`: Modify saved credentials",
+        "description": "Disconnect an organization credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -390450,10 +391267,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:update"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         }
       }
     },
@@ -413431,7 +414247,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Overwrite the full text content of a row-backed Markdown/plain-text file. Allowed for the file's author, or anyone with access to the project owning the file.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: Open Agents, and use the code sandboxes and files of agents you can use",
+        "description": "Overwrite the full text content of a Markdown/plain-text file. Allowed for the file's author, or anyone with access to the project owning the file.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: Open Agents, and use the code sandboxes and files of agents you can use",
         "requestBody": {
           "required": true,
           "content": {
@@ -413455,8 +414271,7 @@
           {
             "schema": {
               "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              "pattern": "^(?:[0-9a-fA-F-]{36}|obj_[A-Za-z0-9_-]{1,2048})$"
             },
             "in": "path",
             "name": "artifactId",
@@ -443042,6 +443857,7 @@
                 "llmOauthClient",
                 "environment",
                 "serviceAccount",
+                "credential",
                 "scheduledTask"
               ]
             },
@@ -443431,7 +444247,7 @@
         "tags": [
           "Permissions"
         ],
-        "description": "The signed-in actor's explicit scoped capabilities. Used for discovery; each operation still authorizes its target.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "The signed-in actor's explicit scoped capabilities. Single-object grants that a `*` grant for the same resource and action covers are left out. Used for discovery; each operation still authorizes its target.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -443468,6 +444284,7 @@
                           "llmOauthClient",
                           "environment",
                           "serviceAccount",
+                          "credential",
                           "scheduledTask"
                         ]
                       },
@@ -443791,6 +444608,7 @@
                 "llmOauthClient",
                 "environment",
                 "serviceAccount",
+                "credential",
                 "scheduledTask"
               ]
             },
@@ -444226,6 +445044,7 @@
                 "llmOauthClient",
                 "environment",
                 "serviceAccount",
+                "credential",
                 "scheduledTask"
               ]
             },
@@ -444285,6 +445104,7 @@
                         "llmOauthClient",
                         "environment",
                         "serviceAccount",
+                        "credential",
                         "scheduledTask"
                       ]
                     },
@@ -445173,6 +445993,7 @@
                 "llmOauthClient",
                 "environment",
                 "serviceAccount",
+                "credential",
                 "scheduledTask"
               ]
             },
@@ -445232,6 +446053,7 @@
                         "llmOauthClient",
                         "environment",
                         "serviceAccount",
+                        "credential",
                         "scheduledTask"
                       ]
                     },

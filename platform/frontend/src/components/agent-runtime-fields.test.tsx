@@ -16,7 +16,11 @@ import {
   it,
   vi,
 } from "vitest";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
@@ -49,6 +53,13 @@ describe("AgentRuntimeFields", () => {
       data: false,
       isPending: false,
     } as ReturnType<typeof useHasPermissions>);
+    // Every saved credential is usable, so each can be attached.
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [{ resource: "credential", action: "use", scope: "*" }],
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: "user-1", name: "Ada", email: "ada@example.com" } },
+    } as unknown as ReturnType<typeof useSession>);
     archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
     server.use(
       http.get("http://localhost:9000/api/credentials", () =>

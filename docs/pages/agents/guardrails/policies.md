@@ -112,7 +112,7 @@ What to know:
 
 - Setting up sync needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) and, to pick a saved App or token, [`credential:read`](/docs/reference/permissions#credential:read). Creating a GitHub App or saving a GitLab token also needs [`credential:create`](/docs/reference/permissions#credential:create).
 - The GitHub App needs only the policy repository, with **Read & write** on Contents and Pull requests. On GitHub Enterprise Server, an App created in setup also gets Workflows **Read & write**.
-- A change that edits a battery credential waits until someone with [`credential:update`](/docs/reference/permissions#credential:update) clicks **Accept repository text** on **Batteries**.
+- A merged change that gives a battery a credential waits for approval. Click **Review** in **Settings > Guardrails** or on **Batteries** to see each battery and its credential, then **Approve**, which needs **Can use** on every credential ([Granular Access Control](/docs/admin/access-control#granular-access-control)). To reject it, undo the change in GitHub or GitLab.
 
 ## Validations
 

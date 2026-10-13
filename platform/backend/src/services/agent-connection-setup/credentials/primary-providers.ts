@@ -5,8 +5,10 @@ import {
 } from "@archestra/shared";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import LlmProviderApiKeyModelLinkModel from "@/models/llm-provider-api-key-model";
+import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
 import ModelTeamModel from "@/models/model-team";
+import OrganizationModel from "@/models/organization";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { ApiError } from "@/types";
 import { readVirtualKeyValue } from "../../connection-setup";
@@ -136,27 +138,71 @@ export async function getVirtualKeyProviderCatalog(
     action: "use",
   });
   const providers = [...new Set(selected.map((key) => key.provider))];
-  return providers.map((provider) => ({
-    provider,
-    name:
-      selected.filter((key) => key.provider === provider).length === 1
-        ? (selected.find((key) => key.provider === provider)?.name ??
-          providerDisplayNames[provider])
-        : providerDisplayNames[provider],
-    models: models
-      .filter(
-        ({ model }) =>
-          model.provider === provider &&
-          allowedModelIds.has(model.id) &&
-          ModelModel.supportsTextChat(model),
-      )
-      .map(({ model }) => ({
-        id: model.modelId,
-        name: model.modelId,
-        context: model.customContextLength ?? model.contextLength,
-        output: model.customOutputLength ?? model.outputLength,
-      })),
-  }));
+  const entries = providers
+    .map((provider) => ({
+      provider,
+      name:
+        selected.filter((key) => key.provider === provider).length === 1
+          ? (selected.find((key) => key.provider === provider)?.name ??
+            providerDisplayNames[provider])
+          : providerDisplayNames[provider],
+      models: models
+        .filter(
+          ({ model }) =>
+            model.provider === provider &&
+            allowedModelIds.has(model.id) &&
+            ModelModel.supportsTextChat(model) &&
+            // OpenCode sends tools on every agent turn. Unknown (null) stays.
+            model.supportsToolCalling !== false,
+        )
+        .map(({ model }) => ({
+          id: model.modelId,
+          name: model.modelId,
+          context: model.customContextLength ?? model.contextLength,
+          output: model.customOutputLength ?? model.outputLength,
+        })),
+    }))
+    .filter((entry) => entry.models.length > 0);
+  if (!entries.length)
+    throw new ApiError(
+      400,
+      "No model from the selected providers can run in OpenCode. OpenCode needs models that support tool calling. Sync the provider's models or choose another provider.",
+    );
+  const preferred = await getPreferredModels(params);
+  const lead = preferred.find(({ provider, modelId }) =>
+    entries.some(
+      (entry) =>
+        entry.provider === provider &&
+        entry.models.some((model) => model.id === modelId),
+    ),
+  )?.provider;
+  return [
+    ...entries.filter((entry) => entry.provider === lead),
+    ...entries.filter((entry) => entry.provider !== lead),
+  ];
+}
+
+/**
+ * OpenCode starts on the first provider it is given, so lead with the one the
+ * user already chats with: their default model's, else the organization's.
+ * Returned in preference order; the caller uses the first one it really offers.
+ */
+async function getPreferredModels(params: {
+  organizationId: string;
+  userId: string;
+}): Promise<Array<{ provider: SupportedProvider; modelId: string }>> {
+  const [member, organization] = await Promise.all([
+    MemberModel.getDefaultModelSelection(params.userId, params.organizationId),
+    OrganizationModel.getById(params.organizationId),
+  ]);
+  const ids = [member.modelId, organization?.defaultModelId].filter(
+    (id): id is string => Boolean(id),
+  );
+  const found = await ModelModel.findByIds(ids);
+  return ids.flatMap((id) => {
+    const model = found.find((candidate) => candidate.id === id);
+    return model ? [{ provider: model.provider, modelId: model.modelId }] : [];
+  });
 }
 
 async function getPrimaryKeys(params: PrimaryProviderContext) {

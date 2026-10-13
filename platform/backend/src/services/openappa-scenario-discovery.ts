@@ -4,6 +4,7 @@ import config from "@/config";
 import { LRUCacheManager } from "@/in-memory-lru-cache";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import { openappaBatteriesService } from "@/openappa/batteries";
+import { openappaDeclarations } from "@/openappa/declarations";
 import {
   scenarioContent,
   scenarioWitnesses,
@@ -63,6 +64,8 @@ async function replay(
   files: { path: string; content: string }[],
 ) {
   try {
+    // Replay opens the policy under the same host defaults as a live session.
+    openappaDeclarations.publishBridgeToken();
     const native = await import("@archestra/openappa-rs");
     return z
       .object({

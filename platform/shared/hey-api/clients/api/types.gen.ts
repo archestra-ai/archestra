@@ -21225,12 +21225,14 @@ export type GetAgentRuntimePreflightResponses = {
             credentialId?: string;
             label: string;
             description?: string;
+            canConnect?: boolean;
         }>;
         misconfigured: Array<{
             key: string;
             credentialId?: string;
             label: string;
             description?: string;
+            canConnect?: boolean;
         }>;
         incompatible: string | null;
     };
@@ -34302,7 +34304,7 @@ export type GetBootstrapResponses = {
         };
         scopedCapabilities: Array<{
             organizationId: string;
-            resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+            resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
             scope: '*' | string;
             action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec';
         }>;
@@ -64412,6 +64414,101 @@ export type UpdateInternalMcpCatalogItemResponses = {
 
 export type UpdateInternalMcpCatalogItemResponse = UpdateInternalMcpCatalogItemResponses[keyof UpdateInternalMcpCatalogItemResponses];
 
+export type GetInternalMcpCatalogCredentialPreflightData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query: {
+        scope: 'personal' | 'team' | 'org';
+    };
+    url: '/api/internal_mcp_catalog/{id}/credential-preflight';
+};
+
+export type GetInternalMcpCatalogCredentialPreflightErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetInternalMcpCatalogCredentialPreflightError = GetInternalMcpCatalogCredentialPreflightErrors[keyof GetInternalMcpCatalogCredentialPreflightErrors];
+
+export type GetInternalMcpCatalogCredentialPreflightResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        blockers: Array<{
+            envKey: string;
+            credentialId: string;
+            credentialName: string;
+            reason: 'no_access' | 'not_connected' | 'not_set_up' | 'personal_only';
+        }>;
+    };
+};
+
+export type GetInternalMcpCatalogCredentialPreflightResponse = GetInternalMcpCatalogCredentialPreflightResponses[keyof GetInternalMcpCatalogCredentialPreflightResponses];
+
 export type GetInternalMcpCatalogToolsBatchData = {
     body?: never;
     path?: never;
@@ -87728,6 +87825,7 @@ export type GetOpenappaPolicyDeclarationsResponses = {
             contentHash: string;
             sourceCommit: string;
             reasons: Array<'drops_batteries' | 'changes_credentials'>;
+            message: string | null;
         } | null;
         credentialBindings: Array<{
             variable: string;
@@ -88537,6 +88635,7 @@ export type SetOpenappaCredentialBindingResponses = {
             contentHash: string;
             sourceCommit: string;
             reasons: Array<'drops_batteries' | 'changes_credentials'>;
+            message: string | null;
         } | null;
         credentialBindings: Array<{
             variable: string;
@@ -90439,6 +90538,99 @@ export type GetAppaGithubAppRepositoriesResponses = {
 };
 
 export type GetAppaGithubAppRepositoriesResponse = GetAppaGithubAppRepositoriesResponses[keyof GetAppaGithubAppRepositoriesResponses];
+
+export type GetHeldAppaGithubPullData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/github-sync/held';
+};
+
+export type GetHeldAppaGithubPullErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetHeldAppaGithubPullError = GetHeldAppaGithubPullErrors[keyof GetHeldAppaGithubPullErrors];
+
+export type GetHeldAppaGithubPullResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        sourceCommit: string | null;
+        reasons: Array<'drops_batteries' | 'changes_credentials'>;
+        grants: Array<{
+            battery: string;
+            variable: string;
+            key: string;
+        }>;
+        droppedBatteries: Array<string>;
+    } | null;
+};
+
+export type GetHeldAppaGithubPullResponse = GetHeldAppaGithubPullResponses[keyof GetHeldAppaGithubPullResponses];
 
 export type AcceptHeldAppaGithubPullData = {
     body?: never;
@@ -102086,7 +102278,20 @@ export type CompleteGitHubUserConnectionResponse = CompleteGitHubUserConnectionR
 export type ListRuntimeCredentialsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
+         */
+        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
+        /**
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         */
+        sharedWith?: Array<string>;
+        /**
+         * Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering.
+         */
+        owner?: Array<string>;
+    };
     url: '/api/credentials';
 };
 
@@ -102199,6 +102404,25 @@ export type CreateRuntimeCredentialData = {
         icon?: string | null;
         allowPersonal?: boolean;
         allowOrganization?: boolean;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        }>;
     };
     path?: never;
     query?: never;
@@ -117890,7 +118114,7 @@ export type UpdateIdentityProviderResponse = UpdateIdentityProviderResponses[key
 export type SearchInitialPermissionSubjectsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
     };
     query?: {
         query?: string;
@@ -118075,7 +118299,7 @@ export type GetScopedCapabilitiesResponses = {
      */
     200: Array<{
         organizationId: string;
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
         scope: '*' | string;
         action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec';
     }>;
@@ -118086,7 +118310,7 @@ export type GetScopedCapabilitiesResponse = GetScopedCapabilitiesResponses[keyof
 export type SearchResourcePermissionSubjectsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
         scope: '*' | string;
     };
     query?: {
@@ -118194,7 +118418,7 @@ export type SearchResourcePermissionSubjectsResponse = SearchResourcePermissionS
 export type GetResourcePermissionsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
         scope: '*' | string;
     };
     query?: never;
@@ -118274,7 +118498,7 @@ export type GetResourcePermissionsResponses = {
      * Default Response
      */
     200: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
         scope: '*' | string;
         name: string;
         ownerId: string | null;
@@ -118366,7 +118590,7 @@ export type UpdateResourcePermissionsData = {
         }>;
     };
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
         scope: '*' | string;
     };
     query?: never;
@@ -118446,7 +118670,7 @@ export type UpdateResourcePermissionsResponses = {
      * Default Response
      */
     200: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
         scope: '*' | string;
         name: string;
         ownerId: string | null;

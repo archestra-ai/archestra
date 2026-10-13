@@ -24,10 +24,15 @@ export default class GithubAppConfigModel {
     const [credential] = await GithubAppConfigModel.findShared(params);
     return credential ?? null;
   }
-  static async create(data: InsertGithubAppConfig): Promise<GithubAppConfig> {
+  static async create(
+    data: InsertGithubAppConfig,
+    /** The user or `service-account:` actor creating it; becomes its author. */
+    createdBy: string | null = null,
+  ): Promise<GithubAppConfig> {
     const definition = await createSharedCredential({
       ...data,
       kind: "github_app",
+      createdBy,
     });
     return {
       id: definition.id,

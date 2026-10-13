@@ -42,6 +42,7 @@ import {
   createStreamAccumulatorState,
   extractCommonToolCallArguments,
 } from "@/types";
+import { isApprovedAsSent } from "../utils/approved-as-sent";
 import { formatResponsesStreamErrorFrame } from "./responses-stream-error-frame";
 import {
   formatResponsesFunctionCallFrames,
@@ -265,6 +266,7 @@ class AzureResponsesRequestAdapter
           ...(toolCall?.namespace ? { namespace: toolCall.namespace } : {}),
           arguments: toolCall?.arguments,
           content: item.output,
+          structured: typeof item.output !== "string",
           isError: false,
         },
       ];
@@ -342,6 +344,10 @@ class AzureResponsesRequestAdapter
         // hand the model exactly what was withheld.
         const updatedOutput = this.toolResultUpdates[item.call_id];
         if (updatedOutput === undefined) {
+          return item;
+        }
+        // Kept as sent: the output's parts (input_image, input_text) stay.
+        if (isApprovedAsSent({ sent: item.output, approved: updatedOutput })) {
           return item;
         }
 

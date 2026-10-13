@@ -47,6 +47,7 @@ import {
   createStreamAccumulatorState,
   extractCommonToolCallArguments,
 } from "@/types";
+import { isApprovedAsSent } from "../utils/approved-as-sent";
 import {
   createOpenAiCodexPassthroughResponsesClient,
   createOpenAiCodexResponsesClient,
@@ -369,6 +370,7 @@ class OpenAiResponsesRequestAdapter
           ...(toolCall?.namespace ? { namespace: toolCall.namespace } : {}),
           arguments: toolCall?.arguments,
           content: item.output,
+          structured: typeof item.output !== "string",
           // Compatible clients may extend tool outputs with a boolean status;
           // native Responses has no is_error field. Do not infer it from output.
           isError: "is_error" in item && item.is_error === true,
@@ -448,6 +450,10 @@ class OpenAiResponsesRequestAdapter
         // hand the model exactly what was withheld.
         const updatedOutput = this.toolResultUpdates[item.call_id];
         if (updatedOutput === undefined) {
+          return item;
+        }
+        // Kept as sent: the output's parts (input_image, input_text) stay.
+        if (isApprovedAsSent({ sent: item.output, approved: updatedOutput })) {
           return item;
         }
 

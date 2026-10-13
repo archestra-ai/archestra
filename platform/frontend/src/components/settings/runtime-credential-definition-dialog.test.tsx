@@ -44,7 +44,7 @@ it.each([
       },
     ],
   },
-])("explains why GitHub user connections are unavailable with $name", async ({
+])("explains why GitHub user credentials are unavailable with $name", async ({
   apps,
 }) => {
   server.use(
@@ -64,7 +64,7 @@ it.each([
   );
   await user.click(screen.getByRole("combobox", { name: "Credential type" }));
   const userConnection = screen.getByRole("option", {
-    name: /GitHub user connection/,
+    name: /GitHub user credential/,
   });
   expect(userConnection).toHaveAttribute("aria-disabled", "true");
   expect(userConnection).toHaveTextContent(/OAuth client ID/);
@@ -102,7 +102,7 @@ it("enables a personal connection after an organization OAuth App is connected",
   );
   await user.click(screen.getByRole("combobox", { name: "Credential type" }));
   await user.click(
-    screen.getByRole("option", { name: /GitHub user connection/ }),
+    screen.getByRole("option", { name: /GitHub user credential/ }),
   );
   expect(
     screen.getByRole("combobox", { name: "Organization GitHub App" }),
@@ -157,7 +157,7 @@ it("creates the guided OpenAPPA GitHub App with its organization identity", asyn
   );
   expect(screen.queryByText("Provided by")).not.toBeInTheDocument();
   expect(
-    screen.queryByText(/GitHub user connections need/),
+    screen.queryByText(/GitHub user credentials need/),
   ).not.toBeInTheDocument();
   await user.type(screen.getByRole("textbox", { name: "App ID" }), "123");
   await user.type(

@@ -18,9 +18,10 @@ import {
 import { parse as parseToml } from "smol-toml";
 import { describe, expect, test } from "vitest";
 import { CODEX_GUARD_CLIENT } from "./guard/clients";
+import { inSingleQuotedHereString } from "./guard/startup-guard.windows";
 import { renderSetupScript } from "./index";
 import { CODEX_HANDOFF_HELPER } from "./payloads/codex-handoff";
-import type { SetupScriptProxySection } from "./types";
+import type { SetupScriptContext, SetupScriptProxySection } from "./types";
 
 const execFileAsync = promisify(execFile);
 const powershellAvailable =
@@ -441,6 +442,425 @@ exit 0
     });
   },
 );
+
+describe.skipIf(!powershellAvailable)(
+  "PowerShell Codex gateway registration",
+  () => {
+    test("approves the guardrail helpers once, under the gateway's own entry", async () => {
+      const root = await mkdtemp(
+        path.join(tmpdir(), "archestra-codex-approvals-powershell-"),
+      );
+      const home = path.join(root, "home");
+      const bin = path.join(root, "bin");
+      const codexHome = path.join(home, ".codex");
+      const setupPath = path.join(root, "setup.ps1");
+      const driverPath = path.join(root, "driver.ps1");
+      const server = createServer((_request, response) => {
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ mcp: "ok", llm: "ok" }));
+      });
+      try {
+        await Promise.all(
+          [bin, codexHome].map((dir) => mkdir(dir, { recursive: true })),
+        );
+        await new Promise<void>((resolve) =>
+          server.listen(0, "127.0.0.1", resolve),
+        );
+        const address = server.address();
+        if (!address || typeof address === "string")
+          throw new Error("Missing HTTP port");
+        const mcp = {
+          serverName: "test_gateway",
+          toolPrefix: "archestra__",
+          url: `http://127.0.0.1:${address.port}/v1/mcp/test-gateway`,
+        };
+        // A config the person already had: it stays as it is.
+        await writeFile(
+          path.join(codexHome, "config.toml"),
+          'model = "gpt-5"\n\n[mcp_servers.docs]\nurl = "https://docs.example.com/mcp"\n',
+        );
+        // Edits config.toml the way the real `codex mcp add` and `remove` do:
+        // add appends the server's table, remove drops it with its sub-tables.
+        await writeFile(
+          path.join(bin, "codex"),
+          `#!/usr/bin/env node
+const fs = require("node:fs");
+const path = require("node:path");
+const [command, action, name, , url] = process.argv.slice(2);
+const file = path.join(process.env.USERPROFILE, ".codex", "config.toml");
+if (command === "mcp" && action === "remove") {
+  let skip = false;
+  const kept = fs.readFileSync(file, "utf8").split(/\\r?\\n/).filter((line) => {
+    if (line.startsWith("[")) skip = line === "[mcp_servers." + name + "]" || line.startsWith("[mcp_servers." + name + ".") || line.startsWith('[mcp_servers."' + name + '".');
+    return !skip;
+  });
+  fs.writeFileSync(file, kept.join("\\n"));
+} else if (command === "mcp" && action === "add") {
+  fs.appendFileSync(file, "\\n[mcp_servers." + name + "]\\nurl = " + JSON.stringify(url) + "\\n");
+} else if (command === "debug") {
+  process.stdout.write(JSON.stringify({ models: [] }));
+}
+`,
+        );
+        await chmod(path.join(bin, "codex"), 0o755);
+        await writeFile(
+          setupPath,
+          renderSetupScript({
+            clientId: "codex",
+            platform: "windows",
+            appName: "Archestra",
+            mcp,
+            proxy: null,
+            skills: null,
+          }),
+        );
+        // A rerun of setup must not define the tables twice.
+        await writeFile(
+          driverPath,
+          `$ErrorActionPreference = 'Stop'
+$setup = Get-Content -Raw $env:ARCHESTRA_TEST_SETUP_PATH
+Invoke-Expression $setup
+Invoke-Expression $setup
+exit 0
+`,
+        );
+        await execFileAsync(
+          "pwsh",
+          ["-NoLogo", "-NoProfile", "-NonInteractive", "-File", driverPath],
+          {
+            cwd: home,
+            env: {
+              HOME: home,
+              USERPROFILE: home,
+              PATH: `${bin}:${process.env.PATH}`,
+              NO_COLOR: "1",
+              ARCHESTRA_TEST_SETUP_PATH: setupPath,
+            },
+            timeout: 30_000,
+          },
+        );
+
+        const config = parseToml(
+          await readFile(path.join(codexHome, "config.toml"), "utf8"),
+        ) as {
+          model: string;
+          mcp_servers: Record<
+            string,
+            { url: string; tools?: Record<string, { approval_mode: string }> }
+          >;
+        };
+        expect(config.model).toBe("gpt-5");
+        expect(config.mcp_servers.docs).toEqual({
+          url: "https://docs.example.com/mcp",
+        });
+        expect(config.mcp_servers[mcp.serverName]).toEqual({
+          url: mcp.url,
+          // The tool runner and other gateway tools keep Codex's question.
+          tools: Object.fromEntries(
+            [
+              "get_remedy_plans",
+              "execute_remedy_plan",
+              "list_peer_messages",
+              "read_peer_message",
+              "yell",
+              "ask_user",
+            ].map((name) => [
+              `${mcp.toolPrefix}${name}`,
+              { approval_mode: "approve" },
+            ]),
+          ),
+        });
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+        await rm(root, { recursive: true, force: true });
+      }
+    });
+  },
+);
+
+describe.skipIf(!powershellAvailable)("PowerShell setup script syntax", () => {
+  test("every rendered Windows setup script parses", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "archestra-ps-parse-"));
+    try {
+      const variants = windowsSetupVariants();
+      const names: string[] = [];
+      for (const [index, variant] of variants.entries()) {
+        names.push(variant.name);
+        await writeFile(
+          path.join(root, `${index}.ps1`),
+          renderSetupScript(variant.ctx),
+        );
+      }
+      const driverPath = path.join(root, "parse.ps1");
+      await writeFile(
+        driverPath,
+        `$out = @{}
+foreach ($f in Get-ChildItem -Path $env:ARCHESTRA_TEST_ROOT -Filter '*.ps1' | Where-Object Name -ne 'parse.ps1') {
+  $errors = $null
+  $null = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$errors)
+  if ($errors.Count -gt 0) { $out[$f.BaseName] = ('line ' + $errors[0].Extent.StartLineNumber + ': ' + $errors[0].Message) }
+}
+$out | ConvertTo-Json -Compress
+`,
+      );
+      const { stdout } = await execFileAsync(
+        "pwsh",
+        ["-NoLogo", "-NoProfile", "-NonInteractive", "-File", driverPath],
+        {
+          env: { ...process.env, ARCHESTRA_TEST_ROOT: root },
+          timeout: 120_000,
+        },
+      );
+      const raw: Record<string, string> = JSON.parse(stdout.trim() || "{}");
+      const failures = Object.entries(raw).map(
+        ([index, error]) => `${names[Number(index)]}: ${error}`,
+      );
+      expect(failures).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 180_000);
+});
+
+describe.skipIf(!powershellAvailable)(
+  "Windows PowerShell 5.1 native argument passing",
+  () => {
+    test("OpenCode primary-providers setup and its guard disconnect run when quotes in native arguments are dropped", async () => {
+      const root = await mkdtemp(path.join(tmpdir(), "archestra-oc-legacy-"));
+      const home = path.join(root, "home");
+      const bin = path.join(root, "bin");
+      const configPath = path.join(
+        home,
+        ".config",
+        "opencode",
+        "opencode.json",
+      );
+      const existing = {
+        model: "local/old",
+        provider: { local: { name: "Local" } },
+      };
+      try {
+        await mkdir(path.dirname(configPath), { recursive: true });
+        await mkdir(bin);
+        await writeFile(configPath, JSON.stringify(existing));
+        await writeFile(
+          path.join(bin, "opencode"),
+          '#!/bin/sh\n[ "$1" = --version ] && echo 1.18.32\nexit 0\n',
+        );
+        await chmod(path.join(bin, "opencode"), 0o755);
+        await writeFile(
+          path.join(root, "setup.ps1"),
+          renderSetupScript({
+            clientId: "opencode",
+            platform: "windows",
+            appName: "Archestra",
+            mcp: {
+              serverName: "prod_gateway",
+              toolPrefix: "archestra__",
+              url: "https://proxy.example.com/v1/mcp/gw",
+            },
+            proxy: {
+              authMode: "primary-providers",
+              provider: "anthropic",
+              providerLabel: "Anthropic",
+              baseUrl: "https://proxy.example.com/v1",
+              url: "https://proxy.example.com/v1/anthropic",
+              proxyName: "default_proxy",
+              virtualKey: "arch_test",
+              virtualKeyName: "Setup",
+              passthroughVirtualKey: null,
+              model: null,
+              primaryProviders: [
+                {
+                  provider: "anthropic",
+                  name: "Anthropic",
+                  models: [
+                    {
+                      id: "claude-test",
+                      name: "Claude",
+                      context: 200000,
+                      output: null,
+                    },
+                  ],
+                },
+              ],
+            },
+            skills: null,
+          }),
+        );
+        // Legacy is how Windows PowerShell 5.1 passes arguments to native
+        // commands: double quotes inside an argument do not reach the program.
+        const driverPath = path.join(root, "driver.ps1");
+        await writeFile(
+          driverPath,
+          `$PSNativeCommandArgumentPassing = 'Legacy'
+& (Join-Path $env:ARCHESTRA_TEST_ROOT 'setup.ps1')
+if ($LASTEXITCODE) { exit $LASTEXITCODE }
+Copy-Item (Join-Path $env:USERPROFILE '.config/opencode/opencode.json') (Join-Path $env:ARCHESTRA_TEST_ROOT 'connected.json')
+$env:ARCHESTRA_GUARD_ACTION = 'disconnect'
+& (Join-Path $env:USERPROFILE '.archestra/opencode-startup-guard.ps1')
+exit $LASTEXITCODE
+`,
+        );
+        await execFileAsync(
+          "pwsh",
+          ["-NoLogo", "-NoProfile", "-NonInteractive", "-File", driverPath],
+          {
+            cwd: home,
+            env: {
+              HOME: home,
+              USERPROFILE: home,
+              XDG_CONFIG_HOME: "",
+              PATH: `${bin}:${process.env.PATH}`,
+              NO_COLOR: "1",
+              ARCHESTRA_TEST_ROOT: root,
+            },
+            timeout: 60_000,
+          },
+        );
+        const connected = JSON.parse(
+          await readFile(path.join(root, "connected.json"), "utf8"),
+        );
+        expect(
+          connected.provider["archestra-anthropic"].models["claude-test"].limit,
+        ).toEqual({ context: 200000, output: 0 });
+        expect(JSON.parse(await readFile(configPath, "utf8"))).toEqual(
+          existing,
+        );
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    }, 90_000);
+  },
+);
+
+describe("Windows startup guard here-strings", () => {
+  test("embedding content with a line starting with '@ fails instead of ending the here-string early", () => {
+    expect(() =>
+      inSingleQuotedHereString("Write-Host 1\n'@\nWrite-Host 2"),
+    ).toThrow("here-string");
+    expect(inSingleQuotedHereString("Write-Host 'a@b'")).toBe(
+      "Write-Host 'a@b'",
+    );
+  });
+
+  // Windows PowerShell 5.1 Select-String reports a missing -Path file even with
+  // -ErrorAction SilentlyContinue, which pwsh cannot reproduce.
+  test("every Select-String in a rendered Windows setup checks that its file exists first", () => {
+    const unguarded: string[] = [];
+    for (const { name, ctx } of windowsSetupVariants()) {
+      for (const line of renderSetupScript(ctx).split("\n")) {
+        for (const [, target] of line.matchAll(
+          /Select-String -Path (\$\w+)/g,
+        )) {
+          if (!line.includes(`(Test-Path ${target}) -and`)) {
+            unguarded.push(`${name}: ${line.trim()}`);
+          }
+        }
+        if (/Select-String -Path [^$]/.test(line)) {
+          unguarded.push(`${name}: ${line.trim()}`);
+        }
+      }
+    }
+    expect([...new Set(unguarded)]).toEqual([]);
+  });
+});
+
+function windowsSetupVariants(): Array<{
+  name: string;
+  ctx: SetupScriptContext;
+}> {
+  const proxy = (
+    provider: "anthropic" | "openai",
+    authMode: "provider-key" | "virtual-key" | "primary-providers",
+    primaryProviders?: SetupScriptProxySection["primaryProviders"],
+  ): SetupScriptProxySection => ({
+    authMode,
+    provider,
+    providerLabel: provider,
+    baseUrl: "https://proxy.example.com/v1",
+    url: `https://proxy.example.com/v1/${provider}`,
+    proxyName: "default_proxy",
+    virtualKey: authMode === "provider-key" ? null : "arch_test",
+    virtualKeyName: authMode === "provider-key" ? null : "Setup",
+    passthroughVirtualKey: authMode === "provider-key" ? "arch_pass" : null,
+    model: null,
+    ...(primaryProviders ? { primaryProviders } : {}),
+  });
+  const catalog = [
+    {
+      provider: "anthropic" as const,
+      name: "Anthropic",
+      models: [
+        { id: "claude-test", name: "Claude", context: 200000, output: null },
+      ],
+    },
+  ];
+  const variants: Array<{ name: string; ctx: SetupScriptContext }> = [];
+  for (const clientId of [
+    "claude-code",
+    "codex",
+    "copilot-cli",
+    "cursor",
+    "opencode",
+  ] as const) {
+    const provider = clientId === "claude-code" ? "anthropic" : "openai";
+    const proxies: Array<[string, SetupScriptProxySection | null]> = [
+      ["no-proxy", null],
+      ["provider-key", proxy(provider, "provider-key")],
+      ["virtual-key", proxy(provider, "virtual-key")],
+      ...(clientId === "opencode"
+        ? ([
+            ["virtual-key-catalog", proxy("openai", "virtual-key", catalog)],
+            [
+              "primary-providers",
+              proxy("anthropic", "primary-providers", catalog),
+            ],
+          ] as Array<[string, SetupScriptProxySection]>)
+        : []),
+    ];
+    for (const [proxyName, proxySection] of proxies) {
+      for (const mcp of [true, false]) {
+        for (const skills of [true, false]) {
+          for (const handoff of [true, false]) {
+            variants.push({
+              name: `${clientId} proxy=${proxyName} mcp=${mcp} skills=${skills} handoff=${handoff}`,
+              ctx: {
+                clientId,
+                platform: "windows",
+                appName: "Archestra",
+                mcp: mcp
+                  ? {
+                      serverName: "prod_gateway",
+                      toolPrefix: "archestra__",
+                      url: "https://proxy.example.com/v1/mcp/gw",
+                    }
+                  : null,
+                proxy: proxySection,
+                skills: skills
+                  ? {
+                      cloneUrl: "https://proxy.example.com/skills/repo.git",
+                      marketplaceName: "acme-skills",
+                    }
+                  : null,
+                runtimeHandoffInstructions: handoff
+                  ? DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS
+                  : null,
+                managedInstructionsSource: mcp
+                  ? {
+                      url: "https://proxy.example.com/api/connection-instructions",
+                      token: "instructions-token",
+                    }
+                  : null,
+              },
+            });
+          }
+        }
+      }
+    }
+  }
+  return variants;
+}
 
 type ClaudeSettings = {
   env: Record<string, unknown>;

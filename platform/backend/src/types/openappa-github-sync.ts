@@ -122,6 +122,18 @@ export const AppaGithubSyncStatusSchema = z.object({
   /** Which host the source lives on; links and wording follow it. */
   provider: GitProviderSchema,
 });
+/**
+ * A held pull, itemized for review: each credential it would hand a battery and
+ * each battery it would remove. Judged against the current policy, as accepting is.
+ */
+export const HeldPullDetailsSchema = z.object({
+  sourceCommit: z.string().nullable(),
+  reasons: z.array(HeldPullReasonSchema),
+  grants: z.array(
+    z.object({ battery: z.string(), variable: z.string(), key: z.string() }),
+  ),
+  droppedBatteries: z.array(z.string()),
+});
 /** What accepting a held pull published, and what it changed to publish it. */
 export const AcceptedHeldPullSchema = z.object({
   contentHash: z.string(),

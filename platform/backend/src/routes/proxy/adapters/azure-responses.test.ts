@@ -133,7 +133,9 @@ describe("azureResponsesAdapterFactory", () => {
       { role: "user", content: "hello from responses" },
       { role: "tool", content: '{"value":1}', toolCalls: [result] },
     ]);
-    expect(adapter.getToolResults()).toEqual([result]);
+    expect(adapter.getToolResults()).toEqual([
+      { ...result, structured: false },
+    ]);
     expect(adapter.getTools()).toEqual([
       {
         name: "read_file",
@@ -165,6 +167,7 @@ describe("azureResponsesAdapterFactory", () => {
         id: "call_missing",
         name: "unknown",
         content: '{"value":1}',
+        structured: false,
         isError: false,
       },
     ]);
@@ -214,7 +217,9 @@ describe("azureResponsesAdapterFactory", () => {
       isError: false,
     };
 
-    expect(adapter.getToolResults()).toEqual([expected]);
+    expect(adapter.getToolResults()).toEqual([
+      { ...expected, structured: false },
+    ]);
     expect(adapter.getMessages()).toEqual([
       { role: "tool", content: "matching tools", toolCalls: [expected] },
     ]);

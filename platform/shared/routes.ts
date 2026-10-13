@@ -114,6 +114,8 @@ export const RouteId = {
   GetInternalMcpCatalog: "getInternalMcpCatalog",
   CreateInternalMcpCatalogItem: "createInternalMcpCatalogItem",
   GetInternalMcpCatalogItem: "getInternalMcpCatalogItem",
+  GetInternalMcpCatalogCredentialPreflight:
+    "getInternalMcpCatalogCredentialPreflight",
   GetInternalMcpCatalogTools: "getInternalMcpCatalogTools",
   GetInternalMcpCatalogToolsBatch: "getInternalMcpCatalogToolsBatch",
   UpdateInternalMcpCatalogItem: "updateInternalMcpCatalogItem",
@@ -864,6 +866,7 @@ export const RouteId = {
   SetOpenappaCredentialBinding: "setOpenappaCredentialBinding",
   GetOpenappaPolicyDeclarations: "getOpenappaPolicyDeclarations",
   AcceptHeldAppaGithubPull: "acceptHeldAppaGithubPull",
+  GetHeldAppaGithubPull: "getHeldAppaGithubPull",
   ConsultOpenappaBatteryHelper: "consultOpenappaBatteryHelper",
   // white-label-ok: operation id for the builtin = "archestra" annotator route, a wire identifier
   AnnotateOpenappaToolWithArchestra: "annotateOpenappaToolWithArchestra",

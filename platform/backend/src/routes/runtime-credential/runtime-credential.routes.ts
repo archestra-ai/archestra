@@ -1,6 +1,13 @@
-import { RouteId } from "@archestra/shared";
+import {
+  ResourceAccessQuerySchema,
+  ResourceOwnerQuerySchema,
+  ResourcePermissionGrantSchema,
+  ResourceSharedWithQuerySchema,
+  RouteId,
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import {
   createRuntimeCredentialDefinition,
   deleteRuntimeCredentialConnection,
@@ -11,6 +18,7 @@ import {
   setRuntimeCredentialConnection,
   updateRuntimeCredentialDefinition,
 } from "@/services/agent-runtime/runtime-credentials";
+import { CredentialAccess } from "@/services/credential-access";
 import { githubUserConnectionManager } from "@/services/github-user-connection";
 import {
   constructResponseSchema,
@@ -36,6 +44,12 @@ const runtimeCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request) => {
       request.auditSkip = true;
+      await CredentialAccess.requireByKey({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        key: request.params.key,
+        action: "use",
+      });
       return githubUserConnectionManager.start({
         organizationId: request.organizationId,
         userId: request.user.id,
@@ -87,16 +101,28 @@ const runtimeCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "List reusable credentials available to platform integrations",
         tags: ["Credentials"],
+        querystring: z.object({
+          access: ResourceAccessQuerySchema,
+          sharedWith: ResourceSharedWithQuerySchema,
+          owner: ResourceOwnerQuerySchema,
+        }),
         response: constructResponseSchema(
           z.array(RuntimeCredentialDefinitionViewSchema),
         ),
       },
     },
-    async (request, reply) =>
+    async ({ user, organizationId, query }, reply) =>
       reply.send(
         await listRuntimeCredentialDefinitions({
-          organizationId: request.organizationId,
-          userId: request.user.id,
+          organizationId,
+          userId: user.id,
+          access: await ResourcePermissionSubjectModel.resolveAccessFilter({
+            userId: user.id,
+            organizationId,
+            relations: query.access,
+            sharedWith: query.sharedWith,
+            ownerIds: query.owner,
+          }),
         }),
       ),
   );
@@ -108,17 +134,24 @@ const runtimeCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.CreateRuntimeCredential,
         description: "Create a credential definition",
         tags: ["Credentials"],
-        body: InsertRuntimeCredentialDefinitionSchema,
+        body: InsertRuntimeCredentialDefinitionSchema.extend({
+          initialGrants: z
+            .array(ResourcePermissionGrantSchema)
+            .max(200)
+            .optional(),
+        }),
         response: constructResponseSchema(
           SelectRuntimeCredentialDefinitionSchema,
         ),
       },
     },
     async (request, reply) => {
+      const { initialGrants, ...definitionInput } = request.body;
       const definition = await createRuntimeCredentialDefinition({
         organizationId: request.organizationId,
         userId: request.user.id,
-        definition: request.body,
+        definition: definitionInput,
+        initialGrants,
       });
       return reply.send(definition);
     },
@@ -135,13 +168,20 @@ const runtimeCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(RuntimeCredentialUsageSchema),
       },
     },
-    async (request, reply) =>
-      reply.send(
+    async (request, reply) => {
+      await CredentialAccess.requireByKey({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        key: request.params.key,
+        action: "read",
+      });
+      return reply.send(
         await getRuntimeCredentialUsage({
           organizationId: request.organizationId,
           key: request.params.key,
         }),
-      ),
+      );
+    },
   );
 
   fastify.patch(
@@ -158,14 +198,21 @@ const runtimeCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ),
       },
     },
-    async (request, reply) =>
-      reply.send(
+    async (request, reply) => {
+      await CredentialAccess.requireByKey({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        key: request.params.key,
+        action: "update",
+      });
+      return reply.send(
         await updateRuntimeCredentialDefinition({
           organizationId: request.organizationId,
           key: request.params.key,
           definition: request.body,
         }),
-      ),
+      );
+    },
   );
 
   fastify.delete(
@@ -182,6 +229,12 @@ const runtimeCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      await CredentialAccess.requireByKey({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        key: request.params.key,
+        action: "delete",
+      });
       await deleteRuntimeCredentialDefinition({
         organizationId: request.organizationId,
         key: request.params.key,
@@ -206,6 +259,12 @@ const runtimeCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       request.auditSkip = true;
+      await CredentialAccess.requireByKey({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        key: request.params.key,
+        action: "use",
+      });
       await setRuntimeCredentialConnection({
         organizationId: request.organizationId,
         userId: request.user.id,
@@ -229,6 +288,8 @@ const runtimeCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      // Ungated on purpose: it removes only the caller's own value, and
+      // someone whose access was revoked must still be able to clear it.
       request.auditBefore = await getRuntimeCredentialConnectionAuditSnapshot({
         organizationId: request.organizationId,
         userId: request.user.id,
@@ -262,6 +323,12 @@ const runtimeCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      await CredentialAccess.requireByKey({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        key: request.params.key,
+        action: "update",
+      });
       const before = await getRuntimeCredentialConnectionAuditSnapshot({
         organizationId: request.organizationId,
         credentialId: request.params.key,
@@ -296,6 +363,12 @@ const runtimeCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
+      await CredentialAccess.requireByKey({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        key: request.params.key,
+        action: "update",
+      });
       request.auditBefore = await getRuntimeCredentialConnectionAuditSnapshot({
         organizationId: request.organizationId,
         credentialId: request.params.key,

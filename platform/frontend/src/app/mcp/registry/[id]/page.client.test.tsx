@@ -57,6 +57,7 @@ const {
 });
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  useMcpCatalogCredentialPreflight: () => ({ data: [] }),
   REMOTE_SERVER_URL_NOT_ALLOWED_CODE: "remote_server_url_not_allowed",
   CATALOG_NAME_CONFLICT_CODE: "catalog_name_conflict",
   getCatalogMutationErrorCode: () => undefined,

@@ -1,4 +1,6 @@
+import { eq } from "drizzle-orm";
 import { vi } from "vitest";
+import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { ConnectionSetupModel, VirtualApiKeyModel } from "@/models";
@@ -65,15 +67,26 @@ describe("POST /api/connection-setups", () => {
     makeSecret,
   }) => {
     const secret = await makeSecret();
-    await makeLlmProviderApiKey(organizationId, secret.id, {
-      provider: "anthropic",
-      isPrimary: true,
-    });
-    await makeLlmProviderApiKey(organizationId, secret.id, {
-      provider: "vllm",
-      isPrimary: true,
-      baseUrl: "https://models.example/v1",
-    });
+    for (const [provider, extra] of [
+      ["anthropic", {}],
+      ["vllm", { baseUrl: "https://models.example/v1" }],
+    ] as const) {
+      const key = await makeLlmProviderApiKey(organizationId, secret.id, {
+        provider,
+        isPrimary: true,
+        ...extra,
+      });
+      const model = await ModelModel.create({
+        provider,
+        modelId: `${provider}-model`,
+        externalId: `${provider}-model`,
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+      });
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+        model.id,
+      ]);
+    }
     const response = await app.inject({
       method: "POST",
       url: "/api/connection-setups",
@@ -105,6 +118,115 @@ describe("POST /api/connection-setups", () => {
     expect(script.body).toContain("archestra-anthropic");
     expect(script.body).toContain("archestra-vllm");
     expect(script.body).toContain("opencode-primary.key");
+  });
+
+  test("re-running OpenCode primary setup drops a Microsoft 365 Copilot mapping left by an older key", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    const secret = await makeSecret();
+    const anthropic = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "anthropic",
+      isPrimary: true,
+    });
+    const copilot = await makeLlmProviderApiKey(organizationId, secret.id, {
+      provider: "microsoft-365-copilot",
+      isPrimary: true,
+    });
+    const model = await ModelModel.create({
+      provider: "anthropic",
+      modelId: "claude-test",
+      externalId: "claude-test",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(anthropic.id, [
+      model.id,
+    ]);
+    // The key an earlier release created, still mapped to both providers.
+    const { virtualKey } = await VirtualApiKeyModel.create({
+      organizationId,
+      authorId: user.id,
+      scope: "personal",
+      name: "OpenCode primary providers",
+      providerApiKeys: [
+        { provider: "anthropic", providerApiKeyId: anthropic.id },
+        { provider: "microsoft-365-copilot", providerApiKeyId: copilot.id },
+      ],
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/connection-setups",
+      payload: {
+        clientId: "opencode",
+        baseUrl: "http://localhost:9000/v1",
+        proxyAuth: "primary-providers",
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const rawToken = response
+      .json()
+      .command.match(/script\/([^']+)'/)?.[1] as string;
+    const setup = await ConnectionSetupModel.findByToken(rawToken);
+    expect(setup?.virtualApiKeyId).toBe(virtualKey.id);
+    expect(
+      (await VirtualApiKeyModel.getProviderApiKeys(virtualKey.id)).map(
+        (key) => key.provider,
+      ),
+    ).toEqual(["anthropic"]);
+    const script = await app.inject({
+      method: "GET",
+      url: `/api/connection-setups/script/${rawToken}`,
+    });
+    expect(script.statusCode, script.body).toBe(200);
+    expect(script.body).toContain("archestra-anthropic");
+    expect(script.body).not.toContain("microsoft-365-copilot");
+  });
+
+  test("OpenCode setup creation fails when no primary provider has a tool-capable model", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    const key = await makeLlmProviderApiKey(
+      organizationId,
+      (await makeSecret()).id,
+      { provider: "anthropic", isPrimary: true },
+    );
+    const model = await ModelModel.create({
+      provider: "anthropic",
+      modelId: "claude-no-tools",
+      externalId: "claude-no-tools",
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: false,
+    });
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+      model.id,
+    ]);
+    for (const payload of [
+      { proxyAuth: "primary-providers" },
+      { proxyAuth: "virtual-key", provider: "anthropic" },
+    ]) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/connection-setups",
+        payload: {
+          clientId: "opencode",
+          baseUrl: "http://localhost:9000/v1",
+          ...payload,
+        },
+      });
+      expect(response.statusCode, response.body).toBe(400);
+      expect(response.json().error.message).toContain(
+        "No model from the selected providers can run in OpenCode",
+      );
+    }
+    expect(
+      await db
+        .select()
+        .from(schema.connectionSetupsTable)
+        .where(eq(schema.connectionSetupsTable.organizationId, organizationId)),
+    ).toEqual([]);
   });
 
   test("primary routing is OpenCode-only and requires virtual-key creation permission", async () => {

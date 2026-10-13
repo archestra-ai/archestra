@@ -578,15 +578,20 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         });
       }
       const askUser = binding.request.tools?.askUser;
+      // Name the native question tool only where asNativeQuestion would hand
+      // ask_user to it; otherwise the model calls a tool that cannot return
+      // the user's answer and then asks again in prose.
       const nativeQuestion =
         !binding.runtimeSessionId &&
         binding.adapter?.nativeQuestion &&
+        binding.adapter.nativeQuestion.isAvailable?.(binding.requestHeaders) !==
+          false &&
         declaresNativeQuestion(binding, binding.adapter.nativeQuestion.toolName)
           ? binding.adapter.nativeQuestion.toolName
           : undefined;
       const askUserTool = askUser?.name;
       if (askUserTool || nativeQuestion) {
-        appendQuestionContinuation({
+        insertRequestGuidance({
           request: context.request,
           interactionType: context.interactionType,
           guidance: buildElicitationMandateInstruction({
@@ -5025,10 +5030,9 @@ function requestCarriesInstruction(params: {
  * Adds guidance that holds for the whole request before the conversation,
  * next to the client's own developer instructions. Placed after the user's
  * message, it made models served to Codex answer a greeting twice, as
- * commentary and again as the final answer, and Codex showed both. The
- * question guidance and turn-specific continuations still go last through
- * appendQuestionContinuation: placed earlier, the question guidance was
- * followed less often.
+ * commentary and again as the final answer, and Codex showed both.
+ * Turn-specific continuations, which follow a tool result, still go last
+ * through appendQuestionContinuation.
  */
 function insertRequestGuidance(params: {
   request: unknown;

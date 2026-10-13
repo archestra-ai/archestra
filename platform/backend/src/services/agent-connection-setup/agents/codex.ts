@@ -57,7 +57,7 @@ function codexAttributionHeaderLines(proxy: SetupScriptProxySection): string {
 }
 
 const CODEX_HELPER_APPROVALS_NOTICE =
-  "Codex runs the guardrail helpers without asking each time. Required human reviews still apply.";
+  "Codex can call the guardrail helpers without asking each time. Required human reviews still apply.";
 
 /**
  * Codex asks before each call of an MCP tool that config.toml does not

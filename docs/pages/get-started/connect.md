@@ -2,7 +2,7 @@
 title: Connect Your Agents
 description: Connect your AI client to Archestra's tools, models, and shared skills
 order: 2
-lastUpdated: 2026-10-09
+lastUpdated: 2026-10-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -72,8 +72,8 @@ Some clients need one more step. The installer prints any other steps under **Go
 
 - **Launch check:** setup adds a block to your shell profile. Each time Claude Code, Codex, Copilot CLI, or OpenCode starts, it checks the connection. Press `C` there to disconnect. To turn it off, set `ARCHESTRA_CLAUDE_GUARD=0`, `ARCHESTRA_CODEX_GUARD=0`, `ARCHESTRA_COPILOT_GUARD=0`, or `ARCHESTRA_OPENCODE_GUARD=0`.
 - **Backups:** setup saves each config file it changes as a `.archestra-backup` file next to the original.
-- **Guardrails tools in Codex:** setup lets Codex run the Guardrails tools, such as the one that submits a call for approval, without asking each time. A call that needs your approval still shows you the approval form. To be asked again, delete the `tools` tables under the gateway's entry in `~/.codex/config.toml`.
-- **Setup reference:** when an agent runs the installer in its own conversation, Guardrails do not apply to that conversation for ten minutes, so the agent can finish the setup. The reference the installer prints marks that conversation. Every other session follows your Guardrails policy from its first request.
+- **Guardrail helpers in Codex:** setup lets Codex run the guardrail helper tools, such as [`ask_user`](/docs/reference/archestra-mcp-server#ask_user) and [`yell`](/docs/reference/archestra-mcp-server#yell), without a prompt each time. A call that needs your approval still shows the approval form. To get the prompts back, delete the `tools` tables under the gateway's entry in `~/.codex/config.toml`.
+- **Setup reference:** if an agent runs the installer, Guardrails do not apply to that agent's conversation for ten minutes, so it can finish the setup. The setup reference the installer prints marks that conversation. Every other session follows your Guardrails policy from its first request.
 - **Setup failed or expired:** run it again. Approval requests expire after ten minutes. Only approve a request you started.
 
 **Next:** [See it work](/docs/get-started/see-it-work).

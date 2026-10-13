@@ -12,12 +12,17 @@ import { cn } from "@/lib/utils/tailwind";
 export function AdvancedSection({
   children,
   className,
+  defaultOpen,
 }: {
   children: ReactNode;
   className?: string;
+  defaultOpen?: boolean;
 }) {
   return (
-    <Collapsible className={cn("border-t pt-3", className)}>
+    <Collapsible
+      defaultOpen={defaultOpen}
+      className={cn("border-t pt-3", className)}
+    >
       <CollapsibleTrigger
         type="button"
         className="group flex w-full cursor-pointer items-center justify-between"

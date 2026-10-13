@@ -134,6 +134,49 @@ describe("composing an organization's declarations", () => {
     );
   });
 
+  test("refreshes legacy effective policy limits without changing an authored cap", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const userId = (await makeUser()).id;
+    for (const limit of [undefined, 4096]) {
+      const organizationId = (await makeOrganization()).id;
+      await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+      const content =
+        "[policy]\nversion = 2\n" +
+        (limit === undefined ? "" : `[externals]\nmax_body_bytes = ${limit}\n`);
+      await declare({ organizationId, userId, content });
+      const initial =
+        await openappaBatteriesService.getEffectivePolicy(organizationId);
+      const legacyContent =
+        limit === undefined
+          ? `${content}[externals]\nmax_body_bytes = 65536\n`
+          : content;
+      await OpenAppaEffectivePolicyModel.save({
+        organizationId,
+        expected: initial,
+        values: {
+          content: legacyContent,
+          contentHash: createHash("sha256").update(legacyContent).digest("hex"),
+          rootRevision: initial.rootRevision,
+          installFingerprint: initial.installFingerprint.replace(/^v\d+:/, ""),
+          error: null,
+        },
+      });
+
+      const refreshed =
+        await openappaBatteriesService.getEffectivePolicy(organizationId);
+      expect(refreshed.lastError).toBeNull();
+      if (limit === undefined)
+        expect(refreshed.content).not.toContain("max_body_bytes");
+      else expect(refreshed.content).toContain(`max_body_bytes = ${limit}`);
+      expect(await openappaBatteriesService.recompile(organizationId)).toEqual(
+        refreshed,
+      );
+    }
+  });
+
   test("a recompose derives one row per bound catalog and keeps its id across recomposes", async ({
     makeOrganization,
     makeUser,

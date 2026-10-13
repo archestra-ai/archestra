@@ -382,6 +382,8 @@ export const SelectOrganizationSchema = InternalSelectOrganizationSchema.omit({
   presetEntityNamePlural: true,
   presetEntityDefaultLabel: true,
   presetEntityDefaultValidationRegex: true,
+  // Superseded by connectionClientProviderKeys; retained in DB only.
+  connectionDefaultProviderKeys: true,
 });
 export const InsertOrganizationSchema = createInsertSchema(
   schema.organizationsTable,
@@ -393,6 +395,7 @@ export const InsertOrganizationSchema = createInsertSchema(
   presetEntityNamePlural: true,
   presetEntityDefaultLabel: true,
   presetEntityDefaultValidationRegex: true,
+  connectionDefaultProviderKeys: true,
 });
 /**
  * The white-label app name is not only shown in the UI: it is substituted into

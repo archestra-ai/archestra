@@ -35,6 +35,7 @@ const {
   useMcpServers,
   useMcpDeploymentStatuses,
   reauthenticateMutateAsync,
+  deleteMutateAsync,
   stubs,
 } = vi.hoisted(() => {
   const quiet = () => ({
@@ -52,11 +53,13 @@ const {
     useMcpServers: vi.fn(),
     useMcpDeploymentStatuses: vi.fn(),
     reauthenticateMutateAsync: vi.fn(),
+    deleteMutateAsync: vi.fn(),
     stubs: stubbed,
   };
 });
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  useMcpCatalogCredentialPreflight: () => ({ data: [] }),
   REMOTE_SERVER_URL_NOT_ALLOWED_CODE: "remote_server_url_not_allowed",
   CATALOG_NAME_CONFLICT_CODE: "catalog_name_conflict",
   getCatalogMutationErrorCode: () => undefined,
@@ -112,6 +115,10 @@ vi.mock("@/lib/mcp/mcp-server.query", () =>
         mutateAsync: reauthenticateMutateAsync,
         isPending: false,
       }),
+      useDeleteMcpServer: () => ({
+        mutateAsync: deleteMutateAsync,
+        isPending: false,
+      }),
     },
   ),
 );
@@ -129,6 +136,7 @@ vi.mock("@/lib/auth/identity-provider-read.query", () => ({
 }));
 vi.mock("../_parts/mcp-server-agent-usage", () => ({
   deriveAgentUsage: () => ({ agents: [], count: 0 }),
+  agentOwnerLabel: () => null,
   McpServerAgentUsage: () => null,
 }));
 
@@ -246,6 +254,7 @@ describe("McpCatalogItemDetailPage overview", () => {
           serverType: "local",
           ownerId: "u1",
           teamId: null,
+          canUseCredential: true,
           createdAt: "2026-08-02T10:00:00.000Z",
         },
       ],
@@ -296,6 +305,16 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(overview.getByText(/Single-tenant/)).toBeInTheDocument();
     expect(overview.getByText("stdio")).toBeInTheDocument();
     expect(overview.queryByText("Generated")).toBeNull();
+  });
+
+  it("labels a server with no transport set as stdio, which is what it runs", () => {
+    renderPage({
+      localConfig: { ...localItem.localConfig, transportType: undefined },
+    });
+
+    const overview = section("Overview");
+    expect(overview.getByText("stdio")).toBeInTheDocument();
+    expect(overview.queryByText(/Streamable HTTP/)).toBeNull();
   });
 
   it("says how callers authenticate, and never shows a secret's value", () => {
@@ -521,6 +540,7 @@ describe("McpCatalogItemDetailPage overview", () => {
           ownerEmail: "admin@example.com",
           teamId: null,
           scope: "org",
+          canUseCredential: true,
           secretStorageType: "none",
           createdAt: "2026-08-02T10:00:00.000Z",
           assignedAgents: [],
@@ -594,6 +614,66 @@ describe("McpCatalogItemDetailPage overview", () => {
       "/mcp/registry/cat-1?tab=credentials",
       { scroll: false },
     );
+  });
+
+  it("confirms revoking an organization connection against the agents it affects", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("tab=credentials") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    const agent = { agentType: "agent", ownerId: null, ownerEmail: null };
+    useMcpServers.mockReturnValue({
+      data: [
+        {
+          id: "srv-org",
+          catalogId: "cat-1",
+          name: "internal-tools",
+          serverType: "remote",
+          ownerId: "u1",
+          ownerEmail: "admin@example.com",
+          teamId: null,
+          scope: "org",
+          secretStorageType: "none",
+          createdAt: "2026-08-02T10:00:00.000Z",
+          // Every caller may resolve to an org connection, so unpinned agents
+          // count as affected too.
+          assignedAgents: [
+            {
+              ...agent,
+              id: "a1",
+              name: "Sales Agent",
+              scope: "org",
+              pinned: false,
+            },
+            {
+              ...agent,
+              id: "a2",
+              name: "Ops Gateway",
+              scope: "org",
+              pinned: true,
+            },
+          ],
+        },
+      ],
+    });
+    renderPage({ serverType: "remote", localConfig: null });
+
+    const row = screen.getByRole("row", { name: /Organization/ });
+    await user.click(within(row).getByRole("button", { name: "Revoke" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(deleteMutateAsync).not.toHaveBeenCalled();
+    expect(dialog).toHaveTextContent(
+      "removes the organization-wide connection for everyone",
+    );
+    expect(dialog).toHaveTextContent("Used by 2 agents");
+    await user.click(within(dialog).getByRole("button", { name: "Uninstall" }));
+    expect(deleteMutateAsync).toHaveBeenCalledWith({
+      id: "srv-org",
+      name: "internal-tools",
+    });
   });
 
   it("reports the live fault, not the one the reader silenced", () => {
@@ -678,5 +758,13 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(screen.getByText("Built-in")).toBeInTheDocument();
     expect(screen.queryByText("Not installed")).toBeNull();
     expect(screen.queryByRole("button", { name: "Overview" })).toBeNull();
+  });
+
+  it("gives a built-in server an Overview with something in it", () => {
+    renderPage({ serverType: "builtin", localConfig: null, toolCount: 12 });
+
+    const overview = section("Overview");
+    expect(overview.getByText("Built into Archestra")).toBeInTheDocument();
+    expect(overview.getByText("12 available")).toBeInTheDocument();
   });
 });

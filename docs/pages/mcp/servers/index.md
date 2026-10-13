@@ -40,6 +40,8 @@ Open the registry and sort by **Action required**. Each broken server says what 
 
 Waiting on someone else to fix one? Click **Dismiss** to hide it for you only.
 
+A teammate's sign-in expired but yours works? You are not asked to sign in again. Admins see a count of those connections instead.
+
 <span id="finding-servers"></span>
 
 ## What to Know

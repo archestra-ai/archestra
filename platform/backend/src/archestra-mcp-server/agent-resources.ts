@@ -36,6 +36,7 @@ import { getAgentActivationSkills } from "@/services/agent-activation-skills";
 import {
   assertAgentModelSelectionAvailable,
   assertAgentRuntimeModelCompatibility,
+  assertCanBindRuntimeCredentials,
   requireAgentRuntimePermission,
 } from "@/services/agent-runtime/agent-config-validation";
 import { resolveDefaultEnvironmentForNewResource } from "@/services/environments/environment";
@@ -924,6 +925,12 @@ async function resolveRuntimeAndModelForWrite(params: {
     agentType: params.agentType,
     runtime,
     isAdmin: params.isAgentAdmin,
+  });
+  await assertCanBindRuntimeCredentials({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    previous: existing?.runtime,
+    next: runtime,
   });
 
   const merged = {

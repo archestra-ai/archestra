@@ -32,6 +32,10 @@ export const ScopedResourceSchema = z.enum([
   // to manage, so it is scoped by id like the rest rather than being
   // organization-wide.
   "serviceAccount",
+  // A saved credential: a secret, a GitHub App, or a GitHub user credential.
+  // Like a service account the organization owns it; who may see, connect,
+  // change or delete one is a grant on it, or at \`*\` for every credential.
+  "credential",
   // Authority over a whole class of thing, with no object to sit on. These
   // replace the `admin` role actions that let someone read rows they did not
   // create. They are granted at `*` and nowhere else, so they appear on the
@@ -96,6 +100,15 @@ export type PermissionSubject = z.infer<typeof PermissionSubjectSchema>;
 export type ResourcePermissionGrant = z.infer<
   typeof ResourcePermissionGrantSchema
 >;
+
+/**
+ * Who a new credential reaches when its creator names nobody: everyone in the
+ * organization can see it and connect or bind its value. Remove the grant on
+ * a credential to keep it to the people named instead.
+ */
+export const DEFAULT_CREDENTIAL_GRANTS: ResourcePermissionGrant[] = [
+  { subject: { type: "organization", id: "*" }, actions: ["read", "use"] },
+];
 
 /**
  * `internal_code` of a permissions save refused because afterwards nobody
@@ -173,6 +186,32 @@ export function hasScopedPermission(params: {
       grant.resource === params.required.resource &&
       grant.action === params.required.action &&
       (grant.scope === "*" || grant.scope === params.required.scope),
+  );
+}
+
+/**
+ * Drops each single-object grant that a `*` grant for the same organization,
+ * resource and action already covers, so {@link hasScopedPermission} answers
+ * every check the same. An admin's list is mostly such rows: every object they
+ * created carries its own grant next to their organization-wide one.
+ *
+ * Sharing one chat is the exception: a `*` grant on conversations is project
+ * oversight and never manages a single chat's sharing, so those rows stay.
+ */
+export function withoutWildcardCoveredGrants<T extends ScopedPermission>(
+  grants: readonly T[],
+): T[] {
+  const key = (grant: ScopedPermission) =>
+    `${grant.organizationId}:${grant.resource}:${grant.action}`;
+  const wildcards = new Set(
+    grants.filter((grant) => grant.scope === "*").map(key),
+  );
+  return grants.filter(
+    (grant) =>
+      grant.scope === "*" ||
+      (grant.resource === "conversation" &&
+        grant.action === "manage-permissions") ||
+      !wildcards.has(key(grant)),
   );
 }
 

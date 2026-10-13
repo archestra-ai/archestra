@@ -2,6 +2,7 @@
 
 import { Copy, SquareTerminal } from "lucide-react";
 import {
+  type ReactNode,
   type SyntheticEvent,
   useCallback,
   useEffect,
@@ -89,6 +90,11 @@ interface ExecTerminalProps {
   /** False while the terminal is hidden, so a background tab holds no session. */
   isActive: boolean;
   title?: string;
+  /**
+   * Shown on the left of the "Focus terminal" row in place of `title`, so a
+   * caller's status line shares that row instead of stacking above it.
+   */
+  toolbarStart?: ReactNode;
   /** Heading for the copyable equivalent command, when the session reports one. */
   manualCommandTitle?: string;
   /** Whether to render the equivalent command below the terminal. */
@@ -117,6 +123,7 @@ export function ExecTerminal({
   claudeMouseWorkaround = false,
   isActive,
   title = "Interactive Shell",
+  toolbarStart,
   manualCommandTitle = "Manual Command",
   showManualCommand = true,
   disconnectedLabel = "Session terminated",
@@ -490,7 +497,13 @@ export function ExecTerminal({
     <div className="flex flex-col gap-4 flex-1 min-h-0">
       <div className="flex flex-col gap-2 flex-1 min-h-0">
         <div className="flex items-center justify-between gap-3 flex-shrink-0">
-          {title ? <h3 className="text-sm font-semibold">{title}</h3> : <div />}
+          {toolbarStart ? (
+            <div className="min-w-0 flex-1">{toolbarStart}</div>
+          ) : title ? (
+            <h3 className="text-sm font-semibold">{title}</h3>
+          ) : (
+            <div />
+          )}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button

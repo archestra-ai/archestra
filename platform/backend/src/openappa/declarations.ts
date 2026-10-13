@@ -157,8 +157,8 @@ class OpenAppaDeclarations {
     process.env[OPENAPPA_BRIDGE_TOKEN_ENV] = this.bridgeToken;
     process.env[OPENAPPA_ARCHESTRA_ANNOTATOR_URL_ENV] =
       `http://127.0.0.1:${config.api.port}${OPENAPPA_ARCHESTRA_ANNOTATOR_PATH}`;
-    // The host sets every hosted policy's body size limit to the proxy's own,
-    // so a tool result the proxy accepted is never dropped by that cap.
+    // Default for an omitted `externals.max_body_bytes`. An explicit policy
+    // value is applied first and is not overwritten.
     process.env[OPENAPPA_MAX_BODY_BYTES_ENV] = String(config.api.bodyLimit);
     return OPENAPPA_BRIDGE_TOKEN_ENV;
   }

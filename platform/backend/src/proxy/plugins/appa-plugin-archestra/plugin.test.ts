@@ -446,6 +446,166 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
+  describe("guidance on a provider-thread continue", () => {
+    const FIXED = "The organization's guardrails policy can block a tool call";
+    const PER_TURN = [
+      "The platform could not read the answer to the last approval question",
+      "The policy needs the user's approval for the last execute_remedy_plan result.",
+      "The ruling above offers a remedy plan for the blocked call.",
+      "Question tools collect the user's decisions.",
+    ];
+    type Pending = {
+      unreadNativeAnswerOfferIds: string[];
+      pendingHitlReviewOfferIds: string[];
+      requiresRemedyContinuation: boolean;
+      requiresQuestionContinuation: boolean;
+      threadContinue: boolean;
+    };
+
+    /** One governed request with every kind of guidance pending. */
+    async function guided(params: {
+      organizationId: string;
+      thread: "create" | "continue";
+      pending: boolean;
+      /** The newest user turn arrives without content. */
+      noContent?: boolean;
+    }) {
+      const plugin = new AppaPluginArchestra([]);
+      const context = requestContext({
+        sessionId: `guidance-${params.thread}-${params.pending}`,
+        organizationId: params.organizationId,
+      });
+      const trusted = trustedOf(context);
+      trusted.thread = params.thread;
+      trusted.request = {
+        tools: {
+          control: { name: "archestra__execute_remedy_plan" },
+          notice: { name: "archestra__get_remedy_plans" },
+          askUser: { name: "archestra__ask_user" },
+          platformToolNames: new Set(),
+          namespaces: new Map(),
+        },
+        customTools: new Set(),
+        declaredTools: [{ name: "archestra__execute_remedy_plan" }],
+        session: {},
+      };
+      await plugin.onSessionInit(context);
+      const binding = (
+        plugin as unknown as { bindings: Map<object, Pending> }
+      ).bindings.get(context.resources);
+      if (params.pending && binding) {
+        binding.unreadNativeAnswerOfferIds = ["offer-2"];
+        binding.pendingHitlReviewOfferIds = ["offer-1"];
+        binding.requiresRemedyContinuation = true;
+        binding.requiresQuestionContinuation = true;
+      }
+      const system = [{ type: "text", text: "client system" }];
+      const request = {
+        system,
+        messages: [
+          params.noContent
+            ? { role: "user" }
+            : {
+                role: "user",
+                content: [
+                  {
+                    type: "tool_result",
+                    tool_use_id: "toolu_1",
+                    content: "done",
+                  },
+                ],
+              },
+        ],
+      };
+      await plugin.onBeforeModel({ ...context, request });
+      await plugin.onCleanup(context);
+      return {
+        binding,
+        system: JSON.stringify(request.system),
+        turn: JSON.stringify(request.messages.at(-1)),
+        systemUntouched: request.system === system && system.length === 1,
+      };
+    }
+
+    test("a continue puts per-turn guidance in the new user turn, not in system, and skips fixed guidance", async ({
+      makeOrganization,
+    }) => {
+      config.openappa.enabled = true;
+      const { id } = await makeOrganization();
+
+      const result = await guided({
+        organizationId: id,
+        thread: "continue",
+        pending: true,
+      });
+
+      expect(result.binding?.threadContinue).toBe(true);
+      expect(result.systemUntouched).toBe(true);
+      for (const text of PER_TURN) {
+        expect(result.turn).toContain(text);
+        expect(result.system).not.toContain(text);
+      }
+      expect(result.turn).not.toContain(FIXED);
+      expect(result.system).not.toContain(FIXED);
+    });
+
+    test("a continue whose newest user turn has no content still gets per-turn guidance", async ({
+      makeOrganization,
+    }) => {
+      config.openappa.enabled = true;
+      const { id } = await makeOrganization();
+
+      const result = await guided({
+        organizationId: id,
+        thread: "continue",
+        pending: true,
+        noContent: true,
+      });
+
+      for (const text of PER_TURN) expect(result.turn).toContain(text);
+      expect(result.systemUntouched).toBe(true);
+    });
+
+    test("a later continue with nothing pending adds nothing", async ({
+      makeOrganization,
+    }) => {
+      config.openappa.enabled = true;
+      const { id } = await makeOrganization();
+
+      const result = await guided({
+        organizationId: id,
+        thread: "continue",
+        pending: false,
+      });
+
+      expect(result.systemUntouched).toBe(true);
+      for (const text of [...PER_TURN, FIXED]) {
+        expect(result.turn).not.toContain(text);
+        expect(result.system).not.toContain(text);
+      }
+    });
+
+    test("a create still puts the guidance in system", async ({
+      makeOrganization,
+    }) => {
+      config.openappa.enabled = true;
+      const { id } = await makeOrganization();
+
+      const result = await guided({
+        organizationId: id,
+        thread: "create",
+        pending: true,
+      });
+
+      expect(result.binding?.threadContinue).toBe(false);
+      expect(result.system).toContain(FIXED);
+      for (const text of PER_TURN) {
+        expect(result.system).toContain(text);
+        expect(result.turn).not.toContain(text);
+      }
+    });
+  });
+
   test("forces Codex to execute an offered remedy instead of asking in prose", async ({
     makeOrganization,
   }) => {
@@ -1750,7 +1910,7 @@ describe("asking through the client's own question tool", () => {
       headers: { "user-agent": "claude-code/1" },
       nativeName: "AskUserQuestion",
       answer: JSON.stringify(
-        'Your questions have been answered: "Approve archestra__whoami?"="Approve" selected preview:\nApprove. You can now continue with these answers in mind.',
+        'Your questions have been answered: "Canonical HITL review."="Approve". You can now continue with these answers in mind.',
       ),
       interactionType: "anthropic:messages" as const,
       provider: "anthropic" as const,
@@ -1762,7 +1922,7 @@ describe("asking through the client's own question tool", () => {
       headers: { "user-agent": "claude-code/1" },
       nativeName: "AskUserQuestion",
       answer: JSON.stringify(
-        'Your questions have been answered: "Approve archestra__whoami?"="Deny" selected preview:\nDeny. You can now continue with these answers in mind.',
+        'Your questions have been answered: "Canonical HITL review."="Deny". You can now continue with these answers in mind.',
       ),
       interactionType: "anthropic:messages" as const,
       provider: "anthropic" as const,
@@ -1914,22 +2074,20 @@ describe("asking through the client's own question tool", () => {
       expect(question.name).toBe(nativeName);
       expect(question.namespace).toBe("");
       if (client === "Claude Code") {
-        // Claude Code asks the short question and previews the reviewed call.
+        // Claude Code does not depend on a preview that it may withhold.
         expect(JSON.parse(question.arguments as string)).toEqual({
           questions: [
             {
-              question: "Approve archestra__whoami?",
+              question: "Canonical HITL review.",
               header: "Approval",
               options: [
                 {
                   label: "Approve",
                   description: "Allow this exact tool call.",
-                  preview: "Approve",
                 },
                 {
                   label: "Deny",
                   description: "Keep this tool call blocked.",
-                  preview: "Deny",
                 },
               ],
               multiSelect: false,
@@ -2290,7 +2448,7 @@ describe("asking through the client's own question tool", () => {
       // An answer with the user's note. The selection it repeats is not a
       // submitted choice, and the wording is not one the adapter reads.
       answer: JSON.stringify(
-        'The user answered: "Approve archestra__whoami?"="Approve" selected preview:\nApprove notes: only once. Read the answers carefully and follow what they actually say.',
+        'The user answered: "Canonical HITL review."="Approve" notes: only once. Read the answers carefully and follow what they actually say.',
       ),
       interactionType: "anthropic:messages" as const,
       provider: "anthropic" as const,
@@ -2815,7 +2973,8 @@ describe("rendering runtime text for this client", () => {
       const message = (outcome as { refusal: { contentMessage: string } })
         .refusal.contentMessage;
       expect(message).toContain("[appa] Refused: tool builtin:exec");
-      expect(message).toContain("declared no tools");
+      expect(message).toContain("This request listed no tools");
+      expect(message).not.toContain("This client");
       expect(message).toContain("code_mode_host = false");
       const reports = await OpenAppaYellModel.list({
         organizationId,
@@ -3688,6 +3847,76 @@ describe("rendering runtime text for this client", () => {
       ]);
     } finally {
       evaluateToolCalls.mockRestore();
+    }
+  });
+
+  test("delivers a denial of arguments that are not JSON as a notice, and keeps the rest of the batch", async () => {
+    // Streamed tool input can end as text that is not JSON. The runtime denies
+    // that call before evaluation; its ruling must reach the client as a
+    // notice instead of failing the whole response.
+    const plugin = new AppaPluginArchestra([]);
+    const context = requestContext({ sessionId: "malformed-arguments" });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: undefined,
+        platformToolNames: new Set(),
+        namespaces: new Map(),
+      },
+      customTools: new Set(),
+    };
+    const ruling =
+      "The tool call arguments are not valid JSON, possibly incomplete. Reissue the call with complete arguments.";
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async () => [
+        { kind: "deny" as const, feedback: ruling },
+        { kind: "allow" as const },
+      ]);
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "ask-1",
+            name: "archestra__ask_user",
+            arguments: '{"question":"Pick one',
+          },
+          {
+            id: "ask-2",
+            name: "archestra__ask_user",
+            arguments: '{"question":"Pick two"}',
+          },
+        ],
+      });
+      if (outcome?.decision !== "allow") throw new Error("expected a notice");
+      expect(outcome.toolCalls).toHaveLength(2);
+      expect(outcome.toolCalls[0]).toMatchObject({
+        id: "ask-1",
+        name: "archestra__get_remedy_plans",
+      });
+      expect(JSON.parse(String(outcome.toolCalls[0].arguments))).toEqual({
+        tool: "archestra__ask_user",
+        arguments: {},
+        ruling,
+        notice: { v: 1, call_id: "ask-1" },
+      });
+      expect(outcome.toolCalls[1]).toMatchObject({
+        id: "ask-2",
+        name: "archestra__ask_user",
+        arguments: '{"question":"Pick two"}',
+      });
+      expect(outcome.blocked).toEqual([
+        { id: "ask-1", name: "archestra__ask_user", reason: ruling },
+      ]);
+    } finally {
+      evaluateToolCalls.mockRestore();
+      await plugin.onCleanup(context);
     }
   });
 

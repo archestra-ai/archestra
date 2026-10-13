@@ -315,6 +315,13 @@ const organizationsTable = pgTable("organization", {
   connectionClientProviderKeys: jsonb(
     "connection_client_provider_keys",
   ).$type<ConnectionClientProviderKeys>(),
+  /**
+   * @deprecated Superseded by `connectionClientProviderKeys`, which a migration
+   * backfilled from it. Retained so app versions still reading it keep working
+   * through a rolling deploy; no longer read or written. Drop in a later
+   * release.
+   */
+  connectionDefaultProviderKeys: jsonb("connection_default_provider_keys"),
 
   /**
    * When false, /connection does not offer installing shared skills, and

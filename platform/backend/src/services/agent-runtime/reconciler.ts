@@ -172,6 +172,9 @@ class AgentRunReconciler {
               },
               agentId: workspace.agentId,
               request: { id: run.taskId },
+              statusReason: expired
+                ? "The run's workspace reached its retention deadline before the run finished."
+                : "The run's workspace was deleted before the run finished.",
             });
           }
           // Capture the supervisor's final output while its volume still exists.

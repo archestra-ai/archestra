@@ -132,6 +132,7 @@ export const adminScopedCapabilitiesSeed: archestraApiTypes.GetScopedCapabilitie
     "llmOauthClient",
     "environment",
     "serviceAccount",
+    "credential",
     "scheduledTask",
   ].flatMap((resource) =>
     (["read", "use", "update", "delete", "manage-permissions"] as const).map(

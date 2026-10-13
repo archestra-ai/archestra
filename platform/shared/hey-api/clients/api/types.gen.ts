@@ -21225,12 +21225,14 @@ export type GetAgentRuntimePreflightResponses = {
             credentialId?: string;
             label: string;
             description?: string;
+            canConnect?: boolean;
         }>;
         misconfigured: Array<{
             key: string;
             credentialId?: string;
             label: string;
             description?: string;
+            canConnect?: boolean;
         }>;
         incompatible: string | null;
     };
@@ -34302,7 +34304,7 @@ export type GetBootstrapResponses = {
         };
         scopedCapabilities: Array<{
             organizationId: string;
-            resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+            resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
             scope: '*' | string;
             action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec';
         }>;
@@ -44960,6 +44962,376 @@ export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors 
 };
 
 export type PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentError = PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors[keyof PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors];
+
+export type ListGitCredentialsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/git-credentials';
+};
+
+export type ListGitCredentialsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListGitCredentialsError = ListGitCredentialsErrors[keyof ListGitCredentialsErrors];
+
+export type ListGitCredentialsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        provider: 'github' | 'gitlab';
+        kind: 'github_app' | 'gitlab_token';
+        webUrl: string;
+        createdAt: string;
+    }>;
+};
+
+export type ListGitCredentialsResponse = ListGitCredentialsResponses[keyof ListGitCredentialsResponses];
+
+export type CreateGitlabTokenData = {
+    body: {
+        name: string;
+        /**
+         * GitLab web address, e.g. https://gitlab.com
+         */
+        gitlabUrl?: string;
+        /**
+         * A project, group, or personal access token. Write-only: never returned.
+         */
+        token: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/git-credentials/gitlab';
+};
+
+export type CreateGitlabTokenErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateGitlabTokenError = CreateGitlabTokenErrors[keyof CreateGitlabTokenErrors];
+
+export type CreateGitlabTokenResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        name: string;
+        provider: 'github' | 'gitlab';
+        kind: 'github_app' | 'gitlab_token';
+        webUrl: string;
+        createdAt: string;
+    };
+};
+
+export type CreateGitlabTokenResponse = CreateGitlabTokenResponses[keyof CreateGitlabTokenResponses];
+
+export type ListGitCredentialRepositoriesData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: {
+        search?: string;
+    };
+    url: '/api/git-credentials/{id}/repositories';
+};
+
+export type ListGitCredentialRepositoriesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListGitCredentialRepositoriesError = ListGitCredentialRepositoriesErrors[keyof ListGitCredentialRepositoriesErrors];
+
+export type ListGitCredentialRepositoriesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        path: string;
+        private: boolean;
+        defaultBranch: string | null;
+    }>;
+};
+
+export type ListGitCredentialRepositoriesResponse = ListGitCredentialRepositoriesResponses[keyof ListGitCredentialRepositoriesResponses];
+
+export type ListGitCredentialNamespacesData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/git-credentials/{id}/namespaces';
+};
+
+export type ListGitCredentialNamespacesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListGitCredentialNamespacesError = ListGitCredentialNamespacesErrors[keyof ListGitCredentialNamespacesErrors];
+
+export type ListGitCredentialNamespacesResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<string>;
+};
+
+export type ListGitCredentialNamespacesResponse = ListGitCredentialNamespacesResponses[keyof ListGitCredentialNamespacesResponses];
 
 export type ListGithubAppConfigsData = {
     body?: never;
@@ -63813,6 +64185,7 @@ export type UpdateInternalMcpCatalogItemData = {
         }>;
         scope?: unknown;
         teams?: unknown;
+        multitenant?: boolean;
         oauthClientSecretVaultPath?: string;
         oauthClientSecretVaultKey?: string;
         localConfigVaultPath?: string;
@@ -64044,6 +64417,101 @@ export type UpdateInternalMcpCatalogItemResponses = {
 };
 
 export type UpdateInternalMcpCatalogItemResponse = UpdateInternalMcpCatalogItemResponses[keyof UpdateInternalMcpCatalogItemResponses];
+
+export type GetInternalMcpCatalogCredentialPreflightData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query: {
+        scope: 'personal' | 'team' | 'org';
+    };
+    url: '/api/internal_mcp_catalog/{id}/credential-preflight';
+};
+
+export type GetInternalMcpCatalogCredentialPreflightErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetInternalMcpCatalogCredentialPreflightError = GetInternalMcpCatalogCredentialPreflightErrors[keyof GetInternalMcpCatalogCredentialPreflightErrors];
+
+export type GetInternalMcpCatalogCredentialPreflightResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        blockers: Array<{
+            envKey: string;
+            credentialId: string;
+            credentialName: string;
+            reason: 'no_access' | 'not_connected' | 'not_set_up' | 'personal_only';
+        }>;
+    };
+};
+
+export type GetInternalMcpCatalogCredentialPreflightResponse = GetInternalMcpCatalogCredentialPreflightResponses[keyof GetInternalMcpCatalogCredentialPreflightResponses];
 
 export type GetInternalMcpCatalogToolsBatchData = {
     body?: never;
@@ -79110,6 +79578,7 @@ export type GetMcpServersResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerId: string | null;
             ownerEmail: string | null;
+            pinned: boolean;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
         alertMutes: Array<{
@@ -79276,6 +79745,7 @@ export type InstallMcpServerResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerId: string | null;
             ownerEmail: string | null;
+            pinned: boolean;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
@@ -79499,6 +79969,7 @@ export type GetMcpServerResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerId: string | null;
             ownerEmail: string | null;
+            pinned: boolean;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
@@ -79644,6 +80115,7 @@ export type ReauthenticateMcpServerResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerId: string | null;
             ownerEmail: string | null;
+            pinned: boolean;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
@@ -79879,6 +80351,7 @@ export type RestoreMcpServerResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerId: string | null;
             ownerEmail: string | null;
+            pinned: boolean;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
@@ -80494,6 +80967,7 @@ export type ReinstallMcpServerResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerId: string | null;
             ownerEmail: string | null;
+            pinned: boolean;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
@@ -88971,6 +89445,7 @@ export type GetAppaGithubSyncResponses = {
             interval: '15m' | '1h' | '1d' | null;
             githubPatId: string | null;
             githubAppConfigId: string | null;
+            gitlabTokenId: string | null;
             revision: string;
             sourceCommit: string | null;
             setupPullRequestNumber: number | null;
@@ -88984,6 +89459,7 @@ export type GetAppaGithubSyncResponses = {
         hasPolicy: boolean;
         validationDirectory: string;
         githubWebUrl: string;
+        provider: 'github' | 'gitlab';
     };
 };
 
@@ -89085,6 +89561,7 @@ export type UpdateAppaGithubSyncResponses = {
             interval: '15m' | '1h' | '1d' | null;
             githubPatId: string | null;
             githubAppConfigId: string | null;
+            gitlabTokenId: string | null;
             revision: string;
             sourceCommit: string | null;
             setupPullRequestNumber: number | null;
@@ -89098,6 +89575,7 @@ export type UpdateAppaGithubSyncResponses = {
         hasPolicy: boolean;
         validationDirectory: string;
         githubWebUrl: string;
+        provider: 'github' | 'gitlab';
     };
 };
 
@@ -89112,6 +89590,7 @@ export type ConfigureAppaGithubSyncData = {
         validationDirectory?: '' | string;
         githubPatId?: string | null;
         githubAppConfigId?: string | null;
+        gitlabTokenId?: string | null;
     };
     path?: never;
     query?: never;
@@ -89200,6 +89679,7 @@ export type ConfigureAppaGithubSyncResponses = {
             interval: '15m' | '1h' | '1d' | null;
             githubPatId: string | null;
             githubAppConfigId: string | null;
+            gitlabTokenId: string | null;
             revision: string;
             sourceCommit: string | null;
             setupPullRequestNumber: number | null;
@@ -89213,6 +89693,7 @@ export type ConfigureAppaGithubSyncResponses = {
         hasPolicy: boolean;
         validationDirectory: string;
         githubWebUrl: string;
+        provider: 'github' | 'gitlab';
     };
 };
 
@@ -89222,7 +89703,8 @@ export type CreateAppaGithubRepositoryData = {
     body: {
         owner: string;
         name: string;
-        githubAppConfigId: string;
+        githubAppConfigId?: string;
+        gitlabTokenId?: string;
         interval: '15m' | '1h' | '1d';
         existing?: boolean;
         ref?: string | null;
@@ -89317,6 +89799,7 @@ export type CreateAppaGithubRepositoryResponses = {
             interval: '15m' | '1h' | '1d' | null;
             githubPatId: string | null;
             githubAppConfigId: string | null;
+            gitlabTokenId: string | null;
             revision: string;
             sourceCommit: string | null;
             setupPullRequestNumber: number | null;
@@ -89330,6 +89813,7 @@ export type CreateAppaGithubRepositoryResponses = {
         hasPolicy: boolean;
         validationDirectory: string;
         githubWebUrl: string;
+        provider: 'github' | 'gitlab';
     };
 };
 
@@ -90253,6 +90737,7 @@ export type AcceptHeldAppaGithubPullResponses = {
                 interval: '15m' | '1h' | '1d' | null;
                 githubPatId: string | null;
                 githubAppConfigId: string | null;
+                gitlabTokenId: string | null;
                 revision: string;
                 sourceCommit: string | null;
                 setupPullRequestNumber: number | null;
@@ -90266,6 +90751,7 @@ export type AcceptHeldAppaGithubPullResponses = {
             hasPolicy: boolean;
             validationDirectory: string;
             githubWebUrl: string;
+            provider: 'github' | 'gitlab';
         };
     };
 };
@@ -97158,6 +97644,7 @@ export type GetPluginsResponses = {
         pluginSlug: string;
         displayName: string;
         description: string;
+        icon: string | null;
         contentHash: string;
         sourceKind: 'manual' | 'github';
         sourceRepo: string | null;
@@ -97170,6 +97657,8 @@ export type GetPluginsResponses = {
         sourceMarketplacePluginName: string | null;
         githubSyncInterval: '15m' | '1h' | '1d' | null;
         githubSyncRef: string | null;
+        sourceProvider: 'github' | 'gitlab' | null;
+        sourceOrigin: string | null;
         lastSyncedAt: string | null;
         pendingSourceSha: string | null;
         pendingContentHash: string | null;
@@ -97214,6 +97703,10 @@ export type CreatePluginData = {
     body: {
         displayName: string;
         description?: string;
+        /**
+         * Emoji or base64 image data URL shown with the name.
+         */
+        icon?: string | null;
         clientType: 'claude-code' | 'copilot-cli' | 'codex' | 'cursor';
         supportedPlatforms?: Array<'posix' | 'windows'>;
         files: Array<{
@@ -97335,6 +97828,7 @@ export type CreatePluginResponses = {
         pluginSlug: string;
         displayName: string;
         description: string;
+        icon: string | null;
         contentHash: string;
         sourceKind: 'manual' | 'github';
         sourceRepo: string | null;
@@ -97349,6 +97843,9 @@ export type CreatePluginResponses = {
         githubSyncRef: string | null;
         githubAppConfigId: string | null;
         githubPatId: string | null;
+        sourceProvider: 'github' | 'gitlab' | null;
+        sourceOrigin: string | null;
+        gitlabTokenId: string | null;
         lastSyncedAt: string | null;
         lastSyncError: string | null;
         pendingSourceSha: string | null;
@@ -97402,10 +97899,15 @@ export type DiscoverGithubPluginMarketplaceData = {
     body: {
         repoUrl: string;
         ref?: string | null;
-        marketplacePath?: '.claude-plugin/marketplace.json' | '.github/plugin/marketplace.json' | '.agents/plugins/marketplace.json' | '.cursor-plugin/marketplace.json' | 'marketplace.json';
+        /**
+         * Git host of a public repository; defaults to github. Ignored when a credential is given.
+         */
+        provider?: 'github' | 'gitlab';
         githubToken?: string;
         githubAppConfigId?: string;
         githubPatId?: string;
+        gitlabTokenId?: string;
+        marketplacePath?: '.claude-plugin/marketplace.json' | '.github/plugin/marketplace.json' | '.agents/plugins/marketplace.json' | '.cursor-plugin/marketplace.json' | 'marketplace.json';
     };
     path?: never;
     query?: never;
@@ -97513,11 +98015,17 @@ export type ImportGithubPluginMarketplaceData = {
     body: {
         repoUrl: string;
         ref?: string | null;
-        marketplacePath?: '.claude-plugin/marketplace.json' | '.github/plugin/marketplace.json' | '.agents/plugins/marketplace.json' | '.cursor-plugin/marketplace.json' | 'marketplace.json';
+        /**
+         * Git host of a public repository; defaults to github. Ignored when a credential is given.
+         */
+        provider?: 'github' | 'gitlab';
         githubToken?: string;
         githubAppConfigId?: string;
         githubPatId?: string;
-    } & {
+        gitlabTokenId?: string;
+        /**
+         * The reviewed manifest path, or null to import plugin folders discovered in a repository without a marketplace manifest
+         */
         marketplacePath: '.claude-plugin/marketplace.json' | '.github/plugin/marketplace.json' | '.agents/plugins/marketplace.json' | '.cursor-plugin/marketplace.json' | 'marketplace.json';
         approvedCommitSha: string;
         trackingRef: string | null;
@@ -97642,6 +98150,7 @@ export type ImportGithubPluginMarketplaceResponses = {
             pluginSlug: string;
             displayName: string;
             description: string;
+            icon: string | null;
             contentHash: string;
             sourceKind: 'manual' | 'github';
             sourceRepo: string | null;
@@ -97656,6 +98165,9 @@ export type ImportGithubPluginMarketplaceResponses = {
             githubSyncRef: string | null;
             githubAppConfigId: string | null;
             githubPatId: string | null;
+            sourceProvider: 'github' | 'gitlab' | null;
+            sourceOrigin: string | null;
+            gitlabTokenId: string | null;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
             pendingSourceSha: string | null;
@@ -97716,9 +98228,14 @@ export type PreviewGithubPluginData = {
         ref?: string | null;
         subdir?: string;
         exclude?: Array<string>;
+        /**
+         * Git host of a public repository; defaults to github. Ignored when a credential is given.
+         */
+        provider?: 'github' | 'gitlab';
         githubToken?: string;
         githubAppConfigId?: string;
         githubPatId?: string;
+        gitlabTokenId?: string;
     };
     path?: never;
     query?: never;
@@ -97799,6 +98316,8 @@ export type PreviewGithubPluginResponses = {
      */
     200: {
         repo: string;
+        sourceProvider: 'github' | 'gitlab';
+        sourceOrigin: string | null;
         requestedRef: string | null;
         commitSha: string;
         subdir: string;
@@ -97820,9 +98339,14 @@ export type ImportGithubPluginData = {
         ref?: string | null;
         subdir?: string;
         exclude?: Array<string>;
+        /**
+         * Git host of a public repository; defaults to github. Ignored when a credential is given.
+         */
+        provider?: 'github' | 'gitlab';
         githubToken?: string;
         githubAppConfigId?: string;
         githubPatId?: string;
+        gitlabTokenId?: string;
     } & {
         displayName: string;
         description?: string;
@@ -97937,6 +98461,7 @@ export type ImportGithubPluginResponses = {
         pluginSlug: string;
         displayName: string;
         description: string;
+        icon: string | null;
         contentHash: string;
         sourceKind: 'manual' | 'github';
         sourceRepo: string | null;
@@ -97951,6 +98476,9 @@ export type ImportGithubPluginResponses = {
         githubSyncRef: string | null;
         githubAppConfigId: string | null;
         githubPatId: string | null;
+        sourceProvider: 'github' | 'gitlab' | null;
+        sourceOrigin: string | null;
+        gitlabTokenId: string | null;
         lastSyncedAt: string | null;
         lastSyncError: string | null;
         pendingSourceSha: string | null;
@@ -98002,9 +98530,14 @@ export type ImportGithubPluginResponse = ImportGithubPluginResponses[keyof Impor
 
 export type PreviewGithubPluginUpdateData = {
     body: {
+        /**
+         * Git host of a public repository; defaults to github. Ignored when a credential is given.
+         */
+        provider?: 'github' | 'gitlab';
         githubToken?: string;
         githubAppConfigId?: string;
         githubPatId?: string;
+        gitlabTokenId?: string;
     };
     path: {
         id: string;
@@ -98087,6 +98620,8 @@ export type PreviewGithubPluginUpdateResponses = {
      */
     200: {
         repo: string;
+        sourceProvider: 'github' | 'gitlab';
+        sourceOrigin: string | null;
         requestedRef: string | null;
         commitSha: string;
         subdir: string;
@@ -98104,9 +98639,14 @@ export type PreviewGithubPluginUpdateResponse = PreviewGithubPluginUpdateRespons
 
 export type ApplyGithubPluginUpdateData = {
     body: {
+        /**
+         * Git host of a public repository; defaults to github. Ignored when a credential is given.
+         */
+        provider?: 'github' | 'gitlab';
         githubToken?: string;
         githubAppConfigId?: string;
         githubPatId?: string;
+        gitlabTokenId?: string;
     } & {
         approvedCommitSha: string;
     };
@@ -98199,6 +98739,7 @@ export type ApplyGithubPluginUpdateResponses = {
         pluginSlug: string;
         displayName: string;
         description: string;
+        icon: string | null;
         contentHash: string;
         sourceKind: 'manual' | 'github';
         sourceRepo: string | null;
@@ -98213,6 +98754,9 @@ export type ApplyGithubPluginUpdateResponses = {
         githubSyncRef: string | null;
         githubAppConfigId: string | null;
         githubPatId: string | null;
+        sourceProvider: 'github' | 'gitlab' | null;
+        sourceOrigin: string | null;
+        gitlabTokenId: string | null;
         lastSyncedAt: string | null;
         lastSyncError: string | null;
         pendingSourceSha: string | null;
@@ -98355,6 +98899,7 @@ export type UpdatePluginGithubSyncResponses = {
         pluginSlug: string;
         displayName: string;
         description: string;
+        icon: string | null;
         contentHash: string;
         sourceKind: 'manual' | 'github';
         sourceRepo: string | null;
@@ -98369,6 +98914,9 @@ export type UpdatePluginGithubSyncResponses = {
         githubSyncRef: string | null;
         githubAppConfigId: string | null;
         githubPatId: string | null;
+        sourceProvider: 'github' | 'gitlab' | null;
+        sourceOrigin: string | null;
+        gitlabTokenId: string | null;
         lastSyncedAt: string | null;
         lastSyncError: string | null;
         pendingSourceSha: string | null;
@@ -98685,6 +99233,7 @@ export type GetPluginResponses = {
         pluginSlug: string;
         displayName: string;
         description: string;
+        icon: string | null;
         contentHash: string;
         sourceKind: 'manual' | 'github';
         sourceRepo: string | null;
@@ -98699,6 +99248,9 @@ export type GetPluginResponses = {
         githubSyncRef: string | null;
         githubAppConfigId: string | null;
         githubPatId: string | null;
+        sourceProvider: 'github' | 'gitlab' | null;
+        sourceOrigin: string | null;
+        gitlabTokenId: string | null;
         lastSyncedAt: string | null;
         lastSyncError: string | null;
         pendingSourceSha: string | null;
@@ -98752,6 +99304,10 @@ export type UpdatePluginData = {
     body: {
         displayName?: string;
         description?: string;
+        /**
+         * Emoji or base64 image data URL shown with the name.
+         */
+        icon?: string | null;
         enabled?: boolean;
         supportedPlatforms?: Array<'posix' | 'windows'>;
         labels?: Array<{
@@ -98767,6 +99323,7 @@ export type UpdatePluginData = {
             authentication?: {
                 githubAppConfigId: string | null;
                 githubPatId: string | null;
+                gitlabTokenId?: string | null;
             };
         };
         files?: Array<{
@@ -98865,6 +99422,7 @@ export type UpdatePluginResponses = {
         pluginSlug: string;
         displayName: string;
         description: string;
+        icon: string | null;
         contentHash: string;
         sourceKind: 'manual' | 'github';
         sourceRepo: string | null;
@@ -98879,6 +99437,9 @@ export type UpdatePluginResponses = {
         githubSyncRef: string | null;
         githubAppConfigId: string | null;
         githubPatId: string | null;
+        sourceProvider: 'github' | 'gitlab' | null;
+        sourceOrigin: string | null;
+        gitlabTokenId: string | null;
         lastSyncedAt: string | null;
         lastSyncError: string | null;
         pendingSourceSha: string | null;
@@ -101769,7 +102330,20 @@ export type CompleteGitHubUserConnectionResponse = CompleteGitHubUserConnectionR
 export type ListRuntimeCredentialsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
+         */
+        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
+        /**
+         * Keep only objects whose own permissions grant read to one of these subjects (comma-separated): org (the whole organization), role:<roleId>, team:<teamId>, user:<userId>, serviceAccount:<serviceAccountId>. Grants inherited from organization-wide permissions do not count. Omit for no filtering.
+         */
+        sharedWith?: Array<string>;
+        /**
+         * Keep only objects authored by one of these user IDs (comma-separated). Narrows the rows the caller can already read. Omit for no filtering.
+         */
+        owner?: Array<string>;
+    };
     url: '/api/credentials';
 };
 
@@ -101847,7 +102421,7 @@ export type ListRuntimeCredentialsResponses = {
      */
     200: Array<{
         id: string;
-        kind: 'secret' | 'github_app' | 'github_app_user';
+        kind: 'secret' | 'github_app' | 'github_app_user' | 'gitlab_token';
         githubUrl: string | null;
         appId: string | null;
         installationId: string | null;
@@ -101871,16 +102445,36 @@ export type CreateRuntimeCredentialData = {
     body: {
         key: string;
         name: string;
-        kind?: 'secret' | 'github_app' | 'github_app_user';
+        kind?: 'secret' | 'github_app' | 'github_app_user' | 'gitlab_token';
         githubUrl?: string | null;
         appId?: string | null;
         installationId?: string | null;
         githubClientId?: string | null;
         githubAppCredentialKey?: string | null;
+        gitlabUrl?: string | null;
         description?: string;
         icon?: string | null;
         allowPersonal?: boolean;
         allowOrganization?: boolean;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        }>;
     };
     path?: never;
     query?: never;
@@ -101964,12 +102558,13 @@ export type CreateRuntimeCredentialResponses = {
         organizationId: string;
         key: string;
         name: string;
-        kind: 'secret' | 'github_app' | 'github_app_user';
+        kind: 'secret' | 'github_app' | 'github_app_user' | 'gitlab_token';
         githubUrl: string | null;
         appId: string | null;
         installationId: string | null;
         githubClientId: string | null;
         githubAppCredentialKey: string | null;
+        gitlabUrl: string | null;
         description: string;
         icon: string | null;
         allowPersonal: boolean;
@@ -102262,12 +102857,13 @@ export type UpdateRuntimeCredentialResponses = {
         organizationId: string;
         key: string;
         name: string;
-        kind: 'secret' | 'github_app' | 'github_app_user';
+        kind: 'secret' | 'github_app' | 'github_app_user' | 'gitlab_token';
         githubUrl: string | null;
         appId: string | null;
         installationId: string | null;
         githubClientId: string | null;
         githubAppCredentialKey: string | null;
+        gitlabUrl: string | null;
         description: string;
         icon: string | null;
         allowPersonal: boolean;
@@ -106471,6 +107067,7 @@ export type GetSkillsResponses = {
             scope: 'personal' | 'team' | 'org';
             name: string;
             description: string;
+            icon: string | null;
             content: string;
             digest: string | null;
             latestVersion: number;
@@ -106490,6 +107087,8 @@ export type GetSkillsResponses = {
             githubSyncRef: string | null;
             githubAppConfigId: string | null;
             githubPatId: string | null;
+            sourceProvider: 'github' | 'gitlab' | null;
+            gitlabTokenId: string | null;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
             usageCount: number;
@@ -106547,6 +107146,10 @@ export type CreateSkillData = {
          * A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `agent`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use. `agent` names an agent the skill runs in — when set, activating the skill delegates it to that agent instead of loading the instructions into the caller's context.
          */
         content: string;
+        /**
+         * Emoji or base64 image data URL shown with the name. Omit to leave it untouched; null clears it.
+         */
+        icon?: string | null;
         files?: Array<{
             /**
              * Resource path, e.g. references/API.md or scripts/run.py
@@ -106679,6 +107282,7 @@ export type CreateSkillResponses = {
         scope: 'personal' | 'team' | 'org';
         name: string;
         description: string;
+        icon: string | null;
         content: string;
         digest: string | null;
         latestVersion: number;
@@ -106698,6 +107302,8 @@ export type CreateSkillResponses = {
         githubSyncRef: string | null;
         githubAppConfigId: string | null;
         githubPatId: string | null;
+        sourceProvider: 'github' | 'gitlab' | null;
+        gitlabTokenId: string | null;
         lastSyncedAt: string | null;
         lastSyncError: string | null;
         usageCount: number;
@@ -106922,6 +107528,7 @@ export type GetSkillResponses = {
         scope: 'personal' | 'team' | 'org';
         name: string;
         description: string;
+        icon: string | null;
         content: string;
         digest: string | null;
         latestVersion: number;
@@ -106941,6 +107548,8 @@ export type GetSkillResponses = {
         githubSyncRef: string | null;
         githubAppConfigId: string | null;
         githubPatId: string | null;
+        sourceProvider: 'github' | 'gitlab' | null;
+        gitlabTokenId: string | null;
         lastSyncedAt: string | null;
         lastSyncError: string | null;
         usageCount: number;
@@ -106995,6 +107604,10 @@ export type UpdateSkillData = {
          * A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `agent`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use. `agent` names an agent the skill runs in — when set, activating the skill delegates it to that agent instead of loading the instructions into the caller's context.
          */
         content: string;
+        /**
+         * Emoji or base64 image data URL shown with the name. Omit to leave it untouched; null clears it.
+         */
+        icon?: string | null;
         files?: Array<{
             /**
              * Resource path, e.g. references/API.md or scripts/run.py
@@ -107114,6 +107727,7 @@ export type UpdateSkillResponses = {
         scope: 'personal' | 'team' | 'org';
         name: string;
         description: string;
+        icon: string | null;
         content: string;
         digest: string | null;
         latestVersion: number;
@@ -107133,6 +107747,8 @@ export type UpdateSkillResponses = {
         githubSyncRef: string | null;
         githubAppConfigId: string | null;
         githubPatId: string | null;
+        sourceProvider: 'github' | 'gitlab' | null;
+        gitlabTokenId: string | null;
         lastSyncedAt: string | null;
         lastSyncError: string | null;
         usageCount: number;
@@ -107763,6 +108379,7 @@ export type RestoreSkillResponses = {
         scope: 'personal' | 'team' | 'org';
         name: string;
         description: string;
+        icon: string | null;
         content: string;
         digest: string | null;
         latestVersion: number;
@@ -107782,6 +108399,8 @@ export type RestoreSkillResponses = {
         githubSyncRef: string | null;
         githubAppConfigId: string | null;
         githubPatId: string | null;
+        sourceProvider: 'github' | 'gitlab' | null;
+        gitlabTokenId: string | null;
         lastSyncedAt: string | null;
         lastSyncError: string | null;
         usageCount: number;
@@ -108006,6 +108625,7 @@ export type ResetSkillResponses = {
         scope: 'personal' | 'team' | 'org';
         name: string;
         description: string;
+        icon: string | null;
         content: string;
         digest: string | null;
         latestVersion: number;
@@ -108025,6 +108645,8 @@ export type ResetSkillResponses = {
         githubSyncRef: string | null;
         githubAppConfigId: string | null;
         githubPatId: string | null;
+        sourceProvider: 'github' | 'gitlab' | null;
+        gitlabTokenId: string | null;
         lastSyncedAt: string | null;
         lastSyncError: string | null;
         usageCount: number;
@@ -108079,6 +108701,25 @@ export type UpdateSkillGithubSyncData = {
          * New pull frequency.
          */
         interval?: '15m' | '1h' | '1d';
+        /**
+         * Pull the skill from another repository, branch, folder, or credential. It is fetched before anything changes, so a location without the skill is refused.
+         */
+        source?: {
+            repoUrl: string;
+            path?: string;
+            /**
+             * Git host of a public repository; defaults to github. Ignored when a credential is given.
+             */
+            provider?: 'github' | 'gitlab';
+            githubToken?: string;
+            githubAppConfigId?: string;
+            githubPatId?: string;
+            gitlabTokenId?: string;
+            /**
+             * The skill's folder from the repository root; empty when the skill is the repository.
+             */
+            skillPath: string;
+        };
         /**
          * Trigger an immediate pull from the source repo.
          */
@@ -108174,6 +108815,7 @@ export type UpdateSkillGithubSyncResponses = {
         scope: 'personal' | 'team' | 'org';
         name: string;
         description: string;
+        icon: string | null;
         content: string;
         digest: string | null;
         latestVersion: number;
@@ -108193,6 +108835,8 @@ export type UpdateSkillGithubSyncResponses = {
         githubSyncRef: string | null;
         githubAppConfigId: string | null;
         githubPatId: string | null;
+        sourceProvider: 'github' | 'gitlab' | null;
+        gitlabTokenId: string | null;
         lastSyncedAt: string | null;
         lastSyncError: string | null;
         usageCount: number;
@@ -108429,9 +109073,14 @@ export type DiscoverGithubSkillsData = {
     body: {
         repoUrl: string;
         path?: string;
+        /**
+         * Git host of a public repository; defaults to github. Ignored when a credential is given.
+         */
+        provider?: 'github' | 'gitlab';
         githubToken?: string;
         githubAppConfigId?: string;
         githubPatId?: string;
+        gitlabTokenId?: string;
     };
     path?: never;
     query?: never;
@@ -108532,9 +109181,14 @@ export type PreviewGithubSkillData = {
     body: {
         repoUrl: string;
         path?: string;
+        /**
+         * Git host of a public repository; defaults to github. Ignored when a credential is given.
+         */
+        provider?: 'github' | 'gitlab';
         githubToken?: string;
         githubAppConfigId?: string;
         githubPatId?: string;
+        gitlabTokenId?: string;
         skillPath: string;
     };
     path?: never;
@@ -108647,9 +109301,14 @@ export type ImportGithubSkillsData = {
     body: {
         repoUrl: string;
         path?: string;
+        /**
+         * Git host of a public repository; defaults to github. Ignored when a credential is given.
+         */
+        provider?: 'github' | 'gitlab';
         githubToken?: string;
         githubAppConfigId?: string;
         githubPatId?: string;
+        gitlabTokenId?: string;
         skillPaths: Array<string>;
         initialGrants?: Array<{
             subject: {
@@ -108762,6 +109421,7 @@ export type ImportGithubSkillsResponses = {
             scope: 'personal' | 'team' | 'org';
             name: string;
             description: string;
+            icon: string | null;
             content: string;
             digest: string | null;
             latestVersion: number;
@@ -108781,6 +109441,8 @@ export type ImportGithubSkillsResponses = {
             githubSyncRef: string | null;
             githubAppConfigId: string | null;
             githubPatId: string | null;
+            sourceProvider: 'github' | 'gitlab' | null;
+            gitlabTokenId: string | null;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
             usageCount: number;
@@ -117504,7 +118166,7 @@ export type UpdateIdentityProviderResponse = UpdateIdentityProviderResponses[key
 export type SearchInitialPermissionSubjectsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
     };
     query?: {
         query?: string;
@@ -117689,7 +118351,7 @@ export type GetScopedCapabilitiesResponses = {
      */
     200: Array<{
         organizationId: string;
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
         scope: '*' | string;
         action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec';
     }>;
@@ -117700,7 +118362,7 @@ export type GetScopedCapabilitiesResponse = GetScopedCapabilitiesResponses[keyof
 export type SearchResourcePermissionSubjectsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
         scope: '*' | string;
     };
     query?: {
@@ -117808,7 +118470,7 @@ export type SearchResourcePermissionSubjectsResponse = SearchResourcePermissionS
 export type GetResourcePermissionsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
         scope: '*' | string;
     };
     query?: never;
@@ -117888,7 +118550,7 @@ export type GetResourcePermissionsResponses = {
      * Default Response
      */
     200: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
         scope: '*' | string;
         name: string;
         ownerId: string | null;
@@ -117980,7 +118642,7 @@ export type UpdateResourcePermissionsData = {
         }>;
     };
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
         scope: '*' | string;
     };
     query?: never;
@@ -118060,7 +118722,7 @@ export type UpdateResourcePermissionsResponses = {
      * Default Response
      */
     200: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
         scope: '*' | string;
         name: string;
         ownerId: string | null;

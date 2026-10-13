@@ -75,7 +75,7 @@ describe("CompactToolGroup", () => {
     vi.mocked(useExternalMcpSkills).mockReturnValue({ data: [] } as never);
   });
 
-  it("shows the confirmed policy return action while tool details remain collapsed", () => {
+  it("opens a saved policy's circle on its one-line result, with no diff", () => {
     mockGetToolShortName.mockImplementation((name: string) =>
       name === "archestra__update_guardrails_policy"
         ? "update_guardrails_policy"
@@ -117,7 +117,9 @@ describe("CompactToolGroup", () => {
     ).toHaveAttribute("href", "/openappa");
     expect(
       screen.getByRole("button", { name: "update guardrails policy" }),
-    ).toHaveAttribute("aria-expanded", "false");
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Saved revision 1")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();
   });
 
   it("shows combined policy previews only when the proposal changes the policy", () => {
@@ -168,7 +170,7 @@ describe("CompactToolGroup", () => {
       }),
     );
     expect(screen.getByLabelText("Policy diff")).toHaveTextContent(
-      '+name = "new"',
+      'Added: name = "new"',
     );
     expect(
       screen.getByText("1 passed, 1 failed, 1 could not run."),
@@ -228,7 +230,7 @@ describe("CompactToolGroup", () => {
     const { rerender } = render(show({ structuredContent: publication }));
     expect(screen.getByText("Saved validations")).toBeInTheDocument();
     expect(
-      screen.getByText("Draft replay: 2 passed, 0 failed, 0 could not run."),
+      screen.getByText(/draft replay: 2 passed, 0 failed, 0 could not run/),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "View Validations" }),
@@ -237,7 +239,7 @@ describe("CompactToolGroup", () => {
       screen.getByRole("button", {
         name: "publish openappa validation change",
       }),
-    ).toHaveAttribute("aria-expanded", "false");
+    ).toHaveAttribute("aria-expanded", "true");
     expect(screen.queryByText(/Enforcement confirmed/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Saved revision/)).not.toBeInTheDocument();
     const withFailures = {
@@ -246,7 +248,7 @@ describe("CompactToolGroup", () => {
     };
     rerender(show({ content: JSON.stringify(withFailures) }));
     expect(
-      screen.getByText("Draft replay: 1 passed, 1 failed, 1 could not run."),
+      screen.getByText(/draft replay: 1 passed, 1 failed, 1 could not run/),
     ).toBeInTheDocument();
     rerender(
       show({
@@ -264,7 +266,7 @@ describe("CompactToolGroup", () => {
       screen.getByRole("link", { name: "Review pull request" }),
     ).toHaveAttribute("href", "https://github.com/example/policies/pull/17");
     expect(
-      screen.getByText(/Review and merge to apply these changes/),
+      screen.getByText(/merge it to apply · draft replay/),
     ).toHaveTextContent("1 failed, 1 could not run");
     expect(screen.queryByText("Saved validations")).not.toBeInTheDocument();
     fireEvent.click(

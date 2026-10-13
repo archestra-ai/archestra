@@ -33,6 +33,7 @@ beforeEach(() => {
     hasPolicy: true,
     validationDirectory: "",
     githubWebUrl: "https://github.com",
+    provider: "github",
     source: null,
   };
   server.use(
@@ -69,7 +70,7 @@ test("shows a policy preview from the chat tool's text result", () => {
   );
 
   expect(screen.getByLabelText("Policy diff")).toHaveTextContent(
-    '+name = "example__search"',
+    'Added: name = "example__search"',
   );
 });
 
@@ -93,14 +94,14 @@ test("shows a reviewable policy diff and the pull request link", () => {
     screen.getByRole("link", { name: "Review pull request" }),
   ).toHaveAttribute("href", "https://github.com/example/policies/pull/17");
   expect(screen.getByLabelText("Policy diff")).toHaveTextContent(
-    '-name = "old"',
+    'Removed: name = "old"',
   );
   expect(screen.getByLabelText("Policy diff")).toHaveTextContent(
-    '+name = "new"',
+    'Added: name = "new"',
   );
 });
 
-test("shows only the changed hunks when the backend sends its diff", () => {
+test("shows only the changed hunks when the backend sends its diff, unchanged lines folded", () => {
   render(
     <OpenAppaPolicyChange
       output={{
@@ -116,11 +117,14 @@ test("shows only the changed hunks when the backend sends its diff", () => {
   );
 
   const diff = screen.getByLabelText("Policy diff");
-  expect(diff).toHaveTextContent("@@ -5,4 +5,4 @@");
-  expect(diff).not.toHaveTextContent(" a b c");
+  expect(diff).not.toHaveTextContent("@@");
+  expect(diff).toHaveTextContent("Unchanged lines hidden");
+  expect(diff).not.toHaveTextContent("organization.appa.toml");
+  expect(diff).toHaveTextContent("Removed: h");
+  expect(diff).toHaveTextContent("8Added: H");
 });
 
-test("shows the whole policy when a first preview keeps the starter as is", () => {
+test("shows a first preview of the starter with every line added", () => {
   render(
     <OpenAppaPolicyChange
       output={{
@@ -134,10 +138,9 @@ test("shows the whole policy when a first preview keeps the starter as is", () =
     />,
   );
 
-  expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();
-  expect(screen.getByLabelText("Policy")).toHaveTextContent(
-    "[policy] version = 2",
-  );
+  const diff = screen.getByLabelText("Policy diff");
+  expect(diff).toHaveTextContent("1Added: [policy]");
+  expect(diff).toHaveTextContent("2Added: version = 2");
 });
 
 const saved = {
@@ -156,7 +159,7 @@ test("confirmed publication offers a return action without opening the diff", ()
     ),
   );
   expect(screen.getByText("Saved revision 1")).toBeInTheDocument();
-  expect(screen.getByText(/Enforcement confirmed on/)).toBeInTheDocument();
+  expect(screen.getByText(/enforcement on/)).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "View Guardrails" })).toHaveAttribute(
     "href",
     "/openappa",
@@ -216,13 +219,13 @@ test("published PR stays reviewable outside collapsed tool details", () => {
   expect(screen.queryByText(/Saved revision/)).not.toBeInTheDocument();
 });
 
-test("a locally saved policy suggests GitHub sync to admins who have not set it up", async () => {
+test("a locally saved policy suggests Git sync to admins who have not set it up", async () => {
   render(
     withQueries(
       <OpenAppaPolicyCompletion output={{ structuredContent: saved }} />,
     ),
   );
-  const link = await screen.findByRole("link", { name: "Set up GitHub sync" });
+  const link = await screen.findByRole("link", { name: "Set up Git sync" });
   expect(link).toHaveAttribute(
     "href",
     "/settings/guardrails?setup=github-sync",
@@ -244,6 +247,7 @@ test.each([
           path: "appa.toml",
           interval: "1h",
           githubPatId: null,
+          gitlabTokenId: null,
           githubAppConfigId: null,
           revision: "revision",
           sourceCommit: null,
@@ -278,7 +282,7 @@ test.each([
       );
     },
   ],
-])("no GitHub sync tip when %s", async (_name, arrange) => {
+])("no Git sync tip when %s", async (_name, arrange) => {
   arrange();
   let requested = false;
   server.use(
@@ -295,7 +299,7 @@ test.each([
   await vi.waitFor(() => expect(requested).toBe(true));
   await new Promise((resolve) => setTimeout(resolve, 50));
   expect(
-    screen.queryByRole("link", { name: "Set up GitHub sync" }),
+    screen.queryByRole("link", { name: "Set up Git sync" }),
   ).not.toBeInTheDocument();
   expect(screen.getByText("Saved revision 1")).toBeInTheDocument();
 });

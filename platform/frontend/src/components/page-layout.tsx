@@ -323,9 +323,10 @@ export function PageLayout({
                 <div
                   data-page-actions
                   className={cn(
-                    // Tablet and phone actions align with the title; desktop
-                    // actions centre against the title and description together.
-                    "row-start-1 flex items-center justify-self-end self-start lg:self-center",
+                    // Actions align with the title row at every width, so they
+                    // sit in the same spot on every page however long its
+                    // description is.
+                    "row-start-1 flex items-center justify-self-end self-start",
                     HEADER_SPACING.titleRow,
                     icon ? "col-start-3" : "col-start-2",
                     contentOverflowX === "clip" && "max-w-full overflow-x-auto",

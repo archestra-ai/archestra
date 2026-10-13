@@ -53,6 +53,8 @@ export async function resolvePublicGithubCommit(params: {
         "ls-remote",
         ...(requestedRef === "HEAD" ? ["--symref"] : []),
         "--exit-code",
+        // Nothing after this is read as an option, whatever a ref holds.
+        "--",
         remote,
         ...patterns,
       ],
@@ -205,6 +207,7 @@ function validateRepository(repository: PublicGithubRepository): void {
 function validateRef(ref: string): void {
   if (
     ref.length > 255 ||
+    ref.startsWith("-") ||
     hasForbiddenRefCharacter(ref) ||
     ref.includes("..") ||
     ref.includes("@{") ||

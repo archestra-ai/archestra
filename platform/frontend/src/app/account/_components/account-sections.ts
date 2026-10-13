@@ -7,7 +7,7 @@
  * your agents may use as you.
  */
 export const accountSections = [
-  // Labelled Account, not Profile: it holds access, sign-in and connections
+  // Labelled Account, not Profile: it holds access, sign-in and credentials
   // too.
   { label: "Account", href: "/account" },
   { label: "API Keys", href: "/account/api-keys" },

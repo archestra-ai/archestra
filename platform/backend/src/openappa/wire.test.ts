@@ -1912,6 +1912,70 @@ describe("denial notice restoration", () => {
     });
   });
 
+  test.each([
+    ["truncated text", '{"question":"Pick one'],
+    ["two concatenated objects", '{"a":1}{"b":2}'],
+    ["an array", "[]"],
+    ["null", "null"],
+    ["a string", '"x"'],
+  ])("records a denied call whose arguments are %s with no arguments, and restores it", (_, args) => {
+    // Streamed tool input can end as text that is not a JSON object. The call
+    // is denied before evaluation; its notice must still reach the client.
+    const input = buildNoticeArguments({
+      id: "toolu_4",
+      tool: "ask_user",
+      arguments: args,
+      result: "[appa] Blocked: this call cannot run yet.",
+    });
+    expect(NoticeArguments.safeParse(input).success).toBe(true);
+    const body = {
+      tools: [{ name: NOTICE }, { name: CONTROL }],
+      messages: [
+        {
+          role: "assistant",
+          content: [{ type: "tool_use", id: "toolu_4", name: NOTICE, input }],
+        },
+        {
+          role: "user",
+          content: [
+            { type: "tool_result", tool_use_id: "toolu_4", content: "seen" },
+          ],
+        },
+      ],
+    };
+
+    prepareAppaRequest({
+      body,
+      interactionType: "anthropic:messages",
+      identity,
+    });
+
+    expect(body.messages[0].content[0]).toEqual({
+      type: "tool_use",
+      id: "toolu_4",
+      name: "ask_user",
+      input: {},
+    });
+    expect(body.messages[1].content[0]).toEqual({
+      type: "tool_result",
+      tool_use_id: "toolu_4",
+      content: "[appa] Blocked: this call cannot run yet.",
+      is_error: true,
+    });
+  });
+
+  test("still refuses to record a custom call without a string input", () => {
+    expect(() =>
+      buildNoticeArguments({
+        id: "call_5",
+        tool: "apply_patch",
+        arguments: "*** Begin Patch",
+        result: "[appa] Blocked: this call cannot run yet.",
+        custom: true,
+      }),
+    ).toThrow("OpenAPPA custom notice requires a string input");
+  });
+
   test("restores a legacy custom notice whose arguments are JSON-object text", () => {
     const legacyArguments = JSON.stringify({ input: "*** Begin Patch\n" });
     const body = {

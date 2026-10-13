@@ -62,6 +62,7 @@ import { populateAgentListActivationSkillCounts } from "@/services/agent-list";
 import { transferAgentOwnership } from "@/services/agent-ownership";
 import {
   assertAgentRuntimeModelCompatibility,
+  assertCanBindRuntimeCredentials,
   requireAgentRuntimePermission,
 } from "@/services/agent-runtime/agent-config-validation";
 import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
@@ -669,6 +670,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         runtime: body.runtime,
         isAdmin: checker.isAdmin(agentType),
       });
+      await assertCanBindRuntimeCredentials({
+        organizationId,
+        userId: user.id,
+        previous: null,
+        next: body.runtime,
+      });
 
       // Validate knowledgeBaseIds if provided
       if (body.knowledgeBaseIds && body.knowledgeBaseIds.length > 0) {
@@ -1149,6 +1156,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
       }
+
+      // The copy is the caller's own Agent, so the credentials it reads are
+      // checked as if they had attached them.
+      await assertCanBindRuntimeCredentials({
+        organizationId,
+        userId: user.id,
+        previous: null,
+        next: sourceAgent.runtime,
+      });
 
       // Delegate cloning logic to the model
       const clonedAgent = await AgentModel.cloneAgent({
@@ -2032,6 +2048,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentType: existingAgent.agentType,
         runtime: body.runtime,
         isAdmin: checker.isAdmin(existingAgent.agentType),
+      });
+      await assertCanBindRuntimeCredentials({
+        organizationId,
+        userId: user.id,
+        previous: existingAgent.runtime,
+        next: body.runtime,
       });
 
       // Who can reach the agent is not editable here: access lives in the

@@ -370,6 +370,7 @@ vi.mock("@/lib/a2a-remote-agents.query", () => ({
 }));
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  useMcpCatalogCredentialPreflight: () => ({ data: [] }),
   useInternalMcpCatalog: useInternalMcpCatalogMock,
 }));
 

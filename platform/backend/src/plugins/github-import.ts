@@ -1,24 +1,29 @@
-import { Octokit } from "@octokit/rest";
+import { GIT_PROVIDER_LABELS, type GitProvider } from "@archestra/shared";
+import type { GitAccess } from "@/git-hosts/git-access";
 import type { PluginFileInput } from "@/types/plugin";
 import {
   PLUGIN_MAX_FILE_BYTES,
   PLUGIN_MAX_TOTAL_BYTES,
 } from "@/types/plugin-file-constraints";
-import { readResponseBodyWithLimit } from "./bounded-response";
 import {
-  isGithubRateLimitError,
-  resolvePublicGithubCommit,
-} from "./github-public-git";
-import { githubRepositoryTreeService } from "./github-tree";
+  createPluginRepoReader,
+  type PluginRepoReader,
+  parsePluginRepoUrl,
+  pluginSourceHost,
+} from "./plugin-repo-reader";
 import { collectPluginTreeFiles } from "./plugin-tree-files";
 
 interface ImportedPlugin {
+  /** Repository path: `owner/repo`, or a nested GitLab `group/sub/project`. */
   repo: string;
   requestedRef: string | null;
   commitSha: string;
   subdir: string;
   files: PluginFileInput[];
   skippedFiles: string[];
+  sourceProvider: GitProvider;
+  /** Web address of a self-hosted source; null means the provider's cloud. */
+  sourceOrigin: string | null;
 }
 
 export class PluginImportError extends Error {
@@ -28,16 +33,25 @@ export class PluginImportError extends Error {
   }
 }
 
-/** Normalize any accepted GitHub repository URL to the stored owner/repo form. */
-export function normalizeGithubPluginRepoUrl(repoUrl: string): string {
-  const { owner, repo } = parseSource({ repoUrl });
-  return `${owner}/${repo}`;
+/**
+ * Normalize any accepted repository URL to the stored repository path
+ * (`owner/repo`, or a nested GitLab path) on the access's host.
+ */
+export function normalizePluginRepoUrl(params: {
+  repoUrl: string;
+  access?: GitAccess;
+}): string {
+  return parseSource({
+    repoUrl: params.repoUrl,
+    reader: createPluginRepoReader(params.access),
+  }).path;
 }
 
 /**
- * Resolve one GitHub tree to immutable, by-value plugin bytes. This service
- * never executes or interprets hook configuration and always strips transport
- * configuration (`.mcp.json`) plus repository policy/CI files.
+ * Resolve one repository tree on GitHub or GitLab (cloud or self-hosted) to
+ * immutable, by-value plugin bytes. This service never executes or interprets
+ * hook configuration and always strips transport configuration (`.mcp.json`)
+ * plus repository policy/CI files.
  */
 export async function importPluginFromGithub(params: {
   repoUrl: string;
@@ -46,17 +60,15 @@ export async function importPluginFromGithub(params: {
   trackingRef?: string | null;
   subdir?: string;
   exclude?: string[];
-  githubToken?: string;
+  /** Host and token; omitted means public github.com. */
+  access?: GitAccess;
   deadlineAt?: number;
 }): Promise<ImportedPlugin> {
   const deadlineSignal = params.deadlineAt
     ? AbortSignal.timeout(Math.max(1, params.deadlineAt - Date.now()))
     : undefined;
-  const source = parseSource(params);
-  const octokit = new Octokit({
-    ...(params.githubToken ? { auth: params.githubToken } : {}),
-    request: { timeout: 10_000 },
-  });
+  const reader = createPluginRepoReader(params.access);
+  const source = parseSource({ ...params, reader });
   const requestedRef =
     params.trackingRef !== undefined
       ? params.trackingRef
@@ -64,24 +76,16 @@ export async function importPluginFromGithub(params: {
   // A pinned commit always wins over the tracking branch at resolution time:
   // the branch may have moved since the review the caller approved, and
   // resolving the branch would race the approval check that follows.
-  const ref = params.ref ?? requestedRef ?? "HEAD";
+  const ref = params.ref ?? requestedRef ?? null;
 
-  const commitSha = await resolveCommit({
-    octokit,
-    source,
-    ref,
-    githubToken: params.githubToken,
-    signal: deadlineSignal,
-  });
+  const commitSha = await reader
+    .resolveCommit({ repo: source.path, ref, signal: deadlineSignal })
+    .catch((error) => {
+      throw new PluginImportError(errorMessage(error));
+    });
   assertWithinDeadline(params.deadlineAt);
-  const tree = await githubRepositoryTreeService
-    .read({
-      owner: source.owner,
-      repo: source.repo,
-      commitSha,
-      githubToken: params.githubToken,
-      signal: deadlineSignal,
-    })
+  const tree = await reader
+    .readTree({ repo: source.path, commitSha, signal: deadlineSignal })
     .catch((error) => {
       throw new PluginImportError(
         `Could not read repository tree: ${errorMessage(error)}`,
@@ -103,9 +107,9 @@ export async function importPluginFromGithub(params: {
   candidates.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
   const downloaded = await downloadCandidates({
     candidates,
-    source,
+    reader,
+    repo: source.path,
     commitSha,
-    githubToken: params.githubToken,
     deadlineAt: params.deadlineAt,
     signal: deadlineSignal,
   });
@@ -145,12 +149,13 @@ export async function importPluginFromGithub(params: {
   }
 
   return {
-    repo: `${source.owner}/${source.repo}`,
+    repo: source.path,
     requestedRef,
     commitSha,
     subdir: source.subdir,
     files,
     skippedFiles: skippedFiles.sort(),
+    ...pluginSourceHost(reader.host),
   };
 }
 
@@ -158,71 +163,25 @@ export async function importPluginFromGithub(params: {
 
 const FILE_DOWNLOAD_CONCURRENCY = 6;
 
-async function resolveCommit(params: {
-  octokit: Octokit;
-  source: { owner: string; repo: string };
-  ref: string;
-  githubToken?: string;
-  signal?: AbortSignal;
-}): Promise<string> {
-  const repository = {
-    owner: params.source.owner,
-    repo: params.source.repo,
-    slug: `${params.source.owner}/${params.source.repo}`,
-  };
+function parseSource(params: {
+  repoUrl: string;
+  subdir?: string;
+  reader: PluginRepoReader;
+}): { path: string; ref: string | null; subdir: string } {
+  let location: ReturnType<typeof parsePluginRepoUrl>;
   try {
-    const response = await params.octokit.rest.repos.getCommit({
-      owner: params.source.owner,
-      repo: params.source.repo,
-      ref: params.ref,
-      request: params.signal ? { signal: params.signal } : undefined,
+    location = parsePluginRepoUrl({
+      repoUrl: params.repoUrl,
+      host: params.reader.host,
     });
-    return response.data.sha;
   } catch (error) {
-    if (!params.githubToken && isGithubRateLimitError(error)) {
-      try {
-        return await resolvePublicGithubCommit({
-          repository,
-          ref: params.ref === "HEAD" ? null : params.ref,
-          signal: params.signal,
-        });
-      } catch (fallbackError) {
-        throw new PluginImportError(
-          `Could not resolve ref "${params.ref}" in ${repository.slug} after the anonymous GitHub API quota was exhausted: ${errorMessage(fallbackError)}`,
-        );
-      }
-    }
-    throw new PluginImportError(
-      `Could not resolve ref "${params.ref}" in ${repository.slug}: ${errorMessage(error)}`,
-    );
+    throw new PluginImportError(errorMessage(error));
   }
-}
-
-function parseSource(params: { repoUrl: string; subdir?: string }): {
-  owner: string;
-  repo: string;
-  ref: string | null;
-  subdir: string;
-} {
-  const withoutProtocol = params.repoUrl
-    .trim()
-    .replace(/^https?:\/\//i, "")
-    .replace(/^github\.com\//i, "")
-    .replace(/\.git$/, "");
-  const segments = withoutProtocol.split("/").filter(Boolean);
-  if (segments.length < 2 || segments[0].includes(".")) {
-    throw new PluginImportError(
-      "Repository must be on github.com and include an owner and repository",
-    );
-  }
-  const [owner, repo, ...rest] = segments;
-  const urlRef = rest[0] === "tree" && rest[1] ? rest[1] : null;
-  const urlSubdir = urlRef ? rest.slice(2).join("/") : "";
   return {
-    owner,
-    repo,
-    ref: urlRef,
-    subdir: normalizeSubdir(params.subdir ?? urlSubdir),
+    path: location.path,
+    ref: location.ref,
+    // an empty subdir defers to a folder named in the URL
+    subdir: normalizeSubdir(params.subdir || location.subpath),
   };
 }
 
@@ -238,44 +197,32 @@ function normalizeSubdir(value: string): string {
 }
 
 async function fetchRawFile(params: {
-  owner: string;
+  reader: PluginRepoReader;
   repo: string;
   commitSha: string;
   path: string;
-  githubToken?: string;
   maxBytes: number;
   deadlineAt?: number;
   signal?: AbortSignal;
 }): Promise<Buffer | null> {
-  const encodedPath = params.path.split("/").map(encodeURIComponent).join("/");
   const timeoutMs = params.deadlineAt
     ? Math.min(10_000, params.deadlineAt - Date.now())
     : 10_000;
   if (timeoutMs <= 0) throw new PluginImportError("Plugin import timed out");
-  let response: Response;
   try {
-    response = await fetch(
-      `https://raw.githubusercontent.com/${encodeURIComponent(params.owner)}/${encodeURIComponent(params.repo)}/${params.commitSha}/${encodedPath}`,
-      {
-        headers: params.githubToken
-          ? { Authorization: `Bearer ${params.githubToken}` }
-          : undefined,
-        signal: params.signal
-          ? AbortSignal.any([params.signal, AbortSignal.timeout(timeoutMs)])
-          : AbortSignal.timeout(timeoutMs),
-      },
-    );
+    return await params.reader.readFile({
+      repo: params.repo,
+      commitSha: params.commitSha,
+      path: params.path,
+      maxBytes: params.maxBytes,
+      timeoutMs,
+      signal: params.signal,
+    });
   } catch (error) {
     throw new PluginImportError(
-      `Could not fetch ${params.path} from GitHub (${errorMessage(error)}); retry the import`,
+      `Could not fetch ${params.path} from ${GIT_PROVIDER_LABELS[params.reader.host.provider]} (${errorMessage(error)}); retry the import`,
     );
   }
-  if (!response.ok) {
-    throw new PluginImportError(
-      `Could not fetch ${params.path} from GitHub (HTTP ${response.status}); retry the import`,
-    );
-  }
-  return readResponseBodyWithLimit(response, params.maxBytes);
 }
 
 /**
@@ -288,9 +235,9 @@ async function fetchRawFile(params: {
  */
 async function downloadCandidates(params: {
   candidates: ReturnType<typeof collectPluginTreeFiles>["candidates"];
-  source: { owner: string; repo: string };
+  reader: PluginRepoReader;
+  repo: string;
   commitSha: string;
-  githubToken?: string;
   deadlineAt?: number;
   signal?: AbortSignal;
 }): Promise<Array<Buffer | null>> {
@@ -310,11 +257,10 @@ async function downloadCandidates(params: {
         nextCandidate += 1;
         const candidate = candidates[index];
         const bytes = await fetchRawFile({
-          owner: params.source.owner,
-          repo: params.source.repo,
+          reader: params.reader,
+          repo: params.repo,
           commitSha: params.commitSha,
           path: candidate.repoPath,
-          githubToken: params.githubToken,
           maxBytes: PLUGIN_MAX_FILE_BYTES,
           deadlineAt: params.deadlineAt,
           signal: params.signal,

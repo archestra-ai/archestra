@@ -59,6 +59,7 @@ vi.mock("@/lib/auth/identity-provider-read.query", () => ({
 vi.mock("@/lib/teams/team.query");
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  useMcpCatalogCredentialPreflight: () => ({ data: [] }),
   useK8sImagePullSecrets: useK8sImagePullSecretsMock,
 }));
 

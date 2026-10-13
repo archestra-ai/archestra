@@ -193,6 +193,20 @@ export default class ResourcePermissionPolicyModel {
               // Editors could always deploy into a restricted environment, back
               // when that was a `deploy-to-restricted` action on each kind of
               // thing deployed. `use` on every environment is that same reach.
+              // Editors managed every credential. Everyone else reaches a
+              // credential through its own policy, which shares it with the
+              // organization unless its creator says otherwise, so a
+              // credential can be kept to a team.
+              ...(resource === "credential"
+                ? [
+                    {
+                      subject: { type: "role" as const, id: "editor" },
+                      actions: [
+                        ...topResourcePermissionPreset(resource).actions,
+                      ],
+                    },
+                  ]
+                : []),
               ...(resource === "environment"
                 ? [
                     {

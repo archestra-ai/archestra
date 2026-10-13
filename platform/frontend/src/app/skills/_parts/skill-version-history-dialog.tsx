@@ -1,10 +1,12 @@
 "use client";
 
-import { Github, RotateCcw } from "lucide-react";
+import { GIT_PROVIDER_LABELS } from "@archestra/shared";
+import { RotateCcw } from "lucide-react";
 import { useMemo, useState } from "react";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { DiffEditor } from "@/components/diff-editor";
 import { Editor } from "@/components/editor";
+import { GitProviderLogo } from "@/components/git/git-setup-chrome";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -249,7 +251,12 @@ function VersionHistory({
               permissionScope={skillId ?? undefined}
               disabled={!canRestore || restoreVersion.isPending}
               onClick={() => setConfirmingRestore(true)}
-              tooltip={restoreTooltip({ isSynced, isHead, appName })}
+              tooltip={restoreTooltip({
+                isSynced,
+                isHead,
+                appName,
+                host: GIT_PROVIDER_LABELS[skill?.sourceProvider ?? "github"],
+              })}
             >
               {restoreVersion.isPending
                 ? "Restoring..."
@@ -331,6 +338,7 @@ function VersionHistory({
               onSelectFile={setActiveFilePath}
               sourceRef={skill?.sourceRef ?? null}
               sourceOrigin={skill?.sourceOrigin ?? null}
+              sourceProvider={skill?.sourceProvider ?? null}
             />
           )}
         </section>
@@ -405,6 +413,7 @@ function VersionPreview({
   onSelectFile,
   sourceRef,
   sourceOrigin,
+  sourceProvider,
 }: {
   version: number;
   isHead: boolean;
@@ -425,6 +434,7 @@ function VersionPreview({
   /** The skill's provenance string, paired with a version's commit to link out. */
   sourceRef: string | null;
   sourceOrigin: string | null;
+  sourceProvider: "github" | "gitlab" | null;
 }) {
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
     new Set(),
@@ -523,6 +533,7 @@ function VersionPreview({
   const sourceUrl = githubSourceUrlAtCommit({
     sourceRef,
     sourceOrigin,
+    provider: sourceProvider,
     commit: detail.sourceCommit,
   });
 
@@ -534,7 +545,7 @@ function VersionPreview({
         <span className="text-xs text-muted-foreground">
           {formatRelativeTimeFromNow(detail.createdAt)}
         </span>
-        {/* Only versions a GitHub pull produced. The link is named rather than
+        {/* Only versions a Git pull produced. The link is named rather than
             spelled out as a SHA, which stays in the title. */}
         {sourceUrl && detail.sourceCommit ? (
           <a
@@ -542,10 +553,12 @@ function VersionPreview({
             target="_blank"
             rel="noreferrer"
             className="ml-auto flex items-center gap-1 text-xs text-muted-foreground underline underline-offset-4 hover:text-primary"
-            title={`Open this version's source on GitHub (${detail.sourceCommit})`}
+            title={`Open this version's source on ${GIT_PROVIDER_LABELS[sourceProvider ?? "github"]} (${detail.sourceCommit})`}
           >
-            <Github className="size-3 shrink-0" />
-            <span>Open version in GitHub</span>
+            <GitProviderLogo provider={sourceProvider ?? "github"} size={12} />
+            <span>
+              Open version in {GIT_PROVIDER_LABELS[sourceProvider ?? "github"]}
+            </span>
           </a>
         ) : null}
       </header>
@@ -736,13 +749,15 @@ function restoreTooltip({
   isSynced,
   isHead,
   appName,
+  host,
 }: {
   isSynced: boolean;
   isHead: boolean;
   appName: string;
+  host: string;
 }): string | undefined {
   if (isSynced) {
-    return `This skill is synced from GitHub. Stop syncing it to edit and restore it in ${appName}.`;
+    return `This skill is synced from ${host}. Stop syncing it to edit and restore it in ${appName}.`;
   }
   if (isHead) return "This is the skill's current version.";
   return undefined;

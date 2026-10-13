@@ -2503,6 +2503,62 @@ if (process.argv[2] === 'debug') {
     }
   });
 
+  test("codex rerun keeps a table Codex added inside the provider block", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "archestra-codex-"));
+    try {
+      const bin = path.join(home, "bin");
+      const codexHome = path.join(home, ".codex");
+      await mkdir(bin);
+      await mkdir(codexHome);
+      await writeFile(
+        path.join(bin, "codex"),
+        `#!/usr/bin/env node
+if (process.argv[2] === 'debug') {
+  require('node:fs').writeFileSync(require('node:path').join(process.env.CODEX_HOME,'models_cache.json'),JSON.stringify({fetched_at:new Date().toISOString()}));
+  console.log(JSON.stringify({models:[{slug:'gpt-5.5',tool_mode:null,supports_search_tool:true}]}));
+}
+`,
+      );
+      await chmod(path.join(bin, "codex"), 0o755);
+      const configPath = path.join(codexHome, "config.toml");
+      // Codex 0.162 writes a new table before the comments at the end of the
+      // file, so a marketplace added after the provider sits inside its block.
+      await writeFile(
+        configPath,
+        'model_provider = "default_proxy"\nmodel = "gpt-5.5"\n# >>> archestra:default_proxy >>>\n[model_providers.default_proxy]\nname = "default_proxy"\n\n[model_providers.default_proxy.http_headers]\n"X-Archestra-Agent-Id" = "codex"\n\n[marketplaces.team-skills]\nsource_type = "git"\n# <<< archestra:default_proxy <<<\n',
+      );
+      const scriptPath = path.join(home, "setup.sh");
+      await writeFile(
+        scriptPath,
+        renderSetupScript({
+          ...fullContext("codex"),
+          mcp: null,
+          skills: null,
+          proxy: OPENAI_PASSTHROUGH_PROXY,
+        }),
+      );
+      await execFileAsync("bash", [scriptPath], {
+        env: {
+          ...process.env,
+          HOME: home,
+          CODEX_HOME: codexHome,
+          PATH: `${bin}:${process.env.PATH}`,
+          SHELL: "/bin/bash",
+          OPENAI_API_KEY: "sk-test-user-key",
+        },
+      });
+      const installed = await readFile(configPath, "utf8");
+      expect(parseToml(installed).marketplaces).toEqual({
+        "team-skills": { source_type: "git" },
+      });
+      expect(installed.split("[model_providers.default_proxy]")).toHaveLength(
+        2,
+      );
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
+  });
+
   test("copilot-cli github-copilot passthrough: links GitHub in-script, token never in argv", async () => {
     const script = renderSetupScript({
       ...fullContext("copilot-cli"),

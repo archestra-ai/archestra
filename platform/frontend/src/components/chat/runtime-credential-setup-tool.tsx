@@ -35,9 +35,9 @@ export function RuntimeCredentialSetupTool({
 
   return (
     <>
-      <InlineNotice variant="neutral" className="my-2 w-full max-w-2xl">
+      <InlineNotice variant="neutral" className="my-2 w-full">
         <GithubIcon aria-hidden />
-        <span className="font-medium">GitHub sync</span>
+        <span className="font-medium">Git sync</span>
         <InlineNoticeText className="flex-1">
           Install an App on the policy repository with Contents and Pull
           requests Read &amp; write.
@@ -74,7 +74,7 @@ export function RuntimeCredentialSetupTool({
           onClose={() => setStep("closed")}
           onConnected={() =>
             onSendMessage?.(
-              `I connected the organization GitHub App credential ${definition.name}. Please continue setting up OpenAPPA GitHub sync.`,
+              `I connected the organization GitHub App credential ${definition.name}. Please continue setting up OpenAPPA Git sync.`,
             )
           }
         />

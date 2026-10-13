@@ -1,16 +1,24 @@
-import { render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
+import { fetchCatalogTools } from "@/lib/mcp/internal-mcp-catalog.query";
 import { InitialAgentSelector } from "./initial-agent-selector";
 
 const {
   agents,
   mockUseAgentCredentialReadiness,
   mockUseAgentDelegations,
+  mockAssignTool,
   mockUseAllProfileTools,
   mockUseConnectors,
+  mockUseMcpServersGroupedByCatalog,
   mockUseInternalMcpCatalog,
   mockUseKnowledgeBases,
   mockUseMcpInstallOrchestrator,
@@ -54,6 +62,10 @@ const {
       accessAllTools: true,
     },
   ],
+  mockAssignTool: vi.fn((_variables: unknown) => Promise.resolve({})),
+  mockUseMcpServersGroupedByCatalog: vi.fn(
+    (): Record<string, unknown[]> | undefined => ({}),
+  ),
   mockUseAgentCredentialReadiness: vi.fn((_options?: unknown) => ({
     data: undefined,
   })),
@@ -105,10 +117,19 @@ vi.mock("@/lib/agent-tools.query", () => ({
   useAgentDelegations: (agentId?: string, options?: unknown) =>
     mockUseAgentDelegations(agentId, options),
   useAllProfileTools: (options?: unknown) => mockUseAllProfileTools(options),
-  useAssignTool: () => ({ mutate: vi.fn() }),
+  useAssignTool: () => ({ mutate: vi.fn(), mutateAsync: mockAssignTool }),
   useRemoveAgentDelegation: () => ({ mutate: vi.fn() }),
   useSyncAgentDelegations: () => ({ mutate: vi.fn() }),
   useUnassignTool: () => ({ mutate: vi.fn() }),
+}));
+
+vi.mock("@/lib/agent-tools.hook", () => ({
+  useInvalidateToolAssignmentQueries: () => vi.fn(),
+}));
+
+vi.mock("@/lib/mcp/mcp-server.query", () => ({
+  useMcpServers: () => ({ data: [] }),
+  useMcpServersGroupedByCatalog: () => mockUseMcpServersGroupedByCatalog(),
 }));
 
 vi.mock("@/lib/knowledge/connector.query", () => ({
@@ -120,6 +141,7 @@ vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
 }));
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  useMcpCatalogCredentialPreflight: () => ({ data: [] }),
   fetchCatalogTools: vi.fn(),
   useCatalogTools: () => ({ data: [] }),
   useInternalMcpCatalog: (options?: unknown) =>
@@ -260,3 +282,101 @@ describe("InitialAgentSelector keyboard navigation", () => {
     expect(mockUseAllProfileTools).not.toHaveBeenCalled();
   });
 });
+
+describe("InitialAgentSelector quick-edit dialog", () => {
+  const catalog = {
+    id: "catalog-1",
+    name: "Everything",
+    description: null,
+    serverType: "local",
+    icon: null,
+  };
+  // A fresh install is owned personally by default, and the backend refuses
+  // to pin a personal connection statically.
+  const personalInstall = {
+    "catalog-1": [{ id: "personal-install", scope: "personal" }],
+  };
+
+  beforeEach(() => {
+    mockUseInternalMcpCatalog.mockReturnValue({ data: [catalog] } as never);
+    vi.mocked(fetchCatalogTools).mockResolvedValue([
+      { id: "tool-a" },
+      { id: "tool-b" },
+    ] as never);
+    mockUseProfile.mockImplementation((id) => {
+      const agent = agents.find((a) => a.id === id);
+      return { data: agent && { ...agent, accessAllTools: false } };
+    });
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [{ resource: "agent", action: "update", scope: "*" }],
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
+  });
+
+  it("adds every tool of a personally-installed server with call-time credentials", async () => {
+    mockUseMcpServersGroupedByCatalog.mockReturnValue(personalInstall);
+    const user = userEvent.setup();
+    renderSelector();
+
+    await openAddTools(user);
+    await user.click(await screen.findByRole("button", { name: /Everything/ }));
+
+    await waitFor(() => expect(mockAssignTool).toHaveBeenCalledTimes(2));
+    expectDynamicAssignments();
+  });
+
+  it("adds a server's tools once the install started from the dialog completes", async () => {
+    mockUseMcpServersGroupedByCatalog.mockReturnValue({});
+    const triggerInstallByCatalogId = vi.fn();
+    mockUseMcpInstallOrchestrator.mockReturnValue({
+      ...mockUseMcpInstallOrchestrator(),
+      triggerInstallByCatalogId,
+    });
+    const user = userEvent.setup();
+    const { rerender } = renderSelector();
+
+    await openAddTools(user);
+    await user.click(await screen.findByRole("button", { name: /Everything/ }));
+    expect(triggerInstallByCatalogId).toHaveBeenCalledWith("catalog-1");
+    expect(mockAssignTool).not.toHaveBeenCalled();
+
+    mockUseMcpServersGroupedByCatalog.mockReturnValue(personalInstall);
+    rerender(selectorTree());
+
+    await waitFor(() => expect(mockAssignTool).toHaveBeenCalledTimes(2));
+    expectDynamicAssignments();
+  });
+});
+
+const queryClient = new QueryClient();
+
+function selectorTree() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <InitialAgentSelector currentAgentId="agent-1" onAgentChange={vi.fn()} />
+    </QueryClientProvider>
+  );
+}
+
+function renderSelector() {
+  queryClient.clear();
+  mockAssignTool.mockClear();
+  return render(selectorTree());
+}
+
+async function openAddTools(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("combobox"));
+  const [editButton] = screen.getAllByRole("button", { name: "Edit" });
+  await user.click(editButton);
+  await user.click(await screen.findByRole("button", { name: "Add" }));
+}
+
+function expectDynamicAssignments() {
+  for (const [variables] of mockAssignTool.mock.calls) {
+    expect(variables).toMatchObject({
+      agentId: "agent-1",
+      resolveAtCallTime: true,
+      credentialResolutionMode: "dynamic",
+    });
+    expect(variables).not.toHaveProperty("mcpServerId");
+  }
+}

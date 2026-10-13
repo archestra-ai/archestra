@@ -180,7 +180,7 @@ url = "http://127.0.0.1:${server.address().port}/annotate"
   assert.deepEqual(requests.map(request => request.artifact.args.name), ['host/archestra/unknown_before', 'host/archestra/unknown_after']);
 });
 
-test('the host sets the result body limit and a policy text cannot change it', { skip: !databaseUrl }, async () => {
+test('an explicit policy result cap takes precedence over the host default', { skip: !databaseUrl }, async () => {
   const proxyLimit = 70 * 1024 * 1024;
   const priorLimit = process.env.APPA_ARCHESTRA_MAX_BODY_BYTES;
   try {
@@ -199,15 +199,21 @@ test('the host sets the result body limit and a policy text cannot change it', {
       assert.equal(kept.approved_output, output);
     };
     process.env.APPA_ARCHESTRA_MAX_BODY_BYTES = String(proxyLimit);
-    // The host limit applies to a text that states nothing, one that states the old
-    // 64 KiB (as every stored effective text does today), a lower value and a higher one.
-    for (const stated of ['', 'max_body_bytes = 65536\n', 'max_body_bytes = 4096\n', 'max_body_bytes = 999999999999\n']) {
+    // Without an explicit cap, results use the published proxy limit. A policy can
+    // also choose a cap above that default without changing the proxy request limit.
+    for (const stated of ['', 'max_body_bytes = 999999999999\n']) {
       const policyText = stated ? `${allow}[externals]\ntimeout_ms = 2000\n${stated}` : allow;
       await carried(policyText, text);
       await carried(policyText, 'x'.repeat(5 * 1024 * 1024));
     }
-    // A result the limit does carry is still ruled on by the policy: a rewrite stands.
-    // Without a published limit a policy keeps the value its text states.
+    for (const limit of [4096, 65536]) {
+      const policyText = `${allow}[externals]\nmax_body_bytes = ${limit}\n`;
+      await carried(policyText, 'x'.repeat(limit));
+      const dropped = await report(policyText, 'x'.repeat(limit + 1));
+      assert.equal(dropped.decision, 'replace_output');
+      assert.equal(dropped.approved_output, withheld);
+    }
+    // A policy keeps its stated limit even without a published host default.
     delete process.env.APPA_ARCHESTRA_MAX_BODY_BYTES;
     const stated = `${allow}[externals]\ntimeout_ms = 2000\nmax_body_bytes = 65536\n`;
     const dropped = await report(stated, text);

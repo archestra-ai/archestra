@@ -1,10 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import logger from "@/logging";
 
 const TTL_MS = 10 * 60 * 1000;
 const MAX_PENDING_REQUESTS = 256;
 const MAX_PENDING_REQUESTS_PER_CALLER = 16;
+/** How often a replica collects answers another replica received for it. */
+const PARKED_MESSAGE_POLL_MS = 1_000;
 
 type PendingInbound = {
   transport: StreamableHTTPServerTransport;
@@ -17,6 +20,37 @@ type PendingInbound = {
   expiryTimer?: NodeJS.Timeout;
 };
 
+/** Who was asked a pending request, as every replica can read it. */
+export type PendingRequestRecord = { agentId: string; caller: string };
+
+/** A client message one replica received for a request another one holds. */
+export type ParkedClientMessage = PendingRequestRecord & {
+  message: Record<string, unknown>;
+};
+
+/**
+ * Storage shared by every replica. A client answers a server-initiated
+ * request with a separate POST, and the load balancer may send that POST to a
+ * replica other than the one waiting on the answer.
+ */
+export interface SharedPendingRequests {
+  remember(params: {
+    wireId: string;
+    record: PendingRequestRecord;
+    ttlMs: number;
+  }): Promise<void>;
+  lookup(wireId: string): Promise<PendingRequestRecord | undefined>;
+  park(params: {
+    wireId: string;
+    parked: ParkedClientMessage;
+    ttlMs: number;
+  }): Promise<void>;
+  take(
+    wireIds: string[],
+  ): Promise<Array<{ wireId: string; parked: ParkedClientMessage }>>;
+  forget(wireId: string): Promise<void>;
+}
+
 /**
  * Maps outbound server-initiated requests (elicitation, sampling) to active transports.
  * In stateless mode, clients answer server-initiated requests with a separate POST.
@@ -26,10 +60,23 @@ type PendingInbound = {
  * Each request receives a unique wire ID to prevent collisions across concurrent calls.
  * Answers are accepted only from the caller that received the request on this gateway.
  *
- * This registry is in-memory because it holds references to live transports.
+ * The registry is in-memory because it holds references to live transports.
+ * With shared storage, an answer that reaches another replica is parked there
+ * and collected by the replica that holds the transport.
  */
-class PendingInboundRequests {
+export class PendingInboundRequests {
   private readonly entries = new Map<string, PendingInbound>();
+  private readonly shared: SharedPendingRequests | undefined;
+  private readonly pollMs: number;
+  private poller: NodeJS.Timeout | undefined;
+  private collecting = false;
+
+  constructor(
+    params: { shared?: SharedPendingRequests; pollMs?: number } = {},
+  ) {
+    this.shared = params.shared;
+    this.pollMs = params.pollMs ?? PARKED_MESSAGE_POLL_MS;
+  }
 
   /**
    * Registers an outbound request and returns the id to send it under.
@@ -38,12 +85,12 @@ class PendingInboundRequests {
    * make room for another caller: rejecting `transport.send()` instead lets the
    * Server fail the request it was trying to issue.
    */
-  register(params: {
+  async register(params: {
     id: string | number;
     transport: StreamableHTTPServerTransport;
     agentId: string;
     caller: string;
-  }): string {
+  }): Promise<string> {
     this.prune();
     if (this.entries.size >= MAX_PENDING_REQUESTS) {
       throw new Error("Too many pending server-initiated requests");
@@ -65,6 +112,22 @@ class PendingInboundRequests {
       }
     }, TTL_MS);
     entry.expiryTimer.unref();
+    if (this.shared) {
+      try {
+        await this.shared.remember({
+          wireId,
+          record: { agentId: params.agentId, caller: params.caller },
+          ttlMs: TTL_MS,
+        });
+        this.startCollecting();
+      } catch (error) {
+        // The request still works when its answer reaches this replica.
+        logger.warn(
+          { agentId: params.agentId, error },
+          "Could not share a pending server-initiated request with other replicas",
+        );
+      }
+    }
     return wireId;
   }
 
@@ -115,6 +178,40 @@ class PendingInboundRequests {
     return entry;
   }
 
+  /**
+   * Keep a client message for the replica that sent the request it answers.
+   * Accepted only when no request with this wire id waits here, some replica
+   * recorded one, and the message comes from the caller that was asked.
+   */
+  async parkForOtherReplica(params: {
+    wireId: string | number;
+    agentId: string;
+    caller: string;
+    message: Record<string, unknown>;
+  }): Promise<boolean> {
+    const wireId = String(params.wireId);
+    if (!this.shared || this.entries.has(wireId)) return false;
+    const record = await this.shared.lookup(wireId);
+    if (!record) return false;
+    if (record.agentId !== params.agentId || record.caller !== params.caller) {
+      logger.warn(
+        { agentId: params.agentId },
+        "Ignored an answer to a server-initiated request asked of another caller",
+      );
+      return false;
+    }
+    await this.shared.park({
+      wireId,
+      parked: {
+        agentId: params.agentId,
+        caller: params.caller,
+        message: params.message,
+      },
+      ttlMs: TTL_MS,
+    });
+    return true;
+  }
+
   /** Forget a request the Server cancelled or stopped waiting on. */
   forget(params: { wireId: string }): void {
     this.remove(params.wireId);
@@ -135,6 +232,53 @@ class PendingInboundRequests {
         this.remove(wireId);
       }
     }
+  }
+
+  /** Stop collecting answers parked by other replicas. */
+  close(): void {
+    this.stopCollecting();
+  }
+
+  private startCollecting(): void {
+    if (this.poller) return;
+    this.poller = setInterval(() => this.collectParked(), this.pollMs);
+    // Never keep the process alive just to poll.
+    this.poller.unref();
+  }
+
+  private stopCollecting(): void {
+    if (this.poller) clearInterval(this.poller);
+    this.poller = undefined;
+  }
+
+  /** One tick: hand each transport the answers other replicas parked for it. */
+  private collectParked(): void {
+    this.prune();
+    if (!this.shared || this.entries.size === 0) {
+      this.stopCollecting();
+      return;
+    }
+    if (this.collecting) return;
+    this.collecting = true;
+    this.shared
+      .take([...this.entries.keys()])
+      .then((parked) => {
+        for (const { wireId, parked: answer } of parked) {
+          const entry = this.consume({
+            wireId,
+            agentId: answer.agentId,
+            caller: answer.caller,
+          });
+          if (entry) deliverClientMessage({ entry, message: answer.message });
+        }
+      })
+      .catch((error) => {
+        // The next tick reads again.
+        logger.debug({ error }, "Collecting parked client answers failed");
+      })
+      .finally(() => {
+        this.collecting = false;
+      });
   }
 
   private prune(): void {
@@ -162,7 +306,34 @@ class PendingInboundRequests {
     if (!entry) return;
     this.entries.delete(wireId);
     if (entry.expiryTimer) clearTimeout(entry.expiryTimer);
+    this.shared?.forget(wireId).catch((error) => {
+      logger.debug({ error }, "Could not forget a shared pending request");
+    });
   }
 }
 
-export const pendingInboundRequests = new PendingInboundRequests();
+/**
+ * Feed a client's answer or cancellation to the Server that sent the request,
+ * under the id that Server issued.
+ */
+export function deliverClientMessage(params: {
+  entry: Pick<PendingInbound, "transport" | "id">;
+  message: Record<string, unknown>;
+}): void {
+  const { entry, message } = params;
+  const cancellation =
+    message.method === "notifications/cancelled" &&
+    typeof message.params === "object" &&
+    message.params !== null;
+  entry.transport.onmessage?.(
+    (cancellation
+      ? {
+          ...message,
+          params: {
+            ...(message.params as Record<string, unknown>),
+            requestId: entry.id,
+          },
+        }
+      : { ...message, id: entry.id }) as unknown as JSONRPCMessage,
+  );
+}

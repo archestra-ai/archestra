@@ -52,6 +52,7 @@ const source = {
   path: "appa.toml",
   interval: "1h" as const,
   githubPatId: null,
+  gitlabTokenId: null,
   githubAppConfigId: null,
   revision: "revision",
   sourceCommit: "a".repeat(40),
@@ -104,6 +105,7 @@ beforeEach(() => {
     enabled: true,
     hasPolicy: false,
     githubWebUrl: "https://github.com",
+    provider: "github",
     source: null,
   };
   server.use(
@@ -264,7 +266,7 @@ test("a failed sync shows its error", async () => {
     source: { ...source, lastSyncError: "appa.toml was not found" },
   };
   show();
-  expect(await screen.findByText("GitHub sync failed")).toBeVisible();
+  expect(await screen.findByText("Git sync failed")).toBeVisible();
   expect(
     within(screen.getByRole("alert")).getByRole("link", {
       name: "Review sync settings",
@@ -278,6 +280,7 @@ test("shows the initial merge link on Overview while sync waits for setup", asyn
   sync = {
     ...sync,
     githubWebUrl: "https://github.example.com",
+    provider: "github",
     source: { ...source, setupPullRequestNumber: 7, sourceCommit: null },
   };
   show();

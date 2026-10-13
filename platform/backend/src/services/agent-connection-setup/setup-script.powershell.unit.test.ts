@@ -575,6 +575,84 @@ exit 0
         await rm(root, { recursive: true, force: true });
       }
     });
+
+    test("a rerun replaces the marketplace an earlier setup registered from another clone URL", async () => {
+      const root = await mkdtemp(
+        path.join(tmpdir(), "archestra-codex-marketplace-powershell-"),
+      );
+      const home = path.join(root, "home");
+      const bin = path.join(root, "bin");
+      const setupPath = path.join(root, "setup.ps1");
+      const source = path.join(home, "marketplace-source");
+      const skills = {
+        cloneUrl: "https://new-token@example.com/skills/repo.git",
+        marketplaceName: "test-skills",
+        hasSkills: true,
+        pluginNames: [],
+      };
+      try {
+        await Promise.all(
+          [bin, path.join(home, ".codex")].map((dir) =>
+            mkdir(dir, { recursive: true }),
+          ),
+        );
+        // Every setup gets a new credential in its clone URL.
+        await writeFile(
+          source,
+          "https://old-token@example.com/skills/repo.git",
+        );
+        // Codex 0.162 keeps one source per marketplace name and refuses another one.
+        await writeFile(
+          path.join(bin, "codex"),
+          `#!/usr/bin/env node
+const fs = require("node:fs");
+const [command, group, action, value] = process.argv.slice(2);
+const source = ${JSON.stringify(source)};
+if (command === "plugin" && group === "marketplace" && action === "remove") {
+  if (!fs.existsSync(source)) { console.error("Error: marketplace \`" + value + "\` is not configured or installed"); process.exit(1); }
+  fs.rmSync(source);
+} else if (command === "plugin" && group === "marketplace" && action === "add") {
+  if (fs.existsSync(source) && fs.readFileSync(source, "utf8") !== value) {
+    console.error("Error: marketplace 'test-skills' is already added from a different source; remove it before adding this source");
+    process.exit(1);
+  }
+  fs.writeFileSync(source, value);
+}
+`,
+        );
+        await chmod(path.join(bin, "codex"), 0o755);
+        await writeFile(
+          setupPath,
+          renderSetupScript({
+            clientId: "codex",
+            platform: "windows",
+            appName: "Archestra",
+            mcp: null,
+            proxy: null,
+            skills,
+          }),
+        );
+        const { stdout } = await execFileAsync(
+          "pwsh",
+          ["-NoLogo", "-NoProfile", "-NonInteractive", "-File", setupPath],
+          {
+            cwd: home,
+            env: {
+              HOME: home,
+              USERPROFILE: home,
+              PATH: `${bin}:${process.env.PATH}`,
+              NO_COLOR: "1",
+            },
+            timeout: 30_000,
+          },
+        );
+
+        expect(stdout).not.toContain("Marketplace registration failed");
+        expect(await readFile(source, "utf8")).toBe(skills.cloneUrl);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    });
   },
 );
 

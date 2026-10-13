@@ -36,6 +36,10 @@ export const CacheKey = {
   LegacySseSession: "legacy-sse-session",
   /** Short-lived replies waiting for a legacy SSE stream on another replica */
   LegacySseMessages: "legacy-sse-messages",
+  /** Who an in-band gateway request (a form) was sent to, readable by every replica */
+  McpGatewayPendingRequest: "mcp-gateway-pending-request",
+  /** A client's answer to an in-band gateway request, waiting for the replica that sent it */
+  McpGatewayParkedAnswer: "mcp-gateway-parked-answer",
   /** IdP groups cache during login flow */
   IdpGroups: "idp-groups",
   /** Chat stream stop signal for cross-pod abort */

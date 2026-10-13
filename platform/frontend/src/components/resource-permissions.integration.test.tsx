@@ -436,6 +436,23 @@ it("shows the owner row and makes another person the owner", async () => {
   await waitFor(() => expect(transferred).toEqual({ ownerId: "user-2" }));
 });
 
+it("links the access every object gives to the list page's permissions for those who can change it", async () => {
+  renderEditor(undefined, true);
+  expect(
+    await screen.findByRole("link", {
+      name: "Edit access to every MCP registry entry",
+    }),
+  ).toHaveAttribute("href", "/mcp/registry?permissions=all");
+});
+
+it("explains the access every object gives without a link for those who cannot change it", async () => {
+  renderEditor();
+  expect(await screen.findByTestId("inherited-access-note")).toBeVisible();
+  expect(
+    screen.queryByRole("link", { name: /Edit access to every/ }),
+  ).not.toBeInTheDocument();
+});
+
 async function pick(user: ReturnType<typeof userEvent.setup>, name: string) {
   await user.click(screen.getByRole("combobox", { name: "Add access" }));
   await user.click(await screen.findByRole("option", { name }));

@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
-import { TimeInMs } from "@archestra/shared";
+import {
+  isYellToolShortName,
+  TimeInMs,
+  type YellToolShortName,
+} from "@archestra/shared";
 import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
@@ -18,7 +22,7 @@ export const YellArgumentsSchema = z.strictObject({
   with_trajectory: z.boolean(),
 });
 
-type YellArguments = z.infer<typeof YellArgumentsSchema>;
+export type YellArguments = z.infer<typeof YellArgumentsSchema>;
 
 type YellSession = { session: OpenAppaSession; callId: string };
 
@@ -26,8 +30,8 @@ type YellSession = { session: OpenAppaSession; callId: string };
  * An external client runs the yell the proxy allowed through the MCP gateway,
  * which sees neither the proxy's session nor the model's call id. The proxy
  * leaves both here, keyed by what the gateway does see: the organization and
- * the call's arguments. Calls that are not the platform's yell, directly or
- * through `run_tool`, leave nothing.
+ * the call's arguments. Calls that are not the platform's yell or superyell,
+ * directly or through `run_tool`, leave nothing.
  */
 export async function rememberYellSession(params: {
   session: OpenAppaSession;
@@ -43,13 +47,13 @@ export async function rememberYellSession(params: {
     [params.call],
     params.resolution,
   );
-  if (archestraMcpBranding.getToolShortName(target.toolCallName) !== "yell")
-    return;
+  const shortName = archestraMcpBranding.getToolShortName(target.toolCallName);
+  if (!isYellToolShortName(shortName)) return;
   const args = YellArgumentsSchema.safeParse(parseJson(target.toolCallArgs));
   if (!args.success) return;
   try {
     await cacheManager.set<YellSession>(
-      yellSessionKey(params.session.organization_id, args.data),
+      yellSessionKey(params.session.organization_id, shortName, args.data),
       { session: params.session, callId: params.call.id },
       TimeInMs.Minute * 10,
     );
@@ -61,11 +65,12 @@ export async function rememberYellSession(params: {
 
 export async function recallYellSession(params: {
   organizationId: string;
+  shortName: YellToolShortName;
   args: YellArguments;
 }): Promise<YellSession | undefined> {
   try {
     return await cacheManager.getAndDelete<YellSession>(
-      yellSessionKey(params.organizationId, params.args),
+      yellSessionKey(params.organizationId, params.shortName, params.args),
       { throwOnError: true },
     );
   } catch (error) {
@@ -79,12 +84,17 @@ export async function recallYellSession(params: {
 
 function yellSessionKey(
   organizationId: string,
+  shortName: YellToolShortName,
   args: YellArguments,
 ): AllowedCacheKey {
+  // yell keeps its original key; superyell's names the tool, so a yell's
+  // entry never stands in for a superyell with the same arguments.
+  const parts =
+    shortName === "yell"
+      ? [organizationId, args.message, args.with_trajectory]
+      : [organizationId, shortName, args.message, args.with_trajectory];
   const digest = createHash("sha256")
-    .update(
-      JSON.stringify([organizationId, args.message, args.with_trajectory]),
-    )
+    .update(JSON.stringify(parts))
     .digest("base64url");
   return `${CacheKey.OpenAppaYellSession}-${digest}`;
 }

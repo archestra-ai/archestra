@@ -1765,6 +1765,7 @@ describe("createAgentServer tools/list", () => {
       "get_remedy_plans",
       "list_peer_messages",
       "read_peer_message",
+      "superyell",
       "yell",
     ]);
     for (const inboxTool of [

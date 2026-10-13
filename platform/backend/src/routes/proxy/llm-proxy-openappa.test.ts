@@ -4395,6 +4395,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           {
             sessionId: mode === "valid" ? workload : credential,
             parentId: null,
+            reason: "enforcement_off",
           },
         ]);
       });

@@ -1025,7 +1025,8 @@ export const AUDIT_DECISIONS = {
   },
   openappaUnenforcedSessionsTable: {
     audited: false,
-    reason: "proxy record of sessions that started while enforcement was off",
+    reason:
+      "proxy record of sessions that started while enforcement was off or were superyelled",
   },
   openappaThreadStatesTable: {
     audited: false,

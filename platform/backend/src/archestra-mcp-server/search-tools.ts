@@ -3,6 +3,7 @@ import {
   isAlwaysExposedArchestraToolShortName,
   isImplicitOpenAppaReadToolShortName,
   isRequiredOpenAppaToolShortName,
+  isYellToolShortName,
   parseFullToolName,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
@@ -365,7 +366,7 @@ async function openappaSearchTools(
     ) {
       return [];
     }
-    if (shortName === "yell" && !openappaYellEnabled()) return [];
+    if (isYellToolShortName(shortName) && !openappaYellEnabled()) return [];
     const name = shortName
       ? archestraMcpBranding.getToolName(shortName)
       : tool.name;

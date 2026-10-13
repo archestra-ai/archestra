@@ -6,6 +6,7 @@ import {
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
+  type YellToolShortName,
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -53,8 +54,10 @@ import {
   type OpenAppaSession,
   readPeerMessage,
 } from "@/openappa/service";
+import { superyellSession } from "@/openappa/unenforced";
 import {
   recallYellSession,
+  type YellArguments,
   YellArgumentsSchema,
 } from "@/openappa/yell-session";
 import {
@@ -132,6 +135,7 @@ import {
   defineArchestraTool,
   defineArchestraTools,
   errorResult,
+  successResult,
 } from "./helpers";
 import { filterToolNamesByPermission } from "./rbac";
 import type { ArchestraContext } from "./types";
@@ -450,13 +454,18 @@ const registry = defineArchestraTools([
     title: "Connect existing OpenAPPA policy repository",
     description:
       "Make a policy file in an existing GitHub repository or GitLab project the organization's OpenAPPA policy source, pull it now, and keep it in sync. The file replaces the current policy, so tell the user that and get their agreement first. List credentials first and pass either an organization GitHub App installed on the repository owner (githubAppConfigId) or a GitLab access token that can read the project (gitlabTokenId). Ask the user for the repository and, if it is not appa.toml at the repository root, the file path. Future policy edits open pull requests. A held pull is connected but waits for an operator to accept it in the guardrails panel; report `source.lastSyncError`. If the first pull fails, nothing is connected and the error says why.",
-    // `ref` and `path` stay plain strings here and are checked against the
-    // source schema in the handler: its `ref` pattern uses a Unicode property
-    // escape, which OpenAI refuses in a function schema.
+    // `repo`, `ref` and `path` stay plain strings here and are checked against
+    // the source schema in the handler. OpenAI refuses the source schema's
+    // patterns in a function schema: `ref` uses a Unicode property escape, and
+    // a model offered the `repo` pattern's repeated group ends its turn with
+    // no reply.
     schema: z.strictObject({
-      repo: AppaGithubSourceSchema.shape.repo.describe(
-        "The existing repository, as owner/name (GitLab: group/subgroup/project).",
-      ),
+      repo: z
+        .string()
+        .max(400)
+        .describe(
+          "The existing repository, as owner/name (GitLab: group/subgroup/project).",
+        ),
       path: z
         .string()
         .default("appa.toml")
@@ -520,41 +529,53 @@ const registry = defineArchestraTools([
       "Send feedback about OpenAPPA, such as a confusing block, remedy or ruling, or the user's complaint, with a diagnostic archive for review in the Guardrails Yells tab. When deployment analytics is enabled, also forwards the report to the shared OpenAPPA reporting service. with_trajectory includes this session's policy decisions, never raw prompts, tool arguments, or outputs. Your message is sent verbatim: say what about OpenAPPA was confusing or wrong. When a call was blocked, report the block; never put the blocked call's content (such as a task you could not file) in its place, and do not include secrets, personal data, or task content. This does not change policy or grant permission.",
     schema: YellArgumentsSchema,
     async handler({ args, context }) {
-      const id = context.sessionId ?? context.conversationId;
-      const known =
-        context.openappaSubagent?.session ??
-        context.openappaSession ??
-        (context.organizationId && context.userId && id
-          ? chatOpenAppaSession(context.organizationId, context.userId, id)
-          : undefined);
-      const identity =
-        known && context.currentToolCallId
-          ? { session: known, callId: context.currentToolCallId }
-          : context.organizationId
-            ? await recallYellSession({
-                organizationId: context.organizationId,
-                args,
-              })
-            : undefined;
-      if (!identity) {
-        logger.warn(
-          {
-            agentId: context.agentId,
-            hasSession: Boolean(known),
-            hasToolCallId: Boolean(context.currentToolCallId),
-          },
-          "OpenAPPA yell refused: no session or tool-call identity",
-        );
-        throw new ApiError(
-          400,
-          "OpenAPPA reporting requires an authenticated session and tool-call identity",
-        );
-      }
+      const identity = await yellIdentity({ shortName: "yell", args, context });
       return executeYell({
         session: identity.session,
         toolCallId: identity.callId,
         args,
       });
+    },
+  }),
+  defineArchestraTool({
+    shortName: "superyell",
+    title: "Report OpenAPPA feedback and turn it off for this session",
+    description:
+      "Do what yell does, then turn OpenAPPA off for this session, after the person running it approves. The report is sent first, the same way yell sends it. Then the session's label resets and OpenAPPA stops checking its calls, and the calls of the children it starts afterwards. Other sessions are not affected. Call it only when the user asks to turn OpenAPPA off for this session. Your message is sent verbatim and is what the person approving reads: say what about OpenAPPA was wrong and why it should be off. Do not include secrets, personal data, or task content.",
+    schema: YellArgumentsSchema,
+    async handler({ args, context }) {
+      if (!(await getGuardrailsDeployment()).active)
+        return errorResult("Guardrails enforcement is off");
+      const identity = await yellIdentity({
+        shortName: "superyell",
+        args,
+        context,
+      });
+      const report = await executeYell({
+        session: identity.session,
+        toolCallId: identity.callId,
+        args,
+      });
+      // The person approved turning OpenAPPA off, so a report that failed to
+      // send does not keep it on.
+      await superyellSession(identity.session);
+      logger.warn(
+        {
+          organizationId: identity.session.organization_id,
+          sessionId: identity.session.session_id,
+          userId: context.userId,
+          reported: !report.isError,
+        },
+        "OpenAPPA turned off for a session by an approved superyell",
+      );
+      return successResult(
+        [
+          ...report.content.flatMap((part) =>
+            part.type === "text" ? [part.text] : [],
+          ),
+          "OpenAPPA is off for this session. Its label is reset, and its calls are no longer checked.",
+        ].join("\n"),
+      );
     },
   }),
   defineArchestraTool({
@@ -1770,4 +1791,50 @@ function peerExecution(params: {
     },
     toolCallId: proof.call_id,
   };
+}
+
+/**
+ * The session and call a yell or superyell reports under. A Chat or runtime
+ * call knows both; an external client's call through the MCP gateway does
+ * not, so the proxy left them when it allowed the call.
+ */
+async function yellIdentity(params: {
+  shortName: YellToolShortName;
+  args: YellArguments;
+  context: ArchestraContext;
+}): Promise<{ session: OpenAppaSession; callId: string }> {
+  const { context } = params;
+  const id = context.sessionId ?? context.conversationId;
+  const known =
+    context.openappaSubagent?.session ??
+    context.openappaSession ??
+    (context.organizationId && context.userId && id
+      ? chatOpenAppaSession(context.organizationId, context.userId, id)
+      : undefined);
+  const identity =
+    known && context.currentToolCallId
+      ? { session: known, callId: context.currentToolCallId }
+      : context.organizationId
+        ? await recallYellSession({
+            organizationId: context.organizationId,
+            shortName: params.shortName,
+            args: params.args,
+          })
+        : undefined;
+  if (!identity) {
+    logger.warn(
+      {
+        agentId: context.agentId,
+        tool: params.shortName,
+        hasSession: Boolean(known),
+        hasToolCallId: Boolean(context.currentToolCallId),
+      },
+      "OpenAPPA yell refused: no session or tool-call identity",
+    );
+    throw new ApiError(
+      400,
+      "OpenAPPA reporting requires an authenticated session and tool-call identity",
+    );
+  }
+  return identity;
 }

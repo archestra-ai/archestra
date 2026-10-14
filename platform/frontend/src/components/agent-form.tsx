@@ -1456,6 +1456,9 @@ export function AgentForm({
     useFeature("anthropicVertexAiEnabled") === true;
   const isClaudeCodeRuntime = runtime?.command?.[0] === "archestra-claude-code";
   const agentRuntimeEnabled = useFeature("agentRuntime") === true;
+  // A runtime saved before the deployment turned Agent Runtime off stays
+  // editable, so it can be switched off.
+  const runtimeEditable = agentRuntimeEnabled || !!agent?.runtime;
   const runtimePreflight = useAgentRuntimePreflight(
     agent?.id ?? "",
     agentRuntimeEnabled && !!agent?.runtime,
@@ -2270,7 +2273,7 @@ export function AgentForm({
                   passthroughHeaders.length > 0 ? passthroughHeaders : null,
               }),
             }),
-            ...(showRuntimeSection && agentRuntimeEnabled && { runtime }),
+            ...(showRuntimeSection && runtimeEditable && { runtime }),
             // The tools group: what the agent may reach, and how.
             ...(showToolsSections && {
               knowledgeBaseIds: knowledgeBaseIds,
@@ -2605,6 +2608,7 @@ export function AgentForm({
     supportsEnvironment,
     supportsSubagents,
     agentRuntimeEnabled,
+    runtimeEditable,
     runtime,
     channelAssignmentsDirty,
     isClaudeCodeRuntime,
@@ -3679,7 +3683,7 @@ export function AgentForm({
           {agent &&
             showRuntimeSection &&
             agentType === "agent" &&
-            agentRuntimeEnabled &&
+            runtimeEditable &&
             !isBuiltIn && (
               <div className={cn(!isActiveSection("runtime") && "hidden")}>
                 <AgentRuntimeFields

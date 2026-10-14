@@ -248,9 +248,12 @@ class SlackProvider implements ChatOpsProvider {
       this.botDisplayName = this.botUserId
         ? await this.getUserName(this.botUserId)
         : null;
-      this.botHandle = this.botUserId
-        ? await this.fetchUserHandle(this.botUserId)
-        : null;
+      // auth.test's `user` is the bot's username and needs no scope, so a
+      // hand-made app without users:read still reports its real handle.
+      this.botHandle =
+        (this.botUserId ? await this.fetchUserHandle(this.botUserId) : null) ||
+        (body.user as string) ||
+        null;
       logger.info(
         {
           botUserId: this.botUserId,

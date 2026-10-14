@@ -23,6 +23,11 @@ import {
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 
+const scopedCapabilities = vi.hoisted(() => ({
+  data: undefined as
+    | { resource: string; scope: string; action: string }[]
+    | undefined,
+}));
 vi.mock("@/lib/auth/auth.query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/auth.query")>()),
   useSession: () => ({
@@ -30,6 +35,7 @@ vi.mock("@/lib/auth/auth.query", async (importOriginal) => ({
       user: { id: "author-user", name: "Sam Author", email: "sam@example.com" },
     },
   }),
+  useScopedCapabilities: () => ({ data: scopedCapabilities.data }),
 }));
 
 const origin = "http://localhost:9000";
@@ -42,7 +48,10 @@ beforeAll(() => {
   server.listen({ onUnhandledRequest: "error" });
 });
 beforeEach(() => archestraApiClient.setConfig({ baseUrl: origin }));
-afterEach(() => server.resetHandlers());
+afterEach(() => {
+  server.resetHandlers();
+  scopedCapabilities.data = undefined;
+});
 afterAll(() => {
   server.close();
   archestraApiClient.setConfig({ baseUrl: "" });
@@ -278,6 +287,40 @@ it("keeps creation fields and mixed recipient permissions in one dialog until th
       },
     ],
   });
+});
+
+it("names everyone and the roles in the add-access field only for a creator who may add them", () => {
+  const renderForm = () =>
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <InitialResourcePermissions
+          resource="agent"
+          grants={[]}
+          onChange={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+  // Seeing every agent is not enough. It takes Full access on every agent.
+  scopedCapabilities.data = [{ resource: "agent", scope: "*", action: "read" }];
+  const { unmount } = renderForm();
+  expect(
+    screen.getByRole("combobox", { name: "Add access" }),
+  ).toHaveTextContent("Add access: a team, a person or a service account…");
+  unmount();
+
+  scopedCapabilities.data = [
+    { resource: "agent", scope: "*", action: "manage-permissions" },
+  ];
+  renderForm();
+  expect(
+    screen.getByRole("combobox", { name: "Add access" }),
+  ).toHaveTextContent(
+    "Add access: everyone, a role, a team, a person or a service account…",
+  );
 });
 
 async function pick(user: ReturnType<typeof userEvent.setup>, name: string) {

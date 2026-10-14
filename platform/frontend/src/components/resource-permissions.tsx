@@ -9,6 +9,7 @@ import {
   type resourcePermissionPresets,
   resourcePermissionPresetsFor,
   type ScopedResource,
+  scopedResourceNouns,
 } from "@archestra/shared";
 import { AlertCircle, AlertTriangle, Info, Loader2, X } from "lucide-react";
 import Link from "next/link";
@@ -318,6 +319,27 @@ function PermissionsEditor({
     actions: preset.actions,
     disabled: !canGrant(preset.actions),
   }));
+  // A grant to everyone or a role makes the object org-wide. Without the
+  // authority to do that, such a grant can stay, go lower, or go, but not up.
+  const levelOptionsFor = (subject: PermissionSubject) => {
+    if (
+      policy.canShareOrganizationWide ||
+      (subject.type !== "organization" && subject.type !== "role")
+    )
+      return levelOptions;
+    const saved =
+      policy.grants.find(
+        (grant) =>
+          grant.subject.type === subject.type &&
+          grant.subject.id === subject.id,
+      )?.actions ?? [];
+    return levelOptions.map((option) => ({
+      ...option,
+      disabled:
+        option.disabled ||
+        !option.actions.every((action) => saved.includes(action)),
+    }));
+  };
   const mutation = useUpdateResourcePermissions(policy.resource, policy.scope);
   const changedElsewhere = dirty && policy.revision !== form.watch("revision");
   const safety = getPermissionSafetyPreview({
@@ -402,6 +424,7 @@ function PermissionsEditor({
       scope={policy.scope}
       existingSubjects={fields.map((entry) => entry.subject)}
       disabled={mutation.isPending || !policy.effectiveActions.includes("read")}
+      canShareOrganizationWide={policy.canShareOrganizationWide}
       onPick={(recipient) => {
         const preset = defaultAddedPreset(presetOptions);
         if (preset) append({ ...recipient, actions: preset.actions });
@@ -498,7 +521,7 @@ function PermissionsEditor({
                     if (choice)
                       update(index, { ...grant, actions: [...choice.actions] });
                   }}
-                  options={levelOptions}
+                  options={levelOptionsFor(grant.subject)}
                   ariaLabel={`Permission for ${grant.name}`}
                   title={actionDetail(grant.actions, policy.resource)}
                   valueLabel={
@@ -961,33 +984,6 @@ export function presetDescription(preset: string, resource: ScopedResource) {
     ? "View logs and manage who can access them"
     : presetDescriptions[preset as keyof typeof resourcePermissionPresets];
 }
-/** Singular, for sentences. `resourceLabels` is plural and reads as "every agents". */
-export const scopedResourceNouns: Record<ScopedResource, string> = {
-  conversation: "chat session",
-  agentRun: "runtime session",
-  agent: "agent",
-  skill: "skill",
-  app: "app",
-  llmModel: "model",
-  mcpGateway: "MCP gateway",
-  mcpRegistry: "MCP registry entry",
-  project: "project",
-  plugin: "plugin",
-  knowledgeBase: "knowledge base",
-  knowledgeConnector: "connector",
-  knowledgeFile: "file",
-  llmVirtualKey: "virtual key",
-  llmProviderApiKey: "provider key",
-  externalAgent: "external agent",
-  mcpOauthClient: "OAuth client",
-  llmOauthClient: "OAuth client",
-  environment: "environment",
-  scheduledTask: "scheduled task",
-  log: "log",
-  auditLog: "audit log entry",
-  serviceAccount: "service account",
-  credential: "credential",
-};
 /** @public - shared with initial-resource-permissions.tsx */
 export const subjectLabels: Record<PermissionSubject["type"], string> = {
   user: "User",

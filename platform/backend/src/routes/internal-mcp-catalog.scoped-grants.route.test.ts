@@ -316,6 +316,55 @@ describe("catalog object grants", () => {
     );
   });
 
+  test("creation shares with everyone or a role only for someone who manages every entry", async ({
+    makeTeam,
+    makeCustomRole,
+  }) => {
+    const creator = await makeCustomRole(organizationId, {
+      permission: { mcpRegistry: ["read", "create"] },
+    });
+    await MemberModel.updateRole(user.id, organizationId, creator.role);
+    const team = await makeTeam(organizationId, user.id);
+    const create = (name: string, initialGrants: unknown[]) =>
+      app.inject({
+        method: "POST",
+        url: "/api/internal_mcp_catalog",
+        payload: {
+          name,
+          serverType: "remote",
+          serverUrl: "https://example.com/mcp",
+          initialGrants,
+        },
+      });
+    for (const subject of [
+      { type: "organization", id: "*" },
+      { type: "role", id: "member" },
+    ]) {
+      const refused = await create("context7", [
+        { subject, actions: ["read", "use"] },
+      ]);
+      expect(refused.statusCode, refused.body).toBe(403);
+      expect(refused.json().error.message).toBe(
+        "Only someone with Full access to every MCP registry entry can share it with everyone in the organization or with a role.",
+      );
+    }
+    expect(
+      (await InternalMcpCatalogModel.findAll()).some(
+        (item) => item.name === "context7",
+      ),
+    ).toBe(false);
+    const toTeam = await create("context7", [
+      { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+    ]);
+    expect(toTeam.statusCode, toTeam.body).toBe(200);
+
+    await MemberModel.updateRole(user.id, organizationId, "admin");
+    const byAdmin = await create("context7-org", [
+      { subject: { type: "organization", id: "*" }, actions: ["read", "use"] },
+    ]);
+    expect(byAdmin.statusCode, byAdmin.body).toBe(200);
+  });
+
   test("an invalid initial recipient rejects creation before the resource is inserted", async () => {
     await MemberModel.updateRole(user.id, organizationId, "admin");
     const before = await InternalMcpCatalogModel.findAll();

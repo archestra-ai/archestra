@@ -1,3 +1,4 @@
+import type { ResourcePermissionGrant } from "@archestra/shared";
 import type {
   GithubAppConfig,
   InsertGithubAppConfig,
@@ -25,7 +26,10 @@ export default class GithubAppConfigModel {
     return credential ?? null;
   }
   static async create(
-    data: InsertGithubAppConfig,
+    data: InsertGithubAppConfig & {
+      /** Who reaches it besides its author; omitted, the organization does. */
+      initialPermissionGrants?: ResourcePermissionGrant[];
+    },
     /** The user or `service-account:` actor creating it; becomes its author. */
     createdBy: string | null = null,
   ): Promise<GithubAppConfig> {

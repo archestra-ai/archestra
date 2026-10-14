@@ -48,6 +48,7 @@ beforeEach(() => {
       },
     ],
     effectiveActions: ["read", "use", "update", "delete", "manage-permissions"],
+    canShareOrganizationWide: true,
     actorSubjects: [],
   };
   server.use(
@@ -451,6 +452,57 @@ it("explains the access every object gives without a link for those who cannot c
   expect(
     screen.queryByRole("link", { name: /Edit access to every/ }),
   ).not.toBeInTheDocument();
+});
+
+it("lets someone who cannot make an entry org-wide lower an everyone grant, but not raise it", async () => {
+  Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+  Element.prototype.scrollIntoView = vi.fn();
+  policy.canShareOrganizationWide = false;
+  policy.grants = [
+    {
+      subject: { type: "organization", id: "*" },
+      name: "Everyone in the organization",
+      actions: ["read", "use"],
+    },
+  ];
+  let saved: unknown;
+  server.use(
+    http.put(endpoint, async ({ request }) => {
+      saved = await request.json();
+      return HttpResponse.json(policy);
+    }),
+  );
+  const user = userEvent.setup();
+  renderEditor();
+  // The field names only the recipients the server will offer.
+  expect(
+    await screen.findByRole("combobox", { name: "Add access" }),
+  ).toHaveTextContent("Add access: a team, a person or a service account…");
+  await user.click(
+    await screen.findByRole("combobox", {
+      name: "Permission for Everyone in the organization",
+    }),
+  );
+  // Only the levels at or below the stored grant stay on offer.
+  await screen.findByRole("option", { name: /^Can view/ });
+  const offered = screen
+    .getAllByRole("option")
+    .filter((option) => option.getAttribute("aria-disabled") !== "true")
+    .map((option) => option.textContent);
+  expect(offered).toEqual([
+    expect.stringMatching(/^Can view/),
+    expect.stringMatching(/^Can use/),
+  ]);
+  await user.click(screen.getByRole("option", { name: /^Can view/ }));
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+  await waitFor(() =>
+    expect(saved).toEqual({
+      revision: 1,
+      grants: [
+        { subject: { type: "organization", id: "*" }, actions: ["read"] },
+      ],
+    }),
+  );
 });
 
 async function pick(user: ReturnType<typeof userEvent.setup>, name: string) {

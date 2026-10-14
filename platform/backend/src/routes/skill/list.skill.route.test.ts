@@ -228,12 +228,14 @@ describe("GET /api/skills", () => {
     ).toEqual([excluded.json().id, published.json().id].sort());
   });
 
-  test("previews All-mode skills for a draft gateway environment", async ({
-    makeMember,
-  }) => {
-    await makeMember(ctx.user.id, ctx.organizationId, {
-      role: ADMIN_ROLE_NAME,
-    });
+  test("previews All-mode skills for a draft gateway environment", async () => {
+    // The helper already made the caller a member; publishing to everyone
+    // takes Full access on every skill.
+    await MemberModel.updateRole(
+      ctx.user.id,
+      ctx.organizationId,
+      ADMIN_ROLE_NAME,
+    );
     const staging = await EnvironmentModel.create({
       organizationId: ctx.organizationId,
       name: "Gateway staging",

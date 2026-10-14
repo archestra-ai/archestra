@@ -5,6 +5,7 @@ import {
 } from "@archestra/shared";
 import { A2aOutboundRunModel } from "@/models";
 import AgentToolModel from "@/models/agent-tool";
+import MemberModel from "@/models/member";
 import { createA2aRemoteAgent } from "@/services/a2a-outbound-registry";
 import { describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
@@ -43,6 +44,8 @@ describe("outbound A2A visibility reads", () => {
       name: "Shared with team",
       initialGrants: [grant("team", team.id)],
     });
+    // Sharing with everyone takes Full access on every external agent.
+    await MemberModel.updateRole(owner.id, ctx.organizationId, ADMIN_ROLE_NAME);
     const organization = await createRemote(ctx, {
       name: "Shared with organization",
       initialGrants: [grant("organization", "*")],
@@ -63,6 +66,11 @@ describe("outbound A2A visibility reads", () => {
     });
     expect(credentialBackedResponse.statusCode).toBe(200);
     const credentialBacked = credentialBackedResponse.json();
+    await MemberModel.updateRole(
+      owner.id,
+      ctx.organizationId,
+      MEMBER_ROLE_NAME,
+    );
     const foreignOrganization = await makeOrganization();
     await createA2aRemoteAgent({
       organizationId: foreignOrganization.id,

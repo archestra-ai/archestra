@@ -49,8 +49,14 @@ const gitCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(GitCredentialSchema),
       },
     },
-    async ({ organizationId, body }, reply) =>
-      reply.send(await createGitlabToken({ organizationId, data: body })),
+    async ({ organizationId, body, user }, reply) =>
+      reply.send(
+        await createGitlabToken({
+          organizationId,
+          userId: user.id,
+          data: body,
+        }),
+      ),
   );
 
   fastify.get(

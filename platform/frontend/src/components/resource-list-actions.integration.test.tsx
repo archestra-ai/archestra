@@ -57,6 +57,7 @@ beforeEach(() => {
     ],
     inheritedGrants: [],
     effectiveActions: ["read", "use", "update", "delete", "manage-permissions"],
+    canShareOrganizationWide: true,
     actorSubjects: [],
   };
   server.use(

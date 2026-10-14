@@ -35,6 +35,7 @@ export function ResourceAccessAddField({
   scope,
   existingSubjects,
   disabled = false,
+  canShareOrganizationWide = true,
   onPick,
 }: {
   resource: ScopedResource;
@@ -43,6 +44,8 @@ export function ResourceAccessAddField({
   /** Recipients that already hold a direct grant, left out of the results. */
   existingSubjects: PermissionSubject[];
   disabled?: boolean;
+  /** False when the server leaves out everyone and the roles for this caller. */
+  canShareOrganizationWide?: boolean;
   onPick: (recipient: PermissionRecipient) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -100,7 +103,9 @@ export function ResourceAccessAddField({
         >
           <Plus className="size-3.5" aria-hidden="true" />
           <span className="min-w-0 flex-1 truncate text-left">
-            Add access: everyone, a role, a team, a person or a service account…
+            {canShareOrganizationWide
+              ? "Add access: everyone, a role, a team, a person or a service account…"
+              : "Add access: a team, a person or a service account…"}
           </span>
         </Button>
       </PopoverTrigger>

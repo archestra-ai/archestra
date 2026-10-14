@@ -77,6 +77,20 @@ export function InitialResourcePermissions({
             grant.scope === "*",
         ),
     );
+  // Everyone and the roles make an object org-wide, which takes Full access
+  // on every object of the kind or the right to edit access policies. The
+  // server offers them as recipients on exactly those terms.
+  const { data: canEditAccessPolicies } = useHasPermissions({
+    accessPolicies: ["update"],
+  });
+  const canShareOrganizationWide =
+    !!canEditAccessPolicies ||
+    !!capabilities?.some(
+      (grant) =>
+        grant.resource === resource &&
+        grant.action === "manage-permissions" &&
+        grant.scope === "*",
+    );
   const levelOptions = Object.entries(presets).map(([value, preset]) => ({
     value,
     label: preset.label,
@@ -174,6 +188,7 @@ export function InitialResourcePermissions({
             ...grants.map((grant) => grant.subject),
             ...(author ? [{ type: "user" as const, id: author.id }] : []),
           ]}
+          canShareOrganizationWide={canShareOrganizationWide}
           onPick={(recipient) => {
             const preset = defaultAddedPreset(levelOptions);
             if (preset)

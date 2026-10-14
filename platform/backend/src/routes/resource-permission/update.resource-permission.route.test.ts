@@ -42,6 +42,56 @@ describe("resource permission routes", () => {
     await app.close();
   });
 
+  test("a member who manages an agent cannot make it org-wide, while an admin can", async ({
+    makeAgent,
+    makeTeam,
+  }) => {
+    const admin = user;
+    const team = await makeTeam(organizationId, admin.id);
+    const agent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      access: "personal",
+    });
+    const url = `/api/resource-permissions/agent/${agent.id}`;
+    const own = {
+      subject: { type: "user", id: admin.id },
+      actions: ["read", "use", "update", "delete", "manage-permissions"],
+    };
+    const everyone = {
+      subject: { type: "organization", id: "*" },
+      actions: ["read", "use"],
+    };
+    const put = async (grants: unknown[]) => {
+      const current = await app.inject({ method: "GET", url });
+      return app.inject({
+        method: "PUT",
+        url,
+        payload: { revision: current.json().revision, grants },
+      });
+    };
+    expect((await put([own])).statusCode).toBe(200);
+
+    await MemberModel.updateRole(admin.id, organizationId, "member");
+    const policy = await app.inject({ method: "GET", url });
+    expect(policy.json().canShareOrganizationWide).toBe(false);
+    const refused = await put([own, everyone]);
+    expect(refused.statusCode, refused.body).toBe(403);
+    expect(refused.json().error.message).toBe(
+      "Only someone with Full access to every agent can share it with everyone in the organization or with a role.",
+    );
+    const shared = await put([
+      own,
+      { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+    ]);
+    expect(shared.statusCode, shared.body).toBe(200);
+
+    await MemberModel.updateRole(admin.id, organizationId, "admin");
+    const published = await put([own, everyone]);
+    expect(published.statusCode, published.body).toBe(200);
+    expect(published.json().canShareOrganizationWide).toBe(true);
+  });
+
   test("saves and audits mixed chat recipients and denies changes from a viewer", async ({
     makeAgent,
     makeUser,

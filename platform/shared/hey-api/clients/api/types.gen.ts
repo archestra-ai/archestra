@@ -119280,6 +119280,7 @@ export type GetResourcePermissionsResponses = {
             sourceScope?: '*' | string;
         }>;
         effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        canShareOrganizationWide: boolean;
         actorSubjects: Array<{
             type: 'user';
             id: string;
@@ -119452,6 +119453,7 @@ export type UpdateResourcePermissionsResponses = {
             sourceScope?: '*' | string;
         }>;
         effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        canShareOrganizationWide: boolean;
         actorSubjects: Array<{
             type: 'user';
             id: string;

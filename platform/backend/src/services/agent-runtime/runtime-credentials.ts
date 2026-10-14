@@ -117,7 +117,9 @@ export async function createRuntimeCredentialDefinition(params: {
     organizationId: params.organizationId,
     createdBy: params.userId,
     definition: params.definition,
-    initialPermissionGrants: params.initialGrants,
+    initialPermissionGrants:
+      params.initialGrants ??
+      (await ResourcePermissions.defaultCredentialGrants(params)),
   });
 }
 

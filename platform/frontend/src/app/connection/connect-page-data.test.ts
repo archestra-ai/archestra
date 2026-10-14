@@ -17,7 +17,11 @@ import {
   type ConnectChoices,
   type ConnectPicks,
 } from "./connect-choices";
-import { useConnectPageData } from "./connect-page-data";
+import {
+  gatewayServerName,
+  useConnectPageData,
+  welcomePrompt,
+} from "./connect-page-data";
 
 // The command only depends on the page origin, the app, the choices and
 // picks; the data hooks render with nothing loaded unless a test sets a
@@ -251,3 +255,67 @@ async function runPosixCommand(clientId: string, choices: ConnectChoices) {
     await rm(root, { recursive: true, force: true });
   }
 }
+
+describe("Connect page welcome prompt", () => {
+  const client = (id: string) => {
+    const found = CONNECT_CLIENTS.find((c) => c.id === id);
+    if (!found) throw new Error(`no client ${id}`);
+    return found;
+  };
+  const gateway = (name: string, isPersonalGateway = false) => ({
+    id: "gw-1",
+    slug: "gw",
+    name,
+    agentType: "mcp_gateway" as const,
+    isPersonalGateway,
+  });
+  const serverFor = (
+    id: string,
+    gw: ReturnType<typeof gateway> | null,
+    tools = true,
+  ) =>
+    gatewayServerName({
+      client: client(id),
+      gateway: gw,
+      appName: "Acme AI",
+      tools,
+    });
+
+  it("names the gateway as installer setups register it", () => {
+    expect(serverFor("claude-code", gateway("My Gateway", true))).toBe(
+      "acme_ai",
+    );
+    expect(serverFor("claude-desktop", gateway("Team Gateway"))).toBe(
+      "team_gateway",
+    );
+    expect(
+      welcomePrompt({
+        origin: "https://acme.test",
+        appName: "Acme AI",
+        serverName: "team_gateway",
+      }),
+    ).toBe(
+      "Read https://acme.test/welcome.md?server=team_gateway and show me what I can do with Acme AI. Do not call, test, reconnect or sign in to my other MCP servers. Leave them out of your answer.",
+    );
+  });
+
+  it("names no server when the page can't know it", () => {
+    // Agents set up from a prompt or by hand pick their own name.
+    expect(serverFor("amp", gateway("Team Gateway"))).toBeNull();
+    expect(serverFor("generic", gateway("Team Gateway"))).toBeNull();
+    // Tools left out, or no gateway: nothing was registered.
+    expect(serverFor("claude-code", gateway("Team Gateway"), false)).toBeNull();
+    expect(serverFor("claude-code", null)).toBeNull();
+    // A name a prompt can't carry plainly.
+    expect(serverFor("claude-code", gateway('R&D "prod"'))).toBeNull();
+    expect(
+      welcomePrompt({
+        origin: "https://acme.test",
+        appName: "Acme AI",
+        serverName: null,
+      }),
+    ).toBe(
+      "Read https://acme.test/welcome.md and show me what I can do with Acme AI.",
+    );
+  });
+});

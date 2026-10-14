@@ -234,7 +234,7 @@ test("Copilot prints saved credentials once in the final instructions, after the
     result.output.match(/^ {2}export COPILOT_PROVIDER_API_KEY=/gm),
   ).toHaveLength(1);
   expect(result.output).toContain(
-    "copilot -i 'What can you do with my Test tools?'",
+    "copilot -i 'What can you do with my Test tools from the test MCP server? Do not call, test, reconnect or sign in to my other MCP servers. Leave them out of your answer.'",
   );
 });
 

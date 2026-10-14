@@ -261,6 +261,10 @@ export const ArchestraOpenAiOAuth = async () => ({
  * - a ChatGPT sign-in (OpenAI requests bound for the Codex backend) is marked
  *   with the OAuth bridge header, as V1's fetch bridge did.
  *
+ * Pinned models are moved to their Archestra twins by the setup payload for
+ * both majors; this variant has no config hook, so a pin added after connect
+ * fails closed in `model.request` instead of being moved at load.
+ *
  * Inject values only with JSON.stringify. The return value is JavaScript source.
  */
 export function renderOpenCodeRoutingPluginV2(
@@ -269,7 +273,6 @@ export function renderOpenCodeRoutingPluginV2(
   return `const routes = ${JSON.stringify(params.routes)};
 const managedHeaders = ${JSON.stringify(params.headers)};
 const routeHeaders = ${JSON.stringify(params.routeHeaders ?? {})};
-const providerTwins = ${JSON.stringify(params.providerTwins ?? {})};
 // white-label-ok: This constant is a stable wire header identifier.
 const openCodeAgentHeader = ${JSON.stringify(OPENCODE_AGENT_HEADER)};
 const openAiOAuthBridgeHeader = "x-archestra-opencode-oauth-bridge";

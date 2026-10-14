@@ -5,6 +5,7 @@ import {
 } from "@archestra/shared/model-constants";
 import {
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
+  type OpenCodeProviderRoute,
   openCodePassthroughBaseUrl,
 } from "@archestra/shared/opencode-provider-routes";
 import type { OpenCodeFamilyClient } from "../opencode-family";
@@ -80,15 +81,15 @@ export function openCodePrimaryConfig(
 function openCodeProviderTwins(
   providers: Record<string, unknown>,
 ): Record<string, string> {
+  const routes: readonly OpenCodeProviderRoute[] =
+    OPENCODE_PASSTHROUGH_PROVIDER_ROUTES;
   return Object.fromEntries(
-    OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.flatMap((route) => {
+    routes.flatMap((route) => {
       const twin = `archestra-${route.provider}`;
       if (!(twin in providers)) return [];
-      const ids: readonly string[] = [
-        route.openCodeProviderId,
-        ...("pinAliases" in route ? route.pinAliases : []),
-      ];
-      return ids.map((id) => [id, twin] as const);
+      return [route.openCodeProviderId, ...(route.pinAliases ?? [])].map(
+        (id) => [id, twin] as const,
+      );
     }),
   );
 }

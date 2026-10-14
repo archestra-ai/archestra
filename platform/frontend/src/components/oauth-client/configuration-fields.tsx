@@ -2,7 +2,7 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import type { OAuthClientScope } from "@archestra/shared/oauth";
 import { Bot, Network, Workflow } from "lucide-react";
-import type { UseFormReturn } from "react-hook-form";
+import { type UseFormReturn, useWatch } from "react-hook-form";
 import type { AgentSelectorAgent } from "@/components/agent-selector";
 import { ProviderKeyList } from "@/components/credential-billing/provider-key-list";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
@@ -94,7 +94,10 @@ export function OAuthClientAccessFields({
   gateways: AgentSelectorAgent[];
   providerApiKeys: archestraApiTypes.GetLlmProviderApiKeysResponses["200"];
 }) {
-  const values = form.watch();
+  const values = useWatch({
+    control: form.control,
+    compute: (current) => current,
+  });
   const userMode = values.grantType === "authorization_code";
   const targets = gateways.filter(
     (agent) =>

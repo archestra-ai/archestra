@@ -167,7 +167,7 @@ function OauthClientsTable() {
     {
       id: "name",
       header: "Name",
-      size: 220,
+      size: 210,
       cell: ({ row }) => (
         <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-2 font-medium">
@@ -200,7 +200,7 @@ function OauthClientsTable() {
     {
       id: "scopes",
       header: "APIs",
-      size: 250,
+      size: 180,
       cell: ({ row }) => (
         <div className="flex flex-wrap gap-1.5">
           {oauthCapabilities
@@ -219,7 +219,7 @@ function OauthClientsTable() {
     {
       id: "grantType",
       header: "Signs in",
-      size: 150,
+      size: 120,
       cell: ({ row }) => {
         const user = row.original.grantType === "authorization_code";
         const Icon = user ? Users : Server;
@@ -239,7 +239,7 @@ function OauthClientsTable() {
     {
       id: "access",
       header: "Access",
-      size: 230,
+      size: 160,
       cell: ({ row }) => {
         const client = row.original;
         const user = client.grantType === "authorization_code";
@@ -275,7 +275,7 @@ function OauthClientsTable() {
     {
       id: "actions",
       header: "Actions",
-      size: 100,
+      size: 84,
       cell: ({ row }) => (
         <TableRowActions
           itemName={row.original.name}

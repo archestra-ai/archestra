@@ -1,6 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { memo } from "react";
+import { useForm } from "react-hook-form";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useModelsWithApiKeys } from "@/lib/llm-models.query";
@@ -10,6 +12,11 @@ import {
 } from "@/lib/organization.query";
 import { useMyTeams, useTeams } from "@/lib/teams/team.query";
 import { CreateManagedOAuthClientDialog } from "./create-managed-oauth-client-dialog";
+import {
+  OAuthClientAccessFields,
+  type OAuthClientFormValues,
+} from "./oauth-client/configuration-fields";
+import { Button } from "./ui/button";
 
 vi.mock("@/lib/auth/auth.query");
 // The permissions section reads the organization policy over the network;
@@ -99,6 +106,58 @@ beforeEach(() => {
 });
 
 describe("CreateManagedOAuthClientDialog", () => {
+  it("keeps multiple targets and provider-key edits reactive with stable form props", async () => {
+    const user = userEvent.setup();
+    const save = vi.fn();
+    const StableAccessFields = memo(OAuthClientAccessFields);
+    function StableForm() {
+      const form = useForm<OAuthClientFormValues>({
+        defaultValues: {
+          name: "Combined application",
+          grantType: "client_credentials",
+          scopes: ["mcp", "a2a", "llm:proxy"],
+          allowedGatewayIds: [],
+          providerApiKeys: [],
+          redirectUrisText: "",
+        },
+      });
+      return (
+        <form onSubmit={form.handleSubmit(save)}>
+          <output>{form.watch("name")}</output>
+          <StableAccessFields
+            form={form}
+            gateways={GATEWAYS}
+            providerApiKeys={PROVIDER_KEYS}
+          />
+          <Button type="submit">Save test client</Button>
+        </form>
+      );
+    }
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <StableForm />
+      </QueryClientProvider>,
+    );
+    await user.click(screen.getByRole("combobox"));
+    await user.click(screen.getByRole("option", { name: /Prod Gateway/ }));
+    await user.click(screen.getByRole("option", { name: /Marketing Agent/ }));
+    await user.keyboard("{Escape}");
+    expect(screen.getByText("2 of 2 selected")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Add OpenAI" }));
+    expect(
+      screen.getByRole("combobox", { name: "OpenAI key" }),
+    ).toHaveTextContent("Main OpenAI");
+    await user.click(screen.getByRole("button", { name: "Save test client" }));
+    await waitFor(() =>
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          allowedGatewayIds: ["gw-1", "ag-1"],
+          providerApiKeys: [{ provider: "openai", providerApiKeyId: "pk-1" }],
+        }),
+        expect.anything(),
+      ),
+    );
+  });
   it("carries a deep-linked agent through to the submitted client", async () => {
     const user = userEvent.setup();
     const { onSubmit } = renderDialog({

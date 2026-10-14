@@ -376,6 +376,16 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         querystring: PaginationQuerySchema.extend({
           search: z.string().optional(),
           sourceRepo: z.string().optional(),
+          skillIds: z
+            .preprocess(
+              (value) =>
+                typeof value === "string"
+                  ? value.split(",").filter(Boolean)
+                  : value,
+              z.array(UuidIdSchema),
+            )
+            .optional()
+            .describe("Restrict results to these skill IDs (comma-separated)."),
           forAgentId: UuidIdSchema.optional().describe(
             "Restrict results to native skills available through this internal " +
               "agent or eligible for publication by this saved MCP gateway.",
@@ -444,6 +454,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           offset,
           search,
           sourceRepo,
+          skillIds: requestedSkillIds,
           forAgentId,
           mcpGatewayEnvironment,
           agentSkillView,
@@ -601,6 +612,13 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         const accessibleSet = new Set(accessibleSkillIds);
         accessibleSkillIds = allowedSkillIds.filter((id) =>
           accessibleSet.has(id),
+        );
+      }
+
+      if (requestedSkillIds !== undefined) {
+        const requestedIds = new Set(requestedSkillIds);
+        accessibleSkillIds = accessibleSkillIds.filter((id) =>
+          requestedIds.has(id),
         );
       }
 

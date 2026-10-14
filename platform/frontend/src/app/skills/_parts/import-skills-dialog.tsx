@@ -11,7 +11,7 @@ import {
   SearchX,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { RepositoryBar, SetupStepper } from "@/components/git/git-setup-chrome";
+import { RepositoryBar } from "@/components/git/git-setup-chrome";
 import {
   gitAuthFields,
   gitRepositoryUrlWithRef,
@@ -21,15 +21,18 @@ import {
   GitSourceStepBody,
   GitSourceStepFooter,
   gitSourceStepDescription,
-  gitSourceStepLabels,
   useGitSourceSteps,
 } from "@/components/git/git-source-steps";
+import {
+  ImportSelectionDialog,
+  ImportSelectionList,
+  ImportSettings,
+} from "@/components/git/import-selection";
 import {
   type InitialPermissionGrant,
   InitialResourcePermissions,
 } from "@/components/initial-resource-permissions";
 import { SearchInput } from "@/components/search-input";
-import { StandardDialog } from "@/components/standard-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -103,7 +106,7 @@ export function ImportSkillsDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onImported?: () => void;
+  onImported?: (skillIds: string[]) => void;
   initialRepoUrl?: string;
   initialSkill?: IndexedSkillSelection;
   autoDiscover?: boolean;
@@ -115,8 +118,9 @@ export function ImportSkillsDialog({
 
   const [discovered, setDiscovered] = useState<SelectStepSkill[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const rangeSelection = useRef(new BulkRangeSelectionController()).current;
+  const rangeSelection = useRef(new BulkRangeSelectionController());
   const [search, setSearch] = useState("");
+  const [selectedOnly, setSelectedOnly] = useState(false);
   const [previewSkillPath, setPreviewSkillPath] = useState<string | null>(null);
   const [discoverError, setDiscoverError] = useState<string | null>(null);
   const [initialGrants, setInitialGrants] = useState<InitialPermissionGrant[]>(
@@ -150,7 +154,9 @@ export function ImportSkillsDialog({
     source.reset();
     setDiscovered(null);
     setSelected(new Set());
+    rangeSelection.current = new BulkRangeSelectionController();
     setSearch("");
+    setSelectedOnly(false);
     setPreviewSkillPath(null);
     setDiscoverError(null);
     setInitialGrants([]);
@@ -160,6 +166,7 @@ export function ImportSkillsDialog({
   const backToRepository = () => {
     setDiscovered(null);
     setSearch("");
+    setSelectedOnly(false);
     setPreviewSkillPath(null);
   };
 
@@ -221,13 +228,13 @@ export function ImportSkillsDialog({
     // a no-op, so keep the dialog open — the mutation's toast reports the skip.
     if (result && result.created.length > 0) {
       handleClose(false);
-      onImported?.();
+      onImported?.(result.created.map((skill) => skill.id));
     }
   };
 
   const toggle = (skillPath: string, range: boolean) => {
     setSelected((prev) => {
-      const next = rangeSelection.update({
+      const next = rangeSelection.current.update({
         current: toRowSelectionState(prev),
         orderedIds: selectableFiltered.map((skill) => skill.skillPath),
         targetId: skillPath,
@@ -240,14 +247,15 @@ export function ImportSkillsDialog({
   const filteredSkills = useMemo(() => {
     if (!discovered) return [];
     const q = search.trim().toLowerCase();
-    if (!q) return discovered;
     return discovered.filter(
       (s) =>
-        s.name.toLowerCase().includes(q) ||
-        s.description?.toLowerCase().includes(q) ||
-        s.skillPath.toLowerCase().includes(q),
+        (!selectedOnly || selected.has(s.skillPath)) &&
+        (!q ||
+          s.name.toLowerCase().includes(q) ||
+          s.description?.toLowerCase().includes(q) ||
+          s.skillPath.toLowerCase().includes(q)),
     );
-  }, [discovered, search]);
+  }, [discovered, search, selectedOnly, selected]);
 
   const selectableFiltered = useMemo(
     () => filteredSkills.filter((s) => !s.exists),
@@ -289,7 +297,7 @@ export function ImportSkillsDialog({
   const totalExisting = discovered?.filter((s) => s.exists).length ?? 0;
 
   return (
-    <StandardDialog
+    <ImportSelectionDialog
       open={open}
       onOpenChange={handleClose}
       title={
@@ -310,7 +318,7 @@ export function ImportSkillsDialog({
               })
       }
       size="medium"
-      bodyClassName={isSelectStep ? "p-0" : undefined}
+      selecting={isSelectStep}
       footer={
         isAutoDiscovering ? (
           <Button variant="outline" onClick={() => handleClose(false)}>
@@ -375,18 +383,7 @@ export function ImportSkillsDialog({
           </div>
         </div>
       ) : isSelectStep ? (
-        <div className="flex flex-col">
-          {autoDiscover ? null : (
-            <div className="px-4 pt-4 pb-3">
-              <SetupStepper
-                steps={gitSourceStepLabels({
-                  provider: source.provider,
-                  last: "Skills",
-                })}
-                current={3}
-              />
-            </div>
-          )}
+        <div className="flex min-h-0 flex-1 flex-col">
           {discovered.length === 0 ? (
             <>
               {repositoryBar}
@@ -406,7 +403,7 @@ export function ImportSkillsDialog({
             </>
           ) : (
             <>
-              <div className="sticky top-0 z-10 border-b bg-background">
+              <div className="shrink-0 border-b bg-background">
                 {repositoryBar}
                 <div className="space-y-2 px-4 py-3">
                   <SearchInput
@@ -416,7 +413,7 @@ export function ImportSkillsDialog({
                     placeholder="Search by name, description, or path"
                     className="relative w-full"
                   />
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <Checkbox
                         id="import-skills-select-all"
@@ -435,7 +432,9 @@ export function ImportSkillsDialog({
                         className="cursor-pointer text-xs font-medium text-muted-foreground select-none hover:text-foreground peer-disabled:cursor-not-allowed peer-disabled:opacity-50 peer-disabled:hover:text-muted-foreground"
                       >
                         {allFilteredSelected
-                          ? "Deselect all"
+                          ? search.trim() || selectedOnly
+                            ? "Deselect visible"
+                            : "Deselect all"
                           : search.trim()
                             ? `Select all (${selectableFiltered.length} visible)`
                             : "Select all"}
@@ -446,134 +445,162 @@ export function ImportSkillsDialog({
                       {totalExisting > 0 && ` · ${totalExisting} imported`}
                     </span>
                   </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      variant={selectedOnly ? "secondary" : "ghost"}
+                      size="xs"
+                      aria-pressed={selectedOnly}
+                      onClick={() => setSelectedOnly((value) => !value)}
+                    >
+                      <span>Selected ({selected.size})</span>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      disabled={selected.size === 0}
+                      onClick={() => {
+                        setSelected(new Set());
+                        rangeSelection.current =
+                          new BulkRangeSelectionController();
+                      }}
+                    >
+                      <span>Clear selection</span>
+                    </Button>
+                  </div>
                 </div>
               </div>
-              {filteredSkills.length === 0 ? (
-                <div className="px-4 py-8">
-                  <Empty>
-                    <EmptyHeader>
-                      <EmptyMedia variant="icon">
-                        <SearchX />
-                      </EmptyMedia>
-                      <EmptyTitle>No matches</EmptyTitle>
-                      <EmptyDescription>
-                        No skills match “{search}”.
-                      </EmptyDescription>
-                    </EmptyHeader>
-                  </Empty>
-                </div>
-              ) : (
-                <ul className="divide-y">
-                  {filteredSkills.map((skill) => {
-                    const isSelected = selected.has(skill.skillPath);
-                    return (
-                      <li
-                        key={skill.skillPath}
-                        className={cn(
-                          "group relative flex items-center gap-3 px-4 py-3 transition-colors",
-                          skill.exists
-                            ? "bg-muted/20"
-                            : isSelected
-                              ? "bg-primary/5"
-                              : "hover:bg-muted/40",
-                        )}
-                      >
-                        <label
-                          htmlFor={`import-skill-${skill.skillPath}`}
+              <ImportSelectionList label="Skills to import">
+                {filteredSkills.length === 0 ? (
+                  <div className="px-4 py-8">
+                    <Empty>
+                      <EmptyHeader>
+                        <EmptyMedia variant="icon">
+                          <SearchX />
+                        </EmptyMedia>
+                        <EmptyTitle>No matches</EmptyTitle>
+                        <EmptyDescription>
+                          {selectedOnly
+                            ? "No selected skills match your search."
+                            : `No skills match “${search}”.`}
+                        </EmptyDescription>
+                      </EmptyHeader>
+                    </Empty>
+                  </div>
+                ) : (
+                  <ul className="divide-y">
+                    {filteredSkills.map((skill) => {
+                      const isSelected = selected.has(skill.skillPath);
+                      return (
+                        <li
+                          key={skill.skillPath}
                           className={cn(
-                            "flex min-w-0 flex-1 items-center gap-3 text-left",
+                            "group relative flex items-center gap-3 px-4 py-3 transition-colors",
                             skill.exists
-                              ? "cursor-not-allowed"
-                              : "cursor-pointer",
+                              ? "bg-muted/20"
+                              : isSelected
+                                ? "bg-primary/5"
+                                : "hover:bg-muted/40",
                           )}
                         >
-                          {skill.exists ? (
-                            <CheckCircle2
-                              className="size-4 shrink-0 text-muted-foreground"
-                              aria-hidden
-                            />
-                          ) : (
-                            <Checkbox
-                              id={`import-skill-${skill.skillPath}`}
-                              checked={isSelected}
-                              onClick={(event) => {
-                                event.preventDefault();
-                                toggle(skill.skillPath, event.shiftKey);
-                              }}
-                              className="shrink-0"
-                              aria-label={
-                                isSelected
-                                  ? `Deselect ${skill.name}`
-                                  : `Select ${skill.name}`
-                              }
-                            />
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <span
-                                className={cn(
-                                  "truncate text-sm font-medium",
-                                  skill.exists && "text-muted-foreground",
-                                )}
-                              >
-                                {skill.name}
-                              </span>
-                              {skill.compatibility && (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span
-                                      role="img"
-                                      aria-label={`Compatibility: ${skill.compatibility}`}
-                                      className="inline-flex shrink-0 items-center gap-1 rounded border border-dashed px-1.5 py-px text-[10px] font-medium tracking-wide text-muted-foreground uppercase"
-                                    >
-                                      <Info className="size-3" />
-                                      compatibility
-                                    </span>
-                                  </TooltipTrigger>
-                                  <TooltipContent className="max-w-xs">
-                                    {skill.compatibility}
-                                  </TooltipContent>
-                                </Tooltip>
-                              )}
-                              {skill.exists && (
-                                <span className="shrink-0 text-[11px] font-medium text-muted-foreground">
-                                  Imported
-                                </span>
-                              )}
-                            </div>
-                            <div className="truncate text-xs text-muted-foreground">
-                              {skill.description || (
-                                <span className="italic">No description</span>
-                              )}
-                            </div>
-                          </div>
-                        </label>
-                        <div className="flex shrink-0 items-center gap-3">
-                          <span className="text-xs tabular-nums text-muted-foreground">
-                            {skill.fileCount}{" "}
-                            {skill.fileCount === 1 ? "file" : "files"}
-                          </span>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="xs"
-                            className="text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-                            onClick={() => setPreviewSkillPath(skill.skillPath)}
-                            aria-label={`Preview ${skill.name}`}
+                          <label
+                            htmlFor={`import-skill-${skill.skillPath}`}
+                            className={cn(
+                              "flex min-w-0 flex-1 items-center gap-3 text-left",
+                              skill.exists
+                                ? "cursor-not-allowed"
+                                : "cursor-pointer",
+                            )}
                           >
-                            <Eye className="size-3.5" />
-                            Preview
-                          </Button>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
+                            {skill.exists ? (
+                              <CheckCircle2
+                                className="size-4 shrink-0 text-muted-foreground"
+                                aria-hidden
+                              />
+                            ) : (
+                              <Checkbox
+                                id={`import-skill-${skill.skillPath}`}
+                                checked={isSelected}
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  toggle(skill.skillPath, event.shiftKey);
+                                }}
+                                className="shrink-0"
+                                aria-label={
+                                  isSelected
+                                    ? `Deselect ${skill.name}`
+                                    : `Select ${skill.name}`
+                                }
+                              />
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={cn(
+                                    "truncate text-sm font-medium",
+                                    skill.exists && "text-muted-foreground",
+                                  )}
+                                >
+                                  {skill.name}
+                                </span>
+                                {skill.compatibility && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span
+                                        role="img"
+                                        aria-label={`Compatibility: ${skill.compatibility}`}
+                                        className="inline-flex shrink-0 items-center gap-1 rounded border border-dashed px-1.5 py-px text-[10px] font-medium tracking-wide text-muted-foreground uppercase"
+                                      >
+                                        <Info className="size-3" />
+                                        compatibility
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="max-w-xs">
+                                      {skill.compatibility}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )}
+                                {skill.exists && (
+                                  <span className="shrink-0 text-[11px] font-medium text-muted-foreground">
+                                    Imported
+                                  </span>
+                                )}
+                              </div>
+                              <div className="truncate text-xs text-muted-foreground">
+                                {skill.description || (
+                                  <span className="italic">No description</span>
+                                )}
+                              </div>
+                            </div>
+                          </label>
+                          <div className="flex shrink-0 items-center gap-3">
+                            <span className="text-xs tabular-nums text-muted-foreground">
+                              {skill.fileCount}{" "}
+                              {skill.fileCount === 1 ? "file" : "files"}
+                            </span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="xs"
+                              className="text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                              onClick={() =>
+                                setPreviewSkillPath(skill.skillPath)
+                              }
+                              aria-label={`Preview ${skill.name}`}
+                            >
+                              <Eye className="size-3.5" />
+                              Preview
+                            </Button>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </ImportSelectionList>
             </>
           )}
           {discovered.length > 0 ? (
-            <div className="space-y-5 border-t px-4 py-4">
+            <ImportSettings>
               <div className="space-y-2">
                 <Label htmlFor="skill-sync-interval">Keep in sync</Label>
                 <FieldDescription>
@@ -600,7 +627,7 @@ export function ImportSkillsDialog({
                 grants={initialGrants}
                 onChange={setInitialGrants}
               />
-            </div>
+            </ImportSettings>
           ) : null}
         </div>
       ) : (
@@ -633,7 +660,7 @@ export function ImportSkillsDialog({
         preview={previewData ?? null}
         isLoading={isPreviewLoading}
       />
-    </StandardDialog>
+    </ImportSelectionDialog>
   );
 }
 

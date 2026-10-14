@@ -107162,6 +107162,10 @@ export type GetSkillsData = {
         search?: string;
         sourceRepo?: string;
         /**
+         * Restrict results to these skill IDs (comma-separated).
+         */
+        skillIds?: Array<string>;
+        /**
          * Restrict results to native skills available through this internal agent or eligible for publication by this saved MCP gateway.
          */
         forAgentId?: string;

@@ -11,6 +11,7 @@ import {
   requireAgentModifyPermission,
   userHasPermission,
 } from "@/auth";
+import { actorFromUserId } from "@/auth/service-account-user-id";
 import logger from "@/logging";
 import {
   A2ATaskModel,
@@ -109,8 +110,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
       reply.send(
         await accessAgentWorkspaceFile({
           actor: {
-            kind: "user",
-            id: request.user.id,
+            ...actorFromUserId(request.user.id),
             organizationId: request.organizationId,
           },
           taskId: request.params.taskId,
@@ -136,8 +136,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const result = await deleteAgentWorkspace({
         actor: {
-          kind: "user",
-          id: request.user.id,
+          ...actorFromUserId(request.user.id),
           organizationId: request.organizationId,
         },
         taskId: request.params.taskId,
@@ -167,8 +166,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async (request, reply) => {
       const result = await accessAgentWorkspaceFile({
         actor: {
-          kind: "user",
-          id: request.user.id,
+          ...actorFromUserId(request.user.id),
           organizationId: request.organizationId,
         },
         taskId: request.params.taskId,
@@ -627,8 +625,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const task = await startDetachedAgentTask({
         actor: {
-          id: request.user.id,
-          kind: "user",
+          ...actorFromUserId(request.user.id),
           organizationId: request.organizationId,
         },
         agentId: agent.id,
@@ -949,8 +946,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
       request.auditBefore = { taskId: run.taskId, state: run.state };
       const task = await startDetachedAgentTask({
         actor: {
-          kind: "user",
-          id: request.user.id,
+          ...actorFromUserId(request.user.id),
           organizationId: request.organizationId,
         },
         agentId: run.agentId,
@@ -1065,8 +1061,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const canceled = await cancelDetachedAgentTask({
         actor: {
-          id: request.user.id,
-          kind: "user",
+          ...actorFromUserId(request.user.id),
           organizationId: request.organizationId,
         },
         agentId: run.agentId,
@@ -1138,8 +1133,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const actor = {
-        kind: "user" as const,
-        id: request.user.id,
+        ...actorFromUserId(request.user.id),
         organizationId: request.organizationId,
       };
       const minted =

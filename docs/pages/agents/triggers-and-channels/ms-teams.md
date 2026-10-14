@@ -2,7 +2,7 @@
 title: MS Teams
 description: Connect Archestra agents to Microsoft Teams channels
 order: 4
-lastUpdated: 2026-10-08
+lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -42,10 +42,13 @@ To change the agent, send `@Archestra /select-agent`, or [add the channel](/docs
 
 ## When the Bot Answers
 
+Mention the bot to ask an agent in a shared conversation.
+
 - In a channel, the bot answers only when you mention it.
 - In a thread, one mention is enough. It then answers every message in that thread.
-- In a group chat or direct message, it answers every message.
-- To answer every message in a channel, turn on **Answer all messages** in the channel's **Settings**. The team owner must approve the app's permissions when they install it.
+- In a group chat, mention the bot on each request. Once a conversation has started, ordinary group messages remain in its history without triggering replies.
+- In a direct message, it answers every message.
+- To answer every message in a channel or group chat, turn on **Answer all messages** in its **Settings**. The installer must approve the app's permissions.
 
 To quiet a thread, send `mute`, or react to a bot reply with 🔇 or 🤫. The bot stops, and cancels any reply in progress. Mention it again to wake it.
 

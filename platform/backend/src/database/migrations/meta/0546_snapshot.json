@@ -1,5 +1,5 @@
 {
-  "id": "0880b5ab-b399-45de-844b-8d34f3b205f6",
+  "id": "0c0df76e-c0ef-4482-bbfc-364aab3641bd",
   "prevId": "18f10de4-ddad-4752-a942-158d60d33660",
   "version": "7",
   "dialect": "postgresql",
@@ -3432,6 +3432,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "gateway_token_id": {
+          "name": "gateway_token_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "completion_target": {
           "name": "completion_target",
           "type": "jsonb",
@@ -3642,6 +3648,19 @@
           "tableTo": "virtual_api_keys",
           "columnsFrom": [
             "virtual_api_key_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "agent_runs_gateway_token_id_service_account_tokens_id_fk": {
+          "name": "agent_runs_gateway_token_id_service_account_tokens_id_fk",
+          "tableFrom": "agent_runs",
+          "tableTo": "service_account_tokens",
+          "columnsFrom": [
+            "gateway_token_id"
           ],
           "columnsTo": [
             "id"
@@ -10480,6 +10499,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "service_account_id": {
+          "name": "service_account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "virtual_key_id": {
           "name": "virtual_key_id",
           "type": "uuid",
@@ -10923,6 +10948,19 @@
           "tableTo": "user",
           "columnsFrom": [
             "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "interactions_service_account_id_service_accounts_id_fk": {
+          "name": "interactions_service_account_id_service_accounts_id_fk",
+          "tableFrom": "interactions",
+          "tableTo": "service_accounts",
+          "columnsFrom": [
+            "service_account_id"
           ],
           "columnsTo": [
             "id"
@@ -17482,6 +17520,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "service_account_id": {
+          "name": "service_account_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "reference_id": {
           "name": "reference_id",
           "type": "text",
@@ -17565,6 +17609,19 @@
           "tableTo": "user",
           "columnsFrom": [
             "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "oauth_client_service_account_id_service_accounts_id_fk": {
+          "name": "oauth_client_service_account_id_service_accounts_id_fk",
+          "tableFrom": "oauth_client",
+          "tableTo": "service_accounts",
+          "columnsFrom": [
+            "service_account_id"
           ],
           "columnsTo": [
             "id"
@@ -18003,13 +18060,6 @@
           "type": "boolean",
           "primaryKey": false,
           "notNull": true
-        },
-        "superyell": {
-          "name": "superyell",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "created_at": {
           "name": "created_at",

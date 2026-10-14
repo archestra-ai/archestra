@@ -40,12 +40,12 @@ import {
   type CreatedCredentials,
   OAuthClientCreatedDialog,
 } from "@/components/oauth-client-created-dialog";
+import { OAuthClientPermissions } from "@/components/oauth-client-permissions";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
   RESOURCE_ACCESS_FILTER_PARAMS,
   ResourceAccessFilter,
 } from "@/components/resource-access-filter";
-import { ResourceListActions } from "@/components/resource-list-actions";
 import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -234,13 +234,7 @@ function OauthClientsTable() {
           <Plus className="h-4 w-4" />
           <span>Create OAuth Client</span>
         </PermissionButton>
-        <ResourceListActions
-          resource="llmOauthClient"
-          label="LLM client permissions"
-          alsoResources={[
-            { resource: "mcpOauthClient", label: "MCP client permissions" },
-          ]}
-        />
+        <OAuthClientPermissions />
       </div>,
     );
     return () => setActionButton(null);

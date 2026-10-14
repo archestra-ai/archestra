@@ -275,9 +275,9 @@ const actionOrder: ResourcePermissionAction[] = [
 ];
 
 const actionChipLabels: Record<ResourcePermissionAction, string> = {
-  read: "View",
+  read: "Read",
   use: "Use",
-  update: "Edit",
+  update: "Update",
   delete: "Delete",
   "manage-permissions": "Manage access",
   "configure-deployment-spec": "Deploy",

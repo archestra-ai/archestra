@@ -1,7 +1,11 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  providerRequiresPerUserCredential,
+} from "@archestra/shared";
 import { Bot, Loader2, Network, Server, Users } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { AgentSelectorAgent } from "@/components/agent-selector";
 import {
@@ -10,7 +14,8 @@ import {
   type SpendCapValue,
   UsersPayNotice,
 } from "@/components/credential-billing/budget-fields";
-import { ProviderKeyPicker } from "@/components/credential-billing/provider-key-picker";
+import { isSubscriptionKey } from "@/components/credential-billing/provider-key-data";
+import { ProviderKeyList } from "@/components/credential-billing/provider-key-list";
 import {
   ReviewList,
   ReviewListRow,
@@ -20,6 +25,7 @@ import { FormDialog } from "@/components/form-dialog";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
 import { ChoiceCards } from "@/components/oauth-client/choice-cards";
 import { GatewayPicker } from "@/components/oauth-client/gateway-picker";
+import { OAuthServiceAccountField } from "@/components/oauth-client/service-account-field";
 import {
   parseRedirectUris,
   RedirectUrisField,
@@ -31,6 +37,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
+import { useServiceAccounts } from "@/lib/service-account.query";
 import { useTeams } from "@/lib/teams/team.query";
 
 export type OAuthClientType = "mcp" | "llm";
@@ -72,6 +79,7 @@ export function CreateOAuthClientDialog({
   const [clientType, setClientType] =
     useState<OAuthClientType>(defaultClientType);
   const [name, setName] = useState("");
+  const [serviceAccountId, setServiceAccountId] = useState<string | null>(null);
   const [grantType, setGrantType] = useState<GrantType>("client_credentials");
   const [selectedGatewayIds, setSelectedGatewayIds] = useState<string[]>([]);
   const [grantsGateways, setGrantsGateways] = useState(false);
@@ -87,6 +95,7 @@ export function CreateOAuthClientDialog({
       setStep("kind");
       setClientType(fixedClientType ?? defaultClientType);
       setName("");
+      setServiceAccountId(null);
       setGrantType("client_credentials");
       setSelectedGatewayIds(defaultAllowedGatewayIds ?? []);
       setGrantsGateways(false);
@@ -99,17 +108,38 @@ export function CreateOAuthClientDialog({
 
   const isMcp = clientType === "mcp";
   const isAuthorizationCode = grantType === "authorization_code";
+  const applicationProviderKeys = (
+    providerApiKeys as LlmProviderApiKeyResponse[]
+  ).filter(
+    (key) =>
+      !isSubscriptionKey(key) &&
+      !providerRequiresPerUserCredential(key.provider),
+  );
+  const llmUnavailable =
+    !isAuthorizationCode && applicationProviderKeys.length === 0;
+  const missingProvidersMessage = (
+    <>
+      Add a model provider before creating a client that signs in as itself.{" "}
+      <Link
+        href="/llm/model-providers"
+        className="font-medium underline underline-offset-2"
+      >
+        Go to Model Providers
+      </Link>
+      .
+    </>
+  );
   const redirectUris = parseRedirectUris(redirectUrisText);
   const steps = stepsFor({ isMcp, isAuthorizationCode });
   const stepIndex = steps.findIndex((item) => item.id === step);
   const ready: Record<Step, boolean> = {
-    kind: name.trim().length > 0,
+    kind: name.trim().length > 0 && (isMcp || !llmUnavailable),
     signin: redirectUris.length > 0,
-    access:
-      isAuthorizationCode && !grantsGateways
+    access: isMcp
+      ? isAuthorizationCode && !grantsGateways
         ? true
-        : selectedGatewayIds.length > 0,
-    keys: providerApiKeyIds.length > 0,
+        : selectedGatewayIds.length > 0
+      : providerApiKeyIds.length > 0,
     budget: true,
     review: true,
   };
@@ -123,6 +153,7 @@ export function CreateOAuthClientDialog({
     const shared = {
       name: name.trim(),
       grantType,
+      ...(!isAuthorizationCode && serviceAccountId && { serviceAccountId }),
       initialGrants: [],
       labels: [],
     };
@@ -222,11 +253,19 @@ export function CreateOAuthClientDialog({
                     {
                       value: "llm",
                       title: "LLM Proxy",
-                      description: "Sends LLM requests through the LLM Proxy.",
+                      disabled: llmUnavailable,
+                      description: llmUnavailable
+                        ? missingProvidersMessage
+                        : "Sends LLM requests through the LLM Proxy.",
                       icon: <Bot className="size-4" />,
                     },
                   ]}
                 />
+              )}
+              {fixedClientType === "llm" && llmUnavailable && (
+                <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+                  {missingProvidersMessage}
+                </p>
               )}
               <ChoiceCards
                 label="How does it sign in?"
@@ -263,6 +302,7 @@ export function CreateOAuthClientDialog({
           )}
 
           {step === "access" &&
+            isMcp &&
             (isAuthorizationCode ? (
               <>
                 <ChoiceCards
@@ -297,22 +337,28 @@ export function CreateOAuthClientDialog({
               </>
             ) : (
               <GatewayPicker
-                label="Gateways and agents it can call"
+                label="Allowed agents and MCP gateways"
                 gateways={gateways}
                 value={selectedGatewayIds}
                 onValueChange={setSelectedGatewayIds}
               />
             ))}
 
-          {step === "keys" && (
-            <div className="space-y-2">
-              <span className="font-medium text-sm">Provider keys</span>
-              <ProviderKeyPicker
-                value={providerApiKeyIds}
-                onChange={setProviderApiKeyIds}
-                providerApiKeys={providerApiKeys as LlmProviderApiKeyResponse[]}
-              />
-            </div>
+          {step === "access" && !isMcp && (
+            <ProviderKeyList
+              alwaysOpen
+              value={providerApiKeyIds}
+              onChange={setProviderApiKeyIds}
+              providerApiKeys={applicationProviderKeys}
+            />
+          )}
+
+          {step === "access" && !isAuthorizationCode && (
+            <OAuthServiceAccountField
+              clientType={isMcp ? "mcp" : "llm"}
+              value={serviceAccountId}
+              onChange={setServiceAccountId}
+            />
           )}
 
           {step === "budget" && (
@@ -333,6 +379,7 @@ export function CreateOAuthClientDialog({
           {step === "review" && (
             <OAuthClientReview
               name={name}
+              serviceAccountId={serviceAccountId}
               isMcp={isMcp}
               isAuthorizationCode={isAuthorizationCode}
               redirectUris={redirectUris}
@@ -341,7 +388,7 @@ export function CreateOAuthClientDialog({
                   gateways.find((gateway) => gateway.id === id)?.name ?? id,
               )}
               providerApiKeyIds={providerApiKeyIds}
-              providerApiKeys={providerApiKeys as LlmProviderApiKeyResponse[]}
+              providerApiKeys={applicationProviderKeys}
               billingTeamId={billingTeamId}
               spendCap={spendCap}
               onEdit={setStep}
@@ -383,7 +430,7 @@ export function CreateOAuthClientDialog({
 type GrantType =
   archestraApiTypes.GetMcpOauthClientsResponses["200"][number]["grantType"];
 
-type Step = "kind" | "signin" | "access" | "keys" | "budget" | "review";
+type Step = "kind" | "signin" | "access" | "budget" | "review";
 
 function stepsFor({
   isMcp,
@@ -404,7 +451,7 @@ function stepsFor({
     ? [kind, signin, { id: "budget", title: "Budget" }, review]
     : [
         kind,
-        { id: "keys", title: "Keys" },
+        { id: "access", title: "Access" },
         { id: "budget", title: "Budget" },
         review,
       ];
@@ -427,6 +474,7 @@ function describeClientType(fixedClientType?: OAuthClientType) {
 
 function OAuthClientReview({
   name,
+  serviceAccountId,
   isMcp,
   isAuthorizationCode,
   redirectUris,
@@ -438,6 +486,7 @@ function OAuthClientReview({
   onEdit,
 }: {
   name: string;
+  serviceAccountId: string | null;
   isMcp: boolean;
   isAuthorizationCode: boolean;
   redirectUris: string[];
@@ -449,6 +498,10 @@ function OAuthClientReview({
   onEdit: (step: Step) => void;
 }) {
   const catalog = useModelProviderCatalog();
+  const { data: accounts = [] } = useServiceAccounts();
+  const accountName = accounts.find(
+    (account) => account.id === serviceAccountId,
+  )?.name;
   const { data: teams = [] } = useTeams({ enabled: !!billingTeamId });
   const teamName = teams.find((team) => team.id === billingTeamId)?.name;
   const keyName = (id: string) =>
@@ -464,6 +517,17 @@ function OAuthClientReview({
           {isMcp ? "Agents & MCP gateways" : "LLM Proxy"} ·{" "}
           {isAuthorizationCode ? "for its users" : "as itself"}
         </ReviewListRow>
+        {!isAuthorizationCode && (
+          <ReviewListRow
+            label="Service account"
+            onEdit={() => onEdit("access")}
+          >
+            {accountName ??
+              (serviceAccountId
+                ? "Current service account"
+                : "No service account")}
+          </ReviewListRow>
+        )}
         {isAuthorizationCode && (
           <ReviewListRow label="Redirect URIs" onEdit={() => onEdit("signin")}>
             <span className="break-all">{redirectUris.join(", ")}</span>
@@ -477,7 +541,7 @@ function OAuthClientReview({
           </ReviewListRow>
         )}
         {!isMcp && !isAuthorizationCode && (
-          <ReviewListRow label="Provider keys" onEdit={() => onEdit("keys")}>
+          <ReviewListRow label="Provider keys" onEdit={() => onEdit("access")}>
             <span className="flex flex-wrap gap-1.5">
               {providerApiKeyIds.map((mapping) => (
                 <span

@@ -229,6 +229,7 @@ function createRun(endedAt: string | null): AgentRunListItem {
     backend: "kubernetes",
     runtimeScope: "archestra-dev",
     virtualApiKeyId: null,
+    gatewayTokenId: null,
     startedAt: "2026-09-03T20:00:00.000Z",
     hardDeadlineAt: "2026-09-06T20:00:00.000Z",
     lastModelActivityAt: "2026-09-03T20:00:04.000Z",

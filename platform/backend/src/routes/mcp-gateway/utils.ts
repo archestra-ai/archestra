@@ -72,6 +72,7 @@ import {
 import { isOpenappaTool } from "@/archestra-mcp-server/openappa";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import type { RequestLookups } from "@/auth/request-lookups";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { LRUCacheManager } from "@/cache-manager";
 import {
   type ArchestraElicitationOutcome,
@@ -99,6 +100,7 @@ import {
   UserTokenModel,
 } from "@/models";
 import { findAgentAccessContextById } from "@/models/agent-access-context";
+import ServiceAccountModel from "@/models/service-account";
 import { metrics } from "@/observability";
 import {
   ATTR_MCP_IS_ERROR_RESULT,
@@ -131,6 +133,7 @@ import {
 import { jwksValidator } from "@/services/jwks-validator";
 import { buildKnowledgeSearchInstruction } from "@/services/knowledge-search-instruction";
 import { buildKnowledgeSourcesDescription } from "@/services/knowledge-sources-description";
+import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { buildSkillDiscoveryPreview } from "@/services/skill-discovery-preview";
 import { isPlatformSkillUri } from "@/skills/skill-uri";
@@ -197,6 +200,7 @@ export interface TokenAuthResult {
   rawToken?: string;
   /** OAuth client the caller signed in with, for OAuth tokens */
   oauthClientId?: string;
+  serviceAccountId?: string;
 }
 
 /**
@@ -269,13 +273,16 @@ type TokenHashes = {
 };
 
 type ResolvedArchestraToken =
+  | { type: "team"; token: SelectTeamToken }
+  | { type: "user"; token: SelectUserToken }
   | {
-      type: "team";
-      token: SelectTeamToken;
-    }
-  | {
-      type: "user";
-      token: SelectUserToken;
+      type: "serviceAccount";
+      token: NonNullable<
+        Awaited<ReturnType<typeof ServiceAccountModel.verifyToken>>
+      >["token"];
+      serviceAccount: NonNullable<
+        Awaited<ReturnType<typeof ServiceAccountModel.verifyToken>>
+      >["serviceAccount"];
     };
 
 /**
@@ -335,7 +342,7 @@ export async function buildAgentMcpToolList(params: {
   agent: GatewayAgent;
   tokenAuth?: Pick<
     TokenAuthContext,
-    "userId" | "organizationId" | "isSessionAuth"
+    "userId" | "organizationId" | "isSessionAuth" | "serviceAccountId"
   >;
   lookups?: RequestLookups;
 }): Promise<{
@@ -374,7 +381,9 @@ export async function buildAgentMcpToolList(params: {
   const fetchedMcpTools = await filterToolsByCallerCatalogAccess(
     agentMcpTools,
     {
-      userId: tokenAuth?.userId,
+      userId: tokenAuth?.serviceAccountId
+        ? serviceAccountUserId(tokenAuth.serviceAccountId)
+        : tokenAuth?.userId,
       organizationId: agent.organizationId,
       lookups: params.lookups,
     },
@@ -510,7 +519,9 @@ export async function buildAgentMcpToolList(params: {
   // Filter Archestra tools based on user RBAC permissions
   const permittedNames = await filterToolNamesByPermission(
     candidateTools.map((t) => t.name),
-    tokenAuth?.userId,
+    tokenAuth?.serviceAccountId
+      ? serviceAccountUserId(tokenAuth.serviceAccountId)
+      : tokenAuth?.userId,
     tokenAuth?.organizationId,
     params.lookups,
   );
@@ -1116,7 +1127,9 @@ export async function createAgentServer(params: {
                 currentToolCallId: params.currentToolCallId,
                 agent: { id: agent.id, name: agent.name },
                 agentId: agent.id,
-                userId: tokenAuth?.userId,
+                userId: tokenAuth?.serviceAccountId
+                  ? serviceAccountUserId(tokenAuth.serviceAccountId)
+                  : tokenAuth?.userId,
                 organizationId: tokenAuth?.organizationId,
                 tokenAuth,
                 mrtr: {
@@ -1828,7 +1841,7 @@ async function validateOAuthTokenByHash(params: {
     if (
       accessToken.referenceId?.startsWith(MCP_OAUTH_CLIENT_REFERENCE_PREFIX)
     ) {
-      return validateMcpClientAccessToken({
+      return await validateMcpClientAccessToken({
         accessToken,
         profileId: params.profileId,
         organizationId: agent.organizationId,
@@ -1918,6 +1931,33 @@ async function validateOAuthTokenByHash(params: {
  * call time are not supported — assign shared/org-scoped credentials to those
  * tools.
  */
+async function validateServiceAccountGatewayAccess(params: {
+  profileId: string;
+  serviceAccountId: string;
+  organizationId: string;
+  tokenId: string;
+}): Promise<TokenAuthResult | null> {
+  const id = serviceAccountUserId(params.serviceAccountId);
+  if (
+    !(await AgentTeamModel.userHasAgentAccess({
+      userId: id,
+      agentId: params.profileId,
+      action: "use",
+      isAgentAdmin: false,
+    }))
+  )
+    return null;
+  const context = await findAgentAccessContextById(params.profileId);
+  if (context?.organizationId !== params.organizationId) return null;
+  return {
+    tokenId: params.tokenId,
+    serviceAccountId: params.serviceAccountId,
+    organizationId: params.organizationId,
+    teamId: null,
+    isOrganizationToken: false,
+  };
+}
+
 async function validateMcpClientAccessToken(params: {
   accessToken: {
     id: string;
@@ -1968,7 +2008,24 @@ async function validateMcpClientAccessToken(params: {
     return null;
   }
 
+  const account = oauthClient.serviceAccountId
+    ? await resolveOauthServiceAccount({
+        serviceAccountId: oauthClient.serviceAccountId,
+        organizationId,
+      })
+    : null;
+  if (
+    account &&
+    !(await validateServiceAccountGatewayAccess({
+      profileId,
+      serviceAccountId: account.id,
+      organizationId,
+      tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
+    }))
+  )
+    return null;
   return {
+    ...(account ? { serviceAccountId: account.id } : {}),
     tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
     teamId: null,
     isOrganizationToken: false,
@@ -2035,7 +2092,9 @@ export async function resolveTokenOrganizationId(
 
   const rawTokenHash = createHash("sha256").update(tokenValue).digest("hex");
   const resolved = await resolveArchestraToken(tokenValue, rawTokenHash);
-  return resolved?.token.organizationId ?? null;
+  return resolved?.type === "serviceAccount"
+    ? resolved.serviceAccount.organizationId
+    : (resolved?.token.organizationId ?? null);
 }
 
 /**
@@ -2083,6 +2142,17 @@ export async function authenticateMCPGatewayRequest(
       tokenValue,
       tokenHashes.rawTokenHash,
     );
+    if (resolvedToken?.type === "serviceAccount") {
+      const result = await validateServiceAccountGatewayAccess({
+        profileId,
+        serviceAccountId: resolvedToken.serviceAccount.id,
+        organizationId: resolvedToken.serviceAccount.organizationId,
+        tokenId: resolvedToken.token.id,
+      });
+      return result
+        ? { result, reason: null }
+        : { result: null, reason: "invalid_token" };
+    }
     if (resolvedToken?.type === "team") {
       const teamTokenResult = await validateResolvedTeamToken({
         profileId,
@@ -2388,7 +2458,10 @@ function cacheTokenAuthResult(
 ): void {
   // Identity lookup may be cached separately, but a user's authorization must
   // reflect resource grants and team/role membership on every request.
-  if (result?.userId) return;
+  // Application credentials likewise recheck expiry, revocation and the
+  // client's current gateway allowlist instead of retaining stale access.
+  if (result?.userId || result?.oauthClientId || result?.serviceAccountId)
+    return;
   // Negative results are intentionally NOT cached. Caching auth failures
   // creates a "cache treadmill" where every retry refreshes the negative
   // entry: a transient race during agent/IdP creation fails the first
@@ -2467,6 +2540,9 @@ async function resolveArchestraToken(
     cacheRawArchestraToken(rawTokenHash, result);
     return result;
   }
+
+  const accountToken = await ServiceAccountModel.verifyToken(tokenValue);
+  if (accountToken) return { type: "serviceAccount", ...accountToken };
 
   cacheRawArchestraToken(rawTokenHash, null);
   return null;

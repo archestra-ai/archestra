@@ -25,13 +25,16 @@ export function GatewayPicker({
           {value.length} of {gateways.length} selected
         </span>
       </div>
+      <p className="text-xs text-muted-foreground">
+        Choose which agents and MCP gateways this application can access.
+      </p>
       <AgentSelector
         mode="multiple"
         agents={gateways}
         value={value}
         onValueChange={onValueChange}
-        placeholder="Select gateways and agents"
-        searchPlaceholder="Search gateways and agents"
+        placeholder="Select agents and MCP gateways"
+        searchPlaceholder="Search agents and MCP gateways"
         className="w-full"
       />
     </div>

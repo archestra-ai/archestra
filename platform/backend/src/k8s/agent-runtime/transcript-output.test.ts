@@ -10,6 +10,7 @@ import {
   AgentRunModel,
   VirtualApiKeyModel,
 } from "@/models";
+import ServiceAccountModel from "@/models/service-account";
 import { AGENT_RUNTIME_CREDENTIALS_SECRET_KEY } from "@/services/agent-runtime/runtime-contract";
 import { expect, test } from "@/test";
 import manager from "./manager";
@@ -115,10 +116,14 @@ for (const outcome of ["success", "disconnect", "failure", "abort"] as const) {
   });
 }
 
-test("retains access only for the same live CLI and revokes it on workspace cleanup", async ({
+test.for([
+  "user",
+  "serviceAccount",
+] as const)("retains %s access only for the same live CLI and revokes it on workspace cleanup", async (actorKind, {
   makeOrganization,
   makeUser,
   makeAgent,
+  makeServiceAccount,
 }) => {
   vi.spyOn(manager, "isEnabled", "get").mockReturnValue(true);
   vi.spyOn(KubeConfig.prototype, "loadFromDefault").mockImplementation(
@@ -133,10 +138,23 @@ test("retains access only for the same live CLI and revokes it on workspace clea
   );
   const organization = await makeOrganization();
   const user = await makeUser();
+  const account =
+    actorKind === "serviceAccount"
+      ? await makeServiceAccount(organization.id)
+      : null;
+  const actorId = account?.id ?? user.id;
+  const gateway = account
+    ? await ServiceAccountModel.createToken({
+        serviceAccountId: account.id,
+        organizationId: organization.id,
+        name: "run gateway",
+        expiresIn: 3600,
+      })
+    : null;
   const agent = await makeAgent({ organizationId: organization.id });
   const context = await A2AContextModel.create({
-    actorKind: "user",
-    actorId: user.id,
+    actorKind,
+    actorId,
   });
   const task = await A2ATaskModel.create({
     contextId: context.id,
@@ -152,9 +170,10 @@ test("retains access only for the same live CLI and revokes it on workspace clea
     taskId: task.id,
     agentId: agent.id,
     organizationId: organization.id,
-    actorKind: "user",
-    actorId: user.id,
-    actorUserId: user.id,
+    actorKind,
+    actorId,
+    actorUserId: account ? null : user.id,
+    gatewayTokenId: gateway?.id,
     backend: "kubernetes",
     runtimeScope: "archestra-dev",
     workloadName: `retained-${randomUUID()}`,
@@ -204,6 +223,10 @@ test("retains access only for the same live CLI and revokes it on workspace clea
     [AGENT_RUNTIME_CREDENTIALS_SECRET_KEY]: "renewable-bundle",
     GITHUB_TOKEN: "",
   });
+  if (gateway)
+    expect(await ServiceAccountModel.verifyToken(gateway.token)).toMatchObject({
+      serviceAccount: { id: actorId },
+    });
   pods.mockResolvedValue({ items: [] });
   await expect(manager.hasRetainedTerminal(run)).resolves.toBe(false);
   await manager.releaseRun(run, { retainInteractiveSession: true });
@@ -211,4 +234,6 @@ test("retains access only for the same live CLI and revokes it on workspace clea
     (await AgentRunModel.findByTaskId(run.taskId))?.virtualApiKeyId,
   ).toBeNull();
   expect(credentialData[AGENT_RUNTIME_CREDENTIALS_SECRET_KEY]).toBe("");
+  if (gateway)
+    expect(await ServiceAccountModel.verifyToken(gateway.token)).toBeNull();
 });

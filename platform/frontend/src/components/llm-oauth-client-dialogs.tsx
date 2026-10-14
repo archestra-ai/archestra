@@ -12,9 +12,11 @@ import {
   UsersPayNotice,
 } from "@/components/credential-billing/budget-fields";
 import { CreatedByHeader } from "@/components/credential-billing/created-by-header";
-import { ProviderKeyBoxes } from "@/components/credential-billing/provider-key-boxes";
+import { ProviderKeyList } from "@/components/credential-billing/provider-key-list";
+import { FormAdvancedSection } from "@/components/form-advanced-section";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
 import { OAuthClientIdentityFields } from "@/components/oauth-client/identity-fields";
+import { OAuthServiceAccountField } from "@/components/oauth-client/service-account-field";
 import {
   parseRedirectUris,
   RedirectUrisField,
@@ -52,6 +54,7 @@ export function EditOAuthClientDialog({
   isSubmitting: boolean;
 }) {
   const [name, setName] = useState("");
+  const [serviceAccountId, setServiceAccountId] = useState<string | null>(null);
   const [providerApiKeyIds, setProviderApiKeyIds] =
     useState<ProviderApiKeyMappings>([]);
   const [redirectUrisText, setRedirectUrisText] = useState("");
@@ -88,6 +91,7 @@ export function EditOAuthClientDialog({
       : null;
     setActiveSection("general");
     setName(oauthClient.name);
+    setServiceAccountId(oauthClient.serviceAccountId ?? null);
     setProviderApiKeyIds(initialKeys);
     setRedirectUrisText(oauthClient.redirectUris.join("\n"));
     setBillingTeamId(oauthClient.billingTeam?.id ?? null);
@@ -95,6 +99,7 @@ export function EditOAuthClientDialog({
     setLabels(oauthClient.labels);
     initialSnapshotRef.current = {
       name: oauthClient.name,
+      serviceAccountId: oauthClient.serviceAccountId ?? null,
       providerApiKeyIds: initialKeys,
       redirectUrisText: oauthClient.redirectUris.join("\n"),
       billingTeamId: oauthClient.billingTeam?.id ?? null,
@@ -122,6 +127,7 @@ export function EditOAuthClientDialog({
     (initial !== null &&
       hasUnsavedChanges(initial, {
         name,
+        serviceAccountId,
         providerApiKeyIds,
         redirectUrisText,
         billingTeamId,
@@ -200,6 +206,10 @@ export function EditOAuthClientDialog({
         await onSubmit(oauthClient.id, {
           name: name.trim(),
           grantType: oauthClient.grantType,
+          ...(!isAuthorizationCode &&
+            serviceAccountId !== (oauthClient.serviceAccountId ?? null) && {
+              serviceAccountId,
+            }),
           ...(isAuthorizationCode
             ? { redirectUris }
             : {
@@ -240,21 +250,30 @@ export function EditOAuthClientDialog({
             onChange={setRedirectUrisText}
           />
         )}
-        {/* SPDX-SnippetBegin
+        <FormAdvancedSection>
+          {!isAuthorizationCode && (
+            <OAuthServiceAccountField
+              clientType="llm"
+              value={serviceAccountId}
+              onChange={setServiceAccountId}
+            />
+          )}
+          {/* SPDX-SnippetBegin
               SPDX-SnippetCopyrightText: 2026 Archestra Inc.
               SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
-        <ResourceAccessSection
-          resource="llmOauthClient"
-          id={oauthClient.id}
-          registerSave={registerPermissionsSave}
-          onDirtyChange={setPermissionsDirty}
-        />
-        {/* SPDX-SnippetEnd */}
-        <AdvancedLabelsSection
-          ref={labelsRef}
-          labels={labels}
-          onLabelsChange={setLabels}
-        />
+          <ResourceAccessSection
+            resource="llmOauthClient"
+            id={oauthClient.id}
+            registerSave={registerPermissionsSave}
+            onDirtyChange={setPermissionsDirty}
+          />
+          {/* SPDX-SnippetEnd */}
+          <AdvancedLabelsSection
+            ref={labelsRef}
+            labels={labels}
+            onLabelsChange={setLabels}
+          />
+        </FormAdvancedSection>
       </div>
 
       {!isAuthorizationCode && (
@@ -265,7 +284,8 @@ export function EditOAuthClientDialog({
               providers are not reachable with this client.
             </span>
           </p>
-          <ProviderKeyBoxes
+          <ProviderKeyList
+            alwaysOpen
             value={providerApiKeyIds}
             onChange={setProviderApiKeyIds}
             providerApiKeys={providerApiKeys as LlmProviderApiKeyResponse[]}

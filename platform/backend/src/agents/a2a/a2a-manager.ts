@@ -1791,6 +1791,14 @@ export class A2AManager {
 
     const organizationId = tokenAuth.organizationId;
 
+    if (tokenAuth.serviceAccountId) {
+      return {
+        id: tokenAuth.serviceAccountId,
+        kind: "serviceAccount",
+        organizationId,
+      };
+    }
+
     if (tokenAuth.userId) {
       const user = await UserModel.getById(tokenAuth.userId);
       if (!user) {
@@ -1816,6 +1824,16 @@ export class A2AManager {
       return {
         id: tokenAuth.organizationId,
         kind: "organization",
+        organizationId,
+      };
+    }
+
+    if (tokenAuth.oauthClientId) {
+      // Machine credentials authenticate the application itself. Token or
+      // secret rotation must not change the owner of its retained tasks.
+      return {
+        id: tokenAuth.oauthClientId,
+        kind: "oauthClient",
         organizationId,
       };
     }

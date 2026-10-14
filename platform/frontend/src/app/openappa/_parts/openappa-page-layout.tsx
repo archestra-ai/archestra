@@ -8,7 +8,6 @@ import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { BatteriesUploadAction } from "./batteries-panel";
 import { OpenAppaPageActionSlotContext } from "./openappa-page-action";
 import { OverviewHeaderActions } from "./overview-header-actions";
 import { openAppaUrl } from "./overview-setup-cards";
@@ -129,9 +128,7 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
           pathname.startsWith("/openappa/validation") ||
           pathname === "/openappa/policy" ? null : pathname === "/openappa" ? (
           <OverviewHeaderActions />
-        ) : (
-          <BatteriesUploadAction />
-        )
+        ) : null
       }
     >
       <OpenAppaPageActionSlotContext.Provider value={pageActionSlot}>

@@ -70,7 +70,10 @@ import {
   useProfile,
   useUpdateProfile,
 } from "@/lib/agent.query";
-import { useAgentDelegations } from "@/lib/agent-tools.query";
+import {
+  useAgentDelegations,
+  useAllProfileTools,
+} from "@/lib/agent-tools.query";
 import {
   useHasPermissions,
   useScopedCapabilities,
@@ -169,8 +172,11 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
       }),
     [allAgents, search, currentAgentId, userId],
   );
-  // Pins load with the picker; until they arrive the groups read as before.
-  const { data: pinnedIds } = usePinnedAgentIds({ enabled: open });
+  // Loaded after first paint, not on open, so the Pinned group is there the
+  // moment the picker opens instead of popping in once the request lands.
+  const { data: pinnedIds } = usePinnedAgentIds({
+    enabled: open || afterFirstPaint,
+  });
   const groupIdPrefix = useId();
   const agentGroups = useMemo(
     () => groupInitialAgents({ agents: filteredAgents, userId, pinnedIds }),
@@ -356,6 +362,18 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const updateProfile = useUpdateProfile();
 
   const { data: editingAgent } = useProfile(editingAgentId ?? undefined);
+  // The settings view also needs the agent's tools and subagents. Fetch them
+  // with the agent, not after it renders, and start all three when the pointer
+  // or focus reaches a row's edit button, ahead of the click.
+  const [warmAgentId, setWarmAgentId] = useState<string | null>(null);
+  const quickEditAgentId = editingAgentId ?? warmAgentId ?? undefined;
+  useProfile(quickEditAgentId);
+  useAllProfileTools({
+    filters: { agentId: quickEditAgentId },
+    skipPagination: true,
+    enabled: !!quickEditAgentId,
+  });
+  useAgentDelegations(quickEditAgentId);
   const { data: cloningAgent } = useProfile(cloningAgentId ?? undefined);
   const editingSummary = allAgents.find((a) => a.id === editingAgentId);
 
@@ -563,6 +581,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                         optionProps={navigation.getOptionProps(agent.id)}
                         onSelect={() => handleAgentSelect(agent.id)}
                         onEdit={() => openQuickEdit(agent.id)}
+                        onWarm={() => setWarmAgentId(agent.id)}
                         onDuplicate={() => {
                           setOpen(false);
                           cloningStartedForRef.current = null;
@@ -823,6 +842,7 @@ function AgentPickerRow({
   optionProps,
   onSelect,
   onEdit,
+  onWarm,
   onDuplicate,
   onConnect,
 }: {
@@ -837,6 +857,7 @@ function AgentPickerRow({
   >;
   onSelect: () => void;
   onEdit: () => void;
+  onWarm: () => void;
   onDuplicate: () => void;
   onConnect: (catalogIds: string[]) => void;
 }) {
@@ -943,6 +964,8 @@ function AgentPickerRow({
                     ? `Edit ${agent.name}`
                     : `Duplicate ${agent.name} to edit a copy`
                 }
+                onPointerEnter={canEdit ? onWarm : undefined}
+                onFocus={canEdit ? onWarm : undefined}
                 onClick={(e) => {
                   e.stopPropagation();
                   if (canEdit) onEdit();

@@ -22,4 +22,5 @@ Read about pricing model here: https://archestra.ai/docs/get-started/pricing
    ```
    Use the file's native comment style (`#` for Python/YAML/shell, `<!-- ... -->` for Markdown/HTML, `--` for SQL).
 3. **Path convention** — files named `*.ee.{ts,tsx,js,jsx,py,rs,sql,json,yaml,yml,md}` or under any `ee/` directory are Enterprise.
-4. **Default** — AGPL-3.0-only.
+4. **Vendored Dagger SDK** — files under `platform/archestra-rs/vendor/dagger-sdk-0.21.9/` retain the upstream MIT license in [`LICENSE`](./platform/archestra-rs/vendor/dagger-sdk-0.21.9/LICENSE).
+5. **Default** — AGPL-3.0-only.

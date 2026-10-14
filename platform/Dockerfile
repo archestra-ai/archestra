@@ -251,6 +251,7 @@ RUN apk add --no-cache build-base cargo rust
 FROM rust-builder-base AS rust-deps
 ARG TARGETARCH
 COPY archestra-rs/Cargo.toml archestra-rs/Cargo.lock ./archestra-rs/
+COPY archestra-rs/vendor/dagger-sdk-0.21.9 ./archestra-rs/vendor/dagger-sdk-0.21.9
 COPY archestra-rs/sandbox-core/Cargo.toml ./archestra-rs/sandbox-core/
 COPY archestra-rs/sandbox-rs/Cargo.toml archestra-rs/sandbox-rs/build.rs ./archestra-rs/sandbox-rs/
 COPY archestra-rs/app-runtime-core/Cargo.toml ./archestra-rs/app-runtime-core/
@@ -285,6 +286,7 @@ COPY --from=deps /app/archestra-rs/app-runtime-rs/node_modules ./archestra-rs/ap
 COPY --from=deps /app/archestra-rs/image-rs/node_modules ./archestra-rs/image-rs/node_modules
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY archestra-rs/Cargo.toml archestra-rs/Cargo.lock ./archestra-rs/
+COPY archestra-rs/vendor/dagger-sdk-0.21.9 ./archestra-rs/vendor/dagger-sdk-0.21.9
 COPY archestra-rs/napi-loader ./archestra-rs/napi-loader
 COPY archestra-rs/sandbox-core ./archestra-rs/sandbox-core
 COPY archestra-rs/sandbox-rs ./archestra-rs/sandbox-rs

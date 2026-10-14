@@ -57,3 +57,6 @@ tracing-subscriber = { version = "0.3", default-features = false, features = [
     "env-filter",
     "registry",
 ], optional = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["net"] }

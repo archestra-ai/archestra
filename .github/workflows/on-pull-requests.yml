@@ -229,13 +229,6 @@ jobs:
           head-ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || '' }}
           # merge_group has no PR to comment on.
           comment-summary-in-pr: ${{ github.event_name == 'pull_request' && 'on-failure' || 'never' }}
-          # GHSA-82j2-j2ch-gfr8 (rustls-webpki <0.103.13 CRL-parsing DoS) is a
-          # transitive dep of dagger-sdk, which pins reqwest 0.11 + rustls-tls
-          # (rustls 0.21 caps rustls-webpki at <0.102) — no patched version is
-          # reachable. The Dagger client only does TLS against a trusted local
-          # engine session, so attacker-controlled CRL parsing is not reachable.
-          # Revisit once dagger-sdk moves to reqwest 0.12 / rustls 0.23.
-          allow-ghsas: GHSA-82j2-j2ch-gfr8
 
   # Fast feedback on every PR push: lint + typecheck + unit tests.
   # Full E2E runs in the separate "Platform E2E Tests" workflow on merge queue
@@ -512,10 +505,18 @@ jobs:
   # tasks in Platform Lint and Unit Tests retain only NAPI build/load smokes;
   # sandbox-rs's workspace suite previously repeated app-runtime and image
   # core tests after this job had already covered them.
+  dagger-sdk-integration:
+    name: Dagger SDK Integration
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/on-pull-requests-dagger-sdk.yml
+
   platform-rust-checks:
     name: Platform Rust Checks
+    needs: dagger-sdk-integration
     # bot-pr-guard (see comment above platform-lint-and-unit-tests)
-    if: github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]')
+    if: always() && (github.event_name != 'pull_request' || ((github.event.pull_request.user.login != 'archestra-ci[bot]' || startsWith(github.event.pull_request.head.ref, 'backport/')) && github.event.pull_request.user.login != 'archestra-contributor-pr-bot[bot]'))
     runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubuntu-latest' }}
     timeout-minutes: 15
     permissions:
@@ -524,6 +525,13 @@ jobs:
       run:
         working-directory: ./platform
     steps:
+      - name: Require Dagger SDK integration
+        if: needs.dagger-sdk-integration.result != 'success'
+        working-directory: .
+        run: |
+          echo "::error::Dagger SDK integration did not succeed."
+          exit 1
+
       - name: Checkout project
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

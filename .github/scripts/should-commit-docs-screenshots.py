@@ -5,8 +5,10 @@ import sys
 
 
 def should_commit(event_name):
-    if event_name != "pull_request":
+    if event_name == "workflow_dispatch":
         return True
+    if event_name != "pull_request":
+        return False
     subject = subprocess.check_output(
         ["git", "log", "-1", "--format=%s"], text=True
     ).strip()

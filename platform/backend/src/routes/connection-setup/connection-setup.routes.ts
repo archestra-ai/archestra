@@ -582,9 +582,6 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
         if (uniqueIds.length > 0) {
           assertConnectPluginsEnabled(organization);
-          if (!config.plugins.enabled) {
-            throw new ApiError(404, "Plugins are not enabled");
-          }
           const canDeliverPlugins = await userCanDeliverPlugins({
             userId: user.id,
             organizationId,
@@ -626,7 +623,6 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       } else if (
         clientId !== "opencode" &&
-        config.plugins.enabled &&
         organization.connectionPluginsEnabled
       ) {
         const canDeliverPlugins = await userCanDeliverPlugins({
@@ -1254,7 +1250,6 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
   let pluginNames: string[] = [];
   if (pluginIds.length > 0) {
     assertConnectPluginsEnabledOrGone(organization);
-    if (!config.plugins.enabled) throw GONE();
     const canDeliverPlugins = await userCanDeliverPlugins({
       userId: setup.userId,
       organizationId: setup.organizationId,

@@ -29,7 +29,7 @@ vi.mock("@/config", async () => ({
   ...(await vi.importActual<typeof import("@/config")>("@/config")),
   ...(await (
     await import("@/test/mocks/config")
-  ).configModuleMock({ plugins: { enabled: true } })),
+  ).configModuleMock({ beta: false })),
 }));
 
 describe("Resource creation with service-account authentication", () => {

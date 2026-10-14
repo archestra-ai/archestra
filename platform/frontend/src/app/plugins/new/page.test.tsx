@@ -446,7 +446,7 @@ describe("NewPluginPage", () => {
     expect(screen.queryByLabelText("Relative path")).not.toBeInTheDocument();
   });
 
-  it("limits each marketplace import to one beta-sized batch", async () => {
+  it("limits each marketplace import to one bounded batch", async () => {
     discoverMock.mockResolvedValue({
       data: {
         repoUrl: "github/awesome-copilot",
@@ -485,7 +485,7 @@ describe("NewPluginPage", () => {
     ).toBeVisible();
     expect(
       screen.getByText(
-        `For this beta, import up to ${PLUGIN_MARKETPLACE_IMPORT_LIMIT} plugins at a time. Finish this import, reopen the marketplace, and select the next batch. Imported plugins will be marked and excluded from the next batch.`,
+        `Import up to ${PLUGIN_MARKETPLACE_IMPORT_LIMIT} plugins at a time. Finish this import, reopen the marketplace, and select the next batch. Imported plugins will be marked and excluded from the next batch.`,
       ),
     ).toBeVisible();
 

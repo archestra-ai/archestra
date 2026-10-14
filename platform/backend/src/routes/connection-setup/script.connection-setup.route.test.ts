@@ -1012,8 +1012,8 @@ describe("GET /api/connection-setups/script/:token", () => {
   });
 
   test("re-validates plugin:admin before rendering executable hooks", async () => {
-    const originalFeatureState = config.plugins.enabled;
-    config.plugins.enabled = true;
+    const originalFeatureState = config.beta;
+    config.beta = false;
     const plugin = await PluginModel.create({
       organizationId,
       userId: user.id,
@@ -1065,10 +1065,6 @@ describe("GET /api/connection-setups/script/:token", () => {
       expect((await fetchScript(rawToken)).statusCode).toBe(410);
 
       mockUserHasPermission.mockResolvedValue(true);
-      config.plugins.enabled = false;
-      expect((await fetchScript(rawToken)).statusCode).toBe(410);
-
-      config.plugins.enabled = true;
       const { OrganizationModel } = await import("@/models");
       await OrganizationModel.patch(organizationId, {
         connectionPluginsEnabled: false,
@@ -1082,7 +1078,7 @@ describe("GET /api/connection-setups/script/:token", () => {
       expect(allowed.statusCode).toBe(200);
       expect(allowed.body).toContain(plugin.pluginSlug);
     } finally {
-      config.plugins.enabled = originalFeatureState;
+      config.beta = originalFeatureState;
     }
   });
 

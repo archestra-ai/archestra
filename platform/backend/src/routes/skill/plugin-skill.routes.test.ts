@@ -91,14 +91,14 @@ describe("plugin Skill routes", () => {
       permission: { ...memberPermissions, plugin: ["read"] },
     });
     await makeMember(ctx.user.id, ctx.organizationId, { role: reader.role });
-    originalEnabled = config.plugins.enabled;
-    config.plugins.enabled = true;
+    originalEnabled = config.beta;
+    config.beta = false;
     pluginAdmin = false;
     grantEverywhere(["plugin"], () => pluginAdmin);
   });
 
   afterEach(() => {
-    config.plugins.enabled = originalEnabled;
+    config.beta = originalEnabled;
     vi.restoreAllMocks();
   });
 
@@ -113,14 +113,15 @@ describe("plugin Skill routes", () => {
     return plugin;
   }
 
-  test("routes are absent while the plugins beta gate is off", async () => {
-    config.plugins.enabled = false;
+  test("routes are available with beta disabled", async () => {
+    config.beta = false;
 
     const list = await ctx.app.inject({
       method: "GET",
       url: "/api/skills/plugins",
     });
-    expect(list.statusCode).toBe(404);
+    expect(list.statusCode).toBe(200);
+    expect(list.json()).toEqual([]);
 
     const detail = await ctx.app.inject({
       method: "GET",

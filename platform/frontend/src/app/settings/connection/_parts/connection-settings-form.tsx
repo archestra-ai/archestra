@@ -33,7 +33,6 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useProfiles } from "@/lib/agent.query";
 import config from "@/lib/config/config";
-import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
@@ -90,7 +89,6 @@ export function ConnectionSettingsForm() {
   const [runtimeHandoffEnabled, setRuntimeHandoffEnabled] = useState(true);
   const [runtimeHandoffInstructions, setRuntimeHandoffInstructions] =
     useState(defaultInstructions);
-  const pluginsFeatureEnabled = useFeature("plugins") === true;
   const { data: providerApiKeys } = useLlmProviderApiKeys();
 
   // Env-configured candidate URLs the admin can curate. Keep order stable so
@@ -195,7 +193,7 @@ export function ConnectionSettingsForm() {
     llmProxyEnabled !== serverLlmProxyEnabled ||
     runtimeHandoffEnabled !== serverRuntimeHandoffEnabled ||
     runtimeHandoffInstructions !== serverRuntimeHandoffInstructions ||
-    (pluginsFeatureEnabled && pluginsEnabled !== serverPluginsEnabled) ||
+    pluginsEnabled !== serverPluginsEnabled ||
     baseUrlsDirty;
 
   // Collapse "all selected" back to null so future clients/providers are
@@ -228,7 +226,7 @@ export function ConnectionSettingsForm() {
       ...(llmProxyEnabled !== serverLlmProxyEnabled
         ? { connectionLlmProxyEnabled: llmProxyEnabled }
         : {}),
-      ...(pluginsFeatureEnabled && pluginsEnabled !== serverPluginsEnabled
+      ...(pluginsEnabled !== serverPluginsEnabled
         ? { connectionPluginsEnabled: pluginsEnabled }
         : {}),
     });
@@ -361,19 +359,17 @@ export function ConnectionSettingsForm() {
                 />
               </SettingRow>
 
-              {pluginsFeatureEnabled && (
-                <SettingRow
-                  title="Plugins on Connect"
-                  description="Offer installing approved plugins. Existing installs keep working."
-                >
-                  <Switch
-                    checked={pluginsEnabled}
-                    onCheckedChange={setPluginsEnabled}
-                    disabled={locked}
-                    aria-label="Offer plugins on the Connect page"
-                  />
-                </SettingRow>
-              )}
+              <SettingRow
+                title="Plugins on Connect"
+                description="Offer installing approved plugins. Existing installs keep working."
+              >
+                <Switch
+                  checked={pluginsEnabled}
+                  onCheckedChange={setPluginsEnabled}
+                  disabled={locked}
+                  aria-label="Offer plugins on the Connect page"
+                />
+              </SettingRow>
 
               <SettingSection
                 title="Agents users can connect"

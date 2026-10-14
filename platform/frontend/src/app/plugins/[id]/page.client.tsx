@@ -44,7 +44,6 @@ import {
 import { WizardFooter } from "@/components/wizard-footer";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
-import { useFeature } from "@/lib/config/config.query";
 import {
   type PluginDetail,
   useDeletePlugin,
@@ -83,13 +82,7 @@ import { PluginSourceGlyph } from "../_parts/plugin-source-icon";
  * mirrors the skill page.
  */
 export default function PluginDetailPage({ id }: { id: string }) {
-  const enabled = useFeature("plugins");
-  const {
-    data: plugin,
-    isPending,
-    isLoadingError,
-    refetch,
-  } = usePlugin(enabled === true ? id : null);
+  const { data: plugin, isPending, isLoadingError, refetch } = usePlugin(id);
 
   // Hold the last plugin this mount saw. Deleting it in another tab (or any
   // background refetch that answers 404) turns `data` into null, and dropping
@@ -106,20 +99,8 @@ export default function PluginDetailPage({ id }: { id: string }) {
   const [isLeavingAfterDelete, setIsLeavingAfterDelete] = useState(false);
   const router = useRouter();
 
-  if (enabled === undefined || (enabled && isPending && !heldPlugin)) {
+  if (isPending && !heldPlugin) {
     return <PluginPageLoading />;
-  }
-
-  if (!enabled) {
-    return (
-      <PageLayout
-        title="Plugins"
-        description="Plugins are disabled for this deployment."
-        maxWidth="wizard"
-      >
-        <div />
-      </PageLayout>
-    );
   }
 
   if (isLoadingError) {

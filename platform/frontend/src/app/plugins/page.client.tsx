@@ -63,7 +63,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
 import {
   usePluginLabelKeys,
   usePluginLabelValues,
@@ -103,35 +102,10 @@ export default function PluginsPage() {
   return (
     <div className="h-full w-full">
       <ErrorBoundary>
-        <PluginsGate />
+        <PluginsList />
       </ErrorBoundary>
     </div>
   );
-}
-
-function PluginsGate() {
-  const enabled = useFeature("plugins");
-
-  // The feature flag arrives with the rest of the config; until it does this
-  // page cannot know whether it is a plugins page or a "disabled" notice. It
-  // waits without drawing anything rather than stacking a second loader in
-  // front of the one the list would show a moment later.
-  if (enabled === undefined) {
-    return null;
-  }
-
-  if (!enabled) {
-    return (
-      <PageLayout
-        title="Plugins"
-        description="Plugins are disabled for this deployment."
-      >
-        <div />
-      </PageLayout>
-    );
-  }
-
-  return <PluginsList />;
 }
 
 function PluginsList() {

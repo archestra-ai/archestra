@@ -76,12 +76,10 @@ export async function listPolicyIndependentAvailableAgentSkills(
           environmentId,
         })
       : [],
-    config.plugins.enabled
-      ? listPluginSkills({
-          organizationId: params.organizationId,
-          userId: params.userId,
-        })
-      : [],
+    listPluginSkills({
+      organizationId: params.organizationId,
+      userId: params.userId,
+    }),
   ]);
   return [
     ...nativeSkills.map((skill) => ({ source: "native" as const, skill })),

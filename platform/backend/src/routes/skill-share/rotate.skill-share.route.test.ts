@@ -7,7 +7,7 @@ import skillShareRoutes from "./skill-share.routes";
 import { seedSkill } from "./skill-share.test-helpers";
 
 beforeEach(() => {
-  config.plugins.enabled = true;
+  config.beta = false;
 });
 
 describe("POST /api/skill-share-links/:id/rotate", () => {

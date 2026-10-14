@@ -287,6 +287,12 @@ export interface PolicyEditInput {
   key?: string
 }
 
+/**
+ * The policy text the runtime stored when `root` opened. Absent when the root
+ * has no log. This is the opening document, not an error message.
+ */
+export declare function readOpenappaOpeningPolicy(root: string): Promise<string | null>
+
 export declare function readPeerMessage(input: string, policy: DispatchPolicy): Promise<string>
 
 /**

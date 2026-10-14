@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { openappaFailure } from "./failure";
+import { OpenappaRetiredAnnotatorError, openappaFailure } from "./failure";
 
 describe("openappaFailure", () => {
   test("names a refused policy and tells clients not to retry it", () => {
@@ -69,9 +69,7 @@ describe("openappaFailure", () => {
   });
 
   test("a session whose annotator the policy retired is not retried", () => {
-    const cause = new Error(
-      "OpenAPPA processing interrupted: annotator=jev.tool-call error=unregistered",
-    );
+    const cause = new OpenappaRetiredAnnotatorError("jev.tool-call");
     const failure = openappaFailure(cause);
 
     expect(failure.statusCode).toBe(409);
@@ -86,8 +84,8 @@ describe("openappaFailure", () => {
   test.each([
     "OpenAPPA processing interrupted: annotator=x error=timeout",
     "OpenAPPA processing interrupted: annotator=x error=unreachable",
-    "OpenAPPA processing interrupted: annotator=x error=unregisteredish",
-  ])("a declared annotator that did not answer stays retryable: %s", (message) => {
+    "OpenAPPA processing interrupted: annotator=x error=unregistered",
+  ])("a runtime message alone does not decide retryability: %s", (message) => {
     const failure = openappaFailure(new Error(message));
 
     expect(failure.statusCode).toBe(503);

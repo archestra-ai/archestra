@@ -29,10 +29,16 @@ export function openappaFailure(error: unknown): ApiError {
   return apiError;
 }
 
-/**
- * A credential the organization's policy binds that could not be read for it:
- * its configuration, not the runtime, so retrying cannot help.
- */
+/** A conversation whose opening policy names an annotator the served policy does not answer. */
+export class OpenappaRetiredAnnotatorError extends Error {
+  constructor(readonly annotator: string) {
+    super(
+      "the served policy does not answer an annotator from the opening policy",
+    );
+    this.name = "OpenappaRetiredAnnotatorError";
+  }
+}
+
 export class OpenappaCredentialError extends Error {
   constructor(
     readonly variable: string,
@@ -78,6 +84,11 @@ function classify(error: unknown): {
   statusCode: 409 | 500 | 503;
   detail: string;
 } {
+  if (error instanceof OpenappaRetiredAnnotatorError)
+    return {
+      statusCode: 409,
+      detail: `this conversation started under a policy that no longer declares annotator "${summarize(error.annotator, MAX_NAME)}". Start a new conversation, or an administrator can declare "${summarize(error.annotator, MAX_NAME)}" again on the ${POLICY_PAGE} page.`,
+    };
   if (error instanceof OpenappaCredentialError)
     return {
       statusCode: 500,
@@ -118,23 +129,8 @@ function classify(error: unknown): {
       detail:
         "this subagent did not start through a checked spawn. This can happen when it started while Guardrails enforcement was off. OpenAPPA refuses its requests. To continue its work, start a new subagent.",
     };
-  // The session opened under a policy whose annotator the served policy no
-  // longer declares. Every retry asks for the same name and fails the same way;
-  // an unreachable or slow annotator that is still declared can recover.
-  const retired = RETIRED_ANNOTATOR.exec(message);
-  if (retired) {
-    const name = summarize(retired[1], MAX_NAME);
-    return {
-      statusCode: 409,
-      detail: `this conversation started under a policy that no longer declares annotator "${name}". Start a new conversation, or an administrator can declare "${name}" again on the ${POLICY_PAGE} page.`,
-    };
-  }
   return { statusCode: 503, detail: "the policy runtime is unavailable." };
 }
-
-/** The runtime's refusal of a consult no annotator of the served policy answers. */
-const RETIRED_ANNOTATOR =
-  /^OpenAPPA processing interrupted: annotator=(\S+) error=unregistered\b/;
 
 /** The runtime's report of a dispatch that no longer owns its operation. */
 const LEASE_LOST =

@@ -22,6 +22,7 @@ import { enterpriseTier } from "@/enterprise-tier";
 import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
 import MemberModel from "@/models/member";
+import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import {
@@ -34,7 +35,11 @@ import {
   declareExistingInstalls,
   seedCredentialBindings,
 } from "@/openappa/declare-installs";
-import { openappaFailure } from "@/openappa/failure";
+import {
+  OpenappaRetiredAnnotatorError,
+  openappaFailure,
+} from "@/openappa/failure";
+import { unservedAnnotator } from "@/openappa/retired-annotators";
 import { captureYellReport } from "@/openappa/yell-receiver";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import type { ToolNameCanonicalizer } from "@/routes/proxy/utils/gateway-tool-names";
@@ -446,6 +451,7 @@ async function dispatchWithPrincipal(params: {
         policy,
       ),
     policy,
+    session,
   );
 }
 
@@ -511,6 +517,7 @@ async function withRuntime(
     policy: DispatchPolicy,
   ) => Promise<string>,
   batchPolicy?: DispatchPolicy,
+  session?: OpenAppaSession,
 ) {
   const policy = batchPolicy ?? (await effectivePolicy(organizationId));
   try {
@@ -518,7 +525,42 @@ async function withRuntime(
     const rawResult = await call(module, policy);
     return NativeDecisionSchema.parse(JSON.parse(rawResult));
   } catch (error) {
-    throw openappaFailure(error);
+    throw await dispatchFailure({ session, served: policy.content, error });
+  }
+}
+
+async function dispatchFailure(params: {
+  session?: OpenAppaSession;
+  served: string;
+  error: unknown;
+}): Promise<ApiError> {
+  const missing = await missingOpeningAnnotator(params.session, params.served);
+  return openappaFailure(
+    missing === null
+      ? params.error
+      : new OpenappaRetiredAnnotatorError(missing),
+  );
+}
+
+async function missingOpeningAnnotator(
+  session: OpenAppaSession | undefined,
+  served: string,
+): Promise<string | null> {
+  if (!session) return null;
+  try {
+    const root = await OpenAppaSessionModel.root({
+      organizationId: session.organization_id,
+      sessionId: session.session_id,
+    });
+    if (!root) return null;
+    const opening = await (await binding()).readOpenappaOpeningPolicy(root);
+    return opening === null ? null : unservedAnnotator({ opening, served });
+  } catch (error) {
+    logger.warn(
+      { err: error },
+      "OpenAPPA could not compare the opening policy with the served policy",
+    );
+    return null;
   }
 }
 

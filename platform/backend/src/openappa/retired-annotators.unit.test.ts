@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   readOpeningPolicy,
   retiredAnnotators,
+  unservedAnnotator,
   withKeptAnnotators,
 } from "./retired-annotators";
 
@@ -307,6 +308,20 @@ function opening(hash: string, content: string) {
   if (!parsed) throw new Error("not TOML");
   return parsed;
 }
+
+describe("unservedAnnotator", () => {
+  test("names an opening annotator the served policy no longer answers", () => {
+    expect(unservedAnnotator({ opening: URL_BOUND, served: JUDGED_BY_B })).toBe(
+      "a.tool-call",
+    );
+  });
+
+  test("does not name an annotator whose binding is unchanged", () => {
+    expect(unservedAnnotator({ opening: URL_BOUND, served: URL_BOUND })).toBe(
+      null,
+    );
+  });
+});
 
 function retire(params: {
   openings: ReturnType<typeof opening>[];

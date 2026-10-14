@@ -1029,6 +1029,28 @@ pub async fn dispatch_hook(input: String, policy: DispatchPolicy) -> napi::Resul
     run(input, policy.into()).await
 }
 
+/// The policy text the runtime stored when `root` opened. Absent when the root
+/// has no log. This is the opening document, not an error message.
+#[napi(js_name = "readOpenappaOpeningPolicy")]
+pub async fn read_openappa_opening_policy(root: String) -> napi::Result<Option<String>> {
+    if root.is_empty() || root.len() > 1024 || root.chars().any(char::is_control) {
+        return Err(error("invalid root identity"));
+    }
+    let state = initialized().await?;
+    let leased = state.lease().await?;
+    tokio::task::spawn_blocking(move || {
+        match leased.state.store.log(&TrajectoryId(root)) {
+            Ok(log) => String::from_utf8(log.policy_file().to_vec())
+                .map(Some)
+                .map_err(|_| error("OpenAPPA opening policy is not UTF-8")),
+            Err(appa_eventlog::ReadError::UnknownRoot { .. }) => Ok(None),
+            Err(read) => Err(error(read)),
+        }
+    })
+    .await
+    .map_err(error)?
+}
+
 /// Read the current label of a started session without mutating its trajectory.
 #[napi(js_name = "getOpenappaStatus")]
 pub async fn get_openappa_status(

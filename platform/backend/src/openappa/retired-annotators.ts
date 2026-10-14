@@ -53,6 +53,39 @@ export function readOpeningPolicy(
 }
 
 /**
+ * An annotator the opening policy bound that the served policy does not still
+ * answer the same way. Null when every opening binding is present unchanged.
+ */
+export function unservedAnnotator(params: {
+  opening: string;
+  served: string;
+}): string | null {
+  const opening = readOpeningPolicy("", params.opening);
+  const served = readOpeningPolicy("", params.served);
+  if (!opening || !served) return null;
+  const current = new Map(
+    served.annotators.flatMap((table) =>
+      typeof table.name === "string" ? [[table.name, table] as const] : [],
+    ),
+  );
+  for (const declaration of opening.annotators) {
+    const name = declaration.name;
+    if (typeof name !== "string") continue;
+    const required = keptFrom({ opening, declaration, name });
+    const present = current.get(name);
+    if (
+      !present ||
+      !sameBinding(
+        required,
+        keptFrom({ opening: served, declaration: present, name }),
+      )
+    )
+      return name;
+  }
+  return null;
+}
+
+/**
  * Every annotator an opening policy declares that `composed` does not, with
  * the externals tables and credentials that answered it there. Two opening
  * policies binding a name differently cannot be safely served by one binding.
@@ -158,9 +191,7 @@ export function withKeptAnnotators(
         ...asRecord(document.credentials),
       };
   }
-  return `# kept by the host for sessions opened under an earlier policy: ${kept
-    .map((annotator) => annotator.name)
-    .join(", ")}\n${stringifyToml(document)}`;
+  return stringifyToml(document);
 }
 
 // =============================================================================
@@ -223,10 +254,8 @@ function unkeepable(params: {
     const current = at(composed.externals, path);
     if (current !== undefined && !isDeepStrictEqual(current, table))
       return `the current policy uses a different externals.${path.join(".")} binding`;
-    const url = typeof table.url === "string" ? table.url : null;
-    if (!url?.startsWith(helperBase)) continue;
-    const install = url.slice(helperBase.length).split("/")[0];
-    if (!installs.has(install))
+    const install = helperInstall(table.url, helperBase);
+    if (install && !installs.has(install))
       return "the battery install whose helper answered it no longer exists";
   }
   return null;
@@ -241,6 +270,24 @@ function sameBinding(a: KeptAnnotator, b: KeptAnnotator): boolean {
 }
 
 /** Every variable a table names through a `*_env` key, at any depth. */
+function helperInstall(value: unknown, helperBase: string): string | null {
+  if (typeof value !== "string") return null;
+  let target: URL;
+  let base: URL;
+  try {
+    target = new URL(value);
+    base = new URL(helperBase);
+  } catch {
+    return null;
+  }
+  if (target.origin !== base.origin) return null;
+  const prefix = base.pathname.split("/").filter(Boolean);
+  const path = target.pathname.split("/").filter(Boolean);
+  if (path.length <= prefix.length) return null;
+  if (prefix.some((segment, index) => segment !== path[index])) return null;
+  return path[prefix.length] ?? null;
+}
+
 function envVariables(table: Record<string, unknown>): string[] {
   return Object.entries(table).flatMap(([key, value]) => {
     if (key.endsWith("_env") && typeof value === "string") return [value];

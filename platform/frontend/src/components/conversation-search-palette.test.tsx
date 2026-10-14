@@ -562,19 +562,6 @@ describe("ConversationSearchPalette", () => {
 
     expect(screen.getByText("New chat")).toBeInTheDocument();
     expect(screen.getByText("Pages")).toBeInTheDocument();
-    expect(screen.queryByText("No recent chats")).not.toBeInTheDocument();
-  });
-
-  it("shows the recent chats empty state in recent chats view", () => {
-    mockUseConversations.mockReturnValue({
-      data: [],
-      isLoading: false,
-      isFetching: false,
-    });
-
-    render(<ConversationSearchPalette {...defaultProps} recentChatsView />);
-
-    expect(screen.getByText("No recent chats")).toBeInTheDocument();
   });
 
   describe("with more recent chats than fit before the pages", () => {
@@ -611,15 +598,6 @@ describe("ConversationSearchPalette", () => {
       });
 
       expect(screen.getByText("Recent chat 7")).toBeInTheDocument();
-    });
-
-    it("lists every recent chat in the recent chats view", () => {
-      render(<ConversationSearchPalette {...defaultProps} recentChatsView />);
-
-      expect(screen.getByText("Recent chat 7")).toBeInTheDocument();
-      expect(
-        screen.queryByText("Type to search older chats"),
-      ).not.toBeInTheDocument();
     });
   });
 

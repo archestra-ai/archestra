@@ -11,10 +11,10 @@ Use `delta.audience` to restrict who can receive a tool's result. Use `requires.
 | Field | What OpenAPPA does |
 |---|---|
 | `delta.audience` | Restricts the result to the specified readers. |
-| `requires.audience.contains` | Checks that the current audience includes all specified readers. |
-| `requires.audience.within` | Checks that every reader in the current audience belongs to the specified audience. |
+| `forwards.audience` | Restricts the content the tool sends beyond its arguments to the specified readers. |
+| `requires.audience.contains` | Checks that the audience of what the call sends includes all specified readers. |
 
-In the example below, reading a ticket restricts the trajectory to `internal`. The `publish_update` call requires unrestricted sharing. The `process_internal_data` call requires the trajectory's audience to be within `internal`.
+In the example below, reading a ticket restricts the trajectory to `internal`. The `publish_update` call requires unrestricted sharing.
 
 ```toml
 [[policy.tool]]
@@ -24,10 +24,6 @@ delta = { audience = ["internal"] }
 [[policy.tool]]
 name = "publish_update"
 requires = { audience = { contains = ["public"] } }
-
-[[policy.tool]]
-name = "process_internal_data"
-requires = { audience = { within = ["internal"] } }
 ```
 
 Multiple entries combine readers from all entries. For example:
@@ -36,9 +32,8 @@ Multiple entries combine readers from all entries. For example:
 |---|---|
 | `delta = { audience = ["@finance", "@support"] }` | The result is for readers who belong to either group. |
 | `requires = { audience = { contains = ["@finance", "@support"] } }` | The current audience must include every member of both groups. |
-| `requires = { audience = { within = ["@finance", "@support"] } }` | Every current reader must belong to at least one of the two groups. |
 
-`within` checks the trajectory's audience, not the recipient of one call. Only `contains` and `within` are allowed under `requires.audience`. Other keys cause a load error.
+`contains` is the only requirement under `requires.audience`.
 
 Each audience entry can be one of the following:
 
@@ -91,7 +86,7 @@ url = "https://audience.corp/slack"
 selectors = [{ template = "viewer", feeds = "self" }, { template = "channel/<id>" }]
 ```
 
-A selector placeholder MAY be the only entry of `delta.audience` or of `requires.audience.contains`. It MAY also be an entry of an annotator's `audiences` mandate; see [Permits and hint](references/contracts/annotators.md#permits-and-hint). It MUST NOT appear under `within`, beside other entries in one list, or in an annotator's answer.
+A selector placeholder MAY be the only entry of `delta.audience` or of `requires.audience.contains`. It MAY also be an entry of an annotator's `audiences` mandate; see [Permits and hint](references/contracts/annotators.md#permits-and-hint). It MUST NOT appear beside other entries in one list or in an annotator's answer.
 
 Each `$<argument_name>` becomes a required top-level argument of the tool, as under `contains`, except that a selector placeholder also accepts an argument declared as an array of strings; see [Read an audience from a tool argument](#read-an-audience-from-a-tool-argument). The spelling, with each `$<argument_name>` read as a variable segment, MUST match one template the provider declares under `selectors`; see [Declare selector templates](#declare-selector-templates). A `$<argument_name>` segment matches only a `<variable>` segment of the template.
 

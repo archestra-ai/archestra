@@ -54,6 +54,7 @@ export function McpElicitationCard({
   groupId,
   members,
   terminalIncomplete = false,
+  onTypeAnswer,
 }: {
   /** Choice requests only (see `isChoiceElicitationRequest`), oldest first. */
   requests: ChatMcpElicitationRequest[];
@@ -62,6 +63,8 @@ export function McpElicitationCard({
   members?: AskUserGroupMember[];
   /** The stream ended after this mounted group had live requests but no result. */
   terminalIncomplete?: boolean;
+  /** Moves focus to the chat composer, which takes a lone question's typed answer. */
+  onTypeAnswer?: () => void;
 }) {
   const [valuesById, setValuesById] = useState<
     Record<string, Record<string, unknown>>
@@ -565,13 +568,17 @@ export function McpElicitationCard({
         }
         submitsOnPick={answersOnClick(question)}
         other={
-          // The chat composer takes a lone question's typed answer.
-          otherField && singlePick && !answersOnClick(question)
-            ? {
-                selected: otherOpen,
-                onSelect: () => setOtherOpen({ question, open: true }),
-              }
-            : undefined
+          !otherField || !singlePick
+            ? undefined
+            : answersOnClick(question)
+              ? // The chat composer takes a lone question's typed answer.
+                onTypeAnswer
+                ? { selected: false, onSelect: onTypeAnswer }
+                : undefined
+              : {
+                  selected: otherOpen,
+                  onSelect: () => setOtherOpen({ question, open: true }),
+                }
         }
       />
     ));
@@ -888,13 +895,46 @@ function AnswerSummary({
 }
 
 /**
- * The choices the agent offered, so the reply reads in context. Picked ones
+ * The choices the agent offered, folded behind a link: the reply bubble
+ * already shows the pick, so the full list is context on demand. Picked ones
  * carry a check; the rest stay muted.
  */
 function OfferedOptions({ member }: { member: AskUserGroupMember }) {
+  const [expanded, setExpanded] = useState(false);
   if (member.options.length === 0) return null;
   const selected =
     member.outcome?.status === "answered" ? member.outcome.selected : [];
+  const count = member.options.length;
+  return (
+    <div className="flex min-w-0 flex-col items-start gap-1.5">
+      <Button
+        type="button"
+        variant="link"
+        size="xs"
+        className="h-auto px-0 text-muted-foreground"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((current) => !current)}
+      >
+        <span>
+          {expanded
+            ? "Hide options"
+            : `Show ${count} ${count === 1 ? "option" : "options"}`}
+        </span>
+      </Button>
+      {expanded ? (
+        <OfferedOptionList member={member} selected={selected} />
+      ) : null}
+    </div>
+  );
+}
+
+function OfferedOptionList({
+  member,
+  selected,
+}: {
+  member: AskUserGroupMember;
+  selected: string[];
+}) {
   return (
     <ul aria-label="Offered options" className="flex flex-wrap gap-1.5">
       {member.options.map((option) => {

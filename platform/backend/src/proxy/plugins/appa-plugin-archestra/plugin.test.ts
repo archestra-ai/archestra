@@ -3622,7 +3622,8 @@ describe("rendering runtime text for this client", () => {
       }
       expect(JSON.stringify(outcome.toolCalls)).toContain("finished subagent");
       expect(JSON.stringify(outcome.toolCalls)).not.toContain("[appa]");
-      expect(outcome.blocked).toEqual([
+      expect(outcome.blocked).toBeUndefined();
+      expect(outcome.rewritten).toEqual([
         expect.objectContaining({ id: "handback" }),
       ]);
 

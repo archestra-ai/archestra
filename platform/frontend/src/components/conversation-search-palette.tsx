@@ -151,13 +151,11 @@ function useNavigationDestinations() {
 interface ConversationSearchPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  recentChatsView?: boolean;
 }
 
 export function ConversationSearchPalette({
   open,
   onOpenChange,
-  recentChatsView = false,
 }: ConversationSearchPaletteProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -209,8 +207,6 @@ export function ConversationSearchPalette({
   const isSearchingAndFetching = isSearching && (isTyping || isFetching);
 
   const matchingNavigationItems = useMemo(() => {
-    if (recentChatsView) return [];
-
     const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
     if (!normalizedQuery) return navigationDestinations;
 
@@ -219,7 +215,7 @@ export function ConversationSearchPalette({
         .toLocaleLowerCase()
         .includes(normalizedQuery),
     );
-  }, [recentChatsView, searchQuery, navigationDestinations]);
+  }, [searchQuery, navigationDestinations]);
 
   // The conversation search runs on the backend; run sessions carry no
   // message bodies, so their titles are matched here instead.
@@ -269,11 +265,9 @@ export function ConversationSearchPalette({
   }, [conversations, runs, debouncedSearch]);
 
   // The browse view keeps recents short so pages stay in reach; older chats
-  // are still found by typing. The recent-chats view lists them all.
+  // are still found by typing.
   const visibleRecent = browseItems
-    ? recentChatsView
-      ? browseItems.recent
-      : browseItems.recent.slice(0, RECENT_CHATS_LIMIT)
+    ? browseItems.recent.slice(0, RECENT_CHATS_LIMIT)
     : [];
   const hiddenRecentCount = browseItems
     ? browseItems.recent.length - visibleRecent.length
@@ -696,11 +690,7 @@ export function ConversationSearchPalette({
                 {matchingRuns.map((run) => renderRunItem(run))}
               </CommandGroup>
             ) : matchingNavigationItems.length === 0 ? (
-              <CommandEmpty>
-                {recentChatsView
-                  ? "No conversations found."
-                  : "No chats or pages found."}
-              </CommandEmpty>
+              <CommandEmpty>No chats or pages found.</CommandEmpty>
             ) : null}
           </>
         ) : (
@@ -737,10 +727,9 @@ export function ConversationSearchPalette({
                 the New chat row and Pages. The groups below carry their own
                 headings (Pinned / Recent), so no standalone label here — a
                 "Chats" label stacked on "Pinned" read as a double heading. */}
-            {!recentChatsView &&
-              (conversations.length > 0 || runs.length > 0) && (
-                <CommandSeparator className="my-2" />
-              )}
+            {(conversations.length > 0 || runs.length > 0) && (
+              <CommandSeparator className="my-2" />
+            )}
 
             {browseItems ? (
               <>
@@ -781,24 +770,13 @@ export function ConversationSearchPalette({
                     )}
                   </CommandGroup>
                 )}
-                {recentChatsView &&
-                  conversations.length === 0 &&
-                  runs.length === 0 && (
-                    <div className="py-4 text-center text-sm text-muted-foreground">
-                      No recent chats
-                    </div>
-                  )}
               </>
             ) : null}
 
-            {!recentChatsView && (
-              <>
-                <CommandSeparator className="my-2" />
-                <CommandGroup heading="Pages" className={PAGES_GRID_CLASS_NAME}>
-                  {renderNavigationItems()}
-                </CommandGroup>
-              </>
-            )}
+            <CommandSeparator className="my-2" />
+            <CommandGroup heading="Pages" className={PAGES_GRID_CLASS_NAME}>
+              {renderNavigationItems()}
+            </CommandGroup>
           </>
         )}
       </CommandList>

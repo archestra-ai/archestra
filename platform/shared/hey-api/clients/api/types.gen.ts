@@ -48329,6 +48329,7 @@ export type GetGuardrailsDeploymentResponses = {
     200: {
         enabled: boolean;
         unsupportedClientAction: 'bypass' | 'block';
+        superyellEnabled: boolean;
         featureEnabled: boolean;
         active: boolean;
     };
@@ -48340,6 +48341,7 @@ export type UpdateGuardrailsDeploymentData = {
     body: {
         enabled?: boolean;
         unsupportedClientAction?: 'bypass' | 'block';
+        superyellEnabled?: boolean;
     };
     path?: never;
     query?: never;
@@ -48421,6 +48423,7 @@ export type UpdateGuardrailsDeploymentResponses = {
     200: {
         enabled: boolean;
         unsupportedClientAction: 'bypass' | 'block';
+        superyellEnabled: boolean;
         featureEnabled: boolean;
         active: boolean;
     };
@@ -89262,6 +89265,10 @@ export type GetOpenappaCoverageToolsResponses = {
                 name: string;
                 selector: string | null;
                 delta: {
+                    trust?: string;
+                    audience?: Array<string>;
+                };
+                forwards: {
                     trust?: string;
                     audience?: Array<string>;
                 };

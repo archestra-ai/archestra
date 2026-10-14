@@ -171620,6 +171620,9 @@
                         "block"
                       ]
                     },
+                    "superyellEnabled": {
+                      "type": "boolean"
+                    },
                     "featureEnabled": {
                       "type": "boolean"
                     },
@@ -171630,6 +171633,7 @@
                   "required": [
                     "enabled",
                     "unsupportedClientAction",
+                    "superyellEnabled",
                     "featureEnabled",
                     "active"
                   ],
@@ -171899,6 +171903,9 @@
                       "bypass",
                       "block"
                     ]
+                  },
+                  "superyellEnabled": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -171923,6 +171930,9 @@
                         "block"
                       ]
                     },
+                    "superyellEnabled": {
+                      "type": "boolean"
+                    },
                     "featureEnabled": {
                       "type": "boolean"
                     },
@@ -171933,6 +171943,7 @@
                   "required": [
                     "enabled",
                     "unsupportedClientAction",
+                    "superyellEnabled",
                     "featureEnabled",
                     "active"
                   ],
@@ -337794,6 +337805,21 @@
                                 },
                                 "additionalProperties": false
                               },
+                              "forwards": {
+                                "type": "object",
+                                "properties": {
+                                  "trust": {
+                                    "type": "string"
+                                  },
+                                  "audience": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "requires": {
                                 "type": "object",
                                 "properties": {
@@ -337832,6 +337858,7 @@
                               "name",
                               "selector",
                               "delta",
+                              "forwards",
                               "requires",
                               "annotator",
                               "enforced"

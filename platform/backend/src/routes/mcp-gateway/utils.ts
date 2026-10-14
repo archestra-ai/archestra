@@ -51,6 +51,7 @@ import {
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { FastifyRequest } from "fastify";
+import { ZodError } from "zod";
 import {
   archestraMcpBranding,
   executeArchestraTool,
@@ -63,7 +64,11 @@ import {
   getUnassignedDiscoverableTools,
   resolveDynamicTool,
 } from "@/archestra-mcp-server/dynamic-tools";
-import { structuredToolErrorResult } from "@/archestra-mcp-server/helpers";
+import {
+  catchError,
+  errorResult,
+  structuredToolErrorResult,
+} from "@/archestra-mcp-server/helpers";
 import { isOpenappaTool } from "@/archestra-mcp-server/openappa";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import type { RequestLookups } from "@/auth/request-lookups";
@@ -72,7 +77,10 @@ import {
   type ArchestraElicitationOutcome,
   ELICITATION_ANSWER_TIMEOUT_MS,
 } from "@/clients/chat-mcp-elicitation";
-import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
+import mcpClient, {
+  McpServerStoppedError,
+  type TokenAuthContext,
+} from "@/clients/mcp-client";
 import { isToolRejectedForMcpHeaders } from "@/clients/mcp-param-headers";
 import config from "@/config";
 import logger from "@/logging";
@@ -111,7 +119,10 @@ import {
   sanitizeAppNameForToolMetadata,
 } from "@/services/apps/app-run-link";
 import { filterToolsByCallerCatalogAccess } from "@/services/caller-catalog-access";
-import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
+import {
+  getGuardrailsDeployment,
+  superyellAvailableIn,
+} from "@/services/guardrails-deployment";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import {
   discoverOidcJwksUrl,
@@ -133,6 +144,7 @@ import {
   type SelectUserToken,
   type ToolExposureMode,
 } from "@/types";
+import { ApiError } from "@/types/api";
 import { APP_LAUNCH_TOOL_NAME } from "@/types/app";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
@@ -444,7 +456,11 @@ export async function buildAgentMcpToolList(params: {
       ? getImplicitTaskControlTools()
       : [];
   // A thrown switch read must fail the list, not look like the switch is off.
-  const remediesActive = await isGuardrailsV2Active();
+  // One read serves both the remedy tools and superyell.
+  const deployment = await getGuardrailsDeployment();
+  const remediesActive = deployment.active;
+  // superyell can also arrive assigned, so it is dropped from the whole list.
+  const superyellAvailable = superyellAvailableIn(deployment);
   const implicitOpenAppaTools = getArchestraMcpTools().filter((tool) => {
     const shortName = archestraMcpBranding.getToolShortName(tool.name);
     if (APPA_IMPLICIT_TOOL_SHORT_NAMES.has(shortName ?? "")) {
@@ -485,6 +501,10 @@ export async function buildAgentMcpToolList(params: {
         },
       })),
     ].map(toMcpListTool),
+  ).filter(
+    (tool) =>
+      superyellAvailable ||
+      archestraMcpBranding.getToolShortName(tool.name) !== "superyell",
   );
 
   // Filter Archestra tools based on user RBAC permissions
@@ -1401,15 +1421,33 @@ export async function createAgentServer(params: {
           requestSizeBytes: args ? JSON.stringify(args).length : undefined,
         });
 
-        if (typeof error === "object" && error !== null && "code" in error) {
+        // Liveness failures carry authored text and must settle detached tasks
+        // as failed rather than as completed error results.
+        if (error instanceof McpServerStoppedError) throw error;
+
+        if (
+          error instanceof McpError ||
+          (typeof error === "object" &&
+            error !== null &&
+            Object.getPrototypeOf(error) === Object.prototype &&
+            "code" in error &&
+            Number.isSafeInteger(error.code) &&
+            "message" in error &&
+            typeof error.message === "string")
+        ) {
           throw error; // Re-throw JSON-RPC errors
         }
 
-        throw {
-          code: -32603, // Internal error
-          message: "Tool execution failed",
-          data: error instanceof Error ? error.message : "Unknown error",
-        };
+        if (error instanceof ApiError && error.statusCode < 500) {
+          logger.warn({ err: error }, "MCP tool execution refused");
+          return errorResult(error.message);
+        }
+        // Custom validation messages and paths can contain submitted secrets.
+        if (error instanceof ZodError) {
+          logger.warn({ err: error }, "MCP tool arguments failed validation");
+          return errorResult("Invalid tool arguments");
+        }
+        return catchError(error, "executing tool");
       }
     };
 

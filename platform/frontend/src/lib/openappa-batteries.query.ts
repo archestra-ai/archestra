@@ -13,15 +13,10 @@ import {
   invalidatePolicyViews,
   policyDeclarationsQueryKey,
 } from "@/lib/openappa-policy-views";
-import {
-  getApiErrorType,
-  reportApiError,
-  throwOnApiError,
-} from "@/lib/utils/api";
+import { reportApiError, throwOnApiError } from "@/lib/utils/api";
 
 export type BatteryMatches =
   archestraApiTypes.GetOpenappaBatteryMatchesResponses["200"];
-export type BatteryMatch = BatteryMatches["matches"][number];
 export type BatterySummary =
   archestraApiTypes.GetOpenappaBatteriesResponses["200"][number];
 export type PolicyDeclarations =
@@ -130,38 +125,6 @@ export function useBatteryMatches(catalogId: string, enabled: boolean) {
       return answered(data);
     },
   });
-}
-
-/** Turns a matched battery on or off for a catalog entry, installing it on first use. */
-export function useSetBatteryEnabled(catalogId: string) {
-  const client = useQueryClient();
-  return useBatteryMutation(
-    async (params: { match: BatteryMatch; enabled: boolean }) => {
-      const { match, enabled } = params;
-      if (match.install) return setInstallEnabled(match.install.id, enabled);
-      // A battery is off by being absent from the policy, so turning an
-      // unattached one off is nothing to write.
-      if (!enabled) return null;
-      const created = await createInstall(client, {
-        batteryName: match.battery,
-        catalogId,
-      });
-      if (getApiErrorType(created.error) !== "api_conflict_error")
-        return settled(created);
-      // A concurrent write attached it first: carry the choice over to its row.
-      const matches = settled(
-        await archestraApiSdk.getOpenappaBatteryMatches({
-          query: { catalogId },
-        }),
-      );
-      const install = matches.matches.find(
-        (fresh) => fresh.battery === match.battery,
-      )?.install;
-      return install
-        ? setInstallEnabled(install.id, enabled)
-        : settled(created);
-    },
-  );
 }
 
 /** Include a battery for a catalog entry, spelling the package the policy governs. */
@@ -297,15 +260,6 @@ const batteriesQuery = {
     return data ?? [];
   },
 };
-
-async function setInstallEnabled(id: string, enabled: boolean) {
-  return settled(
-    await archestraApiSdk.updateOpenappaBatteryInstall({
-      path: { id },
-      body: { enabled },
-    }),
-  );
-}
 
 /** The SDK call's data, or its refusal toasted and thrown. */
 function settled<T>(result: { data?: T; error?: unknown }): T {

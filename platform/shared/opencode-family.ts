@@ -4,8 +4,11 @@
  * Guardrails adapter, the session and log handling) is written once against
  * this descriptor. Only what genuinely differs is recorded here: names, the
  * binary, the config files, the state file prefix, the launch-check variable,
- * the session source in the LLM logs, the sign-in identity and the User-Agent.
+ * the session source in the LLM logs, the sign-in identity, the User-Agent and
+ * the mark.
  */
+
+import type { ClientMark } from "./client-mark";
 
 export type OpenCodeFamilyClientId = "opencode" | "kilo";
 
@@ -35,8 +38,8 @@ export interface OpenCodeFamilyDescriptor {
   oauth: { clientId: string; clientNamePattern: string };
   /** Leading tokens (lower case) of the User-Agents the client sends. */
   userAgentTokens: readonly string[];
-  /** Icon in the LLM logs. */
-  icon: string;
+  /** The mark on the Connect tile and in the LLM logs. */
+  mark: ClientMark;
 }
 
 export const OPENCODE_FAMILY: Record<
@@ -63,7 +66,16 @@ export const OPENCODE_FAMILY: Record<
     // `opencode/<version>` on every provider; `originator: opencode` on the
     // OpenAI Responses wire.
     userAgentTokens: ["opencode"],
-    icon: "/icons/opencode.png",
+    // OpenCode's 240×300 mark scaled into the 24×24 box: the dark frame (its
+    // inner cut-out wound the other way so it stays empty) and the lighter
+    // lower block.
+    mark: {
+      viewBox: "0 0 24 24",
+      path: "M16.8 4.8H7.2v14.4h9.6ZM21.6 24H2.4V0h19.2Z",
+      accent: { path: "M16.8 19.2H7.2V9.6h9.6Z", color: "#CFCECD" },
+      color: "#211E1E",
+      background: "#f7f7f6",
+    },
   },
   kilo: {
     id: "kilo",
@@ -90,7 +102,16 @@ export const OPENCODE_FAMILY: Record<
     // `kilo/<channel>/<version>/<surface>` on its own calls (kilo 7.8.8).
     // Its ChatGPT sign-in sends OpenCode's identity instead.
     userAgentTokens: ["kilo-code", "kilo"],
-    icon: "/icons/kilo.png",
+    // Kilo Code's favicon (kilo.ai) in its 32×32 box: the frame around
+    // "Ki/lo", filled even-odd so the frame and the "o" stay open, on the
+    // brand yellow.
+    mark: {
+      viewBox: "0 0 32 32",
+      path: "M0 0v32h32V0ZM29 29H3V3h26ZM9 12h3v3h3v-3l-3-3H9V6H6v9h3ZM12 6h3v3h-3ZM26 12h-3V9l-3-3h-3v3h3v3h-3v3h9ZM12 17h3v3h-3ZM15 26v-3H9v-6H6v6.1875L8.8125 26ZM23 26v-2h3v-5l-2-2h-4v2h-3v5l2 2ZM20 20h3v3h-3Z",
+      fillRule: "evenodd",
+      color: "#000000",
+      background: "#FFDD00",
+    },
   },
 };
 

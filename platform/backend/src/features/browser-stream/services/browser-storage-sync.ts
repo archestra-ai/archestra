@@ -11,7 +11,7 @@ import { extractRunCodeResult } from "./run-code-result";
 //   stopped         - never saves (restore failed or the row was deleted)
 type SessionStatus = "restored" | "restored-empty" | "stopped";
 
-const SAVE_DEBOUNCE_MS = 3_000;
+const SAVE_DELAY_MS = 3_000;
 const SESSION_STATUS_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_STATE_BYTES = 1_000_000;
 
@@ -60,7 +60,11 @@ class BrowserStorageSync {
     return restore;
   }
 
-  /** Save the session's browser state shortly after the latest tool call. */
+  /**
+   * Save the session's browser state shortly after a tool call. At most one
+   * save per window: the preview's screenshot calls arrive every couple of
+   * seconds, so a timer reset on each call would never fire.
+   */
   scheduleSave(params: {
     client: Client;
     sessionId: string;
@@ -70,11 +74,11 @@ class BrowserStorageSync {
     const status = this.sessionStatus.get(sessionId);
     if (status !== "restored" && status !== "restored-empty") return;
 
-    clearTimeout(this.pendingSaves.get(sessionId));
+    if (this.pendingSaves.has(sessionId)) return;
     const timer = setTimeout(() => {
       this.pendingSaves.delete(sessionId);
       void this.save(params);
-    }, SAVE_DEBOUNCE_MS);
+    }, SAVE_DELAY_MS);
     timer.unref?.();
     this.pendingSaves.set(sessionId, timer);
   }

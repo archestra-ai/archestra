@@ -230,6 +230,7 @@ import {
   shouldForwardAnthropicBeta,
   toSpanUserInfo,
   toToolCallBlock,
+  upstreamErrorMessage,
   withProviderToolCallIds,
   withSessionContext,
 } from "./llm-proxy-helpers";
@@ -2561,7 +2562,10 @@ export async function handleLLMProxy<
     }
     // Persist failed interactions so they appear in LLM logs
     try {
-      const errorMessage = provider.extractErrorMessage(lifecycleError);
+      const errorMessage = upstreamErrorMessage(
+        lifecycleError,
+        provider.extractErrorMessage,
+      );
       // Provider errors routinely echo the prompt back.
       logger.info(
         {
@@ -2887,6 +2891,7 @@ async function handleStreaming<
         model: actualModel,
         inputTokens: 0,
         outputTokens: 0,
+        toolCallBlock,
       };
       await persistProxyInteraction(record, encryptedChat);
     } catch (interactionError) {
@@ -3139,6 +3144,7 @@ async function handleStreaming<
           source,
         });
       }
+      toolCallBlock = toToolCallBlock(null, hostedHold.blocked);
       const heldEvents = streamAdapter.formatHeldHostedToolCallsSSE(
         hostedHold.notices,
       );
@@ -3204,7 +3210,10 @@ async function handleStreaming<
         "Proxy plugin tool-call ruling",
       );
 
-      toolCallBlock = toToolCallBlock(toolInvocationRefusal);
+      toolCallBlock = toToolCallBlock(
+        toolInvocationRefusal,
+        policyOutcome.blocked,
+      );
     }
 
     await recordGovernedThreadResponse({
@@ -3478,7 +3487,10 @@ async function handleStreaming<
     // rejecting the request, or a mid-stream failure once SSE headers and
     // content are already on the wire) still has to reach interaction history.
     if (!streamAdapter.state.usage) {
-      const errorMessage = provider.extractErrorMessage(lifecycleError);
+      const errorMessage = upstreamErrorMessage(
+        lifecycleError,
+        provider.extractErrorMessage,
+      );
       // Provider errors routinely echo the prompt back.
       logger.info(
         { profileId: agent.id, ...(suppressContent ? {} : { errorMessage }) },
@@ -3890,6 +3902,8 @@ async function handleNonStreaming<
 
   // Let the proxy plugins rule on the response's tool calls
   let rewrittenToolCalls: AccumulatedToolCall[] | null = null;
+  let blockedToolCalls: readonly { reason: string }[] =
+    hostedHold?.blocked ?? [];
   if (toolCalls.length === 0) {
     await recordGovernedThreadResponse({
       context: ctx.pluginContext,
@@ -3936,6 +3950,7 @@ async function handleNonStreaming<
       held: !!hostedHold,
     });
     // Record metrics for tool calls substituted with denial notices.
+    blockedToolCalls = policyOutcome.blocked;
     for (const blocked of policyOutcome.blocked) {
       recordBlockedToolCallMetrics({
         allToolCallNames: [blocked.name],
@@ -4052,7 +4067,7 @@ async function handleNonStreaming<
         actualModel,
         usage,
         costs,
-        toolCallBlock: toToolCallBlock(toolInvocationRefusal),
+        toolCallBlock: toToolCallBlock(toolInvocationRefusal, []),
       });
       await persistProxyInteraction(refusalRecord, encryptedChat);
 
@@ -4208,6 +4223,7 @@ async function handleNonStreaming<
       actualModel,
       usage,
       costs,
+      toolCallBlock: toToolCallBlock(null, blockedToolCalls),
     });
     await persistProxyInteraction(record, encryptedChat);
     responsePersisted = true;

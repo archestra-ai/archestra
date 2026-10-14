@@ -19,7 +19,7 @@ Do not offer one for explain, review, or yell requests, after the operator decli
 ## Get the case
 
 1. A concrete case names an action and the expected decision, plus starting conditions when they matter (for example, after reading private Slack data). If the request or the change you just made gives one, go to **Write**.
-2. Otherwise ask in one sentence which case the policy must handle, with an example from the connected servers, and end the turn.
+2. Otherwise read only the policy, then ask one \`archestra__ask_user\` question, "Which case should the validation cover?", with one or two example cases built from the connected servers' tools as options (for example, "Block public posting after reading an HR record"); the operator types their own case in its "Type something" field. The question is your whole reply: do not inspect servers or read the suite first, do not summarize the policy or the existing validations, and do not offer to review them.
 3. If the operator asks what to check, name one or two cases the policy's own rules govern and ask them to pick one or describe their own.
 
 ## Before you write
@@ -34,7 +34,7 @@ Do not offer one for explain, review, or yell requests, after the operator decli
 ## Write
 
 1. Build the calls from \`effective.content\` as the writing reference says. Inspect a tool's metadata only when the case needs arguments the policy's contracts do not show.
-2. Write one file with a descriptive name, a one-line intent comment, and one to three assertions. For Git, its path is a direct \`.appa\` child of \`activeDirectory\`; locally, use the returned directory. Reuse an existing file that already covers the case instead of adding a duplicate.
+2. Write exactly one file for the case, unless the operator asks for more: a descriptive name, a one-line intent comment, and one to three assertions. Cover a variant of the same case (another read, another argument) as another assertion in that file, not a second file. For Git, its path is a direct \`.appa\` child of \`activeDirectory\`; locally, use the returned directory. Reuse an existing file that already covers the case instead of adding a duplicate.
 3. Expectations come from the operator's case, even when the policy fails it today. Ask only if a missing detail changes what should be allowed or blocked. If the case needs a starting state, a contract or the deployment's starting label must establish it; tool names and imagined results do not. If nothing does, explain the gap and ask for the setup.
 4. Preview with \`archestra__preview_openappa_validation_change\`: explicit \`upsert\` and \`delete\`, \`expectedRevision\`, and \`expectedVersion\`. Omit \`policyContent\` unless a policy change is part of the request; never pass the current policy or blank text as a placeholder. Fix \`.appa\` syntax errors in the file only and preview again.
 5. Explain in at most three sentences, without tool calls or \`.appa\` text: the situation, the expected decision, and what the preview found. Keep passed, failed, and cannot-run distinct. \`cannot_run\` means replay could not decide offline, for example because the step needs a remote annotator; it is not a pass.

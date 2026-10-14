@@ -126,7 +126,7 @@ name = "fetch"
 description = "Fetches one URL and returns its body."
 annotator = "jev.tool-call"
 `,
-    batteries: [{ entry: 'batteries/jev/appa.toml', name: 'jev', policy: battery.policy }],
+    batteries: [{ entry: 'batteries/jev/appa.toml', name: 'jev', policy: battery.base }],
   });
   assert.deepEqual(composed.errors, []);
   const declarations = await native.parseOpenappaDeclarations(composed.content);

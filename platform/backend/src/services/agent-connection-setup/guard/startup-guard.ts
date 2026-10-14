@@ -121,6 +121,7 @@ export interface StartupGuardContext {
   skills: StartupGuardSkillsSection | null;
   runtimeHandoffInstructions?: string | null;
   managedInstructionsSource?: { url: string; token: string } | null;
+  managedRuntimeSource?: SetupScriptContext["managedRuntimeSource"];
 }
 
 /**
@@ -312,6 +313,7 @@ export function buildStartupGuardContext(
     skills: ctx.skills,
     runtimeHandoffInstructions: ctx.mcp ? ctx.runtimeHandoffInstructions : null,
     managedInstructionsSource: ctx.mcp ? ctx.managedInstructionsSource : null,
+    managedRuntimeSource: ctx.managedRuntimeSource,
   };
 }
 
@@ -742,7 +744,8 @@ disconnect_resource() { # $1 kind, $2 label
     ctx.mcp
       ? `
 
-MCP_SERVER_NAME=${sh(ctx.mcp.serverName)}`
+MCP_SERVER_NAME=${sh(ctx.mcp.serverName)}
+MCP_SERVER_URL=${sh(ctx.mcp.url)}`
       : ""
   }${
     ctx.skills
@@ -1331,6 +1334,14 @@ ${client.binary}() {
   case "\${1:-}" in
     ${client.utilitySubcommands.join("|")}|--help|-h|--version|-v) command ${client.binary} "$@"; return $? ;;
   esac
+  ${
+    ctx.managedRuntimeSource
+      ? `if [ -f "${guardPath}" ]; then
+    command -v node >/dev/null 2>&1 || { printf '%s\\n' 'Node.js is required for the managed launcher.' >&2; return 1; }
+    node "$HOME/.archestra/${client.clientId}-runtime/bootstrap.cjs" || return 1
+  fi`
+      : ""
+  }
   ${
     ctx.managedInstructionsSource
       ? `if [ -f "${guardPath}" ] && ! grep -qx mcp "$HOME/${client.skipRelpath}" 2>/dev/null && command -v python3 >/dev/null 2>&1; then

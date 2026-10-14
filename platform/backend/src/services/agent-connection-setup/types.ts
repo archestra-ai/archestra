@@ -125,6 +125,12 @@ export interface SetupScriptContext {
   /** Initial local copy; wrappers refresh it before launching an agent. */
   runtimeHandoffInstructions?: string | null;
   managedInstructionsSource?: { url: string; token: string } | null;
+  /** Explicit executable-update capability, distinct from data-only instructions. */
+  managedRuntimeSource?: {
+    url: string;
+    token: string;
+    installation: string;
+  } | null;
 }
 
 /** One script language's renderer for an agent. */

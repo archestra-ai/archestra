@@ -44,6 +44,12 @@ export const REDACTED_LOG_PATHS = [
     '["X-Archestra-Runtime-Binding"]',
     '*["X-Archestra-Runtime-Binding"]',
     '*.headers["X-Archestra-Runtime-Binding"]',
+    '["x-archestra-client-runtime-token"]',
+    '*["x-archestra-client-runtime-token"]',
+    '*.headers["x-archestra-client-runtime-token"]',
+    '["X-Archestra-Client-Runtime-Token"]',
+    '*["X-Archestra-Client-Runtime-Token"]',
+    '*.headers["X-Archestra-Client-Runtime-Token"]',
   ]);
 
 /**

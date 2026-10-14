@@ -977,6 +977,13 @@ describe("asking through the client's own question tool", () => {
           askUser: undefined,
           platformToolNames: new Set(),
           namespaces: new Map([["remedy_alias", "mcp__gateway"]]),
+          controlAliases: [
+            {
+              name: "archestra__execute_remedy_plan",
+              namespace: "mcp__gateway",
+            },
+            { name: "remedy_alias", namespace: "mcp__gateway" },
+          ],
         },
         customTools: new Set(),
         declaredTools: [{ name: "request_user_input" }],
@@ -1454,6 +1461,10 @@ describe("asking through the client's own question tool", () => {
     trusted.request = {
       tools: {
         control: { name: "mcp__my_gateway__archestra__execute_remedy_plan" },
+        controlAliases: [
+          { name: "mcp__my_gateway__archestra__execute_remedy_plan" },
+          { name: "mcp__my_gateway.archestra__execute_remedy_plan" },
+        ],
         notice: { name: "archestra__get_remedy_plans" },
         askUser: { name: "archestra__ask_user" },
         platformToolNames: new Set(),

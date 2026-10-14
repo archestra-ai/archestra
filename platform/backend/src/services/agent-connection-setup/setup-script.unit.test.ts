@@ -1640,7 +1640,6 @@ esac
       proxy: OPENAI_PASSTHROUGH_PROXY,
     });
 
-    expect(script).toContain(".config/opencode");
     expect(script).not.toContain(".opencode/opencode.json");
     expect(script).toContain(EXTERNAL_AGENT_ID_HEADER);
     expect(script).toContain(OPENCODE_CLIENT_ID);
@@ -1766,7 +1765,10 @@ ${script.slice(pluginStart, pluginEnd)}
     }
   });
 
-  test("kilo: installs OpenCode 1's routing plugin and config at Kilo's own version numbers", async () => {
+  test.each([
+    false,
+    true,
+  ])("kilo: migrates a private JSONC gateway into a private managed config (existing config: %s)", async (existingConfig) => {
     const root = await mkdtemp(path.join(tmpdir(), "kilo-setup-"));
     const home = path.join(root, "home");
     const bin = path.join(root, "bin");
@@ -1775,6 +1777,27 @@ ${script.slice(pluginStart, pluginEnd)}
     try {
       await mkdir(home);
       await mkdir(bin);
+      const siblingPath = path.join(home, ".config/kilo/kilo.jsonc");
+      await mkdir(path.dirname(siblingPath), { recursive: true });
+      await writeFile(
+        siblingPath,
+        JSON.stringify({
+          mcp: {
+            my_gateway: {
+              type: "remote",
+              url: MCP.url,
+              enabled: true,
+              headers: { Authorization: "Bearer example-test-token" },
+            },
+          },
+        }),
+      );
+      await chmod(siblingPath, 0o600);
+      if (existingConfig) {
+        const ownedPath = path.join(home, ".config/kilo/kilo.json");
+        await writeFile(ownedPath, "{}");
+        await chmod(ownedPath, 0o644);
+      }
       // Kilo numbers its releases 7.x; OpenCode's check would read that as v2.
       await writeFile(
         path.join(bin, "kilo"),
@@ -1795,7 +1818,7 @@ esac
           ...fullContext("kilo", "linux"),
           proxy: OPENAI_PASSTHROUGH_PROXY,
           skills: null,
-        }),
+        }).replace("#!/usr/bin/env bash", "#!/usr/bin/env bash\numask 022"),
       );
       const result = await execFileAsync("bash", [scriptPath], {
         cwd: root,
@@ -1818,7 +1841,20 @@ esac
       expect(config.mcp[MCP.serverName]).toEqual({
         type: "remote",
         url: MCP.url,
+        headers: { Authorization: "Bearer example-test-token" },
       });
+      const sibling = JSON.parse(await readFile(siblingPath, "utf8"));
+      expect(sibling.mcp.my_gateway.enabled).toBe(false);
+      expect(
+        (await stat(path.join(home, ".config/kilo/kilo.json"))).mode & 0o777,
+      ).toBe(0o600);
+      expect(
+        Object.entries({ ...config.mcp, ...sibling.mcp })
+          .filter(
+            ([, entry]) => (entry as { enabled?: boolean }).enabled !== false,
+          )
+          .map(([name]) => name),
+      ).toEqual([MCP.serverName]);
       const plugin = await readFile(
         path.join(home, ".config/kilo/plugins/archestra-llm-proxy.js"),
         "utf8",
@@ -3803,19 +3839,6 @@ describe("migrating a gateway registered under an older name", () => {
     await expectValidBash(script);
   });
 
-  test("opencode moves the config entry onto the new name", async () => {
-    const script = renderSetupScript({
-      ...fullContext("opencode"),
-      mcp: MCP_WITH_LEGACY_NAME,
-    });
-
-    expect(script).toContain(
-      "ARCHESTRA_OC_MCP_LEGACY_NAMES='[\"my_gateway\"]'",
-    );
-    expect(script).toContain("ARCHESTRA_OC_MCP_NAME='archestra'");
-    await expectValidBash(script);
-  });
-
   test("windows claude-code drops the old entry from both scopes", () => {
     const script = renderSetupScript({
       ...fullContext("claude-code", "windows"),
@@ -3833,18 +3856,12 @@ describe("migrating a gateway registered under an older name", () => {
     );
   });
 
-  test("windows cursor and opencode drop the old config entry", () => {
+  test("windows cursor drops the old config entry", () => {
     const cursor = renderSetupScript({
       ...fullContext("cursor", "windows"),
       mcp: MCP_WITH_LEGACY_NAME,
     });
-    const opencode = renderSetupScript({
-      ...fullContext("opencode", "windows"),
-      mcp: MCP_WITH_LEGACY_NAME,
-    });
-
     expect(cursor).toContain("foreach ($arch_legacy in @('my_gateway'))");
-    expect(opencode).toContain("foreach ($archLegacy in @('my_gateway'))");
   });
 
   test("emits no migration when the gateway keeps its own name", () => {

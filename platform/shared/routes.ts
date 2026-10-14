@@ -980,6 +980,7 @@ export const RouteId = {
   CreateConnectionVirtualKey: "createConnectionVirtualKey",
   CreateConnectionPassthroughKey: "createConnectionPassthroughKey",
   GetConnectionInstructions: "getConnectionInstructions",
+  GetConnectionRuntime: "getConnectionRuntime",
   GetConnectionHealth: "getConnectionHealth",
   GetConnectedClients: "getConnectedClients",
   DisconnectConnectedClient: "disconnectConnectedClient",

@@ -877,7 +877,7 @@ function isOutputDecision(
 export async function processProxyResults(params: {
   session: OpenAppaSession;
   results: CommonToolResult[];
-  canonicalize: (name: string) => string;
+  canonicalize: ToolNameCanonicalizer;
   /** The proxy verifies that this exact result belongs to an issued question. */
   isUserQuestion?: (result: CommonToolResult) => boolean;
   controlToolName?: string;
@@ -988,8 +988,10 @@ export async function evaluateToolCalls(
     looseRunToolDispatch?: boolean;
     /** This session's control tool declaration, as the client spells it. */
     control?: DeclaredToolSpelling;
+    controlAliases?: readonly DeclaredToolSpelling[];
     /** This session's notice tool declaration, as the client spells it. */
     notice?: DeclaredToolSpelling;
+    noticeAliases?: readonly DeclaredToolSpelling[];
     /** True for a call that names a child trajectory (Task, spawn_agent, task). */
     isSpawn?: (name: string, namespace?: string) => boolean;
     /** Runtime launches are resolved per call, including run_tool targets. */
@@ -1043,16 +1045,22 @@ export async function evaluateToolCalls(
       // Only the declared control tool itself, in its own namespace: a
       // same-named tool elsewhere is someone else's and is evaluated.
       if (
-        options.control &&
-        call.name === options.control.name &&
-        call.namespace === options.control.namespace
+        (
+          options.controlAliases ?? (options.control ? [options.control] : [])
+        ).some(
+          (member) =>
+            call.name === member.name && call.namespace === member.namespace,
+        )
       ) {
         return { kind: "control" as const };
       }
       if (
-        options.notice &&
-        call.name === options.notice.name &&
-        call.namespace === options.notice.namespace
+        (
+          options.noticeAliases ?? (options.notice ? [options.notice] : [])
+        ).some(
+          (member) =>
+            call.name === member.name && call.namespace === member.namespace,
+        )
       ) {
         return { kind: "allow" as const };
       }

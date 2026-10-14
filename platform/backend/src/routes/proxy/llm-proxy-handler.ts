@@ -242,6 +242,8 @@ import {
   withFirstChunk,
 } from "./upstream-connection-retry";
 import * as utils from "./utils";
+import { resolveClientGatewayBindings } from "./utils/client-gateway-bindings";
+import { consumeClientRuntimeEvidence } from "./utils/client-runtime-evidence";
 import {
   type EncryptedChatAuditDisposition,
   redactEncryptedChatInteraction,
@@ -666,6 +668,7 @@ export async function handleLLMProxy<
   provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>,
 ): Promise<FastifyReply> {
   const streamTiming: StreamTiming = { requestReceivedAt: Date.now() };
+  const clientRuntimeEvidence = consumeClientRuntimeEvidence(request);
   const internalCall = takeInternalCall(request.headers);
   const headers = request.headers as unknown as THeaders;
   const agentId = (request.params as { agentId?: string }).agentId;
@@ -1393,11 +1396,17 @@ export async function handleLLMProxy<
 
     // Identifies which declared tools the platform gateway served after
     // verifying attestations with the organization key.
+    const clientBindings = await resolveClientGatewayBindings({
+      evidence: clientRuntimeEvidence,
+      organizationId: resolvedAgent.organizationId,
+      llmProxyId: resolvedAgent.id,
+    });
     const toolIdentity =
       await utils.gatewayToolNames.resolveGatewayToolIdentity({
         organizationId: resolvedAgent.organizationId,
         declarations: gatewayToolDeclarations,
         internalChat: isInternalChat,
+        clientBindings,
       });
 
     // Persist tools declared by client (only for llm_proxy agents)
@@ -2149,6 +2158,7 @@ export async function handleLLMProxy<
                 organizationId: resolvedAgent.organizationId,
                 declarations: state.tools,
                 internalChat: isInternalChat,
+                clientBindings,
               });
             threadRecord = {
               organizationId: resolvedAgent.organizationId,

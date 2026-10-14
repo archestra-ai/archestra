@@ -55,12 +55,15 @@ import {
   getVirtualKeyProviderCatalog,
 } from "@/services/agent-connection-setup/credentials/primary-providers";
 import { buildDesktopInstallerBundle } from "@/services/agent-connection-setup/desktop/connection-setup-desktop-bundle";
+import { managedRuntimeManifest } from "@/services/agent-connection-setup/payloads/managed-runtime";
 import { issueConnectionInstructionsToken } from "@/services/connection-instructions-token";
 import { getConnectionManagedInstructions } from "@/services/connection-managed-instructions";
 import {
   connectionSetupReference,
   issueConnectionProxySetupContext,
 } from "@/services/connection-proxy-setup-context";
+import { authenticateConnectionRuntime } from "@/services/connection-runtime";
+import { issueConnectionRuntimeToken } from "@/services/connection-runtime-token";
 import {
   type ConnectionCreditWarning,
   ensureConnectionPassthroughKey,
@@ -95,6 +98,7 @@ import {
 import {
   CONNECTION_HEALTH_PATH,
   CONNECTION_INSTRUCTIONS_PATH,
+  CONNECTION_RUNTIME_PATH,
   CONNECTION_SETUP_SCRIPT_PREFIX,
   SKILL_MARKETPLACE_PREFIX,
   SKILL_MARKETPLACE_STATIC_PATH,
@@ -277,6 +281,48 @@ const ConnectionHealthResponseSchema = z.object({
 });
 
 const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  fastify.get(
+    CONNECTION_RUNTIME_PATH,
+    {
+      schema: {
+        operationId: RouteId.GetConnectionRuntime,
+        description:
+          "Read executable managed launcher/plugin artifacts using a distinct installation update capability. Consumed connection, revocation, live membership and resource access are rechecked. Does not replay installation or issue credentials.",
+        tags: ["Connection Setups"],
+        response: constructResponseSchema(
+          z.object({
+            format: z.literal(1),
+            installation: z.string().uuid(),
+            clientId: z.enum(["opencode", "kilo"]),
+            artifacts: z.record(
+              z.string(),
+              z.object({
+                source: z.string(),
+                sha256: z.string().regex(/^[a-f0-9]{64}$/),
+              }),
+            ),
+          }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      if (
+        await isRateLimited(
+          `${CacheKey.ConnectionHealthRateLimit}-runtime-${connectionHealthRequesterKey(request)}`,
+          { windowMs: 60_000, maxRequests: 60 },
+        )
+      )
+        throw new ApiError(429, "Too many requests");
+      const bearer =
+        /^Bearer (.+)$/.exec(request.headers.authorization ?? "")?.[1] ?? "";
+      const installation = await authenticateConnectionRuntime(bearer);
+      reply.header("Cache-Control", "no-store");
+      return managedRuntimeManifest({
+        installation: installation.setupId,
+        clientId: installation.clientId,
+      });
+    },
+  );
   fastify.get(
     CONNECTION_INSTRUCTIONS_PATH,
     {
@@ -1346,6 +1392,17 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       toolPrefix: archestraMcpBranding.toolPrefix,
       mcp,
       proxy,
+      managedRuntimeSource:
+        isOpenCodeFamilyClient(setup.clientId) && (mcp || proxy)
+          ? {
+              url: `${proxyBaseUrlToOrigin(setup.baseUrl)}${CONNECTION_RUNTIME_PATH}`,
+              token: issueConnectionRuntimeToken({
+                setupId: setup.id,
+                secret: config.auth.secret ?? "",
+              }),
+              installation: setup.id,
+            }
+          : null,
       managedInstructionsSource:
         mcp &&
         ["claude-code", "codex", "copilot-cli", "opencode", "kilo"].includes(

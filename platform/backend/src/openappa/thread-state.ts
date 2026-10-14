@@ -188,6 +188,7 @@ export function threadToolsOf(params: {
     name: string;
     namespace?: string;
     marker?: string;
+    contract?: string;
   }>;
   types: ReadonlyArray<string | undefined>;
 }): ThreadTool[] {
@@ -196,6 +197,7 @@ export function threadToolsOf(params: {
     ...(declaration.namespace ? { namespace: declaration.namespace } : {}),
     ...(params.types[index] ? { type: params.types[index] } : {}),
     ...(declaration.marker ? { marker: declaration.marker } : {}),
+    ...(declaration.contract ? { contract: declaration.contract } : {}),
   }));
 }
 

@@ -985,6 +985,29 @@ describe.skipIf(!powershellAvailable)(
         await mkdir(path.dirname(configPath), { recursive: true });
         await mkdir(bin);
         await writeFile(configPath, JSON.stringify(existing));
+        const siblingPath = path.join(
+          path.dirname(configPath),
+          "opencode.jsonc",
+        );
+        await writeFile(
+          siblingPath,
+          JSON.stringify({
+            mcp: {
+              my_gateway: {
+                type: "remote",
+                url: "https://proxy.example.com/v1/mcp/gw",
+                enabled: true,
+              },
+              prod_gateway: {
+                type: "remote",
+                url: "https://proxy.example.com/v1/mcp/gw",
+                enabled: false,
+                oauth: false,
+                headers: { Authorization: "Bearer example-test-token" },
+              },
+            },
+          }),
+        );
         await writeFile(
           path.join(bin, "opencode"),
           '#!/bin/sh\n[ "$1" = --version ] && echo 1.18.32\nexit 0\n',
@@ -1066,6 +1089,17 @@ exit $LASTEXITCODE
         expect(
           connected.provider["archestra-anthropic"].models["claude-test"].limit,
         ).toEqual({ context: 200000, output: 0 });
+        expect(
+          JSON.parse(await readFile(siblingPath, "utf8")).mcp.my_gateway
+            .enabled,
+        ).toBe(false);
+        expect(
+          JSON.parse(await readFile(siblingPath, "utf8")).mcp.prod_gateway
+            .enabled,
+        ).toBe(false);
+        expect(connected.mcp.prod_gateway.url).toBe(
+          "https://proxy.example.com/v1/mcp/gw",
+        );
         expect(JSON.parse(await readFile(configPath, "utf8"))).toEqual(
           existing,
         );

@@ -101,6 +101,7 @@ import {
   recompileAllOnStart,
 } from "@/openappa/service";
 import { initializeLlmProxyPlugins } from "@/proxy/plugins/registry";
+import { captureClientRuntimeEvidence } from "@/routes/proxy/utils/client-runtime-evidence";
 import { activeChatRunService } from "@/services/active-chat-run";
 import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
 import { warmRenderRuntime } from "@/services/apps/app-recording-render-runtime";
@@ -369,6 +370,9 @@ export async function registerSwaggerPlugin(fastify: FastifyInstanceWithZod) {
  * @param fastify - The Fastify instance to register routes on
  */
 export async function registerApiRoutes(fastify: FastifyInstanceWithZod) {
+  fastify.addHook("onRequest", async (request) => {
+    captureClientRuntimeEvidence(request);
+  });
   await initializeLlmProxyPlugins();
   for (const route of Object.values(routes)) {
     fastify.register(route);

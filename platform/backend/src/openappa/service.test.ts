@@ -1657,6 +1657,44 @@ describe("APPA feature boundary", () => {
     expect(native.dispatchHook).not.toHaveBeenCalled();
   });
 
+  test("releases authorized control and notice aliases but evaluates foreign namespaces", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "deny_call", feedback: "Foreign" }),
+    );
+    const controlAliases = ["mcp__gateway", "mcp__legacy"].map((namespace) => ({
+      name: "archestra__execute_remedy_plan",
+      namespace,
+    }));
+    const noticeAliases = ["mcp__gateway", "mcp__legacy"].map((namespace) => ({
+      name: "archestra__get_remedy_plans",
+      namespace,
+    }));
+    const calls = [
+      ...controlAliases,
+      ...noticeAliases,
+      { name: "archestra__execute_remedy_plan", namespace: "mcp__foreign" },
+    ].map((member, index) => ({
+      ...member,
+      id: `alias-${index}`,
+      arguments: {},
+    }));
+    const decisions = await evaluateToolCalls(session, calls, {
+      canonicalize: () => "archestra__execute_remedy_plan",
+      control: controlAliases[0],
+      controlAliases,
+      notice: noticeAliases[0],
+      noticeAliases,
+    });
+    expect(decisions).toEqual([
+      { kind: "control" },
+      { kind: "control" },
+      { kind: "allow" },
+      { kind: "allow" },
+      { kind: "deny", feedback: "Foreign", offers: [], recorded: true },
+    ]);
+    expect(native.dispatchHook).toHaveBeenCalledTimes(1);
+  });
+
   test("releases the control call only in the namespace its tool was declared in", async () => {
     // Codex calls a namespace member by its bare name. A server beside the
     // gateway can declare a member spelled like the control tool; its call is

@@ -2228,6 +2228,334 @@ describe("APPA request preflight", () => {
     );
   });
 
+  test.each([
+    false,
+    true,
+  ])("accepts only client-authorized alias members and selects stable presentation (reversed=%s)", async (reversed) => {
+    const tools = ["current", "legacy"].flatMap((alias) =>
+      [
+        [ADVERTISED_NOTICE, "get_remedy_plans"],
+        [ADVERTISED_CONTROL, "execute_remedy_plan"],
+        [ADVERTISED_ASK_USER, "ask_user"],
+      ].map(([advertisedName, short]) => ({
+        ...attestedTool({
+          name: `${alias}_archestra__${short}`,
+          advertisedName,
+        }),
+        input_schema: {
+          type: "object",
+          properties: {
+            offer_id: { type: "string" },
+            trajectory: { type: "object" },
+            execution: { type: "object" },
+          },
+          required: ["trajectory"],
+        },
+      })),
+    );
+    const copied = attestedTool({
+      name: "foreign_archestra__execute_remedy_plan",
+      advertisedName: ADVERTISED_CONTROL,
+    });
+    const body = {
+      tools: [...(reversed ? [...tools].reverse() : tools), copied],
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "search",
+              content: [
+                {
+                  type: "tool_reference",
+                  tool_name: "current_archestra__get_remedy_plans",
+                },
+                {
+                  type: "tool_reference",
+                  tool_name: "legacy_archestra__get_remedy_plans",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const authorized = await authorizedAliasIdentity(
+      body,
+      tools.map((tool) => tool.name),
+    );
+    const request = prepareAppaRequest({
+      body,
+      identity: authorized,
+      interactionType: "anthropic:messages",
+    });
+    expect(request.tools?.control.name).toBe(
+      "current_archestra__execute_remedy_plan",
+    );
+    expect(request.tools?.notice.name).toBe(
+      "current_archestra__get_remedy_plans",
+    );
+    expect(
+      request.tools?.controlAliases?.map((member) => member.name).sort(),
+    ).toEqual([
+      "current_archestra__execute_remedy_plan",
+      "legacy_archestra__execute_remedy_plan",
+    ]);
+    expect(request.tools?.askUserAliases).toHaveLength(2);
+    expect(
+      body.tools.some((tool) => tool.name.endsWith("get_remedy_plans")),
+    ).toBe(false);
+    expect(JSON.stringify(body.messages)).not.toContain("tool_reference");
+    for (const tool of tools.filter(
+      (tool) => !tool.name.endsWith("get_remedy_plans"),
+    )) {
+      expect(tool.input_schema.properties).not.toHaveProperty("trajectory");
+      if (tool.name.endsWith("execute_remedy_plan"))
+        expect(tool.input_schema.properties).not.toHaveProperty("execution");
+    }
+    expect(request.tools?.controlAliases).not.toContainEqual({
+      name: copied.name,
+    });
+    expect(authorized.attestationOf(copied.name)).toBeUndefined();
+  });
+
+  test("holds every accepted incomplete remedy group member while tools are deferred", async () => {
+    const body = {
+      tools: [
+        { type: "tool_search_tool_regex_20251119", name: "search" },
+        ...["current", "legacy"].flatMap((alias) =>
+          [ADVERTISED_CONTROL, ADVERTISED_ASK_USER].map((advertisedName) =>
+            attestedTool({
+              name: `${alias}_${advertisedName}`,
+              advertisedName,
+            }),
+          ),
+        ),
+      ],
+      messages: [],
+    };
+    const request = prepareAppaRequest({
+      body,
+      identity: await authorizedAliasIdentity(body),
+      interactionType: "anthropic:messages",
+    });
+    expect(request.tools).toBeUndefined();
+    expect(request.heldTools).toHaveLength(4);
+    expect(body.tools).toHaveLength(1);
+  });
+
+  test("accepts an authorized singleton after a copied outside-binding alias is demoted", async () => {
+    const body = {
+      tools: [
+        attestedTool({
+          name: "current_notice",
+          advertisedName: ADVERTISED_NOTICE,
+        }),
+        attestedTool({
+          name: "current_control",
+          advertisedName: ADVERTISED_CONTROL,
+        }),
+        attestedTool({
+          name: "foreign_control",
+          advertisedName: ADVERTISED_CONTROL,
+        }),
+      ],
+      messages: [],
+    };
+    const identity = await authorizedAliasIdentity(body, [
+      "current_notice",
+      "current_control",
+    ]);
+    const prepared = prepareAppaRequest({
+      body,
+      identity,
+      interactionType: "anthropic:messages",
+    });
+    expect(prepared.tools?.control).toEqual({ name: "current_control" });
+    expect(prepared.tools?.controlAliases).toBeUndefined();
+    expect(body.tools.map((tool) => tool.name)).toEqual([
+      "current_control",
+      "foreign_control",
+    ]);
+    expect(identity.attestationOf("foreign_control")).toBeUndefined();
+    expect(identity.canonicalize("foreign_control")).toBe(
+      "foreign:foreign_control",
+    );
+  });
+
+  test("hides both Codex notice namespaces and retains exact control declarations", async () => {
+    const body = {
+      tools: ["legacy", "current"].map((alias) => ({
+        type: "namespace",
+        name: `mcp__${alias}`,
+        tools: [ADVERTISED_NOTICE, ADVERTISED_CONTROL, ADVERTISED_ASK_USER].map(
+          (advertisedName) => ({
+            ...attestedTool({
+              name: advertisedName,
+              advertisedName,
+              type: "function",
+            }),
+            parameters: {
+              type: "object",
+              properties: {
+                trajectory: { type: "object" },
+                execution: { type: "object" },
+              },
+            },
+          }),
+        ),
+      })),
+      input: [],
+    };
+    const prepared = prepareAppaRequest({
+      body,
+      identity: await authorizedAliasIdentity(body),
+      interactionType: "openai:responses",
+    });
+    expect(prepared.tools?.control).toEqual({
+      name: ADVERTISED_CONTROL,
+      namespace: "mcp__current",
+    });
+    expect(prepared.tools?.controlAliases).toHaveLength(2);
+    for (const group of body.tools) {
+      expect(group.tools.map((tool) => tool.name)).toEqual([
+        ADVERTISED_CONTROL,
+        ADVERTISED_ASK_USER,
+      ]);
+      expect(group.tools[0].parameters.properties).toEqual({});
+      expect(group.tools[1].parameters.properties).toEqual({
+        execution: { type: "object" },
+      });
+    }
+  });
+
+  test("restores every accepted alias receipt without renaming history calls or IDs", async () => {
+    const tools = ["current", "legacy"].flatMap((alias) =>
+      [ADVERTISED_CONTROL, ADVERTISED_NOTICE, ADVERTISED_ASK_USER].map(
+        (advertisedName) =>
+          attestedTool({ name: `${alias}_${advertisedName}`, advertisedName }),
+      ),
+    );
+    const body = {
+      tools,
+      messages: [
+        {
+          role: "assistant",
+          content: ["current", "legacy"].flatMap((alias) => [
+            {
+              type: "tool_use",
+              id: `${alias}-control`,
+              name: `${alias}_${ADVERTISED_CONTROL}`,
+              input: stampedRemedyArguments({
+                callId: `${alias}-control`,
+                toolName: `${alias}_${ADVERTISED_CONTROL}`,
+                original: '{"offer_id":"offer"}',
+              }),
+            },
+            {
+              type: "tool_use",
+              id: `${alias}-question`,
+              name: `${alias}_${ADVERTISED_ASK_USER}`,
+              input: {
+                question: "Choose",
+                trajectory: { v: 1, session_id: "untrusted" },
+              },
+            },
+          ]),
+        },
+        {
+          role: "user",
+          content: ["current", "legacy"].flatMap((alias) => [
+            {
+              type: "tool_result",
+              tool_use_id: `${alias}-control`,
+              content: "done",
+            },
+            {
+              type: "tool_result",
+              tool_use_id: `${alias}-question`,
+              content: "yes",
+            },
+          ]),
+        },
+      ],
+    };
+    prepareAppaRequest({
+      body,
+      identity: await authorizedAliasIdentity(body),
+      interactionType: "anthropic:messages",
+    });
+    expect(body.messages[0].content).toEqual(
+      ["current", "legacy"].flatMap((alias) => [
+        {
+          type: "tool_use",
+          id: `${alias}-control`,
+          name: `${alias}_${ADVERTISED_CONTROL}`,
+          input: { offer_id: "offer" },
+        },
+        {
+          type: "tool_use",
+          id: `${alias}-question`,
+          name: `${alias}_${ADVERTISED_ASK_USER}`,
+          input: { question: "Choose" },
+        },
+      ]),
+    );
+  });
+
+  test.each([
+    "different-gateway",
+    "free-form",
+    "contract-conflict",
+  ])("refuses invalid equivalent special-tool declarations (%s)", async (variant) => {
+    const body = {
+      tools: [
+        attestedTool({
+          name: "current_notice",
+          advertisedName: ADVERTISED_NOTICE,
+        }),
+        {
+          ...attestedTool({
+            name: "current_control",
+            advertisedName: ADVERTISED_CONTROL,
+          }),
+          input_schema: { type: "object" },
+        },
+        {
+          ...attestedTool({
+            name: "legacy_control",
+            advertisedName: ADVERTISED_CONTROL,
+            ...(variant === "different-gateway"
+              ? { gatewayId: randomUUID() }
+              : {}),
+            ...(variant === "free-form" ? { type: "custom" } : {}),
+          }),
+          input_schema:
+            variant === "contract-conflict"
+              ? { type: "object", required: ["different"] }
+              : { type: "object" },
+        },
+      ],
+      messages: [],
+    };
+    const resolved =
+      variant === "contract-conflict"
+        ? await attestedIdentity(body)
+        : await authorizedAliasIdentity(body);
+    expect(() =>
+      prepareAppaRequest({
+        body,
+        identity: resolved,
+        interactionType: "anthropic:messages",
+      }),
+    ).toThrow(
+      variant === "free-form"
+        ? "structured function arguments"
+        : "exactly one declaration",
+    );
+  });
+
   test("never takes a lookalike pair for the remedy tools", async () => {
     // A hostile MCP server can put the branded names on its own tools. Only a
     // gateway attestation confers built-in status, so without one the pair is
@@ -4825,6 +5153,43 @@ async function attestedIdentity(body: unknown, organizationId = ORG) {
     declarations: extractGatewayToolDeclarations(body),
     internalChat: false,
   });
+}
+
+/** Models the proxy's explicit client-bound group API, never marker equality. */
+async function authorizedAliasIdentity(
+  body: unknown,
+  acceptedNames?: readonly string[],
+) {
+  const identity = await attestedIdentity(body);
+  const accepted = identity.verified.filter(
+    (declaration) =>
+      acceptedNames === undefined || acceptedNames.includes(declaration.name),
+  );
+  const attestationOf = (name: string, namespace?: string) =>
+    accepted.find(
+      (declaration) =>
+        declaration.name === name && declaration.namespace === namespace,
+    );
+  const aliasesOf = (advertisedName: string) =>
+    accepted
+      .filter((declaration) => declaration.advertisedName === advertisedName)
+      .map(({ name, namespace }) => ({
+        name,
+        ...(namespace ? { namespace } : {}),
+      }));
+  return {
+    ...identity,
+    attestationOf,
+    aliasesOf,
+    canonicalize: (name: string, namespace?: string) =>
+      attestationOf(name, namespace)?.advertisedName ?? `foreign:${name}`,
+    spellingOf: (advertisedName: string) =>
+      [...aliasesOf(advertisedName)].sort((a, b) =>
+        `${a.namespace ?? ""}\u0000${a.name}`.localeCompare(
+          `${b.namespace ?? ""}\u0000${b.name}`,
+        ),
+      )[0],
+  };
 }
 
 /** A historical offer object. Not a signature and not verified. */

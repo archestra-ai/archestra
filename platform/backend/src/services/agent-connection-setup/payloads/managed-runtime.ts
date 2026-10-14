@@ -58,6 +58,7 @@ module.exports.prepare = async (runtime, config) => loader.locked(root, async ()
 }
 
 function repairArtifact(client: OpenCodeFamilyClient): string {
+  // realFs writes the user's files. The fs argument is the in-memory stand-in.
   return `const realFs = require("node:fs");
 const path = require("node:path");
 const { homedir } = require("node:os");

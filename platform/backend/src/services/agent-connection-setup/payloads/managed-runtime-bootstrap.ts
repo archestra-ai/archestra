@@ -139,8 +139,9 @@ async function refresh(root) {
         }
         atomic(path.join(root, "current.json"), JSON.stringify(manifest));
       }
-    } catch {
-      // Offline, partial download, version skew, and revoked delivery keep verified cache.
+    } catch (error) {
+      // Keep the verified cache, but do not hide a programming error in validate or write.
+      console.error("Managed runtime refresh kept the verified cache:", error && error.message ? error.message : error);
     }
     atomic(checkedPath, JSON.stringify({ installation: params.installation, attemptedAt: Date.now() }));
     return cached(root, params);

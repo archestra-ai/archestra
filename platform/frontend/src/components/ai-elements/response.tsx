@@ -212,7 +212,8 @@ export const Response = memo(
   },
   (prevProps, nextProps) =>
     prevProps.children === nextProps.children &&
-    prevProps.isStreaming === nextProps.isStreaming,
+    prevProps.isStreaming === nextProps.isStreaming &&
+    prevProps.preserveLineBreaks === nextProps.preserveLineBreaks,
 );
 
 Response.displayName = "Response";

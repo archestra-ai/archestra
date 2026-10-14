@@ -14666,6 +14666,10 @@ export type GetAgentsData = {
          */
         name?: string;
         /**
+         * Case-insensitive match on the name or the description, as a picker's search box filters.
+         */
+        search?: string;
+        /**
          * Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'agent' = internal agents with prompts.
          */
         agentType?: 'profile' | 'mcp_gateway' | 'agent';

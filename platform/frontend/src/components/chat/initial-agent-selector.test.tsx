@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -13,6 +13,8 @@ import { InitialAgentSelector } from "./initial-agent-selector";
 
 const {
   agents,
+  mockFetchNextPage,
+  mockUseAgentPickerPages,
   mockServerTools,
   mockUseAgentCredentialReadiness,
   mockUseAgentDelegations,
@@ -102,7 +104,39 @@ const {
   })),
   mockPinnedIds: [] as string[],
   mockSwitchAccess: vi.fn((_params: unknown) => {}),
+  mockFetchNextPage: vi.fn(() => Promise.resolve()),
+  mockUseAgentPickerPages: vi.fn(
+    (_params: { search: string; excludeIds: string[]; enabled?: boolean }) =>
+      ({}) as {
+        data?: { pages: unknown[]; agents: unknown[] };
+        isPending: boolean;
+        hasNextPage: boolean;
+        isFetchingNextPage: boolean;
+        fetchNextPage: () => Promise<unknown>;
+      },
+  ),
 }));
+
+/** The server's side of the picker: unpinned rows matching the search. */
+function pickerPagesOf(
+  params: { search: string },
+  options: { hasNextPage?: boolean } = {},
+) {
+  const rows = agents.filter(
+    (agent) =>
+      !mockPinnedIds.includes(agent.id) &&
+      agent.name.toLowerCase().includes(params.search.toLowerCase()),
+  );
+  return {
+    data: { pages: [], agents: rows },
+    isPending: false,
+    hasNextPage: options.hasNextPage ?? false,
+    isFetchingNextPage: false,
+    fetchNextPage: mockFetchNextPage,
+  };
+}
+
+const intersectionCallbacks: IntersectionObserverCallback[] = [];
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
@@ -110,10 +144,21 @@ vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/agent.query", () => ({
   useAgentCredentialReadiness: (options?: unknown) =>
     mockUseAgentCredentialReadiness(options),
-  useChatAgents: () => ({ data: agents }),
+  useAgentPickerPages: (params: {
+    search: string;
+    excludeIds: string[];
+    enabled?: boolean;
+  }) => mockUseAgentPickerPages(params),
+  useAgentsByIds: (ids: string[]) => ({
+    data: agents.filter((agent) => ids.includes(agent.id)),
+  }),
   useCreateProfile: () => ({ mutate: vi.fn() }),
   useInternalAgents: () => ({ data: agents }),
-  usePinnedAgentIds: () => ({ data: mockPinnedIds }),
+  usePinnedAgents: () => ({
+    data: agents.filter((agent) => mockPinnedIds.includes(agent.id)),
+    automaticIds: [],
+    automaticIdsPending: false,
+  }),
   useProfile: (id: string | undefined, options?: unknown) =>
     mockUseProfile(id, options),
   useSwitchAgentAccess: () => ({
@@ -215,6 +260,14 @@ beforeAll(() => {
     unobserve() {}
     disconnect() {}
   };
+  globalThis.IntersectionObserver = class {
+    constructor(callback: IntersectionObserverCallback) {
+      intersectionCallbacks.push(callback);
+    }
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof IntersectionObserver;
 });
 
 beforeEach(() => {
@@ -226,6 +279,9 @@ beforeEach(() => {
   } as ReturnType<typeof useSession>);
   vi.mocked(useFeature).mockReturnValue(false);
   mockPinnedIds.splice(0);
+  intersectionCallbacks.splice(0);
+  mockFetchNextPage.mockClear();
+  mockUseAgentPickerPages.mockImplementation((params) => pickerPagesOf(params));
 });
 
 describe("InitialAgentSelector keyboard navigation", () => {
@@ -270,12 +326,43 @@ describe("InitialAgentSelector keyboard navigation", () => {
     const search = screen.getByRole("combobox", { name: "Search agents" });
     expect(search).toHaveFocus();
     expect(search).toHaveValue("gamma");
+    // The typed text reaches the server once the keystrokes pause.
+    await waitFor(() =>
+      expect(mockUseAgentPickerPages).toHaveBeenLastCalledWith(
+        expect.objectContaining({ search: "gamma" }),
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("option", { name: /Alpha Agent/ })).toBeNull(),
+    );
     expect(search).toHaveAttribute(
       "aria-activedescendant",
       screen.getByRole("option", { name: /Gamma Agent/ }).id,
     );
     await user.keyboard("{Enter}");
     expect(onAgentChange).toHaveBeenCalledExactlyOnceWith("agent-3");
+  });
+
+  it("loads the next page when the end of the list scrolls into view", async () => {
+    mockUseAgentPickerPages.mockImplementation((params) =>
+      pickerPagesOf(params, { hasNextPage: true }),
+    );
+    const user = userEvent.setup();
+    renderSelector();
+
+    await user.click(screen.getByRole("combobox"));
+    await screen.findByTestId("agent-picker-load-more");
+    expect(mockFetchNextPage).not.toHaveBeenCalled();
+
+    const observe = intersectionCallbacks.at(-1);
+    expect(observe).toBeDefined();
+    act(() => {
+      observe?.(
+        [{ isIntersecting: true } as IntersectionObserverEntry],
+        {} as IntersectionObserver,
+      );
+    });
+    expect(mockFetchNextPage).toHaveBeenCalledOnce();
   });
 
   it("lists the user's pinned agents first, under their own heading", async () => {

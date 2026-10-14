@@ -129,6 +129,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         querystring: z
           .object({
             name: z.string().optional().describe("Filter by agent name"),
+            search: z
+              .string()
+              .optional()
+              .describe(
+                "Case-insensitive match on the name or the description, as a picker's search box filters.",
+              ),
             agentType: z
               .enum(["profile", "mcp_gateway", "agent"])
               .optional()
@@ -265,6 +271,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       {
         query: {
           name,
+          search,
           agentType,
           agentTypes,
           scope,
@@ -324,6 +331,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             baseReadTypes: checker.getAgentTypesWithPermission("read"),
           },
           name,
+          search,
           // agentTypes takes precedence over agentType
           agentType: agentTypes || permittedTypes ? undefined : agentType,
           agentTypes: permittedTypes ?? agentTypes,

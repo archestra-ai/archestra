@@ -1546,6 +1546,41 @@ describe("agent routes", () => {
       }
     });
 
+    test("search matches the description as well as the name", async ({
+      makeAgent,
+    }) => {
+      const suffix = crypto.randomUUID().slice(0, 8);
+      const byName = await makeAgent({
+        name: `Needle ${suffix}`,
+        organizationId,
+        authorId: user.id,
+      });
+      const byDescription = await makeAgent({
+        name: `Unrelated ${crypto.randomUUID().slice(0, 8)}`,
+        description: `Finds the NEEDLE ${suffix} in a haystack`,
+        organizationId,
+        authorId: user.id,
+      });
+      await makeAgent({
+        name: `Other ${crypto.randomUUID().slice(0, 8)}`,
+        description: "Nothing to see",
+        organizationId,
+        authorId: user.id,
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/agents?limit=10&offset=0&search=${encodeURIComponent(`needle ${suffix}`)}`,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(
+        response
+          .json()
+          .data.map((agent: { id: string }) => agent.id)
+          .sort(),
+      ).toEqual([byName.id, byDescription.id].sort());
+    });
+
     test("should return personal agent first in paginated list", async ({
       makeAgent,
     }) => {

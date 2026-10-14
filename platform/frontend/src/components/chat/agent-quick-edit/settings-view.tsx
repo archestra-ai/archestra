@@ -541,13 +541,13 @@ function ToolsSection({
         }
         action={
           <div className="flex items-center gap-2">
-            {accessSwitch}
             {assignedCatalogs.length > 0 && (
               <Button variant="outline" size="sm" onClick={onAddTools}>
                 <Plus />
                 Add tools
               </Button>
             )}
+            {accessSwitch}
           </div>
         }
       />
@@ -961,13 +961,13 @@ function SubagentsSection({
         }
         action={
           <div className="flex items-center gap-2">
-            {accessSwitch}
             {subagents.length > 0 && (
               <Button variant="outline" size="sm" onClick={onEdit}>
                 <Plus />
                 Add subagents
               </Button>
             )}
+            {accessSwitch}
           </div>
         }
       />

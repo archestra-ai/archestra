@@ -6,7 +6,7 @@ import { drainBackgroundWork } from "@/utils/background-work";
 import { injectPluginSkillActivation } from "./inject-skill-activation";
 
 beforeEach(() => {
-  config.plugins.enabled = true;
+  config.beta = false;
 });
 
 test("injects and counts an accessible plugin Skill attachment", async ({

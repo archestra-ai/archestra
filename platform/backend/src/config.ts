@@ -2548,14 +2548,6 @@ const config = {
       250 * 1024 * 1024,
     ),
   },
-  plugins: {
-    /**
-     * Opaque plugins execute on connected developer machines, so authoring
-     * and automatic connection delivery ship off by default. Plugins have no
-     * flag of their own: the ARCHESTRA_BETA master switch turns them on.
-     */
-    enabled: process.env.ARCHESTRA_BETA === "true",
-  },
   git: {
     binaryPath: process.env.ARCHESTRA_GIT_BINARY_PATH?.trim() || "git",
   },

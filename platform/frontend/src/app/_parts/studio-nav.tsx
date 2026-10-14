@@ -174,8 +174,6 @@ export const contentNavGroups: NavGroup[] = [
         customIsActive: (pathname: string) => pathname.startsWith("/skills"),
       },
       {
-        // Dropped entirely when the deployment has plugins turned off — see
-        // the `pluginsEnabled` filter in `AppSidebar`.
         title: "Plugins",
         url: "/plugins",
         icon: Puzzle,

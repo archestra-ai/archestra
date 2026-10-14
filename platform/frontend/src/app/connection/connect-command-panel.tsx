@@ -58,7 +58,6 @@ import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { WizardStep } from "@/components/wizard-step";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useClientConnection } from "@/lib/client-connection.query";
-import { useConfig } from "@/lib/config/config.query";
 import {
   type CreateConnectionSetupBody,
   type CreateConnectionSetupResult,
@@ -251,17 +250,9 @@ export function ConnectCommandPanel({
   );
   const includeSkills = skillsEligible && selectedSkills.length > 0;
 
-  const {
-    data: configData,
-    isPending: configPending,
-    isError: configError,
-  } = useConfig();
-  const deploymentPluginsEnabled =
-    !configError && configData?.features.plugins === true;
   const { data: canAdminPlugins, isPending: pluginsPermissionPending } =
     useHasPermissions({ plugin: ["read", "update"] }, "*");
-  const pluginsQueryEnabled =
-    pluginsEnabled && deploymentPluginsEnabled && canAdminPlugins === true;
+  const pluginsQueryEnabled = pluginsEnabled && canAdminPlugins === true;
   const { data: allPlugins, isPending: pluginsPending } =
     usePlugins(pluginsQueryEnabled);
   const plugins = useMemo(
@@ -272,8 +263,7 @@ export function ConnectCommandPanel({
     [allPlugins, client.id],
   );
   const pluginsLoading =
-    (pluginsEnabled && configPending) ||
-    (pluginsEnabled && deploymentPluginsEnabled && pluginsPermissionPending) ||
+    (pluginsEnabled && pluginsPermissionPending) ||
     (pluginsQueryEnabled && pluginsPending);
 
   // Toggle one skill, snapshotting the current selection into an explicit set

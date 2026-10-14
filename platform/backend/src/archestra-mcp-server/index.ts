@@ -254,14 +254,6 @@ function getHookToolNames(): ReadonlySet<string> {
   return hookToolNamesCache;
 }
 
-let pluginToolNamesCache: ReadonlySet<string> | undefined;
-function getPluginToolNames(): ReadonlySet<string> {
-  if (!pluginToolNamesCache) {
-    pluginToolNamesCache = new Set(pluginTools.map((tool) => tool.name));
-  }
-  return pluginToolNamesCache;
-}
-
 export function getArchestraMcpTools() {
   return brandTools(
     getAllTools()
@@ -537,9 +529,7 @@ export async function preflightArchestraToolCall(params: {
  * container and lifecycle hooks execute inside that same sandbox, so both are
  * unusable without the code runtime and advertising them would promise the
  * model a capability the call cannot deliver. The persistent-file tools only
- * touch the file store, so they stay on. Plugin tools follow the plugins beta
- * flag for the same reason: the REST surface they mirror is a 404 while the
- * flag is off.
+ * touch the file store, so they stay on.
  */
 function isToolRuntimeEnabled(canonicalName: string): boolean {
   const shortName = archestraMcpBranding.getToolShortName(canonicalName);
@@ -548,7 +538,6 @@ function isToolRuntimeEnabled(canonicalName: string): boolean {
   if (shortName && isCodeRuntimeArchestraToolShortName(shortName))
     return config.skillsSandbox.enabled;
   if (getHookToolNames().has(canonicalName)) return config.hooks.enabled;
-  if (getPluginToolNames().has(canonicalName)) return config.plugins.enabled;
   return true;
 }
 

@@ -11,7 +11,6 @@ import {
 } from "@archestra/shared";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
-import config from "@/config";
 import { PluginModel, PluginTeamModel } from "@/models";
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -59,10 +58,6 @@ import type { ArchestraContext } from "./types";
  * matching the REST routes. GitHub-sourced plugin bytes stay read-only here,
  * exactly as in the UI: source updates go through the review-and-approve
  * flow, which is deliberately not reproduced in chat.
- *
- * The whole group follows the `plugins` deployment beta flag: tools are
- * filtered from the advertised surface when it is off, and every handler
- * re-checks it (a previously assigned tool can still be dispatched directly).
  */
 
 const ListPluginsSchema = z.object({
@@ -252,8 +247,6 @@ const registry = defineArchestraTools([
       "plugin admin permission).",
     schema: ListPluginsSchema,
     async handler({ args, context }) {
-      const disabled = pluginsDisabledError();
-      if (disabled) return disabled;
       const ctx = requireUserContext(context);
       if (!ctx) {
         return errorResult("This tool requires an authenticated user session.");
@@ -312,8 +305,6 @@ const registry = defineArchestraTools([
       "edit_plugin's conflict check.",
     schema: GetPluginSchema,
     async handler({ args, context }) {
-      const disabled = pluginsDisabledError();
-      if (disabled) return disabled;
       const ctx = requireUserContext(context);
       if (!ctx) {
         return errorResult("This tool requires an authenticated user session.");
@@ -344,8 +335,6 @@ const registry = defineArchestraTools([
       "has access unless initialGrants share it further.",
     schema: CreatePluginToolSchema,
     async handler({ args, context }) {
-      const disabled = pluginsDisabledError();
-      if (disabled) return disabled;
       const ctx = requireUserContext(context);
       if (!ctx) {
         return errorResult("This tool requires an authenticated user session.");
@@ -410,8 +399,6 @@ const registry = defineArchestraTools([
       "the source review flow in the Plugins UI.",
     schema: UpdatePluginToolSchema,
     async handler({ args, context }) {
-      const disabled = pluginsDisabledError();
-      if (disabled) return disabled;
       const ctx = requireUserContext(context);
       if (!ctx) {
         return errorResult("This tool requires an authenticated user session.");
@@ -464,8 +451,6 @@ const registry = defineArchestraTools([
       "you read it. Manual plugins only — GitHub-sourced files are read-only.",
     schema: EditPluginSchema,
     async handler({ args, context }) {
-      const disabled = pluginsDisabledError();
-      if (disabled) return disabled;
       const ctx = requireUserContext(context);
       if (!ctx) {
         return errorResult("This tool requires an authenticated user session.");
@@ -581,8 +566,6 @@ const registry = defineArchestraTools([
       "on developer machines are not removed.",
     schema: DeletePluginSchema,
     async handler({ args, context }) {
-      const disabled = pluginsDisabledError();
-      if (disabled) return disabled;
       const ctx = requireUserContext(context);
       if (!ctx) {
         return errorResult("This tool requires an authenticated user session.");
@@ -623,16 +606,6 @@ interface UserContext {
 function requireUserContext(context: ArchestraContext): UserContext | null {
   if (!context.organizationId || !context.userId) return null;
   return { organizationId: context.organizationId, userId: context.userId };
-}
-
-/**
- * Defense in depth behind the tools/list filtering: a plugin tool can still
- * be dispatched directly (previously assigned, or called through run_tool),
- * so every handler re-checks the deployment flag.
- */
-function pluginsDisabledError() {
-  if (config.plugins.enabled) return null;
-  return errorResult("Plugins are not enabled on this deployment.");
 }
 
 /**

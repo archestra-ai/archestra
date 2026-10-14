@@ -16,7 +16,6 @@ import { useEffect, useMemo, useState } from "react";
 import type { AgentSelectorAgent } from "@/components/agent-selector";
 import { useDefaultMcpGateway, useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useConfig } from "@/lib/config/config.query";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useLlmProxy } from "@/lib/llm-proxy.query";
@@ -198,7 +197,6 @@ export function useConnectPageData(
     { plugin: ["read", "update"] },
     "*",
   );
-  const { data: appConfig } = useConfig();
 
   const { data: defaultGateway, isLoading: defaultGatewayLoading } =
     useDefaultMcpGateway();
@@ -246,9 +244,7 @@ export function useConnectPageData(
   const pluginsEnabled = org?.connectionPluginsEnabled === true;
   // Same eligibility and filter the setup uses to bundle plugins.
   const { data: allPlugins } = usePlugins(
-    pluginsEnabled &&
-      appConfig?.features.plugins === true &&
-      canDeliverPlugins === true,
+    pluginsEnabled && canDeliverPlugins === true,
   );
   // The setup only bundles plugins built for the computer's OS.
   const [pluginPlatform, setPluginPlatform] = useState<"posix" | "windows">(

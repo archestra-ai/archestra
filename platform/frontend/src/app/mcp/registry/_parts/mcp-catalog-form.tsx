@@ -947,7 +947,7 @@ export function McpCatalogForm({
           className={`m-0 flex min-h-0 min-w-0 flex-1 flex-col border-0 p-0 transition-opacity ${pendingSubmit !== null || isConfirming ? "opacity-60" : ""}`}
         >
           <div
-            className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden space-y-6 ${wizardPanel ? "pb-8" : embedded ? "px-6 pt-6 pb-0" : "px-6 py-6"}`}
+            className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden space-y-6 ${wizardPanel ? "-mx-1 px-1 pb-8" : embedded ? "px-6 pt-6 pb-0" : "px-6 py-6"}`}
           >
             {notice}
             {instructions ? (

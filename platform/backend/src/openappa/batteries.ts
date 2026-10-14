@@ -1096,8 +1096,8 @@ class OpenAppaBatteriesService {
   /**
    * Compose the root with its batteries. Annotators an opening policy of a
    * stored session declares and this composition does not are declared again
-   * as that policy bound them (see `retired-annotators.ts`), and the whole is
-   * composed again so the runtime checks them like anything else. A kept
+   * as that policy bound them (see `retired-annotators.ts`). The resulting
+   * host-composed document is validated by the runtime. A kept
    * annotator the runtime refuses is left out rather than refusing the policy.
    */
   private async compose(params: {

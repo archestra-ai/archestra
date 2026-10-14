@@ -15,14 +15,11 @@ import { usePlatform } from "@/lib/hooks/use-platform";
 export function useConversationSearch() {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
-  const [recentChatsView, setRecentChatsView] = useState(false);
   const { isMac } = usePlatform();
   const encryptedChatEnabled = useFeature("encryptedChatEnabled") ?? false;
 
   useEffect(() => {
-    const handleOpenPalette = (event: Event) => {
-      const detail = (event as CustomEvent).detail;
-      setRecentChatsView(detail?.recentChatsView ?? false);
+    const handleOpenPalette = () => {
       setIsOpen(true);
     };
 
@@ -39,7 +36,6 @@ export function useConversationSearch() {
       ) {
         event.preventDefault();
         event.stopPropagation();
-        setRecentChatsView(false);
         // Using functional update (prev => !prev) to avoid stale closure issues.
         // This ensures we always toggle relative to current state without needing
         // isOpen in the dependency array.
@@ -94,7 +90,6 @@ export function useConversationSearch() {
   return {
     isOpen,
     setIsOpen,
-    recentChatsView,
   };
 }
 

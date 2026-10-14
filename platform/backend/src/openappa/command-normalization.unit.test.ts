@@ -43,7 +43,6 @@ audience = ["private"]
       const toml = rule('"builtin:shell(command:*secret*)"');
       const expanded = expandCommandExecutionPolicyRules(toml);
 
-      expect(expanded.startsWith(toml)).toBe(true);
       expect(new Set(names(expanded))).toEqual(
         new Set(
           ["builtin:", "host/archestra/"].flatMap((prefix) =>
@@ -63,6 +62,22 @@ audience = ["private"]
           audience: { contains: ["public"] },
         });
       }
+      expect(await validateOpenappaPolicy(expanded)).toEqual([]);
+    });
+
+    test("keeps every alias ahead of a broader rule written after the original", async () => {
+      const toml = `${rule('"host/archestra/exec_command(command:*secret*)"')}
+[[policy.tool]]
+name = "host/archestra/exec_command"
+delta = {}
+`;
+      const expanded = expandCommandExecutionPolicyRules(toml);
+
+      expect(names(expanded).at(-1)).toBe("host/archestra/exec_command");
+      expect(
+        names(expanded).indexOf("host/archestra/exec_command(cmd:*secret*)"),
+      ).toBeLessThan(names(expanded).length - 1);
+      expect(names(expanded)).toHaveLength(21);
       expect(await validateOpenappaPolicy(expanded)).toEqual([]);
     });
 

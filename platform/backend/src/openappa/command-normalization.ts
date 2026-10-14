@@ -36,57 +36,65 @@ export function isCommandExecutionTool(name: string): boolean {
 /**
  * Expands command tool policy rules across all tool names (`bash`, `shell`,
  * `exec_command`, `run_command`) and parameter names (`command`, `cmd`), so
- * a rule matches each client's own spelling of a command call. The aliases
- * are appended, so the authored rules keep their lines.
+ * a rule matches each client's own spelling of a command call. Contracts are
+ * first-match in declaration order, so each alias stands right after the rule
+ * it copies, ahead of any broader rule written after it.
  */
 export function expandCommandExecutionPolicyRules(content: string): string {
-  const policy = asRecord(parsePolicyToml(content)?.policy);
-  const rules = (Array.isArray(policy?.tool) ? policy.tool : []).flatMap(
-    (tool) => {
-      const rule = asRecord(tool);
-      return rule && typeof rule.name === "string"
-        ? [{ ...rule, name: rule.name }]
-        : [];
-    },
+  const document = parsePolicyToml(content);
+  const policy = asRecord(document?.policy);
+  if (!document || !policy || !Array.isArray(policy.tool)) return content;
+  const names = new Set(
+    policy.tool.flatMap((entry) => {
+      const name = asRecord(entry)?.name;
+      return typeof name === "string" ? [name] : [];
+    }),
   );
-  const names = new Set(rules.map((rule) => rule.name));
-  const aliases: Record<string, unknown>[] = [];
 
-  for (const rule of rules) {
-    const spelled = rule.name.match(COMMAND_TOOL_NAME);
-    if (!spelled) continue;
-    const [, origPrefix, selector] = spelled;
-    const conditions = selectorConditions(selector);
-    const command = conditions.findIndex((condition) =>
-      COMMAND_CONDITION.test(condition),
+  let expanded = false;
+  const tool = policy.tool.flatMap((entry) => {
+    const rule = asRecord(entry);
+    if (!rule || typeof rule.name !== "string") return [entry];
+    const aliases = commandAliases(rule.name).filter(
+      (name) => !names.has(name),
     );
-    if (command === -1) continue;
+    for (const name of aliases) names.add(name);
+    expanded ||= aliases.length > 0;
+    return [entry, ...aliases.map((name) => ({ ...rule, name }))];
+  });
 
-    const prefixes =
-      origPrefix.startsWith("host/") && origPrefix !== "host/archestra/"
-        ? [origPrefix, ...COMMAND_PREFIXES]
-        : COMMAND_PREFIXES;
-    for (const prefix of prefixes) {
-      for (const tool of COMMAND_TOOLS) {
-        for (const param of COMMAND_PARAMS) {
-          const renamed = conditions.map((condition, index) =>
-            index === command
-              ? condition.replace(COMMAND_CONDITION, param)
-              : condition,
-          );
-          const name = `${prefix}${tool}(${renamed.join(",")})`;
-          if (names.has(name)) continue;
-          names.add(name);
-          aliases.push({ ...rule, name });
-        }
-      }
-    }
-  }
+  return expanded
+    ? stringify({ ...document, policy: { ...policy, tool } })
+    : content;
+}
 
-  if (aliases.length === 0) return content;
-  return `${content}\n\n# --- Expanded command execution tool aliases ---\n${stringify(
-    { policy: { tool: aliases } },
-  )}`;
+/** Every other spelling of a command rule's tool and command argument. */
+function commandAliases(name: string): string[] {
+  const spelled = name.match(COMMAND_TOOL_NAME);
+  if (!spelled) return [];
+  const [, origPrefix, selector] = spelled;
+  const conditions = selectorConditions(selector);
+  const command = conditions.findIndex((condition) =>
+    COMMAND_CONDITION.test(condition),
+  );
+  if (command === -1) return [];
+
+  const prefixes =
+    origPrefix.startsWith("host/") && origPrefix !== "host/archestra/"
+      ? [origPrefix, ...COMMAND_PREFIXES]
+      : COMMAND_PREFIXES;
+  return prefixes.flatMap((prefix) =>
+    COMMAND_TOOLS.flatMap((tool) =>
+      COMMAND_PARAMS.map((param) => {
+        const renamed = conditions.map((condition, index) =>
+          index === command
+            ? condition.replace(COMMAND_CONDITION, param)
+            : condition,
+        );
+        return `${prefix}${tool}(${renamed.join(",")})`;
+      }),
+    ),
+  );
 }
 
 /** A selector's `argument:pattern` conditions, split at unescaped commas. */

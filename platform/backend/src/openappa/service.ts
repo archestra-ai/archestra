@@ -24,10 +24,7 @@ import logger from "@/logging";
 import MemberModel from "@/models/member";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import {
-  expandCommandExecutionPolicyRules,
-  normalizeCommandExecutionArguments,
-} from "@/openappa/command-normalization";
+import { expandCommandExecutionPolicyRules } from "@/openappa/command-normalization";
 import { currentTrajectory } from "@/openappa/current-trajectory";
 import { openappaDeclarations } from "@/openappa/declarations";
 import {
@@ -1064,10 +1061,7 @@ export async function evaluateToolCalls(
           options.control?.name,
           options.supportsDelegation,
         ),
-        arguments: normalizeCommandExecutionArguments(
-          tool,
-          JSON.parse(target.toolCallArgs),
-        ),
+        arguments: JSON.parse(target.toolCallArgs),
         spawn,
         ...(options.lineage?.spawnCallId
           ? { spawn_call_id: options.lineage.spawnCallId }

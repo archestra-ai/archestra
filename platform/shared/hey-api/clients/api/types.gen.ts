@@ -89268,6 +89268,10 @@ export type GetOpenappaCoverageToolsResponses = {
                     trust?: string;
                     audience?: Array<string>;
                 };
+                forwards: {
+                    trust?: string;
+                    audience?: Array<string>;
+                };
                 requires: {
                     trust?: string;
                     audience?: Array<string>;

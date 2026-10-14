@@ -55,6 +55,11 @@ export const CoverageRuleSchema = z.object({
     trust: z.string().optional(),
     audience: z.array(z.string()).optional(),
   }),
+  /** How the content a call sends beyond its arguments is labeled for its requirements. */
+  forwards: z.object({
+    trust: z.string().optional(),
+    audience: z.array(z.string()).optional(),
+  }),
   /** What a call needs before it runs. An object form's `contains` list is flattened. */
   requires: z.object({
     trust: z.string().optional(),

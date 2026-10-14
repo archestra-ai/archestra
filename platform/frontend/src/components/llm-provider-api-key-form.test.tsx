@@ -366,9 +366,7 @@ describe("LlmProviderApiKeyForm", () => {
     await user.click(screen.getByLabelText("Provider"));
     const gemini = screen.getByRole("option", { name: /^Gemini/ });
     expect(gemini).toBeDisabled();
-    expect(gemini).toHaveTextContent(
-      /uses Vertex AI credentials.*API key cannot be added here/,
-    );
+    expect(gemini).toHaveTextContent(/Vertex AI.*No API key needed/);
 
     await user.hover(gemini);
     await user.click(gemini);
@@ -395,7 +393,7 @@ describe("LlmProviderApiKeyForm", () => {
     );
     const gemini = screen.getByRole("option", { name: "Gemini" });
     expect(gemini).toBeEnabled();
-    expect(gemini).not.toHaveTextContent(/Vertex AI credentials/);
+    expect(gemini).not.toHaveTextContent(/No API key needed/);
     await user.click(gemini);
     expect(form.getValues("provider")).toBe("gemini");
   });
@@ -411,9 +409,7 @@ describe("LlmProviderApiKeyForm", () => {
     await user.click(screen.getByLabelText("Provider"));
     const bedrock = screen.getByRole("option", { name: /^AWS Bedrock/ });
     expect(bedrock).toBeDisabled();
-    expect(bedrock).toHaveTextContent(
-      /uses AWS IAM credentials.*API key cannot be added here/,
-    );
+    expect(bedrock).toHaveTextContent(/AWS IAM.*No API key needed/);
     await user.hover(bedrock);
     await user.click(bedrock);
     expect(form.getValues("provider")).toBe("archestra");
@@ -439,7 +435,7 @@ describe("LlmProviderApiKeyForm", () => {
     );
     const bedrock = screen.getByRole("option", { name: "AWS Bedrock" });
     expect(bedrock).toBeEnabled();
-    expect(bedrock).not.toHaveTextContent(/AWS IAM credentials/);
+    expect(bedrock).not.toHaveTextContent(/No API key needed/);
     await user.click(bedrock);
     expect(form.getValues("provider")).toBe("bedrock");
   });

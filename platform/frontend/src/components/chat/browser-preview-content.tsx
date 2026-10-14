@@ -99,17 +99,18 @@ export function BrowserPreviewContent({
   const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const initialNavigateTriggeredRef = useRef(false);
-  // Clicks and keystrokes on the screenshot wait here while a previous browser
-  // action is in flight; consecutive characters merge into one type call.
+  // Clicks and keystrokes go out at once (the backend keeps them in order) up
+  // to MAX_INPUTS_IN_FLIGHT; beyond that they wait here, consecutive
+  // characters merged into one type call.
   const inputQueueRef = useRef<BrowserInputOp[]>([]);
-  const inputOpInFlightRef = useRef(false);
+  const inFlightInputsRef = useRef<BrowserInputOp[]>([]);
+  const lastSettledInputsRef = useRef(0);
   const [isKeyboardFocused, setIsKeyboardFocused] = useState(false);
   const urlJustFocusedRef = useRef(false);
-  // What the remote browser is doing now, shown instead of a bare spinner
-  const [activeInput, setActiveInput] = useState<{
-    label: string;
-    queued: number;
-  } | null>(null);
+  // Everything sent or queued and not yet done, shown instead of a spinner
+  const [pendingInputLabel, setPendingInputLabel] = useState<string | null>(
+    null,
+  );
 
   const {
     screenshot,
@@ -117,7 +118,7 @@ export function BrowserPreviewContent({
     isConnected,
     isConnecting,
     isNavigating,
-    isInteracting,
+    settledInputs,
     error,
     canGoBack,
     navigate,
@@ -171,25 +172,35 @@ export function BrowserPreviewContent({
     [typeText, type],
   );
 
+  const refreshPendingInputLabel = useCallback(() => {
+    setPendingInputLabel(
+      describeInputOps([
+        ...inFlightInputsRef.current,
+        ...inputQueueRef.current,
+      ]),
+    );
+  }, []);
+
   const drainInputQueue = useCallback(() => {
-    if (!isConnected || isInteracting || inputOpInFlightRef.current) return;
-    const next = inputQueueRef.current.shift();
-    if (!next) return;
-    inputOpInFlightRef.current = true;
-    setActiveInput({
-      label: describeInputOp(next),
-      queued: inputQueueRef.current.length,
-    });
-    if (next.kind === "click") {
-      click(next.x, next.y);
-    } else if (next.kind === "scroll") {
-      scroll(next);
-    } else if (next.kind === "text") {
-      type(next.value);
-    } else {
-      pressKey(next.value);
+    if (!isConnected) return;
+    while (
+      inFlightInputsRef.current.length < MAX_INPUTS_IN_FLIGHT &&
+      inputQueueRef.current.length > 0
+    ) {
+      const next = inputQueueRef.current.shift() as BrowserInputOp;
+      inFlightInputsRef.current.push(next);
+      if (next.kind === "click") {
+        click(next.x, next.y);
+      } else if (next.kind === "scroll") {
+        scroll(next);
+      } else if (next.kind === "text") {
+        type(next.value);
+      } else {
+        pressKey(next.value);
+      }
     }
-  }, [isConnected, isInteracting, click, scroll, type, pressKey]);
+    refreshPendingInputLabel();
+  }, [isConnected, click, scroll, type, pressKey, refreshPendingInputLabel]);
 
   const enqueueInputOp = useCallback(
     (op: BrowserInputOp) => {
@@ -203,12 +214,18 @@ export function BrowserPreviewContent({
         last.x = op.x;
         last.y = op.y;
       } else {
-        queue.push(op);
+        queue.push({ ...op });
       }
       drainInputQueue();
     },
     [drainInputQueue],
   );
+
+  const resetInputQueue = useCallback(() => {
+    inputQueueRef.current = [];
+    inFlightInputsRef.current = [];
+    setPendingInputLabel(null);
+  }, []);
 
   const handleOverlayKeyDown = useCallback(
     (e: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -325,21 +342,21 @@ export function BrowserPreviewContent({
     [enqueueInputOp],
   );
 
-  // Send the next queued input once the previous browser action finishes
+  // Each settled action frees a slot: drop the oldest in-flight op and send
+  // queued ones
   useEffect(() => {
-    if (!isInteracting) {
-      inputOpInFlightRef.current = false;
-      setActiveInput(null);
-      drainInputQueue();
-    }
-  }, [isInteracting, drainInputQueue]);
+    const settled = settledInputs - lastSettledInputsRef.current;
+    lastSettledInputsRef.current = settledInputs;
+    if (settled <= 0) return;
+    inFlightInputsRef.current.splice(0, settled);
+    drainInputQueue();
+  }, [settledInputs, drainInputQueue]);
 
   // Drop queued input when the session changes or disconnects
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reset queue when conversationId changes
   useEffect(() => {
-    inputQueueRef.current = [];
-    inputOpInFlightRef.current = false;
-  }, [conversationId, isConnected]);
+    resetInputQueue();
+  }, [conversationId, isConnected, resetInputQueue]);
 
   // Clear initial URL state once connected (backend handles initial navigation via subscription)
   useEffect(() => {
@@ -372,158 +389,38 @@ export function BrowserPreviewContent({
         className,
       )}
     >
-      {/* Header */}
-      <div className="flex flex-col px-2 py-3 border-b">
-        <div className="flex items-center justify-between gap-2">
-          {hideHeader ? (
-            isConnected ? (
-              <span
-                className="w-2 h-2 rounded-full bg-green-500 ml-1"
-                title="Connected"
-              />
-            ) : (
-              <div />
-            )
-          ) : (
-            <div className="flex items-center gap-2">
-              <Globe className="h-4 w-4 text-muted-foreground" />
-              <span className="text-xs font-medium">Browser Preview</span>
-              {isConnected && (
-                <span
-                  className="w-2 h-2 rounded-full bg-green-500"
-                  title="Connected"
-                />
-              )}
-            </div>
-          )}
-          <div className="flex items-center gap-1">
-            {/* Type tool */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  disabled={!isConnected || isInteracting}
-                  title="Type text into focused input"
-                >
-                  <Type className="h-3 w-3" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-64" align="end">
-                <form onSubmit={handleType} className="space-y-2">
-                  <div className="text-xs font-medium">
-                    Type into focused input
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Click on an input field first, then type here
-                  </p>
-                  <Textarea
-                    placeholder="Text to type..."
-                    aria-label="Text to type"
-                    value={typeText}
-                    onChange={(e) => setTypeText(e.target.value)}
-                    className="text-xs min-h-[60px]"
-                    autoFocus
-                  />
-                  <Button
-                    type="submit"
-                    size="xs"
-                    className="w-full"
-                    disabled={!typeText}
-                  >
-                    Type
-                  </Button>
-                </form>
-              </PopoverContent>
-            </Popover>
-
-            {/* Keyboard tool */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  disabled={!isConnected || isInteracting}
-                  title="Press key"
-                >
-                  <Keyboard className="h-3 w-3" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-48" align="end">
-                <div className="space-y-2">
-                  <div className="text-xs font-medium">Press Key</div>
-                  <div className="grid grid-cols-2 gap-1">
-                    <Button
-                      size="xs"
-                      variant="outline"
-                      onClick={() => pressKey("Enter")}
-                    >
-                      Enter
-                    </Button>
-                    <Button
-                      size="xs"
-                      variant="outline"
-                      onClick={() => pressKey("Tab")}
-                    >
-                      Tab
-                    </Button>
-                    <Button
-                      size="xs"
-                      variant="outline"
-                      onClick={() => pressKey("Escape")}
-                    >
-                      Escape
-                    </Button>
-                    <Button
-                      size="xs"
-                      variant="outline"
-                      onClick={() => pressKey("Backspace")}
-                    >
-                      Backspace
-                    </Button>
-                  </div>
-                </div>
-              </PopoverContent>
-            </Popover>
-
-            {/* Scroll buttons */}
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={() => scrollPage(-600)}
-              disabled={!isConnected}
-              title="Scroll up"
-            >
-              <ChevronUp className="h-3 w-3" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={() => scrollPage(600)}
-              disabled={!isConnected}
-              title="Scroll down"
-            >
-              <ChevronDown className="h-3 w-3" />
-            </Button>
-
-            {/* Extra header actions (open in new window, close, etc.) */}
-            {headerActions}
-          </div>
+      {/* Title row: only when no parent chrome names the panel */}
+      {!hideHeader && (
+        <div className="flex items-center gap-2 px-2 pt-2">
+          <Globe className="h-4 w-4 text-muted-foreground" />
+          <span className="text-xs font-medium">Browser Preview</span>
         </div>
-        <div className="border-b pb-3 w-[120%] -translate-x-[10%] translate-y-[-1px]" />
-        {/* URL input */}
-        <form onSubmit={handleNavigate} className="flex gap-2 mt-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-xs"
-            className="flex-shrink-0"
-            onClick={navigateBack}
-            disabled={isNavigating || !isConnected || !canGoBack}
-            title="Go back"
-          >
-            <ArrowLeft className="h-3 w-3" />
-          </Button>
+      )}
+
+      {/* Toolbar: one row, like a browser's address bar */}
+      <div className="flex items-center gap-1 border-b px-2 py-1.5">
+        <span
+          className={cn(
+            "mx-1 h-2 w-2 shrink-0 rounded-full",
+            isConnected ? "bg-green-500" : "bg-muted-foreground/30",
+          )}
+          title={isConnected ? "Connected" : "Not connected"}
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className="shrink-0"
+          onClick={navigateBack}
+          disabled={isNavigating || !isConnected || !canGoBack}
+          title="Go back"
+        >
+          <ArrowLeft className="h-3 w-3" />
+        </Button>
+        <form
+          onSubmit={handleNavigate}
+          className="flex min-w-0 flex-1 items-center gap-1"
+        >
           <Input
             type="text"
             placeholder="Enter URL..."
@@ -546,12 +443,13 @@ export function BrowserPreviewContent({
                 e.preventDefault();
               }
             }}
-            className="h-7 text-xs!"
+            className="h-7 min-w-0 text-xs!"
             disabled={isNavigating || isCreatingConversation}
           />
           <Button
             type="submit"
             size="xs"
+            className="shrink-0"
             disabled={
               isNavigating ||
               isCreatingConversation ||
@@ -566,6 +464,104 @@ export function BrowserPreviewContent({
             )}
           </Button>
         </form>
+
+        <div className="flex shrink-0 items-center">
+          {/* Type tool */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                disabled={!isConnected}
+                title="Type text into focused input"
+              >
+                <Type className="h-3 w-3" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64" align="end">
+              <form onSubmit={handleType} className="space-y-2">
+                <div className="text-xs font-medium">
+                  Type into focused input
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Click on an input field first, then type here
+                </p>
+                <Textarea
+                  placeholder="Text to type..."
+                  aria-label="Text to type"
+                  value={typeText}
+                  onChange={(e) => setTypeText(e.target.value)}
+                  className="text-xs min-h-[60px]"
+                  autoFocus
+                />
+                <Button
+                  type="submit"
+                  size="xs"
+                  className="w-full"
+                  disabled={!typeText}
+                >
+                  Type
+                </Button>
+              </form>
+            </PopoverContent>
+          </Popover>
+
+          {/* Keyboard tool */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                disabled={!isConnected}
+                title="Press key"
+              >
+                <Keyboard className="h-3 w-3" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-48" align="end">
+              <div className="space-y-2">
+                <div className="text-xs font-medium">Press Key</div>
+                <div className="grid grid-cols-2 gap-1">
+                  {["Enter", "Tab", "Escape", "Backspace"].map((key) => (
+                    <Button
+                      key={key}
+                      size="xs"
+                      variant="outline"
+                      onClick={() =>
+                        enqueueInputOp({ kind: "key", value: key })
+                      }
+                    >
+                      {key}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {/* Scroll buttons */}
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={() => scrollPage(-600)}
+            disabled={!isConnected}
+            title="Scroll up"
+          >
+            <ChevronUp className="h-3 w-3" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={() => scrollPage(600)}
+            disabled={!isConnected}
+            title="Scroll down"
+          >
+            <ChevronDown className="h-3 w-3" />
+          </Button>
+
+          {/* Extra header actions (open in new window, close, etc.) */}
+          {headerActions}
+        </div>
       </div>
 
       {error && (
@@ -578,9 +574,7 @@ export function BrowserPreviewContent({
               size="xs"
               className="shrink-0"
               onClick={() => {
-                inputQueueRef.current = [];
-                inputOpInFlightRef.current = false;
-                setActiveInput(null);
+                resetInputQueue();
                 reconnect();
               }}
             >
@@ -688,13 +682,13 @@ export function BrowserPreviewContent({
         )}
 
         {/* Status: what the remote browser is doing; non-blocking, input queues */}
-        {isInteracting && (
-          <div className="absolute top-2 right-2 flex max-w-[70%] items-center gap-1.5 rounded-full bg-background/90 px-2.5 py-1 text-xs text-muted-foreground shadow pointer-events-none">
+        {pendingInputLabel && (
+          <div className="absolute top-2 right-2 flex max-w-[85%] items-center gap-1.5 rounded-full bg-background/90 px-2.5 py-1 text-xs text-muted-foreground shadow pointer-events-none">
             <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
-            <span className="truncate">{activeInput?.label ?? "Working…"}</span>
-            {!!activeInput?.queued && (
-              <span className="shrink-0">· {activeInput.queued} queued</span>
-            )}
+            {/* Truncate from the left so the newest input stays visible */}
+            <span className="truncate [direction:rtl]">
+              <bdi>{pendingInputLabel}</bdi>
+            </span>
           </div>
         )}
       </div>
@@ -744,17 +738,33 @@ type BrowserInputOp =
   | { kind: "scroll"; x: number; y: number; deltaX: number; deltaY: number }
   | { kind: "text" | "key"; value: string };
 
-function describeInputOp(op: BrowserInputOp): string {
-  switch (op.kind) {
-    case "click":
-      return "Clicking…";
-    case "scroll":
-      return "Scrolling…";
-    case "key":
-      return `Pressing ${op.value}…`;
-    case "text":
-      return `Typing “${op.value.length > 24 ? `${op.value.slice(0, 24)}…` : op.value}”`;
+/** Most inputs sent but not yet done; more wait in the queue, merged. */
+const MAX_INPUTS_IN_FLIGHT = 3;
+
+/** All pending inputs in order, e.g. `Typing “hello” · Enter · Clicking`. */
+function describeInputOps(ops: BrowserInputOp[]): string | null {
+  const parts: string[] = [];
+  let text = "";
+  const flushText = () => {
+    if (text) parts.push(`Typing “${text}”`);
+    text = "";
+  };
+  for (const op of ops) {
+    if (op.kind === "text") {
+      text += op.value;
+      continue;
+    }
+    flushText();
+    const label =
+      op.kind === "click"
+        ? "Clicking"
+        : op.kind === "scroll"
+          ? "Scrolling"
+          : op.value;
+    if (parts.at(-1) !== label) parts.push(label);
   }
+  flushText();
+  return parts.length > 0 ? parts.join(" · ") : null;
 }
 
 /** Non-character keys forwarded to the remote page as Playwright key presses. */

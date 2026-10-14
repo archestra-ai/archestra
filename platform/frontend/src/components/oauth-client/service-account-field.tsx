@@ -6,17 +6,27 @@ import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useServiceAccounts } from "@/lib/service-account.query";
 
-export function OAuthServiceAccountField({
-  value,
-  onChange,
-  clientType,
-}: {
+type OAuthServiceAccountFieldProps = {
   clientType: "mcp" | "llm";
   value: string | null;
   onChange: (id: string | null) => void;
-}) {
+};
+
+export function OAuthServiceAccountField(props: OAuthServiceAccountFieldProps) {
+  const { data: canReadAccounts } = useHasPermissions({
+    serviceAccount: ["read"],
+  });
+  return canReadAccounts ? <ReadableServiceAccountField {...props} /> : null;
+}
+
+function ReadableServiceAccountField({
+  value,
+  onChange,
+  clientType,
+}: OAuthServiceAccountFieldProps) {
   const id = useId();
   const {
     data: accounts = [],
@@ -30,7 +40,7 @@ export function OAuthServiceAccountField({
       <Label htmlFor={id}>Service account (optional)</Label>
       <p id={`${id}-description`} className="text-xs text-muted-foreground">
         {clientType === "mcp"
-          ? "Choose the account whose permissions this client uses to call agents and MCP gateways. A2A runs belong to that account. Leave unset for runs owned only by this OAuth client."
+          ? "Choose the account whose permissions this client uses to call agents and MCP gateways. Agent sessions started through A2A belong to that account. Leave unset to manage its sessions using only tokens issued to this OAuth client."
           : "Choose the account whose permissions this client uses for LLM Proxy requests. LLM spend is attributed to that account. Leave unset to attribute spend only to this OAuth client."}
       </p>
       <SearchableSelect
@@ -74,7 +84,7 @@ export function OAuthServiceAccountField({
             label: "No service account",
             description:
               clientType === "mcp"
-                ? "A2A runs belong only to this OAuth client."
+                ? "Manage agent sessions with this OAuth client’s tokens."
                 : "LLM spend is attributed to this OAuth client.",
             content: (
               <span className="flex items-center gap-2">

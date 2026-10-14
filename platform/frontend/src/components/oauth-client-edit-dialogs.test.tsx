@@ -159,6 +159,51 @@ describe("LLM OAuth client edit", () => {
 });
 
 describe("MCP OAuth client edit", () => {
+  it("hides unavailable account selection without fetching accounts or clearing an existing binding", async () => {
+    const user = userEvent.setup();
+    const accountReads = vi.fn();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !("serviceAccount" in permissions),
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    server.use(
+      http.get("http://localhost:9000/api/service-accounts", () => {
+        accountReads();
+        return HttpResponse.json({ message: "Forbidden" }, { status: 403 });
+      }),
+    );
+    renderWithQuery(
+      <EditMcpOAuthClientDialog
+        oauthClient={
+          {
+            ...base,
+            name: "Worker",
+            grantType: "client_credentials",
+            allowedGatewayIds: ["gw-1"],
+            serviceAccountId: "a1111111-1111-4111-8111-111111111111",
+          } as unknown as McpOauthClient
+        }
+        onOpenChange={vi.fn()}
+        gateways={[{ id: "gw-1", name: "Gateway", agentType: "mcp_gateway" }]}
+        onSubmit={onSubmit}
+        isSubmitting={false}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    expect(
+      screen.queryByRole("combobox", { name: "Service account" }),
+    ).not.toBeInTheDocument();
+    await user.type(screen.getByRole("textbox", { name: "Name" }), " renamed");
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(onSubmit.mock.calls[0][1]).not.toHaveProperty("serviceAccountId");
+    expect(accountReads).not.toHaveBeenCalled();
+  });
+
   it("saves a chosen service-account binding", async () => {
     const user = userEvent.setup();
     archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });

@@ -23,7 +23,8 @@ export function ChoiceCards<Value extends string>({
   options: Array<{
     value: Value;
     title: string;
-    description: string;
+    description: React.ReactNode;
+    disabled?: boolean;
     icon?: React.ReactNode;
   }>;
   idPrefix: string;
@@ -49,13 +50,25 @@ export function ChoiceCards<Value extends string>({
                 radioCardClass(),
               )}
             >
-              <RadioGroupItem id={id} value={option.value} className="mt-0.5" />
+              <RadioGroupItem
+                id={id}
+                value={option.value}
+                disabled={option.disabled}
+                className="mt-0.5"
+              />
               <span className="min-w-0 flex-1 space-y-1">
                 <span className="flex items-center gap-2 font-medium">
                   {option.icon}
                   {option.title}
                 </span>
-                <span className="block text-xs text-muted-foreground leading-relaxed">
+                <span
+                  key={
+                    typeof option.description === "string"
+                      ? option.description
+                      : "node"
+                  }
+                  className="block text-xs text-muted-foreground leading-relaxed"
+                >
                   {option.description}
                 </span>
               </span>

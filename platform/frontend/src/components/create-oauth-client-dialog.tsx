@@ -1,7 +1,11 @@
 "use client";
 
-import type { archestraApiTypes } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  providerRequiresPerUserCredential,
+} from "@archestra/shared";
 import { Bot, Loader2, Network, Server, Users } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { AgentSelectorAgent } from "@/components/agent-selector";
 import {
@@ -10,6 +14,7 @@ import {
   type SpendCapValue,
   UsersPayNotice,
 } from "@/components/credential-billing/budget-fields";
+import { isSubscriptionKey } from "@/components/credential-billing/provider-key-data";
 import { ProviderKeyList } from "@/components/credential-billing/provider-key-list";
 import {
   ReviewList,
@@ -103,11 +108,32 @@ export function CreateOAuthClientDialog({
 
   const isMcp = clientType === "mcp";
   const isAuthorizationCode = grantType === "authorization_code";
+  const applicationProviderKeys = (
+    providerApiKeys as LlmProviderApiKeyResponse[]
+  ).filter(
+    (key) =>
+      !isSubscriptionKey(key) &&
+      !providerRequiresPerUserCredential(key.provider),
+  );
+  const llmUnavailable =
+    !isAuthorizationCode && applicationProviderKeys.length === 0;
+  const missingProvidersMessage = (
+    <>
+      Add a model provider before creating a client that signs in as itself.{" "}
+      <Link
+        href="/llm/model-providers"
+        className="font-medium underline underline-offset-2"
+      >
+        Go to Model Providers
+      </Link>
+      .
+    </>
+  );
   const redirectUris = parseRedirectUris(redirectUrisText);
   const steps = stepsFor({ isMcp, isAuthorizationCode });
   const stepIndex = steps.findIndex((item) => item.id === step);
   const ready: Record<Step, boolean> = {
-    kind: name.trim().length > 0,
+    kind: name.trim().length > 0 && (isMcp || !llmUnavailable),
     signin: redirectUris.length > 0,
     access: isMcp
       ? isAuthorizationCode && !grantsGateways
@@ -227,11 +253,19 @@ export function CreateOAuthClientDialog({
                     {
                       value: "llm",
                       title: "LLM Proxy",
-                      description: "Sends LLM requests through the LLM Proxy.",
+                      disabled: llmUnavailable,
+                      description: llmUnavailable
+                        ? missingProvidersMessage
+                        : "Sends LLM requests through the LLM Proxy.",
                       icon: <Bot className="size-4" />,
                     },
                   ]}
                 />
+              )}
+              {fixedClientType === "llm" && llmUnavailable && (
+                <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+                  {missingProvidersMessage}
+                </p>
               )}
               <ChoiceCards
                 label="How does it sign in?"
@@ -303,7 +337,7 @@ export function CreateOAuthClientDialog({
               </>
             ) : (
               <GatewayPicker
-                label="Allowed agents and gateways"
+                label="Allowed agents and MCP gateways"
                 gateways={gateways}
                 value={selectedGatewayIds}
                 onValueChange={setSelectedGatewayIds}
@@ -315,7 +349,7 @@ export function CreateOAuthClientDialog({
               alwaysOpen
               value={providerApiKeyIds}
               onChange={setProviderApiKeyIds}
-              providerApiKeys={providerApiKeys as LlmProviderApiKeyResponse[]}
+              providerApiKeys={applicationProviderKeys}
             />
           )}
 
@@ -354,7 +388,7 @@ export function CreateOAuthClientDialog({
                   gateways.find((gateway) => gateway.id === id)?.name ?? id,
               )}
               providerApiKeyIds={providerApiKeyIds}
-              providerApiKeys={providerApiKeys as LlmProviderApiKeyResponse[]}
+              providerApiKeys={applicationProviderKeys}
               billingTeamId={billingTeamId}
               spendCap={spendCap}
               onEdit={setStep}

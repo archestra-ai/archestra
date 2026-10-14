@@ -208,7 +208,7 @@ export function EditOAuthClientDialog({
               label={
                 isAuthorizationCode
                   ? "Gateways to grant"
-                  : "Allowed agents and gateways"
+                  : "Allowed agents and MCP gateways"
               }
               gateways={gateways}
               value={selectedGatewayIds}

@@ -99,6 +99,37 @@ beforeEach(() => {
 });
 
 describe("CreateOAuthClientDialog", () => {
+  it("blocks keyless client credentials at the type choice and links to model provider setup", async () => {
+    const user = userEvent.setup();
+    renderDialog({ providerApiKeys: [] });
+    await user.type(screen.getByLabelText("Name"), "worker");
+    const llmChoice = screen.getByRole("radio", { name: /LLM Proxy/ });
+    expect(llmChoice).toBeDisabled();
+    expect(
+      screen.getByRole("link", { name: "Go to Model Providers" }),
+    ).toHaveAttribute("href", "/llm/model-providers");
+    await user.click(screen.getByRole("radio", { name: /For its users/ }));
+    expect(llmChoice).toBeEnabled();
+    await user.click(llmChoice);
+    await continueStep(user);
+    expect(screen.getByLabelText("Redirect URIs")).toBeVisible();
+  });
+
+  it("does not offer personal subscription credentials to application clients", async () => {
+    renderDialog({
+      providerApiKeys: [
+        {
+          id: "subscription-key",
+          name: "Personal subscription",
+          provider: "openai",
+          scope: "personal",
+          subscriptionKind: "openai-codex",
+        },
+      ] as never,
+    });
+    expect(screen.getByRole("radio", { name: /LLM Proxy/ })).toBeDisabled();
+  });
+
   it("carries a deep-linked agent through to the submitted client", async () => {
     const user = userEvent.setup();
     const { onSubmit } = renderDialog({
@@ -172,8 +203,8 @@ describe("CreateOAuthClientDialog", () => {
     ).not.toBeInTheDocument();
     await continueStep(user);
     expect(
-      screen.getByRole("combobox", { name: "Service account" }),
-    ).toBeVisible();
+      screen.queryByRole("combobox", { name: "Service account" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("2. Access")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Add OpenAI" }));
     await continueStep(user);

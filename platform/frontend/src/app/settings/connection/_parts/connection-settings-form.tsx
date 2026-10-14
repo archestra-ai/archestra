@@ -82,6 +82,9 @@ export function ConnectionSettingsForm() {
     >
   >({});
   // client → provider API keys its setup command's virtual key maps to
+  const [clientFutureProviders, setClientFutureProviders] = useState<
+    Record<string, boolean>
+  >({});
   const [clientProviderKeys, setClientProviderKeys] =
     useState<ClientProviderKeys>({});
   const [skillsEnabled, setSkillsEnabled] = useState(true);
@@ -109,6 +112,9 @@ export function ConnectionSettingsForm() {
     );
     setBaseUrlMeta(buildBaseUrlMeta(organization.connectionBaseUrls ?? null));
     setClientProviderKeys(organization.connectionClientProviderKeys ?? {});
+    setClientFutureProviders(
+      organization.connectionClientFutureProviders ?? {},
+    );
     setSkillsEnabled(organization.connectionSkillsEnabled);
     setLlmProxyEnabled(organization.connectionLlmProxyEnabled);
     setPluginsEnabled(organization.connectionPluginsEnabled);
@@ -184,6 +190,8 @@ export function ConnectionSettingsForm() {
   });
 
   const hasChanges =
+    JSON.stringify(clientFutureProviders) !==
+      JSON.stringify(organization?.connectionClientFutureProviders ?? {}) ||
     JSON.stringify(withoutEmptyClients(clientProviderKeys)) !==
       JSON.stringify(withoutEmptyClients(serverClientProviderKeys)) ||
     gatewayId !== serverGatewayId ||
@@ -221,6 +229,7 @@ export function ConnectionSettingsForm() {
         ? { connectionClientOrder: selectedClientOrder }
         : {}),
       connectionBaseUrls: collapseBaseUrlMeta(envBaseUrls, baseUrlMeta),
+      connectionClientFutureProviders: clientFutureProviders,
       connectionClientProviderKeys: withoutEmptyClients(clientProviderKeys),
       ...(skillsEnabled !== serverSkillsEnabled
         ? { connectionSkillsEnabled: skillsEnabled }
@@ -384,6 +393,18 @@ export function ConnectionSettingsForm() {
                   shownClientIds={shownClientIds}
                   onShownClientIdsChange={setShownClientIds}
                   onOrderChange={setClientOrder}
+                  clientFutureProviders={clientFutureProviders}
+                  onClientFutureProvidersChange={(clientId, value) => {
+                    setClientFutureProviders((previous) => ({
+                      ...previous,
+                      [clientId]: value,
+                    }));
+                    if (value)
+                      setClientProviderKeys((previous) => ({
+                        ...previous,
+                        [clientId]: [],
+                      }));
+                  }}
                   clientProviderKeys={clientProviderKeys}
                   onClientKeysChange={(clientId, value) =>
                     setClientProviderKeys((prev) => ({

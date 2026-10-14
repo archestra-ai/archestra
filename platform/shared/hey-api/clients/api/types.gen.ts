@@ -34381,6 +34381,9 @@ export type GetBootstrapResponses = {
                 isDefault: boolean;
                 visible: boolean;
             }> | null;
+            connectionClientFutureProviders: {
+                [key: string]: boolean;
+            } | null;
             connectionClientProviderKeys: {
                 [key: string]: Array<{
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -93167,6 +93170,9 @@ export type GetOrganizationResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -93501,6 +93507,9 @@ export type UpdateAppearanceSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -93713,6 +93722,9 @@ export type UpdateSecuritySettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -93922,6 +93934,9 @@ export type UpdateMcpSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -94131,6 +94146,9 @@ export type UpdateSkillsSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -94341,6 +94359,9 @@ export type UpdateAgentSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -94398,6 +94419,9 @@ export type UpdateAgentSettingsResponse = UpdateAgentSettingsResponses[keyof Upd
 export type UpdateConnectionSettingsData = {
     body: {
         connectionDefaultMcpGatewayId?: string | null;
+        connectionClientFutureProviders?: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys?: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -94570,6 +94594,9 @@ export type UpdateConnectionSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -94815,6 +94842,9 @@ export type UpdateIntegrationSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -95034,6 +95064,9 @@ export type UpdateDefaultEnvironmentResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -95248,6 +95281,9 @@ export type UpdateAuthSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -95464,6 +95500,9 @@ export type UpdateKnowledgeSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -95670,6 +95709,9 @@ export type DropEmbeddingConfigResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -96238,6 +96280,9 @@ export type CompleteOnboardingResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -114869,6 +114914,7 @@ export type GetAllVirtualApiKeysResponses = {
             organizationId: string;
             name: string;
             keyType: 'standard' | 'passthrough';
+            includeFutureProviders: boolean;
             secretId: string;
             tokenStart: string;
             scope: 'personal' | 'team' | 'org';
@@ -114929,6 +114975,7 @@ export type CreateVirtualApiKeyData = {
         name: string;
         keyType?: 'standard' | 'passthrough';
         expiresAt?: unknown;
+        includeFutureProviders?: boolean;
         providerApiKeys?: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             providerApiKeyId: string;
@@ -115047,6 +115094,7 @@ export type CreateVirtualApiKeyResponses = {
         organizationId: string;
         name: string;
         keyType: 'standard' | 'passthrough';
+        includeFutureProviders: boolean;
         secretId: string;
         tokenStart: string;
         scope: 'personal' | 'team' | 'org';
@@ -115268,6 +115316,7 @@ export type GetVirtualApiKeyResponses = {
         organizationId: string;
         name: string;
         keyType: 'standard' | 'passthrough';
+        includeFutureProviders: boolean;
         secretId: string;
         tokenStart: string;
         scope: 'personal' | 'team' | 'org';
@@ -115319,6 +115368,7 @@ export type UpdateVirtualApiKeyData = {
         name: string;
         keyType?: 'standard' | 'passthrough';
         expiresAt?: unknown;
+        includeFutureProviders?: boolean;
         providerApiKeys?: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             providerApiKeyId: string;
@@ -115419,6 +115469,7 @@ export type UpdateVirtualApiKeyResponses = {
         organizationId: string;
         name: string;
         keyType: 'standard' | 'passthrough';
+        includeFutureProviders: boolean;
         secretId: string;
         tokenStart: string;
         scope: 'personal' | 'team' | 'org';

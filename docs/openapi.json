@@ -122570,6 +122570,13 @@
                             "additionalProperties": false
                           }
                         },
+                        "connectionClientFutureProviders": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "boolean"
+                          }
+                        },
                         "connectionClientProviderKeys": {
                           "nullable": true,
                           "type": "object",
@@ -122842,6 +122849,7 @@
                         "connectionClientOrder",
                         "connectionShownProviders",
                         "connectionBaseUrls",
+                        "connectionClientFutureProviders",
                         "connectionClientProviderKeys",
                         "connectionSkillsEnabled",
                         "connectionLlmProxyEnabled",
@@ -351858,6 +351866,13 @@
                         "additionalProperties": false
                       }
                     },
+                    "connectionClientFutureProviders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
+                    },
                     "connectionClientProviderKeys": {
                       "nullable": true,
                       "type": "object",
@@ -352130,6 +352145,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionClientFutureProviders",
                     "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
@@ -353000,6 +353016,13 @@
                         "additionalProperties": false
                       }
                     },
+                    "connectionClientFutureProviders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
+                    },
                     "connectionClientProviderKeys": {
                       "nullable": true,
                       "type": "object",
@@ -353272,6 +353295,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionClientFutureProviders",
                     "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
@@ -354383,6 +354407,13 @@
                         "additionalProperties": false
                       }
                     },
+                    "connectionClientFutureProviders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
+                    },
                     "connectionClientProviderKeys": {
                       "nullable": true,
                       "type": "object",
@@ -354655,6 +354686,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionClientFutureProviders",
                     "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
@@ -355377,6 +355409,13 @@
                         "additionalProperties": false
                       }
                     },
+                    "connectionClientFutureProviders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
+                    },
                     "connectionClientProviderKeys": {
                       "nullable": true,
                       "type": "object",
@@ -355649,6 +355688,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionClientFutureProviders",
                     "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
@@ -356371,6 +356411,13 @@
                         "additionalProperties": false
                       }
                     },
+                    "connectionClientFutureProviders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
+                    },
                     "connectionClientProviderKeys": {
                       "nullable": true,
                       "type": "object",
@@ -356643,6 +356690,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionClientFutureProviders",
                     "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
@@ -357377,6 +357425,13 @@
                         "additionalProperties": false
                       }
                     },
+                    "connectionClientFutureProviders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
+                    },
                     "connectionClientProviderKeys": {
                       "nullable": true,
                       "type": "object",
@@ -357649,6 +357704,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionClientFutureProviders",
                     "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
@@ -357936,6 +357992,13 @@
                     "type": "string",
                     "format": "uuid",
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "connectionClientFutureProviders": {
+                    "nullable": true,
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "boolean"
+                    }
                   },
                   "connectionClientProviderKeys": {
                     "nullable": true,
@@ -358495,6 +358558,13 @@
                         "additionalProperties": false
                       }
                     },
+                    "connectionClientFutureProviders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
+                    },
                     "connectionClientProviderKeys": {
                       "nullable": true,
                       "type": "object",
@@ -358767,6 +358837,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionClientFutureProviders",
                     "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
@@ -359604,6 +359675,13 @@
                         "additionalProperties": false
                       }
                     },
+                    "connectionClientFutureProviders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
+                    },
                     "connectionClientProviderKeys": {
                       "nullable": true,
                       "type": "object",
@@ -359876,6 +359954,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionClientFutureProviders",
                     "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
@@ -360668,6 +360747,13 @@
                         "additionalProperties": false
                       }
                     },
+                    "connectionClientFutureProviders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
+                    },
                     "connectionClientProviderKeys": {
                       "nullable": true,
                       "type": "object",
@@ -360940,6 +361026,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionClientFutureProviders",
                     "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
@@ -361676,6 +361763,13 @@
                         "additionalProperties": false
                       }
                     },
+                    "connectionClientFutureProviders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
+                    },
                     "connectionClientProviderKeys": {
                       "nullable": true,
                       "type": "object",
@@ -361948,6 +362042,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionClientFutureProviders",
                     "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
@@ -362715,6 +362810,13 @@
                         "additionalProperties": false
                       }
                     },
+                    "connectionClientFutureProviders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
+                    },
                     "connectionClientProviderKeys": {
                       "nullable": true,
                       "type": "object",
@@ -362987,6 +363089,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionClientFutureProviders",
                     "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
@@ -363691,6 +363794,13 @@
                         "additionalProperties": false
                       }
                     },
+                    "connectionClientFutureProviders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
+                    },
                     "connectionClientProviderKeys": {
                       "nullable": true,
                       "type": "object",
@@ -363963,6 +364073,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionClientFutureProviders",
                     "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
@@ -365871,6 +365982,13 @@
                         "additionalProperties": false
                       }
                     },
+                    "connectionClientFutureProviders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
+                    },
                     "connectionClientProviderKeys": {
                       "nullable": true,
                       "type": "object",
@@ -366143,6 +366261,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionClientFutureProviders",
                     "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
@@ -433097,6 +433216,9 @@
                               "passthrough"
                             ]
                           },
+                          "includeFutureProviders": {
+                            "type": "boolean"
+                          },
                           "secretId": {
                             "type": "string",
                             "format": "uuid",
@@ -433338,6 +433460,7 @@
                           "organizationId",
                           "name",
                           "keyType",
+                          "includeFutureProviders",
                           "secretId",
                           "tokenStart",
                           "scope",
@@ -433676,6 +433799,9 @@
                   "expiresAt": {
                     "nullable": true
                   },
+                  "includeFutureProviders": {
+                    "type": "boolean"
+                  },
                   "providerApiKeys": {
                     "default": [],
                     "type": "array",
@@ -433956,6 +434082,9 @@
                         "passthrough"
                       ]
                     },
+                    "includeFutureProviders": {
+                      "type": "boolean"
+                    },
                     "secretId": {
                       "type": "string",
                       "format": "uuid",
@@ -434200,6 +434329,7 @@
                     "organizationId",
                     "name",
                     "keyType",
+                    "includeFutureProviders",
                     "secretId",
                     "tokenStart",
                     "scope",
@@ -434510,6 +434640,9 @@
                         "passthrough"
                       ]
                     },
+                    "includeFutureProviders": {
+                      "type": "boolean"
+                    },
                     "secretId": {
                       "type": "string",
                       "format": "uuid",
@@ -434751,6 +434884,7 @@
                     "organizationId",
                     "name",
                     "keyType",
+                    "includeFutureProviders",
                     "secretId",
                     "tokenStart",
                     "scope",
@@ -435041,6 +435175,9 @@
                   "expiresAt": {
                     "nullable": true
                   },
+                  "includeFutureProviders": {
+                    "type": "boolean"
+                  },
                   "providerApiKeys": {
                     "default": [],
                     "type": "array",
@@ -435197,6 +435334,9 @@
                         "standard",
                         "passthrough"
                       ]
+                    },
+                    "includeFutureProviders": {
+                      "type": "boolean"
                     },
                     "secretId": {
                       "type": "string",
@@ -435439,6 +435579,7 @@
                     "organizationId",
                     "name",
                     "keyType",
+                    "includeFutureProviders",
                     "secretId",
                     "tokenStart",
                     "scope",

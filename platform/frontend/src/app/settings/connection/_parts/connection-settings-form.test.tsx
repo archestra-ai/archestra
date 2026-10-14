@@ -424,6 +424,27 @@ describe("ConnectionSettingsForm", () => {
     });
   });
 
+  it("saves automatic provider coverage for one client without pinning primary keys", async () => {
+    const user = userEvent.setup();
+    render(<ConnectionSettingsForm />);
+    await user.click(
+      screen.getByRole("button", { name: "Cursor provider keys" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Cursor" });
+    await user.click(
+      within(dialog).getByRole("radio", {
+        name: /Current and future providers/,
+      }),
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Done" }));
+    expect(screen.getByText("Current and future providers")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(mutate.mock.lastCall?.[0].connectionClientFutureProviders).toEqual({
+      cursor: true,
+    });
+    expect(mutate.mock.lastCall?.[0].connectionClientProviderKeys).toBeNull();
+  });
+
   it("offers shared gateways as the default but not a member's personal one", () => {
     vi.mocked(useProfiles).mockReturnValue({
       data: [

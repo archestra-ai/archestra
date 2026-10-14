@@ -60,6 +60,7 @@ import {
   readVirtualKeyValue,
 } from "@/services/connection-setup";
 import { ResourcePermissions } from "@/services/resource-permissions";
+import { resolveVirtualKeyProviderMappings } from "@/services/virtual-key-providers";
 import {
   isReservedMarketplaceName,
   resolvePluginName,
@@ -500,6 +501,9 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
               keyName: multiProviderKey.keyName,
               supportedProviders: INSTALLER_CLIENT_KEY_PROVIDERS[clientId],
               mappedKeys,
+              includeFutureProviders:
+                organization.connectionClientFutureProviders?.[clientId] ??
+                false,
               organizationId,
               userId: user.id,
               userTeamIds: await TeamModel.getUserTeamIds(user.id),
@@ -513,6 +517,9 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 userTeamIds: await TeamModel.getUserTeamIds(user.id),
                 provider,
                 clientId,
+                includeFutureProviders:
+                  organization.connectionClientFutureProviders?.[clientId] ??
+                  false,
                 preferredProviderKeyId:
                   mappedKeys?.find((key) => key.provider === provider)
                     ?.providerApiKeyId ?? null,
@@ -1659,7 +1666,7 @@ async function getCursorModels(params: {
   virtualApiKeyId: string;
   defaultModelId: string | null;
 }): Promise<{ ids: string[]; defaultId: string | null }> {
-  const mappings = await VirtualApiKeyModel.getProviderApiKeysForRouting(
+  const mappings = await resolveVirtualKeyProviderMappings(
     params.virtualApiKeyId,
   );
   const models = await listRoutableModels({

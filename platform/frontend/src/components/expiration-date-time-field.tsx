@@ -1,7 +1,7 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import { DateTimePicker } from "@/components/ui/date-time-picker";
+import { useId } from "react";
+import { ExpirySelect } from "@/components/credential-billing/expiry-select";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Label } from "@/components/ui/label";
 
@@ -9,7 +9,6 @@ export function ExpirationDateTimeField({
   value,
   onChange,
   label = "Expiration",
-  placeholder = "No expiration",
   noExpirationText = "Will never expire",
   formatExpiration,
   disabledDate = isPastDate,
@@ -22,33 +21,21 @@ export function ExpirationDateTimeField({
   formatExpiration: (value: Date | string | null) => string;
   disabledDate?: (date: Date) => boolean;
 }) {
+  const id = useId();
   return (
     <div className="space-y-2">
-      <Label>
+      <Label htmlFor={id}>
         {label}{" "}
         <span className="text-muted-foreground font-normal">
           ({Intl.DateTimeFormat().resolvedOptions().timeZone})
         </span>
       </Label>
-      <div className="flex items-center gap-2">
-        <DateTimePicker
-          value={value ?? undefined}
-          onChange={(date) => onChange(date ?? null)}
-          disabledDate={disabledDate}
-          placeholder={placeholder}
-          className="flex-1"
-        />
-        {value && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => onChange(null)}
-          >
-            Never
-          </Button>
-        )}
-      </div>
+      <ExpirySelect
+        id={id}
+        value={value}
+        onChange={onChange}
+        disabledDate={disabledDate}
+      />
       <FieldDescription>
         {value ? `Expires ${formatExpiration(value)}` : noExpirationText}
       </FieldDescription>

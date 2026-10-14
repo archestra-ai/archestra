@@ -11,6 +11,10 @@ import ModelModel from "@/models/model";
 import ModelTeamModel from "@/models/model-team";
 import OrganizationModel from "@/models/organization";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
+import {
+  getSharedPrimaryProviderKeys,
+  resolveVirtualKeyProviderMappings,
+} from "@/services/virtual-key-providers";
 import { ApiError } from "@/types";
 import { readVirtualKeyValue } from "../../connection-setup";
 import type { SetupScriptProxySection } from "../types";
@@ -25,6 +29,7 @@ type PrimaryProviderContext = {
    * usable they replace the user's primary keys, and the user needs no access
    * of their own to them.
    */
+  includeFutureProviders?: boolean;
   mappedKeys?: Array<{
     provider: SupportedProvider;
     providerApiKeyId: string;
@@ -39,25 +44,49 @@ type PrimaryProviderContext = {
 export async function ensurePrimaryProviderKey(
   params: PrimaryProviderContext & { keyName: string },
 ) {
-  const mapped = await getMappedKeys(params);
-  const keys = mapped.length > 0 ? mapped : await getPrimaryKeys(params);
-  if (keys.length === 0) {
-    throw new ApiError(
-      400,
-      "No usable primary provider keys are available. Mark a compatible provider key as primary, ask an admin to choose provider keys for this client, or choose another routing option.",
-    );
-  }
   const name = params.keyName;
-  const providerApiKeys = keys.map((key) => ({
-    provider: key.provider,
-    providerApiKeyId: key.id,
-  }));
   const existing = await VirtualApiKeyModel.findByAuthorScopeName({
     organizationId: params.organizationId,
     authorId: params.userId,
     scope: "personal",
     name,
   });
+  // Organization defaults apply only when issuing a key for the first time.
+  const includeFutureProviders =
+    existing?.includeFutureProviders ?? params.includeFutureProviders;
+  const context = existing?.includeFutureProviders
+    ? {
+        ...params,
+        mappedKeys: await VirtualApiKeyModel.getProviderApiKeys(existing.id),
+      }
+    : params;
+  const mapped = await getMappedKeys(context);
+  const primaries = includeFutureProviders
+    ? (await getSharedPrimaryProviderKeys(params.organizationId)).filter(
+        (key) => params.supportedProviders.includes(key.provider),
+      )
+    : await getPrimaryKeys(params);
+  const keys = includeFutureProviders
+    ? [
+        ...mapped,
+        ...primaries.filter(
+          (key) =>
+            !mapped.some((override) => override.provider === key.provider),
+        ),
+      ]
+    : mapped.length > 0
+      ? mapped
+      : primaries;
+  if (keys.length === 0) {
+    throw new ApiError(
+      400,
+      "No usable primary provider keys are available. Mark a compatible provider key as primary, ask an admin to choose provider keys for this client, or choose another routing option.",
+    );
+  }
+  const providerApiKeys = keys.map((key) => ({
+    provider: key.provider,
+    providerApiKeyId: key.id,
+  }));
   if (existing && existing.keyType !== "standard") {
     throw new ApiError(
       409,
@@ -65,14 +94,15 @@ export async function ensurePrimaryProviderKey(
     );
   }
   if (existing && (await readVirtualKeyValue(existing.id))) {
-    await VirtualApiKeyModel.update({
-      id: existing.id,
-      name,
-      scope: "personal",
-      authorId: params.userId,
-      teamIds: [],
-      providerApiKeys,
-    });
+    if (!existing.includeFutureProviders)
+      await VirtualApiKeyModel.update({
+        id: existing.id,
+        name,
+        scope: "personal",
+        authorId: params.userId,
+        teamIds: [],
+        providerApiKeys,
+      });
     return { virtualApiKeyId: existing.id, provider: keys[0].provider };
   }
   if (existing) await VirtualApiKeyModel.delete(existing.id);
@@ -81,7 +111,13 @@ export async function ensurePrimaryProviderKey(
     authorId: params.userId,
     scope: "personal",
     name,
-    providerApiKeys,
+    includeFutureProviders,
+    providerApiKeys: includeFutureProviders
+      ? mapped.map((key) => ({
+          provider: key.provider,
+          providerApiKeyId: key.id,
+        }))
+      : providerApiKeys,
   });
   // Match connection-key creation: concurrent first setups converge on the
   // oldest key so later catalog refreshes update every installation.
@@ -93,14 +129,15 @@ export async function ensurePrimaryProviderKey(
   });
   if (winner && winner.id !== virtualKey.id) {
     await VirtualApiKeyModel.delete(virtualKey.id);
-    await VirtualApiKeyModel.update({
-      id: winner.id,
-      name,
-      scope: "personal",
-      authorId: params.userId,
-      teamIds: [],
-      providerApiKeys,
-    });
+    if (!winner.includeFutureProviders)
+      await VirtualApiKeyModel.update({
+        id: winner.id,
+        name,
+        scope: "personal",
+        authorId: params.userId,
+        teamIds: [],
+        providerApiKeys,
+      });
     return { virtualApiKeyId: winner.id, provider: keys[0].provider };
   }
   return { virtualApiKeyId: virtualKey.id, provider: keys[0].provider };
@@ -113,16 +150,25 @@ export async function getVirtualKeyProviderCatalog(
     provider?: SupportedProvider;
   },
 ): Promise<NonNullable<SetupScriptProxySection["primaryProviders"]>> {
+  const virtualKey = await VirtualApiKeyModel.findById(params.virtualApiKeyId);
+  const automaticMappings = virtualKey?.includeFutureProviders
+    ? await resolveVirtualKeyProviderMappings(params.virtualApiKeyId)
+    : null;
   const [userKeys, mappedKeys, mappings] = await Promise.all([
-    params.provider
-      ? LlmProviderApiKeyModel.getAvailableKeysForUser(
-          params.organizationId,
-          params.userId,
-          params.userTeamIds,
+    automaticMappings
+      ? LlmProviderApiKeyModel.findByIds(
+          automaticMappings.map((key) => key.providerApiKeyId),
         )
-      : getPrimaryKeys(params),
+      : params.provider
+        ? LlmProviderApiKeyModel.getAvailableKeysForUser(
+            params.organizationId,
+            params.userId,
+            params.userTeamIds,
+          )
+        : getPrimaryKeys(params),
     getMappedKeys(params),
-    VirtualApiKeyModel.getProviderApiKeys(params.virtualApiKeyId),
+    automaticMappings ??
+      VirtualApiKeyModel.getProviderApiKeys(params.virtualApiKeyId),
   ]);
   // Admin-mapped keys stand in for the user's own access.
   const keys = [
@@ -134,7 +180,9 @@ export async function getVirtualKeyProviderCatalog(
   // Connection keys can be reused by other clients/providers. Only publish the
   // provider selected in this setup, never the key's unrelated mappings.
   const selectedMappings = mappings.filter(
-    (mapping) => !params.provider || mapping.provider === params.provider,
+    (mapping) =>
+      params.supportedProviders.includes(mapping.provider) &&
+      (!params.provider || mapping.provider === params.provider),
   );
   const boundIds = new Set(
     selectedMappings.map((mapping) => mapping.providerApiKeyId),

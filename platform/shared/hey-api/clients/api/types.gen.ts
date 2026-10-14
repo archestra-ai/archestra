@@ -21971,7 +21971,7 @@ export type GetAgentRunsResponses = {
         organizationId: string;
         taskId: string;
         agentId: string;
-        actorKind: 'user' | 'team' | 'organization' | 'system';
+        actorKind: 'user' | 'team' | 'organization' | 'oauthClient' | 'system';
         actorId: string;
         actorUserId: string | null;
         title: string;
@@ -22195,7 +22195,7 @@ export type GetMyAgentRunsResponses = {
             organizationId: string;
             taskId: string;
             agentId: string;
-            actorKind: 'user' | 'team' | 'organization' | 'system';
+            actorKind: 'user' | 'team' | 'organization' | 'oauthClient' | 'system';
             actorId: string;
             actorUserId: string | null;
             title: string;
@@ -22411,7 +22411,7 @@ export type GetMyAgentRunResponses = {
         organizationId: string;
         taskId: string;
         agentId: string;
-        actorKind: 'user' | 'team' | 'organization' | 'system';
+        actorKind: 'user' | 'team' | 'organization' | 'oauthClient' | 'system';
         actorId: string;
         actorUserId: string | null;
         title: string;
@@ -22551,7 +22551,7 @@ export type UpdateAgentRunResponses = {
         organizationId: string;
         taskId: string;
         agentId: string;
-        actorKind: 'user' | 'team' | 'organization' | 'system';
+        actorKind: 'user' | 'team' | 'organization' | 'oauthClient' | 'system';
         actorId: string;
         actorUserId: string | null;
         title: string;
@@ -101898,7 +101898,7 @@ export type GetProjectRunsResponses = {
         organizationId: string;
         taskId: string;
         agentId: string;
-        actorKind: 'user' | 'team' | 'organization' | 'system';
+        actorKind: 'user' | 'team' | 'organization' | 'oauthClient' | 'system';
         actorId: string;
         actorUserId: string | null;
         title: string;

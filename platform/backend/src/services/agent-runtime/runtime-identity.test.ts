@@ -28,7 +28,7 @@ const SECRET = "test-runtime-binding-secret-32chars";
 async function persistWorkspace(params: {
   organizationId: string;
   agentId: string;
-  actorKind: "user" | "team" | "organization" | "system";
+  actorKind: "user" | "team" | "organization" | "system" | "oauthClient";
   actorId: string;
   actorUserId?: string | null;
   workloadName?: string;
@@ -79,6 +79,62 @@ async function persistWorkspace(params: {
 }
 
 describe("runtime OpenAPPA identity", () => {
+  test("application workspace bindings cannot be used by another application or task", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const current = await persistWorkspace({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorKind: "oauthClient",
+      actorId: "mcp_oauth_first",
+    });
+    const binding = issueRuntimeBinding({
+      secret: SECRET,
+      organizationId: org.id,
+      agentId: agent.id,
+      workspaceId: current.workspace.id,
+      workloadName: current.workspace.workloadName,
+      taskId: current.task.id,
+      actorKind: "oauthClient",
+      actorId: "mcp_oauth_first",
+      expiresAt: Date.now() + 60_000,
+    });
+    if (!binding) throw new Error("Expected signed runtime binding");
+    const resolve = (oauthClientId: string, runTaskId = current.task.id) =>
+      resolveGatewayRuntimeSession({
+        organizationId: org.id,
+        agentId: agent.id,
+        token: { isOrganizationToken: false, oauthClientId },
+        secret: SECRET,
+        bindingToken: binding,
+        runTaskId,
+      });
+    expect(await resolve("mcp_oauth_first")).toMatchObject({
+      kind: "session",
+      identity: {
+        actorKind: "oauthClient",
+        actorId: "mcp_oauth_first",
+        workspaceId: current.workspace.id,
+      },
+    });
+    expect(await resolve("mcp_oauth_second")).toMatchObject({ kind: "reject" });
+    expect(await resolve("mcp_oauth_first", randomUUID())).toMatchObject({
+      kind: "reject",
+    });
+    expect(
+      await resolveRuntimeIdentityByVirtualKeys({
+        organizationId: org.id,
+        virtualKeyIds: [current.virtualKeyId],
+      }),
+    ).toMatchObject({
+      status: "bound",
+      identity: { actorKind: "oauthClient", actorId: "mcp_oauth_first" },
+    });
+  });
+
   test("the launcher stamps only secret environment from persisted identity and refuses replay on a sibling", async ({
     makeOrganization,
     makeAgent,

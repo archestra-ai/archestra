@@ -39,6 +39,7 @@ const ACTOR_KINDS = new Set<AgentRunActorKind>([
   "user",
   "team",
   "organization",
+  "oauthClient",
   "system",
 ]);
 
@@ -82,6 +83,7 @@ type GatewayTokenActor = {
   userId?: string;
   teamId?: string | null;
   isOrganizationToken: boolean;
+  oauthClientId?: string;
 };
 
 /** @public — principal constructor shared with review and gateway callers */
@@ -604,12 +606,23 @@ function tokenOwnsActor(
   if (token.teamId && !token.isOrganizationToken) {
     return claims.actorKind === "team" && claims.actorId === token.teamId;
   }
+  if (token.oauthClientId) {
+    return (
+      claims.actorKind === "oauthClient" &&
+      claims.actorId === token.oauthClientId
+    );
+  }
   if (token.isOrganizationToken) {
     if (
       claims.actorKind === "organization" &&
       claims.actorId === organizationId
     ) {
       return true;
+    }
+    // The host launches application runs with its gateway credential. The
+    // signed binding and persisted run, not the org token, identify the app.
+    if (claims.actorKind === "oauthClient") {
+      return claims.organizationId === organizationId;
     }
     // Host-created system runs use the organization gateway token. The
     // signed binding, not the token alone, names that workload.

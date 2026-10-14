@@ -2388,7 +2388,9 @@ function cacheTokenAuthResult(
 ): void {
   // Identity lookup may be cached separately, but a user's authorization must
   // reflect resource grants and team/role membership on every request.
-  if (result?.userId) return;
+  // Application credentials likewise recheck expiry, revocation and the
+  // client's current gateway allowlist instead of retaining stale access.
+  if (result?.userId || result?.oauthClientId) return;
   // Negative results are intentionally NOT cached. Caching auth failures
   // creates a "cache treadmill" where every retry refreshes the negative
   // entry: a transient race during agent/IdP creation fails the first

@@ -13,6 +13,7 @@ import { AgentModel, AgentRunModel, McpToolCallModel } from "@/models";
 import {
   APPA_SESSION_HEADER,
   isWellFormedAppaId,
+  openappaEnabled,
   sessionFromHeaders,
 } from "@/openappa/service";
 import {
@@ -412,7 +413,7 @@ async function handleMcpPostRequest(
               scope: `user:${tokenAuthContext.userId}`,
             })
           : undefined;
-    if (runtimeSession.kind === "session") {
+    if (runtimeSession.kind === "session" && openappaEnabled()) {
       const workspace = await resolveRuntimeSessionForWorkspace({
         organizationId: runtimeSession.identity.organizationId,
         workspaceId: runtimeSession.identity.workspaceId,
@@ -1363,6 +1364,11 @@ function runtimeTokenMatchesRun(params: {
       return params.tokenAuth.userId === params.run.actorId;
     case "team":
       return params.tokenAuth.teamId === params.run.actorId;
+    case "oauthClient":
+      return (
+        params.tokenAuth.oauthClientId === params.run.actorId ||
+        params.tokenAuth.isOrganizationToken
+      );
     case "organization":
     case "system":
       return params.tokenAuth.isOrganizationToken;

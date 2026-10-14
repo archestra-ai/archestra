@@ -3,7 +3,7 @@ title: Gateway Access for Apps
 sidebarTitle: Apps and Services
 description: Let your own app or service call an MCP Gateway with an OAuth client
 order: 2
-lastUpdated: 2026-10-08
+lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -22,6 +22,8 @@ Create either one under **Settings → OAuth Clients → Create OAuth Client**, 
 <span id="oauth-client-credentials-applications"></span>
 
 ## Call as the App
+
+Each application owns its A2A tasks and retained runtime workspaces. Use the same application's credentials to list, read, follow, or cancel its tasks; tokens renewed for that application retain access. A different application cannot access those tasks, even when both can call the same agent.
 
 No person signs in, so the app uses the gateway's shared accounts. Give its tools a shared service account in [Choose Its Tools](/docs/mcp/gateway#choose-its-tools).
 

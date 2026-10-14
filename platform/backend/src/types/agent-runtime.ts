@@ -30,6 +30,7 @@ export const AgentRunActorKindSchema = z.enum([
   "user",
   "team",
   "organization",
+  "oauthClient",
   "system",
 ]);
 export type AgentRunActorKind = z.infer<typeof AgentRunActorKindSchema>;

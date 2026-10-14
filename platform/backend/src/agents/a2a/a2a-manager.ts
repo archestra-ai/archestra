@@ -1820,6 +1820,16 @@ export class A2AManager {
       };
     }
 
+    if (tokenAuth.oauthClientId) {
+      // Machine credentials authenticate the application itself. Token or
+      // secret rotation must not change the owner of its retained tasks.
+      return {
+        id: tokenAuth.oauthClientId,
+        kind: "oauthClient",
+        organizationId,
+      };
+    }
+
     return {
       id: "system",
       kind: "system",

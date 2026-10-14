@@ -77088,6 +77088,7 @@
                           "user",
                           "team",
                           "organization",
+                          "oauthClient",
                           "system"
                         ]
                       },
@@ -77949,6 +77950,7 @@
                               "user",
                               "team",
                               "organization",
+                              "oauthClient",
                               "system"
                             ]
                           },
@@ -78467,6 +78469,7 @@
                         "user",
                         "team",
                         "organization",
+                        "oauthClient",
                         "system"
                       ]
                     },
@@ -79061,6 +79064,7 @@
                         "user",
                         "team",
                         "organization",
+                        "oauthClient",
                         "system"
                       ]
                     },
@@ -387349,6 +387353,7 @@
                           "user",
                           "team",
                           "organization",
+                          "oauthClient",
                           "system"
                         ]
                       },

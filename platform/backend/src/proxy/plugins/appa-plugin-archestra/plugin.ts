@@ -493,6 +493,19 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           denied: true,
         };
       }
+      const approved = result.toolResultUpdates[answer.id];
+      if (approved?.denied) {
+        const clarification = await cacheManager.get<string>(
+          deniedCallClarificationKey({
+            session: this.governedSession(binding),
+            callId: answer.id,
+          }),
+        );
+        if (clarification) approved.content += clarification;
+        if (approved.offers?.length === 0 && !approved.review?.length) {
+          approved.content += NO_REMEDY_PLAN_HINT;
+        }
+      }
     }
     binding.requiresRemedyContinuation = await hasRemedyOfferResult({
       binding,
@@ -1307,6 +1320,35 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // call as given. The identity the runtime ruled on — the dispatch's
       // target — is what the notice and the refusal describe.
       const identity = this.policyIdentity(binding, call);
+      let clarification = "";
+      if (identity.dispatch) {
+        const namespace = call.namespace
+          ? ` in wire namespace ${JSON.stringify(call.namespace)}`
+          : "";
+        clarification = `\n\n[appa] This call already went through the run_tool wrapper ${JSON.stringify(identity.dispatch)}${namespace}, with tool_name targeting ${JSON.stringify(identity.name)}. Calling the target directly or retrying the same wrapper call is the same blocked call, not a routing correction.`;
+      }
+      // Only a recorded policy denial can establish that no remedy is offered.
+      // Local failures and pending reviews retain their own recovery guidance.
+      const noPlan =
+        decision.recorded === true &&
+        decision.offers?.length === 0 &&
+        !decision.review?.length;
+      const ruling =
+        decision.feedback + clarification + (noPlan ? NO_REMEDY_PLAN_HINT : "");
+      if (decision.recorded && clarification) {
+        // The next request restores the runtime's ruling, not the client's
+        // notice result. Retain only our addition; never replace that ruling.
+        try {
+          await cacheManager.set(
+            deniedCallClarificationKey({ session, callId: call.id }),
+            clarification,
+            TimeInMs.Day,
+          );
+        } catch {
+          // Ancillary prose must not interrupt a ruled batch or its cancellation.
+          logger.warn("OpenAPPA could not retain denial clarification");
+        }
+      }
       if (!notice) {
         // The client's own wait tool stands in for the notice tool. The call
         // keeps its id, the client waits for its MCP servers instead of
@@ -1357,13 +1399,15 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         // A call that only needs loading gets that one instruction.
         const contentMessage = notLoaded.has(call.id)
           ? decision.feedback
-          : transient
-            ? `${decision.feedback}\n\n[appa] This request did not include the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the ruling could not be offered as a remedy and the call is refused. The gateway tools usually finish loading a moment after the session starts. Send your message again.`
-            : binding.request.defersTools
-              ? `${decision.feedback}\n\n[appa] This client defers tools it has not loaded, and the ${archestraMcpBranding.serverName} MCP gateway remedy tools are not loaded in this session, so the ruling could not be offered as a remedy and the call is refused. Search for ${TOOL_GET_REMEDY_PLANS_SHORT_NAME} and ${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME} with your tool search, then call the denied tool again to receive the remedy.`
-              : binding.request.declaredTools.length === 0
-                ? `${decision.feedback}\n\n[appa] This request listed no tools, so the ruling could not be offered as a remedy and the call is refused. Remedies need the ${archestraMcpBranding.serverName} MCP gateway tools in the request. Connect the gateway, then start a new session. In Codex, also set code_mode_host = false: code mode keeps its tools out of the request.`
-                : `${decision.feedback}\n\n[appa] This client did not declare the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the call is refused. Connect the MCP gateway and allow both remedy tools to use approval plans.`;
+          : noPlan
+            ? ruling
+            : transient
+              ? `${ruling}\n\n[appa] This request did not include the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the ruling could not be offered as a remedy and the call is refused. The gateway tools usually finish loading a moment after the session starts. Send your message again.`
+              : binding.request.defersTools
+                ? `${ruling}\n\n[appa] This client defers tools it has not loaded, and the ${archestraMcpBranding.serverName} MCP gateway remedy tools are not loaded in this session, so the ruling could not be offered as a remedy and the call is refused. Search for ${TOOL_GET_REMEDY_PLANS_SHORT_NAME} and ${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME} with your tool search, then call the denied tool again to receive the remedy.`
+                : binding.request.declaredTools.length === 0
+                  ? `${ruling}\n\n[appa] This request listed no tools, so the ruling could not be offered as a remedy and the call is refused. Remedies need the ${archestraMcpBranding.serverName} MCP gateway tools in the request. Connect the gateway, then start a new session. In Codex, also set code_mode_host = false: code mode keeps its tools out of the request.`
+                  : `${ruling}\n\n[appa] This client did not declare the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the call is refused. Connect the MCP gateway and allow both remedy tools to use approval plans.`;
         return {
           decision: "refuse",
           refusal: {
@@ -1389,7 +1433,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             id: call.id,
             tool: identity.name,
             arguments: identity.arguments,
-            result: decision.feedback,
+            result: ruling,
             custom: identity.custom,
             namespace: identity.namespace,
           }),
@@ -1813,6 +1857,22 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       ? undefined
       : name;
   }
+}
+
+const NO_REMEDY_PLAN_HINT =
+  "\n\n[appa] This ruling offers no remedy plan. Explain the ruling to the user and STOP this blocked action. Do not retry the same call, directly or through a wrapper.";
+
+function deniedCallClarificationKey(params: {
+  session: OpenAppaSession;
+  callId: string;
+}): AllowedCacheKey {
+  return `${CacheKey.OpenAppaDeniedCallClarification}-${Buffer.from(
+    JSON.stringify([
+      params.session.organization_id,
+      params.session.session_id,
+      withoutTrajectoryStamp(params.callId),
+    ]),
+  ).toString("base64url")}`;
 }
 
 function notLoadedRulingKey(params: {
@@ -4950,6 +5010,14 @@ async function hasRemedyOfferResult(params: {
       approved.code === "unreleased_call"
     )
       return [];
+    if (
+      approved.denied &&
+      (approved.offers !== undefined || approved.review?.length)
+    ) {
+      // Current denial metadata outranks both the original journal offer and
+      // generic remedy hints. Unknown metadata still uses the scoped fallback.
+      return approved.offers?.length || approved.review?.length ? [index] : [];
+    }
     if (
       offeredRuling === undefined &&
       (!approved.content.includes("[appa] Blocked") ||

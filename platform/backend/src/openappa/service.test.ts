@@ -685,7 +685,7 @@ describe("APPA feature boundary", () => {
       {
         kind: "deny",
         feedback: "[appa] a call is already outstanding",
-        offers: [],
+        offers: undefined,
         recorded: true,
       },
     ]);
@@ -996,7 +996,7 @@ describe("APPA feature boundary", () => {
         {
           kind: "deny",
           feedback: "Policy denied",
-          offers: [],
+          offers: undefined,
           recorded: true,
         },
         { kind: "allow" },
@@ -1508,7 +1508,12 @@ describe("APPA feature boundary", () => {
 
     expect(decisions).toEqual([
       { kind: "control" },
-      { kind: "deny", feedback: "Not declared", offers: [], recorded: true },
+      {
+        kind: "deny",
+        feedback: "Not declared",
+        offers: undefined,
+        recorded: true,
+      },
     ]);
     expect(
       native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
@@ -1550,7 +1555,12 @@ describe("APPA feature boundary", () => {
     );
     expect(decisions).toEqual([
       { kind: "allow" },
-      { kind: "deny", feedback: "Not declared", offers: [], recorded: true },
+      {
+        kind: "deny",
+        feedback: "Not declared",
+        offers: undefined,
+        recorded: true,
+      },
     ]);
     expect(
       native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
@@ -1593,7 +1603,12 @@ describe("APPA feature boundary", () => {
     );
 
     expect(decisions).toEqual([
-      { kind: "deny", feedback: "Not declared", offers: [], recorded: true },
+      {
+        kind: "deny",
+        feedback: "Not declared",
+        offers: undefined,
+        recorded: true,
+      },
     ]);
     expect(
       native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
@@ -2196,7 +2211,7 @@ describe("APPA feature boundary", () => {
       {
         kind: "deny",
         feedback: "Parent policy denied",
-        offers: [],
+        offers: undefined,
         recorded: true,
       },
     ]);

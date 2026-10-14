@@ -571,11 +571,18 @@ async function attach(params: {
         batteryName: install.batteryName,
         catalogId: install.catalogId,
         status: install.status,
+        target: install.target,
         packageHash: install.packageHash,
         lastError: install.lastError,
         credentialBindings: install.credentialBindings,
       })),
-      { ...row, status: "active" as const, packageHash: null, lastError: null },
+      {
+        ...row,
+        status: "active" as const,
+        target: "multi-user" as const,
+        packageHash: null,
+        lastError: null,
+      },
     ],
   });
   const install = rows.at(-1);

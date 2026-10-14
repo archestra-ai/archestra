@@ -10,6 +10,7 @@ import { resolveCredentialValue } from "@/services/credentials";
 import { skillRootPath } from "@/skills-sandbox/runtime-image";
 import { shellQuote } from "@/utils/shell-quote";
 import { archestraAudience } from "./archestra-audience";
+import { deployedFromRow } from "./battery-target";
 import { openappaDeclarations } from "./declarations";
 
 /**
@@ -109,8 +110,10 @@ class OpenAppaHelperBridge {
       name: install.batteryName,
       packageHash: install.packageHash,
     });
+    // The row records the target the composition deployed, whose helpers it serves.
+    const deployed = battery && deployedFromRow(battery, install.target);
     const matches =
-      battery?.externals.filter(
+      deployed?.externals.filter(
         (candidate) => candidate.name === params.externalName,
       ) ?? [];
     const kind = consultKind(params.request);
@@ -118,7 +121,7 @@ class OpenAppaHelperBridge {
       matches.length === 1
         ? matches[0]
         : matches.find((candidate) => candidate.kind === sectionForKind(kind));
-    if (!battery || !external) return { kind: "not_found" };
+    if (!battery || !deployed || !external) return { kind: "not_found" };
     if (
       archestraAudience.serves({
         batteryName: install.batteryName,
@@ -132,7 +135,7 @@ class OpenAppaHelperBridge {
       });
 
     const resolved = await Promise.all(
-      battery.credentials.map((credential) =>
+      deployed.credentials.map((credential) =>
         this.resolveCredential({ install, credential }),
       ),
     );

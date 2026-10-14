@@ -5,7 +5,8 @@ import db, { schema } from "@/database";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
-import { beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { bindOrganizationCredential } from "@/test/openappa-credentials";
 import { useRouteTestApp } from "@/test/route-test-app";
 import routes from "./openappa-trust-audience.routes";
 
@@ -14,11 +15,15 @@ const GITHUB = "batteries/github/appa.toml";
 
 describe("GET /api/openappa/trust-audience", () => {
   const ctx = useRouteTestApp(routes);
+  const sandbox = config.daggerRuntime.enabled;
   beforeEach(async ({ makeMember }) => {
     config.openappa.enabled = true;
     await makeMember(ctx.user.id, ctx.organizationId, {
       role: ADMIN_ROLE_NAME,
     });
+  });
+  afterEach(() => {
+    config.daggerRuntime.enabled = sandbox;
   });
 
   const view = async () => {
@@ -166,6 +171,15 @@ name = "wiki__publish"
 requires = { audience = { contains = ["@eng"] } }
 `;
     await saveRoot(content);
+    // GitHub's audience sources are its multi-user target's, which deploys
+    // where the sandbox runs its helpers and once its token is bound.
+    config.daggerRuntime.enabled = true;
+    await bindOrganizationCredential({
+      organizationId: ctx.organizationId,
+      userId: ctx.user.id,
+      variable: "APPA_PROVIDER_GITHUB_TOKEN",
+      key: "github-token",
+    });
 
     const body = await view();
 

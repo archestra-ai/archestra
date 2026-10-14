@@ -1371,6 +1371,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeletePendingSignupMember]: { member: ["delete"] }, // Delete auto-provisioned member who hasn't signed up
   [RouteId.GetUserPermissionSources]: {},
   [RouteId.GetUserPermissions]: {}, // User permissions route - available to all authenticated users (no specific permissions required)
+  // Other members' saved browser logins: managing someone else's sessions is a
+  // member-management action, so admins only
+  [RouteId.GetBrowserStorageStates]: { member: ["update"] },
+  [RouteId.DeleteBrowserStorageState]: { member: ["update"] },
   [RouteId.GetImpersonableUsers]: { member: ["impersonate"] }, // Role debugger picker (the impersonate-user call itself is also gated on member:impersonate in the auth before-hook)
 
   // Member default routes - available to all authenticated users (manages their own defaults)

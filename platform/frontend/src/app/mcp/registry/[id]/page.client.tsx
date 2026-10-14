@@ -59,6 +59,7 @@ import {
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useSavedBrowserLogins } from "@/lib/browser-storage-state.query";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { typeRole } from "@/lib/design/type-scale";
 import { useEnvironments } from "@/lib/environment.query";
@@ -110,12 +111,14 @@ import { deriveAgentUsage } from "../_parts/mcp-server-agent-usage";
 import type { CatalogItem, InstalledServer } from "../_parts/mcp-server-card";
 import { McpServerIssueNotice } from "../_parts/mcp-server-issue-notice";
 import { McpServerUsageTab } from "../_parts/mcp-server-usage-tab";
+import { PlaywrightSavedLoginsTab } from "../_parts/playwright-saved-logins-tab";
 import { useCatalogInstall } from "../_parts/use-catalog-install";
 import { useChatWithCatalogItem } from "../_parts/use-chat-with-catalog-item";
 import { YamlConfigContent } from "../_parts/yaml-config-dialog";
 
 type DetailTab =
   | "overview"
+  | "logins"
   | "usage"
   | "permissions"
   | "credentials"
@@ -276,6 +279,14 @@ function CatalogItemDetails({
   const { data: userCanViewDeploymentYaml } = useMcpDeploymentPermission(
     item.id,
   );
+  // Signing someone else out of the browser is member management: admins only
+  const { data: userCanManageMembers } = useHasPermissions({
+    member: ["update"],
+  });
+  const showSavedLogins = isPlaywright && !!userCanManageMembers;
+  const { data: savedLogins } = useSavedBrowserLogins({
+    enabled: showSavedLogins,
+  });
 
   const { data: allMcpServers } = useMcpServers();
   const { statuses: deploymentStatuses, state: deploymentFeedState } =
@@ -356,6 +367,7 @@ function CatalogItemDetails({
   // Overview and Credentials/Installations share the unified main page. Only
   // secondary operational views remain in the tab strip.
   const tabIds: DetailTab[] = [
+    ...(showSavedLogins ? (["logins"] as const) : []),
     "usage",
     ...(variant !== "builtin" && !isPlaywright
       ? (["permissions"] as const)
@@ -427,6 +439,17 @@ function CatalogItemDetails({
       href: tabHref("overview"),
       selected: effectiveTab === "overview",
     },
+    ...(tabIds.includes("logins")
+      ? [
+          {
+            label: (
+              <TabLabel title="Saved logins" count={savedLogins?.length ?? 0} />
+            ),
+            href: tabHref("logins"),
+            selected: effectiveTab === "logins",
+          },
+        ]
+      : []),
     ...(tabIds.includes("permissions")
       ? [
           {
@@ -602,6 +625,7 @@ function CatalogItemDetails({
             onDirtyChange={setPermissionsDirty}
           />
         )}
+        {effectiveTab === "logins" && <PlaywrightSavedLoginsTab />}
         {effectiveTab === "usage" && (
           <McpServerUsageTab
             serversForCatalog={allServersForCatalog}

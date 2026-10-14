@@ -107,24 +107,43 @@ ${CATCH_ALL_RULES}`,
         });
       await openappaBatteriesService.recompile(organizationId);
 
-      const calls = rules.flatMap((rule) => {
-        const call = ruleCall(rule);
-        return call ? [{ ...call, rule }] : [];
-      });
-      const [control, ...governed] = await decide(organizationId, [
-        ...[...servers.values()].slice(0, 1).map((server) => ({
-          tool: `mcp/${server}/not_a_battery_tool`,
-          arguments: {},
-        })),
-        ...calls.map((call) => ({
-          tool: `mcp/${servers.get(call.namespace)}/${call.tool}`,
-          arguments: call.arguments,
-        })),
-      ]);
+      const calls = governedCalls(rules).map((call) => ({
+        ...call,
+        tool: `mcp/${servers.get(call.namespace)}/${call.tool}`,
+      }));
+      const controls = [...servers.values()].slice(0, 1).map((server) => ({
+        label: "control",
+        tool: `mcp/${server}/not_a_battery_tool`,
+        arguments: {},
+      }));
+      const decided = await decide(organizationId, [...controls, ...calls]);
+      const [control, ...governed] = decided;
+      const builtins = deployedPolicies(battery, mode).flatMap(modelBuiltins);
+      const unopened = decided.flatMap((decision, index) =>
+        decision.refusal === undefined
+          ? []
+          : [{ label: [...controls, ...calls][index].label, decision }],
+      );
       outcomes[`${battery.name} ${mode}`] = {
         governed: calls.length > 0,
         offServer: rules.filter((rule) => !ruleCall(rule)),
-        refused: governed.some(({ status }) => status === REFUSED.status),
+        refusedBy: [
+          ...new Set(
+            unopened.flatMap(({ decision }) =>
+              builtins.filter((builtin) =>
+                decision.refusal?.includes(JSON.stringify(builtin)),
+              ),
+            ),
+          ),
+        ],
+        unopened: unopened
+          .filter(
+            ({ decision }) =>
+              !builtins.some((builtin) =>
+                decision.refusal?.includes(JSON.stringify(builtin)),
+              ),
+          )
+          .map(({ label, decision }) => `${label}: ${decision.refusal}`),
         control: servers.size > 0 ? control : null,
         targets: [
           ...new Set(
@@ -133,9 +152,12 @@ ${CATCH_ALL_RULES}`,
               .map(({ target }) => target),
           ),
         ],
-        onCatchAll: calls
-          .filter((_, index) => governed[index]?.actual === CATCH_ALL_MARK)
-          .map(({ rule }) => rule),
+        catchAllMismatches: calls
+          .filter(
+            ({ leftToRoot }, index) =>
+              (governed[index]?.actual === CATCH_ALL_MARK) !== leftToRoot,
+          )
+          .map(({ label }) => label),
       };
     }
 
@@ -144,16 +166,20 @@ ${CATCH_ALL_RULES}`,
         deployments.map(({ battery, mode }) => {
           const governs = toolEntries(battery.base).length > 0;
           // Offline replay refuses a policy that asks a model to annotate.
-          const refused = deployedPolicies(battery, mode).some(asksModel);
+          const builtins = [
+            ...new Set(deployedPolicies(battery, mode).flatMap(modelBuiltins)),
+          ];
+          const refused = governs && builtins.length > 0;
           return [
             `${battery.name} ${mode}`,
             {
               governed: governs,
               offServer: [],
-              refused: governs && refused,
-              control: governs ? (refused ? REFUSED : CATCH_ALL) : null,
+              refusedBy: refused ? builtins : [],
+              unopened: [],
+              control: governs ? (refused ? UNOPENED : CATCH_ALL) : null,
               targets: [mode === "multi-user" ? "multi-user" : null],
-              onCatchAll: [],
+              catchAllMismatches: [],
             },
           ];
         }),
@@ -308,23 +334,37 @@ type DeploymentOutcome = {
   governed: boolean;
   /** Rules on no MCP server, which no Archestra call reaches. */
   offServer: string[];
-  /** Whether the replay refused to open the deployed policy. */
-  refused: boolean;
+  /** The model annotators whose declaration made the replay refuse the policy. */
+  refusedBy: string[];
+  /** Calls the replay ran no step for, for any other reason. */
+  unopened: string[];
   /** What a tool the battery does not name decides on its server. */
   control: Decision | null;
   targets: (string | null)[];
-  /** The battery's rules whose calls the catch-all decided. */
-  onCatchAll: string[];
+  /**
+   * Calls the catch-all decided that the battery governs, and calls the battery
+   * leaves to the root that something else decided.
+   */
+  catchAllMismatches: string[];
 };
 
-type Decision = { status: string; actual: string | null };
+type Decision = {
+  status: string;
+  actual: string | null;
+  /** Why the replay ran no step for the call; absent when it ran one. */
+  refusal?: string;
+};
 /** The catch-all routes to the no-op annotator, answered here with a review requirement. */
 const CATCH_ALL_MARK = "authority hitl";
 const CATCH_ALL: Decision = { status: "failed", actual: CATCH_ALL_MARK };
 /** A rule that asks a battery helper, which offline replay leaves unanswered. */
 const UNANSWERED_HELPER: Decision = { status: "cannot_run", actual: null };
-/** A call in a policy the replay refused to open. */
-const REFUSED: Decision = { status: "refused", actual: null };
+/** A call the replay ran no step for. */
+const UNOPENED = {
+  status: "cannot_run",
+  actual: null,
+  refusal: expect.any(String),
+};
 /** A base read's static label lets a fresh trajectory's call run. */
 const BASE_READ: Decision = { status: "passed", actual: "allow" };
 
@@ -424,19 +464,16 @@ function deployedPolicies(
     : [battery.base];
 }
 
-/** Whether a policy declares an annotator answered by model inference. */
-function asksModel(policy: string): boolean {
+/** The builtins of a policy's annotators answered by model inference. */
+function modelBuiltins(policy: string): string[] {
   const annotators = (
     parsePolicyToml(policy)?.policy as { annotator?: unknown } | undefined
   )?.annotator;
-  return (
-    Array.isArray(annotators) &&
-    annotators.some(
-      (annotator: { builtin?: unknown }) =>
-        typeof annotator.builtin === "string" &&
-        annotator.builtin !== "archestra",
-    )
-  );
+  return Array.isArray(annotators)
+    ? annotators.flatMap(({ builtin }: { builtin?: unknown }) =>
+        typeof builtin === "string" && builtin !== "archestra" ? [builtin] : [],
+      )
+    : [];
 }
 
 /**
@@ -476,14 +513,19 @@ async function decide(
           },
         }),
       ),
-    ) as { files: { path: string; steps: Decision[] }[] };
+    ) as {
+      files: {
+        path: string;
+        status: string;
+        error?: string;
+        steps: Decision[];
+      }[];
+    };
     for (const file of response.files) {
-      // A file with no step is one the replay refused before calling anything.
-      const [step = REFUSED] = file.steps;
-      decisions[start + Number.parseInt(file.path, 10)] = {
-        status: step.status,
-        actual: step.actual,
-      };
+      const [step] = file.steps;
+      decisions[start + Number.parseInt(file.path, 10)] = step
+        ? { status: step.status, actual: step.actual }
+        : { status: file.status, actual: null, refusal: file.error ?? "" };
     }
   }
   return decisions;
@@ -496,7 +538,7 @@ async function decide(
 function ruleCall(rule: string): {
   namespace: string;
   tool: string;
-  arguments: Record<string, string>;
+  pattern: [string, string][];
 } | null {
   const match = /^mcp\/([^/]+)\/([^(]+)(?:\((.*)\))?$/.exec(rule);
   if (!match) return null;
@@ -504,22 +546,79 @@ function ruleCall(rule: string): {
   return {
     namespace,
     tool,
-    arguments: {
-      ...ONE_REPOSITORY,
-      ...Object.fromEntries(
-        (pattern ?? "")
-          .split(",")
-          .filter(Boolean)
-          .map((pair) => {
-            const [key, value] = pair.split(":");
-            return [key, value === "*" ? "any" : value];
-          }),
-      ),
-    },
+    pattern: (pattern ?? "")
+      .split(",")
+      .filter(Boolean)
+      .map((pair) => {
+        const [key, value] = pair.split(":");
+        return [key, value];
+      }),
   };
 }
 
-/** Arguments that name one repository, which the GitHub rules' helpers ask about. */
+/**
+ * The calls the rules govern, and those they leave to the root. Each rule is
+ * called with what its pattern matches. Each tool is called with no arguments,
+ * and each patterned rule with arguments its pattern does not match: the
+ * battery governs those only through a rule of the tool with no pattern.
+ */
+function governedCalls(rules: string[]) {
+  const parsed = rules.flatMap((rule) => {
+    const call = ruleCall(rule);
+    return call ? [{ rule, ...call }] : [];
+  });
+  const unpatterned = new Set(
+    parsed
+      .filter(({ pattern }) => pattern.length === 0)
+      .map(({ namespace, tool }) => `${namespace}/${tool}`),
+  );
+  const leftToRoot = (call: { namespace: string; tool: string }) =>
+    !unpatterned.has(`${call.namespace}/${call.tool}`);
+  const matching = parsed.map((call) => ({
+    label: `${call.rule} [matching]`,
+    namespace: call.namespace,
+    tool: call.tool,
+    arguments: {
+      ...ONE_REPOSITORY,
+      ...Object.fromEntries(
+        call.pattern.map(([key, value]) => [
+          key,
+          value === "*" ? "any" : value,
+        ]),
+      ),
+    },
+    leftToRoot: false,
+  }));
+  const bare = [
+    ...new Map(
+      parsed.map((call) => [`${call.namespace}/${call.tool}`, call]),
+    ).values(),
+  ].map((call) => ({
+    label: `mcp/${call.namespace}/${call.tool} [bare]`,
+    namespace: call.namespace,
+    tool: call.tool,
+    arguments: {},
+    leftToRoot: leftToRoot(call),
+  }));
+  const nonmatching = parsed
+    .filter(({ pattern }) => pattern.length > 0)
+    .map((call) => ({
+      label: `${call.rule} [nonmatching]`,
+      namespace: call.namespace,
+      tool: call.tool,
+      arguments: {
+        ...ONE_REPOSITORY,
+        ...Object.fromEntries(
+          call.pattern
+            .filter(([, value]) => value !== "*")
+            .map(([key]) => [key, "matches-no-pattern"]),
+        ),
+      },
+      leftToRoot: leftToRoot(call),
+    }));
+  return [...matching, ...bare, ...nonmatching];
+}
+
 const ONE_REPOSITORY = { owner: "acme", repo: "widgets" };
 
 /** The replay engine's limit on files per run. */

@@ -132,6 +132,7 @@ export function TabbedDialogShell<TSection extends string>({
                 aria-description={navItem.status}
                 className={cn(
                   "justify-start font-normal w-full",
+                  responsive && "max-sm:w-auto max-sm:flex-1",
                   navItem.status && "h-auto flex-col items-start gap-0 py-1.5",
                   activeSection === navItem.id &&
                     "bg-accent text-accent-foreground font-medium",

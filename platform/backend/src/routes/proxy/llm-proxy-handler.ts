@@ -179,8 +179,9 @@ import {
 import {
   carriesConnectionSetupReference,
   connectionProxySetupContext,
-  verifyConnectionProxySetupContext,
+  readVerifiedConnectionProxySetup,
 } from "@/services/connection-proxy-setup-context";
+import { claimConnectionSetupConversation } from "@/services/connection-setup-conversation-claim";
 import { nativeSetupClientFromProvenance } from "@/services/connection-setup-scope";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
@@ -1549,23 +1550,26 @@ export async function handleLLMProxy<
     let appaIdentity: AppaSessionIdentity = {};
     let hasNativeClientSession = false;
     const approvedProxySetupContext = connectionProxySetupContext(request.raw);
-    const approvedProxySetup =
-      !!approvedProxySetupContext &&
-      [virtualKeyId, passthroughVirtualKeyId].some(
-        (keyId) =>
-          !!keyId &&
-          verifyConnectionProxySetupContext({
-            token: approvedProxySetupContext,
-            organizationId: resolvedAgent.organizationId,
-            virtualApiKeyId: keyId,
-            proxyAgentId: resolvedAgent.id,
-            secret: config.auth.secret,
-          }),
-      );
+    let verifiedProxySetup: ReturnType<typeof readVerifiedConnectionProxySetup>;
+    if (approvedProxySetupContext) {
+      for (const keyId of [virtualKeyId, passthroughVirtualKeyId]) {
+        if (!keyId) continue;
+        verifiedProxySetup = readVerifiedConnectionProxySetup({
+          token: approvedProxySetupContext,
+          organizationId: resolvedAgent.organizationId,
+          virtualApiKeyId: keyId,
+          proxyAgentId: resolvedAgent.id,
+          secret: config.auth.secret,
+        });
+        if (verifiedProxySetup) break;
+      }
+    }
+    const approvedProxySetup = verifiedProxySetup !== undefined;
     // The setup URL stays in the client's settings for the whole window, so
-    // sessions started after the setup send it too. Only the conversation
-    // that ran the installer holds the setup reference the installer printed.
-    const installerConversation =
+    // sessions started after the setup send it too. The reference must be in
+    // this request, and the first well-formed native conversation to present
+    // it owns the exemption until the token expires.
+    const carriesReference =
       approvedProxySetup &&
       !!approvedProxySetupContext &&
       carriesConnectionSetupReference({
@@ -1573,6 +1577,16 @@ export async function handleLLMProxy<
         requestBody: body,
         secret: config.auth.secret,
       });
+    const installerConversation =
+      carriesReference &&
+      verifiedProxySetup !== undefined &&
+      (await claimConnectionSetupConversation({
+        organizationId: verifiedProxySetup.organizationId,
+        setupId: verifiedProxySetup.setupId,
+        expiresAt: verifiedProxySetup.expiresAt,
+        headers: headersForExtraction,
+        requestBody: body,
+      }));
     const installerSetupBypass = appaActive && installerConversation;
     if (installerSetupBypass) {
       logger.info(

@@ -52,6 +52,9 @@ const MCP = {
   url: "https://archestra.example.com/v1/mcp/prod-gateway",
 };
 
+const STARTER_PROMPT =
+  "What can you do with my Archestra tools from the prod_gateway MCP server? Do not call, test, reconnect or sign in to my other MCP servers. Leave them out of your answer.";
+
 const CODEX_CONFIG_WITH_TRAILING_TABLE = `model = "gpt-5"
 
 [mcp_servers.docs]
@@ -1541,9 +1544,7 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
   ] as const)("opencode (%s): the ending offers sign-in and a launch command", (platform) => {
     const script = renderSetupScript(fullContext("opencode", platform));
     expect(script).toContain(`opencode mcp auth ${MCP.serverName}`);
-    expect(script).toContain(
-      "opencode --prompt 'What can you do with my Archestra tools?'",
-    );
+    expect(script).toContain(`opencode --prompt '${STARTER_PROMPT}'`);
     expect(script).toContain("If OpenCode is already open, close it first");
     // No instructions addressed to an agent.
     expect(script).not.toContain("relay the URL");
@@ -1742,9 +1743,7 @@ ${script.slice(pluginStart, pluginEnd)}
     expect(script).toContain("ARCHESTRA_KILO_GUARD");
     expect(script).toContain("KILO_CONFIG_CONTENT");
     expect(script).toContain(`kilo mcp auth ${MCP.serverName}`);
-    expect(script).toContain(
-      "kilo --prompt 'What can you do with my Archestra tools?'",
-    );
+    expect(script).toContain(`kilo --prompt '${STARTER_PROMPT}'`);
     expect(script).toContain("If Kilo Code is already open, close it first");
     // The guard removes the handoff plugin it installed when it removes itself.
     expect(script).toContain(
@@ -3859,7 +3858,7 @@ describe("ending", () => {
   test("ends on the launch command and hands the installer the commands", () => {
     const script = renderSetupScript(fullContext("claude-code"));
     expect(script).toContain(
-      "Next: open a new terminal and run:\n\n  claude 'What can you do with my Archestra tools?'\nARCHESTRA_NEXT",
+      `Next: open a new terminal and run:\n\n  claude '${STARTER_PROMPT}'\nARCHESTRA_NEXT`,
     );
     // Run on its own, the script prints the ending; the installer reads it
     // from the marker instead.
@@ -3873,11 +3872,44 @@ describe("ending", () => {
       MCP.serverName,
     ]);
     expect(ending.launch).toEqual({
-      command: ["claude", "What can you do with my Archestra tools?"],
-      text: "claude 'What can you do with my Archestra tools?'",
+      command: ["claude", STARTER_PROMPT],
+      text: `claude '${STARTER_PROMPT}'`,
     });
   });
 });
+
+describe("starter prompt", () => {
+  test("keeps the agent on the gateway's server, with nothing PowerShell would mangle", () => {
+    const prompt = launchPrompt(fullContext("claude-code", "windows"));
+    expect(prompt).toBe(STARTER_PROMPT);
+    expect(prompt).not.toContain('"');
+  });
+
+  test("names no server whose name a prompt can't carry plainly", () => {
+    const prompt = launchPrompt({
+      ...fullContext("claude-code", "windows"),
+      mcp: { ...MCP, serverName: 'r&d "prod"' },
+    });
+    expect(prompt).toBe(
+      "What can you do with my Archestra tools from the MCP server Archestra added? Do not call, test, reconnect or sign in to my other MCP servers. Leave them out of your answer.",
+    );
+  });
+
+  test("asks about the setup when there is no gateway", () => {
+    expect(
+      launchPrompt({ ...fullContext("claude-code"), mcp: null, skills: null }),
+    ).toBe("What did Archestra set up for you?");
+  });
+});
+
+/** The prompt the ending's launch command starts the agent with. */
+function launchPrompt(ctx: SetupScriptContext): string | undefined {
+  const marker = renderSetupScript(ctx).match(
+    /^# archestra-ending: (\S+)$/m,
+  )?.[1];
+  return JSON.parse(Buffer.from(marker ?? "", "base64").toString()).launch
+    ?.command[1];
+}
 
 const CURSOR_APPLICATION_USER_KEY =
   "src.vs.platform.reactivestorage.browser.reactiveStorageServiceImpl.persistentStorage.applicationUser";

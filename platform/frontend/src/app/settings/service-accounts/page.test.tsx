@@ -290,6 +290,54 @@ test("offers row edits only on accounts the user holds an update grant for", asy
   ).not.toBeInTheDocument();
 });
 
+test("searches API key names and restores results after clearing", async () => {
+  const tokens = ["Deployment key", "Backup key"].map((name, index) => ({
+    id: `key-${index}`,
+    name,
+    tokenStart: `preview-${index}`,
+    disabled: false,
+    expiresAt: null,
+    lastUsedAt: null,
+    createdAt: account.createdAt,
+  }));
+  server.use(
+    http.get(`${origin}/api/service-accounts/:id`, () =>
+      HttpResponse.json({
+        ...account,
+        tokens,
+        tokenCount: 2,
+        activeTokenCount: 2,
+      }),
+    ),
+  );
+  const user = userEvent.setup();
+  render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <ServiceAccountsSettingsPage />
+    </QueryClientProvider>,
+  );
+  await user.click(await screen.findByRole("button", { name: account.name }));
+  await user.click(screen.getByRole("button", { name: "API keys" }));
+  expect(await screen.findByText("Deployment key")).toBeVisible();
+  expect(screen.getByText("Backup key")).toBeVisible();
+  const search = screen.getByPlaceholderText("Search API keys by name");
+  await user.type(search, "DEPLOY");
+  await waitFor(() =>
+    expect(screen.queryByText("Backup key")).not.toBeInTheDocument(),
+  );
+  expect(screen.getByText("Deployment key")).toBeVisible();
+  await user.clear(search);
+  expect(await screen.findByText("Backup key")).toBeVisible();
+  await user.type(search, "unknown");
+  expect(
+    await screen.findByText("No API keys match your filters"),
+  ).toBeVisible();
+});
+
 function mockServiceAccountGrants(
   grants: { resource: string; action: string; scope: string }[],
 ) {

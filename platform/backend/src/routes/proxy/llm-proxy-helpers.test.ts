@@ -11,6 +11,7 @@ import { vi } from "vitest";
 import { SESSION_ID_KEY } from "@/observability/request-context";
 import { describe, expect, test } from "@/test";
 import type { Agent, ToolCompressionStats } from "@/types";
+import { formatResponsesStreamErrorFrame } from "./adapters/responses-stream-error-frame";
 
 // Mock prom-client (required by metrics)
 vi.mock("prom-client", () => ({
@@ -88,6 +89,7 @@ import {
   recordBlockedToolCallMetrics,
   shouldForwardAnthropicBeta,
   toSpanUserInfo,
+  upstreamErrorMessage,
   withSessionContext,
 } from "./llm-proxy-helpers";
 
@@ -957,6 +959,73 @@ describe("handleError", () => {
       }),
     });
     expect(throwStatusFor(timedOut)).toBe(504);
+  });
+
+  // An upstream that closes its socket mid-stream surfaces from undici as a
+  // bare TypeError("terminated") with the reason on `cause`. The proxy names
+  // what happened, keeps the reason, and frames it as a retryable server
+  // error — not as a final "api_error" called "terminated".
+  function upstreamClosedSocket() {
+    return Object.assign(new TypeError("terminated"), {
+      cause: Object.assign(new Error("other side closed"), {
+        code: "UND_ERR_SOCKET",
+      }),
+    });
+  }
+  const CLOSED_MESSAGE =
+    "The model provider closed the connection before the response finished (other side closed). Retry the request.";
+
+  test("names a connection the upstream closed before headers commit", () => {
+    const { reply } = makeReply(false);
+    let thrown: unknown;
+    try {
+      handleError(
+        upstreamClosedSocket(),
+        reply,
+        extractMessage,
+        true,
+        () => undefined,
+      );
+    } catch (error) {
+      thrown = error;
+    }
+    expect((thrown as ApiError).statusCode).toBe(502);
+    expect((thrown as ApiError).message).toBe(CLOSED_MESSAGE);
+  });
+
+  test("frames a connection the upstream closed mid-stream as a retryable server error", () => {
+    const { reply, writes } = makeReply(true);
+
+    handleError(
+      upstreamClosedSocket(),
+      reply,
+      extractMessage,
+      true,
+      () => undefined,
+      formatResponsesStreamErrorFrame,
+    );
+
+    expect(writes).toHaveLength(1);
+    const payload = JSON.parse(writes[0].replace(/^data: /, ""));
+    expect(payload.error).toEqual({
+      type: "server_error",
+      code: "upstream_connection_closed",
+      message: CLOSED_MESSAGE,
+      param: null,
+    });
+  });
+
+  test("records the same description for the failed interaction", () => {
+    expect(upstreamErrorMessage(upstreamClosedSocket(), extractMessage)).toBe(
+      CLOSED_MESSAGE,
+    );
+    // A provider error with an HTTP status keeps the adapter's own message.
+    const providerError = Object.assign(new Error("terminated"), {
+      status: 500,
+    });
+    expect(upstreamErrorMessage(providerError, extractMessage)).toBe(
+      "terminated",
+    );
   });
 
   test("leaves an error that carries an explicit HTTP status untouched", () => {

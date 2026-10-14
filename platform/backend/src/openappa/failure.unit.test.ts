@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { openappaFailure } from "./failure";
+import { OpenappaRetiredAnnotatorError, openappaFailure } from "./failure";
 
 describe("openappaFailure", () => {
   test("names a refused policy and tells clients not to retry it", () => {
@@ -13,7 +13,7 @@ describe("openappaFailure", () => {
     expect(failure.shouldRetry).toBe(false);
     expect(failure.retryAfterSeconds).toBeUndefined();
     expect(failure.message).toBe(
-      'OpenAPPA could not safely complete this operation: the organization\'s guardrails policy was refused (unsupported policy: tool "grain__*" has an invalid qualified identity). An administrator can fix it on the OpenAPPA page.',
+      'OpenAPPA could not safely complete this operation: the organization\'s guardrails policy was refused (unsupported policy: tool "grain__*" has an invalid qualified identity). An administrator can fix it on the Guardrails page.',
     );
     expect(failure.cause).toBe(cause);
   });
@@ -66,6 +66,31 @@ describe("openappaFailure", () => {
       "OpenAPPA could not safely complete this operation: the policy runtime is unavailable.",
     );
     expect(failure.cause).toBe(cause);
+  });
+
+  test("a session whose annotator the policy retired is not retried", () => {
+    const cause = new OpenappaRetiredAnnotatorError("jev.tool-call");
+    const failure = openappaFailure(cause);
+
+    expect(failure.statusCode).toBe(409);
+    expect(failure.shouldRetry).toBe(false);
+    expect(failure.retryAfterSeconds).toBeUndefined();
+    expect(failure.message).toBe(
+      'OpenAPPA could not safely complete this operation: this conversation started under a policy that no longer declares annotator "jev.tool-call". Start a new conversation, or an administrator can declare "jev.tool-call" again on the Guardrails page.',
+    );
+    expect(failure.cause).toBe(cause);
+  });
+
+  test.each([
+    "OpenAPPA processing interrupted: annotator=x error=timeout",
+    "OpenAPPA processing interrupted: annotator=x error=unreachable",
+    "OpenAPPA processing interrupted: annotator=x error=unregistered",
+  ])("a runtime message alone does not decide retryability: %s", (message) => {
+    const failure = openappaFailure(new Error(message));
+
+    expect(failure.statusCode).toBe(503);
+    expect(failure.shouldRetry).toBe(true);
+    expect(failure.retryAfterSeconds).toBeGreaterThan(0);
   });
 
   test.each([

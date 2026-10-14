@@ -76,7 +76,8 @@ function duplicateEntryErrors(resolution: PolicyResolution): string[] {
  * it; one the document introduces is an error. Either way the held-back
  * batteries are named with it, since they are what the refusal is fixed by.
  * A held-back battery the document composes without is no refusal; its status
- * is the effective policy's to report.
+ * is the effective policy's to report. A document that composes is warned
+ * about each annotator the effective policy declares and it would drop.
  */
 async function deploymentRefusal(params: {
   organizationId: string;
@@ -87,8 +88,10 @@ async function deploymentRefusal(params: {
   const submitted = await openappaBatteriesService.composeInDeployment({
     organizationId,
     content,
+    previous,
   });
-  if (submitted.refusal.length === 0) return { errors: [], warnings: [] };
+  if (submitted.refusal.length === 0)
+    return { errors: [], warnings: submitted.retiring };
   const kept = new Set(
     previous === content
       ? submitted.refusal

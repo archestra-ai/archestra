@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 "use client";
 
 import type { IdentityProviderFormValues } from "@archestra/shared";
@@ -13,8 +14,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { useAppName } from "@/lib/hooks/use-app-name";
-import { getIdentityProviderClaimHint } from "./identity-provider-claim-hints";
+import { IdentityProviderSectionHeader } from "./identity-provider-section-header.ee";
 import { SsoTemplateDebugSection } from "./sso-template-debug-section.ee";
 
 interface TeamSyncConfigFormProps {
@@ -26,21 +26,6 @@ interface TeamSyncConfigFormProps {
   groupsExpressionDescription?: ReactNode;
 }
 
-const HANDLEBARS_EXAMPLES = [
-  {
-    expression: "{{#each groups}}{{this}},{{/each}}",
-    description: 'Simple flat array: ["admin", "users"]',
-  },
-  {
-    expression: "{{#each roles}}{{this.name}},{{/each}}",
-    description: 'Extract names from objects: [{name: "admin"}]',
-  },
-  {
-    expression: '{{{json (pluck roles "name")}}}',
-    description: "Extract names as JSON array using pluck helper",
-  },
-];
-
 export function TeamSyncConfigForm({
   form,
   identityProviderId,
@@ -49,18 +34,12 @@ export function TeamSyncConfigForm({
   groupsExpressionReadOnly = false,
   groupsExpressionDescription,
 }: TeamSyncConfigFormProps) {
-  const appName = useAppName();
-  const providerClaimHint = getIdentityProviderClaimHint(
-    form.watch("providerId"),
-  );
   const content = (
     <>
-      {providerClaimHint && (
-        <p className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-md">
-          {providerClaimHint.teamSyncNote}
-        </p>
-      )}
-
+      <IdentityProviderSectionHeader title="Team Sync">
+        Sync team membership from sign-in groups. Set each team’s external group
+        IDs in External Group Sync.
+      </IdentityProviderSectionHeader>
       {showEnabledField && (
         <FormField
           control={form.control}
@@ -76,9 +55,7 @@ export function TeamSyncConfigForm({
               <div className="space-y-1 leading-none">
                 <FormLabel>Enable Team Sync</FormLabel>
                 <FormDescription>
-                  When enabled, users are automatically added/removed from
-                  {` `}
-                  {appName} teams based on their SSO group memberships.
+                  Add and remove team members automatically when they sign in.
                 </FormDescription>
               </div>
             </FormItem>
@@ -95,9 +72,8 @@ export function TeamSyncConfigForm({
             <FormDescription>
               {groupsExpressionDescription ?? (
                 <>
-                  Handlebars template to extract group identifiers from SSO
-                  claims. Should render to a comma-separated list or JSON array.
-                  Leave empty to use default extraction.
+                  Extract group identifiers as a comma-separated list or JSON
+                  array. Leave empty to use the groups claim.
                 </>
               )}
             </FormDescription>
@@ -119,7 +95,7 @@ export function TeamSyncConfigForm({
         mode="team-sync"
         template={form.watch("teamSyncConfig.groupsExpression")}
         templateLabel="the team sync groups template"
-        examples={HANDLEBARS_EXAMPLES}
+        teamSyncEnabled={form.watch("teamSyncConfig.enabled") !== false}
       />
     </>
   );

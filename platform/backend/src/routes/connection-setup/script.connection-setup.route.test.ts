@@ -48,7 +48,7 @@ import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { clientConnectionService } from "@/services/client-connection";
 import {
   connectionSetupReference,
-  verifyConnectionProxySetupContext,
+  readVerifiedConnectionProxySetup,
 } from "@/services/connection-proxy-setup-context";
 import { grantEverywhere } from "@/test/wildcard-grants";
 
@@ -344,23 +344,23 @@ describe("GET /api/connection-setups/script/:token", () => {
           `/connection-setup/${token}/${provider}`,
         );
         expect(
-          verifyConnectionProxySetupContext({
+          readVerifiedConnectionProxySetup({
             token,
             organizationId,
             virtualApiKeyId: setup.virtualApiKeyId,
             proxyAgentId: setup.llmProxyId ?? "",
             secret: config.auth.secret,
           }),
-        ).toBe(true);
+        ).toBeDefined();
         expect(
-          verifyConnectionProxySetupContext({
+          readVerifiedConnectionProxySetup({
             token,
             organizationId,
             virtualApiKeyId: setup.virtualApiKeyId,
             proxyAgentId: "another-proxy",
             secret: config.auth.secret,
           }),
-        ).toBe(false);
+        ).toBeUndefined();
         if (clientId !== "claude-desktop") {
           // The installer prints the reference the proxy looks for in the
           // conversation that ran it, as plain text in its ending.

@@ -1621,7 +1621,10 @@ describe("model router proxy routes", () => {
       organizationId: org.id,
       agentType: "llm_proxy",
     });
-    const mappings = [{ provider, providerApiKeyId: key.id }];
+    const mappings: {
+      provider: SupportedProvider;
+      providerApiKeyId: string;
+    }[] = [{ provider, providerApiKeyId: key.id }];
     let credential: string;
     if (credentialKind === "oauth") {
       const client = await LlmOauthClientModel.create({

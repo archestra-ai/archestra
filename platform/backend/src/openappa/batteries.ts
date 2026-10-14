@@ -5,6 +5,7 @@ import type {
   PolicyEditInput,
 } from "@archestra/openappa-rs";
 import { matchBatteries, parseFullToolName } from "@archestra/shared";
+import { LRUCacheManager } from "@/cache-manager";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -15,12 +16,14 @@ import OpenAppaEffectivePolicyModel, {
   type EffectivePolicyValues,
 } from "@/models/openappa-effective-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
+import OpenAppaPolicyFileModel from "@/models/openappa-policy-file";
 import OrganizationModel from "@/models/organization";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ToolModel from "@/models/tool";
 import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service";
 import { CredentialAccess } from "@/services/credential-access";
+import { resolveCredentialValue } from "@/services/credentials";
 import {
   GUARDRAILS_REVISION_CONFLICT,
   guardrailsPolicyService,
@@ -67,6 +70,14 @@ import {
   packageContentHash,
   uploadedEntry,
 } from "./declarations";
+import { asRecord, parsePolicyToml } from "./policy-text";
+import {
+  type KeptAnnotator,
+  type OpeningPolicy,
+  readOpeningPolicy,
+  retiredAnnotators,
+  withKeptAnnotators,
+} from "./retired-annotators";
 
 /** A battery after a write, and the derived row that write stands for. */
 type BatteryWriteResult = {
@@ -84,6 +95,11 @@ class OpenAppaBatteriesService {
   private readonly recomposing = new Map<string, Slot<Recomposition>>();
   /** Concurrent dispatches of one organization share a single policy read. */
   private readonly reading = new Map<string, Promise<EffectivePolicy>>();
+  /** Stored opening policies never change, so each is parsed once. */
+  private readonly openings = new LRUCacheManager<OpeningPolicy | null>({
+    maxSize: 1_000,
+    defaultTtl: 0,
+  });
 
   /** Every battery this organization can include, bundled and uploaded, with its rows. */
   async listBatteries(organizationId: string): Promise<BatterySummary[]> {
@@ -331,16 +347,22 @@ class OpenAppaBatteriesService {
    * Compose `content` as a recompose would were it the root now, writing
    * nothing: the batteries this deployment holds back compose as the empty
    * battery. `refusal` is what the runtime refuses, empty when it composes;
-   * `heldBack` names each held-back battery and what brings it back.
+   * `heldBack` names each held-back battery and what brings it back;
+   * `retiring` names each annotator `previous` (the revision `content` would
+   * replace, the latest one unless given) declares that the composition would
+   * no longer declare, and whether the host keeps it for the sessions opened
+   * under earlier policies.
    */
   async composeInDeployment(params: {
     organizationId: string;
     content: string;
-  }): Promise<{ refusal: string[]; heldBack: string[] }> {
+    previous?: string;
+  }): Promise<{ refusal: string[]; heldBack: string[]; retiring: string[] }> {
     const { organizationId, content } = params;
-    const [root, installs] = await Promise.all([
+    const [root, installs, effective] = await Promise.all([
       guardrailsPolicyService.get(organizationId),
       OpenAppaBatteryInstallModel.list(organizationId),
+      OpenAppaEffectivePolicyModel.find(organizationId),
     ]);
     const planned = await this.plan({
       organizationId,
@@ -354,9 +376,21 @@ class OpenAppaBatteriesService {
       deployed: planned.deployed,
       held: new Set(held.map((battery) => battery.name)),
     });
+    const draft = composed.content ?? null;
+    const retiring =
+      draft === null
+        ? { warnings: [], refusal: [] }
+        : await this.retiringWarnings({
+            organizationId,
+            current: params.previous ?? root.content,
+            effective: effective?.content ?? null,
+            draft,
+            installs,
+          });
     return {
-      refusal: (composed.content ?? null) === null ? composed.errors : [],
+      refusal: draft === null ? composed.errors : retiring.refusal,
       heldBack: held.map(heldBackNote),
+      retiring: retiring.warnings,
     };
   }
 
@@ -911,7 +945,9 @@ class OpenAppaBatteriesService {
       effective.rootRevision === root.revision &&
       effective.installFingerprint.startsWith(COMPOSITION_VERSION) &&
       effective.installFingerprint.endsWith(
-        root.revision === 0 ? `:${root.contentHash}` : "",
+        `:${await this.retiredCredentialFingerprint(organizationId)}${
+          root.revision === 0 ? `:${root.contentHash}` : ""
+        }`,
       )
     )
       return effective;
@@ -979,6 +1015,8 @@ class OpenAppaBatteriesService {
       planned,
       batteries: this.composeInputs({ planned, installs }),
       root,
+      retiredCredentials:
+        await this.retiredCredentialFingerprint(organizationId),
     });
     // Catalogs, credentials or stored packages moved under the policy; only a
     // recomposition can say what the root composes to now.
@@ -1012,6 +1050,8 @@ class OpenAppaBatteriesService {
         planned,
         batteries: composed,
         root,
+        retiredCredentials:
+          await this.retiredCredentialFingerprint(organizationId),
       });
       // Same inputs give the same bytes, so the stored row already is the answer.
       if (
@@ -1033,13 +1073,15 @@ class OpenAppaBatteriesService {
           installs: await OpenAppaBatteryInstallModel.list(organizationId),
         };
       }
-      const values = await this.compose({
+      const { values, retired } = await this.compose({
+        organizationId,
         root: planned.root,
         roster: planned.roster,
         planned: planned.batteries,
         composed,
         installFingerprint,
         previousContent: expected?.content ?? null,
+        installs,
       });
       if (values.error === null) {
         // The kept rows still carry the refusal this composition lifts.
@@ -1061,6 +1103,7 @@ class OpenAppaBatteriesService {
         values,
         expected,
       });
+      if (policy) logRetired({ organizationId, ...retired });
       if (policy)
         return {
           ...planned,
@@ -1118,14 +1161,23 @@ class OpenAppaBatteriesService {
     });
   }
 
+  /**
+   * Compose the root with its batteries. Annotators an opening policy of a
+   * stored session declares and this composition does not are declared again
+   * as that policy bound them (see `retired-annotators.ts`). The resulting
+   * host-composed document is validated by the runtime. A kept
+   * annotator the runtime refuses is left out rather than refusing the policy.
+   */
   private async compose(params: {
+    organizationId: string;
     root: GuardrailsPolicy;
     roster: HostMemberRoster;
     planned: readonly PlannedBattery[];
     composed: ComposeBatteryInput[];
     installFingerprint: string;
     previousContent: string | null;
-  }): Promise<EffectivePolicyValues> {
+    installs: readonly BatteryInstall[];
+  }): Promise<{ values: EffectivePolicyValues; retired: Retirement }> {
     const { root, planned, composed, installFingerprint, previousContent } =
       params;
     const native = await loadNative();
@@ -1139,20 +1191,217 @@ class OpenAppaBatteriesService {
     // before deciding whether the runtime refused: an identity test against
     // `null` alone silently stores a refusal as a clean composition.
     const accepted = result.content ?? null;
-    // The root alone is no longer enforceable — its include entries are the
-    // host's to answer — so a refusal keeps the last composition that opened.
-    const content = accepted ?? previousContent ?? root.content;
-    return {
+    const values = (content: string, error: string | null) => ({
       content,
       contentHash: hash(content),
       rootRevision: root.revision,
       installFingerprint,
-      error:
-        accepted === null
-          ? [...result.errors, ...heldBack(planned).map(heldBackNote)].join(
-              "\n",
-            )
-          : null,
+      error,
+    });
+    if (accepted === null)
+      return {
+        // The root alone is no longer enforceable — its include entries are
+        // the host's to answer — so a refusal keeps the last composition
+        // that opened.
+        values: values(
+          previousContent ?? root.content,
+          [...result.errors, ...heldBack(planned).map(heldBackNote)].join("\n"),
+        ),
+        retired: NOTHING_RETIRED,
+      };
+    const retired = await this.retiredAnnotators({
+      organizationId: params.organizationId,
+      composed: accepted,
+      installs: params.installs,
+    });
+    if (retired.refusal.length > 0)
+      return {
+        values: values(previousContent ?? accepted, retired.refusal.join("\n")),
+        retired,
+      };
+    const keep = async (kept: readonly KeptAnnotator[]) => {
+      // Opening snapshots contain host-bound helpers, not authored input. Keep
+      // their bridge credentials intact without relaxing the root validator.
+      const text = withKeptAnnotators(accepted, kept);
+      if (text === null) return { content: null, errors: ["root is not TOML"] };
+      const errors = await native.validateHostedOpenappaPolicy(text);
+      return { content: errors.length === 0 ? text : null, errors };
+    };
+    let kept = retired.kept;
+    const dropped = [...retired.dropped];
+    let content = kept.length > 0 ? (await keep(kept)).content : accepted;
+    if (content === null) {
+      // One kept annotator the runtime refuses must not take the others down.
+      const alone = await Promise.all(
+        kept.map(async (annotator) => ({
+          annotator,
+          ...(await keep([annotator])),
+        })),
+      );
+      for (const { annotator, content, errors } of alone)
+        if (content === null)
+          dropped.push({ name: annotator.name, reason: errors.join("; ") });
+      kept = alone.flatMap(({ annotator, content }) =>
+        content === null ? [] : [annotator],
+      );
+      content = kept.length > 0 ? (await keep(kept)).content : null;
+      if (content === null) kept = [];
+    }
+    return {
+      values: values(content ?? accepted, null),
+      retired: { ...retired, kept, dropped },
+    };
+  }
+
+  /** What `retiredAnnotators` makes of this organization's stored opening policies now. */
+  private async retiredAnnotators(params: {
+    organizationId: string;
+    composed: string;
+    installs: readonly BatteryInstall[];
+    extraOpening?: string;
+  }): Promise<Retirement> {
+    const openings = await this.openingPolicies();
+    const extra =
+      params.extraOpening === undefined
+        ? null
+        : readOpeningPolicy(hash(params.extraOpening), params.extraOpening);
+    const candidates = extra ? [...openings, extra] : openings;
+    const readable = await this.readableCredentialKeys({
+      organizationId: params.organizationId,
+      openings: candidates,
+    });
+    return retiredAnnotators({
+      openings: candidates,
+      composed: params.composed,
+      readable,
+      helperBase: helperUrlBase(""),
+      installs: new Set(params.installs.map((install) => install.id)),
+    });
+  }
+
+  /**
+   * Every policy a stored session opened under, parsed.
+   *
+   * The runtime ledger has no organization column. That is safe here because a
+   * deployment serves one organization; credential and helper checks still use
+   * that organization's readable keys and installs.
+   */
+  private async openingPolicies(): Promise<OpeningPolicy[]> {
+    const rows = await OpenAppaPolicyFileModel.list();
+    return rows.flatMap(({ hash, bytes }) => {
+      let opening = this.openings.get(hash);
+      if (opening === undefined) {
+        // node-postgres reads bytea as a Buffer, PGlite as a bare Uint8Array.
+        opening = readOpeningPolicy(hash, Buffer.from(bytes).toString("utf8"));
+        this.openings.set(hash, opening);
+        if (opening === null)
+          logger.error(
+            { policyHash: hash },
+            "OpenAPPA skipped a stored opening policy that is not valid TOML",
+          );
+      }
+      return opening ? [opening] : [];
+    });
+  }
+
+  /** Only availability, never secret values, participates in composition freshness. */
+  private async retiredCredentialFingerprint(
+    organizationId: string,
+  ): Promise<string> {
+    const openings = await this.openingPolicies();
+    const readable = await this.readableCredentialKeys({
+      organizationId,
+      openings,
+    });
+    const keys = [
+      ...new Set(
+        openings.flatMap((opening) => Object.values(opening.credentials)),
+      ),
+    ]
+      .filter((key): key is string => typeof key === "string")
+      .sort();
+    return hash(JSON.stringify(keys.map((key) => [key, readable.has(key)])));
+  }
+
+  /** A connection row alone does not prove its organization secret can still be read. */
+  private async readableCredentialKeys(params: {
+    organizationId: string;
+    openings: readonly OpeningPolicy[];
+  }): Promise<ReadonlySet<string>> {
+    const requested = new Set(
+      params.openings.flatMap((opening) => Object.values(opening.credentials)),
+    );
+    if (requested.size === 0) return new Set();
+    const keys = [...(await this.bindableKeys(params.organizationId))].filter(
+      (key) => requested.has(key),
+    );
+    const resolved = await mapWithConcurrency(
+      keys,
+      RECOMPILE_CONCURRENCY,
+      (key) =>
+        resolveCredentialValue({
+          organizationId: params.organizationId,
+          credentialId: key,
+          scope: "organization",
+        }),
+    );
+    return new Set(
+      keys.filter((_, index) => {
+        const result = resolved[index];
+        return (
+          result.status === "fulfilled" &&
+          result.value !== null &&
+          result.value.length > 0
+        );
+      }),
+    );
+  }
+
+  /**
+   * One line per annotator the current root composes that the draft would no
+   * longer declare: kept for the sessions opened under earlier policies, or
+   * why it cannot be. The effective policy counts as an opening policy, since
+   * the next session opens under it.
+   */
+  private async retiringWarnings(params: {
+    organizationId: string;
+    current: string;
+    effective: string | null;
+    draft: string;
+    installs: readonly BatteryInstall[];
+  }): Promise<{ warnings: string[]; refusal: string[] }> {
+    const resolution = await openappaDeclarations.resolve({
+      organizationId: params.organizationId,
+      content: params.current,
+    });
+    const declared = new Set([
+      ...annotatorNames(params.current),
+      ...resolution.entries.flatMap((entry) => entry.battery?.annotators ?? []),
+    ]);
+    const retired = await this.retiredAnnotators({
+      organizationId: params.organizationId,
+      composed: params.draft,
+      installs: params.installs,
+      extraOpening: params.effective ?? undefined,
+    });
+    return {
+      refusal: retired.refusal,
+      warnings: [
+        ...retired.kept.flatMap(({ name, binding }) =>
+          declared.has(name)
+            ? [
+                `annotator "${name}" would no longer be declared; sessions opened under earlier policies still ask for it. The host keeps its previous binding (${binding}) for them.`,
+              ]
+            : [],
+        ),
+        ...retired.dropped.flatMap(({ name, reason }) =>
+          declared.has(name)
+            ? [
+                `annotator "${name}" would no longer be declared and cannot be kept for sessions opened under earlier policies (${reason}); those sessions will be told to start a new conversation.`,
+              ]
+            : [],
+        ),
+      ],
     };
   }
 
@@ -2018,11 +2267,10 @@ function heldBackRemedy(battery: HeldBackBattery): string {
   }
 }
 
-// Recompose legacy documents that froze an unstated 64 KiB body limit before
-// explicit policy limits took precedence over the host default (v2), and rows
-// derived before they recorded the target each battery deploys as (v3), and
-// compositions before the host filled the member rosters it declares (v4).
-const COMPOSITION_VERSION = "v4:";
+// Recompose legacy rows with implicit 64 KiB limits (v2), rows that do not
+// record their deployed battery target (v3), rows before host member rosters
+// (v4), and rows without retained original annotator bindings (v5).
+const COMPOSITION_VERSION = "v5:";
 
 /**
  * What a stored composition answers: the batteries it composed, the credential
@@ -2032,6 +2280,7 @@ function compositionFingerprint(params: {
   planned: PlannedComposition;
   batteries: ComposeBatteryInput[];
   root: GuardrailsPolicy;
+  retiredCredentials: string;
 }): string {
   const { planned, batteries, root } = params;
   const held = heldBack(planned.batteries).map(heldBackNote);
@@ -2047,6 +2296,7 @@ function compositionFingerprint(params: {
         ...(held.length > 0 ? { held } : {}),
       }),
     ) +
+    `:${params.retiredCredentials}` +
     (root.revision === 0 ? `:${root.contentHash}` : "")
   );
 }
@@ -2292,4 +2542,53 @@ function sleep(ms: number): Promise<void> {
 
 function hash(content: string): string {
   return createHash("sha256").update(content).digest("hex");
+}
+
+/** The annotators a composition keeps for earlier sessions, and those it cannot. */
+type Retirement = {
+  kept: KeptAnnotator[];
+  dropped: { name: string; reason: string }[];
+  conflicts: string[];
+  refusal: string[];
+};
+
+const NOTHING_RETIRED: Retirement = {
+  kept: [],
+  dropped: [],
+  conflicts: [],
+  refusal: [],
+};
+
+/** One warning per stored composition that keeps annotators, one per name it cannot keep. */
+function logRetired(params: Retirement & { organizationId: string }): void {
+  const { organizationId, kept, dropped, conflicts } = params;
+  if (kept.length > 0)
+    logger.warn(
+      {
+        organizationId,
+        kept: kept.map(({ name, binding }) => ({ name, binding })),
+      },
+      "OpenAPPA kept retired externals for sessions opened under earlier policies",
+    );
+  for (const { name, reason } of dropped)
+    logger.warn(
+      { organizationId, annotator: name, reason },
+      "OpenAPPA cannot keep a retired annotator for sessions opened under earlier policies",
+    );
+  if (conflicts.length > 0)
+    logger.info(
+      { organizationId, annotators: conflicts },
+      "OpenAPPA earlier opening policies require different bindings for a retired annotator; the name cannot be kept",
+    );
+}
+
+/** The names the `[[policy.annotator]]` tables of a document declare. */
+function annotatorNames(content: string): string[] {
+  const annotators = asRecord(parsePolicyToml(content)?.policy)?.annotator;
+  return Array.isArray(annotators)
+    ? annotators.flatMap((table) => {
+        const name = asRecord(table)?.name;
+        return typeof name === "string" ? [name] : [];
+      })
+    : [];
 }

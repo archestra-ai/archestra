@@ -287,6 +287,12 @@ export interface PolicyEditInput {
   key?: string
 }
 
+/**
+ * The policy text the runtime stored when `root` opened. Absent when the root
+ * has no log. This is the opening document, not an error message.
+ */
+export declare function readOpenappaOpeningPolicy(root: string): Promise<string | null>
+
 export declare function readPeerMessage(input: string, policy: DispatchPolicy): Promise<string>
 
 /**
@@ -317,6 +323,14 @@ export interface TokenEnvReader {
   variable: string
   reader: string
 }
+
+/**
+ * Validates a document already composed by the host, including host-owned helper
+ * token bindings. Never use this for authored root or battery text: those must
+ * pass their existing input checks before the host adds its bindings.
+ * Validation defers secret lookup and opens no store or network connection.
+ */
+export declare function validateHostedOpenappaPolicy(content: string): Promise<Array<string>>
 
 /**
  * Validates a root document that declares no battery: [`compose_openappa_policy`]

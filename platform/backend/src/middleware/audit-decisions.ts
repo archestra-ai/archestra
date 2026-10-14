@@ -870,6 +870,10 @@ export const AUDIT_DECISIONS = {
   // =========================================================================
   // ChatOps runtime
   // =========================================================================
+  chatopsUserAdmissionsTable: {
+    audited: false,
+    reason: "pending ChatOps execution admission; runtime state",
+  },
   chatopsProcessedMessagesTable: {
     audited: false,
     reason: "ChatOps message dedup; runtime state",

@@ -57,6 +57,7 @@ const install = (fields: Partial<Install> = {}): Install => ({
   catalogId,
   batteryName: "github",
   enabled: true,
+  target: null,
   packageHash: null,
   lastError: null,
   credentialBindings: {},

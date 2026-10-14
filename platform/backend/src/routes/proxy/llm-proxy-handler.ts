@@ -179,8 +179,9 @@ import {
 import {
   carriesConnectionSetupReference,
   connectionProxySetupContext,
-  verifyConnectionProxySetupContext,
+  readVerifiedConnectionProxySetup,
 } from "@/services/connection-proxy-setup-context";
+import { claimConnectionSetupConversation } from "@/services/connection-setup-conversation-claim";
 import { nativeSetupClientFromProvenance } from "@/services/connection-setup-scope";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
@@ -225,6 +226,7 @@ import {
   calculateInteractionCosts,
   calculateUsageCost,
   handleError,
+  isRetryableUpstreamConnectionFailure,
   planDispatchModeToolCallRewrites,
   recordBlockedToolCallMetrics,
   shouldForwardAnthropicBeta,
@@ -235,6 +237,10 @@ import {
   withSessionContext,
 } from "./llm-proxy-helpers";
 import { StreamKeepAlive } from "./stream-keepalive";
+import {
+  openUpstreamWithRetry,
+  withFirstChunk,
+} from "./upstream-connection-retry";
 import * as utils from "./utils";
 import {
   type EncryptedChatAuditDisposition,
@@ -1544,23 +1550,26 @@ export async function handleLLMProxy<
     let appaIdentity: AppaSessionIdentity = {};
     let hasNativeClientSession = false;
     const approvedProxySetupContext = connectionProxySetupContext(request.raw);
-    const approvedProxySetup =
-      !!approvedProxySetupContext &&
-      [virtualKeyId, passthroughVirtualKeyId].some(
-        (keyId) =>
-          !!keyId &&
-          verifyConnectionProxySetupContext({
-            token: approvedProxySetupContext,
-            organizationId: resolvedAgent.organizationId,
-            virtualApiKeyId: keyId,
-            proxyAgentId: resolvedAgent.id,
-            secret: config.auth.secret,
-          }),
-      );
+    let verifiedProxySetup: ReturnType<typeof readVerifiedConnectionProxySetup>;
+    if (approvedProxySetupContext) {
+      for (const keyId of [virtualKeyId, passthroughVirtualKeyId]) {
+        if (!keyId) continue;
+        verifiedProxySetup = readVerifiedConnectionProxySetup({
+          token: approvedProxySetupContext,
+          organizationId: resolvedAgent.organizationId,
+          virtualApiKeyId: keyId,
+          proxyAgentId: resolvedAgent.id,
+          secret: config.auth.secret,
+        });
+        if (verifiedProxySetup) break;
+      }
+    }
+    const approvedProxySetup = verifiedProxySetup !== undefined;
     // The setup URL stays in the client's settings for the whole window, so
-    // sessions started after the setup send it too. Only the conversation
-    // that ran the installer holds the setup reference the installer printed.
-    const installerConversation =
+    // sessions started after the setup send it too. The reference must be in
+    // this request, and the first well-formed native conversation to present
+    // it owns the exemption until the token expires.
+    const carriesReference =
       approvedProxySetup &&
       !!approvedProxySetupContext &&
       carriesConnectionSetupReference({
@@ -1568,6 +1577,16 @@ export async function handleLLMProxy<
         requestBody: body,
         secret: config.auth.secret,
       });
+    const installerConversation =
+      carriesReference &&
+      verifiedProxySetup !== undefined &&
+      (await claimConnectionSetupConversation({
+        organizationId: verifiedProxySetup.organizationId,
+        setupId: verifiedProxySetup.setupId,
+        expiresAt: verifiedProxySetup.expiresAt,
+        headers: headersForExtraction,
+        requestBody: body,
+      }));
     const installerSetupBypass = appaActive && installerConversation;
     if (installerSetupBypass) {
       logger.info(
@@ -2364,12 +2383,13 @@ export async function handleLLMProxy<
 
     // Start with the credential-derived billing mode. Anthropic OAuth requests
     // can refine this after the upstream response identifies paid overage.
-    let billingMode = utils.resolveInteractionBillingMode({
+    const credentialBillingMode = utils.resolveInteractionBillingMode({
       isSubscriptionCredential:
         openAiCodexPassthrough !== undefined ||
         provider.isSubscriptionCredential?.(apiKey) === true,
       autodetectEnabled: config.llmCost.subscriptionAutodetect,
     });
+    let billingMode = credentialBillingMode;
 
     // Create client with observability (each provider handles metrics internally)
     const abortSignal =
@@ -2389,7 +2409,8 @@ export async function handleLLMProxy<
       onResponseHeaders: (responseHeaders) => {
         if (providerName === "anthropic") {
           billingMode = utils.refineAnthropicBillingModeFromHeaders({
-            billingMode,
+            // A retry's response must not inherit a failed attempt's overage.
+            billingMode: credentialBillingMode,
             headers: responseHeaders,
           });
         }
@@ -2942,7 +2963,22 @@ async function handleStreaming<
         if (pluginRegistry && pluginContext) {
           await pluginRegistry.onBeforeModel({ ...pluginContext, request });
         }
-        const stream = await provider.executeStream(client, request);
+        const stream = await openUpstreamWithRetry({
+          open: async () =>
+            withFirstChunk(await provider.executeStream(client, request)),
+          // Gemini's SDK loses the HTTP status when an error body is cut off;
+          // that is indistinguishable from a transport failure, so don't retry.
+          isRetryable: (error) =>
+            providerName !== "gemini" &&
+            isRetryableUpstreamConnectionFailure(error),
+          shouldContinue: () => !reply.raw.destroyed,
+          onRetry: (event) =>
+            logUpstreamRetry({
+              ...event,
+              provider: providerName,
+              model: actualModel,
+            }),
+        });
         billingMode = getBillingMode();
 
         // Record request duration at stream establishment for providers whose
@@ -3747,7 +3783,20 @@ async function handleNonStreaming<
         if (pluginRegistry && pluginContext) {
           await pluginRegistry.onBeforeModel({ ...pluginContext, request });
         }
-        result = await provider.execute(client, request);
+        result = await openUpstreamWithRetry({
+          open: () => provider.execute(client, request),
+          // See the streaming path: Gemini cannot safely classify this boundary.
+          isRetryable: (error) =>
+            providerName !== "gemini" &&
+            isRetryableUpstreamConnectionFailure(error),
+          shouldContinue: () => !reply.raw.destroyed,
+          onRetry: (event) =>
+            logUpstreamRetry({
+              ...event,
+              provider: providerName,
+              model: actualModel,
+            }),
+        });
         if (ctx.connectionVerification) assertVerificationResponse(result);
         billingMode = getBillingMode();
       } catch (error) {
@@ -4706,6 +4755,19 @@ function firstHeaderValue(
   value: string | string[] | undefined,
 ): string | undefined {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function logUpstreamRetry(params: {
+  attempt: number;
+  delayMs: number;
+  provider: string;
+  model: string;
+}): void {
+  const { attempt, delayMs, provider, model } = params;
+  logger.warn(
+    { attempt, delayMs, provider, model },
+    "Retrying upstream connection before receiving model output",
+  );
 }
 
 function normalizeVirtualKeyCandidate(

@@ -69,18 +69,19 @@ describe("GET /api/openappa/coverage/summary", () => {
     expect(result.totals).toEqual({
       tools: 10,
       root: 2,
-      battery: 5,
-      notEnforced: 2,
+      battery: 7,
+      notEnforced: 0,
       notCovered: 1,
       catchAll: 0,
     });
-    // Gh's battery needs a credential, so neither of its rules holds.
+    // GitHub waits on the token for its multi-user target; its base composes,
+    // so both of its rules hold.
     expect(result.batteries).toEqual({
       active: [
         { name: "acme", tools: 3 },
         { name: "microsoft-learn", tools: 2 },
       ],
-      broken: [{ name: "github", status: "missing_credentials", tools: 2 }],
+      broken: [{ name: "github", status: "missing_credentials", tools: 0 }],
       available: [],
     });
   });

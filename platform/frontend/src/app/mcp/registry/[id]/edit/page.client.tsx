@@ -3,6 +3,8 @@
 import { ArrowLeft, ArrowRight, PackageX } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useRef } from "react";
+import { OpenAppaChatButton } from "@/app/openappa/_parts/openappa-chat-button";
+import { AppaKeeperIcon } from "@/components/appa-keeper-icon";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
@@ -17,6 +19,7 @@ import {
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WizardFooter } from "@/components/wizard-footer";
+import { useFeature } from "@/lib/config/config.query";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import {
   SETUP_STEPS,
@@ -119,6 +122,7 @@ function SetupWizard({
   const hideNext = step === "test" && !testTarget;
 
   const detailHref = `/mcp/registry/${item.id}`;
+  const openappaEnabled = useFeature("openappaEnabled") === true;
   // Which of the configuration step's two submit buttons asked for the save
   // in flight: "Save" finishes on the server's page (one field changed is one
   // save, not a walk through the remaining steps), "Save & Continue" moves on
@@ -266,9 +270,22 @@ function SetupWizard({
               </Button>
             )
           ) : (
-            <Button size="sm" onClick={() => router.push(detailHref)}>
-              Finish
-            </Button>
+            <div className="flex items-center gap-2">
+              {openappaEnabled && (
+                <OpenAppaChatButton
+                  variant="outline"
+                  size="sm"
+                  promptKey="improveCoverage"
+                  target={{ kind: "mcp_server", id: item.id, name: item.name }}
+                >
+                  <AppaKeeperIcon />
+                  <span>Configure Guardrails with agent</span>
+                </OpenAppaChatButton>
+              )}
+              <Button size="sm" onClick={() => router.push(detailHref)}>
+                Finish
+              </Button>
+            </div>
           )}
         </WizardFooter>
       )}

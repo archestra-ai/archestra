@@ -158,7 +158,7 @@ describe("buildAgentSystemPrompt", () => {
       userId: user.id,
       agentId: agent.id,
     };
-    const choiceRule = `When you need a decision, a clarification, a preference, or an approval from the user, ask with ${askUserToolName}. The user then answers in the client's question interface. Ask multiple-choice questions with ${askUserToolName} too, not in plain text.`;
+    const choiceRule = `When you need a decision, a clarification, a preference, or an approval from the user, ask with ${askUserToolName}. The user then answers in the client's question interface. Ask multiple-choice questions with ${askUserToolName} too, not in plain text. A link or command the user must open or run goes in your reply text, not in the question.`;
 
     // Chat: the stream shows the question and waits for the answer.
     const chat = await buildAgentSystemPrompt({

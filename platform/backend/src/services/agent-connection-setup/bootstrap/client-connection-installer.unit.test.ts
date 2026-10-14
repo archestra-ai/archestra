@@ -225,7 +225,7 @@ test("Copilot prints saved credentials once in the final instructions, after the
   const credentials = result.output.indexOf(
     "export COPILOT_PROVIDER_API_KEY='test-key'",
   );
-  const signIn = result.output.indexOf("Sign in to Test tools");
+  const signIn = result.output.indexOf("Authorize Copilot CLI for the");
   expect(summary).toBeGreaterThan(-1);
   expect(optional).toBeGreaterThan(summary);
   expect(credentials).toBeGreaterThan(optional);
@@ -234,7 +234,7 @@ test("Copilot prints saved credentials once in the final instructions, after the
     result.output.match(/^ {2}export COPILOT_PROVIDER_API_KEY=/gm),
   ).toHaveLength(1);
   expect(result.output).toContain(
-    "copilot -i 'What can you do with my Test tools?'",
+    "copilot -i 'What can you do with my Test tools from the test MCP server? Do not call, test, reconnect or sign in to my other MCP servers. Leave them out of your answer.'",
   );
 });
 
@@ -452,7 +452,12 @@ test.each([
     label: "OpenCode",
     appName: "Test",
     parts: [],
-    signIn: { command, text: command.join(" "), howTo: "Sign in later." },
+    signIn: {
+      command,
+      text: command.join(" "),
+      howTo: "Sign in later.",
+      gatewayName: "test",
+    },
     launch: null,
     notes: [],
   };

@@ -6,6 +6,7 @@ import { enterpriseTier } from "@/enterprise-tier";
 import IdentityProviderModel from "@/models/identity-provider.ee";
 import SsoPendingUserModel from "@/models/sso-pending-user.ee";
 import UserModel from "@/models/user";
+import { openappaBatteriesService } from "@/openappa/batteries";
 
 /**
  * Only the verified SSO callback may reconcile a pending Teams user. Copy the
@@ -24,6 +25,7 @@ export function withSsoEmailReconciliation(ctx: HookEndpointContext) {
     ...adapter,
     updateUser: async (...args: Parameters<typeof adapter.updateUser>) => {
       const [userId, data] = args;
+      let reconciledOrganizationId: string | undefined;
       if (typeof data.email === "string") {
         const user = await UserModel.getById(userId);
         const email = data.email.toLowerCase();
@@ -63,6 +65,8 @@ export function withSsoEmailReconciliation(ctx: HookEndpointContext) {
                   requestPath: path,
                 })
               : "conflict";
+            if (result === "reconciled")
+              reconciledOrganizationId = provider.organizationId;
             if (result === "conflict")
               throw new APIError("CONFLICT", {
                 code: "SSO_EMAIL_CONFLICT",
@@ -72,7 +76,14 @@ export function withSsoEmailReconciliation(ctx: HookEndpointContext) {
           }
         }
       }
-      return adapter.updateUser(...args);
+      const updated = await adapter.updateUser(...args);
+      // Reconciliation changes the email atomically before the adapter hook
+      // can detect it, so refresh the host member roster explicitly here.
+      if (reconciledOrganizationId)
+        await openappaBatteriesService.recompileOrganizations([
+          reconciledOrganizationId,
+        ]);
+      return updated;
     },
   };
 }

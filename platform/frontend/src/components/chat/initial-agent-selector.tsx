@@ -178,6 +178,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
     enabled: open || afterFirstPaint,
   });
   const groupIdPrefix = useId();
+  const toolSummaryId = useId();
   const agentGroups = useMemo(
     () => groupInitialAgents({ agents: filteredAgents, userId, pinnedIds }),
     [filteredAgents, userId, pinnedIds],
@@ -308,6 +309,10 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
         })),
     ];
   }, [currentAgent, knowledgeBasesData, connectorsData]);
+
+  const hasNonBuiltInTools =
+    triggerSubagents.length > 0 ||
+    assignedServers.some((server) => !isBuiltInCatalogId(server.catalog.id));
 
   // The icons are "known" once this agent's own data has arrived; until then
   // the slot shows placeholders, never the previous agent's icons.
@@ -488,6 +493,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
               role="combobox"
               aria-expanded={open}
               aria-label={displayAgentName}
+              aria-describedby={toolSummaryId}
               data-agent-selector
               onKeyDown={navigation.onTriggerKeyDown}
               className="min-w-0"
@@ -497,12 +503,37 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                 {displayAgentName}
               </span>
               {/* In Auto mode the agent reaches everything dynamically, so
-                  per-server icons would mean nothing; the chip is part of
-                  the agent's own button rather than a second control. */}
-              {currentAgent?.accessAllTools && (
+                  per-server icons would mean nothing. Either way the chip or
+                  the icons are part of the agent's own button rather than a
+                  second control. */}
+              {currentAgent?.accessAllTools ? (
                 <Badge variant="secondary" className="shrink-0">
                   All tools
                 </Badge>
+              ) : !triggerIconsLoaded ? (
+                <span
+                  className="flex min-w-14 shrink-0 items-center"
+                  aria-hidden="true"
+                  data-testid="agent-tools-placeholder"
+                >
+                  {[0, 1, 2].map((index) => (
+                    <span
+                      key={index}
+                      className="-ml-1.5 size-5 rounded-full border-2 border-background bg-muted first:ml-0 animate-pulse"
+                    />
+                  ))}
+                </span>
+              ) : (
+                <AgentToolIcons
+                  descriptionId={toolSummaryId}
+                  agentName={displayAgentName}
+                  subagents={triggerSubagents}
+                  servers={assignedServers}
+                  knowledgeSources={knowledgeSources}
+                  missingCatalogIds={missingCatalogIds}
+                  canEdit={canEditCurrentAgent}
+                  onOpenChange={setSummaryOpen}
+                />
               )}
               {runtimeEnabled && currentAgent?.runtime && (
                 <RuntimeCapableIndicator runtime={currentAgent.runtime} />
@@ -619,40 +650,17 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
           </PopoverContent>
         </Popover>
 
-        {currentAgent?.accessAllTools ? null : !triggerIconsLoaded ? (
-          <span
-            className="ml-1 flex min-w-14 items-center"
-            aria-hidden="true"
-            data-testid="agent-tools-placeholder"
-          >
-            {[0, 1, 2].map((index) => (
-              <span
-                key={index}
-                className="-ml-1.5 size-5 rounded-full border-2 border-background bg-muted first:ml-0 animate-pulse"
-              />
-            ))}
-          </span>
-        ) : (
-          <AgentToolSummary
-            agentName={displayAgentName}
-            subagents={triggerSubagents}
-            servers={assignedServers}
-            knowledgeSources={knowledgeSources}
-            missingCatalogIds={missingCatalogIds}
-            canEdit={canEditCurrentAgent}
-            onOpenChange={setSummaryOpen}
-            onOpenTools={() =>
-              currentAgent
-                ? canEditCurrentAgent
-                  ? openQuickEdit(currentAgent.id)
-                  : setOpen(true)
-                : undefined
-            }
-            onAddTools={() =>
-              currentAgent && openQuickEdit(currentAgent.id, "add-tools")
-            }
-          />
-        )}
+        {/* A button cannot nest inside the agent's, so the shortcut for an
+            agent with no tools of its own sits just after it. */}
+        {currentAgent &&
+          !currentAgent.accessAllTools &&
+          triggerIconsLoaded &&
+          canEditCurrentAgent &&
+          !hasNonBuiltInTools && (
+            <AddToolsButton
+              onClick={() => openQuickEdit(currentAgent.id, "add-tools")}
+            />
+          )}
       </div>
 
       {/* Outside the popover on purpose: connecting closes the list, and a
@@ -1016,12 +1024,13 @@ type SummaryKnowledge = {
 };
 
 /**
- * The icon group beside the agent's name. Hovering lists what the agent can
- * use; clicking opens its settings (or the picker, for an agent the user
- * cannot edit). It is its own button rather than part of the name's, so each
- * has its own focus ring and label.
+ * The icon group inside the agent's button, after its name. Hovering lists
+ * what the agent can use; clicking is the button's own click (the picker).
+ * `descriptionId` labels the summary the button points at, so screen readers
+ * hear it without a hover.
  */
-function AgentToolSummary({
+function AgentToolIcons({
+  descriptionId,
   agentName,
   subagents,
   servers,
@@ -1029,9 +1038,8 @@ function AgentToolSummary({
   missingCatalogIds,
   canEdit,
   onOpenChange,
-  onOpenTools,
-  onAddTools,
 }: {
+  descriptionId: string;
   agentName: string;
   subagents: { id: string; name: string; icon?: string | null }[];
   servers: SummaryServer[];
@@ -1039,12 +1047,7 @@ function AgentToolSummary({
   missingCatalogIds: Set<string>;
   canEdit: boolean;
   onOpenChange: (open: boolean) => void;
-  onOpenTools: () => void;
-  onAddTools: () => void;
 }) {
-  const hasNonBuiltInTools =
-    subagents.length > 0 ||
-    servers.some((server) => !isBuiltInCatalogId(server.catalog.id));
   const icons = [
     ...subagents.map((agent) => ({
       key: agent.id,
@@ -1073,26 +1076,7 @@ function AgentToolSummary({
       })),
   ];
 
-  const addButton = canEdit && !hasNonBuiltInTools && (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          aria-label="Add tools"
-          onClick={onAddTools}
-          className="-ml-1 rounded-full bg-muted hover:bg-muted/80 size-5"
-        >
-          <Plus className="size-3 text-muted-foreground" />
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent side="top">Add tools</TooltipContent>
-    </Tooltip>
-  );
-
-  if (icons.length === 0) {
-    return addButton ? <span className="ml-1 flex">{addButton}</span> : null;
-  }
+  if (icons.length === 0) return null;
 
   const summaryLabel = [
     subagents.length > 0 && countLabel(subagents.length, "subagent"),
@@ -1104,21 +1088,19 @@ function AgentToolSummary({
     .join(", ");
 
   return (
-    <span className="ml-1 flex items-center">
+    <>
+      <span id={descriptionId} className="sr-only">
+        {`${agentName} uses ${summaryLabel}`}
+      </span>
       <HoverCard openDelay={300} closeDelay={100} onOpenChange={onOpenChange}>
         <HoverCardTrigger asChild>
-          <UnstyledButton
-            type="button"
-            onClick={onOpenTools}
-            aria-label={`${agentName} uses ${summaryLabel}. ${canEdit ? "Edit tools" : "Open agent picker"}`}
-            className="flex items-center rounded-full px-1 py-0.5 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
+          <span className="flex shrink-0 items-center" aria-hidden="true">
             <OverlappedIcons
               icons={icons}
               maxVisible={MAX_VISIBLE_AVATARS}
               overflowTooltip=""
             />
-          </UnstyledButton>
+          </span>
         </HoverCardTrigger>
         {/* Capped to the room above the composer: a long list otherwise runs
             off the top of a short window (Safari shows it clipped). */}
@@ -1182,15 +1164,34 @@ function AgentToolSummary({
               ))}
             </SummaryGroup>
           )}
-          <div className="mt-2 border-t pt-2 text-xs text-muted-foreground">
-            {canEdit
-              ? "Click to edit tools"
-              : "Only people who can edit this agent can change its tools"}
-          </div>
+          {!canEdit && (
+            <div className="mt-2 border-t pt-2 text-xs text-muted-foreground">
+              Only people who can edit this agent can change its tools
+            </div>
+          )}
         </HoverCardContent>
       </HoverCard>
-      {addButton}
-    </span>
+    </>
+  );
+}
+
+/** Shortcut for an agent with no tools of its own; opens Add tools. */
+function AddToolsButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          aria-label="Add tools"
+          onClick={onClick}
+          className="ml-1 rounded-full bg-muted hover:bg-muted/80 size-5"
+        >
+          <Plus className="size-3 text-muted-foreground" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="top">Add tools</TooltipContent>
+    </Tooltip>
   );
 }
 

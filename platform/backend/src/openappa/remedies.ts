@@ -14,9 +14,16 @@ import type {
 } from "@/types/openappa-remedies";
 import { openappaBatteriesService } from "./batteries";
 import {
+  type DeployedFile,
+  deployedFiles,
+  effectiveToolRules,
+  shownLine,
+} from "./battery-target";
+import {
   arrayHeaderLines,
   asRecord,
   parsePolicyToml,
+  type ToolEntry,
   toolEntries,
 } from "./policy-text";
 import { policyLevels } from "./trust-audience";
@@ -31,30 +38,41 @@ class OpenAppaRemediesService {
     organizationId: string;
     userId: string;
   }): Promise<RemediesView> {
-    const [{ rootContent, resolution }, canSeeAllConsults] = await Promise.all([
-      openappaBatteriesService.coverageSnapshot(params.organizationId),
-      // Consults are recorded per session; an org-wide status needs the
-      // permission that shows every session's consults.
-      userHasPermission(
-        params.userId,
-        params.organizationId,
-        "openappaDiagnostics",
-        "admin",
-      ),
-    ]);
+    const [{ rootContent, resolution, viewed }, canSeeAllConsults] =
+      await Promise.all([
+        openappaBatteriesService.coverageSnapshot(params.organizationId),
+        // Consults are recorded per session; an org-wide status needs the
+        // permission that shows every session's consults.
+        userHasPermission(
+          params.userId,
+          params.organizationId,
+          "openappaDiagnostics",
+          "admin",
+        ),
+      ]);
     const files: PolicyFile[] = [
-      { entry: null, battery: null, text: rootContent },
-      ...resolution.entries.flatMap((included) =>
-        included.battery
-          ? [
-              {
-                entry: included.name === included.entry ? null : included.entry,
-                battery: included.name,
-                text: included.battery.policy,
-              },
-            ]
-          : [],
-      ),
+      { entry: null, battery: null, text: rootContent, firstLine: 1 },
+      ...resolution.entries.flatMap((included) => {
+        const deployed = viewed.get(included.entry);
+        return deployed
+          ? deployedFiles(deployed).map((file) => ({
+              entry: included.name === included.entry ? null : included.entry,
+              battery: included.name,
+              ...file,
+            }))
+          : [];
+      }),
+    ];
+    const rules = [
+      ...toolEntries(rootContent),
+      ...resolution.entries.flatMap((included) => {
+        const deployed = viewed.get(included.entry);
+        return deployed
+          ? effectiveToolRules(deployedFiles(deployed)).map(
+              ({ entry }) => entry,
+            )
+          : [];
+      }),
     ];
     const externals = declaredExternals(files);
     const authorities = files.flatMap((file) =>
@@ -87,7 +105,7 @@ class OpenAppaRemediesService {
         ...sanitizer,
         lastConsult: consultOf(sanitizerConsults, sanitizer.name),
       })),
-      blocks: blockCoverage(files, authorities, sanitizers),
+      blocks: blockCoverage(files, rules, authorities, sanitizers),
     };
   }
 
@@ -116,10 +134,9 @@ export const openappaRemediesService = new OpenAppaRemediesService();
 /** The activity window the overview shows. */
 const ACTIVITY_DAYS = 7;
 
-type PolicyFile = {
+type PolicyFile = DeployedFile & {
   entry: string | null;
   battery: string | null;
-  text: string;
 };
 type LatestConsult = Pick<ExternalConsult, "outcome" | "createdAt">;
 type Externals = {
@@ -220,7 +237,7 @@ function declaredAuthorities(
     source: {
       entry: file.entry,
       battery: file.battery,
-      line: lines[index] ?? null,
+      line: shownLine(file, lines[index]),
     },
     implementation: wired.get(entry.name) ?? null,
     tags: strings(entry.tags) ?? [],
@@ -239,7 +256,7 @@ function declaredSanitizers(
     source: {
       entry: file.entry,
       battery: file.battery,
-      line: lines[index] ?? null,
+      line: shownLine(file, lines[index]),
     },
     implementation:
       wired.get(entry.name) ??
@@ -306,18 +323,18 @@ function sanitizerPermits(value: unknown): SanitizerPermits | null {
  */
 function blockCoverage(
   files: PolicyFile[],
+  rules: ToolEntry[],
   authorities: Omit<Authority, "lastConsult">[],
   sanitizers: Omit<Sanitizer, "lastConsult">[],
 ): BlockCoverage[] {
   const levels = policyLevels(files);
   let excludes = 0;
   const marks = new Set<string>();
-  for (const file of files)
-    for (const entry of toolEntries(file.text)) {
-      if ((entry.excludes?.length ?? 0) > 0) excludes += 1;
-      for (const mark of strings(asRecord(entry.requires)?.attention) ?? [])
-        if (mark !== BLOCKED_MARK) marks.add(mark);
-    }
+  for (const entry of rules) {
+    if ((entry.excludes?.length ?? 0) > 0) excludes += 1;
+    for (const mark of strings(asRecord(entry.requires)?.attention) ?? [])
+      if (mark !== BLOCKED_MARK) marks.add(mark);
+  }
   const wiredAuthorities = authorities.filter((each) => each.implementation);
   const wiredSanitizers = sanitizers.filter((each) => each.implementation);
   const entry = (

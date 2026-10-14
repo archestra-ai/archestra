@@ -11,9 +11,16 @@ import AgentModel from "@/models/agent";
 import AgentWorkspaceModel from "@/models/agent-workspace";
 import ChatOpsUserAdmissionModel from "@/models/chatops-user-admission";
 import IdentityProviderModel from "@/models/identity-provider.ee";
+import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import UserModel from "@/models/user";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import { beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
+import {
+  deployGithubWithRoster,
+  storedHostMembers,
+} from "@/test/openappa-github-roster";
+import { GitHubUserIdSchema } from "@/types";
 import { auth } from "./better-auth";
 
 const ORIGIN = "http://localhost:3000";
@@ -149,6 +156,47 @@ describe("SSO callback after changing the email claim", () => {
     expect(session?.user.id).toBe(userId);
     return session;
   }
+
+  test("reconciliation refreshes the host member roster with the canonical user's new email", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const openappa = { ...config.openappa };
+    const sandbox = config.daggerRuntime.enabled;
+    try {
+      await deployGithubWithRoster({
+        organizationId,
+        userId,
+        makeInternalMcpCatalog,
+        makeTool,
+      });
+      await RuntimeCredentialConnectionModel.upsert({
+        organizationId,
+        scope: "personal",
+        userId,
+        credentialId: "github-user",
+        value: "token",
+        githubId: GitHubUserIdSchema.parse(1001),
+      });
+      await openappaBatteriesService.recompile(organizationId);
+      expect(await storedHostMembers(organizationId)).toEqual({
+        "github:1001": EMAIL_A,
+      });
+      await autoProvisionUser({
+        email: EMAIL_B,
+        name: "Pending Teams User",
+        provider: "ms-teams",
+      });
+      await updateClaim();
+      await expectSignedIn(await signIn());
+      expect(await storedHostMembers(organizationId)).toEqual({
+        "github:1001": EMAIL_B,
+      });
+    } finally {
+      Object.assign(config.openappa, openappa);
+      config.daggerRuntime.enabled = sandbox;
+    }
+  });
 
   test("updates the same admin on next login, keeps its live session, and is idempotent", async () => {
     const firstLogin = await signIn();

@@ -66,7 +66,6 @@ import {
   skillCatalogSearchSeed,
   skillsListSeed,
 } from "./data/skills";
-import { identityProviderHandlers } from "./identity-provider-handlers";
 
 // Every endpoint is registered once, under its backend-relative path, which
 // MSW matches against any origin. Both consumers arrive that way: the browser
@@ -134,7 +133,6 @@ const LABELLED_ENTITY_PATHS = [
 ];
 
 export const handlers: HttpHandler[] = [
-  ...identityProviderHandlers,
   ...getJson("/api/openappa/trust-audience", {
     trust: ["suspicious", "trusted"],
     audiences: [

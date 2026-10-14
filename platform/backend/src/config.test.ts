@@ -82,6 +82,7 @@ import config, {
   parseSandboxMemoryMaxBytes,
   parseTrustProxy,
   parseVirtualKeyDefaultExpiration,
+  resolveAllowedOrigins,
   resolveRenderBaseUrl,
 } from "./config";
 
@@ -463,21 +464,12 @@ describe("getConfiguredOrigins (tested via getCorsOrigins/getTrustedOrigins)", (
     process.env = originalEnv;
   });
 
-  test("should accept all origins when no env vars are set", () => {
+  test("should configure no origins when no env vars are set", () => {
     delete process.env.ARCHESTRA_FRONTEND_URL;
     delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
 
-    const cors = getCorsOrigins();
-    expect(cors).toHaveLength(1);
-    expect(cors[0]).toBeInstanceOf(RegExp);
-
-    const trusted = getTrustedOrigins();
-    expect(trusted).toEqual([
-      "http://*:*",
-      "https://*:*",
-      "http://*",
-      "https://*",
-    ]);
+    expect(getCorsOrigins()).toEqual([]);
+    expect(getTrustedOrigins()).toEqual([]);
   });
 
   test("should parse ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS with trimming and filtering", () => {
@@ -505,22 +497,6 @@ describe("getTrustedOrigins", () => {
 
   afterEach(() => {
     process.env = originalEnv;
-  });
-
-  describe("no origin env vars (accept all)", () => {
-    test("should return catch-all wildcards when no env vars are set", () => {
-      delete process.env.ARCHESTRA_FRONTEND_URL;
-      delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
-
-      const result = getTrustedOrigins();
-
-      expect(result).toEqual([
-        "http://*:*",
-        "https://*:*",
-        "http://*",
-        "https://*",
-      ]);
-    });
   });
 
   describe("configured origins (enforce)", () => {
@@ -567,6 +543,53 @@ describe("getTrustedOrigins", () => {
 
       expect(getTrustedOrigins()).toEqual(["https://auth.example.com"]);
     });
+  });
+});
+
+describe("resolveAllowedOrigins", () => {
+  test("allows only configured origins when any are configured", () => {
+    expect(
+      resolveAllowedOrigins({
+        configuredOrigins: ["https://app.example.com"],
+        forwardedHost: "evil.example.com",
+        host: "evil.example.com",
+      }),
+    ).toEqual(["https://app.example.com"]);
+  });
+
+  test("falls back to the forwarded host's own origin when unconfigured", () => {
+    expect(
+      resolveAllowedOrigins({
+        configuredOrigins: [],
+        forwardedHost: "192.168.1.20:3000, proxy.internal",
+        host: "localhost:9000",
+      }),
+    ).toEqual(["http://192.168.1.20:3000", "https://192.168.1.20:3000"]);
+  });
+
+  test("falls back to the Host header with loopback equivalents", () => {
+    expect(
+      resolveAllowedOrigins({
+        configuredOrigins: [],
+        forwardedHost: undefined,
+        host: "localhost:3000",
+      }),
+    ).toEqual([
+      "http://localhost:3000",
+      "https://localhost:3000",
+      "http://127.0.0.1:3000",
+      "https://127.0.0.1:3000",
+    ]);
+  });
+
+  test("allows nothing when unconfigured and the host is unknown", () => {
+    expect(
+      resolveAllowedOrigins({
+        configuredOrigins: [],
+        forwardedHost: null,
+        host: undefined,
+      }),
+    ).toEqual([]);
   });
 });
 
@@ -1689,6 +1712,59 @@ describe("mcp gateway config", () => {
 
     expect(cfg.mcpGateway.toolCallTimeoutMs).toBe(60000);
   });
+
+  test("defaults the subscription stream cap to disabled", async () => {
+    delete process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS;
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.mcpGateway.subscriptionMaxDurationMs).toBe(0);
+  });
+
+  test("reads the subscription stream cap from the env var", async () => {
+    process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS = "20000";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.mcpGateway.subscriptionMaxDurationMs).toBe(20_000);
+  });
+
+  test("accepts zero as no subscription stream expiry", async () => {
+    process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS = "0";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.mcpGateway.subscriptionMaxDurationMs).toBe(0);
+  });
+
+  test("falls back when the subscription stream cap exceeds the timer range", async () => {
+    process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS =
+      "2147483648";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.mcpGateway.subscriptionMaxDurationMs).toBe(0);
+  });
+
+  test("accepts the largest delay a timer can schedule", async () => {
+    process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS =
+      "2147483647";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.mcpGateway.subscriptionMaxDurationMs).toBe(2_147_483_647);
+  });
+
+  test.each([
+    "-1",
+    "Infinity",
+    "NaN",
+    "1.5",
+  ])("disables subscription stream expiry for invalid value %s", async (value) => {
+    process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS = value;
+    const { default: cfg } = await import("./config");
+    expect(cfg.mcpGateway.subscriptionMaxDurationMs).toBe(0);
+  });
 });
 
 describe("rum export config", () => {
@@ -1755,21 +1831,6 @@ describe("getCorsOrigins", () => {
 
   afterEach(() => {
     process.env = originalEnv;
-  });
-
-  describe("no origin env vars (accept all)", () => {
-    test("should return catch-all regex when no env vars are set", () => {
-      delete process.env.ARCHESTRA_FRONTEND_URL;
-      delete process.env.ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS;
-
-      const result = getCorsOrigins();
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toBeInstanceOf(RegExp);
-      expect((result[0] as RegExp).test("http://anything.example.com")).toBe(
-        true,
-      );
-    });
   });
 
   describe("configured origins (enforce)", () => {

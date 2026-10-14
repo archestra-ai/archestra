@@ -1297,6 +1297,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (result.status === "not_found") {
         throw new ApiError(404, "User not found");
       }
+      await openappaBatteriesService.recompileOrganizations([organizationId]);
 
       return reply.send({ success: true });
     },

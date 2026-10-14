@@ -2,7 +2,7 @@
 title: "Permissions"
 description: "Built-in role grants, available permissions, and LLM API access requirements"
 order: 6
-lastUpdated: 2026-10-13
+lastUpdated: 2026-10-14
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -84,7 +84,6 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | MCP Server Installations | `read`, `create`, `delete` |
 | Environments | `read` |
 | Credentials | `read` |
-| OpenAPPA Policy | `read` |
 | Knowledge Sources | `read`, `query` |
 | Chats | `read`, `create`, `update`, `delete`, `full-view` |
 | Projects | `read`, `create`, `update`, `delete` |

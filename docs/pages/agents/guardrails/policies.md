@@ -3,8 +3,8 @@ title: Guardrail Policies
 sidebarTitle: Policies
 description: Cover your tools with rules, change the policy, and sync it with GitHub or GitLab
 order: 1
-alpha: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-12
+beta: "Policy syntax and behavior may change as OpenAPPA evolves."
+lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

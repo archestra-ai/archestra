@@ -1,3 +1,6 @@
+import { parse as parseToml, stringify } from "smol-toml";
+import { asRecord } from "./policy-text";
+
 const COMMAND_TOOLS = [
   "bash",
   "Bash",
@@ -10,13 +13,10 @@ const COMMAND_PARAMS = ["command", "cmd"] as const;
 
 const COMMAND_PREFIXES = ["builtin:", "host/archestra/"] as const;
 
-const COMMAND_TOOL_REGEX =
-  /^((?:builtin:|host\/[^/]+\/)?)(bash|Bash|shell|exec_command|run_command)\((command|cmd):([^)]+)\)$/;
+const COMMAND_TOOL_NAME =
+  /^((?:builtin:|host\/[^/]+\/)?)(?:bash|Bash|shell|exec_command|run_command)\((.*)\)$/s;
 
-const NAME_REGEX = /^([\t ]*name[\t ]*=[\t ]*")([^"\r\n]+)(")/m;
-
-const TABLE_HEADER_REGEX =
-  /^[\t ]*(?:\[\[[\t ]*([^\]\r\n]+?)[\t ]*\]\]|\[[\t ]*([^\]\r\n]+?)[\t ]*\])[\t ]*(?:#.*)?\r?$/gm;
+const COMMAND_CONDITION = /^(?:command|cmd)(?=:)/;
 
 /**
  * Checks whether a tool name refers to a command-execution tool.
@@ -59,95 +59,86 @@ export function normalizeCommandExecutionArguments(
 
 /**
  * Expands command tool policy rules across all tool names (`bash`, `shell`,
- * `exec_command`, `run_command`) and parameter names (`command`, `cmd`).
- * This makes sure policies evaluate consistently across clients.
+ * `exec_command`, `run_command`) and parameter names (`command`, `cmd`), so
+ * a rule matches each client's own spelling of a command call. Contracts are
+ * first-match in declaration order, so each alias stands right after the rule
+ * it copies, ahead of any broader rule written after it. Without aliases a
+ * call in another spelling would fall through to a broader rule, so a policy
+ * this cannot read is refused rather than served unexpanded.
  */
 export function expandCommandExecutionPolicyRules(content: string): string {
-  const blocks = policyToolRuleBlocks(content);
-  if (blocks.length === 0) return content;
+  const document = parseToml(content, { integersAsBigInt: "asNeeded" });
+  const policy = asRecord(document.policy);
+  if (!policy || !Array.isArray(policy.tool)) return content;
 
-  const existingNames = new Set<string>();
-  for (const block of blocks) {
-    const match = toolRuleNameMatch(block);
-    if (match) existingNames.add(match[2]);
-  }
+  const declared = new Set<string>();
+  let expanded = false;
+  const tool = policy.tool.flatMap((entry) => {
+    const rule = asRecord(entry);
+    if (!rule || typeof rule.name !== "string") return [entry];
+    declared.add(rule.name);
+    const aliases = commandAliases(rule.name).filter(
+      (name) => !declared.has(name),
+    );
+    for (const name of aliases) declared.add(name);
+    expanded ||= aliases.length > 0;
+    return [entry, ...aliases.map((name) => ({ ...rule, name }))];
+  });
 
-  const newBlocks: string[] = [];
+  return expanded
+    ? stringify({ ...document, policy: { ...policy, tool } })
+    : content;
+}
 
-  for (const block of blocks) {
-    const match = toolRuleNameMatch(block);
-    if (!match) continue;
-    const fullName = match[2];
-    const parsed = fullName.match(COMMAND_TOOL_REGEX);
-    if (!parsed) continue;
+/** Every other spelling of a command rule's tool and command argument. */
+function commandAliases(name: string): string[] {
+  const spelled = name.match(COMMAND_TOOL_NAME);
+  if (!spelled) return [];
+  const [, origPrefix, selector] = spelled;
+  const conditions = selectorConditions(selector);
+  const commands = conditions.filter((condition) =>
+    COMMAND_CONDITION.test(condition),
+  ).length;
+  if (commands === 0) return [];
+  // A selector naming both spellings already matches either client.
+  const command = conditions.findIndex((condition) =>
+    COMMAND_CONDITION.test(condition),
+  );
+  const selectors =
+    commands > 1
+      ? [selector]
+      : COMMAND_PARAMS.map((param) =>
+          conditions
+            .map((condition, index) =>
+              index === command
+                ? condition.replace(COMMAND_CONDITION, param)
+                : condition,
+            )
+            .join(","),
+        );
 
-    const [, origPrefix, , , pattern] = parsed;
-    const prefixes =
-      origPrefix.startsWith("host/") &&
-      !origPrefix.startsWith("host/archestra/")
-        ? [origPrefix, ...COMMAND_PREFIXES]
-        : COMMAND_PREFIXES;
-
-    for (const prefix of prefixes) {
-      for (const tool of COMMAND_TOOLS) {
-        for (const param of COMMAND_PARAMS) {
-          const aliasName = `${prefix}${tool}(${param}:${pattern})`;
-          if (!existingNames.has(aliasName)) {
-            existingNames.add(aliasName);
-            const aliasBlock = replaceToolRuleName(block, match, aliasName);
-            newBlocks.push(
-              `\n${aliasBlock}${aliasBlock.endsWith("\n") ? "" : "\n"}`,
-            );
-          }
-        }
-      }
-    }
-  }
-
-  return (
-    content +
-    (newBlocks.length > 0
-      ? "\n# --- Expanded command execution tool aliases ---\n" +
-        newBlocks.join("")
-      : "")
+  const prefixes =
+    origPrefix.startsWith("host/") && origPrefix !== "host/archestra/"
+      ? [origPrefix, ...COMMAND_PREFIXES]
+      : COMMAND_PREFIXES;
+  return prefixes.flatMap((prefix) =>
+    COMMAND_TOOLS.flatMap((tool) =>
+      selectors.map((renamed) => `${prefix}${tool}(${renamed})`),
+    ),
   );
 }
 
-function toolRuleNameMatch(block: string): RegExpMatchArray | null {
-  for (const header of block.matchAll(TABLE_HEADER_REGEX)) {
-    if (header.index > 0) {
-      return block.slice(0, header.index).match(NAME_REGEX);
+/** A selector's `argument:pattern` conditions, split at unescaped commas. */
+function selectorConditions(selector: string): string[] {
+  const conditions = [""];
+  let escaped = false;
+  for (const char of selector) {
+    if (char === "," && !escaped) {
+      conditions.push("");
+      continue;
     }
+    escaped = char === "\\" && !escaped;
+    conditions[conditions.length - 1] += char;
   }
-  return block.match(NAME_REGEX);
-}
-
-function replaceToolRuleName(
-  block: string,
-  match: RegExpMatchArray,
-  aliasName: string,
-): string {
-  const valueStart = (match.index ?? 0) + match[1].length;
-  const valueEnd = valueStart + match[2].length;
-  return block.slice(0, valueStart) + aliasName + block.slice(valueEnd);
-}
-
-function policyToolRuleBlocks(content: string): string[] {
-  const blocks: string[] = [];
-  let ruleStart: number | null = null;
-
-  for (const match of content.matchAll(TABLE_HEADER_REGEX)) {
-    const path = (match[1] ?? match[2]).replace(/[\t ]/g, "");
-    const isToolRule = match[1] !== undefined && path === "policy.tool";
-    const isToolSubtable = path.startsWith("policy.tool.");
-
-    if (ruleStart !== null && !isToolSubtable) {
-      blocks.push(content.slice(ruleStart, match.index));
-      ruleStart = null;
-    }
-    if (isToolRule) ruleStart = match.index;
-  }
-
-  if (ruleStart !== null) blocks.push(content.slice(ruleStart));
-  return blocks;
+  return conditions;
 }

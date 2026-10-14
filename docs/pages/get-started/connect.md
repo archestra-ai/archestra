@@ -52,7 +52,7 @@ The command changes nothing on your computer until you approve it in your browse
 2. Click **Copy** and run the command in a terminal. It prints a code and opens an approval page in your browser.
 3. Check that the code in the browser matches the code in the terminal. Tick **This code matches the code in my terminal** and click **Approve connection**.
 4. Back in the terminal, the installer sets up your client and lists what it set up. When it asks **Sign in now?**, press Enter to sign in to the gateway in your browser.
-5. Open a new terminal and run the command the installer prints last. It starts your client with a first question, such as `opencode --prompt 'What can you do with my Archestra tools?'`. Cursor has no command: open Cursor.
+5. Open a new terminal and run the command the installer prints last. It starts your client with a first question about the gateway's tools, leaving your other MCP servers alone. Cursor has no command: open Cursor.
 
 ![The browser approval page with a code to match against the terminal](/docs/automated_screenshots/platform-connection_browser-approval.webp)
 
@@ -77,7 +77,9 @@ Some clients need one more step. The installer prints any other steps under **Go
 - **Launch check:** setup adds a block to your shell profile. Each time Claude Code, Codex, Copilot CLI, OpenCode, or Kilo Code starts, it checks the connection. Press `C` there to disconnect. To turn it off, set `ARCHESTRA_CLAUDE_GUARD=0`, `ARCHESTRA_CODEX_GUARD=0`, `ARCHESTRA_COPILOT_GUARD=0`, `ARCHESTRA_OPENCODE_GUARD=0`, or `ARCHESTRA_KILO_GUARD=0`.
 - **Backups:** setup saves each config file it changes as a `.archestra-backup` file next to the original.
 - **Guardrail helpers in Codex:** setup lets Codex run the guardrail helper tools, such as [`ask_user`](/docs/reference/archestra-mcp-server#ask_user) and [`yell`](/docs/reference/archestra-mcp-server#yell), without a prompt each time. A call that needs your approval still shows the approval form. To get the prompts back, delete the `tools` tables under the gateway's entry in `~/.codex/config.toml`.
-- **Setup reference:** if an agent runs the installer, Guardrails do not apply to that agent's conversation for ten minutes, so it can finish the setup. The setup reference the installer prints marks that conversation. Every other session follows your Guardrails policy from its first request.
+- **Codex waits for the gateway:** Codex 0.99 or newer does not send the first `codex exec` request until the gateway is connected. If you skipped sign-in, or the gateway is down, that command stops. Sign in with `codex mcp login <gateway>`, then run it again. Older Codex ignores this and can still send the first request early. To let `codex exec` start without the gateway, delete `required = true` under the gateway's entry in `~/.codex/config.toml`.
+- **Setup reference:** the first conversation that presents the installer's reference with a valid session ID is exempt from Guardrails for the rest of the ten-minute setup window. Later requests must carry both the reference and that session ID. Different session IDs and requests without the reference remain governed.
+- **Exemption limits:** the first conversation wins, even if it did not run the installer. Session IDs come from the client, so this does not protect against a client that copies both the reference and the session ID. If the server loses the short-lived ownership record, another conversation can claim the rest of the window.
 - **Setup failed or expired:** run it again. Approval requests expire after ten minutes. Only approve a request you started.
 
 **Next:** [See it work](/docs/get-started/see-it-work).

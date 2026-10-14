@@ -85,6 +85,12 @@ const TransferCredentialOutputSchema = z.object({
   availability: z
     .string()
     .describe("When a run can read the value, in plain words."),
+  next_step: z
+    .string()
+    .optional()
+    .describe(
+      "What to do with `url`: hand it over in the reply text, never inside a question form. Only set while a value is still missing.",
+    ),
 });
 
 const registry = defineArchestraTools([
@@ -356,6 +362,11 @@ const registry = defineArchestraTools([
           const url = agentCredentialSetupUrl(agent.id, [entry.key]);
           const availability =
             "Nothing is stored yet. A run can read it once the person saves a value, from that Agent's next turn onward.";
+          // Question forms show a link as plain text, so the model must hand
+          // it over in its reply. Said in both the text and the structured
+          // result, since a client may show the model only one of them.
+          const nextStep =
+            "Put the url in your reply text, never inside a question form, so the person can paste the value there.";
 
           return structuredSuccessResult(
             {
@@ -365,10 +376,11 @@ const registry = defineArchestraTools([
               valueStored: false,
               url,
               availability,
+              next_step: nextStep,
             },
             [
               `Declared ${entry.key} on "${agent.name}". No value is stored.`,
-              `Ask the person to paste it here: ${url}`,
+              `Put this link in your reply text, never inside a question form, so the person can paste it: ${url}`,
               "Scope: personal — whatever they save applies to every run they start on this Agent, and to no one else's runs.",
               availability,
             ].join("\n"),

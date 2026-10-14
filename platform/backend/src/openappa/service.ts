@@ -194,6 +194,9 @@ type ProcessedToolResult = {
   code?: string;
   /** The runtime denied this call, so `content` is its ruling, not an output. */
   denied?: true;
+  /** Current denial metadata; omitted offers are unknown, not an empty list. */
+  offers?: string[];
+  review?: Array<{ offer_id: string; text: string }>;
 };
 type ChildEndOutcome =
   | { decision: "release"; crossed: true }
@@ -275,6 +278,20 @@ export async function declareOpenappaInstalls(): Promise<void> {
       { err: error },
       "Seeding the OpenAPPA credential bindings from the policy text failed; the text still binds its own variables",
     );
+  }
+}
+
+/**
+ * Recompose every organization once the declarations are carried over, so a
+ * composition an earlier build stored takes in what this build composes, such
+ * as the member roster. Never rejects: a server starts whatever it finds.
+ */
+export async function recompileAllOnStart(): Promise<void> {
+  if (!openappaEnabled()) return;
+  try {
+    await openappaBatteriesService.recompileAll();
+  } catch (error) {
+    logger.error({ err: error }, "Recomposing the OpenAPPA policies failed");
   }
 }
 
@@ -757,7 +774,13 @@ async function approveToolResult(params: {
     outputSource,
     ...(reason ? { reason } : {}),
     ...(code ? { code } : {}),
-    ...(decision.decision === "deny_call" ? { denied: true as const } : {}),
+    ...(decision.decision === "deny_call"
+      ? {
+          denied: true as const,
+          offers: decision.offers?.map((offer) => offer.offer_id),
+          review: decision.review,
+        }
+      : {}),
   };
 }
 // SPDX-SnippetEnd
@@ -1119,8 +1142,8 @@ export async function evaluateToolCalls(
         feedback: decisionMessage(decision),
         offers:
           decision.decision === "deny_call"
-            ? (decision.offers ?? [])
-                .map((offer) => offer.offer_id)
+            ? decision.offers
+                ?.map((offer) => offer.offer_id)
                 .filter((id) => id.length > 0)
             : [],
         review:

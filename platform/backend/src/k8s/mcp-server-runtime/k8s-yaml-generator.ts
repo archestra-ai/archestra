@@ -1,5 +1,6 @@
 import {
   type EnvironmentVariableSchema,
+  type ImagePullPolicy,
   MCP_ORCHESTRATOR_DEFAULTS,
 } from "@archestra/shared";
 import type * as k8s from "@kubernetes/client-node";
@@ -29,6 +30,8 @@ interface DeploymentYamlContext {
   httpPort?: number;
   /** imagePullSecrets for pulling container images from private registries */
   imagePullSecrets?: Array<{ name: string }>;
+  /** Pull policy pinned on the catalog; unset derives one from the image */
+  imagePullPolicy?: ImagePullPolicy;
 }
 
 /**
@@ -109,7 +112,9 @@ export function generateDeploymentYamlTemplate(
   const containerSpec: Record<string, unknown> = {
     name: "mcp-server",
     image: placeholder("archestra", "docker_image"),
-    imagePullPolicy: getMcpImagePullPolicy(dockerImage),
+    imagePullPolicy: getMcpImagePullPolicy(dockerImage, {
+      configured: context.imagePullPolicy,
+    }),
     // command and args come from basic config
     ...(envSection.length > 0 ? { env: envSection } : {}),
     // Ephemeral-storage governance keeps the scheduler disk-aware and

@@ -2,6 +2,7 @@
 
 import { E2eTestId, isPlaywrightCatalogItem } from "@archestra/shared";
 import {
+  Cable,
   Copy,
   MessageSquare,
   MoreHorizontal,
@@ -544,6 +545,16 @@ function CatalogItemDetails({
       tabs={tabs}
       actionButton={
         <div className="flex shrink-0 items-center gap-2">
+          {/* Once installed, the next step is a client: the Connect page puts
+              these tools into Claude Code, Cursor and the rest. */}
+          {showChatButton && (
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/connection">
+                <Cable className="h-4 w-4" />
+                Connect
+              </Link>
+            </Button>
+          )}
           {showChatButton && (
             <Button
               variant="outline"

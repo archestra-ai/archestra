@@ -22,13 +22,32 @@ export interface BatteryPackage {
   annotators: Array<string>
   /** The annotators the battery's own `[[policy.tool]]` rules route calls to. */
   routedAnnotators: Array<string>
-  policy: string
+  /** The base policy text: all a deployment without a target composes. */
+  base: string
   helpers: Array<string>
   credentials: Array<string>
   externals: Array<BatteryExternal>
   benefit?: string
   setup?: string
   files: Array<BatteryFileInput>
+  /** What a multi-user deployment composes, when the battery declares targets. */
+  multiUser?: BatteryTargetView
+}
+
+/**
+ * A battery deployed for one target: the target policy, composed before the base,
+ * and what the two declare and read together.
+ */
+export interface BatteryTargetView {
+  policy: string
+  /** Every variable the target and its base read. */
+  credentials: Array<string>
+  /** The variables the target policy itself reads, without the base's. */
+  targetCredentials: Array<string>
+  externals: Array<BatteryExternal>
+  annotators: Array<string>
+  routedAnnotators: Array<string>
+  setup?: string
 }
 
 export interface ChildAddressRecord {
@@ -65,7 +84,10 @@ export interface ComposeBatteryInput {
   /** The include entry this battery answers, as the root document spells it. */
   entry: string
   name: string
+  /** The base policy text. */
   policy: string
+  /** The target policy text deployed before the base; absent deploys the base alone. */
+  targetPolicy?: string
   helpers?: HelperBindingInput
 }
 
@@ -92,6 +114,11 @@ export declare function composeOpenappaPolicy(input: ComposePolicyInput): Promis
 export interface ComposePolicyInput {
   root: string
   batteries: Array<ComposeBatteryInput>
+  /**
+   * The readers of each member roster the host keeps, by roster name:
+   * principal → email. A roster absent here is declared empty.
+   */
+  memberRosters?: Record<string, Record<string, string>>
 }
 
 export interface CredentialDeclaration {

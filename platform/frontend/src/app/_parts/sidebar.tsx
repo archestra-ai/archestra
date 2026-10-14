@@ -348,11 +348,7 @@ const NavPrimary = ({
           <SidebarMenuButton
             tooltip="Search chats"
             onClick={() => {
-              window.dispatchEvent(
-                new CustomEvent("open-conversation-search", {
-                  detail: { recentChatsView: true },
-                }),
-              );
+              window.dispatchEvent(new CustomEvent("open-conversation-search"));
             }}
           >
             <MoreHorizontal />
@@ -419,6 +415,11 @@ const NavSecondary = ({
   const permittedItems = items.filter((item) =>
     isNavItemPermitted(item, permissionMap),
   );
+  // An empty group still takes its padding and gaps, leaving a blank band
+  // between the chat list and the footer.
+  if (permittedItems.length === 0 && !showCommunityLinks) {
+    return null;
+  }
 
   return (
     <SidebarGroup className={className}>
@@ -633,7 +634,15 @@ export function AppSidebar() {
       {/* The nav scrolls under the footer; the fade keeps the last row from
           ending in a hard cut. It takes its own space at the end, so it covers
           nothing once scrolled to the bottom or when nothing overflows. */}
-      <SidebarContent className="relative after:pointer-events-none after:sticky after:bottom-0 after:-mt-2 after:block after:h-4 after:shrink-0 after:bg-gradient-to-t after:from-sidebar after:to-transparent after:content-['']">
+      <SidebarContent
+        className={cn(
+          "relative",
+          // The chat list scrolls and fades on its own; this fade would only
+          // add a blank band between it and the footer.
+          sidebarMode !== "chats" &&
+            "after:pointer-events-none after:sticky after:bottom-0 after:-mt-2 after:block after:h-4 after:shrink-0 after:bg-gradient-to-t after:from-sidebar after:to-transparent after:content-['']",
+        )}
+      >
         {isAuthenticated &&
           permissionMap &&
           (sidebarMode === "chats" ? (

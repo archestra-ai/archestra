@@ -181,8 +181,9 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // or changes is decided by grants on each one.
   credential: ["read"],
 
-  // OpenAPPA
-  openappaPolicy: ["read"],
+  // OpenAPPA. Members do not see the Guardrails pages or read the policy.
+  // Enforcement, yells, and remedies do not depend on these permissions.
+  openappaPolicy: [],
   openappaDiagnostics: [],
 
   // Knowledge

@@ -32,6 +32,27 @@ export function supportsUsage(group: UsageGroup, metric: UsageMetric) {
       : true;
 }
 
+export function usageSeries(
+  statistics: UsageViewProps["statistics"],
+  metric: UsageMetric,
+): number[] | undefined {
+  const values = statistics.timeSeries.map((point) =>
+    metric === "billed"
+      ? (point.billedCost ?? point.value)
+      : metric === "subscription"
+        ? point.subscriptionCost
+        : metric === "requests"
+          ? point.requests
+          : point.inputTokens !== undefined && point.outputTokens !== undefined
+            ? point.inputTokens + point.outputTokens
+            : undefined,
+  );
+  return values.length > 0 &&
+    values.every((value) => value !== undefined && Number.isFinite(value))
+    ? (values as number[])
+    : undefined;
+}
+
 export function usageCube(
   { statistics, breakdown, timeframe }: UsageViewProps,
   metric: UsageMetric,
@@ -108,22 +129,12 @@ export function usageCube(
       { id: "subscription", label: "Subscription estimate", format: money },
     ].filter((c) => c.id !== metric);
   } else if (group === "time") {
-    const values = statistics.timeSeries.map((p) =>
-      metric === "billed"
-        ? (p.billedCost ?? p.value)
-        : metric === "subscription"
-          ? p.subscriptionCost
-          : metric === "requests"
-            ? p.requests
-            : p.inputTokens !== undefined && p.outputTokens !== undefined
-              ? p.inputTokens + p.outputTokens
-              : undefined,
-    );
-    const complete = values.length > 0 && values.every((v) => v !== undefined);
+    const series = usageSeries(statistics, metric);
+    const complete = series !== undefined;
     rows = [
       {
         ...base("personal", "Your usage", statistics[field]),
-        series: complete ? (values as number[]) : [],
+        series: series ?? [],
         hasSeries: complete,
       },
     ];

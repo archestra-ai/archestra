@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { makeUsageData } from "./usage.test-data";
-import { supportsUsage, usageCube } from "./usage-explorer-data";
+import { supportsUsage, usageCube, usageSeries } from "./usage-explorer-data";
 
 const props = makeUsageData();
 
@@ -58,5 +58,22 @@ describe("personal usage explorer", () => {
       "Not reported",
     );
     expect(usageCube(props, "tokens", "token", false).total).toBe(1100);
+  });
+  it("builds independent KPI timelines without substituting currency for missing activity", () => {
+    expect(usageSeries(props.statistics, "billed")).toEqual([2]);
+    expect(usageSeries(props.statistics, "subscription")).toEqual([8]);
+    expect(usageSeries(props.statistics, "requests")).toEqual([3]);
+    expect(usageSeries(props.statistics, "tokens")).toEqual([100]);
+    const older = {
+      ...props.statistics,
+      timeSeries: [{ timestamp: "2026-01-01T00:00:00Z", value: 2 }],
+    };
+    expect(usageSeries(older, "billed")).toEqual([2]);
+    expect(usageSeries(older, "requests")).toBeUndefined();
+    expect(usageSeries(older, "tokens")).toBeUndefined();
+    expect(usageSeries(older, "subscription")).toBeUndefined();
+    expect(
+      usageSeries({ ...props.statistics, timeSeries: [] }, "billed"),
+    ).toBeUndefined();
   });
 });

@@ -1054,3 +1054,36 @@ function Tag({ text }: { text: string }) {
 function RowGroup({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
+
+export function Segmented<T extends string>({
+  value,
+  onChange,
+  items,
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  items: { id: T; label: string; disabled?: boolean; title?: string }[];
+}) {
+  return (
+    <div className="inline-flex h-7 items-center rounded-md bg-muted p-0.5 text-xs">
+      {items.map((it) => (
+        <UnstyledButton
+          key={it.id}
+          type="button"
+          disabled={it.disabled}
+          title={it.title}
+          aria-pressed={value === it.id}
+          onClick={() => onChange(it.id)}
+          className={cn(
+            "h-full rounded-[5px] px-2.5 transition-colors disabled:opacity-40",
+            value === it.id
+              ? "bg-background font-medium text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          <span>{it.label}</span>
+        </UnstyledButton>
+      ))}
+    </div>
+  );
+}

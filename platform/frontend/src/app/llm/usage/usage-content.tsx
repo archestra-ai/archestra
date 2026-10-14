@@ -1,5 +1,5 @@
 "use client";
-import { Copy } from "lucide-react";
+import { ClipboardCopy, X } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
@@ -12,6 +12,7 @@ import {
   PivotChart,
   PivotTable,
   QueryChip,
+  Segmented,
   SummaryTable,
 } from "../(costs)/costs/cost-explorer-parts";
 import { fmtMetric, KpiTile } from "../(costs)/costs/cost-overview";
@@ -23,6 +24,7 @@ import {
   type UsageGroup,
   type UsageMetric,
   usageCube,
+  usageSeries,
 } from "./usage-explorer-data";
 
 const VIEWS: { label: string; group: UsageGroup; metric: UsageMetric }[] = [
@@ -112,7 +114,7 @@ export function UsageContent(props: UsageViewProps) {
     <div className="min-w-0 space-y-4">
       <section
         aria-label="Your usage"
-        className="grid grid-cols-2 gap-3 lg:grid-cols-5"
+        className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5"
       >
         {tiles.map((t) => (
           <KpiTile
@@ -120,6 +122,16 @@ export function UsageContent(props: UsageViewProps) {
             label={t.label}
             value={fmtMetric(t.id, t.value, true)}
             caption={t.caption}
+            series={usageSeries(statistics, t.id)}
+            colorClass={
+              t.id === "tokens"
+                ? "text-chart-3"
+                : t.id === "requests"
+                  ? "text-chart-2"
+                  : t.id === "subscription"
+                    ? "text-muted-foreground"
+                    : "text-chart-1"
+            }
             estimate={t.id === "subscription"}
             active={metric === t.id}
             onClick={() =>
@@ -143,10 +155,10 @@ export function UsageContent(props: UsageViewProps) {
             key={v.label}
             onClick={() => select(v.group, v.metric)}
             className={cn(
-              "h-7 rounded-full border px-3 text-xs transition-colors hover:bg-accent",
+              "h-7 rounded-full border px-3 text-xs transition-colors",
               group === v.group && metric === v.metric
-                ? "bg-accent font-medium"
-                : "text-muted-foreground",
+                ? "border-foreground bg-foreground text-background"
+                : "bg-background text-muted-foreground hover:border-foreground/40 hover:text-foreground dark:bg-input/30",
             )}
           >
             <span>{v.label}</span>
@@ -233,36 +245,57 @@ export function UsageContent(props: UsageViewProps) {
             <p className="mt-2 text-xs text-muted-foreground">
               {group === "time"
                 ? "Overall personal activity for the selected range."
-                : "Totals for the selected range. Click rows to compare them in the chart."}
+                : "Totals for the selected range."}
             </p>
           </div>
         )}
-        <div className="flex items-center justify-between gap-2 border-y px-3 py-2">
-          <div className="flex gap-1">
-            {(["summary", "pivot"] as const).map((v) => (
+        <div className="flex flex-wrap items-center gap-2 border-y px-3 py-2">
+          <Segmented
+            value={effectiveView}
+            onChange={setView}
+            items={[
+              { id: "summary", label: "Summary" },
+              {
+                id: "pivot",
+                label: "Pivot",
+                disabled: !canPivot,
+                title: !canPivot
+                  ? "Choose Time, or split model/client tokens by input/output, to pivot available data."
+                  : undefined,
+              },
+            ]}
+          />
+          {focus.size > 0 ? (
+            <span className="inline-flex min-w-0 items-center gap-1 rounded-full bg-primary/10 py-0.5 pr-1 pl-2.5 text-primary text-xs">
+              <span className="truncate">
+                Chart shows{" "}
+                {cube.rows
+                  .filter((row) => focus.has(row.key))
+                  .slice(0, 2)
+                  .map((row) => row.label)
+                  .join(", ")}
+                {focus.size > 2 && <span> +{focus.size - 2}</span>}
+              </span>
               <UnstyledButton
-                key={v}
-                disabled={v === "pivot" && !canPivot}
-                title={
-                  v === "pivot" && !canPivot
-                    ? "Choose Time, or split model/client tokens by input/output, to pivot available data."
-                    : undefined
-                }
-                onClick={() => setView(v)}
-                className={cn(
-                  "rounded-md px-3 py-1.5 text-xs capitalize disabled:opacity-40",
-                  effectiveView === v
-                    ? "bg-muted font-medium"
-                    : "text-muted-foreground hover:bg-muted/50",
-                )}
+                aria-label="Clear selection"
+                onClick={() => setFocus(new Set())}
+                className="rounded-full p-0.5 hover:bg-primary/15"
               >
-                <span>{v}</span>
+                <X className="size-3" />
               </UnstyledButton>
-            ))}
-          </div>
+            </span>
+          ) : (
+            chart !== "table" && (
+              <span className="hidden text-muted-foreground text-xs md:inline">
+                Click rows to compare them in the chart
+              </span>
+            )
+          )}
           <Button
             variant="ghost"
             size="xs"
+            className="ml-auto"
+            disabled={cube.rows.length === 0}
             onClick={() =>
               copyCsv({
                 cube,
@@ -273,7 +306,7 @@ export function UsageContent(props: UsageViewProps) {
               })
             }
           >
-            <Copy className="size-3" />
+            <ClipboardCopy />
             <span>Copy as CSV</span>
           </Button>
         </div>

@@ -54,4 +54,19 @@ describe("usage exploration", () => {
       "Model,Input,Output,total\nexample-model,80,20,100",
     );
   });
+  it("clears a row comparison through the shared toolbar", async () => {
+    const user = userEvent.setup();
+    render(<UsageContent {...makeUsageData()} />);
+    await user.click(
+      within(screen.getByRole("table")).getByText("example-model"),
+    );
+    expect(screen.getByText("Chart shows example-model")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Clear selection" }));
+    expect(
+      screen.queryByRole("button", { name: "Clear selection" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Click rows to compare them in the chart"),
+    ).toBeInTheDocument();
+  });
 });

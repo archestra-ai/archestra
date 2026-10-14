@@ -143,7 +143,11 @@ describe("RoleMappingForm", () => {
         ]}
       />,
     );
-    expect(await screen.findByText("Rule 2 → Admin")).toBeInTheDocument();
+    // The first preview lazily imports Handlebars, which can exceed the
+    // default one-second DOM wait while the full suite loads its modules.
+    expect(
+      await screen.findByText("Rule 2 → Admin", {}, { timeout: 5_000 }),
+    ).toBeInTheDocument();
     const first = screen.getAllByTestId(
       E2eTestId.IdpRoleMappingRuleTemplate,
     )[0];

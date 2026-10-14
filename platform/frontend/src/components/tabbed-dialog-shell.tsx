@@ -31,6 +31,8 @@ export interface TabbedDialogNavItem<TSection extends string> {
   label: string;
   /** A short state line under the label, e.g. "2 providers". */
   status?: string;
+  /** Compact context beside the tab label, such as a status tooltip. */
+  indicator?: ReactNode;
 }
 
 interface TabbedDialogShellProps<TSection extends string> {
@@ -90,6 +92,7 @@ export function TabbedDialogShell<TSection extends string>({
   isDirty = false,
 }: TabbedDialogShellProps<TSection>) {
   const isMobile = useIsMobile();
+  const activeNavItem = navItems.find((item) => item.id === activeSection);
   const [footerSlot, setFooterSlot] = useState<HTMLDivElement | null>(null);
   const guard = useUnsavedChangesGuard({ isDirty, onOpenChange });
   const formContent = (
@@ -125,7 +128,11 @@ export function TabbedDialogShell<TSection extends string>({
                 type="button"
                 variant="ghost"
                 data-testid={getNavItemTestId?.(navItem.id)}
-                aria-label={navItem.status ? navItem.label : undefined}
+                aria-label={
+                  navItem.status || navItem.indicator
+                    ? navItem.label
+                    : undefined
+                }
                 aria-description={navItem.status}
                 className={cn(
                   "justify-start font-normal w-full",
@@ -136,6 +143,7 @@ export function TabbedDialogShell<TSection extends string>({
                 onClick={() => onActiveSectionChange(navItem.id)}
               >
                 <span>{navItem.label}</span>
+                {navItem.indicator}
                 {navItem.status && (
                   <span
                     aria-hidden
@@ -191,12 +199,22 @@ export function TabbedDialogShell<TSection extends string>({
                 }
               >
                 <SelectTrigger className="w-full" aria-label="Dialog section">
-                  <SelectValue />
+                  <SelectValue>
+                    {isMobile && activeNavItem ? (
+                      <span className="flex items-center gap-2">
+                        {activeNavItem.label}
+                        {activeNavItem.indicator}
+                      </span>
+                    ) : undefined}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {navItems.map((item) => (
                     <SelectItem key={item.id} value={item.id}>
-                      <span>{item.label}</span>
+                      <span className="flex items-center gap-2">
+                        {item.label}
+                        {item.indicator}
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>

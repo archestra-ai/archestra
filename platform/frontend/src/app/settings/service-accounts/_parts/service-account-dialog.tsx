@@ -2,8 +2,7 @@
 
 import type { ColumnDef } from "@tanstack/react-table";
 import {
-  AlertTriangle,
-  Bot,
+  CircleDashed,
   KeyRound,
   ListFilter,
   Loader2,
@@ -15,6 +14,7 @@ import {
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
+import { AgentIcon } from "@/components/agent-icon";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { CopyableCode } from "@/components/copyable-code";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -27,14 +27,12 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
+import { IdentityFields } from "@/components/identity-fields";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceAccessSection } from "@/components/resource-access-section";
 import { RoleAssignmentBlockedNotice } from "@/components/role-assignment-blocked-notice";
 import { SearchInput } from "@/components/search-input";
-import {
-  AccountHealthBadge,
-  KeyStatusBadge,
-} from "@/components/service-account-status-badge";
+import { KeyStatusBadge } from "@/components/service-account-status-badge";
 import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -49,11 +47,15 @@ import {
   DialogStickyFooter,
 } from "@/components/ui/dialog";
 import { FieldDescription } from "@/components/ui/field-description";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { RoleSelect } from "@/components/ui/role-select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
@@ -83,7 +85,11 @@ import {
 } from "@/lib/utils/date-time";
 import { formatRoleName } from "@/lib/utils/role";
 
-type ServiceAccountFormValues = { name: string; role: string };
+type ServiceAccountFormValues = {
+  name: string;
+  role: string;
+  icon: string | null;
+};
 
 type TokenFormValues = {
   name: string;
@@ -169,7 +175,11 @@ export function ServiceAccountDialog({
   );
   const [permissionsDirty, setPermissionsDirty] = useState(false);
   const editForm = useForm<ServiceAccountFormValues>({
-    defaultValues: { name: account.name, role: account.role },
+    defaultValues: {
+      name: account.name,
+      role: account.role,
+      icon: account.icon ?? null,
+    },
   });
 
   const apiDocsUrl = getFrontendDocsUrl("reference/api");
@@ -388,6 +398,7 @@ export function ServiceAccountDialog({
         id: serviceAccountId,
         body: {
           name: values.name.trim(),
+          icon: values.icon,
           role: values.role,
           labels: finalLabels,
         },
@@ -417,30 +428,32 @@ export function ServiceAccountDialog({
       onOpenChange={onOpenChange}
       title="Edit service account"
       description={`Manage ${account.name} and its API keys and permissions.`}
-      headerDescription={
-        activeTab === "keys" ? (
-          <>
-            Keys that let scripts and integrations call the{" "}
-            {apiDocsUrl ? (
-              <ExternalDocsLink
-                href={apiDocsUrl}
-                className="text-inherit underline underline-offset-4"
-                showIcon={false}
-              >
-                platform API
-              </ExternalDocsLink>
-            ) : (
-              <span>platform API</span>
-            )}{" "}
-            as this service account.
-          </>
-        ) : undefined
-      }
       sidebarLabel={editForm.watch("name") || account.name}
       sidebarDescription="Service account"
-      sidebarIcon={<Bot className="h-4 w-4" />}
+      sidebarIcon={<AgentIcon icon={editForm.watch("icon")} />}
       activeSection={activeTab}
-      navItems={NAV_ITEMS}
+      navItems={NAV_ITEMS.map((item) => ({
+        ...item,
+        indicator:
+          item.id === "keys" && healthExplanation ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  role="img"
+                  // biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard focus exposes the same status tooltip as hover
+                  tabIndex={0}
+                  aria-label="API key status"
+                  className="ml-auto inline-flex shrink-0 cursor-help text-muted-foreground"
+                >
+                  <CircleDashed aria-hidden className="size-3.5" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="max-w-64">
+                {healthExplanation}
+              </TooltipContent>
+            </Tooltip>
+          ) : undefined,
+      }))}
       onActiveSectionChange={setActiveTab}
       onSubmit={(event) => {
         if (activeTab !== "general" || !canUpdateServiceAccounts) {
@@ -455,8 +468,7 @@ export function ServiceAccountDialog({
         JSON.stringify(labels) !== JSON.stringify(account.labels)
       }
       className="max-w-5xl h-[80vh]"
-      contentClassName="px-4"
-      headerExtra={health && <AccountHealthBadge health={health} />}
+      contentClassName="px-4 py-4"
       footer={
         activeTab === "general" && canUpdateServiceAccounts ? (
           <>
@@ -522,27 +534,29 @@ export function ServiceAccountDialog({
         </Alert>
       ) : (
         <div className="space-y-6">
-          {healthExplanation && (
-            <InlineNotice variant="error">
-              <AlertTriangle />
-              <span className="font-medium">
-                This service account cannot authenticate
-              </span>
-              <InlineNoticeText>{healthExplanation}</InlineNoticeText>
-            </InlineNotice>
-          )}
           {activeTab === "general" ? (
             <fieldset
               disabled={!canUpdateServiceAccounts}
               className="space-y-4"
             >
-              <div className="space-y-2">
-                <Label htmlFor="edit-service-account-name">Display name</Label>
+              <IdentityFields
+                icon={editForm.watch("icon")}
+                onIconChange={(icon) =>
+                  editForm.setValue("icon", icon, { shouldDirty: true })
+                }
+                showLogos
+                disabled={!canUpdateServiceAccounts}
+                label={
+                  <Label htmlFor="edit-service-account-name">
+                    Display name
+                  </Label>
+                }
+              >
                 <Input
                   id="edit-service-account-name"
                   {...editForm.register("name", { required: true })}
                 />
-              </div>
+              </IdentityFields>
               <div className="space-y-2">
                 <Label htmlFor="edit-service-account-role">Roles</Label>
                 <RoleSelect
@@ -689,6 +703,21 @@ export function ServiceAccountDialog({
                   ]}
                   flexibleColumnIds={["name"]}
                 />
+                <p className="text-sm text-muted-foreground">
+                  Keys let scripts and integrations call the{" "}
+                  {apiDocsUrl ? (
+                    <ExternalDocsLink
+                      href={apiDocsUrl}
+                      className="text-inherit underline underline-offset-4"
+                      showIcon={false}
+                    >
+                      platform API
+                    </ExternalDocsLink>
+                  ) : (
+                    <span>platform API</span>
+                  )}{" "}
+                  as this service account.
+                </p>
                 {canAuthenticate(health) && (
                   <div className="space-y-2">
                     <p className="text-xs font-medium text-muted-foreground">
@@ -720,15 +749,15 @@ export function ServiceAccountDialog({
             />
             {/* SPDX-SnippetEnd */}
           </div>
-          {activeTab === "general" && (
-            <fieldset disabled={!canUpdateServiceAccounts} className="pt-4">
-              <AdvancedLabelsSection
-                ref={labelsRef}
-                labels={labels}
-                onLabelsChange={setLabels}
-              />
-            </fieldset>
-          )}
+          <fieldset hidden={activeTab !== "general"} className="pt-4">
+            <AdvancedLabelsSection
+              collapsible
+              disabled={!canUpdateServiceAccounts}
+              ref={labelsRef}
+              labels={labels}
+              onLabelsChange={setLabels}
+            />
+          </fieldset>
 
           <CreateTokenDialog
             open={isTokenDialogOpen}

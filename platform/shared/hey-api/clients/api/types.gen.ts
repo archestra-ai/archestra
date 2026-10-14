@@ -105272,6 +105272,7 @@ export type GetServiceAccountsResponses = {
         } | null;
         organizationId: string;
         name: string;
+        icon: string | null;
         role: string;
         disabled: boolean;
         createdAt: string;
@@ -105294,6 +105295,7 @@ export type GetServiceAccountsResponse = GetServiceAccountsResponses[keyof GetSe
 export type CreateServiceAccountData = {
     body: {
         name: string;
+        icon?: string | null;
         role: string;
         labels?: Array<{
             key: string;
@@ -105408,6 +105410,7 @@ export type CreateServiceAccountResponses = {
         } | null;
         organizationId: string;
         name: string;
+        icon: string | null;
         role: string;
         disabled: boolean;
         createdAt: string;
@@ -105615,6 +105618,7 @@ export type GetServiceAccountResponses = {
         } | null;
         organizationId: string;
         name: string;
+        icon: string | null;
         role: string;
         disabled: boolean;
         createdAt: string;
@@ -105646,6 +105650,7 @@ export type GetServiceAccountResponse = GetServiceAccountResponses[keyof GetServ
 export type UpdateServiceAccountData = {
     body: {
         name?: string;
+        icon?: string | null;
         role?: string;
         disabled?: boolean;
         labels?: Array<{
@@ -105744,6 +105749,7 @@ export type UpdateServiceAccountResponses = {
         } | null;
         organizationId: string;
         name: string;
+        icon: string | null;
         role: string;
         disabled: boolean;
         createdAt: string;

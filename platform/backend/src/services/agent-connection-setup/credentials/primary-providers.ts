@@ -150,6 +150,11 @@ export async function getVirtualKeyProviderCatalog(
     provider?: SupportedProvider;
     /** The client named when no model can run in it. */
     clientLabel?: string;
+    /**
+     * Runtime refresh only. A selected key or model list that is now empty
+     * returns no providers. Installer calls still fail so a new setup is generated.
+     */
+    allowEmpty?: boolean;
   },
 ): Promise<NonNullable<SetupScriptProxySection["primaryProviders"]>> {
   const virtualKey = await VirtualApiKeyModel.findById(params.virtualApiKeyId);
@@ -196,11 +201,13 @@ export async function getVirtualKeyProviderCatalog(
       (!PROVIDERS_REQUIRING_BASE_URL.has(key.provider) ||
         Boolean(key.baseUrl?.trim())),
   );
-  if (!selected.length || selected.length !== selectedMappings.length)
+  if (!selected.length || selected.length !== selectedMappings.length) {
+    if (params.allowEmpty && selected.length === 0) return [];
     throw new ApiError(
       410,
       "Model provider access changed. Generate a new setup command.",
     );
+  }
   const models = await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds(
     selected.map((key) => key.id),
   );
@@ -241,11 +248,13 @@ export async function getVirtualKeyProviderCatalog(
     }))
     .filter((entry) => entry.models.length > 0);
   const clientLabel = params.clientLabel ?? "OpenCode";
-  if (!entries.length)
+  if (!entries.length) {
+    if (params.allowEmpty) return [];
     throw new ApiError(
       400,
       `No model from the selected providers can run in ${clientLabel}. ${clientLabel} needs models that support tool calling. Sync the provider's models or choose another provider.`,
     );
+  }
   const preferred = await getPreferredModels(params);
   const lead = preferred.find(({ provider, modelId }) =>
     entries.some(

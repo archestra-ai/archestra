@@ -131,33 +131,22 @@ export async function loadManagedRuntimeCatalog(
   ) {
     throw unavailable();
   }
-  let primaryProviders: Awaited<
-    ReturnType<typeof getVirtualKeyProviderCatalog>
-  > = [];
-  try {
-    primaryProviders = await getVirtualKeyProviderCatalog({
-      supportedProviders: OPENCODE_PRIMARY_PROVIDERS,
-      clientLabel: INSTALLER_CLIENT_LABELS[installation.clientId],
-      provider:
-        installation.authMode === "virtual-key"
-          ? installation.provider
-          : undefined,
-      mappedKeys:
-        organization.connectionClientProviderKeys?.[installation.clientId] ??
-        null,
-      organizationId: installation.organizationId,
-      userId: installation.userId,
-      userTeamIds: await TeamModel.getUserTeamIds(installation.userId),
-      virtualApiKeyId: key.id,
-    });
-  } catch (error) {
-    if (
-      !(error instanceof ApiError) ||
-      (error.statusCode !== 400 && error.statusCode !== 410)
-    ) {
-      throw error;
-    }
-  }
+  const primaryProviders = await getVirtualKeyProviderCatalog({
+    supportedProviders: OPENCODE_PRIMARY_PROVIDERS,
+    clientLabel: INSTALLER_CLIENT_LABELS[installation.clientId],
+    provider:
+      installation.authMode === "virtual-key"
+        ? installation.provider
+        : undefined,
+    mappedKeys:
+      organization.connectionClientProviderKeys?.[installation.clientId] ??
+      null,
+    organizationId: installation.organizationId,
+    userId: installation.userId,
+    userTeamIds: await TeamModel.getUserTeamIds(installation.userId),
+    virtualApiKeyId: key.id,
+    allowEmpty: true,
+  });
   return publicManagedCatalog({
     primaryProviders,
     passthroughProviders:

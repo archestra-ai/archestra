@@ -73,6 +73,12 @@ test("consumed installations fetch credential-free artifacts after ticket expiry
     expect(artifact.source).not.toContain(token);
     expect(artifact.source).not.toContain(rawToken);
   }
+  expect(response.json().artifacts["routing-v1.mjs"].source).toContain(
+    "const hasCatalog = false",
+  );
+  expect(response.json().artifacts["routing-v2.mjs"].source).toContain(
+    "const hasCatalog = false",
+  );
   expect((await fetchRuntime(rawToken)).statusCode).toBe(401);
   expect(
     (
@@ -204,7 +210,11 @@ test("LLM-only installations recheck live proxy read access without creating or 
   });
   await ConnectionSetupModel.claimByToken({ rawToken });
   const credential = tokenFor(setup.id);
-  expect((await fetchRuntime(credential)).statusCode).toBe(200);
+  const allowed = await fetchRuntime(credential);
+  expect(allowed.statusCode).toBe(200);
+  expect(allowed.json().artifacts["routing-v1.mjs"].source).toContain(
+    "const hasCatalog = false",
+  );
   expect(
     (await ConnectionSetupModel.findById(setup.id))?.virtualApiKeyId,
   ).toBeNull();
@@ -468,9 +478,110 @@ test("a provider key outside the installation user's teams retires models withou
   expect(response.json().artifacts["routing-v1.mjs"].source).not.toContain(
     "fixture/team/hidden",
   );
+  expect(response.json().artifacts["routing-v1.mjs"].source).toContain(
+    "const hasCatalog = true",
+  );
   expect(response.json().artifacts["routing-v1.mjs"].source).not.toContain(
     created.value,
   );
+  expect(await rowCounts()).toEqual(before);
+});
+
+test("revoking the last model publishes an empty catalog instead of the installed routes", async ({
+  makeMember,
+  makeAgent,
+  makeSecret,
+  makeLlmProviderApiKey,
+}) => {
+  await makeMember(ctx.user.id, ctx.organizationId);
+  const proxy = await makeAgent({
+    organizationId: ctx.organizationId,
+    authorId: ctx.user.id,
+    agentType: "llm_proxy",
+  });
+  const secret = await makeSecret();
+  const providerKey = await makeLlmProviderApiKey(
+    ctx.organizationId,
+    secret.id,
+    {
+      provider: "perplexity",
+      isPrimary: true,
+    },
+  );
+  const model = await ModelModel.create({
+    provider: "perplexity",
+    modelId: "fixture/model/last",
+    externalId: "fixture-model-last",
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    contextLength: 2048,
+    outputLength: 256,
+  });
+  await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(providerKey.id, [
+    model.id,
+  ]);
+  const policy = await ResourcePermissionPolicyModel.find({
+    organizationId: ctx.organizationId,
+    resource: "llmModel",
+    scope: model.id,
+  });
+  await ResourcePermissionPolicyModel.replace({
+    organizationId: ctx.organizationId,
+    resource: "llmModel",
+    scope: model.id,
+    revision: policy?.revision ?? 0,
+    grants: [{ subject: { type: "user", id: ctx.user.id }, actions: ["use"] }],
+  });
+  const created = await VirtualApiKeyModel.create({
+    organizationId: ctx.organizationId,
+    name: "Last model catalog key",
+    scope: "personal",
+    authorId: ctx.user.id,
+    providerApiKeys: [
+      { provider: "perplexity", providerApiKeyId: providerKey.id },
+    ],
+  });
+  const { setup, rawToken } = await ConnectionSetupModel.create({
+    organizationId: ctx.organizationId,
+    userId: ctx.user.id,
+    clientId: "opencode",
+    baseUrl: "https://deployment.example.com/v1",
+    llmProxyId: proxy.id,
+    provider: "perplexity",
+    proxyAuth: "virtual-key",
+    virtualApiKeyId: created.virtualKey.id,
+    expiresAt: new Date(Date.now() + 60000),
+  });
+  await ConnectionSetupModel.claimByToken({ rawToken });
+  const before = await rowCounts();
+  const credential = tokenFor(setup.id);
+  const granted = await fetchRuntime(credential);
+  expect(granted.statusCode, granted.body).toBe(200);
+  expect(granted.json().artifacts["routing-v1.mjs"].source).toContain(
+    "fixture/model/last",
+  );
+  const current = await ResourcePermissionPolicyModel.find({
+    organizationId: ctx.organizationId,
+    resource: "llmModel",
+    scope: model.id,
+  });
+  await ResourcePermissionPolicyModel.replace({
+    organizationId: ctx.organizationId,
+    resource: "llmModel",
+    scope: model.id,
+    revision: current?.revision ?? 0,
+    grants: [],
+  });
+  const revoked = await fetchRuntime(credential);
+  expect(revoked.statusCode, revoked.body).toBe(200);
+  for (const name of ["routing-v1.mjs", "routing-v2.mjs"] as const) {
+    const source = revoked.json().artifacts[name].source as string;
+    expect(source).toContain("const hasCatalog = true");
+    expect(source).not.toContain("fixture/model/last");
+    expect(source).not.toContain(created.value);
+    expect(source).not.toContain(credential);
+  }
+  expect(revoked.json().artifacts["repair.cjs"].source).toBeTypeOf("string");
   expect(await rowCounts()).toEqual(before);
 });
 

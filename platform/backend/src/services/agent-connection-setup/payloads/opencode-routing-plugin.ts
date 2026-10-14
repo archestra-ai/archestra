@@ -150,8 +150,12 @@ const rawDirectFetch = globalThis[directFetchSymbol] ?? (globalThis[directFetchS
 const managedAuth = (id) => ({ apiKey: aliasKeys.get(id), baseURL: activeRoutes[id],
   fetch: async (input, init) => {
     const request = new Request(input, init), url = new URL(request.url);
+    if (!activeRoutes[id]) throw new Error("Unsupported managed authentication request.");
+    if (/\\/models\\/[^/]+:(?:generateContent|streamGenerateContent)$/.test(url.pathname)) {
+      throw new Error("Managed " + id + " uses the OpenAI model router, which does not accept Gemini generateContent.");
+    }
     const suffix = ["/chat/completions", "/responses", "/models"].find((path) => url.pathname.endsWith(path));
-    if (!suffix || !activeRoutes[id]) throw new Error("Unsupported managed authentication request.");
+    if (!suffix) throw new Error("Unsupported managed authentication request.");
     const headers = new Headers(request.headers);
     headers.delete("Authorization");
     headers.delete("ChatGPT-Account-Id");
@@ -465,6 +469,34 @@ const openCodeAgentHeader = ${JSON.stringify(OPENCODE_AGENT_HEADER)};
 const openAiOAuthBridgeHeader = "x-archestra-opencode-oauth-bridge";
 const chatGptBaseUrl = "https://chatgpt.com/backend-api/codex";
 const normalizeUrl = (value) => String(value ?? "").replace(/\\/+$/, "");
+const managedAliases = new Set();
+let managedCredential = "";
+const stripAliasAuth = (headers) => {
+  const names = ["authorization", "chatgpt-account-id", "x-goog-api-key", openAiOAuthBridgeHeader];
+  if (typeof headers.delete === "function") {
+    for (const name of names) headers.delete(name);
+    if (managedCredential) headers.set("Authorization", "Bearer " + managedCredential);
+    return;
+  }
+  for (const key of Object.keys(headers)) if (names.includes(key.toLowerCase())) delete headers[key];
+  if (managedCredential) headers.Authorization = "Bearer " + managedCredential;
+};
+const managedAliasTarget = (url) => {
+  if (managedAliases.has("openai") && activeRoutes.openai && (url.hostname === "chatgpt.com" || url.hostname === "api.openai.com")) {
+    const suffix = url.pathname.endsWith("/backend-api/codex/responses") ? "/responses" : ["/chat/completions", "/responses", "/models"].find((path) => url.pathname.endsWith(path));
+    return suffix ? activeRoutes.openai + suffix : "";
+  }
+  if (managedAliases.has("google") && /\\/models\\/[^/]+:(?:generateContent|streamGenerateContent)$/.test(url.pathname)) {
+    throw new Error("Managed google uses the OpenAI model router, which does not accept Gemini generateContent.");
+  }
+  return "";
+};
+const onManagedAliasRoute = (url) => [...managedAliases].some((id) => {
+  const route = activeRoutes[id];
+  if (!route) return false;
+  const base = new URL(route);
+  return base.origin === url.origin && url.pathname.startsWith(base.pathname.replace(/\\/+$/, ""));
+});
 ${params.runtime ? "const directInferencePath = /(?:\\/(?:messages|responses|chat\\/completions)|\\/v1beta\\/models\\/[^/]+:(?:generateContent|streamGenerateContent)|\\/backend-api\\/codex\\/responses)$/;" : ""}
 
 export default {
@@ -473,9 +505,11 @@ export default {
     await ctx.provider.transform(async (editor) => {
       activeRoutes = { ...routes };
       effectiveRouteHeaders = { ...routeHeaders };
+      managedAliases.clear();
       if (hasCatalog && Object.keys(catalogProviders).length) {
         const sdk = await import("@opencode/plugin");
         const managedKey = readManagedKey();
+        managedCredential = managedKey;
         const apply = (id, definition, baseURL, headers) => {
           const providerID = sdk.Provider.ID.make(id);
           const models = Object.entries(definition.models ?? {}).map(([modelId, model]) => {
@@ -507,6 +541,7 @@ export default {
             (credentialEnvByProvider[alias] ?? []).some((name) => process.env[name]?.trim()) ||
             (typeof key === "string" && key.trim() && key !== managedKey && !key.startsWith("archestra_")));
           if (native) continue;
+          managedAliases.add(alias);
           const next = apply(alias, catalogProviders[twin], routes[twin], { ...managedHeaders });
           if (record) { editor.update(alias, (provider) => Object.assign(provider, next.info)); editor.models.set(alias, next.models); }
           else editor.add(next);
@@ -530,12 +565,14 @@ export default {
           'OpenCode provider "' + providerId + '" is not supported by the connected ' + appName + ' LLM proxy. Disconnect or reconfigure the proxy before using it.',
         );
       }
-      const chatGptSignIn = providerId === "openai" && normalizeUrl(event.baseURL) === chatGptBaseUrl;
+      const managedAlias = managedAliases.has(providerId);
+      const chatGptSignIn = !managedAlias && providerId === "openai" && normalizeUrl(event.baseURL) === chatGptBaseUrl;
       event.baseURL = route;
       ${params.runtime ? 'delete event.headers["x-archestra-client-runtime-token"];\n      delete event.headers["x-archestra-mcp-aliases"];' : ""}
       Object.assign(event.headers, managedHeaders, effectiveRouteHeaders[providerId] ?? {});
       event.headers[openCodeAgentHeader] = event.agent;
-      if (chatGptSignIn) event.headers[openAiOAuthBridgeHeader] = "true";
+      if (managedAlias) stripAliasAuth(event.headers);
+      else if (chatGptSignIn) event.headers[openAiOAuthBridgeHeader] = "true";
     });
     ${
       params.runtime
@@ -545,14 +582,19 @@ export default {
       const headers = new Headers(request.headers);
       headers.delete("x-archestra-client-runtime-token");
       headers.delete("x-archestra-mcp-aliases");
+      const rewritten = managedAliasTarget(url);
+      const finalUrl = rewritten ? new URL(rewritten) : url;
+      if (rewritten || onManagedAliasRoute(finalUrl)) stripAliasAuth(headers);
       const managedRoute = Object.values(activeRoutes).some(route => {
         const base = new URL(route);
-        return base.origin === url.origin && url.pathname.startsWith(base.pathname.replace(/\\/+$/, "") + "/");
+        return base.origin === finalUrl.origin && finalUrl.pathname.startsWith(base.pathname.replace(/\\/+$/, "") + "/");
       });
-      if (url.protocol === "https:" && process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "0" && url.origin === runtimeParams.origin && managedRoute && directInferencePath.test(url.pathname)) {
+      if (finalUrl.protocol === "https:" && process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "0" && finalUrl.origin === runtimeParams.origin && managedRoute && directInferencePath.test(finalUrl.pathname)) {
         for (const [name, value] of Object.entries(bindingProof?.() ?? {})) headers.set(name, value);
       }
-      event.request = new Request(request, { headers, redirect: headers.has("x-archestra-client-runtime-token") ? "error" : request.redirect });
+      event.request = rewritten
+        ? new Request(rewritten, { method: request.method, headers, body: request.body, signal: request.signal, duplex: request.body ? "half" : undefined, redirect: headers.has("x-archestra-client-runtime-token") ? "error" : request.redirect })
+        : new Request(request, { headers, redirect: headers.has("x-archestra-client-runtime-token") ? "error" : request.redirect });
     });`
         : ""
     }
@@ -566,8 +608,7 @@ function catalogSource(params: RenderOpenCodeRoutingPluginParams): string {
   const providers = catalog?.providers ?? {};
   const routes = catalog?.routes ?? {};
   const twins = catalog?.twins ?? {};
-  const hasCatalog =
-    Object.keys(providers).length > 0 || Object.keys(routes).length > 0;
+  const hasCatalog = params.catalog !== undefined;
   return `const catalogProviders = ${JSON.stringify(providers)};
 const catalogRoutes = ${JSON.stringify(routes)};
 const catalogTwins = ${JSON.stringify(twins)};

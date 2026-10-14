@@ -1545,9 +1545,7 @@ export async function handleLLMProxy<
     let appaIdentity: AppaSessionIdentity = {};
     let hasNativeClientSession = false;
     const approvedProxySetupContext = connectionProxySetupContext(request.raw);
-    let verifiedProxySetup:
-      | ReturnType<typeof readVerifiedConnectionProxySetup>
-      | undefined;
+    let verifiedProxySetup: ReturnType<typeof readVerifiedConnectionProxySetup>;
     if (approvedProxySetupContext) {
       for (const keyId of [virtualKeyId, passthroughVirtualKeyId]) {
         if (!keyId) continue;

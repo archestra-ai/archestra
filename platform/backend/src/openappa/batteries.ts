@@ -1279,7 +1279,13 @@ class OpenAppaBatteriesService {
     });
   }
 
-  /** Every policy a stored session opened under, parsed. */
+  /**
+   * Every policy a stored session opened under, parsed.
+   *
+   * The runtime ledger has no organization column. That is safe here because a
+   * deployment serves one organization; credential and helper checks still use
+   * that organization's readable keys and installs.
+   */
   private async openingPolicies(): Promise<OpeningPolicy[]> {
     const rows = await OpenAppaPolicyFileModel.list();
     return rows.flatMap(({ hash, bytes }) => {

@@ -1,6 +1,6 @@
 import { SLACK_REQUIRED_BOT_SCOPES } from "@archestra/shared";
 import { HttpResponse, http } from "msw";
-import { describe, expect, test } from "@/test";
+import { describe, expect, test } from "vitest";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
 import SlackProvider from "./slack-provider";

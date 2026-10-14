@@ -2221,6 +2221,15 @@ const config = {
       process.env.ARCHESTRA_MCP_GATEWAY_TOOL_CALL_TIMEOUT_MS,
       60000,
     ),
+    /**
+     * Largest single JSON-RPC message (bytes) accepted from a stdio MCP server
+     * running in Kubernetes. A larger reply fails only the tool call it
+     * answers. The default matches the MCP SDK's stdio buffer limit.
+     */
+    stdioMaxMessageBytes: parsePositiveInt(
+      process.env.ARCHESTRA_MCP_GATEWAY_STDIO_MAX_MESSAGE_BYTES,
+      10 * 1024 * 1024,
+    ),
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise

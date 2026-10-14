@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ClientMark } from "../client-mark";
 import type { SupportedProvider } from "../model-constants";
 import {
   OPENCODE_FAMILY_CLIENTS,
@@ -375,6 +376,12 @@ export interface ClientFamily {
    * `provider` logo.
    */
   icon?: string;
+  /**
+   * The family's own mark on its brand tile (OpenCode, Kilo Code), drawn as
+   * the Connect page draws it. When set, the UI renders it instead of `icon`
+   * or the `provider` logo.
+   */
+  mark?: ClientMark;
   agentIds: ReadonlyArray<string>;
   isClientAgentId: (externalAgentId: string | null | undefined) => boolean;
 }
@@ -427,7 +434,7 @@ const CLIENT_FAMILIES: ReadonlyArray<ClientFamily> = [
     filter: client.id,
     label: client.label,
     provider: "openai" as const,
-    icon: client.icon,
+    mark: client.mark,
     agentIds: [client.id] as readonly string[],
     isClientAgentId: (externalAgentId: string | null | undefined) =>
       externalAgentId?.trim().toLowerCase() === client.id,
@@ -478,9 +485,11 @@ export const CLIENT_FILTER_OPTIONS: ReadonlyArray<{
   label: string;
   provider: SupportedProvider;
   icon?: string;
-}> = CLIENT_FAMILIES.map(({ filter, label, provider, icon }) => ({
+  mark?: ClientMark;
+}> = CLIENT_FAMILIES.map(({ filter, label, provider, icon, mark }) => ({
   value: filter,
   label,
   provider,
   icon,
+  mark,
 }));

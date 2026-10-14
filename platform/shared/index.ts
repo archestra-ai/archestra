@@ -14,6 +14,7 @@ export * from "./chat";
 export * from "./chat-error";
 export * from "./chatops-channels";
 export * from "./citation-quotes";
+export * from "./client-mark";
 export * from "./consts";
 export * from "./created-by";
 export * from "./docs";

@@ -967,47 +967,30 @@ describe("LLM proxy plugin lifecycle", () => {
     }
   });
 
-  test("records calls an allowing plugin replaced with denial notices", async ({
-    makeAgent,
-  }) => {
+  test.for([
+    {
+      stream: false,
+      tool: "read_file",
+      client: {
+        nonStreamingToolCalls: [
+          { id: "call-1", name: "read_file", arguments: "{}" },
+        ],
+      },
+    },
+    {
+      // The stream ends before the usage chunk, so the turn is recorded
+      // without usage.
+      stream: true,
+      tool: "get_weather",
+      client: { includeToolCalls: true, interruptAtChunk: 2 },
+    },
+  ])("records calls an allowing plugin replaced with denial notices (stream: $stream)", async ({
+    stream,
+    tool,
+    client,
+  }, { makeAgent }) => {
     vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
-      () =>
-        ({
-          chat: {
-            completions: {
-              create: async () => ({
-                id: "chatcmpl-plugin-test",
-                object: "chat.completion",
-                created: 1,
-                model: "gpt-4o",
-                choices: [
-                  {
-                    index: 0,
-                    message: {
-                      role: "assistant",
-                      content: null,
-                      refusal: null,
-                      tool_calls: [
-                        {
-                          id: "call-1",
-                          type: "function",
-                          function: { name: "read_file", arguments: "{}" },
-                        },
-                      ],
-                    },
-                    finish_reason: "tool_calls",
-                    logprobs: null,
-                  },
-                ],
-                usage: {
-                  prompt_tokens: 1,
-                  completion_tokens: 1,
-                  total_tokens: 2,
-                },
-              }),
-            },
-          },
-        }) as never,
+      () => createOpenAiTestClient(client) as never,
     );
     const unregister = registerLlmProxyPlugin({
       id: `test-notice-${crypto.randomUUID()}`,
@@ -1016,9 +999,11 @@ describe("LLM proxy plugin lifecycle", () => {
         return {
           decision: "allow",
           toolCalls,
-          blocked: [
-            { id: "call-1", name: "read_file", reason: "policy denied read" },
-          ],
+          blocked: toolCalls.map((call) => ({
+            id: call.id,
+            name: call.name,
+            reason: "policy denied the call",
+          })),
         };
       },
     });
@@ -1034,12 +1019,13 @@ describe("LLM proxy plugin lifecycle", () => {
         },
         payload: {
           model: "gpt-4o",
-          messages: [{ role: "user", content: "read a file" }],
+          stream,
+          messages: [{ role: "user", content: "use the tool" }],
           tools: [
             {
               type: "function",
               function: {
-                name: "read_file",
+                name: tool,
                 parameters: { type: "object", properties: {} },
               },
             },
@@ -1052,7 +1038,7 @@ describe("LLM proxy plugin lifecycle", () => {
         agent.id,
       );
       expect(interaction.toolCallBlock).toEqual({
-        reason: "policy denied read",
+        reason: "policy denied the call",
         blockedToolCallCount: 1,
       });
     } finally {

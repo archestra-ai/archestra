@@ -2887,6 +2887,7 @@ async function handleStreaming<
         model: actualModel,
         inputTokens: 0,
         outputTokens: 0,
+        toolCallBlock,
       };
       await persistProxyInteraction(record, encryptedChat);
     } catch (interactionError) {

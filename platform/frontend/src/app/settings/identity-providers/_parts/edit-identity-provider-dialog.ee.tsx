@@ -190,7 +190,7 @@ export function EditIdentityProviderDialog({
         activeSection={validActiveSection}
         navItems={navItems}
         onActiveSectionChange={setActiveSection}
-        onSubmit={form.handleSubmit(onSubmit)}
+        onSubmit={onSubmit}
         sidebarFooter={
           <PermissionButton
             type="button"

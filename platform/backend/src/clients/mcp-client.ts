@@ -205,7 +205,7 @@ class McpServerUnreachableError extends Error {
  * Ends a tool call whose MCP server stopped answering or closed the
  * connection mid-call. Its message reaches the model and the chat task card.
  */
-class McpServerStoppedError extends Error {
+export class McpServerStoppedError extends Error {
   constructor(reason: "not_answering" | "connection_closed") {
     super(
       reason === "not_answering"

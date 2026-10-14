@@ -22,10 +22,17 @@ import {
   TOOL_UPLOAD_FILE_FULL_NAME,
   TOOL_WHOAMI_FULL_NAME,
 } from "@archestra/shared";
-import type { ListToolsResult } from "@modelcontextprotocol/sdk/types.js";
-import { vi } from "vitest";
+import { StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import {
+  ErrorCode,
+  type ListToolsResult,
+  McpError,
+} from "@modelcontextprotocol/sdk/types.js";
+import { onTestFinished, vi } from "vitest";
+import { ZodError } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
-import mcpClient from "@/clients/mcp-client";
+import mcpClient, { McpServerStoppedError } from "@/clients/mcp-client";
+import config from "@/config";
 import {
   AgentTeamModel,
   McpCatalogLabelModel,
@@ -40,6 +47,8 @@ import {
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import type { JwksValidationResult } from "@/services/jwks-validator";
 import { describe, expect, test } from "@/test";
+import { ApiError } from "@/types/api";
+import { handleTaskMethod, MCP_TASKS_EXTENSION_ID } from "./tasks";
 
 vi.mock("@/config", async () =>
   (await import("@/test/mocks/config")).configModuleMock({
@@ -71,6 +80,8 @@ type TestCallToolHandler = (
 ) => Promise<{
   content: Array<{ type: string; text: string }>;
   isError?: boolean;
+  resultType?: string;
+  task?: { taskId: string };
   structuredContent?: { items?: unknown[] };
 }>;
 
@@ -3136,6 +3147,251 @@ describe("createAgentServer tools/list", () => {
     expect(searchTool?.description).toContain(
       "github (Repositories, issues, and pull requests)",
     );
+  });
+
+  describe("tool execution errors", () => {
+    test.for([
+      {
+        label: "silent server",
+        error: new McpServerStoppedError("not_answering"),
+      },
+      {
+        label: "closed connection",
+        error: new McpServerStoppedError("connection_closed"),
+      },
+      { label: "unexpected error", error: new Error("PRIVATE_SENTINEL") },
+    ])("settles a detached $label without losing its error contract", async ({
+      error,
+    }, {
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeOrganization,
+      makeTool,
+    }) => {
+      const originalTimeout = config.mcpGateway.toolCallTimeoutMs;
+      config.mcpGateway.toolCallTimeoutMs = 20;
+      onTestFinished(() => {
+        config.mcpGateway.toolCallTimeoutMs = originalTimeout;
+      });
+      const org = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: org.id,
+        name: "qa-errors",
+      });
+      const tool = await makeTool({
+        catalogId: catalog.id,
+        name: "qa-errors__execute",
+        parameters: { type: "object", properties: {} },
+      });
+      await makeAgentTool(agent.id, tool.id);
+      let rejectExecution!: (reason: unknown) => void;
+      const pending = new Promise<never>((_resolve, reject) => {
+        rejectExecution = reject;
+      });
+      const execute = vi
+        .spyOn(mcpClient, "executeToolCallForOwner")
+        .mockImplementationOnce(() => pending);
+      onTestFinished(() => execute.mockRestore());
+      const { server } = await createAgentServer({
+        agentId: agent.id,
+        mrtr: { enabled: true },
+      });
+      const handler = (
+        server.server as unknown as {
+          _requestHandlers: Map<string, TestCallToolHandler>;
+        }
+      )._requestHandlers.get("tools/call");
+      if (!handler) throw new Error("Expected tools/call handler");
+      const result = await handler(
+        {
+          method: "tools/call",
+          params: {
+            name: tool.name,
+            arguments: {},
+            _meta: {
+              "io.modelcontextprotocol/clientCapabilities": {
+                extensions: { [MCP_TASKS_EXTENSION_ID]: {} },
+              },
+            },
+          },
+        },
+        { sendRequest: vi.fn() },
+      );
+      expect(result.resultType).toBe("task");
+      expect(result.task?.taskId).toBeDefined();
+      await vi.waitFor(() => expect(execute).toHaveBeenCalledOnce());
+      rejectExecution(error);
+      await vi.waitFor(async () => {
+        const state = await handleTaskMethod({
+          body: {
+            method: "tasks/get",
+            params: { taskId: result.task?.taskId },
+          },
+          agentId: agent.id,
+          principal: "anonymous",
+        });
+        expect(state).toMatchObject({
+          result: {
+            task:
+              error instanceof McpServerStoppedError
+                ? {
+                    status: "failed",
+                    error: { code: -32603, message: error.message },
+                  }
+                : {
+                    status: "completed",
+                    result: {
+                      resultType: "complete",
+                      isError: true,
+                      content: [
+                        {
+                          type: "text",
+                          text: "Error: An internal error occurred while executing tool",
+                        },
+                      ],
+                    },
+                  },
+          },
+        });
+        expect(JSON.stringify(state)).not.toContain("PRIVATE_SENTINEL");
+      });
+    });
+
+    test.for([
+      {
+        label: "authored client error",
+        error: new ApiError(403, "Access denied"),
+        message: "Error: Access denied",
+      },
+      {
+        label: "internal API error",
+        error: new ApiError(500, "PRIVATE_SENTINEL"),
+      },
+      { label: "unexpected error", error: new Error("PRIVATE_SENTINEL") },
+      {
+        label: "spoofed server-stopped error",
+        error: Object.assign(new Error("PRIVATE_SENTINEL"), {
+          name: "McpServerStoppedError",
+        }),
+      },
+      {
+        label: "HTTP transport error",
+        error: new StreamableHTTPError(503, "PRIVATE_SENTINEL"),
+      },
+      {
+        label: "numeric-code Error",
+        error: Object.assign(new Error("PRIVATE_SENTINEL"), { code: -32603 }),
+      },
+      {
+        label: "SQL unique violation",
+        error: Object.assign(new Error("PRIVATE_SENTINEL"), {
+          code: "23505",
+          detail: "PRIVATE_SENTINEL",
+        }),
+        message:
+          "Error: A record with the same value already exists (executing tool)",
+      },
+      {
+        label: "other string-code error",
+        error: Object.assign(new Error("PRIVATE_SENTINEL"), {
+          code: "ECONNRESET",
+        }),
+      },
+      {
+        label: "malformed protocol object",
+        error: { code: -32603.5, message: "PRIVATE_SENTINEL" },
+      },
+      { label: "thrown string", error: "PRIVATE_SENTINEL" },
+      { label: "thrown null", error: null },
+      {
+        label: "custom validation message and path",
+        error: new ZodError([
+          {
+            code: "custom",
+            path: ["PRIVATE_SENTINEL"],
+            message: "PRIVATE_SENTINEL",
+          },
+        ]),
+        message: "Error: Invalid tool arguments",
+      },
+      {
+        label: "MCP protocol error",
+        error: new McpError(
+          ErrorCode.InvalidParams,
+          "Invalid protocol parameters",
+          { field: "name" },
+        ),
+        protocol: true,
+      },
+      {
+        label: "authored protocol object",
+        error: {
+          code: -32601,
+          message: "Method not found",
+          data: { method: "unknown" },
+        },
+        protocol: true,
+      },
+    ])("handles $label without leaking execution details", async ({
+      error,
+      message,
+      protocol,
+    }, {
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeOrganization,
+      makeTool,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: org.id,
+        name: "qa-errors",
+      });
+      const tool = await makeTool({
+        catalogId: catalog.id,
+        name: "qa-errors__execute",
+        parameters: { type: "object", properties: {} },
+      });
+      await makeAgentTool(agent.id, tool.id);
+      const execute = vi
+        .spyOn(mcpClient, "executeToolCallForOwner")
+        .mockRejectedValueOnce(error);
+      onTestFinished(() => execute.mockRestore());
+      const { server } = await createAgentServer({ agentId: agent.id });
+      const handler = (
+        server.server as unknown as {
+          _requestHandlers: Map<string, TestCallToolHandler>;
+        }
+      )._requestHandlers.get("tools/call");
+      if (!handler) throw new Error("Expected tools/call handler");
+      const response = handler(
+        { method: "tools/call", params: { name: tool.name, arguments: {} } },
+        { sendRequest: vi.fn() },
+      );
+      if (protocol) {
+        await expect(response).rejects.toBe(error);
+      } else {
+        const result = await response;
+        expect(result).toMatchObject({
+          resultType: "complete",
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text:
+                message ??
+                "Error: An internal error occurred while executing tool",
+            },
+          ],
+        });
+        expect(JSON.stringify(result)).not.toContain("PRIVATE_SENTINEL");
+      }
+      expect(execute).toHaveBeenCalledOnce();
+    });
   });
 
   test("preserves user context when calling restricted Archestra tools", async ({

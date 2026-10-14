@@ -121,7 +121,13 @@ export default class OpenAppaYellModel {
 
   static async summary(params: { organizationId: string }) {
     const [row] = await db
-      .select({ unresolved: count() })
+      .select({
+        unresolved: count(),
+        superyells:
+          sql<number>`count(*) filter (where ${table.superyell})`.mapWith(
+            Number,
+          ),
+      })
       .from(table)
       .where(
         and(
@@ -129,7 +135,10 @@ export default class OpenAppaYellModel {
           isNull(table.resolvedAt),
         ),
       );
-    return { unresolved: row?.unresolved ?? 0 };
+    return {
+      unresolved: row?.unresolved ?? 0,
+      superyells: row?.superyells ?? 0,
+    };
   }
 
   static async list(

@@ -92254,6 +92254,7 @@ export type GetOpenAppaYellsResponses = {
             toolCallId: string;
             message: string;
             withTrajectory: boolean;
+            superyell: boolean;
             createdAt: string;
             reportedAt: string | null;
             reportFailed: boolean;
@@ -92363,6 +92364,7 @@ export type GetOpenAppaYellsSummaryResponses = {
      */
     200: {
         unresolved: number;
+        superyells: number;
     };
 };
 
@@ -92457,6 +92459,7 @@ export type GetOpenAppaYellResponses = {
         toolCallId: string;
         message: string;
         withTrajectory: boolean;
+        superyell: boolean;
         createdAt: string;
         reportedAt: string | null;
         reportFailed: boolean;
@@ -92570,6 +92573,7 @@ export type UpdateOpenAppaYellResponses = {
         toolCallId: string;
         message: string;
         withTrajectory: boolean;
+        superyell: boolean;
         createdAt: string;
         reportedAt: string | null;
         reportFailed: boolean;

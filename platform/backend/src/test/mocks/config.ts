@@ -26,6 +26,7 @@ export async function configModuleMock(
 ) {
   const actual = await vi.importActual<typeof import("@/config")>("@/config");
   return {
+    ...actual,
     default: deepMerge(structuredClone(actual.default), overrides),
   };
 }

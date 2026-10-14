@@ -1271,7 +1271,11 @@ describe("ConnectPage loading", () => {
 });
 
 describe("ConnectPage after copying the command", () => {
+  // Cursor's installer registers the gateway under its name; Generic client
+  // picks its own, so its prompt names no server.
   const welcome =
+    "Read http://localhost:3000/welcome.md?server=team_gateway and show me what I can do with Example Platform. Do not call, test, reconnect or sign in to my other MCP servers. Leave them out of your answer.";
+  const genericWelcome =
     "Read http://localhost:3000/welcome.md and show me what I can do with Example Platform.";
 
   beforeEach(() => {
@@ -1386,7 +1390,7 @@ describe("ConnectPage after copying the command", () => {
     expect(card).toHaveTextContent(
       "Works once your agent is connected. If it isn't yet, it points you back to the Connect page.",
     );
-    expect(within(card).getByText(welcome)).toBeVisible();
+    expect(within(card).getByText(genericWelcome)).toBeVisible();
     await userEvent.click(within(card).getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("region", { name: "Starter prompt" })).toBeNull();
   });

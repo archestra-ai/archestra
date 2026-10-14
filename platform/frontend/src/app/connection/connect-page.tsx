@@ -84,6 +84,7 @@ import {
   type ConnectPageSkill,
   type ConnectPlugin,
   type ConnectServer,
+  gatewayServerName,
   useConnectPageData,
   welcomePrompt,
 } from "./connect-page-data";
@@ -675,16 +676,23 @@ function ConnectArea({
     data.gateway?.id,
     ...keptPlugins.map((p) => p.id),
   ].join();
+  const serverName = gatewayServerName({
+    client,
+    gateway: data.gateway,
+    appName: data.appName,
+    tools: choices.tools && data.partsFor(client).tools,
+  });
   const [run, setRun] = useState<AfterConnectRun>({
     phase: "idle",
     key: setupKey,
     client,
     script,
+    serverName,
   });
   const phase =
     run.phase === "connected" || run.key === setupKey ? run.phase : "idle";
   const setPhase = (next: AfterConnectPhase) =>
-    setRun({ phase: next, key: setupKey, client, script });
+    setRun({ phase: next, key: setupKey, client, script, serverName });
   // Only a copied prompt or command starts it: Manual setup and Claude
   // Desktop's download have nothing to copy.
   const startWaiting = () => {
@@ -815,7 +823,15 @@ function ConnectArea({
         phase={phase}
         client={run.client}
         script={run.script}
-        welcome={origin ? welcomePrompt(origin, data.appName) : null}
+        welcome={
+          origin
+            ? welcomePrompt({
+                origin,
+                appName: data.appName,
+                serverName: run.serverName,
+              })
+            : null
+        }
         // n8n has no agent to follow up with; "everything left out" has
         // nothing to follow up on.
         showLink={

@@ -101,6 +101,15 @@ export function isInstallerClientId(id: string): id is InstallerClientId {
 }
 
 /**
+ * A client's MCP server name that is safe to quote in a prompt or pass in a
+ * link: letters, digits, `_`, `.` and `-`. Names with anything else (quotes,
+ * spaces, text a crafted link adds) are left out of prompts.
+ */
+export function isPlainMcpClientServerName(name: string): boolean {
+  return /^[A-Za-z0-9_.-]{1,64}$/.test(name);
+}
+
+/**
  * The startup guard's file stem under ~/.archestra ("claude" for
  * claude-startup-guard.sh); undefined for apps without a guard (Cursor,
  * Claude Desktop).

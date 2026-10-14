@@ -82,7 +82,7 @@ Go to **Settings → OAuth Clients → Create OAuth Client**, and pick **LLM Pro
 
 ### Call as the App
 
-For a bot or a nightly job with no person behind it.
+For a bot or a nightly job with no person behind it. Select **Service account (optional)** on **Access** to use that account’s permissions and attribute LLM spend to it. You can bind an Agents & MCP gateways client to the same account for [shared A2A run ownership](/docs/mcp/authentication/applications#call-as-the-app).
 
 1. Pick **As itself**, then a provider key for each provider.
 2. On **Budget**, pick the team that pays for it. This is optional.

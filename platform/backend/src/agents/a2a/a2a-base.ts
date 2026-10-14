@@ -1,6 +1,12 @@
 export interface A2AActor {
   id: string;
-  kind: "user" | "team" | "organization" | "oauthClient" | "system";
+  kind:
+    | "user"
+    | "team"
+    | "organization"
+    | "oauthClient"
+    | "serviceAccount"
+    | "system";
   organizationId: string;
 }
 

@@ -43,6 +43,7 @@ import {
 import QuickLRU from "quick-lru";
 import { unavailableThirdPartyToolMessage } from "@/archestra-mcp-server/tool-recovery-messages";
 import { getMcpCatalogPermissionChecker } from "@/auth/mcp-catalog-permissions";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
@@ -323,6 +324,7 @@ export type TokenAuthContext = {
   isSessionAuth?: boolean;
   /** OAuth client the caller signed in with, for OAuth tokens */
   oauthClientId?: string;
+  serviceAccountId?: string;
   /** Who sent the request over the HTTP gateway; unset for in-process calls */
   source?: McpGatewayCallSource;
   /** Headers to forward to downstream MCP servers (extracted from incoming request per gateway allowlist) */
@@ -349,6 +351,7 @@ type InstallCallerContext = Pick<TokenAuthContext, "userId"> &
  * been resolved — whose credential the upstream call ran under.
  */
 type ToolCallAuthInfo = {
+  serviceAccountId?: string;
   userId?: string;
   authMethod?: MCPGatewayAuthMethod;
   oauthClientId?: string;
@@ -653,6 +656,7 @@ class McpClient {
       tokenAuth && Object.keys(tokenAuth).length
         ? {
             userId: tokenAuth.userId,
+            serviceAccountId: tokenAuth.serviceAccountId,
             authMethod: deriveAuthMethod(tokenAuth),
             oauthClientId: tokenAuth.oauthClientId,
             source: tokenAuth.source,
@@ -685,7 +689,9 @@ class McpClient {
       !isToolCatalogAccessible(
         tool,
         await getCallerAccessibleCatalogIds({
-          userId: tokenAuth?.userId,
+          userId: tokenAuth?.serviceAccountId
+            ? serviceAccountUserId(tokenAuth.serviceAccountId)
+            : tokenAuth?.userId,
           organizationId: tokenAuth?.organizationId,
         }),
       )
@@ -2330,6 +2336,7 @@ class McpClient {
           tokenId: tokenAuth.tokenId,
           teamId: tokenAuth.teamId,
           userId: tokenAuth.userId,
+          serviceAccountId: tokenAuth.serviceAccountId,
           isOrganizationToken: tokenAuth.isOrganizationToken,
           isUserToken: tokenAuth.isUserToken,
           isExternalIdp: tokenAuth.isExternalIdp,
@@ -5163,7 +5170,9 @@ class McpClient {
       );
     // A catalog the calling user cannot see is not listed through the agent.
     const tools = await filterToolsByCallerCatalogAccess(agentTools, {
-      userId: tokenAuth?.userId,
+      userId: tokenAuth?.serviceAccountId
+        ? serviceAccountUserId(tokenAuth.serviceAccountId)
+        : tokenAuth?.userId,
       organizationId: tokenAuth?.organizationId,
     });
     const assignedTools = await ToolModel.getMcpToolsAssignedToAgent(

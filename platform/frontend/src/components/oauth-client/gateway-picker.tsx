@@ -25,6 +25,9 @@ export function GatewayPicker({
           {value.length} of {gateways.length} selected
         </span>
       </div>
+      <p className="text-sm text-muted-foreground">
+        Choose which agents and MCP gateways this application can access.
+      </p>
       <AgentSelector
         mode="multiple"
         agents={gateways}

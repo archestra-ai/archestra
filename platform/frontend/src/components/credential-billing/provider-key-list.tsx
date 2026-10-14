@@ -221,9 +221,7 @@ export function ProviderKeyList({
         <div className="space-y-3 rounded-lg border bg-muted/40 p-3">
           {noneOn && (
             <div className="space-y-0.5">
-              <p className="font-semibold text-sm">
-                Pick the providers this key can use
-              </p>
+              <p className="font-semibold text-sm">Choose providers to use</p>
               <p className="text-xs text-muted-foreground">
                 Add at least one. Each starts with its primary key.
               </p>
@@ -547,9 +545,8 @@ function NoProviderKeys({ unavailable }: { unavailable: SupportedProvider[] }) {
           Connect your first model provider
         </p>
         <p className="text-sm text-muted-foreground">
-          A virtual key sends requests through your provider keys. Add a key for
-          Anthropic, OpenAI or another provider, and this key can call its
-          models.
+          Add a provider key for Anthropic, OpenAI or another provider to use
+          its models.
         </p>
         {shown.length > 0 && (
           <div className="flex gap-1.5">

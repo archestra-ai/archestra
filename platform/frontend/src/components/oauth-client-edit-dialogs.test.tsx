@@ -1,7 +1,19 @@
+import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useModelsWithApiKeys } from "@/lib/llm-models.query";
 import { useOrganization } from "@/lib/organization.query";
@@ -27,6 +39,11 @@ vi.mock("@/lib/teams/team.query", () => ({
 }));
 
 Element.prototype.scrollIntoView = vi.fn();
+
+const server = setupServer();
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
 
 const base = {
   id: "client-1",
@@ -142,6 +159,78 @@ describe("LLM OAuth client edit", () => {
 });
 
 describe("MCP OAuth client edit", () => {
+  it("saves a chosen service-account binding", async () => {
+    const user = userEvent.setup();
+    archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+    vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
+      typeof useHasPermissions
+    >);
+    server.use(
+      http.get("http://localhost:9000/api/service-accounts", () =>
+        HttpResponse.json([
+          {
+            id: "a1111111-1111-4111-8111-111111111111",
+            name: "Worker account",
+            disabled: false,
+          },
+        ]),
+      ),
+    );
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    renderWithQuery(
+      <EditMcpOAuthClientDialog
+        oauthClient={
+          {
+            ...base,
+            name: "Worker",
+            grantType: "client_credentials",
+            allowedGatewayIds: ["gw-1"],
+            serviceAccountId: null,
+          } as unknown as McpOauthClient
+        }
+        onOpenChange={vi.fn()}
+        gateways={[{ id: "gw-1", name: "Gateway", agentType: "mcp_gateway" }]}
+        onSubmit={onSubmit}
+        isSubmitting={false}
+      />,
+    );
+    expect(
+      screen.queryByRole("combobox", { name: "Service account" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    const picker = await screen.findByRole("combobox", {
+      name: "Service account",
+    });
+    await waitFor(() => expect(picker).toBeEnabled());
+    await user.click(picker);
+    await user.click(
+      await screen.findByRole("option", { name: /Worker account/ }),
+    );
+    await user.type(
+      screen.getByRole("textbox", { name: "Label key" }),
+      "environment",
+    );
+    await user.type(
+      screen.getByRole("textbox", { name: "Label value" }),
+      "demo",
+    );
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    expect(
+      screen.queryByRole("combobox", { name: "Service account" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith(
+        "client-1",
+        expect.objectContaining({
+          serviceAccountId: "a1111111-1111-4111-8111-111111111111",
+          labels: [
+            expect.objectContaining({ key: "environment", value: "demo" }),
+          ],
+        }),
+      ),
+    );
+  });
   it("grants gateways to signed-in users only when asked to", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue(undefined);

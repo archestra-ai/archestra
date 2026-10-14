@@ -112,7 +112,9 @@ describe("CreateOAuthClientDialog", () => {
     await user.type(screen.getByLabelText("Name"), "marketing-bot");
     await continueStep(user);
 
-    expect(screen.getByRole("combobox")).toHaveTextContent("Marketing Agent");
+    expect(screen.getByRole("combobox", { name: "" })).toHaveTextContent(
+      "Marketing Agent",
+    );
     expect(screen.getByText("1 of 2 selected")).toBeVisible();
     await continueStep(user);
     expect(screen.queryByLabelText("Label key")).not.toBeInTheDocument();
@@ -147,7 +149,7 @@ describe("CreateOAuthClientDialog", () => {
     await continueStep(user);
 
     expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
-    await user.click(screen.getByRole("combobox"));
+    await user.click(screen.getByRole("combobox", { name: "" }));
     await user.click(screen.getByRole("option", { name: /Prod Gateway/ }));
     expect(screen.getByRole("button", { name: "Continue" })).toBeEnabled();
   });
@@ -165,8 +167,15 @@ describe("CreateOAuthClientDialog", () => {
     const { onSubmit } = renderDialog({ fixedClientType: "llm" });
 
     await user.type(screen.getByLabelText("Name"), "ci-runner");
+    expect(
+      screen.queryByRole("combobox", { name: "Service account" }),
+    ).not.toBeInTheDocument();
     await continueStep(user);
-    await user.click(screen.getByRole("radio", { name: "Main OpenAI" }));
+    expect(
+      screen.getByRole("combobox", { name: "Service account" }),
+    ).toBeVisible();
+    expect(screen.getByText("2. Access")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Add OpenAI" }));
     await continueStep(user);
     await user.click(screen.getByLabelText("Who pays for this client?"));
     await user.click(await screen.findByRole("option", { name: /^Platform/ }));

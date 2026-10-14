@@ -1,5 +1,6 @@
 import { isVaultReference } from "@archestra/shared";
 import { userHasPermission } from "@/auth";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import logger from "@/logging";
 import { AgentModel, SecretModel, UserCredentialModel } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
@@ -44,12 +45,16 @@ export async function resolveAgentRuntimeCredentials(params: {
     Partial<Pick<ResolvedAgentRuntime, "command">>;
   organizationId: string;
   userId: string | null;
+  authorizationUserId?: string | null;
 }): Promise<AgentRuntimeCredentialResolution> {
   const { shared, perUser } = splitDeclarations(applicableCredentials(params));
   await requireSharedCredentialAccess({
     shared,
     organizationId: params.organizationId,
-    userId: params.userId,
+    userId:
+      params.authorizationUserId === undefined
+        ? params.userId
+        : params.authorizationUserId,
   });
   const batch = await CredentialResolutionBatch.create({
     organizationId: params.organizationId,
@@ -151,6 +156,7 @@ export async function preflightAgentRuntimeCredentials(params: {
     Partial<Pick<ResolvedAgentRuntime, "command">>;
   organizationId: string;
   userId: string | null;
+  authorizationUserId?: string | null;
 }): Promise<{
   configured: string[];
   missing: MissingAgentRuntimeCredential[];
@@ -160,7 +166,10 @@ export async function preflightAgentRuntimeCredentials(params: {
   await requireSharedCredentialAccess({
     shared,
     organizationId: params.organizationId,
-    userId: params.userId,
+    userId:
+      params.authorizationUserId === undefined
+        ? params.userId
+        : params.authorizationUserId,
   });
   const batch = await CredentialResolutionBatch.create({
     organizationId: params.organizationId,
@@ -250,6 +259,22 @@ async function requireSharedCredentialAccess(params: {
   ) {
     return;
   }
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  if (isServiceAccountUserId(params.userId)) {
+    for (const declaration of params.shared) {
+      if (!declaration.credentialId) continue;
+      await CredentialAccess.requireUseOfKey({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        key: declaration.credentialId,
+        message: "Service account cannot use this shared credential.",
+      });
+    }
+    return;
+  }
+  // SPDX-SnippetEnd
   const permitted = await userHasPermission(
     params.userId,
     params.organizationId,

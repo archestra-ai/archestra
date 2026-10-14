@@ -1791,6 +1791,14 @@ export class A2AManager {
 
     const organizationId = tokenAuth.organizationId;
 
+    if (tokenAuth.serviceAccountId) {
+      return {
+        id: tokenAuth.serviceAccountId,
+        kind: "serviceAccount",
+        organizationId,
+      };
+    }
+
     if (tokenAuth.userId) {
       const user = await UserModel.getById(tokenAuth.userId);
       if (!user) {

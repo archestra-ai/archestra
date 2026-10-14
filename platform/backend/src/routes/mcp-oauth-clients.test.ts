@@ -375,4 +375,45 @@ describe("mcpOauthClientsRoutes", () => {
       "MCP gateway or agent not found",
     );
   });
+  test("binding an OAuth credential requires management of the account and rejects cross-organization accounts", async ({
+    makeAgent,
+    makeServiceAccount,
+    makeOrganization,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+    });
+    const account = await makeServiceAccount(organizationId);
+    const payload = {
+      name: "worker",
+      allowedGatewayIds: [gateway.id],
+      serviceAccountId: account.id,
+    };
+    const denied = await app.inject({
+      method: "POST",
+      url: "/api/mcp-oauth-clients",
+      payload,
+    });
+    expect(denied.statusCode).toBe(403);
+    const otherOrg = await makeOrganization();
+    const otherAccount = await makeServiceAccount(otherOrg.id);
+    const crossOrg = await app.inject({
+      method: "POST",
+      url: "/api/mcp-oauth-clients",
+      payload: { ...payload, serviceAccountId: otherAccount.id },
+    });
+    expect(crossOrg.statusCode).toBe(400);
+    await db
+      .update(schema.membersTable)
+      .set({ role: "admin" })
+      .where(eq(schema.membersTable.userId, user.id));
+    const allowed = await app.inject({
+      method: "POST",
+      url: "/api/mcp-oauth-clients",
+      payload,
+    });
+    expect(allowed.statusCode, allowed.body).toBe(200);
+    expect(allowed.json().serviceAccountId).toBe(account.id);
+  });
 });

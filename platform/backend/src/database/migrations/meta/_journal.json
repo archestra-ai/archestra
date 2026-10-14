@@ -3809,6 +3809,13 @@
       "when": 1791985031985,
       "tag": "0543_low_raider",
       "breakpoints": true
+    },
+    {
+      "idx": 544,
+      "version": "7",
+      "when": 1792004823134,
+      "tag": "0544_fair_forgotten_one",
+      "breakpoints": true
     }
   ]
 }

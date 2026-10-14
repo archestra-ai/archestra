@@ -40,6 +40,7 @@ const ACTOR_KINDS = new Set<AgentRunActorKind>([
   "team",
   "organization",
   "oauthClient",
+  "serviceAccount",
   "system",
 ]);
 
@@ -84,6 +85,7 @@ type GatewayTokenActor = {
   teamId?: string | null;
   isOrganizationToken: boolean;
   oauthClientId?: string;
+  serviceAccountId?: string;
 };
 
 /** @public — principal constructor shared with review and gateway callers */
@@ -605,6 +607,12 @@ function tokenOwnsActor(
   }
   if (token.teamId && !token.isOrganizationToken) {
     return claims.actorKind === "team" && claims.actorId === token.teamId;
+  }
+  if (token.serviceAccountId) {
+    return (
+      claims.actorKind === "serviceAccount" &&
+      claims.actorId === token.serviceAccountId
+    );
   }
   if (token.oauthClientId) {
     return (

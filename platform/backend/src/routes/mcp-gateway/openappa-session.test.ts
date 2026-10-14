@@ -828,7 +828,13 @@ async function persistContinuation(current: {
     id: string;
     organizationId: string;
     agentId: string;
-    actorKind: "team" | "system" | "organization" | "user" | "oauthClient";
+    actorKind:
+      | "team"
+      | "system"
+      | "organization"
+      | "user"
+      | "oauthClient"
+      | "serviceAccount";
     actorId: string;
     workloadName: string;
   };

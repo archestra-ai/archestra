@@ -1364,6 +1364,8 @@ function runtimeTokenMatchesRun(params: {
       return params.tokenAuth.userId === params.run.actorId;
     case "team":
       return params.tokenAuth.teamId === params.run.actorId;
+    case "serviceAccount":
+      return params.tokenAuth.serviceAccountId === params.run.actorId;
     case "oauthClient":
       return (
         params.tokenAuth.oauthClientId === params.run.actorId ||

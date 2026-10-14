@@ -4,6 +4,55 @@ import AgentModel from "./agent";
 import StatisticsModel from "./statistics";
 
 describe("StatisticsModel", () => {
+  test("service-account spend combines credentials and excludes other principals and organizations", async ({
+    makeOrganization,
+    makeServiceAccount,
+    makeAgent,
+    makeInteraction,
+  }) => {
+    const org = await makeOrganization();
+    const otherOrg = await makeOrganization();
+    const account = await makeServiceAccount(org.id);
+    const otherAccount = await makeServiceAccount(org.id);
+    const proxy = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+    });
+    const foreignProxy = await makeAgent({
+      organizationId: otherOrg.id,
+      agentType: "llm_proxy",
+    });
+    await makeInteraction(proxy.id, {
+      serviceAccountId: account.id,
+      authMethod: "oauth_client_credentials",
+      cost: "2",
+      inputTokens: 10,
+    });
+    await makeInteraction(proxy.id, {
+      serviceAccountId: account.id,
+      authMethod: "virtual_key",
+      cost: "3",
+      inputTokens: 20,
+    });
+    await makeInteraction(proxy.id, {
+      serviceAccountId: otherAccount.id,
+      cost: "7",
+    });
+    await makeInteraction(foreignProxy.id, {
+      serviceAccountId: account.id,
+      cost: "9",
+    });
+    const stats = await StatisticsModel.getProxyCostStatistics({
+      organizationId: org.id,
+      serviceAccountId: account.id,
+      timeframe: "24h",
+      limit: 50,
+      offset: 0,
+    });
+    expect(stats.totals.requests).toBe(2);
+    expect(stats.totals.billedCost).toBe(5);
+    expect(stats.totals.inputTokens).toBe(30);
+  });
   describe("getTeamStatistics", () => {
     test("counts team members per team instead of per organization", async ({
       makeAgent,

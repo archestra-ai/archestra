@@ -19,12 +19,14 @@ import { vi } from "vitest";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import {
+  A2AContextModel,
   A2ATaskModel,
   McpOauthClientModel,
   OAuthAccessTokenModel,
   TeamTokenModel,
   UserTokenModel,
 } from "@/models";
+import ServiceAccountModel from "@/models/service-account";
 import type { JwksValidationResult } from "@/services/jwks-validator";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 
@@ -86,12 +88,14 @@ async function makeClientCredentialsToken(params: {
   organizationId: string;
   authorId: string;
   allowedGatewayIds: string[];
+  serviceAccountId?: string;
 }): Promise<string> {
   const { oauthClient } = await McpOauthClientModel.create({
     organizationId: params.organizationId,
     authorId: params.authorId,
     name: "service",
     allowedGatewayIds: params.allowedGatewayIds,
+    serviceAccountId: params.serviceAccountId,
   });
   const raw = `mcp_at_${randomBytes(32).toString("base64url")}`;
   await OAuthAccessTokenModel.createClientCredentialsToken({
@@ -361,6 +365,81 @@ describe("a2a route-level authentication", () => {
     });
     const revoked = await call(renewed, "GetTask", { id: taskId });
     expect(revoked.json().error, revoked.body).toBeTruthy();
+  });
+
+  test("OAuth and API credentials share account-owned tasks without granting other accounts access", async ({
+    makeOrganization,
+    makeInternalAgent,
+    makeServiceAccount,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    const account = await makeServiceAccount(org.id);
+    const other = await makeServiceAccount(org.id);
+    const tokenFor = (serviceAccountId: string) =>
+      makeClientCredentialsToken({
+        organizationId: org.id,
+        authorId: crypto.randomUUID(),
+        allowedGatewayIds: [agent.id],
+        serviceAccountId,
+      });
+    const oauth = await tokenFor(account.id);
+    const anotherClient = await tokenFor(account.id);
+    const foreign = await tokenFor(other.id);
+    const api = await ServiceAccountModel.createToken({
+      organizationId: org.id,
+      serviceAccountId: account.id,
+      name: "worker API",
+    });
+    const call = (token: string, method: string, params: unknown) =>
+      app.inject({
+        method: "POST",
+        url: `/v2/a2a/${agent.id}`,
+        headers: bearer(token),
+        payload: { jsonrpc: "2.0", id: 1, method, params },
+      });
+    const started = await call(oauth, "SendMessage", v2Payload().params);
+    expect(started.json().error, started.body).toBeUndefined();
+    const contextId = started.json().result.message.contextId;
+    expect(await A2AContextModel.findById(contextId)).toMatchObject({
+      actorKind: "serviceAccount",
+      actorId: account.id,
+    });
+    const task = await A2ATaskModel.create({
+      contextId,
+      agentId: agent.id,
+      state: "TASK_STATE_WORKING",
+    });
+    for (const credential of [oauth, anotherClient, api.token]) {
+      const own = await call(credential, "GetTask", { id: task.id });
+      expect(own.json().error, own.body).toBeUndefined();
+    }
+    for (const method of ["GetTask", "SubscribeToTask", "CancelTask"]) {
+      const denied = await call(foreign, method, { id: task.id });
+      expect(denied.json().error?.code, denied.body).toBe(-32001);
+    }
+    expect((await call(foreign, "ListTasks", {})).json().result.tasks).toEqual(
+      [],
+    );
+    const canceled = await call(api.token, "CancelTask", { id: task.id });
+    expect(canceled.json().result.status.state, canceled.body).toBe(
+      "TASK_STATE_CANCELED",
+    );
+    await ServiceAccountModel.deleteToken({
+      serviceAccountId: account.id,
+      organizationId: org.id,
+      tokenId: api.id,
+    });
+    expect(
+      (await call(api.token, "GetTask", { id: task.id })).json().error,
+    ).toBeTruthy();
+    expect(
+      (await call(oauth, "GetTask", { id: task.id })).json().error,
+    ).toBeUndefined();
+    await ServiceAccountModel.update(account.id, org.id, { disabled: true });
+    expect(
+      (await call(oauth, "GetTask", { id: task.id })).json().error,
+    ).toBeTruthy();
   });
 
   test("v2 SendMessage accepts a user-bound OAuth access token", async ({

@@ -6,9 +6,11 @@ import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import type { AgentSelectorAgent } from "@/components/agent-selector";
 import { CreatedByHeader } from "@/components/credential-billing/created-by-header";
+import { FormAdvancedSection } from "@/components/form-advanced-section";
 import { ChoiceCards } from "@/components/oauth-client/choice-cards";
 import { GatewayPicker } from "@/components/oauth-client/gateway-picker";
 import { OAuthClientIdentityFields } from "@/components/oauth-client/identity-fields";
+import { OAuthServiceAccountField } from "@/components/oauth-client/service-account-field";
 import {
   parseRedirectUris,
   RedirectUrisField,
@@ -44,6 +46,7 @@ export function EditOAuthClientDialog({
   isSubmitting: boolean;
 }) {
   const [name, setName] = useState("");
+  const [serviceAccountId, setServiceAccountId] = useState<string | null>(null);
   const [selectedGatewayIds, setSelectedGatewayIds] = useState<string[]>([]);
   const [grantsGateways, setGrantsGateways] = useState(false);
   const [redirectUrisText, setRedirectUrisText] = useState("");
@@ -64,12 +67,14 @@ export function EditOAuthClientDialog({
   useEffect(() => {
     if (!oauthClient) return;
     setName(oauthClient.name);
+    setServiceAccountId(oauthClient.serviceAccountId ?? null);
     setSelectedGatewayIds(oauthClient.allowedGatewayIds);
     setGrantsGateways(oauthClient.allowedGatewayIds.length > 0);
     setRedirectUrisText(oauthClient.redirectUris.join("\n"));
     setLabels(oauthClient.labels);
     initialSnapshotRef.current = {
       name: oauthClient.name,
+      serviceAccountId: oauthClient.serviceAccountId ?? null,
       selectedGatewayIds: oauthClient.allowedGatewayIds,
       redirectUrisText: oauthClient.redirectUris.join("\n"),
       labels: oauthClient.labels,
@@ -95,6 +100,7 @@ export function EditOAuthClientDialog({
     (initialSnapshotRef.current !== null &&
       hasUnsavedChanges(initialSnapshotRef.current, {
         name,
+        serviceAccountId,
         selectedGatewayIds: grantedGatewayIds,
         redirectUrisText,
         labels,
@@ -109,6 +115,12 @@ export function EditOAuthClientDialog({
         isAuthorizationCode
           ? "Signs users in. Tools act with each user's own identity."
           : "Calls the gateways and agents you pick, as itself."
+      }
+      headerExtra={
+        <CreatedByHeader
+          createdBy={oauthClient.createdBy}
+          createdAt={oauthClient.createdAt}
+        />
       }
       isDirty={isDirty}
       footer={
@@ -126,6 +138,10 @@ export function EditOAuthClientDialog({
         await onSubmit(oauthClient.id, {
           name: name.trim(),
           grantType: oauthClient.grantType,
+          ...(!isAuthorizationCode &&
+            serviceAccountId !== (oauthClient.serviceAccountId ?? null) && {
+              serviceAccountId,
+            }),
           allowedGatewayIds: grantedGatewayIds,
           ...(isAuthorizationCode && { redirectUris }),
           labels: finalLabels,
@@ -133,10 +149,6 @@ export function EditOAuthClientDialog({
       }}
     >
       <div className="space-y-4">
-        <CreatedByHeader
-          createdBy={oauthClient.createdBy}
-          createdAt={oauthClient.createdAt}
-        />
         <div className="space-y-2">
           <Label htmlFor="edit-oauth-client-name">Name</Label>
           <Input
@@ -196,7 +208,7 @@ export function EditOAuthClientDialog({
               label={
                 isAuthorizationCode
                   ? "Gateways to grant"
-                  : "Gateways and agents it can call"
+                  : "Allowed agents and gateways"
               }
               gateways={gateways}
               value={selectedGatewayIds}
@@ -204,21 +216,29 @@ export function EditOAuthClientDialog({
             />
           )}
         </div>
-        {/* SPDX-SnippetBegin
+        <FormAdvancedSection>
+          {!isAuthorizationCode && (
+            <OAuthServiceAccountField
+              value={serviceAccountId}
+              onChange={setServiceAccountId}
+            />
+          )}
+          {/* SPDX-SnippetBegin
               SPDX-SnippetCopyrightText: 2026 Archestra Inc.
               SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
-        <ResourceAccessSection
-          resource="mcpOauthClient"
-          id={oauthClient.id}
-          registerSave={registerPermissionsSave}
-          onDirtyChange={setPermissionsDirty}
-        />
-        {/* SPDX-SnippetEnd */}
-        <AdvancedLabelsSection
-          ref={labelsRef}
-          labels={labels}
-          onLabelsChange={setLabels}
-        />
+          <ResourceAccessSection
+            resource="mcpOauthClient"
+            id={oauthClient.id}
+            registerSave={registerPermissionsSave}
+            onDirtyChange={setPermissionsDirty}
+          />
+          {/* SPDX-SnippetEnd */}
+          <AdvancedLabelsSection
+            ref={labelsRef}
+            labels={labels}
+            onLabelsChange={setLabels}
+          />
+        </FormAdvancedSection>
       </div>
     </StandardFormDialog>
   );

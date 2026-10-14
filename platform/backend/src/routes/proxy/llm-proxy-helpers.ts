@@ -479,6 +479,7 @@ export function buildInteractionRecord(params: {
   billingTeamId?: string;
   runId?: string;
   userId?: string;
+  serviceAccountId?: string;
   virtualKeyId?: string;
   passthroughVirtualKeyId?: string;
   /** MCP App whose runtime made this call; only app-runtime completions set it. */
@@ -509,6 +510,7 @@ export function buildInteractionRecord(params: {
     billingTeamId: params.billingTeamId,
     runId: params.runId,
     userId: params.userId,
+    serviceAccountId: params.serviceAccountId,
     virtualKeyId: params.virtualKeyId,
     passthroughVirtualKeyId: params.passthroughVirtualKeyId,
     appId: params.appId,

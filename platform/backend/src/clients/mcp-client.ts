@@ -979,6 +979,7 @@ class McpClient {
         currentSecrets: Record<string, unknown>,
         isRetry = false,
       ): Promise<CommonToolResult> => {
+        let attemptClient: Client | undefined;
         try {
           const hasRefreshToken = !!(
             currentSecrets as { refresh_token?: string }
@@ -1030,6 +1031,7 @@ class McpClient {
             serverState,
             options?.elicitationHandler,
           );
+          attemptClient = client;
 
           // Determine the actual upstream tool name. Prefer the stored raw name
           // (tools.raw_name): it is exact even when the slug's server-prefix was
@@ -1231,14 +1233,24 @@ class McpClient {
           if (stopped) {
             // Drop the dead client so the next call on this connection
             // reconnects instead of failing on it too.
-            if (attemptClient) this.retireClient(connectionKey, attemptClient);
+            if (attemptClient) {
+              if (this.activeConnections.get(connectionKey) === attemptClient) {
+                this.clearConnectionState(connectionKey);
+              }
+              attemptClient.close().catch(() => {
+                logger.warn(
+                  { connectionKey },
+                  "Failed to close an MCP client whose server stopped answering",
+                );
+              });
+            }
             const stoppedResult = await this.createErrorResult({
               toolCall,
               owner,
               error: stopped.message,
               mcpServerName,
               authInfo,
-              encryptedChatContent,
+              lockedChatContent,
             });
             // A detachable call that has run past the synchronous timeout is
             // a background task by now (it detaches well before that bound);

@@ -151,6 +151,14 @@ Pin an exact chart version or image tag from [GitHub Releases](https://github.co
 3. Test the selected version in staging.
 4. Apply the Helm upgrade above and check rollout and migration Job status.
 
+During shutdown, Archestra stops accepting new model requests and gives active requests up to 60 seconds to finish. Requests that outlast this window can still lose their connection. The Helm chart sets `archestra.terminationGracePeriodSeconds` to 120; keep it at least this high so the container can finish shutdown.
+
+For Docker, use `docker stop --time 120` or set Compose's `stop_grace_period: 120s`. A shorter host deadline can kill the container before requests finish.
+
+The proxy retries a provider connection failure at most twice before receiving the first response chunk. It does not retry provider error responses, timeouts, or failures after output starts. Recovery after partial output depends on your client's retry policy.
+
+Gemini is excluded from these proxy retries because its SDK can report an interrupted error response as a connection failure.
+
 Rolling back a container image does not reverse database migrations. Restore a compatible database backup when required by the release's rollback procedure.
 
 ## Infrastructure as Code

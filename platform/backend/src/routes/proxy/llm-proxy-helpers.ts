@@ -673,6 +673,26 @@ export function upstreamErrorMessage(
   return extractErrorMessage(error);
 }
 
+/**
+ * Identifies connection failures eligible for retry. Errors with an HTTP
+ * status, provider error payload, client abort, or timeout are excluded.
+ * The caller limits retries to failures before the first response chunk.
+ */
+export function isRetryableUpstreamConnectionFailure(error: unknown): boolean {
+  if (
+    error instanceof ApiError ||
+    explicitHttpStatus(error) !== undefined ||
+    isClientAbortError(error) ||
+    hasUpstreamErrorPayload(error)
+  ) {
+    return false;
+  }
+  const code = classifyUpstreamTransportFailure(error)?.code;
+  return (
+    code === "upstream_connection_closed" || code === "upstream_unreachable"
+  );
+}
+
 export function handleError(
   error: unknown,
   reply: FastifyReply,

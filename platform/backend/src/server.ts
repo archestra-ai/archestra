@@ -161,6 +161,7 @@ import {
   READY_PATH,
   SKILL_MARKETPLACE_PREFIX,
 } from "./routes/route-paths";
+import { beginLlmProxyDrain } from "./server/llm-proxy-drain";
 import {
   UserConfigFieldDefaultSchema,
   UserConfigFieldSchema,
@@ -1263,8 +1264,19 @@ function registerWebServerShutdown(
     activeChatRunReaperIntervalId?: NodeJS.Timeout;
   } = {},
 ): void {
+  let shuttingDown = false;
   const gracefulShutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     fastify.log.info(`Received ${signal}, shutting down gracefully...`);
+    beginLlmProxyDrain(fastify);
+    // Leave time after the 60s proxy drain for dependency cleanup, but never
+    // let unrelated long-lived connections or cleanup exceed the supervisor.
+    const shutdownDeadline = setTimeout(() => {
+      fastify.log.error("Graceful shutdown timed out");
+      process.exit(1);
+    }, 80_000);
+    shutdownDeadline.unref();
 
     // Stop accepting new runs before snapshotting, so nothing created after this
     // point escapes the cleanup below.
@@ -1385,8 +1397,10 @@ function registerWebServerShutdown(
         );
       }
 
+      clearTimeout(shutdownDeadline);
       process.exit(0);
     } catch (error) {
+      clearTimeout(shutdownDeadline);
       fastify.log.error({ error }, "Error during shutdown");
       process.exit(1);
     }

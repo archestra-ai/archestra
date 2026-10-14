@@ -159,15 +159,19 @@ ${CATCH_ALL_RULES}`,
               (governed[index].actual === CATCH_ALL_MARK) !== (rule === null),
           )
           .map(({ label }) => label),
-        undecided: calls.flatMap(({ label, rule }, index) => {
+        misdecided: calls.flatMap(({ label, rule, arguments: args }, index) => {
           const { actual, refusal, error } = governed[index];
           const helper = rule === null ? null : ruleHelper(policies, rule);
-          return actual !== null ||
+          const unanswered =
+            helper !== null &&
+            UNANSWERED_ANNOTATOR.exec(error ?? "")?.[1] === helper.name;
+          // A helper whose audience the call fills is consulted, so only its
+          // unanswered consult shows the rule decided; otherwise any decision.
+          const asked = helper?.reads.every((read) => read in args) === true;
+          const expected =
             refusal !== undefined ||
-            (helper !== null &&
-              UNANSWERED_ANNOTATOR.exec(error ?? "")?.[1] === helper)
-            ? []
-            : [`${label}: ${error}`];
+            (asked ? unanswered : actual !== null || unanswered);
+          return expected ? [] : [`${label}: ${actual ?? error}`];
         }),
       };
     }
@@ -191,7 +195,7 @@ ${CATCH_ALL_RULES}`,
               control: governs ? (refused ? UNOPENED : CATCH_ALL) : null,
               targets: [mode === "multi-user" ? "multi-user" : null],
               catchAllMismatches: [],
-              undecided: [],
+              misdecided: [],
             },
           ];
         }),
@@ -359,10 +363,11 @@ type DeploymentOutcome = {
    */
   catchAllMismatches: string[];
   /**
-   * Calls that reached no decision, other than those whose rule asks a battery
-   * helper that left the consult unanswered.
+   * Calls their rule did not decide: a call whose rule's battery helper reads
+   * only arguments the call gives must show that helper's unanswered consult,
+   * and any other call a decision or such a consult.
    */
-  undecided: string[];
+  misdecided: string[];
 };
 
 type Decision = {
@@ -505,20 +510,48 @@ function modelBuiltins(policy: string): string[] {
 
 /**
  * The battery helper a rule's annotator runs, which offline replay leaves
- * unanswered; null for a rule decided without one.
+ * unanswered, and the call arguments its audience templates read; null for a
+ * rule decided without one.
  */
-function ruleHelper(policies: string[], rule: string): string | null {
+function ruleHelper(
+  policies: string[],
+  rule: string,
+): { name: string; reads: string[] } | null {
   const annotator = policies
     .flatMap(toolEntries)
     .find(({ name }) => name === rule)?.annotator;
   if (typeof annotator !== "string") return null;
-  const helper = policies.some((policy) => {
-    const externals = parsePolicyToml(policy)?.externals as
-      | { annotators?: Record<string, { command?: unknown }> }
-      | undefined;
-    return Array.isArray(externals?.annotators?.[annotator]?.command);
-  });
-  return helper ? annotator : null;
+  const declarations = policies.map(
+    (policy) =>
+      parsePolicyToml(policy) as {
+        policy?: { annotator?: { name?: unknown; audiences?: unknown }[] };
+        externals?: { annotators?: Record<string, { command?: unknown }> };
+      } | null,
+  );
+  if (
+    !declarations.some((declaration) =>
+      Array.isArray(declaration?.externals?.annotators?.[annotator]?.command),
+    )
+  )
+    return null;
+  const audiences = declarations.flatMap(
+    (declaration) =>
+      declaration?.policy?.annotator?.flatMap(({ name, audiences }) =>
+        name === annotator && Array.isArray(audiences) ? audiences : [],
+      ) ?? [],
+  );
+  return {
+    name: annotator,
+    reads: [
+      ...new Set(
+        audiences.flatMap((audience) =>
+          typeof audience === "string"
+            ? [...audience.matchAll(/\$(\w+)/g)].map(([, read]) => read)
+            : [],
+        ),
+      ),
+    ],
+  };
 }
 
 /** The annotator a step's error names when its consult went unanswered. */

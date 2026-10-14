@@ -65,7 +65,7 @@ describe("createOAuthAwareCorsDelegate (wired into @fastify/cors)", () => {
     await app.register(
       fastifyCors,
       createOAuthAwareCorsDelegate({
-        restricted: { origin: [RESTRICTED_ORIGIN], credentials: true },
+        restricted: () => ({ origin: [RESTRICTED_ORIGIN], credentials: true }),
         publicOAuth: { origin: true, credentials: false },
         authorizeDisabled: { origin: false },
       }),

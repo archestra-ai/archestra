@@ -61,6 +61,7 @@ import { cacheManager } from "@/cache-manager";
 import { registerMcpClientHibernationInvalidation } from "@/clients/mcp-client";
 // SPDX-SnippetEnd
 import config, {
+  resolveAllowedOrigins,
   shouldRunRenderer,
   shouldRunWebServer,
   shouldRunWorker,
@@ -1589,8 +1590,10 @@ const startWebServer = async () => {
     //     clients on arbitrary origins can complete the OAuth handshake.
     //   - every other route keeps the restricted, credentialed policy bound to
     //     the configured origins. See isPublicOAuthCorsPath for the rationale.
-    const restrictedCorsOptions: FastifyCorsOptions = {
-      origin: corsOrigins,
+    const restrictedCorsOptions = (
+      req: FastifyRequest,
+    ): FastifyCorsOptions => ({
+      origin: allowedOriginsFor(req),
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders: [
         "Content-Type",
@@ -1600,7 +1603,7 @@ const startWebServer = async () => {
       ],
       exposedHeaders: ["Set-Cookie"],
       credentials: true,
-    };
+    });
     const publicOAuthCorsOptions: FastifyCorsOptions = {
       origin: true,
       methods: ["GET", "POST", "OPTIONS"],
@@ -1625,9 +1628,7 @@ const startWebServer = async () => {
 
     logger.info(
       {
-        corsOrigins: corsOrigins.map((o) =>
-          o instanceof RegExp ? o.toString() : o,
-        ),
+        corsOrigins,
         trustedOrigins: config.auth.trustedOrigins,
       },
       "CORS and trusted origins configured",
@@ -1710,20 +1711,40 @@ const startWebServer = async () => {
 async function registerMaintenanceModeRoutes(
   fastify: FastifyInstanceWithZod,
 ): Promise<void> {
-  await fastify.register(fastifyCors, {
-    origin: corsOrigins,
-    methods: ["GET", "OPTIONS"],
-    allowedHeaders: [
-      "Content-Type",
-      "X-Requested-With",
-      "Cookie",
-      apiKeyAuthorizationHeaderName,
-    ],
-    exposedHeaders: ["Set-Cookie"],
-    credentials: true,
-  });
+  await fastify.register(
+    fastifyCors,
+    () =>
+      (
+        req: FastifyRequest,
+        callback: (err: Error | null, options: FastifyCorsOptions) => void,
+      ) => {
+        callback(null, {
+          origin: allowedOriginsFor(req),
+          methods: ["GET", "OPTIONS"],
+          allowedHeaders: [
+            "Content-Type",
+            "X-Requested-With",
+            "Cookie",
+            apiKeyAuthorizationHeaderName,
+          ],
+          exposedHeaders: ["Set-Cookie"],
+          credentials: true,
+        });
+      },
+  );
   await fastify.register(routes.healthRoutes);
   await fastify.register(publicConfigRoutes);
+}
+
+function allowedOriginsFor(req: FastifyRequest): string[] {
+  const forwardedHost = req.headers["x-forwarded-host"];
+  return resolveAllowedOrigins({
+    configuredOrigins: corsOrigins,
+    forwardedHost: Array.isArray(forwardedHost)
+      ? forwardedHost[0]
+      : forwardedHost,
+    host: req.headers.host,
+  });
 }
 
 function registerWebServerShutdown(

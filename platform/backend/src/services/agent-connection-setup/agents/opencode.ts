@@ -252,6 +252,7 @@ function opencodeRoutingPluginBash(params: {
   routes: Record<string, string>;
   headers: Record<string, string>;
   routeHeaders?: Record<string, Record<string, string>>;
+  providerTwins?: Record<string, string>;
 }): string {
   const encoded = Buffer.from(
     renderOpenCodeRoutingPlugin(params),
@@ -297,6 +298,7 @@ function opencodeRoutingPluginPowerShell(params: {
   routes: Record<string, string>;
   headers: Record<string, string>;
   routeHeaders?: Record<string, Record<string, string>>;
+  providerTwins?: Record<string, string>;
 }): string {
   const encoded = Buffer.from(
     renderOpenCodeRoutingPlugin(params),
@@ -384,7 +386,7 @@ ARCHESTRA_PRIMARY_CATALOG
     warn:*) warn "\${archNotice#warn:}" ;;
   esac
 done
-${opencodeRoutingPluginBash({ client, routes, routeHeaders, headers: opencodePrimaryHeaders(client) })}`);
+${opencodeRoutingPluginBash({ client, routes, routeHeaders, providerTwins: nativeProviders, headers: opencodePrimaryHeaders(client) })}`);
     } else if (ctx.proxy.authMode === "provider-key") {
       const routes = Object.fromEntries(
         OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map((route) => [
@@ -532,7 +534,7 @@ finally {
   Remove-Item -Force -ErrorAction SilentlyContinue $archPrimaryFile
   Remove-Item Env:ARCHESTRA_OC_KEY, Env:ARCHESTRA_OC_PRIMARY, Env:ARCHESTRA_OC_MAJOR -ErrorAction SilentlyContinue
 }
-${opencodeRoutingPluginPowerShell({ client, routes, routeHeaders, headers: opencodePrimaryHeaders(client) })}`);
+${opencodeRoutingPluginPowerShell({ client, routes, routeHeaders, providerTwins: nativeProviders, headers: opencodePrimaryHeaders(client) })}`);
     } else if (ctx.proxy.authMode === "provider-key") {
       const headers = opencodeProxyHeaders(client, ctx.proxy);
       const legacyTarget = opencodeProviderTarget(client, ctx);

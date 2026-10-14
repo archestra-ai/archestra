@@ -325,6 +325,50 @@ describe.each([1, 2])("OpenCode %i default model after connect", (major) => {
     }
   });
 
+  test("moves agent pins to their Archestra twins, removes one nothing serves, and disconnect restores them", () => {
+    const before = {
+      agent: {
+        general: { model: "openai/gpt-test", prompt: "research" },
+        // Kilo Code pins its compaction agent to a Kimi Code plan provider;
+        // the Kimi provider here serves the same model under its own id.
+        compaction: { model: "kimi-code-plan-global/k3" },
+        summary: { model: "kimi-code-plan-cn/k3-256k" },
+        build: { prompt: "no pin" },
+      },
+    };
+    const withKimi = proxy([
+      entry("anthropic", "claude-test"),
+      entry("openai", "gpt-test"),
+      entry("kimi", "k3"),
+    ]);
+    const { home, run, read } = setup(before);
+    try {
+      const output = run(openCodePrimaryConfig(withKimi, "Acme"));
+      expect(read().agent).toEqual({
+        general: { model: "archestra-openai/gpt-test", prompt: "research" },
+        compaction: { model: "archestra-kimi/k3" },
+        summary: {},
+        build: { prompt: "no pin" },
+      });
+      expect(output).toContain(
+        "info:OpenCode agent.general.model openai/gpt-test now uses archestra-openai/gpt-test from Acme. Disconnect restores openai/gpt-test.",
+      );
+      expect(output).toContain(
+        "info:OpenCode agent.compaction.model kimi-code-plan-global/k3 now uses archestra-kimi/k3 from Acme. Disconnect restores kimi-code-plan-global/k3.",
+      );
+      expect(output).toContain(
+        "warn:Acme does not offer OpenCode agent.summary.model kimi-code-plan-cn/k3-256k, so setup removed it. The agent uses the session's model. Disconnect restores kimi-code-plan-cn/k3-256k.",
+      );
+      // A second run remaps from the original pins, and disconnect restores them.
+      run(openCodePrimaryConfig(withKimi, "Acme"));
+      expect(read().agent.compaction.model).toBe("archestra-kimi/k3");
+      run(null);
+      expect(read().agent).toEqual(before.agent);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   test("removes a pin Archestra cannot serve so OpenCode falls back to the first provider", () => {
     const { home, run, read } = setup({
       model: "openai/gpt-not-offered",

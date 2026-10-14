@@ -1,0 +1,1 @@
+ALTER TABLE "service_accounts" ADD COLUMN "icon" text;

@@ -23,6 +23,8 @@ export interface TabbedDialogNavItem<TSection extends string> {
   label: string;
   /** A short state line under the label, e.g. "2 providers". */
   status?: string;
+  /** Compact context beside the tab label, such as a status tooltip. */
+  indicator?: ReactNode;
 }
 
 interface TabbedDialogShellProps<TSection extends string> {
@@ -51,6 +53,8 @@ interface TabbedDialogShellProps<TSection extends string> {
   wrapForm?: (children: ReactNode) => ReactNode;
   getNavItemTestId?: (section: TSection) => string;
   isDirty?: boolean;
+  /** Stack identity and navigation above the form on narrow screens. */
+  responsive?: boolean;
 }
 
 export function TabbedDialogShell<TSection extends string>({
@@ -78,6 +82,7 @@ export function TabbedDialogShell<TSection extends string>({
   wrapForm,
   getNavItemTestId,
   isDirty = false,
+  responsive = false,
 }: TabbedDialogShellProps<TSection>) {
   const [footerSlot, setFooterSlot] = useState<HTMLDivElement | null>(null);
   const guard = useUnsavedChangesGuard({ isDirty, onOpenChange });
@@ -87,6 +92,7 @@ export function TabbedDialogShell<TSection extends string>({
         <nav
           className={cn(
             "w-[240px] border-r flex flex-col shrink-0",
+            responsive && "max-sm:w-full max-sm:border-r-0 max-sm:border-b",
             sidebarClassName,
           )}
         >
@@ -106,14 +112,23 @@ export function TabbedDialogShell<TSection extends string>({
             </div>
           </div>
 
-          <div className="flex flex-col gap-0.5 px-2 py-3 flex-1">
+          <div
+            className={cn(
+              "flex flex-col gap-0.5 px-2 py-3 flex-1",
+              responsive && "max-sm:flex-row max-sm:py-2",
+            )}
+          >
             {navItems.map((navItem) => (
               <Button
                 key={navItem.id}
                 type="button"
                 variant="ghost"
                 data-testid={getNavItemTestId?.(navItem.id)}
-                aria-label={navItem.status ? navItem.label : undefined}
+                aria-label={
+                  navItem.status || navItem.indicator
+                    ? navItem.label
+                    : undefined
+                }
                 aria-description={navItem.status}
                 className={cn(
                   "justify-start font-normal w-full",
@@ -124,6 +139,7 @@ export function TabbedDialogShell<TSection extends string>({
                 onClick={() => onActiveSectionChange(navItem.id)}
               >
                 <span>{navItem.label}</span>
+                {navItem.indicator}
                 {navItem.status && (
                   <span
                     aria-hidden
@@ -213,6 +229,7 @@ export function TabbedDialogShell<TSection extends string>({
         <DialogContent
           className={cn(
             "max-w-6xl h-[85vh] flex flex-row p-0 gap-0 overflow-hidden",
+            responsive && "max-sm:flex-col",
             className,
           )}
           showCloseButton={false}

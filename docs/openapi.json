@@ -399220,6 +399220,10 @@
                       "name": {
                         "type": "string"
                       },
+                      "icon": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "role": {
                         "type": "string"
                       },
@@ -399291,6 +399295,7 @@
                       "createdBy",
                       "organizationId",
                       "name",
+                      "icon",
                       "role",
                       "disabled",
                       "createdAt",
@@ -399564,6 +399569,10 @@
                     "minLength": 1,
                     "maxLength": 256
                   },
+                  "icon": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "role": {
                     "type": "string",
                     "minLength": 1,
@@ -399788,6 +399797,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "role": {
                       "type": "string"
                     },
@@ -399905,6 +399918,7 @@
                     "createdBy",
                     "organizationId",
                     "name",
+                    "icon",
                     "role",
                     "disabled",
                     "createdAt",
@@ -400230,6 +400244,10 @@
                     "name": {
                       "type": "string"
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "role": {
                       "type": "string"
                     },
@@ -400347,6 +400365,7 @@
                     "createdBy",
                     "organizationId",
                     "name",
+                    "icon",
                     "role",
                     "disabled",
                     "createdAt",
@@ -400620,6 +400639,10 @@
                     "minLength": 1,
                     "maxLength": 256
                   },
+                  "icon": {
+                    "nullable": true,
+                    "type": "string"
+                  },
                   "role": {
                     "type": "string",
                     "minLength": 1,
@@ -400723,6 +400746,10 @@
                       "type": "string"
                     },
                     "name": {
+                      "type": "string"
+                    },
+                    "icon": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "role": {
@@ -400842,6 +400869,7 @@
                     "createdBy",
                     "organizationId",
                     "name",
+                    "icon",
                     "role",
                     "disabled",
                     "createdAt",

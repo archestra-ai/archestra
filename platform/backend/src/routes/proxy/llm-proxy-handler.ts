@@ -230,6 +230,7 @@ import {
   shouldForwardAnthropicBeta,
   toSpanUserInfo,
   toToolCallBlock,
+  upstreamErrorMessage,
   withProviderToolCallIds,
   withSessionContext,
 } from "./llm-proxy-helpers";
@@ -2561,7 +2562,10 @@ export async function handleLLMProxy<
     }
     // Persist failed interactions so they appear in LLM logs
     try {
-      const errorMessage = provider.extractErrorMessage(lifecycleError);
+      const errorMessage = upstreamErrorMessage(
+        lifecycleError,
+        provider.extractErrorMessage,
+      );
       // Provider errors routinely echo the prompt back.
       logger.info(
         {
@@ -3483,7 +3487,10 @@ async function handleStreaming<
     // rejecting the request, or a mid-stream failure once SSE headers and
     // content are already on the wire) still has to reach interaction history.
     if (!streamAdapter.state.usage) {
-      const errorMessage = provider.extractErrorMessage(lifecycleError);
+      const errorMessage = upstreamErrorMessage(
+        lifecycleError,
+        provider.extractErrorMessage,
+      );
       // Provider errors routinely echo the prompt back.
       logger.info(
         { profileId: agent.id, ...(suppressContent ? {} : { errorMessage }) },

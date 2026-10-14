@@ -18,6 +18,7 @@ import { rewriteConnectionProxySetupUrl } from "@/services/connection-proxy-setu
 import type { ApiError } from "@/types";
 import { incomingRequestAbortTracker } from "@/utils/incoming-request-abort";
 import { handleServerError } from "./server/error-handler";
+import { registerLlmProxyDrain } from "./server/llm-proxy-drain";
 
 const BROWSER_API_FAVICON_HREF = Symbol("browserApiFaviconHref");
 
@@ -26,8 +27,8 @@ type BrowserApiRequest = FastifyRequest & {
 };
 
 /** Sets up logging, Zod validation, response serialization, and shared hooks. */
-export const createFastifyInstance = () =>
-  Fastify({
+export const createFastifyInstance = () => {
+  const fastify = Fastify({
     loggerInstance: logger,
     logController: new LogController({ disableRequestLogging: true }),
     trustProxy: config.api.trustProxy,
@@ -111,6 +112,10 @@ export const createFastifyInstance = () =>
       }
     })
     .setErrorHandler<ApiError | Error>(handleServerError);
+
+  registerLlmProxyDrain(fastify);
+  return fastify;
+};
 
 /** Type for the Fastify instance with Zod type provider. */
 export type FastifyInstanceWithZod = ReturnType<typeof createFastifyInstance>;

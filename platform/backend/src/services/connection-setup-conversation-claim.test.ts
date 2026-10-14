@@ -17,6 +17,8 @@ const ownerId = "55555555-5555-4555-8555-555555555555";
 const copierId = "66666666-6666-4666-8666-666666666666";
 
 test("the first native conversation owns the setup until the token expires", async () => {
+  // The claim computes a TTL; the cache adds it to a separate clock read.
+  vi.spyOn(Date, "now").mockReturnValue(Date.now());
   const expiresAt = Date.now() + 10 * 60 * 1000;
   expect(await claim({ nativeConversationId: ownerId, expiresAt })).toBe(true);
   expect(await claim({ nativeConversationId: copierId, expiresAt })).toBe(
@@ -26,8 +28,7 @@ test("the first native conversation owns the setup until the token expires", asy
 
   const stored = await storedClaim();
   expect(stored?.value).toEqual({ nativeConversationId: ownerId });
-  expect(stored?.expires).toBeGreaterThan(expiresAt - 2_000);
-  expect(stored?.expires).toBeLessThanOrEqual(expiresAt);
+  expect(stored?.expires).toBe(expiresAt);
 });
 
 test("a second organization or setup does not share the claim", async () => {
@@ -53,10 +54,11 @@ test("a second organization or setup does not share the claim", async () => {
 });
 
 test("a window that expires as the lock returns does not exempt", async () => {
-  const expiresAt = Date.now() + 60_000;
+  const now = Date.now();
+  const expiresAt = now + 60_000;
   const delaySetupId = "88888888-8888-4888-8888-888888888888";
   const realWithLock = cacheManager.withLock.bind(cacheManager);
-  const clock = vi.spyOn(Date, "now");
+  const clock = vi.spyOn(Date, "now").mockReturnValue(now);
   vi.spyOn(cacheManager, "withLock").mockImplementation(
     async (scope, callback) => {
       const claimed = await realWithLock(scope, callback);
@@ -77,8 +79,7 @@ test("a window that expires as the lock returns does not exempt", async () => {
   }
   const stored = await storedClaim(delaySetupId);
   expect(stored?.value).toEqual({ nativeConversationId: ownerId });
-  expect(stored?.expires).toBeGreaterThan(expiresAt - 2_000);
-  expect(stored?.expires).toBeLessThanOrEqual(expiresAt);
+  expect(stored?.expires).toBe(expiresAt);
 });
 
 test("an expired window does not claim and does not write a row", async () => {

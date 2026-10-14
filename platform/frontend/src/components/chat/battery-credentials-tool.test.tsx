@@ -122,7 +122,7 @@ afterAll(() => {
   archestraApiClient.setConfig({ baseUrl: "" });
 });
 
-it("steps through batteries and sends the picked key or skip per variable on Done", async () => {
+it("steps through batteries and sends the picked key, or skipped for one left unpicked, on Done", async () => {
   const user = userEvent.setup();
   const onSendMessage = vi.fn();
   renderCard({ request, onSendMessage });
@@ -130,19 +130,19 @@ it("steps through batteries and sends the picked key or skip per variable on Don
   expect(card).toHaveTextContent("1 of 2");
   expect(screen.getByRole("region", { name: "Slack" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Skip" })).toBeInTheDocument();
 
   await waitFor(() => expect(definitionsLoaded()).toBe(true));
   await user.click(screen.getByRole("combobox"));
   expect(screen.queryByRole("option", { name: "My token" })).toBeNull();
   await user.click(screen.getByRole("option", { name: "Slack token" }));
+  expect(
+    screen.getByRole("img", { name: "Slack token connected" }),
+  ).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Next" }));
 
   expect(card).toHaveTextContent("2 of 2");
   expect(screen.getByRole("region", { name: "GitHub" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Done" })).toBeDisabled();
-  await user.click(
-    screen.getByRole("button", { name: "Skip APPA_PROVIDER_GITHUB_TOKEN" }),
-  );
 
   await user.click(screen.getByRole("button", { name: "Back" }));
   expect(screen.getByRole("region", { name: "Slack" })).toHaveTextContent(
@@ -239,11 +239,9 @@ it("gives each variable of a two-token battery its own secret", async () => {
   });
 
   await waitFor(() => expect(definitionsLoaded()).toBe(true));
-  const [first, second] = screen.getAllByRole("button", {
-    name: "Add new token",
-  });
-  await addTokenFrom(user, first, "token-value");
-  await addTokenFrom(user, second, "host-value");
+  const [first, second] = screen.getAllByRole("combobox");
+  await addTokenFrom(user, first, "Add new token", "token-value");
+  await addTokenFrom(user, second, "Add new token", "host-value");
   await user.click(screen.getByRole("button", { name: "Done" }));
 
   expect(definitions.map((entry) => entry.name)).toEqual(
@@ -280,8 +278,10 @@ it("asks for a Vault reference instead of a secret when the secrets manager is e
     byosEnabled: true,
   });
 
+  await waitFor(() => expect(definitionsLoaded()).toBe(true));
+  await user.click(screen.getByRole("combobox"));
   await user.click(
-    await screen.findByRole("button", { name: "Connect GitHub token" }),
+    await screen.findByRole("option", { name: "Connect GitHub token" }),
   );
 
   expect(
@@ -334,22 +334,22 @@ function renderCard(params: {
 
 async function addToken(
   user: ReturnType<typeof userEvent.setup>,
-  button: string,
+  option: string,
   value: string,
 ) {
-  await addTokenFrom(
-    user,
-    await screen.findByRole("button", { name: button }),
-    value,
-  );
+  await waitFor(() => expect(definitionsLoaded()).toBe(true));
+  await addTokenFrom(user, screen.getByRole("combobox"), option, value);
 }
 
+/** Opens the add-token dialogs from a variable's dropdown and connects a value. */
 async function addTokenFrom(
   user: ReturnType<typeof userEvent.setup>,
-  button: HTMLElement,
+  combobox: HTMLElement,
+  option: string,
   value: string,
 ) {
-  await user.click(button);
+  await user.click(combobox);
+  await user.click(await screen.findByRole("option", { name: option }));
   const define = screen.queryByRole("dialog", { name: /credential/i });
   if (define)
     await user.click(

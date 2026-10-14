@@ -10,6 +10,7 @@ import {
   ChevronLeftIcon,
   ChevronRight,
   ChevronRightIcon,
+  PlusIcon,
 } from "lucide-react";
 import { Fragment, useEffect, useState } from "react";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
@@ -28,6 +29,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -39,7 +41,7 @@ import {
 import { cn } from "@/lib/utils/tailwind";
 
 type Battery = BatteryCredentialRequest["batteries"][number];
-type Choice = { kind: "key"; key: string } | { kind: "skipped" };
+type Choice = { key: string };
 type Adding =
   | { battery: Battery; variable: string; step: "define" }
   | { battery: Battery; variable: string; step: "connect"; id: string };
@@ -47,7 +49,8 @@ type Adding =
 /**
  * One step per battery the configuration agent asked credentials for: each
  * variable is bound to an organization credential, a new one made through the
- * Settings dialogs, or skipped. Done sends one message naming only keys.
+ * Settings dialogs, or skipped by leaving it unpicked. Done sends one message
+ * naming only keys.
  */
 export function BatteryCredentialsTool({
   request,
@@ -80,9 +83,11 @@ export function BatteryCredentialsTool({
   const variables = request.batteries.flatMap((entry) =>
     entry.credentials.map((variable) => ({ battery: entry, variable })),
   );
-  const complete = variables.every(
-    ({ battery, variable }) => choices[choiceId(battery, variable)],
+  const answered = battery.credentials.every(
+    (variable) => choices[choiceId(battery, variable)],
   );
+  const choiceName = (key: string) =>
+    all.find((entry) => entry.key === key)?.name ?? key;
   const choose = (battery: Battery, variable: string, choice: Choice) =>
     setChoices((current) => ({
       ...current,
@@ -94,7 +99,7 @@ export function BatteryCredentialsTool({
       variables
         .map(({ battery, variable }) => {
           const choice = choices[choiceId(battery, variable)];
-          return `${battery.title} ${variable} → ${choice?.kind === "key" ? choice.key : "skipped"}`;
+          return `${battery.title} ${variable} → ${choice?.key ?? "skipped"}`;
         })
         .join("; ") || "nothing to bind"
     }.`;
@@ -147,22 +152,27 @@ export function BatteryCredentialsTool({
               <Label htmlFor={id} className="font-mono text-xs">
                 {variable}
               </Label>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2">
                 <Select
-                  value={choice?.kind === "key" ? choice.key : ""}
+                  value={choice?.key ?? ""}
                   disabled={sent !== null}
                   onValueChange={(key) =>
-                    choose(battery, variable, { kind: "key", key })
+                    key === ADD_TOKEN
+                      ? setAdding(
+                          existing
+                            ? {
+                                battery,
+                                variable,
+                                step: "connect",
+                                id: existing.id,
+                              }
+                            : { battery, variable, step: "define" },
+                        )
+                      : choose(battery, variable, { key })
                   }
                 >
                   <SelectTrigger id={id} size="sm" className="min-w-48 flex-1">
-                    <SelectValue
-                      placeholder={
-                        choice?.kind === "skipped"
-                          ? "Skipped"
-                          : "Pick a credential"
-                      }
-                    />
+                    <SelectValue placeholder="Pick existing credential" />
                   </SelectTrigger>
                   <SelectContent position="popper">
                     {options.map((entry) => (
@@ -170,38 +180,29 @@ export function BatteryCredentialsTool({
                         {entry.name}
                       </SelectItem>
                     ))}
+                    {options.length > 0 ? <SelectSeparator /> : null}
+                    <SelectItem
+                      value={ADD_TOKEN}
+                      icon={<PlusIcon className="size-4" aria-hidden />}
+                    >
+                      <span>
+                        {existing && !existing.organizationConfigured
+                          ? `Connect ${existing.name}`
+                          : "Add new token"}
+                      </span>
+                    </SelectItem>
                   </SelectContent>
                 </Select>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={sent !== null}
-                  onClick={() =>
-                    setAdding(
-                      existing
-                        ? {
-                            battery,
-                            variable,
-                            step: "connect",
-                            id: existing.id,
-                          }
-                        : { battery, variable, step: "define" },
-                    )
-                  }
-                >
-                  <span>
-                    {existing ? `Connect ${existing.name}` : "Add new token"}
+                {choice ? (
+                  <span
+                    role="img"
+                    aria-label={`${choiceName(choice.key)} connected`}
+                    title={`${choiceName(choice.key)} connected`}
+                    className="flex size-8 shrink-0 items-center justify-center rounded-md border border-green-600/30 bg-green-600/10 text-green-600 dark:text-green-400"
+                  >
+                    <CheckIcon className="size-4" aria-hidden />
                   </span>
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={sent !== null}
-                  aria-label={`Skip ${variable}`}
-                  onClick={() => choose(battery, variable, { kind: "skipped" })}
-                >
-                  <span>Skip</span>
-                </Button>
+                ) : null}
               </div>
             </div>
           );
@@ -229,7 +230,7 @@ export function BatteryCredentialsTool({
             key="done"
             type="button"
             size="sm"
-            disabled={!complete || sent !== null}
+            disabled={sent !== null}
             onClick={done}
           >
             <CheckIcon aria-hidden />
@@ -239,11 +240,12 @@ export function BatteryCredentialsTool({
           <Button
             key="next"
             type="button"
-            variant="secondary"
+            // Leaving a variable unpicked skips it.
+            variant={answered ? "secondary" : "outline"}
             size="sm"
             onClick={() => setIndex(index + 1)}
           >
-            <span>Next</span>
+            <span>{answered ? "Next" : "Skip"}</span>
             <ChevronRightIcon aria-hidden />
           </Button>
         )}
@@ -270,10 +272,7 @@ export function BatteryCredentialsTool({
           useExternalSecretsManager={byosEnabled}
           onClose={() => setAdding(null)}
           onConnected={() =>
-            choose(adding.battery, adding.variable, {
-              kind: "key",
-              key: connecting.key,
-            })
+            choose(adding.battery, adding.variable, { key: connecting.key })
           }
         />
       ) : null}
@@ -382,6 +381,9 @@ function tokenName(battery: Battery, variable: string) {
 function choiceId(battery: Battery, variable: string) {
   return `${battery.name}:${variable}`;
 }
+
+// The Select item that opens the add-token dialogs instead of picking a key.
+const ADD_TOKEN = "__add-token__";
 
 // A URL stops before trailing sentence punctuation.
 const STEP_TOKEN = /(`[^`]+`|https?:\/\/[^\s`]*[^\s`.,:;)])/;

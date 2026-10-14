@@ -23,3 +23,28 @@ test("a launch key resolves only to a known prompt, and a target prompt only wit
   expect(resolveOpenAppaLaunchPrompt("toString")).toBeUndefined();
   expect(resolveOpenAppaLaunchPrompt("unknown", gateway)).toBeUndefined();
 });
+
+const server = {
+  kind: "mcp_server" as const,
+  name: "GitHub",
+  id: "catalog-1",
+};
+
+test("a policy prompt given a target keeps its text and narrows to the target", () => {
+  const plain = resolveOpenAppaLaunchPrompt("improveCoverage");
+  const scoped = resolveOpenAppaLaunchPrompt("improveCoverage", server);
+  expect(scoped).toMatch(new RegExp(`^${plain?.replace(/\./g, "\\.")} `));
+  expect(scoped).toContain('Focus on the MCP server "GitHub".');
+  expect(scoped).toContain("Target ID: catalog-1");
+});
+
+test("a policy prompt given a tool narrows to that tool", () => {
+  const scoped = resolveOpenAppaLaunchPrompt("explainPolicy", {
+    ...server,
+    tool: "create_issue",
+  });
+  expect(scoped).toContain(
+    'Focus on the tool "create_issue" of the MCP server "GitHub".',
+  );
+  expect(scoped).toContain("Tool: create_issue");
+});

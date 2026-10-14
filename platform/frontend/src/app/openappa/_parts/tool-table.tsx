@@ -14,17 +14,21 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { DataTable } from "@/components/ui/data-table";
 import { DEFAULT_FILTER_ALL } from "@/consts";
+import type { OpenAppaLaunchTarget } from "@/lib/openappa-chat-prompts";
 import {
   type CoverageTool,
   useCoverageTools,
 } from "@/lib/openappa-coverage.query";
 import { GovernedByPill } from "./coverage-badges";
+import { ImproveChatButton } from "./improve-chat-button";
 import { policyLineHref } from "./policy-line-href";
 
 type ToolTableProps = {
   catalogId?: string;
   entityId?: string;
   autoMode?: boolean;
+  /** Adds an Improve action per tool, scoped to this target. */
+  target?: OpenAppaLaunchTarget;
 };
 
 const FIRST_PAGE = { pageIndex: 0, pageSize: 10 };
@@ -46,6 +50,7 @@ export function ToolTable({
   catalogId,
   entityId,
   autoMode = false,
+  target,
 }: ToolTableProps) {
   const [search, setSearch] = useState("");
   const [serverId, setServerId] = useState<string | undefined>();
@@ -90,24 +95,29 @@ export function ToolTable({
   });
   const columns = useMemo<ColumnDef<CoverageTool>[]>(
     () => [
-      {
-        id: "server",
-        header: "MCP server",
-        size: 190,
-        cell: ({ row }) => (
-          <div className="flex items-center gap-2">
-            <McpCatalogIcon
-              icon={row.original.catalogIcon}
-              catalogId={row.original.catalogId}
-              size={18}
-            />
-            <span>{row.original.catalogName || row.original.prefix}</span>
-          </div>
-        ),
-      },
+      // One server's tools all share it, so the column only shows for many.
+      ...(catalogId
+        ? []
+        : [
+            {
+              id: "server",
+              header: "MCP server",
+              size: 190,
+              cell: ({ row }) => (
+                <div className="flex items-center gap-2">
+                  <McpCatalogIcon
+                    icon={row.original.catalogIcon}
+                    catalogId={row.original.catalogId}
+                    size={18}
+                  />
+                  <span>{row.original.catalogName || row.original.prefix}</span>
+                </div>
+              ),
+            } satisfies ColumnDef<CoverageTool>,
+          ]),
       {
         id: "tool",
-        header: "Tool name",
+        header: "Tool",
         size: 230,
         cell: ({ row }) => <ToolNameCell tool={row.original} />,
       },
@@ -117,8 +127,25 @@ export function ToolTable({
         size: 240,
         cell: ({ row }) => <PolicySourceCell tool={row.original} />,
       },
+      ...(target
+        ? [
+            {
+              id: "actions",
+              header: () => <div className="text-right">Actions</div>,
+              size: 112,
+              cell: ({ row }) => (
+                <div className="flex justify-end">
+                  <ImproveChatButton
+                    size="xs"
+                    target={{ ...target, tool: row.original.name }}
+                  />
+                </div>
+              ),
+            } satisfies ColumnDef<CoverageTool>,
+          ]
+        : []),
     ],
-    [],
+    [catalogId, target],
   );
 
   if (tools.isLoadingError)
@@ -193,6 +220,8 @@ export function ToolTable({
           total: tools.data?.pagination.total ?? 0,
         }}
         onPaginationChange={setPagination}
+        fixedWidthColumnIds={["server", "actions"]}
+        flexibleColumnIds={["tool", "policy"]}
         isLoading={tools.isFetching}
         emptyIcon={Wrench}
         emptyMessage="No tools available"
@@ -224,7 +253,7 @@ function PolicySourceCell({ tool }: { tool: CoverageTool }) {
   if (tool.policySource === "not_covered" || tool.rule?.source === "catchall") {
     const line = tool.rule?.line ?? tool.fallbackLine;
     return (
-      <div className="space-y-1">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <GovernedByPill
           governedBy={{
             source:
@@ -257,7 +286,7 @@ function PolicySourceCell({ tool }: { tool: CoverageTool }) {
         ? policyLineHref({ entry: null, line: tool.rule.line })
         : undefined;
   return (
-    <div className="space-y-1">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
       {tool.rule.source === "root" ? (
         <GovernedByPill
           governedBy={{ source: "root" }}

@@ -114,6 +114,11 @@ export declare function composeOpenappaPolicy(input: ComposePolicyInput): Promis
 export interface ComposePolicyInput {
   root: string
   batteries: Array<ComposeBatteryInput>
+  /**
+   * The readers of each member roster the host keeps, by roster name:
+   * principal → email. A roster absent here is declared empty.
+   */
+  memberRosters?: Record<string, Record<string, string>>
 }
 
 export interface CredentialDeclaration {

@@ -96,7 +96,10 @@ import { reportAbnormalPreviousTermination } from "@/observability/previous-term
 import { rumExporter } from "@/observability/rum/exporter.ee";
 import { createCachedOpenApiRouteHandler } from "@/openapi/cached-openapi-route";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
-import { declareOpenappaInstalls } from "@/openappa/service";
+import {
+  declareOpenappaInstalls,
+  recompileAllOnStart,
+} from "@/openappa/service";
 import { initializeLlmProxyPlugins } from "@/proxy/plugins/registry";
 import { activeChatRunService } from "@/services/active-chat-run";
 import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
@@ -163,6 +166,7 @@ import {
   READY_PATH,
   SKILL_MARKETPLACE_PREFIX,
 } from "./routes/route-paths";
+import { beginLlmProxyDrain } from "./server/llm-proxy-drain";
 import {
   UserConfigFieldDefaultSchema,
   UserConfigFieldSchema,
@@ -926,6 +930,7 @@ const startWebServer = async () => {
     // a recompose rewrites those rows from the text and deletes every row the
     // text does not declare.
     await declareOpenappaInstalls();
+    void recompileAllOnStart();
 
     // With basic auth disabled, a password session that predates the flag
     // would otherwise stay valid until it expired. Runs after seeding so the
@@ -1291,8 +1296,19 @@ function registerWebServerShutdown(
     activeChatRunReaperIntervalId?: NodeJS.Timeout;
   } = {},
 ): void {
+  let shuttingDown = false;
   const gracefulShutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     fastify.log.info(`Received ${signal}, shutting down gracefully...`);
+    beginLlmProxyDrain(fastify);
+    // Leave time after the 60s proxy drain for dependency cleanup, but never
+    // let unrelated long-lived connections or cleanup exceed the supervisor.
+    const shutdownDeadline = setTimeout(() => {
+      fastify.log.error("Graceful shutdown timed out");
+      process.exit(1);
+    }, 80_000);
+    shutdownDeadline.unref();
 
     // Stop accepting new runs before snapshotting, so nothing created after this
     // point escapes the cleanup below.
@@ -1413,8 +1429,10 @@ function registerWebServerShutdown(
         );
       }
 
+      clearTimeout(shutdownDeadline);
       process.exit(0);
     } catch (error) {
+      clearTimeout(shutdownDeadline);
       fastify.log.error({ error }, "Error during shutdown");
       process.exit(1);
     }
@@ -1477,6 +1495,7 @@ const startWorker = async () => {
     // deletes every install row the policy text does not declare: the worker
     // carries the legacy rows into the text first, exactly as `start` does.
     await declareOpenappaInstalls();
+    void recompileAllOnStart();
 
     registerTaskHandlers(taskQueueService);
     await taskQueueService.seedPeriodicTasks();

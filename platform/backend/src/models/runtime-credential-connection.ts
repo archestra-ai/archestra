@@ -3,10 +3,11 @@ import { alias } from "drizzle-orm/pg-core";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import { secretManager } from "@/secrets-manager";
-import type {
-  GitHubUserId,
-  RuntimeCredentialConnection,
-  RuntimeCredentialConnectionScope,
+import {
+  GITHUB_COM_API_URL,
+  type GitHubUserId,
+  type RuntimeCredentialConnection,
+  type RuntimeCredentialConnectionScope,
 } from "@/types";
 
 export default class RuntimeCredentialConnectionModel {
@@ -288,7 +289,6 @@ export default class RuntimeCredentialConnectionModel {
 // ===================== Internals =====================
 
 const SECRET_VALUE_FIELD = "value";
-const GITHUB_COM_API_URL = "https://api.github.com";
 
 async function deleteSecretQuietly(secretId: string): Promise<void> {
   try {

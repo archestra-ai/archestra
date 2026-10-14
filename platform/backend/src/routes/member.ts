@@ -8,6 +8,7 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import logger from "@/logging";
 import { MemberModel } from "@/models";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import { removeMemberTarget } from "@/services/member-removal";
 import { constructResponseSchema, MemberListItemSchema } from "@/types";
 
@@ -124,6 +125,11 @@ const memberRoutes: FastifyPluginAsyncZod = async (fastify) => {
           failed.push({ ...target, error: "Could not remove this member" });
         }
       }
+      // Former members leave the member roster: one recompose for the batch.
+      if (succeeded.length > 0)
+        await openappaBatteriesService.recompileOrganizations([
+          request.organizationId,
+        ]);
 
       if (succeeded.length === 0) {
         // Do not turn an entirely unsuccessful attempt into an audit event.

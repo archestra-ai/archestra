@@ -7,6 +7,7 @@ import {
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
 } from "@archestra/shared";
+import { memberPermissions } from "@archestra/shared/access-control";
 import { vi } from "vitest";
 import config from "@/config";
 import { scopedSessionId } from "@/openappa/actor";
@@ -2186,6 +2187,7 @@ describe("list_guardrails_battery_fits", () => {
     makeOrganization,
     makeUser,
     makeMember,
+    makeCustomRole,
     makeInternalMcpCatalog,
     makeTool,
   }) => {
@@ -2193,8 +2195,11 @@ describe("list_guardrails_battery_fits", () => {
     const org = await makeOrganization();
     const owner = await makeUser();
     const viewer = await makeUser();
-    await makeMember(owner.id, org.id, { role: "member" });
-    await makeMember(viewer.id, org.id, { role: "member" });
+    const reader = await makeCustomRole(org.id, {
+      permission: { ...memberPermissions, openappaPolicy: ["read"] },
+    });
+    await makeMember(owner.id, org.id, { role: reader.role });
+    await makeMember(viewer.id, org.id, { role: reader.role });
     const linear = await makeInternalMcpCatalog({
       organizationId: org.id,
       authorId: owner.id,

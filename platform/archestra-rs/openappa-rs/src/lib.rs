@@ -665,6 +665,9 @@ pub struct ComposeBatteryInput {
 pub struct ComposePolicyInput {
     pub root: String,
     pub batteries: Vec<ComposeBatteryInput>,
+    /// The readers of each member roster the host keeps, by roster name:
+    /// principal → email. A roster absent here is declared empty.
+    pub member_rosters: Option<HashMap<String, HashMap<String, String>>>,
 }
 
 #[napi(object)]
@@ -699,7 +702,13 @@ pub async fn compose_openappa_policy(input: ComposePolicyInput) -> napi::Result<
                 }),
             })
             .collect();
-        std::panic::catch_unwind(|| policy::compose(&input.root, &batteries))
+        let rosters: policy::MemberRosters = input
+            .member_rosters
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(name, readers)| (name, readers.into_iter().collect()))
+            .collect();
+        std::panic::catch_unwind(|| policy::compose_with_rosters(&input.root, &batteries, &rosters))
             .map(|result| match result {
                 Ok(composed) => ComposedPolicy {
                     content: Some(composed.content),

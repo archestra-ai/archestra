@@ -1,14 +1,6 @@
 [advisories]
 db-urls = ["https://github.com/rustsec/advisory-db"]
-ignore = [
-  { id = "RUSTSEC-2025-0134", reason = "Transitive through dagger-sdk 0.21.9 via reqwest 0.11; remove once dagger-sdk upgrades its HTTP stack." },
-  { id = "RUSTSEC-2026-0098", reason = "Transitive through dagger-sdk 0.21.9 via rustls-webpki 0.101; remove once dagger-sdk upgrades its HTTP stack." },
-  { id = "RUSTSEC-2026-0099", reason = "Transitive through dagger-sdk 0.21.9 via rustls-webpki 0.101; remove once dagger-sdk upgrades its HTTP stack." },
-  { id = "RUSTSEC-2026-0104", reason = "Transitive through dagger-sdk 0.21.9 via rustls-webpki 0.101; remove once dagger-sdk upgrades its HTTP stack." },
-  { id = "RUSTSEC-2026-0346", reason = "Transitive through dagger-sdk 0.21.9 via rustls 0.21 (reqwest 0.11); the rustls 0.23 line is on 0.23.46, which fixes it. Remove once dagger-sdk upgrades its HTTP stack." },
-  { id = "RUSTSEC-2026-0349", reason = "Transitive through dagger-sdk 0.21.9 via rustls 0.21 (reqwest 0.11); the downgrade concerns the hybrid key exchange that rustls 0.21 does not offer, and the rustls 0.23 line is on 0.23.46, which fixes it. Remove once dagger-sdk upgrades its HTTP stack." },
-  { id = "RUSTSEC-2026-0258", reason = "Transitive through dagger-sdk 0.21.9 via reqwest 0.11 and h2 0.3; remove once dagger-sdk upgrades its HTTP stack." },
-]
+ignore = []
 
 [bans]
 multiple-versions = "warn"

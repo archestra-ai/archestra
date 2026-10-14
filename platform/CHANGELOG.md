@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.3.72](https://github.com/archestra-ai/archestra/compare/platform-v1.3.71...platform-v1.3.72) (2026-10-13)
+
+
+### Bug Fixes
+
+* **apps:** keep embedded resource contents in archestra.tools.call results (backport release/1.3) ([#8799](https://github.com/archestra-ai/archestra/issues/8799)) ([608f7b2](https://github.com/archestra-ai/archestra/commit/608f7b2d0bb91587a8d85359cf53f74cd7369950))
+* **deps:** backport Go toolchain and Handlebars CVE fixes to release/1.3 ([#8758](https://github.com/archestra-ai/archestra/issues/8758)) ([f3ffaec](https://github.com/archestra-ai/archestra/commit/f3ffaec89432e06e8217ce4c759034f7e8e62c98))
+* **guardrails:** read run_tool tool_args sent as JSON text (backport release/1.3) ([#8781](https://github.com/archestra-ai/archestra/issues/8781)) ([b52e0aa](https://github.com/archestra-ai/archestra/commit/b52e0aad0e34724d1e6f61b41c4338b12a20cc2b))
+* **llm-providers:** open a new part when Grok resumes reasoning after text (backport release/1.3) ([#8771](https://github.com/archestra-ai/archestra/issues/8771)) ([e4bfb14](https://github.com/archestra-ai/archestra/commit/e4bfb14d896be6d22b445575547040acb5a9d4ad))
+* **llm-proxy:** relay provider error bodies so Claude Code recovers threads (backport release/1.3) ([#8755](https://github.com/archestra-ai/archestra/issues/8755)) ([9d29f65](https://github.com/archestra-ai/archestra/commit/9d29f6567f49935de31ad23b0a01e0e142db48d9))
+
 ## [1.3.71](https://github.com/archestra-ai/archestra/compare/platform-v1.3.70...platform-v1.3.71) (2026-10-08)
 
 

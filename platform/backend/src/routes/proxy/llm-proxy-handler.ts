@@ -120,6 +120,7 @@ import {
   shouldForwardAnthropicBeta,
   toSpanUserInfo,
   toToolCallBlock,
+  upstreamErrorMessage,
   withSessionContext,
 } from "./llm-proxy-helpers";
 import { StreamKeepAlive } from "./stream-keepalive";
@@ -1363,7 +1364,10 @@ export async function handleLLMProxy<
   } catch (error) {
     // Persist failed interactions so they appear in LLM logs
     try {
-      const errorMessage = provider.extractErrorMessage(error);
+      const errorMessage = upstreamErrorMessage(
+        error,
+        provider.extractErrorMessage,
+      );
       logger.info(
         { profileId: resolvedAgent.id, errorMessage },
         "Persisting error interaction record",
@@ -1880,7 +1884,10 @@ async function handleStreaming<
     // rejecting the request, or a mid-stream failure once SSE headers and
     // content are already on the wire) still has to reach interaction history.
     if (!streamAdapter.state.usage) {
-      const errorMessage = provider.extractErrorMessage(error);
+      const errorMessage = upstreamErrorMessage(
+        error,
+        provider.extractErrorMessage,
+      );
       logger.info(
         { profileId: agent.id, errorMessage },
         "Persisting error interaction record for failed stream",

@@ -33,13 +33,28 @@ export function resolveRunToolTarget(
     return { toolName, toolInput };
   }
 
-  const targetToolInput = isRecord(toolInput.tool_args)
-    ? toolInput.tool_args
-    : {};
   return {
     toolName: targetToolName,
-    toolInput: targetToolInput,
+    toolInput: readRunToolArgs(toolInput.tool_args) ?? {},
   };
+}
+
+/**
+ * The target's arguments as `run_tool` reads its `tool_args`: an object, or
+ * JSON text of one, which some models send for nested objects. A missing value
+ * is the empty object. Returns undefined for anything else, which `run_tool`
+ * refuses.
+ */
+function readRunToolArgs(value: unknown): Record<string, unknown> | undefined {
+  if (value === undefined) return {};
+  if (isRecord(value)) return value;
+  if (typeof value !== "string") return undefined;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return isRecord(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 type RunToolDispatch =

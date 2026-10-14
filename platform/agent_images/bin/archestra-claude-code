@@ -13,6 +13,9 @@ fi
 unset ANTHROPIC_API_KEY
 
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
+# The runtime directory outlives the pod. A killed run must not leave a held
+# turn behind for a later continuation.
+rm -f "${runtime_dir}/turn-waiting-background"
 mcp_config="${runtime_dir}/claude-mcp.json"
 jq -n \
   --arg url "${ARCHESTRA_MCP_GATEWAY_URL:?}" \
@@ -77,6 +80,11 @@ case "${event}:${notification}" in
     label="Permission needed"
     ;;
   Notification:idle_prompt)
+    # A delegated turn that waits for its background agents needs no input.
+    if [[ -f "${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}/turn-waiting-background" ]]; then
+      "${attention_command}" clear
+      exit 0
+    fi
     label="Waiting for input"
     ;;
   Notification:elicitation_dialog)
@@ -160,6 +168,15 @@ if [[ -n "${transcript}" && -r "${transcript}" ]]; then
 fi
 
 if [[ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" == "one_shot" ]]; then
+  # Claude Code ends a turn to wait for background subagents and workflows,
+  # then starts a new one when they report back. Completing here would kill
+  # them. Like print mode, other background work does not hold the run.
+  if jq -e '[.background_tasks[]? | select(.type == "subagent" or .type == "workflow")] | length > 0' \
+    <<<"${payload}" >/dev/null 2>&1; then
+    touch "${runtime_dir}/turn-waiting-background"
+    exit 0
+  fi
+  rm -f "${runtime_dir}/turn-waiting-background"
   if [[ -n "${transcript}" && -r "${transcript}" ]]; then
     jq -rs '[.[]
         | select(.type == "assistant")

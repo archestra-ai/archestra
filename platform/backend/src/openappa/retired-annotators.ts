@@ -276,7 +276,7 @@ function sameBinding(a: KeptAnnotator, b: KeptAnnotator): boolean {
   );
 }
 
-/** Every variable a table names through a `*_env` key, at any depth. */
+/** The install id in a host helper URL, or null when the URL is not one. */
 function helperInstall(value: unknown, helperBase: string): string | null {
   if (typeof value !== "string") return null;
   let target: URL;
@@ -295,6 +295,7 @@ function helperInstall(value: unknown, helperBase: string): string | null {
   return path[prefix.length] ?? null;
 }
 
+/** Every variable a table names through a `*_env` key, at any depth. */
 function envVariables(table: Record<string, unknown>): string[] {
   return Object.entries(table).flatMap(([key, value]) => {
     if (key.endsWith("_env") && typeof value === "string") return [value];

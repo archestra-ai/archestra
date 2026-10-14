@@ -2,7 +2,7 @@
 title: "Single Sign-On"
 description: "Sign users in with OIDC or SAML, map IdP claims to roles, and sync directory groups to teams"
 order: 1
-lastUpdated: 2026-10-06
+lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -55,6 +55,14 @@ Limit which accounts can sign in through an identity provider:
 
 - **Allowed Email Domains:** Enter comma-separated domains (such as `company.com, subsidiary.com`). Subdomains match automatically (`eng.company.com` matches `company.com`).
 - **Downstream-only providers:** Uncheck **Use for Single Sign-On** to use a provider solely for MCP tool token exchange. The provider remains hidden from the sign-in screen, and its role mapping rules never apply.
+
+## Change an Email Claim
+
+For OIDC providers, keep **User ID Claim** unchanged when changing **Email Claim**. Archestra uses the provider and user ID to recognize an existing SSO user.
+
+With OIDC profile updates enabled, the user's next successful sign-in updates their email on the same account. Saving the mapping leaves their email and active sessions unchanged. If that account also has a password, use the updated email with the existing password afterward.
+
+If the updated email belongs to a pending Microsoft Teams user who has never signed in, Archestra can reconcile that pending user automatically. Its supported chat history, resources, and team memberships move to the existing SSO user. An account with login credentials, an active session, ongoing work, or other owned resources requires manual resolution; sign-in reports an email conflict and preserves both users.
 
 ## Role Mapping
 

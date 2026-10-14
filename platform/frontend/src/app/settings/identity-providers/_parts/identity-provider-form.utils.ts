@@ -209,10 +209,9 @@ function normalizeOidcConfigForEnterpriseExchange(params: {
     mapping: {
       ...oidcConfig.mapping,
       id: oidcConfig.mapping?.id ?? "sub",
-      email:
-        !oidcConfig.mapping?.email || oidcConfig.mapping.email === "email"
-          ? "preferred_username"
-          : oidcConfig.mapping.email,
+      email: !oidcConfig.mapping?.email
+        ? "preferred_username"
+        : oidcConfig.mapping.email,
       name: oidcConfig.mapping?.name ?? "name",
     },
     enterpriseManagedCredentials: params.enterpriseManagedCredentials,

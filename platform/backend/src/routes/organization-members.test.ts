@@ -1,6 +1,10 @@
 import { type Mock, vi } from "vitest";
+import { autoProvisionUser } from "@/agents/chatops/auto-provision";
+import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import ChatOpsUserAdmissionModel from "@/models/chatops-user-admission";
+import UserModel from "@/models/user";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { SelectServiceAccount, User } from "@/types";
 
@@ -52,6 +56,32 @@ describe("GET /api/organization/members — visibility scope", () => {
   function get() {
     return app.inject({ method: "GET", url: "/api/organization/members" });
   }
+
+  test("explicit pending-user removal also removes an outstanding Teams admission", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    currentUser = await makeUser({ email: "admin@example.com" });
+    await makeMember(currentUser.id, organizationId, { role: "admin" });
+    const pending = await autoProvisionUser({
+      email: "pending@example.com",
+      name: "Pending",
+      provider: "ms-teams",
+    });
+    const admission = await ChatOpsUserAdmissionModel.acquire(
+      "pending@example.com",
+    );
+    expect(admission?.admissionId).toBeTruthy();
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/organization/members/${pending.userId}/pending-signup`,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(await UserModel.getById(pending.userId)).toBeUndefined();
+    expect(
+      await db.select().from(schema.chatopsUserAdmissionsTable),
+    ).toHaveLength(0);
+  });
 
   test("caller without member:read sees only teammates, not the whole org", async ({
     makeUser,

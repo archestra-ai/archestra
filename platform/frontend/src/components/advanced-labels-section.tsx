@@ -18,13 +18,20 @@ export const AdvancedLabelsSection = forwardRef<
     onLabelsChange: (labels: ProfileLabel[]) => void;
     className?: string;
     collapsible?: boolean;
+    disabled?: boolean;
   }
 >(function AdvancedLabelsSection(
-  { labels, onLabelsChange, className, collapsible = false },
+  { labels, onLabelsChange, className, collapsible = false, disabled = false },
   ref,
 ) {
   const content = (
-    <ProfileLabels ref={ref} labels={labels} onLabelsChange={onLabelsChange} />
+    <fieldset disabled={disabled} className="min-w-0">
+      <ProfileLabels
+        ref={ref}
+        labels={labels}
+        onLabelsChange={onLabelsChange}
+      />
+    </fieldset>
   );
   if (!collapsible) return <div className={className}>{content}</div>;
   return (

@@ -268,6 +268,46 @@ test("summarizes multiple roles and reveals the full assignment in a tooltip", a
     expect(within(tooltip).getByText(name)).toBeVisible();
 });
 
+test("read-only viewers can expand labels without being allowed to edit them", async () => {
+  vi.mocked(useHasPermissions).mockImplementation(
+    (permissions) =>
+      ({
+        data: !permissions.serviceAccount?.includes("update"),
+        isPending: false,
+      }) as unknown as ReturnType<typeof useHasPermissions>,
+  );
+  server.use(
+    http.get(`${origin}/api/service-accounts`, () =>
+      HttpResponse.json([
+        { ...account, labels: [{ key: "environment", value: "preview" }] },
+      ]),
+    ),
+  );
+  const user = userEvent.setup();
+  render(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <ServiceAccountsSettingsPage />
+    </QueryClientProvider>,
+  );
+  await user.click(await screen.findByRole("button", { name: account.name }));
+  const dialog = screen.getByRole("dialog", { name: "Edit service account" });
+  const advanced = within(dialog).getByRole("button", { name: "Advanced" });
+  expect(advanced).toBeEnabled();
+  await user.click(advanced);
+  expect(within(dialog).getByText("environment:")).toBeVisible();
+  expect(within(dialog).getByLabelText("Label key")).toBeDisabled();
+  expect(
+    within(dialog).getByRole("button", { name: "Remove label" }),
+  ).toBeDisabled();
+  expect(
+    within(dialog).queryByRole("button", { name: "Save" }),
+  ).not.toBeInTheDocument();
+});
+
 test("offers row edits only on accounts the user holds an update grant for", async () => {
   mockServiceAccountGrants([
     { resource: "serviceAccount", action: "update", scope: "another-account" },

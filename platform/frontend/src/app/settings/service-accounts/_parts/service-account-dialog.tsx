@@ -750,13 +750,10 @@ export function ServiceAccountDialog({
             />
             {/* SPDX-SnippetEnd */}
           </div>
-          <fieldset
-            disabled={!canUpdateServiceAccounts}
-            hidden={activeTab !== "general"}
-            className="pt-4"
-          >
+          <fieldset hidden={activeTab !== "general"} className="pt-4">
             <AdvancedLabelsSection
               collapsible
+              disabled={!canUpdateServiceAccounts}
               ref={labelsRef}
               labels={labels}
               onLabelsChange={setLabels}

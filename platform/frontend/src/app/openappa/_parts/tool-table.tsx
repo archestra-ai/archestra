@@ -131,10 +131,11 @@ export function ToolTable({
         ? [
             {
               id: "actions",
-              header: () => <div className="text-right">Actions</div>,
-              size: 112,
+              // Table cells pad less on the right; this evens the edge.
+              header: () => <div className="pr-2 text-right">Actions</div>,
+              size: 120,
               cell: ({ row }) => (
-                <div className="flex justify-end">
+                <div className="flex justify-end pr-2">
                   <ImproveChatButton
                     size="xs"
                     target={{ ...target, tool: row.original.name }}

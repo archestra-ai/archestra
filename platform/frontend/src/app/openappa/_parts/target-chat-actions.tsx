@@ -15,10 +15,10 @@ export function TargetChatActions({
   size: ButtonProps["size"];
 }) {
   return (
-    <div className="flex items-center justify-end gap-1">
+    <div className="flex items-center justify-end gap-2">
       <OpenAppaChatButton
         permissions={{ mcpRegistry: ["read"] }}
-        variant="ghost"
+        variant="outline"
         size={size}
         // On the button, so a refused one, which drops the link, keeps it.
         aria-label={`Explain in chat: ${target.name}`}

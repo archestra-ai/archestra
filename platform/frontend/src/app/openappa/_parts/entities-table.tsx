@@ -2,7 +2,7 @@
 
 import type { Column, ColumnDef, SortingState } from "@tanstack/react-table";
 import { Bot, ChevronDown, ChevronUp, TriangleAlert, X } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import {
   CollectionFilters,
@@ -141,10 +141,13 @@ export function EntitiesTable() {
       },
       {
         id: "actions",
-        header: () => <div className="text-right">Actions</div>,
-        size: 200,
+        // Table cells pad less on the right; this evens the edge with the left.
+        header: () => <div className="pr-2 text-right">Actions</div>,
+        size: 216,
         cell: ({ row }) => (
-          <TargetChatActions size="xs" target={targetOf(row.original)} />
+          <div className="pr-2">
+            <TargetChatActions size="xs" target={targetOf(row.original)} />
+          </div>
         ),
       },
     ],
@@ -251,6 +254,7 @@ function PolicyTargetDialog({
   target: CoverageEntity | null;
   onClose: () => void;
 }) {
+  const toolsRef = useRef<HTMLDivElement>(null);
   return (
     <StandardDialog
       open={selected !== null}
@@ -258,7 +262,11 @@ function PolicyTargetDialog({
       size="large"
       // As tall as its rows, up to the large dialog's height.
       className="h-auto max-h-[90vh]"
-      headerClassName="pr-64"
+      // The table's pagination already leaves a gap below it.
+      bodyClassName="pb-0"
+      headerClassName="pr-72"
+      // Focus the tools, not the close button, so nothing opens ringed.
+      initialFocusRef={toolsRef}
       title={
         selected ? (
           <span className="flex items-center gap-2.5">
@@ -284,13 +292,15 @@ function PolicyTargetDialog({
       }
     >
       {selected && (
-        <ToolTable
-          key={selected.id}
-          catalogId={selected.type === "mcp_server" ? selected.id : undefined}
-          entityId={selected.type === "mcp_server" ? undefined : selected.id}
-          autoMode={selected.autoMode}
-          target={targetOf(selected)}
-        />
+        <div ref={toolsRef} tabIndex={-1} className="outline-none">
+          <ToolTable
+            key={selected.id}
+            catalogId={selected.type === "mcp_server" ? selected.id : undefined}
+            entityId={selected.type === "mcp_server" ? undefined : selected.id}
+            autoMode={selected.autoMode}
+            target={targetOf(selected)}
+          />
+        </div>
       )}
     </StandardDialog>
   );

@@ -188,6 +188,8 @@ interface ChatMessagesProps {
    * When set, the inline error card shows a "Try again" button.
    */
   onChatErrorRetry?: () => void | Promise<void>;
+  /** Focuses the composer so a pending question can be answered in free text. */
+  onTypeAnswer?: () => void;
   error?: Error | null;
   chatErrors?: archestraApiTypes.GetChatConversationResponses["200"]["chatErrors"];
   compactions?: archestraApiTypes.GetChatConversationResponses["200"]["compactions"];
@@ -259,6 +261,7 @@ export function ChatMessages({
   onRegenerateUserMessage,
   onProviderConnected,
   onChatErrorRetry,
+  onTypeAnswer,
   error = null,
   chatErrors = [],
   compactions = [],
@@ -815,6 +818,7 @@ export function ChatMessages({
                                 session?.resolveMcpElicitation ??
                                 (async () => false)
                               }
+                              onTypeAnswer={onTypeAnswer}
                             />
                           </ErrorBoundary>
                         );
@@ -1603,6 +1607,7 @@ export function ChatMessages({
               <McpElicitationCard
                 requests={ungroupedPendingChoiceElicitations}
                 onRespond={session.resolveMcpElicitation}
+                onTypeAnswer={onTypeAnswer}
               />
             ) : null}
             <ContextCompactionStatus

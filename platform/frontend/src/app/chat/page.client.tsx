@@ -3438,6 +3438,11 @@ export function ChatPageContent({
                               ? undefined
                               : handleChatErrorRetry
                           }
+                          onTypeAnswer={
+                            isReadOnlyConversation
+                              ? undefined
+                              : () => textareaRef.current?.focus()
+                          }
                           error={error}
                           onToolApprovalResponse={
                             addToolApprovalResponse

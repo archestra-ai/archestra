@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { ConnectionSignInDialog } from "@/components/connection-sign-in-dialog";
@@ -31,21 +32,45 @@ export function RuntimeCredentialConnectionDialog({
   useExternalSecretsManager = false,
   onClose,
   onConnected,
+  silent = false,
+  create,
 }: {
-  definition: RuntimeCredentialDefinition;
+  definition: Pick<
+    RuntimeCredentialDefinition,
+    "key" | "name" | "kind" | "icon" | "description" | "githubClientId"
+  >;
   scope: "personal" | "organization";
   useExternalSecretsManager?: boolean;
   onClose: () => void;
   onConnected?: () => void;
+  /** Skips the "connected" toast, for a caller that shows the result itself. */
+  silent?: boolean;
+  /**
+   * Makes the credential when the value is submitted, for a definition that
+   * does not exist yet, so a dialog closed without a value leaves nothing.
+   */
+  create?: () => Promise<unknown>;
 }) {
-  const connect = useSetRuntimeCredentialConnection();
+  const connect = useSetRuntimeCredentialConnection({ silent });
+  const [creating, setCreating] = useState(false);
   const startGitHub = useStartGitHubUserConnection();
   const form = useForm<ConnectionFormValues>({
     resolver: zodResolver(ConnectionFormSchema),
     defaultValues: { value: "", clientSecret: "" },
   });
 
-  const save = (nextValue: string) => {
+  const save = async (nextValue: string) => {
+    if (create) {
+      setCreating(true);
+      try {
+        await create();
+      } catch {
+        // The create mutation already reported the error.
+        return;
+      } finally {
+        setCreating(false);
+      }
+    }
     connect.mutate(
       {
         key: definition.key,
@@ -122,16 +147,16 @@ export function RuntimeCredentialConnectionDialog({
             });
             return;
           }
-          save(JSON.stringify({ privateKey: value, clientSecret }));
-        } else save(value);
+          void save(JSON.stringify({ privateKey: value, clientSecret }));
+        } else void save(value);
       })}
       footer={
         <>
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" disabled={connect.isPending}>
-            {connect.isPending ? "Connecting…" : "Connect"}
+          <Button type="submit" disabled={creating || connect.isPending}>
+            {creating || connect.isPending ? "Connecting…" : "Connect"}
           </Button>
         </>
       }

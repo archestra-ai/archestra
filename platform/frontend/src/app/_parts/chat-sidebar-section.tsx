@@ -409,11 +409,7 @@ export function ChatSidebarSection({
   };
 
   const openConversationSearch = () => {
-    window.dispatchEvent(
-      new CustomEvent("open-conversation-search", {
-        detail: { recentChatsView: true },
-      }),
-    );
+    window.dispatchEvent(new CustomEvent("open-conversation-search"));
   };
 
   const renderConversationItem = (conv: (typeof conversations)[number]) => {

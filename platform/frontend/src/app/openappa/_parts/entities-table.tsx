@@ -1,8 +1,8 @@
 "use client";
 
 import type { Column, ColumnDef, SortingState } from "@tanstack/react-table";
-import { Bot, ChevronDown, ChevronUp, TriangleAlert } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { Bot, ChevronDown, ChevronUp, TriangleAlert, X } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import {
   CollectionFilters,
@@ -13,9 +13,9 @@ import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { StandardDialog } from "@/components/standard-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import { DialogClose } from "@/components/ui/dialog";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useQueryParamsAdapter } from "@/lib/hooks/use-query-params-adapter";
 import {
@@ -24,6 +24,7 @@ import {
 } from "@/lib/openappa-coverage.query";
 import { cn } from "@/lib/utils/tailwind";
 import { RuleCoverageBar } from "./rule-coverage-bar";
+import { TargetChatActions } from "./target-chat-actions";
 import { ToolTable } from "./tool-table";
 
 const PARAM_NAMES = {
@@ -35,7 +36,7 @@ const PARAM_NAMES = {
 } as const;
 
 /** The columns the table sorts by, named as the API sorts. */
-const SORTABLE = ["name", "type", "tools"] as const;
+const SORTABLE = ["name", "tools"] as const;
 type SortColumn = (typeof SORTABLE)[number];
 /** MCP servers by name. */
 const DEFAULT_SORT: { id: SortColumn; desc: boolean } = {
@@ -99,7 +100,7 @@ export function EntitiesTable() {
         id: "name",
         accessorFn: (row) => row.name,
         header: ({ column }) => <SortHeader column={column} label="Name" />,
-        size: 260,
+        size: 300,
         cell: ({ row }) => (
           <Button
             variant="ghost"
@@ -115,22 +116,6 @@ export function EntitiesTable() {
         ),
       },
       {
-        id: "type",
-        accessorFn: (row) => row.type,
-        header: ({ column }) => <SortHeader column={column} label="Type" />,
-        size: 210,
-        cell: ({ row }) => (
-          <span className="flex items-center gap-2">
-            <span>{entityTypeLabel(row.original.type)}</span>
-            {row.original.autoMode && (
-              <Badge variant="outline" className="font-normal">
-                Auto mode
-              </Badge>
-            )}
-          </span>
-        ),
-      },
-      {
         id: "tools",
         accessorFn: (row) => row.toolCount,
         header: ({ column }) => (
@@ -138,11 +123,10 @@ export function EntitiesTable() {
         ),
         cell: ({ row }) => (
           <div className="flex items-center gap-3">
-            {/* Capped, so a wide screen leaves room after it, not a longer bar. */}
             <RuleCoverageBar
               counts={row.original.rules}
               total={row.original.toolCount}
-              className="h-1.5 min-w-0 max-w-48 flex-1"
+              className="h-1.5 min-w-20 flex-1"
             />
             <CoverageCount
               covered={
@@ -152,6 +136,18 @@ export function EntitiesTable() {
               }
               total={row.original.toolCount}
             />
+          </div>
+        ),
+      },
+      {
+        id: "actions",
+        // Buttons label themselves, so the title is for screen readers. Cells pad
+        // less on the right; the cell's pr-2 evens that edge with the left.
+        header: () => <span className="sr-only">Actions</span>,
+        size: 216,
+        cell: ({ row }) => (
+          <div className="pr-2">
+            <TargetChatActions size="xs" target={targetOf(row.original)} />
           </div>
         ),
       },
@@ -200,8 +196,8 @@ export function EntitiesTable() {
             total: entities.data?.pagination.total ?? 0,
           }}
           onPaginationChange={setPagination}
-          // Name and type keep their width; coverage takes what is left.
-          fixedWidthColumnIds={["name", "type"]}
+          // Name and actions keep their width; coverage takes what is left.
+          fixedWidthColumnIds={["name", "actions"]}
           flexibleColumnIds={["tools"]}
           tableClassName="min-w-3xl"
           manualSorting
@@ -259,11 +255,19 @@ function PolicyTargetDialog({
   target: CoverageEntity | null;
   onClose: () => void;
 }) {
+  const toolsRef = useRef<HTMLDivElement>(null);
   return (
     <StandardDialog
       open={selected !== null}
       onOpenChange={(open) => !open && onClose()}
       size="large"
+      // As tall as its rows, up to the large dialog's height.
+      className="h-auto max-h-[90vh]"
+      // The table's pagination already leaves a gap below it.
+      bodyClassName="pb-0"
+      headerClassName="pr-72"
+      // Focus the tools, not the close button, so nothing opens ringed.
+      initialFocusRef={toolsRef}
       title={
         selected ? (
           <span className="flex items-center gap-2.5">
@@ -275,17 +279,36 @@ function PolicyTargetDialog({
         )
       }
       description={selected ? <EntitySummary entity={selected} /> : undefined}
+      headerAction={
+        selected ? (
+          <div className="flex items-center gap-1">
+            <TargetChatActions size="sm" target={targetOf(selected)} />
+            <DialogClose asChild>
+              <Button variant="ghost" size="icon-sm" aria-label="Close">
+                <X />
+              </Button>
+            </DialogClose>
+          </div>
+        ) : undefined
+      }
     >
       {selected && (
-        <ToolTable
-          key={selected.id}
-          catalogId={selected.type === "mcp_server" ? selected.id : undefined}
-          entityId={selected.type === "mcp_server" ? undefined : selected.id}
-          autoMode={selected.autoMode}
-        />
+        <div ref={toolsRef} tabIndex={-1} className="outline-none">
+          <ToolTable
+            key={selected.id}
+            catalogId={selected.type === "mcp_server" ? selected.id : undefined}
+            entityId={selected.type === "mcp_server" ? undefined : selected.id}
+            autoMode={selected.autoMode}
+            target={targetOf(selected)}
+          />
+        </div>
       )}
     </StandardDialog>
   );
+}
+
+function targetOf(entity: CoverageEntity) {
+  return { kind: entity.type, id: entity.id, name: entity.name };
 }
 
 function entityTypeLabel(type: CoverageEntity["type"]): string {
@@ -344,18 +367,17 @@ function EntitySummary({ entity }: { entity: CoverageEntity }) {
   ];
 
   return (
-    <span className="flex flex-col gap-3">
+    <span className="flex flex-wrap items-baseline gap-x-1.5">
       <span>{entityTypeLabel(entity.type)}</span>
-      <span className="flex flex-wrap gap-x-6 gap-y-2">
-        {stats.map((stat) => (
-          <span key={stat.label} className="flex items-baseline gap-1.5">
-            <span className="font-medium text-foreground tabular-nums">
-              {stat.value}
-            </span>
-            <span>{stat.label}</span>
+      {stats.map((stat) => (
+        <span key={stat.label} className="flex items-baseline gap-1.5">
+          <span aria-hidden>·</span>
+          <span className="font-medium text-foreground tabular-nums">
+            {stat.value}
           </span>
-        ))}
-      </span>
+          <span>{stat.label}</span>
+        </span>
+      ))}
     </span>
   );
 }
@@ -369,7 +391,7 @@ function CoverageCount({ covered, total }: { covered: number; total: number }) {
   return (
     <span
       className={cn(
-        "flex w-36 shrink-0 items-center justify-end gap-1.5 whitespace-nowrap text-xs tabular-nums",
+        "flex w-32 shrink-0 items-center gap-1.5 whitespace-nowrap text-xs tabular-nums",
         low ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground",
       )}
     >

@@ -1,4 +1,5 @@
 import {
+  boolean,
   index,
   pgTable,
   text,
@@ -27,6 +28,9 @@ const virtualApiKeysTable = pgTable(
       .$type<VirtualApiKeyType>()
       .notNull()
       .default("standard"),
+    includeFutureProviders: boolean("include_future_providers")
+      .notNull()
+      .default(false),
     /** Reference to secret table where token value is stored */
     secretId: uuid("secret_id")
       .notNull()

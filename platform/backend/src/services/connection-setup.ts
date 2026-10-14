@@ -18,6 +18,7 @@ import {
 } from "@/secrets-manager";
 import { ApiError } from "@/types";
 import { SecretDecryptionError } from "@/utils/secret-decryption-error";
+import { ensurePrimaryProviderKey } from "./agent-connection-setup/credentials/primary-providers";
 
 /**
  * A non-fatal warning attached to a connection setup when the Anthropic key it
@@ -69,6 +70,7 @@ export async function ensureConnectionVirtualKey(params: {
    * resolution falls back to the user's personal → team → org precedence.
    */
   preferredProviderKeyId?: string | null;
+  includeFutureProviders?: boolean;
 }): Promise<{
   virtualApiKeyId: string;
   creditWarning?: ConnectionCreditWarning;
@@ -82,6 +84,33 @@ export async function ensureConnectionVirtualKey(params: {
     clientId,
     preferredProviderKeyId,
   } = params;
+
+  const existingMode = await VirtualApiKeyModel.findByAuthorScopeName({
+    organizationId,
+    authorId: userId,
+    scope: "personal",
+    name: connectionVirtualKeyName({ userEmail, clientId }),
+  });
+  if (
+    existingMode?.includeFutureProviders ||
+    (!existingMode && params.includeFutureProviders)
+  ) {
+    const result = await ensurePrimaryProviderKey({
+      organizationId,
+      userId,
+      userTeamIds,
+      keyName: connectionVirtualKeyName({ userEmail, clientId }),
+      supportedProviders: [provider],
+      includeFutureProviders: true,
+      mappedKeys:
+        !existingMode && preferredProviderKeyId
+          ? [{ provider, providerApiKeyId: preferredProviderKeyId }]
+          : existingMode
+            ? await VirtualApiKeyModel.getProviderApiKeys(existingMode.id)
+            : [],
+    });
+    return { virtualApiKeyId: result.virtualApiKeyId };
+  }
 
   // Per-user providers (GitHub Copilot): the connection virtual key must wrap
   // the connecting user's OWN personal key — never an admin-configured or

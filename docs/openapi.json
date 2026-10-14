@@ -122781,6 +122781,13 @@
                         },
                         "newAppsLockedByDefault": {
                           "type": "boolean"
+                        },
+                        "connectionClientFutureProviders": {
+                          "nullable": true,
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "boolean"
+                          }
                         }
                       },
                       "required": [
@@ -122842,6 +122849,7 @@
                         "connectionClientOrder",
                         "connectionShownProviders",
                         "connectionBaseUrls",
+                        "connectionClientFutureProviders",
                         "connectionClientProviderKeys",
                         "connectionSkillsEnabled",
                         "connectionLlmProxyEnabled",
@@ -352069,6 +352077,13 @@
                     },
                     "newAppsLockedByDefault": {
                       "type": "boolean"
+                    },
+                    "connectionClientFutureProviders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
                     }
                   },
                   "required": [
@@ -352130,6 +352145,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionClientFutureProviders",
                     "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
@@ -353211,6 +353227,13 @@
                     },
                     "newAppsLockedByDefault": {
                       "type": "boolean"
+                    },
+                    "connectionClientFutureProviders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
                     }
                   },
                   "required": [
@@ -353272,6 +353295,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionClientFutureProviders",
                     "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
@@ -354594,6 +354618,13 @@
                     },
                     "newAppsLockedByDefault": {
                       "type": "boolean"
+                    },
+                    "connectionClientFutureProviders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
                     }
                   },
                   "required": [
@@ -354655,6 +354686,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionClientFutureProviders",
                     "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
@@ -355588,6 +355620,13 @@
                     },
                     "newAppsLockedByDefault": {
                       "type": "boolean"
+                    },
+                    "connectionClientFutureProviders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
                     }
                   },
                   "required": [
@@ -355649,6 +355688,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionClientFutureProviders",
                     "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
@@ -356582,6 +356622,13 @@
                     },
                     "newAppsLockedByDefault": {
                       "type": "boolean"
+                    },
+                    "connectionClientFutureProviders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
                     }
                   },
                   "required": [
@@ -356643,6 +356690,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionClientFutureProviders",
                     "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
@@ -357588,6 +357636,13 @@
                     },
                     "newAppsLockedByDefault": {
                       "type": "boolean"
+                    },
+                    "connectionClientFutureProviders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
                     }
                   },
                   "required": [
@@ -357649,6 +357704,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionClientFutureProviders",
                     "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
@@ -358059,6 +358115,13 @@
                       "required": [
                         "url"
                       ]
+                    }
+                  },
+                  "connectionClientFutureProviders": {
+                    "nullable": true,
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "boolean"
                     }
                   }
                 }
@@ -358706,6 +358769,13 @@
                     },
                     "newAppsLockedByDefault": {
                       "type": "boolean"
+                    },
+                    "connectionClientFutureProviders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
                     }
                   },
                   "required": [
@@ -358767,6 +358837,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionClientFutureProviders",
                     "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
@@ -359815,6 +359886,13 @@
                     },
                     "newAppsLockedByDefault": {
                       "type": "boolean"
+                    },
+                    "connectionClientFutureProviders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
                     }
                   },
                   "required": [
@@ -359876,6 +359954,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionClientFutureProviders",
                     "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
@@ -360879,6 +360958,13 @@
                     },
                     "newAppsLockedByDefault": {
                       "type": "boolean"
+                    },
+                    "connectionClientFutureProviders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
                     }
                   },
                   "required": [
@@ -360940,6 +361026,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionClientFutureProviders",
                     "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
@@ -361887,6 +361974,13 @@
                     },
                     "newAppsLockedByDefault": {
                       "type": "boolean"
+                    },
+                    "connectionClientFutureProviders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
                     }
                   },
                   "required": [
@@ -361948,6 +362042,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionClientFutureProviders",
                     "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
@@ -362926,6 +363021,13 @@
                     },
                     "newAppsLockedByDefault": {
                       "type": "boolean"
+                    },
+                    "connectionClientFutureProviders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
                     }
                   },
                   "required": [
@@ -362987,6 +363089,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionClientFutureProviders",
                     "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
@@ -363902,6 +364005,13 @@
                     },
                     "newAppsLockedByDefault": {
                       "type": "boolean"
+                    },
+                    "connectionClientFutureProviders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
                     }
                   },
                   "required": [
@@ -363963,6 +364073,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionClientFutureProviders",
                     "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
@@ -366082,6 +366193,13 @@
                     },
                     "newAppsLockedByDefault": {
                       "type": "boolean"
+                    },
+                    "connectionClientFutureProviders": {
+                      "nullable": true,
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
                     }
                   },
                   "required": [
@@ -366143,6 +366261,7 @@
                     "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
+                    "connectionClientFutureProviders",
                     "connectionClientProviderKeys",
                     "connectionSkillsEnabled",
                     "connectionLlmProxyEnabled",
@@ -431827,6 +431946,9 @@
                               "currentUsage"
                             ],
                             "additionalProperties": false
+                          },
+                          "includeFutureProviders": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -431834,6 +431956,7 @@
                           "organizationId",
                           "name",
                           "keyType",
+                          "includeFutureProviders",
                           "secretId",
                           "tokenStart",
                           "scope",
@@ -432415,6 +432538,9 @@
                         "actions"
                       ]
                     }
+                  },
+                  "includeFutureProviders": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -432689,6 +432815,9 @@
                         "currentUsage"
                       ],
                       "additionalProperties": false
+                    },
+                    "includeFutureProviders": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -432696,6 +432825,7 @@
                     "organizationId",
                     "name",
                     "keyType",
+                    "includeFutureProviders",
                     "secretId",
                     "tokenStart",
                     "scope",
@@ -433240,6 +433370,9 @@
                         "currentUsage"
                       ],
                       "additionalProperties": false
+                    },
+                    "includeFutureProviders": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -433247,6 +433380,7 @@
                     "organizationId",
                     "name",
                     "keyType",
+                    "includeFutureProviders",
                     "secretId",
                     "tokenStart",
                     "scope",
@@ -433646,6 +433780,9 @@
                       "limitValue",
                       "cleanupInterval"
                     ]
+                  },
+                  "includeFutureProviders": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -433928,6 +434065,9 @@
                         "currentUsage"
                       ],
                       "additionalProperties": false
+                    },
+                    "includeFutureProviders": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -433935,6 +434075,7 @@
                     "organizationId",
                     "name",
                     "keyType",
+                    "includeFutureProviders",
                     "secretId",
                     "tokenStart",
                     "scope",

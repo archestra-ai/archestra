@@ -345,6 +345,8 @@ export function usePinnedAgentIds(params?: { enabled?: boolean }) {
       return (data?.data ?? []).map((agent) => agent.id);
     },
     enabled: params?.enabled,
+    // A short id list; kept across reloads so pins show without a wait.
+    meta: PERSISTED_QUERY_META,
   });
   const { data: personalDefaultAgentId } = useDefaultAgentId();
   const { data: personalChatAgentId } = usePersonalChatAgentId();

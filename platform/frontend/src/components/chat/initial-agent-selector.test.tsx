@@ -317,7 +317,9 @@ describe("InitialAgentSelector keyboard navigation", () => {
     });
     // The server icons come from the agent detail; the full tool-assignment
     // list (every tool's schema) is only for the edit dialog.
-    expect(mockUseAllProfileTools).not.toHaveBeenCalled();
+    expect(mockUseAllProfileTools).not.toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: true }),
+    );
   });
 });
 
@@ -372,6 +374,27 @@ describe("InitialAgentSelector quick-edit dialog", () => {
     expect(
       await screen.findByRole("heading", { name: /Instructions|Tools/ }),
     ).toBeInTheDocument();
+  });
+
+  it("starts loading the dialog's data when the edit button is hovered", async () => {
+    const user = userEvent.setup();
+    renderSelector();
+
+    await user.click(screen.getByRole("combobox"));
+    mockUseAllProfileTools.mockClear();
+    await user.hover(screen.getByRole("button", { name: "Edit Alpha Agent" }));
+
+    expect(mockUseProfile).toHaveBeenCalledWith("agent-1", undefined);
+    expect(mockUseAllProfileTools).toHaveBeenCalledWith({
+      filters: { agentId: "agent-1" },
+      skipPagination: true,
+      enabled: true,
+    });
+    expect(mockUseAgentDelegations).toHaveBeenCalledWith("agent-1", undefined);
+    // Hovering alone does not open it.
+    expect(
+      screen.queryByRole("dialog", { name: "Alpha Agent settings" }),
+    ).not.toBeInTheDocument();
   });
 
   it("switches the agent to All tools from its settings", async () => {

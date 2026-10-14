@@ -168,6 +168,7 @@ import {
   type LlmProxyRequestContext,
   type LlmProxyToolCallRefusal,
 } from "@/proxy/plugins/registry";
+import { collectedDelegationMarkers } from "@/routes/proxy/utils/delegation-markers";
 import {
   RUNTIME_BINDING_HEADER,
   resolveRuntimeIdentityByVirtualKeys,
@@ -710,11 +711,7 @@ export async function handleLLMProxy<
     // A route that translated the wire first collected the markers from the
     // client's own wire; the translated text may no longer end with them.
     delegationMarkers =
-      (
-        request as FastifyRequest & {
-          llmProxyDelegationMarkers?: AppaDelegationMarker[];
-        }
-      ).llmProxyDelegationMarkers ??
+      collectedDelegationMarkers(request) ??
       collectDelegationMarkers({
         family: requestWireFamily,
         body,

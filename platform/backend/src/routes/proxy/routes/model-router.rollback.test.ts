@@ -32,6 +32,7 @@ import {
   mintDelegationMarker,
 } from "@/openappa/delegation";
 import authRoutes from "@/routes/auth";
+import { collectedDelegationMarkers } from "@/routes/proxy/utils/delegation-markers";
 import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import {
   accessGrants,
@@ -855,11 +856,7 @@ describe("model router proxy routes", () => {
     config.openappa.offerSigningSecret = "model-router-delegation-secret";
     let collected: AppaDelegationMarker[] | undefined;
     app.addHook("onSend", async (request) => {
-      collected = (
-        request as typeof request & {
-          llmProxyDelegationMarkers?: AppaDelegationMarker[];
-        }
-      ).llmProxyDelegationMarkers;
+      collected = collectedDelegationMarkers(request);
     });
     try {
       const prompt = "CHILD-MARKER: reply with exactly child-done";

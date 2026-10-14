@@ -26,10 +26,8 @@ import {
   TeamModel,
   VirtualApiKeyModel,
 } from "@/models";
-import {
-  type AppaDelegationMarker,
-  collectDelegationMarkers,
-} from "@/openappa/delegation";
+import { collectDelegationMarkers } from "@/openappa/delegation";
+import { setCollectedDelegationMarkers } from "@/routes/proxy/utils/delegation-markers";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
@@ -543,14 +541,10 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
   // leave a client's delegation marker mid-text (Kilo Code appends an
   // environment part after the prompt it was handed). Collect the markers
   // from the wire the client sent, where each still ends its own part.
-  (
-    request as FastifyRequest & {
-      llmProxyDelegationMarkers?: AppaDelegationMarker[];
-    }
-  ).llmProxyDelegationMarkers = collectDelegationMarkers({
-    family: "openai:responses",
-    body,
-  });
+  setCollectedDelegationMarkers(
+    request,
+    collectDelegationMarkers({ family: "openai:responses", body }),
+  );
   const { chatBody, responsesContext } = responsesToOpenaiChat(body, {
     preserveContentParts: resolution.provider === "bedrock",
   });

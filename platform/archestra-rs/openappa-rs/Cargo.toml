@@ -13,10 +13,10 @@ crate-type = ["cdylib"]
 # of its post-call label, `requires.audience.within` is no longer a
 # requirement, and the policy identity is v2. #636 shows what accepting a
 # narrowing restricts.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "82f3011a88f4db28cce8593a13d1ce6bed225919", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "82f3011a88f4db28cce8593a13d1ce6bed225919" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "82f3011a88f4db28cce8593a13d1ce6bed225919", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "82f3011a88f4db28cce8593a13d1ce6bed225919" }
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "05d68f527853ba95e777686610c3f7526a0e6e43", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "05d68f527853ba95e777686610c3f7526a0e6e43" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "05d68f527853ba95e777686610c3f7526a0e6e43", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "05d68f527853ba95e777686610c3f7526a0e6e43" }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"

@@ -317,7 +317,7 @@ function demoteAttestations(params: {
   );
   const bindingRank = (declaration: VerifiedToolDeclaration) =>
     clientBindings?.gatewayId === declaration.gatewayId
-      ? (clientBindings.serverNames.findIndex(
+      ? clientBindings.serverNames.findIndex(
           (serverName) =>
             (declaration.namespace === `mcp__${serverName}` &&
               declaration.name === declaration.advertisedName) ||
@@ -326,7 +326,7 @@ function demoteAttestations(params: {
                 `${serverName}_${declaration.advertisedName}` ||
                 declaration.name ===
                   `mcp__${serverName}__${declaration.advertisedName}`)),
-        ) ?? -1)
+        )
       : -1;
 
   const spellingsByServedTool = new Map<string, string[]>();

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   removeAttestationTokens,
   takeLeadingAttestation,
@@ -141,5 +142,3 @@ function removeTokensEverywhere(body: unknown): boolean {
   }
   return changed;
 }
-
-import { createHash } from "node:crypto";

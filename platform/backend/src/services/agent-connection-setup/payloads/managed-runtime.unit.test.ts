@@ -74,8 +74,10 @@ async function fixture(client = KILO_CLIENT, apiMajor = 1) {
     siblingPath,
     pluginPath,
     install,
-    run: (script: string) =>
-      exec(process.execPath, ["--input-type=module", "-e", script], { env }),
+    run: (script: string, extraEnv: Record<string, string> = {}) =>
+      exec(process.execPath, ["--input-type=module", "-e", script], {
+        env: { ...env, ...extraEnv },
+      }),
   };
 }
 
@@ -511,7 +513,13 @@ describe("pre-bind local repair", () => {
     await writeFile(files.configPath, owned, { mode: 0o600 });
     await writeFile(files.siblingPath, sibling, { mode: 0o600 });
     const result = await files.run(
-      `import fs from "node:fs"; globalThis.fetch=async()=>{throw Error("offline")}; const loader=(await import(${JSON.stringify(path.join(files.root, "bootstrap.cjs"))})).default; const runtime=await loader.refresh(${JSON.stringify(files.root)});const original=fs.readFileSync;let edited=false;fs.readFileSync=(file,...args)=>{const bytes=original(file,...args);if(file===${JSON.stringify(files.siblingPath)}&&!edited){edited=true;fs.writeFileSync(file,${JSON.stringify(changed)});}return bytes;};try{await (await import(runtime.directory+"/launcher.cjs")).default.prepare(runtime);}catch(error){console.log(error.message);}`,
+      `import fs from "node:fs"; globalThis.fetch=async()=>{throw Error("offline")}; const loader=(await import(process.env.ARCH_TEST_BOOTSTRAP)).default; const runtime=await loader.refresh(process.env.ARCH_TEST_ROOT);const original=fs.readFileSync;let edited=false;fs.readFileSync=(file,...args)=>{const bytes=original(file,...args);if(file===process.env.ARCH_TEST_SIBLING&&!edited){edited=true;fs.writeFileSync(file,process.env.ARCH_TEST_CHANGED);}return bytes;};try{await (await import(runtime.directory+"/launcher.cjs")).default.prepare(runtime);}catch(error){console.log(error.message);}`,
+      {
+        ARCH_TEST_BOOTSTRAP: path.join(files.root, "bootstrap.cjs"),
+        ARCH_TEST_ROOT: files.root,
+        ARCH_TEST_SIBLING: files.siblingPath,
+        ARCH_TEST_CHANGED: changed,
+      },
     );
     expect(result.stdout).toContain("MCP config changed during alias repair");
     expect(await readFile(files.configPath, "utf8")).toBe(owned);

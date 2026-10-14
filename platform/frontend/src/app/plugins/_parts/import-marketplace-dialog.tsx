@@ -586,8 +586,8 @@ export function ImportMarketplaceDialog({
                     placeholder="Search by name or description"
                     className="relative w-full"
                   />
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <div className="flex shrink-0 items-center gap-2">
                       <Checkbox
                         id="import-plugins-select-all"
                         checked={
@@ -614,13 +614,35 @@ export function ImportMarketplaceDialog({
                           : selectionLimitReached && selectedFilteredCount > 0
                             ? search.trim() || selectedOnly
                               ? "Deselect visible"
-                              : "Clear selected batch"
+                              : "Clear batch"
                             : search.trim()
                               ? `Select visible (up to ${PLUGIN_MARKETPLACE_IMPORT_LIMIT})`
                               : `Select up to ${PLUGIN_MARKETPLACE_IMPORT_LIMIT}`}
                       </label>
                     </div>
-                    <span className="text-xs tabular-nums text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant={selectedOnly ? "secondary" : "ghost"}
+                        size="xs"
+                        aria-pressed={selectedOnly}
+                        onClick={() => setSelectedOnly((value) => !value)}
+                      >
+                        <span>Selected ({selected.size})</span>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        disabled={selected.size === 0}
+                        onClick={() => {
+                          setSelected(new Set());
+                          rangeSelection.current =
+                            new BulkRangeSelectionController();
+                        }}
+                      >
+                        <span>Clear selection</span>
+                      </Button>
+                    </div>
+                    <span className="ml-auto text-xs tabular-nums text-muted-foreground">
                       {selected.size} of {totalImportable} selected
                       {totalImportable > PLUGIN_MARKETPLACE_IMPORT_LIMIT &&
                         ` · ${PLUGIN_MARKETPLACE_IMPORT_LIMIT} max per import`}
@@ -628,28 +650,6 @@ export function ImportMarketplaceDialog({
                       {totalUnsupported > 0 &&
                         ` · ${totalUnsupported} unsupported`}
                     </span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      variant={selectedOnly ? "secondary" : "ghost"}
-                      size="xs"
-                      aria-pressed={selectedOnly}
-                      onClick={() => setSelectedOnly((value) => !value)}
-                    >
-                      <span>Selected ({selected.size})</span>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      disabled={selected.size === 0}
-                      onClick={() => {
-                        setSelected(new Set());
-                        rangeSelection.current =
-                          new BulkRangeSelectionController();
-                      }}
-                    >
-                      <span>Clear selection</span>
-                    </Button>
                   </div>
                 </div>
               </div>

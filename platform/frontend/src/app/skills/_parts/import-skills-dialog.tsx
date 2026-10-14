@@ -413,8 +413,8 @@ export function ImportSkillsDialog({
                     placeholder="Search by name, description, or path"
                     className="relative w-full"
                   />
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <div className="flex shrink-0 items-center gap-2">
                       <Checkbox
                         id="import-skills-select-all"
                         checked={
@@ -440,32 +440,32 @@ export function ImportSkillsDialog({
                             : "Select all"}
                       </label>
                     </div>
-                    <span className="text-xs tabular-nums text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant={selectedOnly ? "secondary" : "ghost"}
+                        size="xs"
+                        aria-pressed={selectedOnly}
+                        onClick={() => setSelectedOnly((value) => !value)}
+                      >
+                        <span>Selected ({selected.size})</span>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        disabled={selected.size === 0}
+                        onClick={() => {
+                          setSelected(new Set());
+                          rangeSelection.current =
+                            new BulkRangeSelectionController();
+                        }}
+                      >
+                        <span>Clear selection</span>
+                      </Button>
+                    </div>
+                    <span className="ml-auto text-xs tabular-nums text-muted-foreground">
                       {selected.size} of {totalImportable} selected
                       {totalExisting > 0 && ` · ${totalExisting} imported`}
                     </span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      variant={selectedOnly ? "secondary" : "ghost"}
-                      size="xs"
-                      aria-pressed={selectedOnly}
-                      onClick={() => setSelectedOnly((value) => !value)}
-                    >
-                      <span>Selected ({selected.size})</span>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      disabled={selected.size === 0}
-                      onClick={() => {
-                        setSelected(new Set());
-                        rangeSelection.current =
-                          new BulkRangeSelectionController();
-                      }}
-                    >
-                      <span>Clear selection</span>
-                    </Button>
                   </div>
                 </div>
               </div>

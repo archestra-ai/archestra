@@ -85,11 +85,18 @@ for (const viewport of [
     await expect(
       dialog.getByRole("checkbox", { name: "Select Skill 1", exact: true }),
     ).toHaveCount(0);
-    await dialog.getByRole("button", { name: "Import settings" }).click();
+    const settings = dialog.getByRole("button", { name: "Import settings" });
+    await expect(settings).toHaveAttribute("aria-expanded", "false");
+    await settings.press("Enter");
+    await expect(settings).toHaveAttribute("aria-expanded", "true");
     await expect(
       dialog.getByRole("combobox", { name: "Keep in sync" }),
     ).toBeVisible();
-    await dialog.getByRole("button", { name: "Import settings" }).click();
+    await settings.press("Space");
+    await expect(settings).toHaveAttribute("aria-expanded", "false");
+    await expect(
+      dialog.getByRole("combobox", { name: "Keep in sync" }),
+    ).toBeHidden();
     await dialog.screenshot({
       path: `test-results/import-skills-${viewport.width}.png`,
     });
@@ -424,6 +431,10 @@ async function assertBoundedList({
 }) {
   const region = dialog.getByRole("region", { name: `${noun} to import` });
   await expect(region).toBeVisible();
+  await expect(dialog.locator('[data-slot="dialog-header"]')).toHaveCSS(
+    "text-align",
+    "left",
+  );
   await dialog.evaluate(async (element) => {
     await Promise.all(
       element
@@ -449,6 +460,27 @@ async function assertBoundedList({
   expect(bounds.y).toBeGreaterThanOrEqual(0);
   expect(bounds.y + bounds.height).toBeLessThanOrEqual(viewport.height);
   expect(bounds.width).toBeLessThanOrEqual(viewport.width);
+  expect(
+    await dialog.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth,
+    ),
+  ).toBe(true);
+  const selectAll = await dialog.getByRole("checkbox").first().boundingBox();
+  const selected = await dialog
+    .getByRole("button", { name: /^Selected \(/ })
+    .boundingBox();
+  const clear = await dialog
+    .getByRole("button", { name: "Clear selection" })
+    .boundingBox();
+  if (!selectAll || !selected || !clear)
+    throw new Error("Selection controls have no bounds");
+  // The phone toolbar fits bulk, selected-only and clear controls together.
+  expect(selected.y).toBe(clear.y);
+  expect(
+    Math.abs(
+      selectAll.y + selectAll.height / 2 - (selected.y + selected.height / 2),
+    ),
+  ).toBeLessThanOrEqual(1);
   const importButton = dialog.getByRole("button", { name: /^Import \(/ });
   const before = await importButton.boundingBox();
   const scroll = await region.evaluate((element) => {

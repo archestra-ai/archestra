@@ -1282,7 +1282,7 @@ function credentialsNeededResult(
       )
       .join(
         "\n",
-      )}\n\nAsk the user to add them here, then start the run again: ${url}`,
+      )}\n\nPut this link in your reply text, never inside a question form, so the user can add them, then start the run again: ${url}`,
   );
 }
 

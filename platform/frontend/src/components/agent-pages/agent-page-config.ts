@@ -240,8 +240,8 @@ const ADVANCED_STEP: AgentSetupStep = { id: "advanced", title: "Advanced" };
  * Triggers & Channels where it answers and what starts it;
  * Advanced the settings a record rarely needs. Only an `agent` has channels —
  * a gateway or proxy is not something a person messages — so the step is
- * offered for that type alone. A built-in agent is a single-step edit, so its host renders no
- * stepper. Connecting is not a step: it is the detail page's Connect section,
+ * offered for that type alone. A built-in agent edits only its configuration
+ * and its tools. Connecting is not a step: it is the detail page's Connect section,
  * which the list's Connect action opens. New agents open a creation summary; new gateways
  * open on Connect.
  */
@@ -252,7 +252,7 @@ export function getAgentSetupSteps({
   agentType: AgentType;
   builtIn: boolean;
 }): AgentSetupStep[] {
-  if (builtIn) return [CONFIGURATION_STEP];
+  if (builtIn) return [CONFIGURATION_STEP, TOOLS_STEP];
   return [
     CONFIGURATION_STEP,
     agentType === "agent" ? TOOLS_SKILLS_STEP : TOOLS_STEP,

@@ -134,6 +134,11 @@ describe("run tools", () => {
     // agentDetailHref would otherwise rewrite away along with `setup`.
     expect(text).toContain(`/agents/${target.id}?setup=credentials&keys=`);
     expect(text).toContain("GITHUB_TOKEN%2CCLAUDE_CODE_OAUTH_TOKEN");
+    // A question form shows the link as dead text, so the model is told to
+    // hand it over in its reply.
+    expect(text).toContain(
+      "Put this link in your reply text, never inside a question form",
+    );
     expect(
       await AgentRunModel.listForAgent({ agentId: target.id, organizationId }),
     ).toEqual([]);

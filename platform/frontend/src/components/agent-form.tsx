@@ -1533,11 +1533,13 @@ export function AgentForm({
   // Who may reach it — the scope picker, plus the caller's own default-agent
   // toggle. A built-in belongs to the organization and offers neither, so the
   // section would be empty.
+  // A built-in offers its assigned tools and nothing else: the backend keeps a
+  // built-in's other fields at their shipped values, so the All mode,
+  // knowledge sources and tool behavior would not save.
   const showTools =
-    !isBuiltIn &&
-    (agentType === "mcp_gateway" ||
-      agentType === "agent" ||
-      agentType === "profile");
+    agentType === "mcp_gateway" ||
+    agentType === "agent" ||
+    agentType === "profile";
   const showSubagents = !isBuiltIn && supportsSubagents;
   // The delegation targets and the disabled-subagent set each arrive from their
   // own request. Until both have succeeded the editors would render a
@@ -2193,8 +2195,7 @@ export function AgentForm({
       let updateConfirmed = false;
 
       // Save tool changes FIRST (before agent update triggers refetch that clears pending changes)
-      // Skip for built-in agents as they don't have editable tools
-      if (agent && !isBuiltIn) {
+      if (agent) {
         await agentToolsEditorRef.current?.saveChanges({
           resourceLabel: agentTypeDisplayName[agentType] || "resource",
         });
@@ -3349,23 +3350,25 @@ export function AgentForm({
                             )
                           : assignedToolsSummary(assignedToolCount)}
                       </p>
-                      <Tabs
-                        value={autoToolsMode ? "auto" : "custom"}
-                        onValueChange={(value) => {
-                          const auto = value === "auto";
-                          setAccessAllTools(auto);
-                          // Dynamic access only works through the search/run
-                          // dispatch surface, so picking it enables that mode.
-                          if (auto) {
-                            setToolExposureMode("search_and_run_only");
-                          }
-                        }}
-                      >
-                        <TabsList size="sm">
-                          <TabsTrigger value="auto">All</TabsTrigger>
-                          <TabsTrigger value="custom">Manual</TabsTrigger>
-                        </TabsList>
-                      </Tabs>
+                      {!isBuiltIn && (
+                        <Tabs
+                          value={autoToolsMode ? "auto" : "custom"}
+                          onValueChange={(value) => {
+                            const auto = value === "auto";
+                            setAccessAllTools(auto);
+                            // Dynamic access only works through the search/run
+                            // dispatch surface, so picking it enables that mode.
+                            if (auto) {
+                              setToolExposureMode("search_and_run_only");
+                            }
+                          }}
+                        >
+                          <TabsList size="sm">
+                            <TabsTrigger value="auto">All</TabsTrigger>
+                            <TabsTrigger value="custom">Manual</TabsTrigger>
+                          </TabsList>
+                        </Tabs>
+                      )}
                     </div>
                     {/* Auto and Custom are the same pair of fields inversed —
                         every tool and source minus a set, or exactly a set — so
@@ -3474,7 +3477,7 @@ export function AgentForm({
                           includeAppCatalogs={shouldOfferAppCatalogs(agentType)}
                         />
                       </div>
-                      {canReadKnowledgeBase && (
+                      {canReadKnowledgeBase && !isBuiltIn && (
                         <div className="space-y-2">
                           {/* At zero the editor's own empty state names the
                               count and the tool assigning one produces, so
@@ -3542,7 +3545,7 @@ export function AgentForm({
                       // inset past the icon column, and the two together
                       // stacked one line on another.
                       "mt-2 border-t pt-2",
-                      autoToolsMode && "hidden",
+                      (autoToolsMode || isBuiltIn) && "hidden",
                     )}
                     data-testid={E2eTestId.AgentToolLoadingSection}
                   >

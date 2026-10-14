@@ -175,35 +175,6 @@ export function useRemoveBatteryInclude() {
   );
 }
 
-export function useUploadBatteryPackage() {
-  return useBatteryMutation(
-    async (params: {
-      name: string;
-      files: archestraApiTypes.UploadOpenappaBatteryPackageData["body"]["files"];
-    }) =>
-      settled(
-        await archestraApiSdk.uploadOpenappaBatteryPackage({
-          path: { name: params.name },
-          body: { files: params.files },
-        }),
-      ),
-    (data) => toast.success(`Battery "${data.name}" uploaded`),
-  );
-}
-
-/** Packages are deleted by the bytes they hold: a name may have several versions. */
-export function useDeleteBatteryPackage() {
-  return useBatteryMutation(
-    async (contentHash: string) =>
-      settled(
-        await archestraApiSdk.deleteOpenappaBatteryPackage({
-          path: { contentHash },
-        }),
-      ),
-    () => toast.success("Battery package deleted"),
-  );
-}
-
 /**
  * The one create call: a battery is included once, so a second server joining
  * one the policy already includes has to name that entry's package — the

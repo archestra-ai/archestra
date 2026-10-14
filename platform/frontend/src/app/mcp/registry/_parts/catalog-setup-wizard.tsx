@@ -536,12 +536,6 @@ function ToolReviewCard({ tool }: { tool: ToolWithAssignmentsData }) {
               {label}
             </Badge>
           ))}
-          {tool.assignmentCount > 0 && (
-            <Badge variant="secondary" className="font-normal">
-              {tool.assignmentCount}{" "}
-              {tool.assignmentCount === 1 ? "assignment" : "assignments"}
-            </Badge>
-          )}
         </div>
         {tool.description && (
           <p className="text-sm text-muted-foreground">{tool.description}</p>

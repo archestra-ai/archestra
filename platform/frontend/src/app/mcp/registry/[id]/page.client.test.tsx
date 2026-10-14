@@ -741,6 +741,23 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(screen.queryByText("Not installed")).toBeNull();
   });
 
+  it("leads an installed server with tools on to the Connect page", () => {
+    installedWithNoDeploymentEntry();
+    renderPage({ serverType: "remote", localConfig: null, toolCount: 3 });
+
+    expect(screen.getByRole("link", { name: "Connect" })).toHaveAttribute(
+      "href",
+      "/connection",
+    );
+  });
+
+  it("offers no Connect before the server is installed", () => {
+    useMcpServers.mockReturnValue({ data: [] });
+    renderPage({ serverType: "remote", localConfig: null, toolCount: 3 });
+
+    expect(screen.queryByRole("link", { name: "Connect" })).toBeNull();
+  });
+
   it("says it is still checking while the deployment feed is loading", () => {
     installedWithNoDeploymentEntry();
     useMcpDeploymentStatuses.mockReturnValue({

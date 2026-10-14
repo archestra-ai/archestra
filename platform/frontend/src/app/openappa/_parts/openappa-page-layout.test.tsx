@@ -52,9 +52,6 @@ vi.mock("next/navigation");
 vi.mock("@/lib/hooks/use-app-name", () => ({
   useAppName: () => "Archestra",
 }));
-vi.mock("./batteries-panel", () => ({
-  BatteriesUploadAction: () => null,
-}));
 const setupState = vi.hoisted(() => ({
   isFresh: false as boolean | undefined,
 }));

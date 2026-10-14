@@ -1,0 +1,144 @@
+name: Dagger SDK Integration
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  dagger-sdk-integration:
+    name: Dagger SDK Integration
+    # Never run a privileged PR engine on a shared/self-hosted runner.
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+        working-directory: platform
+    env:
+      CARGO_BUILD_JOBS: "2"
+      ENGINE_NAME: archestra-dagger-sdk-${{ github.run_id }}-${{ github.run_attempt }}
+      ENGINE_CACHE: archestra-dagger-sdk-cache-${{ github.run_id }}-${{ github.run_attempt }}
+      DOCKER_HOST: unix:///var/run/docker.sock
+      DOCKER_CONTEXT: ""
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      # Always emit the check on PRs and merge groups; skip only expensive work
+      # for unrelated changes rather than leaving a required check missing.
+      - name: Detect Dagger-related changes
+        id: changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          changed=$(git diff --name-only "$BASE_SHA" HEAD -- \
+            archestra-rs/sandbox-core archestra-rs/sandbox-rs archestra-rs/vendor \
+            archestra-rs/Cargo.toml archestra-rs/Cargo.lock rust-toolchain.toml Dockerfile \
+            archestra-rs/.cargo \
+            ../.github/workflows/on-pull-requests.yml \
+            ../.github/workflows/on-pull-requests-dagger-sdk.yml \
+            ../.github/bench/dagger-job.yaml)
+          if [[ -n "$changed" ]]; then
+            echo 'run=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'run=false' >> "$GITHUB_OUTPUT"
+            echo 'No Dagger-related changes; real-engine smoke not needed.'
+          fi
+
+      - name: Install pinned Rust toolchain
+        if: steps.changes.outputs.run == 'true'
+        run: rustup show
+
+      - name: Compile the real-engine test
+        if: steps.changes.outputs.run == 'true'
+        id: build
+        run: |
+          set -euo pipefail
+          cargo test --manifest-path archestra-rs/Cargo.toml --locked \
+            -p sandbox_core --test live_dagger_sdk --no-run --message-format=json \
+            | jq -r 'select(.reason == "compiler-artifact" and .target.name == "live_dagger_sdk" and .executable != null) | "executable=" + .executable' \
+            >> "$GITHUB_OUTPUT"
+
+      - name: Verify CLI and exercise the isolated engine
+        if: steps.changes.outputs.run == 'true'
+        timeout-minutes: 10
+        env:
+          TEST_EXECUTABLE: ${{ steps.build.outputs.executable }}
+        run: |
+          set -euo pipefail
+          test -x "$TEST_EXECUTABLE"
+          test_name=real_sdk_exec_files_secrets_and_typed_errors
+          "$TEST_EXECUTABLE" --list --ignored --exact "$test_name" | grep -Fx "$test_name: test"
+          fixture=$(mktemp -d "$RUNNER_TEMP/dagger-sdk.XXXXXXXX")
+          cleanup() {
+            if docker container inspect "$ENGINE_NAME" >/dev/null 2>&1; then
+              docker rm --force --volumes "$ENGINE_NAME"
+            fi
+            if docker volume inspect "$ENGINE_CACHE" >/dev/null 2>&1; then
+              docker volume rm "$ENGINE_CACHE"
+            fi
+            rm -rf -- "$fixture"
+          }
+          trap cleanup EXIT
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+          mkdir -p "$fixture/bin" "$fixture/home" "$fixture/cache/dagger" "$fixture/tmp"
+
+          # Official v0.21.9 release checksums.txt and GitHub asset digest agree.
+          # This is the stock CLI, not the production image's Go-patched build.
+          curl --fail --silent --show-error --location --retry 3 --max-time 120 \
+            https://github.com/dagger/dagger/releases/download/v0.21.9/dagger_v0.21.9_linux_amd64.tar.gz \
+            --output "$fixture/cli.tar.gz"
+          printf '%s  %s\n' \
+            33eea0b08d6be444bada18e64b2216459100d6070abcb4b5345cee40c9fff982 \
+            "$fixture/cli.tar.gz" | sha256sum -c --strict
+          tar -xzf "$fixture/cli.tar.gz" -C "$fixture/bin" dagger
+          test -x "$fixture/bin/dagger"
+          ln -s "$fixture/bin/dagger" "$fixture/cache/dagger/dagger-0.21.9"
+
+          # Same engine version/digest as .github/bench/dagger-job.yaml. No ports,
+          # Docker socket, repository, HOME, or other host directories are mounted.
+          docker volume create "$ENGINE_CACHE"
+          docker run --detach --privileged --name "$ENGINE_NAME" \
+            --cpus 2 --memory 3g \
+            --volume "$ENGINE_CACHE:/var/lib/dagger" \
+            registry.dagger.io/engine:v0.21.9@sha256:3c4e0cedaea400d7e30155e050f94910ea5f381b6f5942dd2172382657628cb4
+          ready=false
+          for attempt in {1..60}; do
+            if timeout 5s docker exec "$ENGINE_NAME" buildctl debug workers >/dev/null 2>&1; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$ready" != true ]]; then
+            echo 'Task-owned Dagger engine did not become ready.' >&2
+            exit 1
+          fi
+
+          # No inherited session, remote engine, Docker credentials, cloud token,
+          # GitHub token, or telemetry configuration reaches the SDK/CLI process.
+          timeout --signal=TERM --kill-after=10s 300s env -i \
+            PATH="$PATH" HOME="$fixture/home" TMPDIR="$fixture/tmp" \
+            XDG_CACHE_HOME="$fixture/cache" DOCKER_HOST=unix:///var/run/docker.sock \
+            _EXPERIMENTAL_DAGGER_CLI_BIN="$fixture/bin/dagger" \
+            _EXPERIMENTAL_DAGGER_RUNNER_HOST="docker-container://$ENGINE_NAME" \
+            "$TEST_EXECUTABLE" --ignored --exact "$test_name" --nocapture
+
+      # Backstop for cancellation/failure before the shell EXIT trap completes.
+      - name: Remove task-owned engine and cache
+        if: always() && steps.changes.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          if docker container inspect "$ENGINE_NAME" >/dev/null 2>&1; then
+            docker rm --force --volumes "$ENGINE_NAME"
+          fi
+          if docker volume inspect "$ENGINE_CACHE" >/dev/null 2>&1; then
+            docker volume rm "$ENGINE_CACHE"
+          fi

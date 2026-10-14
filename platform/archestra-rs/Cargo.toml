@@ -1,6 +1,10 @@
 [workspace]
 members = ["app-runtime-core", "app-runtime-rs", "image-core", "image-rs", "sandbox-core", "sandbox-rs"]
+exclude = ["vendor/dagger-sdk-0.21.9"]
 resolver = "2"
+
+[patch.crates-io]
+dagger-sdk = { path = "vendor/dagger-sdk-0.21.9" }
 
 # No LTO: for these NAPI shims it measured slower to build AND a larger binary
 # (little cross-crate hot code to inline), so it was pure cost.

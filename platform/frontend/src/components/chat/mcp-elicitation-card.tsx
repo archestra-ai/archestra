@@ -15,6 +15,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { QuestionMarkdown } from "@/components/chat/question-markdown";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils/tailwind";
@@ -736,7 +737,7 @@ export function McpElicitationCard({
               <AnswerSummary members={settledMembers} label="Saved answers" />
             </div>
           ) : null}
-          <div className="flex min-w-0 flex-col gap-3 px-4 pb-3 pt-4 [&>p:first-child]:font-medium">
+          <div className="flex min-w-0 flex-col gap-3 px-4 pb-3 pt-4">
             <ElicitationMessage request={activeQuestion.request} />
             {renderFields(activeQuestion)}
           </div>
@@ -826,12 +827,11 @@ function ElicitationMessage({
   request: ChatMcpElicitationRequest;
 }) {
   return (
-    <p
+    <QuestionMarkdown
       id={questionMessageId(request.id)}
-      className="whitespace-pre-wrap text-sm leading-6 text-foreground [overflow-wrap:anywhere]"
-    >
-      {request.message}
-    </p>
+      className="font-medium"
+      text={request.message}
+    />
   );
 }
 
@@ -965,16 +965,15 @@ function AnsweredQuestionText({ question }: { question: string }) {
   const isLong = question.length > LONG_QUESTION_CHARACTERS;
   return (
     <div className="flex min-w-0 flex-col items-start gap-1">
-      <p
+      <QuestionMarkdown
         className={cn(
           // Same reading type as assistant prose (MessageContent): the
           // question is the agent talking, so it should not read as UI chrome.
-          "whitespace-pre-wrap text-[0.9375rem] leading-relaxed text-foreground [overflow-wrap:anywhere]",
+          "text-[0.9375rem] leading-relaxed",
           isLong && !expanded && "line-clamp-3",
         )}
-      >
-        {question}
-      </p>
+        text={question}
+      />
       {isLong ? (
         <Button
           type="button"

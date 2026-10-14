@@ -337805,6 +337805,21 @@
                                 },
                                 "additionalProperties": false
                               },
+                              "forwards": {
+                                "type": "object",
+                                "properties": {
+                                  "trust": {
+                                    "type": "string"
+                                  },
+                                  "audience": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
                               "requires": {
                                 "type": "object",
                                 "properties": {
@@ -337843,6 +337858,7 @@
                               "name",
                               "selector",
                               "delta",
+                              "forwards",
                               "requires",
                               "annotator",
                               "enforced"
@@ -405861,6 +405877,20 @@
             "in": "query",
             "name": "sourceRepo",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              }
+            },
+            "in": "query",
+            "name": "skillIds",
+            "required": false,
+            "description": "Restrict results to these skill IDs (comma-separated)."
           },
           {
             "schema": {

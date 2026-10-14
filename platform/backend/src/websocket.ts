@@ -1717,6 +1717,13 @@ class WebSocketService {
     error: string | null,
   ): void {
     if (!this.wss) return;
+    // Clients classify runtime alerts from both feeds together. A reinstall
+    // reports "success" only after this process has seen the new pod ready,
+    // but the deployment feed is pushed on watch events and can still carry
+    // the restart gap ("not_created"), which reads as "Not running" until the
+    // next push. Send the current deployment states first so a client never
+    // pairs a fresh installation status with a stale runtime state.
+    this.pushMcpDeploymentStatusesToSubscribers();
     this.broadcast({
       type: "mcp_installation_status",
       payload: { serverId, status, error },

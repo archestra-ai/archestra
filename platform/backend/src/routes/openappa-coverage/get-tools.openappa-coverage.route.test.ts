@@ -250,7 +250,8 @@ describe("GET /api/openappa/coverage/tools", () => {
       "docs__microsoft_docs_search(query:*azure*)",
       "mixed__list_items",
     ]);
-    // A rule that needs approval is a write too.
+    // A rule that needs approval is a write too. `acme__ping` requires only
+    // the ignored `audience.within`, so it is not one.
     expect(await rows("?kind=write")).toEqual([
       "acme__create_item",
       "acme__delete_item",
@@ -258,6 +259,11 @@ describe("GET /api/openappa/coverage/tools", () => {
       "docs__microsoft_docs_search",
     ]);
     expect(await rows("?kind=approval")).toEqual(["acme__create_item"]);
+    const deleteItem = (await tools("?search=delete_item")).data[0];
+    expect(deleteItem.rule).toMatchObject({
+      forwards: { audience: ["self"] },
+      requires: { trust: "trusted" },
+    });
   });
 
   test("lists server filters for a target across all pages and keeps icons", async ({

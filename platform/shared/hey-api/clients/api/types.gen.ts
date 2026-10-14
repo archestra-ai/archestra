@@ -89268,6 +89268,10 @@ export type GetOpenappaCoverageToolsResponses = {
                     trust?: string;
                     audience?: Array<string>;
                 };
+                forwards: {
+                    trust?: string;
+                    audience?: Array<string>;
+                };
                 requires: {
                     trust?: string;
                     audience?: Array<string>;
@@ -107161,6 +107165,10 @@ export type GetSkillsData = {
         offset?: number;
         search?: string;
         sourceRepo?: string;
+        /**
+         * Restrict results to these skill IDs (comma-separated).
+         */
+        skillIds?: Array<string>;
         /**
          * Restrict results to native skills available through this internal agent or eligible for publication by this saved MCP gateway.
          */

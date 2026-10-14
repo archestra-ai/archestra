@@ -309,14 +309,11 @@ function audiencesNamedByRules(files: PolicyFile[]): Set<string> {
   return named;
 }
 
-/** A `delta` audience list, or a `requires` audience's `contains` and `within`. */
+/** A `delta` audience list, or a `requires` audience's `contains`. */
 function audienceNames(value: unknown): string[] {
   const record = asRecord(value);
   if (!record) return strings(value) ?? [];
-  return [
-    ...(strings(record.contains) ?? []),
-    ...(strings(record.within) ?? []),
-  ];
+  return strings(record.contains) ?? [];
 }
 
 function strings(value: unknown): string[] | null {

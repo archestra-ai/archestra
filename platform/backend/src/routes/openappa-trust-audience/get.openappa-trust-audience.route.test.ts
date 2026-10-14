@@ -110,7 +110,7 @@ delta = { audience = ["self"] }
 [[policy.tool]]
 name = "mail__send"
 delta = { audience = ["self"] }
-requires = { audience = { contains = ["self"], within = ["internal"] } }
+requires = { audience = { contains = ["self"] } }
 
 [[policy.tool]]
 name = "docs__search"
@@ -147,7 +147,7 @@ from = ["github:org/acme/team/eng"]
 
 [[policy.tool]]
 name = "wiki__publish"
-requires = { audience = { within = ["@eng"] } }
+requires = { audience = { contains = ["@eng"] } }
 `;
     await saveRoot(content);
 

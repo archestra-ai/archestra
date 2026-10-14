@@ -141,13 +141,20 @@ it("edits only the all-agents policy and guards dismissing unsaved changes", asy
   const dialog = await screen.findByRole("dialog", {
     name: "Permissions for all agents",
   });
-  expect(dialog).toHaveTextContent("including new ones");
+  expect(dialog).toHaveTextContent(
+    "including other people’s and ones created later",
+  );
   await user.click(
     await within(dialog).findByRole("combobox", {
       name: "Permission for Support",
     }),
   );
-  await user.click(screen.getByRole("option", { name: /Can edit/ }));
+  const capabilities = screen.getByRole("list", { name: "Capabilities" });
+  expect(within(capabilities).getByText("Read")).toBeVisible();
+  expect(within(capabilities).getByText("Update")).toBeVisible();
+  expect(within(capabilities).queryByText("View")).not.toBeInTheDocument();
+  expect(within(capabilities).queryByText("Edit")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("option", { name: /Can update/ }));
   const footer = within(dialog).getByRole("group", {
     name: "Permission actions",
   });
@@ -176,11 +183,11 @@ it("edits only the all-agents policy and guards dismissing unsaved changes", asy
   ).not.toBeInTheDocument();
   expect(
     within(dialog).getByRole("combobox", { name: "Permission for Support" }),
-  ).toHaveTextContent("Can view");
+  ).toHaveTextContent("Can read");
   await user.click(
     within(dialog).getByRole("combobox", { name: "Permission for Support" }),
   );
-  await user.click(screen.getByRole("option", { name: /Can edit/ }));
+  await user.click(screen.getByRole("option", { name: /Can update/ }));
 
   await user.click(
     within(dialog).getByRole("button", { name: "Save permissions" }),
@@ -275,7 +282,7 @@ it("adds recipients to the permission draft in the same dialog", async () => {
       name: "Permission for Support",
     }),
   );
-  await user.click(screen.getByRole("option", { name: /Can edit/ }));
+  await user.click(screen.getByRole("option", { name: /Can update/ }));
   await user.click(
     within(dialog).getByRole("combobox", { name: "Add access" }),
   );
@@ -286,7 +293,7 @@ it("adds recipients to the permission draft in the same dialog", async () => {
   ).toBe(dialog);
   expect(
     within(dialog).getByRole("combobox", { name: "Permission for Support" }),
-  ).toHaveTextContent("Can edit");
+  ).toHaveTextContent("Can update");
   expect(
     within(dialog).getByRole("combobox", { name: "Permission for Design" }),
   ).toHaveTextContent("Can use");
@@ -304,5 +311,5 @@ it("adds recipients to the permission draft in the same dialog", async () => {
   ).not.toBeInTheDocument();
   expect(
     within(dialog).getByRole("combobox", { name: "Permission for Support" }),
-  ).toHaveTextContent("Can view");
+  ).toHaveTextContent("Can read");
 });

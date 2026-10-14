@@ -366,7 +366,7 @@ test("a diagnostics-only reader reaches Yells without fetching policy or setting
   });
   await page.goto("/openappa/yells");
   await expect(
-    page.getByRole("heading", { name: "Yells Alpha" }),
+    page.getByRole("heading", { name: "Yells Beta" }),
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Policy", exact: true }),

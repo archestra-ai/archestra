@@ -114,6 +114,7 @@ import {
   calculateInteractionCosts,
   canonicalizeCommonMessageToolNames,
   handleError,
+  isRetryableUpstreamConnectionFailure,
   normalizeToolCallsForPolicy,
   planDispatchModeToolCallRewrites,
   recordBlockedToolCallMetrics,
@@ -124,6 +125,10 @@ import {
   withSessionContext,
 } from "./llm-proxy-helpers";
 import { StreamKeepAlive } from "./stream-keepalive";
+import {
+  openUpstreamWithRetry,
+  withFirstChunk,
+} from "./upstream-connection-retry";
 import * as utils from "./utils";
 import type { SessionSource } from "./utils/headers/session-id";
 import {
@@ -1193,11 +1198,12 @@ export async function handleLLMProxy<
 
     // Start with the credential-derived billing mode. Anthropic OAuth requests
     // can refine this after the upstream response identifies paid overage.
-    let billingMode = utils.resolveInteractionBillingMode({
+    const credentialBillingMode = utils.resolveInteractionBillingMode({
       isSubscriptionCredential:
         provider.isSubscriptionCredential?.(apiKey) ?? false,
       autodetectEnabled: config.llmCost.subscriptionAutodetect,
     });
+    let billingMode = credentialBillingMode;
 
     // Create client with observability (each provider handles metrics internally)
     const abortSignal =
@@ -1217,7 +1223,8 @@ export async function handleLLMProxy<
       onResponseHeaders: (responseHeaders) => {
         if (providerName === "anthropic") {
           billingMode = utils.refineAnthropicBillingModeFromHeaders({
-            billingMode,
+            // A retry's response must not inherit a failed attempt's overage.
+            billingMode: credentialBillingMode,
             headers: responseHeaders,
           });
         }
@@ -1589,7 +1596,22 @@ async function handleStreaming<
       parentContext,
       user: toSpanUserInfo(resolvedUser),
       callback: async (llmSpan) => {
-        const stream = await provider.executeStream(client, request);
+        const stream = await openUpstreamWithRetry({
+          open: async () =>
+            withFirstChunk(await provider.executeStream(client, request)),
+          // Gemini's SDK loses the HTTP status when an error body is cut off;
+          // that is indistinguishable from a transport failure, so don't retry.
+          isRetryable: (error) =>
+            providerName !== "gemini" &&
+            isRetryableUpstreamConnectionFailure(error),
+          shouldContinue: () => !reply.raw.destroyed,
+          onRetry: (event) =>
+            logUpstreamRetry({
+              ...event,
+              provider: providerName,
+              model: actualModel,
+            }),
+        });
         billingMode = getBillingMode();
 
         // Record request duration at stream establishment for providers whose
@@ -2120,7 +2142,20 @@ async function handleNonStreaming<
       // must not double-report here — the flag gates that.
       let result: TResponse;
       try {
-        result = await provider.execute(client, request);
+        result = await openUpstreamWithRetry({
+          open: () => provider.execute(client, request),
+          // See the streaming path: Gemini cannot safely classify this boundary.
+          isRetryable: (error) =>
+            providerName !== "gemini" &&
+            isRetryableUpstreamConnectionFailure(error),
+          shouldContinue: () => !reply.raw.destroyed,
+          onRetry: (event) =>
+            logUpstreamRetry({
+              ...event,
+              provider: providerName,
+              model: actualModel,
+            }),
+        });
         billingMode = getBillingMode();
       } catch (error) {
         if (provider.recordRequestDurationInHandler) {
@@ -2502,6 +2537,19 @@ function planDispatchRewrites(params: {
     );
   }
   return rewritten;
+}
+
+function logUpstreamRetry(params: {
+  attempt: number;
+  delayMs: number;
+  provider: string;
+  model: string;
+}): void {
+  const { attempt, delayMs, provider, model } = params;
+  logger.warn(
+    { attempt, delayMs, provider, model },
+    "Retrying upstream connection before receiving model output",
+  );
 }
 
 function normalizeVirtualKeyCandidate(

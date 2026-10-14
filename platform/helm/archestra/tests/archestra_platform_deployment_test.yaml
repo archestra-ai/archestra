@@ -2,6 +2,22 @@ suite: test archestra platform -- Deployment/Service
 templates:
   - archestra-platform.yaml
 tests:
+  - it: leaves time for proxy draining and supervised shutdown
+    documentIndex: 1
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 120
+
+  - it: accepts a longer deployment shutdown budget
+    documentIndex: 1
+    set:
+      archestra.terminationGracePeriodSeconds: 180
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 180
+
   - it: preserves existing bulk environment imports on upgrade
     documentIndex: 1
     set:

@@ -84,6 +84,7 @@ import {
   buildInteractionRecord,
   calculateInteractionCosts,
   handleError,
+  isRetryableUpstreamConnectionFailure,
   normalizeToolCallsForPolicy,
   planDispatchModeToolCallRewrites,
   recordBlockedToolCallMetrics,
@@ -815,6 +816,126 @@ describe("shouldForwardAnthropicBeta", () => {
 
   test("keeps forwarding a non-Claude model with no override (canonical endpoint)", () => {
     expect(shouldForwardAnthropicBeta("kimi-k2", false)).toBe(true);
+  });
+});
+
+describe("isRetryableUpstreamConnectionFailure", () => {
+  test.each([
+    ["SDK connection message", new Error("Connection error.")],
+    [
+      "SDK connection error name",
+      Object.assign(new Error("upstream unavailable"), {
+        name: "APIConnectionError",
+        status: undefined,
+        error: undefined,
+      }),
+    ],
+    ["closed connection", new Error("connection closed")],
+    ["refused connection", new Error("connection refused")],
+    [
+      "undici socket cause",
+      new TypeError("terminated", {
+        cause: Object.assign(new Error("other side closed"), {
+          code: "UND_ERR_SOCKET",
+        }),
+      }),
+    ],
+    [
+      "nested errno cause",
+      new Error("fetch failed", {
+        cause: new Error("transport failed", {
+          cause: Object.assign(new Error("read failed"), {
+            code: "ECONNRESET",
+          }),
+        }),
+      }),
+    ],
+    [
+      "refused errno without connection wording",
+      Object.assign(new Error("connect failed"), { code: "ECONNREFUSED" }),
+    ],
+  ])("accepts %s without a provider response", (_label, error) => {
+    expect(isRetryableUpstreamConnectionFailure(error)).toBe(true);
+  });
+
+  test.each([
+    ["Archestra ApiError", new ApiError(502, "Connection error.")],
+    [
+      "HTTP status",
+      Object.assign(new Error("Connection error."), { status: 503 }),
+    ],
+    [
+      "HTTP statusCode",
+      Object.assign(new Error("connection reset"), { statusCode: 429 }),
+    ],
+    [
+      "AWS HTTP response metadata",
+      Object.assign(new Error("connection refused"), {
+        $metadata: { httpStatusCode: 500 },
+      }),
+    ],
+    ["fetch client abort", new DOMException("fetch failed", "AbortError")],
+    [
+      "SDK client abort",
+      Object.assign(new Error("Connection error."), {
+        name: "APIUserAbortError",
+      }),
+    ],
+    [
+      "provider error object",
+      Object.assign(new Error("Connection error."), {
+        error: { type: "api_error", message: "provider failed" },
+      }),
+    ],
+    [
+      "provider error envelope",
+      Object.assign(new Error("connection reset"), {
+        error: {
+          type: "error",
+          error: { type: "overloaded_error", message: "Overloaded" },
+        },
+      }),
+    ],
+    [
+      "provider error string",
+      Object.assign(new Error("Connection error."), {
+        error: "provider rejected the request",
+      }),
+    ],
+    ["SDK timeout message", new Error("Request timed out.")],
+    [
+      "SDK timeout overrides connection wording",
+      Object.assign(new Error("Connection error."), {
+        name: "APIConnectionTimeoutError",
+      }),
+    ],
+    [
+      "timeout errno overrides fetch failure",
+      new Error("fetch failed", {
+        cause: Object.assign(new Error("connect failed"), {
+          code: "ETIMEDOUT",
+        }),
+      }),
+    ],
+    [
+      "undici headers timeout",
+      new Error("fetch failed", {
+        cause: Object.assign(new Error("headers failed"), {
+          code: "UND_ERR_HEADERS_TIMEOUT",
+        }),
+      }),
+    ],
+    [
+      "abort caused by timeout",
+      new DOMException(
+        "The operation was aborted due to timeout",
+        "TimeoutError",
+      ),
+    ],
+    ["internal error", new TypeError("cannot read x of undefined")],
+    ["non-Error rejection", { code: "ECONNRESET" }],
+  ])("rejects %s even if transport wording is present", (_label, error) => {
+    expect(isRetryableUpstreamConnectionFailure(error)).toBe(false);
   });
 });
 

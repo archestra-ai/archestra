@@ -27,6 +27,14 @@ Archestra maintains one active stable release line at a time. Bug fixes and secu
 2. Read the release notes for migration notices.
 3. Apply the upgrade to a staging environment first.
 
+During shutdown, Archestra stops accepting new model requests and gives active requests up to 60 seconds to finish. Requests that outlast this window can still lose their connection. The Helm chart sets `archestra.terminationGracePeriodSeconds` to 120; keep it at least this high so the container can finish shutdown.
+
+For Docker, use `docker stop --time 120` or set Compose's `stop_grace_period: 120s`. A shorter host deadline can kill the container before requests finish.
+
+The proxy retries a provider connection failure at most twice before receiving the first response chunk. It does not retry provider error responses, timeouts, or failures after output starts. Recovery after partial output depends on your client's retry policy.
+
+Gemini is excluded from these proxy retries because its SDK can report an interrupted error response as a connection failure.
+
 Rolling back the platform container does not revert database migrations.
 
 ## Docker Deployment

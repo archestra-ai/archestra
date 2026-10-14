@@ -14,7 +14,6 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { GUARDRAILS_BETA_TOOLTIP } from "@/lib/openappa-maturity";
-import { BatteriesUploadAction } from "./batteries-panel";
 import { OpenAppaPageActionSlotContext } from "./openappa-page-action";
 import { OverviewHeaderActions } from "./overview-header-actions";
 import { openAppaUrl } from "./overview-setup-cards";
@@ -140,9 +139,7 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
           pathname.startsWith("/openappa/validation") ||
           pathname === "/openappa/policy" ? null : pathname === "/openappa" ? (
           <OverviewHeaderActions />
-        ) : (
-          <BatteriesUploadAction />
-        )
+        ) : null
       }
     >
       <OpenAppaPageActionSlotContext.Provider value={pageActionSlot}>

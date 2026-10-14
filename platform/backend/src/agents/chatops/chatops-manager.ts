@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   ChatErrorCode,
   DEFAULT_APP_NAME,
@@ -68,9 +68,10 @@ import {
   extractMessageFromSendMessageResult,
 } from "../a2a/a2a-helper";
 import { A2AContextManager } from "../a2a/a2a-model-manager";
-import type {
-  A2AArchestraApprovalRequest,
-  A2AProtocolSendMessageResponse,
+import {
+  type A2AArchestraApprovalRequest,
+  A2AProtocolRole,
+  type A2AProtocolSendMessageResponse,
 } from "../a2a/a2a-protocol";
 import {
   buildWelcomeMessage,
@@ -885,6 +886,55 @@ export class ChatOpsManager {
     } finally {
       if (admissionId) await ChatOpsUserAdmissionModel.release(admissionId);
     }
+  }
+
+  /**
+   * Keep ambient group text in an already established session without treating
+   * it as an agent request. No identity lookup, provisioning, session creation,
+   * tools, typing indicator or reply is performed for passive traffic.
+   */
+  async recordAmbientMessage(params: {
+    provider: ChatOpsProvider;
+    message: IncomingChatMessage;
+  }): Promise<void> {
+    const { provider, message } = params;
+    if (!usesServerSideSessions(provider, message) || !message.text.trim()) {
+      return;
+    }
+    const binding = await ChatOpsChannelBindingModel.findByChannel({
+      provider: provider.providerId,
+      channelId: message.channelId,
+      workspaceId: message.workspaceId,
+    });
+    if (!binding?.agentId) return;
+    const mapping = await ChatOpsThreadContextModel.findByThread({
+      provider: provider.providerId,
+      channelId: message.channelId,
+      workspaceId: message.workspaceId ?? null,
+      threadId: message.threadId ?? message.channelId,
+    });
+    if (!mapping) return;
+    const context = await A2AContextModel.findById(mapping.contextId);
+    if (!context) return;
+    if (
+      !(await ChatOpsProcessedMessageModel.tryMarkAsProcessed(
+        processedMessageKey(provider, message),
+      ))
+    ) {
+      return;
+    }
+
+    const id = randomUUID();
+    const text = `[${CHATOPS_PROVIDER_LABELS[provider.providerId]} group message from ${message.senderName}; background context, not a request to the assistant]\n${message.text}`;
+    await A2AContextManager.addMessageToContext({
+      context,
+      message: {
+        messageId: id,
+        role: A2AProtocolRole.User,
+        parts: [{ text }],
+      },
+      uiMessage: { id, role: "user", parts: [{ type: "text", text }] },
+    });
   }
 
   private async processMessageWithAdmission(

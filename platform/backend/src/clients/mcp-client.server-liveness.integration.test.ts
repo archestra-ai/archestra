@@ -175,7 +175,9 @@ describe("background tool calls check that the MCP server still answers", () => 
       ],
     });
 
-    // Closed after it: by then the call runs as a background task.
+    // Closed after it: by then the call runs as a background task. The client
+    // decides by how long the call has run, so twice the sync timeout after
+    // the server received it is safely past that bound.
     const late = callTool({ ...install, tool: "slow", ms: 15_000 });
     await waitUntil(() => activity.slowCalls === 2);
     await sleep(CLOSE_TEST_SYNC_TIMEOUT_MS * 2);

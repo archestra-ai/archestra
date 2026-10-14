@@ -397,7 +397,8 @@ class StdoutLineReader {
           }
           lines.push({ kind: "oversized", id: findMessageId(ends) });
         } else if (newline === -1) {
-          this.buffer = line;
+          // Copy a bare view so a held partial line does not pin the chunk.
+          this.buffer = line === piece ? Buffer.from(piece) : line;
           return lines;
         } else {
           const text = line.toString("utf8").replace(/\r$/, "");
@@ -429,6 +430,8 @@ function keepTail(buffer: Buffer): Buffer {
 /**
  * Serializers put a response's top-level `id` either first (after `jsonrpc`)
  * or last, so look only there: an `id` anywhere else may belong to the payload.
+ * Both patterns are anchored (to the line's start, and to its closing brace),
+ * so a nested `id` never matches.
  */
 function findMessageId(ends: {
   head: Buffer;

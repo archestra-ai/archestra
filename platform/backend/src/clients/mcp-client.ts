@@ -5854,6 +5854,7 @@ async function callWhileServerAnswers<T>(params: {
 }): Promise<T> {
   const { client, timeoutMs, signal, request } = params;
   const checkAfterMs = config.mcpGateway.toolCallTimeoutMs;
+  // Nothing is scheduled yet, so this path needs no cleanup.
   if (timeoutMs <= checkAfterMs) return request(signal);
 
   const intervalMs = Math.max(1_000, Math.floor(checkAfterMs / 2));
@@ -5911,6 +5912,8 @@ function asMcpServerStoppedError(
   if (error instanceof McpServerStoppedError) return error;
   if (
     (error instanceof McpError && error.code === ErrorCode.ConnectionClosed) ||
+    // The SDK's Protocol.request() raises this plain Error when the transport
+    // is already gone; recheck the text after an SDK upgrade.
     (error instanceof Error && error.message === "Not connected")
   ) {
     return new McpServerStoppedError("connection_closed");

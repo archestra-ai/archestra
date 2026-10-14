@@ -18,12 +18,12 @@ export type IdentityProviderDialogSection =
   | "attribute-mapping"
   | "enterprise-managed-credentials"
   | "role-mapping"
-  | "team-sync"
-  | "token-debugger";
+  | "team-sync";
 
 export interface IdentityProviderDialogNavItem {
   id: IdentityProviderDialogSection;
   label: string;
+  status?: string;
 }
 
 interface IdentityProviderDialogShellProps {

@@ -12,6 +12,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   DialogDismissProvider,
   UnsavedChangesDialog,
   useUnsavedChangesGuard,
@@ -44,6 +51,7 @@ interface TabbedDialogShellProps<TSection extends string> {
   children: ReactNode;
   footer: ReactNode;
   sidebarFooter?: ReactNode;
+  mobileNavigation?: ReactNode;
   headerExtra?: ReactNode;
   className?: string;
   contentClassName?: string;
@@ -71,6 +79,7 @@ export function TabbedDialogShell<TSection extends string>({
   children,
   footer,
   sidebarFooter,
+  mobileNavigation,
   headerExtra,
   className,
   contentClassName,
@@ -87,6 +96,7 @@ export function TabbedDialogShell<TSection extends string>({
         <nav
           className={cn(
             "w-[240px] border-r flex flex-col shrink-0",
+            "hidden md:flex",
             sidebarClassName,
           )}
         >
@@ -169,6 +179,28 @@ export function TabbedDialogShell<TSection extends string>({
           </div>
         </div>
 
+        {showSidebar &&
+          (mobileNavigation ?? (
+            <div className="border-b px-4 py-3 md:hidden">
+              <Select
+                value={activeSection}
+                onValueChange={(value) =>
+                  onActiveSectionChange(value as TSection)
+                }
+              >
+                <SelectTrigger className="w-full" aria-label="Dialog section">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {navItems.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>
+                      <span>{item.label}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ))}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
           <div
             className={cn(
@@ -178,6 +210,9 @@ export function TabbedDialogShell<TSection extends string>({
           >
             <TabbedDialogFooterSlot.Provider value={footerSlot}>
               {children}
+              {sidebarFooter && (
+                <div className="mt-4 md:hidden">{sidebarFooter}</div>
+              )}
             </TabbedDialogFooterSlot.Provider>
           </div>
         </div>

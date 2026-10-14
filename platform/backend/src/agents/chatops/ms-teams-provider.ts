@@ -1036,7 +1036,7 @@ class MSTeamsProvider implements ChatOpsProvider {
         context.activity.from?.id || senderId,
       );
       if (member?.email || member?.userPrincipalName) {
-        senderEmail = member.email ?? member.userPrincipalName ?? null;
+        senderEmail = await resolveMSTeamsUserEmail(member);
       }
     } catch (error) {
       logger.debug(

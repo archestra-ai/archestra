@@ -3802,6 +3802,13 @@
       "when": 1791971504679,
       "tag": "0542_tricky_firebrand",
       "breakpoints": true
+    },
+    {
+      "idx": 543,
+      "version": "7",
+      "when": 1792001226749,
+      "tag": "0543_bizarre_malice",
+      "breakpoints": true
     }
   ]
 }

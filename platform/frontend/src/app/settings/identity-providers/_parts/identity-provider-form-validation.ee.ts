@@ -14,13 +14,13 @@ export function getIdentityProviderFormIssue(
   else if (path.startsWith("teamSyncConfig")) section = "team-sync";
   else if (
     path.startsWith("oidcConfig.mapping") ||
+    path === "oidcConfig.overrideUserInfo" ||
     path.startsWith("samlConfig.mapping")
   )
     section = "attribute-mapping";
   else if (path.startsWith("oidcConfig.enterpriseManagedCredentials"))
     section = "enterprise-managed-credentials";
-  else if (path.startsWith("samlConfig.spMetadata"))
-    section = "service-provider-metadata";
+
   return { ...issue, path, section };
 }
 

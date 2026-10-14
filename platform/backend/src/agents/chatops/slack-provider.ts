@@ -59,6 +59,7 @@ import {
   CHATOPS_THREAD_HISTORY,
   SLACK_DEFAULT_CONNECTION_MODE,
 } from "./constants";
+import { slackMessageText } from "./slack-message-text";
 import { SlackReplyStream } from "./slack-reply-stream";
 import {
   EventDedupMap,
@@ -425,7 +426,7 @@ class SlackProvider implements ChatOpsProvider {
       return null;
     }
 
-    const text = event.text || "";
+    const text = slackMessageText(event);
     const isThreadReply = Boolean(event.thread_ts);
     const isDM = event.channel_type === "im";
     const threadTs = event.thread_ts || event.ts;
@@ -985,7 +986,10 @@ class SlackProvider implements ChatOpsProvider {
       } while (cursor && allMessages.length < limit);
 
       // Trim to the requested limit
-      const trimmedMessages = allMessages.slice(0, limit);
+      const trimmedMessages = allMessages.slice(0, limit).map((message) => ({
+        ...message,
+        text: slackMessageText(message),
+      }));
 
       // Keep text-less USER messages that carry downloadable files: a
       // screenshot posted alone is a turn the model must know about — its
@@ -3041,6 +3045,7 @@ interface SlackEventPayload {
     ts: string;
     thread_ts?: string;
     files?: SlackFile[];
+    blocks?: unknown[];
     reaction?: string;
     item?: { type?: string; channel: string; ts: string };
     // app_home_opened: which tab of the app's DM was opened

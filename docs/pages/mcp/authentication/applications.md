@@ -47,6 +47,8 @@ No person signs in, so the app uses the gateway's shared accounts. Give its tool
 
 4. Call the gateway with `Authorization: Bearer <access_token>`. Get a new token when it expires.
 
+Reuse each token until it expires. If the token endpoint returns HTTP `429`, wait for its `Retry-After` delay before requesting another token. See [authentication rate limits](/docs/reference/configuration#ARCHESTRA_AUTH_RATE_LIMIT_DISABLED).
+
 <span id="oauth-authorization-code-on-behalf-of-users"></span>
 
 ## Call for a Person

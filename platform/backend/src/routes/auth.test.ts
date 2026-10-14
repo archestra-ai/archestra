@@ -21,6 +21,9 @@ import {
   buildConnectorResourceUri,
 } from "@/services/apps/app-connector-resource";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
+
+setupTestCacheManager();
 
 describe("auth routes", () => {
   let app: FastifyInstanceWithZod;

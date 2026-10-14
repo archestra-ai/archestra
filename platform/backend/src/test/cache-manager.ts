@@ -13,7 +13,7 @@
 
 import { sql } from "drizzle-orm";
 import type { KeyvStoreAdapter } from "keyv";
-import { afterAll, afterEach, beforeAll, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
 import { cacheManager } from "@/cache-manager";
 import db from "@/database";
 
@@ -23,6 +23,8 @@ export function setupTestCacheManager(): void {
     cacheManager.shutdown();
     cacheManager.start(createDatabaseStore());
   });
+  // A test may deliberately shut the cache down to exercise an outage.
+  beforeEach(() => cacheManager.start(createDatabaseStore()));
   // Spies on the shared singleton would otherwise outlive this file in a
   // shared worker (the setup's clearAllMocks keeps spy implementations).
   afterEach(() => {

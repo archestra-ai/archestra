@@ -45,6 +45,7 @@ import {
   shieldRefreshTokenGrant,
   shieldRevocationRequest,
 } from "@/services/oauth-refresh-replay";
+import { oauthTokenRateLimiter } from "@/services/oauth-token-rate-limit";
 import { ApiError, constructResponseSchema } from "@/types";
 import {
   isLoopbackRedirectUri,
@@ -433,6 +434,34 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     schema: {
       tags: ["Auth"],
     },
+    async onRequest(request, reply) {
+      if (config.authRateLimitDisabled) return;
+      // Use Fastify's trustProxy policy, never an unchecked forwarding header.
+      // All grants share an IP budget so rotating client IDs cannot bypass it.
+      try {
+        const limit = await oauthTokenRateLimiter.consume(request.ip);
+        if (limit.allowed) return;
+        return reply
+          .header("Retry-After", limit.retryAfter)
+          .header("Cache-Control", "no-store")
+          .code(429)
+          .send({
+            error: "temporarily_unavailable",
+            error_description:
+              "Too many token requests. Retry after the indicated delay.",
+          });
+      } catch (error) {
+        logger.error(
+          { err: error },
+          "OAuth token rate-limit storage unavailable",
+        );
+        return reply.header("Cache-Control", "no-store").code(503).send({
+          error: "temporarily_unavailable",
+          error_description: "Token issuance is temporarily unavailable.",
+        });
+      }
+    },
+    // codeql[js/missing-rate-limiting] The onRequest hook enforces a distributed, atomic IP budget before this handler; CodeQL only models package-based middleware.
     async handler(request, reply) {
       const body = request.body as Record<string, unknown> | undefined;
       const resource = body?.resource;

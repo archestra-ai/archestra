@@ -1124,11 +1124,10 @@ async function getModelRouterOAuthClientAuth(
   const managedClient = await LlmOauthClientModel.findByClientId(
     accessToken.clientId,
   );
-  if (
-    managedClient &&
-    (managedClient.disabled ||
-      !managedClient.scopes.includes(LLM_PROXY_OAUTH_SCOPE))
-  ) {
+  if (managedClient?.disabled) {
+    throw new ApiError(401, "LLM OAuth client is disabled.");
+  }
+  if (managedClient && !managedClient.scopes.includes(LLM_PROXY_OAUTH_SCOPE)) {
     throw new ApiError(403, "OAuth client no longer grants LLM proxy access.");
   }
   if (accessToken.userId) {

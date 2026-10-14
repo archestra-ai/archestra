@@ -2537,6 +2537,7 @@ function cacheRawArchestraToken(
 }
 
 function buildTokenHashes(profileId: string, tokenValue: string): TokenHashes {
+  // codeql[js/insufficient-password-hash] Cache/lookup fingerprints of high-entropy bearer tokens, not password storage. Rejected arbitrary input never creates a credential.
   const digest = createHash("sha256").update(tokenValue).digest();
   return {
     cacheKey: `${profileId}:${digest.toString("hex")}`,

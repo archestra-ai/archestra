@@ -186,6 +186,7 @@ Archestra reads its configuration from environment variables. Pass them with `-e
 - **`ARCHESTRA_AUTH_RATE_LIMIT_DISABLED`** - Turns off rate limiting on the sign-in and auth endpoints.
   - Default: `false`
   - Values: `true`, `false`
+  - The OAuth token endpoint allows 100 requests per minute per client IP, shared across grants and replicas. On HTTP `429`, wait for the `Retry-After` delay. IP resolution follows [`ARCHESTRA_TRUST_PROXY`](/docs/reference/configuration#ARCHESTRA_TRUST_PROXY).
   - Use it only for load tests or automated test runs.
 
 - **`ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL`** - Skips the sign-in page in development by signing in as the user with this email.

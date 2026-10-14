@@ -108,7 +108,7 @@ ${CATCH_ALL_RULES}`,
         });
       await openappaBatteriesService.recompile(organizationId);
 
-      const calls = governedCalls(rules).map((call) => ({
+      const calls = governedCalls(policies, rules).map((call) => ({
         ...call,
         tool: `mcp/${servers.get(call.namespace)}/${call.tool}`,
       }));
@@ -645,11 +645,12 @@ function ruleCall(rule: string): {
 
 /**
  * The calls the rules govern, and those they leave to the root. Each rule is
- * called with what its pattern matches. Each tool is called with no arguments,
- * and each patterned rule with arguments its pattern does not match: the
- * battery governs those only through a rule of the tool with no pattern.
+ * called with what its pattern matches and every argument the deployed helpers
+ * read, so a helper its rule routes to is asked. Each tool is called with no arguments, and each
+ * patterned rule with arguments its pattern does not match: the battery
+ * governs those only through a rule of the tool with no pattern.
  */
-function governedCalls(rules: string[]) {
+function governedCalls(policies: string[], rules: string[]) {
   const parsed = rules.flatMap((rule) => {
     const call = ruleCall(rule);
     return call ? [{ rule, ...call }] : [];
@@ -663,12 +664,17 @@ function governedCalls(rules: string[]) {
     const rule = `mcp/${call.namespace}/${call.tool}`;
     return unpatterned.has(rule) ? rule : null;
   };
+  const helperReads = Object.fromEntries(
+    parsed
+      .flatMap(({ rule }) => ruleHelper(policies, rule)?.reads ?? [])
+      .map((read) => [read, `some-${read}`]),
+  );
   const matching = parsed.map((call) => ({
     label: `${call.rule} [matching]`,
     namespace: call.namespace,
     tool: call.tool,
     arguments: {
-      ...ONE_REPOSITORY,
+      ...helperReads,
       ...Object.fromEntries(
         call.pattern.map(([key, value]) => [
           key,
@@ -695,20 +701,15 @@ function governedCalls(rules: string[]) {
       label: `${call.rule} [nonmatching]`,
       namespace: call.namespace,
       tool: call.tool,
-      arguments: {
-        ...ONE_REPOSITORY,
-        ...Object.fromEntries(
-          call.pattern
-            .filter(([, value]) => value !== "*")
-            .map(([key]) => [key, "matches-no-pattern"]),
-        ),
-      },
+      arguments: Object.fromEntries(
+        call.pattern
+          .filter(([, value]) => value !== "*")
+          .map(([key]) => [key, "matches-no-pattern"]),
+      ),
       rule: toolRule(call),
     }));
   return [...matching, ...bare, ...nonmatching];
 }
-
-const ONE_REPOSITORY = { owner: "acme", repo: "widgets" };
 
 /** The replay engine's limit on files per run. */
 const REPLAY_FILES = 32;

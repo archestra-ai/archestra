@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.4.0-rc.41](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.40...platform-v1.4.0-rc.41) (2026-10-14)
+
+
+### Features
+
+* **auth:** bind OAuth clients to service accounts and isolate runtime tasks ([#8900](https://github.com/archestra-ai/archestra/issues/8900)) ([9db5378](https://github.com/archestra-ai/archestra/commit/9db53780c881f96b39da43a1fd1d76c0382cc27c))
+
+
+### Bug Fixes
+
+* **rbac:** align role and resource permission terminology ([#8906](https://github.com/archestra-ai/archestra/issues/8906)) ([35c12a6](https://github.com/archestra-ai/archestra/commit/35c12a6b0e367b4703bfa5cbafd60c892f020ffc))
+* **teams:** require mentions for group chat replies ([#8907](https://github.com/archestra-ai/archestra/issues/8907)) ([d896dcd](https://github.com/archestra-ai/archestra/commit/d896dcdb29df345efdbf48357e4d5900ae1c98f6))
+
 ## [1.4.0-rc.40](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.39...platform-v1.4.0-rc.40) (2026-10-14)
 
 

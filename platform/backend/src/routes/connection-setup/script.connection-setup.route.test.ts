@@ -144,6 +144,74 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(response.body).not.toContain("/connection-setup/");
   });
 
+  for (const clientId of ["opencode", "kilo"] as const) {
+    test(`${clientId} primary-providers installer routes the user's own sign-ins through the proxy with a passthrough key`, async ({
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const providerKey = await makeLlmProviderApiKey(
+        organizationId,
+        (await makeSecret()).id,
+        { provider: "anthropic", isPrimary: true },
+      );
+      const model = await ModelModel.create({
+        provider: "anthropic",
+        modelId: "claude-test",
+        externalId: "anthropic/claude-test",
+        inputModalities: ["text"],
+        outputModalities: ["text"],
+      });
+      await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(providerKey.id, [
+        model.id,
+      ]);
+      // An admin turned Gemini off for the organization.
+      await OrganizationModel.patch(organizationId, {
+        modelProviderOverrides: { gemini: { hidden: true } },
+      });
+      const { rawToken } = await createSetup({
+        clientId,
+        baseUrl: "http://localhost:9000/v1",
+        proxyAuth: "primary-providers",
+      });
+
+      const response = await fetchScript(rawToken);
+      expect(response.statusCode, response.body).toBe(200);
+      const passthroughKey = await VirtualApiKeyModel.findByAuthorScopeName({
+        organizationId,
+        authorId: user.id,
+        scope: "personal",
+        name: `Connection passthrough — ${user.email}`,
+      });
+      expect(passthroughKey?.keyType).toBe("passthrough");
+      const passthroughValue = await readVirtualKeyValue(
+        passthroughKey?.id as string,
+      );
+      // The routing plugin travels base64-encoded in the script.
+      const plugins = [
+        ...response.body.matchAll(/ARCHESTRA_OC_PLUGIN_CONTENT='([^']+)'/g),
+      ].map((match) => Buffer.from(match[1], "base64").toString("utf8"));
+      expect(plugins.length).toBeGreaterThan(0);
+      for (const plugin of plugins) {
+        expect(plugin).toMatch(
+          /"archestra-anthropic":"http:\/\/localhost:9000\/v1\/connection-setup\/[^"]+\/model-router"/,
+        );
+        expect(plugin).toMatch(
+          /"anthropic":"http:\/\/localhost:9000\/v1\/connection-setup\/[^"]+\/anthropic\/v1"/,
+        );
+        expect(plugin).toContain('"openai":"http://localhost:9000/v1/');
+        const routesLine = plugin.match(/^const routes = (.*);$/m)?.[1] ?? "";
+        expect(routesLine).toContain('"openai":');
+        expect(routesLine).not.toContain('"google":');
+        expect(plugin).toContain(
+          `"anthropic":{"${VIRTUAL_KEY_HEADER}":"${passthroughValue}"}`,
+        );
+        expect(plugin).not.toContain(
+          `"archestra-anthropic":{"${VIRTUAL_KEY_HEADER}"`,
+        );
+      }
+    });
+  }
+
   test("cursor installer lists the Model Router's chat models and the organization default", async ({
     makeSecret,
     makeLlmProviderApiKey,

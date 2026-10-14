@@ -17,7 +17,7 @@ import {
   isCodexOriginator,
   isProviderApiKeyOptional,
   OPENCODE_AGENT_HEADER,
-  OPENCODE_CLIENT_ID,
+  openCodeFamilySource,
   PROVIDER_BASE_URL_HEADER,
   providerDisplayNames,
   providerRequiresPerUserCredential,
@@ -25,6 +25,7 @@ import {
   stripClaudeContextVariantSuffix,
 } from "@archestra/shared";
 import { ARCHESTRA_CODEX_CONNECTION_ORIGINATOR } from "@archestra/shared/interactions/client";
+import { isOpenCodeFamilyClient } from "@archestra/shared/opencode-family";
 import {
   type Context,
   context as otelContext,
@@ -167,6 +168,7 @@ import {
   type LlmProxyRequestContext,
   type LlmProxyToolCallRefusal,
 } from "@/proxy/plugins/registry";
+import { collectedDelegationMarkers } from "@/routes/proxy/utils/delegation-markers";
 import {
   RUNTIME_BINDING_HEADER,
   resolveRuntimeIdentityByVirtualKeys,
@@ -706,10 +708,14 @@ export async function handleLLMProxy<
         (proof) => stripChildTrajectoryReceipts(proof).receipts,
       ),
     );
-    delegationMarkers = collectDelegationMarkers({
-      family: requestWireFamily,
-      body,
-    });
+    // A route that translated the wire first collected the markers from the
+    // client's own wire; the translated text may no longer end with them.
+    delegationMarkers =
+      collectedDelegationMarkers(request) ??
+      collectDelegationMarkers({
+        family: requestWireFamily,
+        body,
+      });
     stripDelegationMarkers({ family: requestWireFamily, body });
     const nativeClient = APPA_CLIENT_ADAPTERS.find((adapter) =>
       adapter.matches({
@@ -718,7 +724,9 @@ export async function handleLLMProxy<
       }),
     )?.id;
     childReturns = collectAndStripChildReturns(body, {
-      openCodeBackgroundReturns: nativeClient === "opencode",
+      // Kilo Code frames its background tasks as OpenCode does.
+      openCodeBackgroundReturns:
+        !!nativeClient && isOpenCodeFamilyClient(nativeClient),
       codexMailboxReturns: nativeClient === "codex",
       onRefusal: (refusal) => {
         childReturnRefusal ??= refusal;
@@ -748,7 +756,8 @@ export async function handleLLMProxy<
   // from the request body; Codex clients → "openai_codex" from the
   // client_metadata body shape or the originator/User-Agent headers the Codex
   // CLI stamps on every request; OpenCode → "opencode" from its equivalent
-  // identity headers; Cursor → "cursor" from its User-Agent).
+  // identity headers; Kilo Code → "kilo" and Cursor → "cursor" from their
+  // User-Agents).
   const externalAgentId =
     utils.headers.externalAgentId.getExternalAgentId(headersForExtraction) ??
     utils.headers.clientApp.detectClaudeClientId(bodyForExtraction) ??
@@ -757,6 +766,7 @@ export async function handleLLMProxy<
       bodyForExtraction,
     ) ??
     utils.headers.clientApp.detectOpenCodeClientId(headersForExtraction) ??
+    utils.headers.clientApp.detectKiloClientId(headersForExtraction) ??
     utils.headers.clientApp.detectCursorClientId(headersForExtraction);
   const runId = utils.headers.runId.getRunId(headersForExtraction);
   const authOverride = (
@@ -797,15 +807,20 @@ export async function handleLLMProxy<
     headersForExtraction,
     "x-parent-session-id",
   );
+  // OpenCode and Kilo Code frame their turns the same way; each gets its own
+  // source prefix (opencode:main, kilo:main, ...).
   const openCodeSource: InteractionSource | undefined =
-    externalAgentId === OPENCODE_CLIENT_ID
-      ? openCodeParentSession
-        ? "opencode:subagent"
-        : openCodeAgent === "title"
-          ? "opencode:title"
-          : openCodeAgent === "compaction"
-            ? "opencode:compaction"
-            : "opencode:main"
+    externalAgentId && isOpenCodeFamilyClient(externalAgentId)
+      ? openCodeFamilySource(
+          externalAgentId,
+          openCodeParentSession
+            ? "subagent"
+            : openCodeAgent === "title"
+              ? "title"
+              : openCodeAgent === "compaction"
+                ? "compaction"
+                : "main",
+        )
       : undefined;
   const untrustedAppaChatSource =
     isAppaChatSource(parsedSource) && !isLoopbackRequest(request);

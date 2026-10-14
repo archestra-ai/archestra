@@ -1,8 +1,13 @@
+import { VIRTUAL_KEY_HEADER } from "@archestra/shared/consts";
 import {
   MODEL_ROUTER_SUPPORTED_PROVIDERS,
   type SupportedProvider,
 } from "@archestra/shared/model-constants";
-import { OPENCODE_PASSTHROUGH_PROVIDER_ROUTES } from "@archestra/shared/opencode-provider-routes";
+import {
+  OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
+  openCodePassthroughBaseUrl,
+} from "@archestra/shared/opencode-provider-routes";
+import type { OpenCodeFamilyClient } from "../opencode-family";
 import type { SetupScriptProxySection } from "../types";
 
 /** Custom providers keep the platform's catalog separate from local accounts. */
@@ -41,16 +46,44 @@ export function openCodePrimaryConfig(
         [route.openCodeProviderId, `archestra-${route.provider}`] as const,
     ).filter(([, id]) => id in providers),
   );
-  return { routes, providers, nativeProviders, appName };
+  // The user's own sign-ins route through the proxy too, with their own
+  // credential; the passthrough key attributes those requests to the user.
+  const passthroughRoutes = OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.filter(
+    (route) => proxy.passthroughProviders?.includes(route.provider),
+  );
+  const routeHeaders: Record<string, Record<string, string>> = {};
+  for (const route of passthroughRoutes) {
+    routes[route.openCodeProviderId] = openCodePassthroughBaseUrl(
+      proxy.baseUrl,
+      route,
+    );
+    if (proxy.passthroughVirtualKey) {
+      routeHeaders[route.openCodeProviderId] = {
+        [VIRTUAL_KEY_HEADER]: proxy.passthroughVirtualKey,
+      };
+    }
+  }
+  const nativeRoutes = passthroughRoutes.map(
+    (route) => route.openCodeProviderId,
+  );
+  return {
+    routes,
+    routeHeaders,
+    providers,
+    nativeProviders,
+    nativeRoutes,
+    appName,
+  };
 }
 
 /** Runs in Node on both platforms; restores only the fields this mode owns. */
-export const OPENCODE_PRIMARY_CONFIG_SCRIPT = String.raw`
+export const openCodePrimaryConfigScript = (client: OpenCodeFamilyClient) =>
+  String.raw`
 const fs = require("node:fs"), path = require("node:path"), os = require("node:os");
 const home = process.env.HOME || process.env.USERPROFILE || os.homedir();
-const configPath = path.join(process.env.XDG_CONFIG_HOME || path.join(home, ".config"), "opencode", "opencode.json");
-const statePath = path.join(home, ".archestra", "opencode-primary-state.json");
-const keyPath = path.join(home, ".archestra", "opencode-primary.key");
+const configPath = path.join(process.env.XDG_CONFIG_HOME || path.join(home, ".config"), ${JSON.stringify(client.dir)}, ${JSON.stringify(client.configFile)});
+const statePath = path.join(home, ".archestra", ${JSON.stringify(`${client.stateName}-primary-state.json`)});
+const keyPath = path.join(home, ".archestra", ${JSON.stringify(`${client.stateName}-primary.key`)});
 const input = JSON.parse(process.env.ARCHESTRA_OC_PRIMARY === "stdin" ? fs.readFileSync(0, "utf8") : process.env.ARCHESTRA_OC_PRIMARY || "null");
 if (!input && !fs.existsSync(statePath)) process.exit(0);
 const config = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, "utf8")) : {};
@@ -70,13 +103,13 @@ if (fs.existsSync(statePath)) {
 if (input) {
   // A previous single-provider setup owns native provider overrides. Restore
   // its original values before taking this mode's snapshot.
-  const legacyStatePath = path.join(home, ".archestra", "opencode-connection-state.json");
+  const legacyStatePath = path.join(home, ".archestra", ${JSON.stringify(`${client.stateName}-connection-state.json`)});
   if (fs.existsSync(legacyStatePath)) {
     const legacy = JSON.parse(fs.readFileSync(legacyStatePath, "utf8"));
     config.provider ??= {};
     for (const [id, previous] of Object.entries(legacy.providerState || {})) {
       if (previous === null) delete config.provider[id]; else config.provider[id] = previous;
-      fs.rmSync(path.join(home, ".archestra", "opencode-" + id + ".key"), { force: true });
+      fs.rmSync(path.join(home, ".archestra", ${JSON.stringify(`${client.stateName}-`)} + id + ".key"), { force: true });
     }
     if (!Object.keys(config.provider).length) delete config.provider;
     if (legacy.enabledProvidersPresent) config.enabled_providers = legacy.enabledProviders;
@@ -94,24 +127,25 @@ if (input) {
   }
   const ids = Object.keys(input.providers);
   const inCatalog = (providerId, modelId) => Boolean(input.providers[providerId]?.models.some(model => model.id === modelId));
-  // Never add a pin. Keep one that is already served here, move a native one
-  // to the catalog provider with the same model id, and drop the rest so
-  // OpenCode falls back to the first provider below instead of an account it
-  // cannot use.
+  // Never add a pin. Keep one that is already served here or on a native
+  // provider the user signs in to, move a native one to the catalog provider
+  // with the same model id, and drop the rest so OpenCode falls back to the
+  // first provider below instead of an account it cannot use.
   const notices = [];
+  const nativeRoutes = Array.isArray(input.nativeRoutes) ? input.nativeRoutes : [];
   for (const field of ["model", "small_model"]) {
     const pin = config[field];
     if (typeof pin !== "string") continue;
     const slash = pin.indexOf("/");
     const providerId = pin.slice(0, slash), modelId = pin.slice(slash + 1);
-    if (slash > 0 && inCatalog(providerId, modelId)) continue;
+    if (slash > 0 && (inCatalog(providerId, modelId) || nativeRoutes.includes(providerId))) continue;
     const twin = slash > 0 ? input.nativeProviders?.[providerId] : undefined;
     if (twin && inCatalog(twin, modelId)) {
       config[field] = twin + "/" + modelId;
-      notices.push("info:OpenCode " + field + " " + pin + " now uses " + config[field] + " from " + input.appName + ". Disconnect restores " + pin + ".");
+      notices.push(${JSON.stringify(`info:${client.label} `)} + field + " " + pin + " now uses " + config[field] + " from " + input.appName + ". Disconnect restores " + pin + ".");
     } else {
       delete config[field];
-      notices.push("warn:" + input.appName + " does not offer OpenCode " + field + " " + pin + ", so setup removed it. Choose a model in OpenCode with /models. Disconnect restores " + pin + ".");
+      notices.push("warn:" + input.appName + ${JSON.stringify(` does not offer ${client.label} `)} + field + " " + pin + ${JSON.stringify(`, so setup removed it. Choose a model in ${client.label} with /models. Disconnect restores `)} + pin + ".");
     }
   }
   config.enabled_providers = ids;
@@ -126,7 +160,7 @@ if (input) {
       return [model.id, { name: model.name, [v2 ? "modelID" : "id"]: model.wireId,
         ...(context || output ? { limit: { context, output } } : {}) }];
     }));
-    const settings = { baseURL: provider.baseURL, apiKey: "{file:~/.archestra/opencode-primary.key}" };
+    const settings = { baseURL: provider.baseURL, apiKey: ${JSON.stringify(`{file:~/.archestra/${client.stateName}-primary.key}`)} };
     config[section][id] = v2
       ? { name: provider.name, package: provider.responses ? "@opencode/ai/providers/openai-compatible/responses" : "@opencode/ai/providers/openai-compatible", settings, models }
       : { name: provider.name, npm: provider.responses ? "@ai-sdk/openai" : "@ai-sdk/openai-compatible", options: settings, models };

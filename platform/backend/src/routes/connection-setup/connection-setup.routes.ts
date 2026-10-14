@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   DEFAULT_APP_NAME,
+  isIntegrationHidden,
   legacyMcpClientServerNames,
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
   OPENCODE_PRIMARY_PROVIDERS,
@@ -13,7 +14,13 @@ import {
   SupportedProvidersSchema,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
-import { INSTALLER_CLIENT_KEY_PROVIDERS } from "@archestra/shared/connection-setup";
+import {
+  INSTALLER_CLIENT_KEY_PROVIDERS,
+  INSTALLER_CLIENT_LABELS,
+  isOpenCodeFamilyClient,
+  type OpenCodeFamilyClientId,
+} from "@archestra/shared/connection-setup";
+import { openCodeFamilyRecord } from "@archestra/shared/opencode-family";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { isRateLimited } from "@/agents/utils";
@@ -32,6 +39,7 @@ import {
   SkillModel,
   SkillShareLinkModel,
   TeamModel,
+  UserModel,
   VirtualApiKeyModel,
 } from "@/models";
 import { CONNECTION_SETUP_TOKEN_TTL_MS } from "@/models/connection-setup";
@@ -116,9 +124,10 @@ const CLIENT_SUPPORTED_PROVIDERS: Record<
     "cerebras",
     "github-copilot",
   ],
-  // OpenCode can only route the providers its plugin redirects natively.
-  opencode: OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map(
-    ({ provider }) => provider,
+  // OpenCode and Kilo Code route only the providers their plugin redirects
+  // natively.
+  ...openCodeFamilyRecord(() =>
+    OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map(({ provider }) => provider),
   ),
 };
 
@@ -126,8 +135,10 @@ const CLIENT_SUPPORTED_PROVIDERS: Record<
 const MULTI_PROVIDER_KEY_CLIENTS: Partial<
   Record<ConnectionSetupClientId, { keyName: string }>
 > = {
-  opencode: { keyName: "OpenCode primary providers" },
   cursor: { keyName: "Cursor model router" },
+  ...openCodeFamilyRecord((client) => ({
+    keyName: `${client.label} primary providers`,
+  })),
 };
 
 const CreateConnectionSetupBodySchema = z.object({
@@ -394,7 +405,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (allPrimary && !multiProviderKey) {
         throw new ApiError(
           400,
-          "All primary providers is only supported for OpenCode and Cursor setups",
+          "All primary providers is only supported for OpenCode, Kilo Code and Cursor setups",
         );
       }
       if (clientId === "cursor" && provider && !allPrimary) {
@@ -409,7 +420,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         !allPrimary &&
         provider &&
         !(
-          clientId === "opencode" && proxyAuth === "virtual-key"
+          isOpenCodeFamilyClient(clientId) && proxyAuth === "virtual-key"
             ? OPENCODE_PRIMARY_PROVIDERS
             : CLIENT_SUPPORTED_PROVIDERS[clientId]
         ).includes(provider)
@@ -527,9 +538,10 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
           // Fail here, where the Connect page shows the message, rather than
           // when the installer downloads its script.
-          if (clientId === "opencode" && virtualApiKeyId && provider) {
+          if (isOpenCodeFamilyClient(clientId) && virtualApiKeyId && provider) {
             await getVirtualKeyProviderCatalog({
               supportedProviders: OPENCODE_PRIMARY_PROVIDERS,
+              clientLabel: INSTALLER_CLIENT_LABELS[clientId],
               provider: allPrimary ? undefined : provider,
               mappedKeys,
               organizationId,
@@ -552,7 +564,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             (provider === "anthropic" || provider === "bedrock")) ||
             (clientId === "codex" && provider === "openai") ||
             (clientId === "copilot-cli" && provider === "github-copilot") ||
-            clientId === "opencode")
+            isOpenCodeFamilyClient(clientId))
         ) {
           const canCreateVirtualKey = await userHasPermission(
             user.id,
@@ -629,7 +641,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
       } else if (
-        clientId !== "opencode" &&
+        !isOpenCodeFamilyClient(clientId) &&
         organization.connectionPluginsEnabled
       ) {
         const canDeliverPlugins = await userCanDeliverPlugins({
@@ -1052,7 +1064,10 @@ interface MarketplaceRenderContext {
   skillIds: string[];
   pluginIds: string[];
   pluginNames: string[];
-  pluginClientType: Exclude<ConnectionSetupClientId, "opencode"> | null;
+  pluginClientType: Exclude<
+    ConnectionSetupClientId,
+    OpenCodeFamilyClientId
+  > | null;
   pluginPlatform: PluginPlatform | null;
   marketplaceName: string;
 }
@@ -1133,6 +1148,12 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
         throw GONE();
       }
       virtualKeyName = virtualKey.name;
+      if (
+        isOpenCodeFamilyClient(setup.clientId) &&
+        setup.proxyAuth === "primary-providers"
+      ) {
+        passthroughVirtualKey = await openCodeFamilyPassthroughKey(setup);
+      }
     } else if (setup.proxyAuth === "provider-key" && setup.virtualApiKeyId) {
       // Passthrough attribution key (provider-key mode reuses virtualApiKeyId).
       // Best-effort: a revoked key just drops the header — never throw GONE(),
@@ -1172,20 +1193,27 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
             })
           : undefined,
       primaryProviders:
-        setup.clientId === "opencode" &&
+        isOpenCodeFamilyClient(setup.clientId) &&
         setup.proxyAuth !== "provider-key" &&
         setup.virtualApiKeyId
           ? await getVirtualKeyProviderCatalog({
               supportedProviders: OPENCODE_PRIMARY_PROVIDERS,
+              clientLabel: INSTALLER_CLIENT_LABELS[setup.clientId],
               provider:
                 setup.proxyAuth === "virtual-key" ? setup.provider : undefined,
               mappedKeys:
-                organization.connectionClientProviderKeys?.opencode ?? null,
+                organization.connectionClientProviderKeys?.[setup.clientId] ??
+                null,
               organizationId: setup.organizationId,
               userId: setup.userId,
               userTeamIds: await TeamModel.getUserTeamIds(setup.userId),
               virtualApiKeyId: setup.virtualApiKeyId,
             })
+          : undefined,
+      passthroughProviders:
+        isOpenCodeFamilyClient(setup.clientId) &&
+        setup.proxyAuth === "primary-providers"
+          ? await openCodeFamilyPassthroughProviders(setup.organizationId)
           : undefined,
       authMode: setup.proxyAuth,
       provider: setup.provider,
@@ -1301,7 +1329,7 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       pluginIds,
       pluginNames,
       pluginClientType:
-        pluginIds.length > 0 && setup.clientId !== "opencode"
+        pluginIds.length > 0 && !isOpenCodeFamilyClient(setup.clientId)
           ? setup.clientId
           : null,
       pluginPlatform:
@@ -1320,7 +1348,7 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       proxy,
       managedInstructionsSource:
         mcp &&
-        ["claude-code", "codex", "copilot-cli", "opencode"].includes(
+        ["claude-code", "codex", "copilot-cli", "opencode", "kilo"].includes(
           setup.clientId,
         )
           ? {
@@ -1676,4 +1704,43 @@ async function getCursorModels(params: {
     ids: models.map(buildRoutableModelId),
     defaultId: defaultModel ? buildRoutableModelId(defaultModel) : null,
   };
+}
+
+/**
+ * In primary-providers mode the user's own sign-ins in an OpenCode-family
+ * client route through the proxy next to the Archestra providers; this key
+ * attributes those requests to the user. Best effort: without the permission
+ * to mint one they still pass, unattributed.
+ */
+async function openCodeFamilyPassthroughKey(
+  setup: ConnectionSetup,
+): Promise<string | null> {
+  const canCreateVirtualKey = await userHasPermission(
+    setup.userId,
+    setup.organizationId,
+    "llmVirtualKey",
+    "create",
+  );
+  if (!canCreateVirtualKey) return null;
+  const user = await UserModel.getById(setup.userId);
+  if (!user) return null;
+  const passthroughKeyId = await ensureConnectionPassthroughKey({
+    organizationId: setup.organizationId,
+    userId: setup.userId,
+    userEmail: user.email,
+  });
+  return readVirtualKeyValue(passthroughKeyId);
+}
+
+/** The native providers an admin has not turned off for the organization. */
+async function openCodeFamilyPassthroughProviders(
+  organizationId: string,
+): Promise<SupportedProvider[]> {
+  const { modelProviderOverrides } =
+    await OrganizationModel.getIntegrationOverrides(organizationId);
+  return OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map(
+    (route) => route.provider,
+  ).filter(
+    (provider) => !isIntegrationHidden(modelProviderOverrides, provider),
+  );
 }

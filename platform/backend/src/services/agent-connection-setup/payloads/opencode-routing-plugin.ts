@@ -1,8 +1,17 @@
 import { OPENCODE_AGENT_HEADER } from "@archestra/shared";
+import { OPENCODE_CLIENT, type OpenCodeFamilyClient } from "../opencode-family";
 
 interface RenderOpenCodeRoutingPluginParams {
   routes: Record<string, string>;
   headers: Record<string, string>;
+  /**
+   * Extra headers for one route only, keyed by provider id: the passthrough
+   * key goes on providers that sign in with the user's own credential, never
+   * on a provider that already authenticates with a virtual key.
+   */
+  routeHeaders?: Record<string, Record<string, string>>;
+  /** The client the plugin runs in; OpenCode when omitted. */
+  client?: OpenCodeFamilyClient;
 }
 
 /**
@@ -14,6 +23,9 @@ interface RenderOpenCodeRoutingPluginParams {
 export function renderOpenCodeRoutingPlugin(
   params: RenderOpenCodeRoutingPluginParams,
 ): string {
+  const { dir, label } = params.client ?? OPENCODE_CLIENT;
+  // The client values go in before the wire-header constant below, so every
+  // later line stays covered by its white-label waiver.
   return `import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -21,22 +33,34 @@ import { join } from "node:path";
 const routes = ${JSON.stringify(params.routes)};
 let activeRoutes = { ...routes };
 const managedHeaders = ${JSON.stringify(params.headers)};
+const routeHeaders = ${JSON.stringify(params.routeHeaders ?? {})};
+const headersFor = (providerId) => ({ ...managedHeaders, ...(routeHeaders[providerId] ?? {}) });
 const credentialEnvByProvider = ${JSON.stringify(OPENCODE_CREDENTIAL_ENV_BY_PROVIDER)};
 const normalizeUrl = (value) => String(value ?? "").replace(/\\/+$/, "");
 const directInferencePath = /(?:\\/(?:messages|responses|chat\\/completions)|\\/v1beta\\/models\\/[^/]+:(?:generateContent|streamGenerateContent)|\\/backend-api\\/codex\\/responses)$/;
 const fetchGuardSymbol = Symbol.for("archestra.opencode.llmProxyFetchGuard");
 const openAiOAuthBridgeHeader = "x-archestra-opencode-oauth-bridge";
 const openAiApiBaseUrl = "https://api.openai.com/v1";
+const clientLabel = ${JSON.stringify(label)};
+const clientDir = ${JSON.stringify(dir)};
 // white-label-ok: This constant is a stable wire header identifier.
 const openCodeAgentHeader = ${JSON.stringify(OPENCODE_AGENT_HEADER)};
 const chatGptResponsesUrl = "https://chatgpt.com/backend-api/codex/responses";
 
-const authPath = join(process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"), "opencode", "auth.json");
-let localAuth = {};
-try { localAuth = JSON.parse(readFileSync(authPath, "utf8")); } catch {}
+const authPath = join(process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"), clientDir, "auth.json");
+// Read again on every use: the user can sign in to a provider from the client
+// after this plugin loaded.
+const readLocalAuth = () => {
+  try { return JSON.parse(readFileSync(authPath, "utf8")); } catch { return {}; }
+};
+const localAuth = readLocalAuth();
 const openAiOAuth = localAuth.openai?.type === "oauth" ? localAuth.openai : null;
 const googleOAuth = localAuth.google?.type === "oauth" ? localAuth.google : null;
-const usableAuth = (providerId) => {
+const currentOpenAiOAuth = () => {
+  const auth = readLocalAuth().openai;
+  return auth?.type === "oauth" ? auth : null;
+};
+const usableAuth = (localAuth, providerId) => {
   const auth = localAuth[providerId];
   if (auth?.type === "api") return typeof auth.key === "string" && auth.key.trim() !== "";
   if (auth?.type !== "oauth") return false;
@@ -54,19 +78,21 @@ if (!globalThis[fetchGuardSymbol]) {
   globalThis.fetch = (input, init) => {
     const request = new Request(input, init);
     const url = new URL(request.url);
-    if (openAiOAuth && url.href === chatGptResponsesUrl) {
-      const target = activeRoutes.openai;
+    // A ChatGPT sign-in made after startup still has its requests bridged.
+    const chatGptAuth = url.href === chatGptResponsesUrl ? openAiOAuth ?? currentOpenAiOAuth() : null;
+    if (chatGptAuth) {
+      const target = routes.openai;
       if (!target) throw new Error("OpenAI OAuth is not supported by the connected Archestra LLM proxy.");
       const headers = new Headers(request.headers);
-      for (const [name, value] of Object.entries(managedHeaders)) headers.set(name, value);
-      if (!headers.has("Authorization")) throw new Error("OpenAI OAuth request is missing its current bearer token. Refresh the OpenCode OpenAI connection and try again.");
-      if (!headers.has("ChatGPT-Account-Id") && openAiOAuth.accountId) headers.set("ChatGPT-Account-Id", openAiOAuth.accountId);
+      for (const [name, value] of Object.entries(headersFor("openai"))) headers.set(name, value);
+      if (!headers.has("Authorization")) throw new Error("OpenAI OAuth request is missing its current bearer token. Refresh the " + clientLabel + " OpenAI connection and try again.");
+      if (!headers.has("ChatGPT-Account-Id") && chatGptAuth.accountId) headers.set("ChatGPT-Account-Id", chatGptAuth.accountId);
       headers.set(openAiOAuthBridgeHeader, "true");
       return directFetch(new Request(target + "/responses", { method: request.method, headers, body: request.body, signal: request.signal, duplex: request.body ? "half" : undefined }));
     }
     if (!proxyOrigins.has(url.origin) && directInferencePath.test(url.pathname)) {
       throw new Error(
-        'Blocked a direct provider inference request to "' + url.origin + '" while OpenCode is connected to the Archestra LLM proxy.',
+        'Blocked a direct provider inference request to "' + url.origin + '" while ' + clientLabel + ' is connected to the Archestra LLM proxy.',
       );
     }
     return directFetch(request);
@@ -77,13 +103,18 @@ if (!globalThis[fetchGuardSymbol]) {
 export const ArchestraLlmProxy = async () => ({
   async config(config) {
     config.provider ??= {};
+    const localAuth = readLocalAuth();
+    const signedInToOpenAi = localAuth.openai?.type === "oauth";
     const eligible = Object.entries(routes).filter(([providerId]) => {
       const apiKey = config.provider[providerId]?.options?.apiKey;
-      return usableAuth(providerId) || usableEnvironment(providerId) || (typeof apiKey === "string" && apiKey.trim() !== "");
+      return usableAuth(localAuth, providerId) || usableEnvironment(providerId) || (typeof apiKey === "string" && apiKey.trim() !== "");
     });
     activeRoutes = Object.fromEntries(eligible);
     proxyOrigins = computeProxyOrigins(activeRoutes);
-    const providerIds = eligible.map(([providerId]) => providerId);
+    // Every routed provider stays listed, signed in or not, so the user can
+    // connect one from the client. Only the signed-in ones get a config entry:
+    // an entry alone would load a provider that has no credential yet.
+    const providerIds = Object.keys(routes);
     config.enabled_providers = providerIds;
     if (Array.isArray(config.disabled_providers)) {
       config.disabled_providers = config.disabled_providers.filter((id) => !providerIds.includes(id));
@@ -97,8 +128,8 @@ export const ArchestraLlmProxy = async () => ({
       }
       const provider = config.provider[providerId] ?? {};
       provider.options ??= {};
-      provider.options.baseURL = providerId === "openai" && openAiOAuth ? openAiApiBaseUrl : baseURL;
-      provider.options.headers = { ...(provider.options.headers ?? {}), ...managedHeaders };
+      provider.options.baseURL = providerId === "openai" && signedInToOpenAi ? openAiApiBaseUrl : baseURL;
+      provider.options.headers = { ...(provider.options.headers ?? {}), ...headersFor(providerId) };
       config.provider[providerId] = provider;
     }
     for (const field of ["model", "small_model"]) {
@@ -111,21 +142,21 @@ export const ArchestraLlmProxy = async () => ({
     const expected = activeRoutes[providerId];
     if (!expected) {
       throw new Error(
-        'OpenCode provider "' + providerId + '" is not supported by the connected Archestra LLM proxy. Disconnect or reconfigure the proxy before using it.',
+        clientLabel + ' provider "' + providerId + '" is not supported by the connected Archestra LLM proxy. Disconnect or reconfigure the proxy before using it.',
       );
     }
     const actual = input.provider.options?.baseURL;
-    const expectedResolved = providerId === "openai" && openAiOAuth ? openAiApiBaseUrl : expected;
+    const expectedResolved = providerId === "openai" && currentOpenAiOAuth() ? openAiApiBaseUrl : expected;
     if (normalizeUrl(actual) !== normalizeUrl(expectedResolved)) {
       throw new Error(
-        'OpenCode provider "' + providerId + '" resolved to "' + (actual ?? 'no base URL') + '" instead of the connected Archestra endpoint. Re-run the connection setup.',
+        clientLabel + ' provider "' + providerId + '" resolved to "' + (actual ?? 'no base URL') + '" instead of the connected Archestra endpoint. Re-run the connection setup.',
       );
     }
   },
   async "chat.headers"(input, output) {
     const providerId = input.provider.id ?? input.provider.info?.id;
     if (!activeRoutes[providerId]) return;
-    Object.assign(output.headers, managedHeaders);
+    Object.assign(output.headers, headersFor(providerId));
     output.headers["x-opencode-session"] = input.sessionID;
     output.headers[openCodeAgentHeader] = input.agent;
   },
@@ -140,13 +171,13 @@ export const ArchestraLlmProxy = async () => ({
           apiKey: "archestra-oauth-bridge",
           fetch: async (input, init) => {
             if (credential.expires && credential.expires <= Date.now()) {
-              throw new Error("Google OAuth access token expired. Refresh the OpenCode Google connection and try again.");
+              throw new Error("Google OAuth access token expired. Refresh the " + clientLabel + " Google connection and try again.");
             }
             const request = new Request(input, init);
             const headers = new Headers(request.headers);
             headers.delete("x-goog-api-key");
             headers.set("Authorization", "Bearer " + credential.access);
-            for (const [name, value] of Object.entries(managedHeaders)) headers.set(name, value);
+            for (const [name, value] of Object.entries(headersFor("google"))) headers.set(name, value);
             if (process.env.GOOGLE_CLOUD_PROJECT) headers.set("x-goog-user-project", process.env.GOOGLE_CLOUD_PROJECT);
             return directFetch(new Request(request, { headers }));
           },
@@ -165,20 +196,20 @@ export const ArchestraOpenAiOAuth = async () => ({
         const credential = await auth();
         if (!credential || credential.type !== "oauth" || !credential.access) return {};
         const accountId = credential.accountId ?? openAiOAuth.accountId;
-        if (!accountId) throw new Error("OpenAI OAuth account ID is missing. Refresh the OpenCode OpenAI connection and try again.");
+        if (!accountId) throw new Error("OpenAI OAuth account ID is missing. Refresh the " + clientLabel + " OpenAI connection and try again.");
         return {
           apiKey: "archestra-oauth-bridge",
           fetch: async (input, init) => {
             if (credential.expires && credential.expires <= Date.now()) {
-              throw new Error("OpenAI OAuth access token expired. Refresh the OpenCode OpenAI connection and try again.");
+              throw new Error("OpenAI OAuth access token expired. Refresh the " + clientLabel + " OpenAI connection and try again.");
             }
             const request = new Request(input, init);
             const headers = new Headers(request.headers);
             headers.set("Authorization", "Bearer " + credential.access);
             headers.set("ChatGPT-Account-Id", accountId);
             headers.set(openAiOAuthBridgeHeader, "true");
-            for (const [name, value] of Object.entries(managedHeaders)) headers.set(name, value);
-            const target = activeRoutes.openai;
+            for (const [name, value] of Object.entries(headersFor("openai"))) headers.set(name, value);
+            const target = routes.openai;
             if (!target) throw new Error("OpenAI OAuth is not supported by the connected Archestra LLM proxy.");
             return directFetch(new Request(target + "/responses", { method: request.method, headers, body: request.body, signal: request.signal, duplex: request.body ? "half" : undefined }));
           },
@@ -212,6 +243,7 @@ export function renderOpenCodeRoutingPluginV2(
 ): string {
   return `const routes = ${JSON.stringify(params.routes)};
 const managedHeaders = ${JSON.stringify(params.headers)};
+const routeHeaders = ${JSON.stringify(params.routeHeaders ?? {})};
 // white-label-ok: This constant is a stable wire header identifier.
 const openCodeAgentHeader = ${JSON.stringify(OPENCODE_AGENT_HEADER)};
 const openAiOAuthBridgeHeader = "x-archestra-opencode-oauth-bridge";
@@ -240,7 +272,7 @@ export default {
       }
       const chatGptSignIn = providerId === "openai" && normalizeUrl(event.baseURL) === chatGptBaseUrl;
       event.baseURL = route;
-      Object.assign(event.headers, managedHeaders);
+      Object.assign(event.headers, managedHeaders, routeHeaders[providerId] ?? {});
       event.headers[openCodeAgentHeader] = event.agent;
       if (chatGptSignIn) event.headers[openAiOAuthBridgeHeader] = "true";
     });

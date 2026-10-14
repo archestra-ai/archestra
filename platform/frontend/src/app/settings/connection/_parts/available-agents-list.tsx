@@ -8,6 +8,7 @@ import {
   INSTALLER_CLIENT_IDS,
   INSTALLER_CLIENT_KEY_PROVIDERS,
   type InstallerClientId,
+  isOpenCodeFamilyClient,
 } from "@archestra/shared/connection-setup";
 import {
   closestCenter,
@@ -572,7 +573,7 @@ function asInstallerClientId(id: string): InstallerClientId | null {
 }
 
 function ownKeysLabel(clientId: InstallerClientId): string {
-  return clientId === "cursor" || clientId === "opencode"
+  return clientId === "cursor" || isOpenCodeFamilyClient(clientId)
     ? "Users' primary keys"
     : "Users' own keys";
 }

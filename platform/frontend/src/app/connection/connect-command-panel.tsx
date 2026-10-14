@@ -13,6 +13,7 @@ import {
   type ConnectSetupPart,
   INSTALLER_CLIENT_KEY_PROVIDERS,
   isInstallerClientId,
+  isOpenCodeFamilyClient,
 } from "@archestra/shared/connection-setup";
 import { Download, KeyRound, RotateCcw, TriangleAlert } from "lucide-react";
 import Link from "next/link";
@@ -284,18 +285,20 @@ export function ConnectCommandPanel({
       ),
     [organization, client.id],
   );
-  // How models authenticate is the admin's call, not the user's. Cursor and
-  // OpenCode get one virtual key for many providers. Other clients get a
-  // virtual key when an admin mapped keys for them, and otherwise keep the
-  // user's own provider key or subscription.
+  // OpenCode and Kilo Code (an OpenCode fork) share one setup and its options.
+  const openCodeFamily = isOpenCodeFamilyClient(client.id);
+  // How models authenticate is the admin's call, not the user's. Cursor,
+  // OpenCode and Kilo Code get one virtual key for many providers. Other
+  // clients get a virtual key when an admin mapped keys for them, and
+  // otherwise keep the user's own provider key or subscription.
   const proxyAuth: ConnectProxyAuth =
-    client.id === "cursor" || client.id === "opencode"
+    client.id === "cursor" || openCodeFamily
       ? "primary-providers"
       : adminMappedProviders.size > 0 && canAttribute === true
         ? "virtual-key"
         : "provider-key";
   const allPrimaryProviders =
-    (client.id === "opencode" || client.id === "cursor") &&
+    (openCodeFamily || client.id === "cursor") &&
     proxyAuth === "primary-providers";
   // Target OS for the generated command. Auto-detected from the browser after
   // mount (kept off the initial render to avoid an SSR/hydration mismatch); the
@@ -391,12 +394,11 @@ export function ConnectCommandPanel({
   const configuredProviders = useMemo(
     () =>
       new Set(
-        (client.id === "opencode"
-          ? usableOpenCodeKeys
-          : (availableKeys ?? [])
-        ).map((key) => key.provider),
+        (openCodeFamily ? usableOpenCodeKeys : (availableKeys ?? [])).map(
+          (key) => key.provider,
+        ),
       ),
-    [client.id, availableKeys, usableOpenCodeKeys],
+    [openCodeFamily, availableKeys, usableOpenCodeKeys],
   );
 
   // Providers this client can be wired to at all, narrowed by the admin
@@ -405,7 +407,7 @@ export function ConnectCommandPanel({
     const supported =
       client.id === "cursor"
         ? [...INSTALLER_CLIENT_KEY_PROVIDERS.cursor]
-        : client.id === "opencode" && proxyAuth !== "provider-key"
+        : openCodeFamily && proxyAuth !== "provider-key"
           ? [...OPENCODE_PRIMARY_PROVIDERS]
           : client.proxy.kind === "custom"
             ? client.proxy.supportedProviders
@@ -414,7 +416,14 @@ export function ConnectCommandPanel({
     return shown && !allPrimaryProviders
       ? supported.filter((p) => shown.has(p))
       : supported;
-  }, [client.id, client.proxy, shownProviders, allPrimaryProviders, proxyAuth]);
+  }, [
+    client.id,
+    openCodeFamily,
+    client.proxy,
+    shownProviders,
+    allPrimaryProviders,
+    proxyAuth,
+  ]);
 
   // A virtual key can only be minted against a configured key, so virtual-key
   // mode never offers a provider the command would fail on. Passthrough needs
@@ -605,7 +614,7 @@ export function ConnectCommandPanel({
     (((client.id === "claude-code" || client.id === "claude-desktop") &&
       (provider === "anthropic" || provider === "bedrock")) ||
       (client.id === "codex" && provider === "openai") ||
-      client.id === "opencode");
+      openCodeFamily);
 
   const { mutateAsync: createSetup, isPending } = useCreateConnectionSetup();
   // Creating the personal key invalidates the available-keys query, so once the
@@ -854,7 +863,7 @@ export function ConnectCommandPanel({
             {allPrimaryProviders ? (
               <span>
                 {providers.length
-                  ? "Create a personal virtual key for all primary model providers you can access, and make their models available in OpenCode."
+                  ? `Create a personal virtual key for all primary model providers you can access, and make their models available in ${client.label}. Providers you sign in to from ${client.label} itself, such as a ChatGPT or Claude subscription, go through the proxy too.`
                   : "No usable primary model providers are available. Mark a compatible model provider key as primary."}
               </span>
             ) : effectiveProxyAuth === "provider-key" ? (
@@ -1154,7 +1163,7 @@ export function ConnectCommandPanel({
                   <span>
                     {providers.length
                       ? `Route all primary model providers (${providers.length}) through the LLM Proxy using a virtual key`
-                      : "No usable primary model providers available for OpenCode"}
+                      : `No usable primary model providers available for ${client.label}`}
                   </span>
                 ) : !provider ? (
                   noVirtualKeyMessage

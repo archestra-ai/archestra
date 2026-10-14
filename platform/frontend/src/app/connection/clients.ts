@@ -2,8 +2,9 @@ import {
   CLAUDE_CODE_PROXY_ENV_KEYS,
   CLAUDE_DESKTOP_CLIENT_ID,
   EXTERNAL_AGENT_ID_HEADER,
-  OPENCODE_CLIENT_ID,
+  OPENCODE_FAMILY,
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
+  type OpenCodeFamilyDescriptor,
   openCodePassthroughBaseUrl,
   type SupportedProvider,
 } from "@archestra/shared";
@@ -201,6 +202,10 @@ const COPILOT_PATH =
 // cut-out wound the other way so it stays empty) and the lighter lower block.
 const OPENCODE_PATH = "M16.8 4.8H7.2v14.4h9.6ZM21.6 24H2.4V0h19.2Z";
 const OPENCODE_ACCENT_PATH = "M16.8 19.2H7.2V9.6h9.6Z";
+// Kilo Code's favicon (kilo.ai) in its 32×32 box: the frame around "Ki/lo",
+// filled even-odd so the frame and the "o" stay open.
+const KILO_PATH =
+  "M0 0v32h32V0ZM29 29H3V3h26ZM9 12h3v3h3v-3l-3-3H9V6H6v9h3ZM12 6h3v3h-3ZM26 12h-3V9l-3-3h-3v3h3v3h-3v3h9ZM12 17h3v3h-3ZM15 26v-3H9v-6H6v6.1875L8.8125 26ZM23 26v-2h3v-5l-2-2h-4v2h-3v5l2 2ZM20 20h3v3h-3Z";
 
 // Marks for the popular agents below, from LobeHub Icons (factory.ai's own
 // favicon for Droid). All but Droid's use the 24×24 box with even-odd fills.
@@ -554,118 +559,22 @@ claude`,
       }),
     },
   },
-  {
-    id: "opencode",
-    label: NATIVE_SESSION_CLIENT_LABELS.opencode,
-    sub: "Open-source CLI",
+  openCodeFamilyTile(OPENCODE_FAMILY.opencode, {
     svg: OPENCODE_PATH,
     svgAccent: { path: OPENCODE_ACCENT_PATH, color: "#CFCECD" },
     iconColor: "#211E1E",
     tileBg: "#f7f7f6",
-    mcp: {
-      kind: "custom",
-      supportedAuth: "both",
-      preferredAuth: "oauth",
-      configFile: "terminal",
-      language: "bash",
-      steps: ({ token }) => {
-        const verifyServer: ClientStep = {
-          title: "Check the connection",
-          body: 'The gateway should be listed as "connected".',
-          terminalTitle: "terminal",
-          buildCommand: () => "opencode mcp list",
-        };
-        if (token) {
-          return [
-            {
-              title: "Add the gateway",
-              body: "Use the static token when you want OpenCode to call the MCP gateway without an OAuth browser flow. Needs OpenCode 1.17 or later.",
-              terminalTitle: "terminal",
-              buildCommand: ({ url, serverName, token }) =>
-                `opencode mcp add ${shellArg(serverName)} --url ${shellArg(url)} --header ${shellArg(`Authorization=Bearer ${token}`)}`,
-            },
-            verifyServer,
-          ];
-        }
-        return [
-          {
-            title: "Add the gateway",
-            body: "Registers the gateway in your global OpenCode config. Needs OpenCode 1.17 or later.",
-            terminalTitle: "terminal",
-            buildCommand: ({ url, serverName }) =>
-              `opencode mcp add ${shellArg(serverName)} --url ${shellArg(url)}`,
-          },
-          {
-            title: "Start the OAuth flow",
-            body: "Check with opencode mcp list first. Run this only if authentication is needed; OpenCode does not start OAuth on its own.",
-            terminalTitle: "terminal",
-            buildCommand: ({ serverName }) =>
-              `opencode mcp auth ${shellArg(serverName)}`,
-          },
-          {
-            title: FINISH_OAUTH_FLOW_TITLE,
-            body: "OpenCode opens your browser and prints the sign-in link. Sign in and approve the gateway — it grants tool access per user, so its tools stay unavailable until you complete this one-time sign-in.",
-          },
-          verifyServer,
-        ];
-      },
-    },
-    proxy: {
-      kind: "custom",
-      supportedProviders: OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map(
-        ({ provider }) => provider,
-      ),
-      build: ({ provider, url, appName }) => {
-        const openConfig: ProxyStep = {
-          title: "Open ~/.config/opencode/opencode.json",
-          body: "Create it if it doesn't exist. If you have opencode.jsonc there instead, edit that file.",
-        };
-        const rootUrl = url.replace(new RegExp(`/${provider}$`), "");
-        const selectedRoute = OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.find(
-          (route) => route.provider === provider,
-        );
-        const selectedProviderId =
-          selectedRoute?.openCodeProviderId ?? provider;
-        const selectedBaseUrl = selectedRoute
-          ? openCodePassthroughBaseUrl(rootUrl, selectedRoute)
-          : url;
-        return {
-          kind: "steps",
-          steps: [
-            openConfig,
-            {
-              title: `Route ${selectedProviderId} through ${appName}`,
-              body: "Merge this snippet into the file. It keeps the native provider and model ids and uses the credential already configured for this provider.",
-              language: "json",
-              code: JSON.stringify(
-                {
-                  enabled_providers: [selectedProviderId],
-                  provider: {
-                    [selectedProviderId]: {
-                      options: {
-                        baseURL: selectedBaseUrl,
-                        headers: {
-                          [EXTERNAL_AGENT_ID_HEADER]: OPENCODE_CLIENT_ID,
-                        },
-                      },
-                    },
-                  },
-                },
-                null,
-                2,
-              ),
-            },
-            {
-              title: "Verify the proxy",
-              body: `Pick an existing model under ${selectedProviderId}. The request must appear in the ${appName} LLM logs with an OpenCode badge.`,
-              language: "bash",
-              code: `opencode run -m ${selectedProviderId}/<model-id> "Reply with exactly: opencode-proxy-ok"`,
-            },
-          ],
-        };
-      },
-    },
-  },
+    mcpAddNote: " Needs OpenCode 1.17 or later.",
+  }),
+
+  openCodeFamilyTile(OPENCODE_FAMILY.kilo, {
+    svg: KILO_PATH,
+    svgViewBox: "0 0 32 32",
+    svgFillRule: "evenodd",
+    iconColor: "#000000",
+    tileBg: "#FFDD00",
+  }),
+
   {
     id: "copilot-cli",
     label: "Copilot CLI",
@@ -1036,4 +945,130 @@ export {
  */
 function shellArg(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * OpenCode and Kilo Code share one tile: the same `mcp` commands, the same
+ * manual proxy snippet, from the family descriptor. Only the look and a
+ * version note differ.
+ */
+function openCodeFamilyTile(
+  client: OpenCodeFamilyDescriptor,
+  look: Pick<ConnectClient, "svg" | "iconColor" | "tileBg"> &
+    Partial<Pick<ConnectClient, "svgAccent" | "svgViewBox" | "svgFillRule">> & {
+      mcpAddNote?: string;
+    },
+): ConnectClient {
+  const { mcpAddNote = "", ...icon } = look;
+  const { binary, label } = client;
+  const siblingConfigFile =
+    client.manualConfigFile === client.configFile
+      ? client.commentedConfigFile
+      : client.configFile;
+  return {
+    id: client.id,
+    label,
+    sub: "Open-source CLI",
+    ...icon,
+    mcp: {
+      kind: "custom",
+      supportedAuth: "both",
+      preferredAuth: "oauth",
+      configFile: "terminal",
+      language: "bash",
+      steps: ({ token }) => {
+        const verifyServer: ClientStep = {
+          title: "Check the connection",
+          body: 'The gateway should be listed as "connected".',
+          terminalTitle: "terminal",
+          buildCommand: () => `${binary} mcp list`,
+        };
+        if (token) {
+          return [
+            {
+              title: "Add the gateway",
+              body: `Use the static token when you want ${label} to call the MCP gateway without an OAuth browser flow.${mcpAddNote}`,
+              terminalTitle: "terminal",
+              buildCommand: ({ url, serverName, token }) =>
+                `${binary} mcp add ${shellArg(serverName)} --url ${shellArg(url)} --header ${shellArg(`Authorization=Bearer ${token}`)}`,
+            },
+            verifyServer,
+          ];
+        }
+        return [
+          {
+            title: "Add the gateway",
+            body: `Registers the gateway in your global ${label} config.${mcpAddNote}`,
+            terminalTitle: "terminal",
+            buildCommand: ({ url, serverName }) =>
+              `${binary} mcp add ${shellArg(serverName)} --url ${shellArg(url)}`,
+          },
+          {
+            title: "Start the OAuth flow",
+            body: `Check with ${binary} mcp list first. Run this only if authentication is needed; ${label} does not start OAuth on its own.`,
+            terminalTitle: "terminal",
+            buildCommand: ({ serverName }) =>
+              `${binary} mcp auth ${shellArg(serverName)}`,
+          },
+          {
+            title: FINISH_OAUTH_FLOW_TITLE,
+            body: `${label} opens your browser and prints the sign-in link. Sign in and approve the gateway — it grants tool access per user, so its tools stay unavailable until you complete this one-time sign-in.`,
+          },
+          verifyServer,
+        ];
+      },
+    },
+    proxy: {
+      kind: "custom",
+      supportedProviders: OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map(
+        ({ provider }) => provider,
+      ),
+      build: ({ provider, url, appName }) => {
+        const rootUrl = url.replace(new RegExp(`/${provider}$`), "");
+        const selectedRoute = OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.find(
+          (route) => route.provider === provider,
+        );
+        const selectedProviderId =
+          selectedRoute?.openCodeProviderId ?? provider;
+        const selectedBaseUrl = selectedRoute
+          ? openCodePassthroughBaseUrl(rootUrl, selectedRoute)
+          : url;
+        return {
+          kind: "steps",
+          steps: [
+            {
+              title: `Open ~/.config/${client.dir}/${client.manualConfigFile}`,
+              body: `Create it if it doesn't exist. If you have ${siblingConfigFile} there instead, edit that file.`,
+            },
+            {
+              title: `Route ${selectedProviderId} through ${appName}`,
+              body: `Merge this snippet into the file. It keeps the native provider and model ids and uses the credential already configured for this provider. ${label} then offers only this provider, so no request skips ${appName}.`,
+              language: "json",
+              code: JSON.stringify(
+                {
+                  enabled_providers: [selectedProviderId],
+                  provider: {
+                    [selectedProviderId]: {
+                      options: {
+                        baseURL: selectedBaseUrl,
+                        headers: { [EXTERNAL_AGENT_ID_HEADER]: client.id },
+                      },
+                    },
+                  },
+                },
+                null,
+                2,
+              ),
+            },
+            {
+              title: "Verify the proxy",
+              body: `Pick an existing model under ${selectedProviderId}. The request must appear in the ${appName} LLM logs with the ${label} badge.`,
+              language: "bash",
+              code: `${binary} run -m ${selectedProviderId}/<model-id> "Reply with exactly: ${client.id}-proxy-ok"`,
+            },
+          ],
+        };
+      },
+    },
+  };
 }

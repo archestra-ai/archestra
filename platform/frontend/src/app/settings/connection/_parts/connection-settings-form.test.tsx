@@ -317,26 +317,18 @@ describe("ConnectionSettingsForm", () => {
     ).toBeDisabled();
   });
 
-  it("omits the plugin setting and its PATCH field when plugins are unavailable", async () => {
+  it("edits plugin delivery while the deployment beta flag is off", async () => {
     const user = userEvent.setup();
-    vi.mocked(useFeature).mockReturnValue(undefined);
-
+    vi.mocked(useFeature).mockReturnValue(false);
     render(<ConnectionSettingsForm />);
-
-    expect(
-      screen.queryByRole("switch", {
-        name: "Offer plugins on the Connect page",
-      }),
-    ).not.toBeInTheDocument();
-    await user.click(
-      screen.getByRole("switch", { name: "Offer skills on the Connect page" }),
-    );
+    const toggle = screen.getByRole("switch", {
+      name: "Offer plugins on the Connect page",
+    });
+    expect(toggle).toBeVisible();
+    await user.click(toggle);
     await user.click(screen.getByRole("button", { name: "Save" }));
-
     expect(mutate).toHaveBeenCalledWith(
-      expect.not.objectContaining({
-        connectionPluginsEnabled: expect.anything(),
-      }),
+      expect.objectContaining({ connectionPluginsEnabled: false }),
     );
   });
 
@@ -422,6 +414,27 @@ describe("ConnectionSettingsForm", () => {
         { provider: "openai", providerApiKeyId: "openai-org" },
       ],
     });
+  });
+
+  it("saves automatic provider coverage for one client without pinning primary keys", async () => {
+    const user = userEvent.setup();
+    render(<ConnectionSettingsForm />);
+    await user.click(
+      screen.getByRole("button", { name: "Cursor provider keys" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Cursor" });
+    await user.click(
+      within(dialog).getByRole("radio", {
+        name: /Current and future providers/,
+      }),
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Done" }));
+    expect(screen.getByText("Current and future providers")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(mutate.mock.lastCall?.[0].connectionClientFutureProviders).toEqual({
+      cursor: true,
+    });
+    expect(mutate.mock.lastCall?.[0].connectionClientProviderKeys).toBeNull();
   });
 
   it("offers shared gateways as the default but not a member's personal one", () => {

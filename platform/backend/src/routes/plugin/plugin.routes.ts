@@ -12,7 +12,6 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
-import config from "@/config";
 import type { GitAccess } from "@/git-hosts/git-access";
 import {
   PluginLabelModel,
@@ -238,12 +237,6 @@ const pluginRoutes: FastifyPluginAsyncZod = async (fastify) => {
     model: PluginLabelModel,
     keysOperationId: RouteId.GetPluginLabelKeys,
     valuesOperationId: RouteId.GetPluginLabelValues,
-  });
-
-  fastify.addHook("onRequest", async () => {
-    if (!config.plugins.enabled) {
-      throw new ApiError(404, "Plugins are not enabled");
-    }
   });
 
   fastify.get(

@@ -34381,6 +34381,9 @@ export type GetBootstrapResponses = {
                 isDefault: boolean;
                 visible: boolean;
             }> | null;
+            connectionClientFutureProviders: {
+                [key: string]: boolean;
+            } | null;
             connectionClientProviderKeys: {
                 [key: string]: Array<{
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -93167,6 +93170,9 @@ export type GetOrganizationResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -93501,6 +93507,9 @@ export type UpdateAppearanceSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -93713,6 +93722,9 @@ export type UpdateSecuritySettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -93922,6 +93934,9 @@ export type UpdateMcpSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -94131,6 +94146,9 @@ export type UpdateSkillsSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -94341,6 +94359,9 @@ export type UpdateAgentSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -94398,6 +94419,9 @@ export type UpdateAgentSettingsResponse = UpdateAgentSettingsResponses[keyof Upd
 export type UpdateConnectionSettingsData = {
     body: {
         connectionDefaultMcpGatewayId?: string | null;
+        connectionClientFutureProviders?: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys?: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -94570,6 +94594,9 @@ export type UpdateConnectionSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -94815,6 +94842,9 @@ export type UpdateIntegrationSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -95034,6 +95064,9 @@ export type UpdateDefaultEnvironmentResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -95248,6 +95281,9 @@ export type UpdateAuthSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -95464,6 +95500,9 @@ export type UpdateKnowledgeSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -95670,6 +95709,9 @@ export type DropEmbeddingConfigResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -96238,6 +96280,9 @@ export type CompleteOnboardingResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -111498,6 +111543,454 @@ export type GetCostSavingsStatisticsResponses = {
 
 export type GetCostSavingsStatisticsResponse = GetCostSavingsStatisticsResponses[keyof GetCostSavingsStatisticsResponses];
 
+export type GetMcpToolCallUsageData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        /**
+         * Only this person's usage.
+         */
+        userId?: string;
+        /**
+         * Only usage by direct members of this team.
+         */
+        teamId?: string;
+        limit?: number;
+        offset?: number;
+        /**
+         * Comma-separated dimensions to group by: day, mcpServerName, toolName, userId, agentId, appId. Defaults to mcpServerName,toolName.
+         */
+        groupBy?: Array<'day' | 'mcpServerName' | 'toolName' | 'userId' | 'agentId' | 'appId'>;
+        agentId?: string;
+        appId?: string;
+        mcpServerName?: string;
+        toolName?: string;
+    };
+    url: '/api/statistics/mcp-tool-calls';
+};
+
+export type GetMcpToolCallUsageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetMcpToolCallUsageError = GetMcpToolCallUsageErrors[keyof GetMcpToolCallUsageErrors];
+
+export type GetMcpToolCallUsageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            /**
+             * UTC calendar day (YYYY-MM-DD). Present when grouped by day.
+             */
+            day?: string;
+            mcpServerName?: string;
+            /**
+             * Tool name as called, including its server prefix. Null when the name is not readable by the server (encrypted chats).
+             */
+            toolName?: string | null;
+            /**
+             * Who made the calls. Null for usage without a resolved user. Present when grouped by userId.
+             */
+            userId?: string | null;
+            userName?: string | null;
+            /**
+             * Agent or gateway that made the calls. Null for app calls.
+             */
+            agentId?: string | null;
+            agentName?: string | null;
+            /**
+             * App that made the calls. Null for agent calls.
+             */
+            appId?: string | null;
+            appName?: string | null;
+            calls: number;
+            /**
+             * Calls whose result was an error.
+             */
+            errors: number;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+        totals: {
+            calls: number;
+            errors: number;
+        };
+    };
+};
+
+export type GetMcpToolCallUsageResponse = GetMcpToolCallUsageResponses[keyof GetMcpToolCallUsageResponses];
+
+export type GetAppUsageData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        /**
+         * Only this person's usage.
+         */
+        userId?: string;
+        /**
+         * Only usage by direct members of this team.
+         */
+        teamId?: string;
+        limit?: number;
+        offset?: number;
+        /**
+         * Comma-separated dimensions to group by: day, appId, userId. Defaults to appId.
+         */
+        groupBy?: Array<'day' | 'appId' | 'userId'>;
+        appId?: string;
+    };
+    url: '/api/statistics/app-usage';
+};
+
+export type GetAppUsageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAppUsageError = GetAppUsageErrors[keyof GetAppUsageErrors];
+
+export type GetAppUsageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            /**
+             * UTC calendar day (YYYY-MM-DD). Present when grouped by day.
+             */
+            day?: string;
+            appId?: string;
+            appName?: string | null;
+            /**
+             * Who made the calls. Null for usage without a resolved user. Present when grouped by userId.
+             */
+            userId?: string | null;
+            userName?: string | null;
+            /**
+             * Times the app was opened.
+             */
+            runs: number;
+            /**
+             * Tool calls the app made.
+             */
+            toolCalls: number;
+            /**
+             * LLM requests the app made.
+             */
+            llmRequests: number;
+            inputTokens: number;
+            outputTokens: number;
+            billedCost: number;
+            subscriptionCost: number;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+        totals: {
+            /**
+             * Times the app was opened.
+             */
+            runs: number;
+            /**
+             * Tool calls the app made.
+             */
+            toolCalls: number;
+            /**
+             * LLM requests the app made.
+             */
+            llmRequests: number;
+            inputTokens: number;
+            outputTokens: number;
+            billedCost: number;
+            subscriptionCost: number;
+        };
+    };
+};
+
+export type GetAppUsageResponse = GetAppUsageResponses[keyof GetAppUsageResponses];
+
+export type GetSkillUsageData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        /**
+         * Only this person's usage.
+         */
+        userId?: string;
+        /**
+         * Only usage by direct members of this team.
+         */
+        teamId?: string;
+        limit?: number;
+        offset?: number;
+        /**
+         * Comma-separated dimensions to group by: day, skillId, userId. Defaults to skillId.
+         */
+        groupBy?: Array<'day' | 'skillId' | 'userId'>;
+        skillId?: string;
+    };
+    url: '/api/statistics/skill-usage';
+};
+
+export type GetSkillUsageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetSkillUsageError = GetSkillUsageErrors[keyof GetSkillUsageErrors];
+
+export type GetSkillUsageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            /**
+             * UTC calendar day (YYYY-MM-DD). Present when grouped by day.
+             */
+            day?: string;
+            skillId?: string;
+            skillName?: string;
+            /**
+             * Who made the calls. Null for usage without a resolved user. Present when grouped by userId.
+             */
+            userId?: string | null;
+            userName?: string | null;
+            activations: number;
+            /**
+             * Tokens the activations added to the model's context.
+             */
+            contextTokens: number;
+            /**
+             * Distinct people who activated a skill.
+             */
+            users: number;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+        totals: {
+            activations: number;
+            /**
+             * Tokens the activations added to the model's context.
+             */
+            contextTokens: number;
+            /**
+             * Distinct people who activated a skill.
+             */
+            users: number;
+        };
+    };
+};
+
+export type GetSkillUsageResponse = GetSkillUsageResponses[keyof GetSkillUsageResponses];
+
 export type GetTeamsData = {
     body?: never;
     path?: never;
@@ -114421,6 +114914,7 @@ export type GetAllVirtualApiKeysResponses = {
             organizationId: string;
             name: string;
             keyType: 'standard' | 'passthrough';
+            includeFutureProviders: boolean;
             secretId: string;
             tokenStart: string;
             scope: 'personal' | 'team' | 'org';
@@ -114481,6 +114975,7 @@ export type CreateVirtualApiKeyData = {
         name: string;
         keyType?: 'standard' | 'passthrough';
         expiresAt?: unknown;
+        includeFutureProviders?: boolean;
         providerApiKeys?: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             providerApiKeyId: string;
@@ -114599,6 +115094,7 @@ export type CreateVirtualApiKeyResponses = {
         organizationId: string;
         name: string;
         keyType: 'standard' | 'passthrough';
+        includeFutureProviders: boolean;
         secretId: string;
         tokenStart: string;
         scope: 'personal' | 'team' | 'org';
@@ -114820,6 +115316,7 @@ export type GetVirtualApiKeyResponses = {
         organizationId: string;
         name: string;
         keyType: 'standard' | 'passthrough';
+        includeFutureProviders: boolean;
         secretId: string;
         tokenStart: string;
         scope: 'personal' | 'team' | 'org';
@@ -114871,6 +115368,7 @@ export type UpdateVirtualApiKeyData = {
         name: string;
         keyType?: 'standard' | 'passthrough';
         expiresAt?: unknown;
+        includeFutureProviders?: boolean;
         providerApiKeys?: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             providerApiKeyId: string;
@@ -114971,6 +115469,7 @@ export type UpdateVirtualApiKeyResponses = {
         organizationId: string;
         name: string;
         keyType: 'standard' | 'passthrough';
+        includeFutureProviders: boolean;
         secretId: string;
         tokenStart: string;
         scope: 'personal' | 'team' | 'org';

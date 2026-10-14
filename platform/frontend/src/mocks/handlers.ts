@@ -553,6 +553,8 @@ export const handlers: HttpHandler[] = [
 
   // Skills (list page, the "new skill" chooser, and the GitHub import dialog)
   ...getJson("/api/skills", skillsListSeed),
+  ...getJson("/api/skills/plugins", []),
+  ...getJson("/api/plugins", []),
   ...paths("/api/skills/:id").map((url) =>
     http.get(url, ({ params }) =>
       HttpResponse.json(makeSkillDetail(String(params.id))),

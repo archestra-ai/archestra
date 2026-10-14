@@ -1195,7 +1195,7 @@ describe("ConnectCommandPanel", () => {
     );
   });
 
-  it("still generates non-plugin setup sections when config loading fails", async () => {
+  it("generates plugin setup when config loading fails", async () => {
     vi.mocked(useConfig).mockReturnValue({
       data: undefined,
       isPending: false,
@@ -1205,7 +1205,7 @@ describe("ConnectCommandPanel", () => {
 
     await waitFor(() =>
       expect(createSetupMock).toHaveBeenCalledWith(
-        expect.objectContaining({ pluginIds: [] }),
+        expect.objectContaining({ pluginIds: ["b1"] }),
       ),
     );
     expect(await screen.findByText(COMMAND)).toBeInTheDocument();

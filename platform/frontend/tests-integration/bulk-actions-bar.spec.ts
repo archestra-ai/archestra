@@ -222,7 +222,10 @@ test.describe("Bulk actions bar", () => {
     await expect(page.getByTestId("skills-bulk-selection-count")).toHaveText(
       "1 skill selected",
     );
-    await page.getByRole("button", { name: "Clear", exact: true }).click();
+    await page
+      .locator('[data-slot="bulk-actions-bar"]')
+      .getByRole("button", { name: "Clear", exact: true })
+      .click();
     await expect(page.getByTestId("skills-bulk-selection-count")).toHaveText(
       "0 skills selected",
     );

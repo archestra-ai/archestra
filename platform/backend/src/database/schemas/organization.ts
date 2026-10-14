@@ -22,6 +22,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   ConnectionBaseUrl,
+  ConnectionClientFutureProviders,
   ConnectionClientProviderKeys,
   LimitCleanupInterval,
   NetworkPolicy,
@@ -312,6 +313,9 @@ const organizationsTable = pgTable("organization", {
    * client or provider with no entry falls back to the user's own key
    * resolution.
    */
+  connectionClientFutureProviders: jsonb(
+    "connection_client_future_providers",
+  ).$type<ConnectionClientFutureProviders>(),
   connectionClientProviderKeys: jsonb(
     "connection_client_provider_keys",
   ).$type<ConnectionClientProviderKeys>(),

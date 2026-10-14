@@ -1019,5 +1019,48 @@ describe("scoped virtual key grants", () => {
       expect(response.json().error.message).toContain("cannot be shared");
     }
   });
+  test("requires organization-wide provider access to enable future providers", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const admin = user;
+    user = await makeUser();
+    await makeMember(user.id, organizationId, { role: "member" });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "automatic",
+        includeFutureProviders: true,
+        providerApiKeys: [],
+      },
+    });
+    expect(response.statusCode).toBe(403);
+    user = admin;
+    const allowed = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "automatic",
+        includeFutureProviders: true,
+        providerApiKeys: [],
+      },
+    });
+    expect(allowed.statusCode).toBe(200);
+    expect(allowed.json()).toMatchObject({
+      includeFutureProviders: true,
+      providerApiKeys: [],
+    });
+    const passthrough = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "invalid",
+        keyType: "passthrough",
+        includeFutureProviders: true,
+      },
+    });
+    expect(passthrough.statusCode).toBe(400);
+  });
 });
 // SPDX-SnippetEnd

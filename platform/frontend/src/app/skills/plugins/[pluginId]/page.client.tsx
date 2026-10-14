@@ -4,7 +4,6 @@ import { Puzzle } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { PageLayout } from "@/components/page-layout";
-import { Badge } from "@/components/ui/badge";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { usePluginSkill } from "@/lib/skills/skill.query";
@@ -29,12 +28,7 @@ export function PluginSkillPage({ pluginId }: { pluginId: string }) {
 
   return (
     <PageLayout
-      title={
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="truncate">{skill.name}</span>
-          <Badge variant="secondary">Beta</Badge>
-        </div>
-      }
+      title={skill.name}
       description={skill.description}
       backLink={<SkillBackLink href="/skills" label="Skills" />}
     >

@@ -165,11 +165,9 @@ export function TimeRangePicker({
                 )}
               >
                 <Clock className="size-3.5 shrink-0 text-muted-foreground" />
-                {/* One width for every label, so picking a range never moves
-                    the arrows; a longer typed range is cut short, and its
-                    times show in the tooltip. On a phone the arrows, zoom and
-                    reset hide, so the picker fits beside a page title. */}
-                <span className="w-24 truncate text-left sm:w-32">{label}</span>
+                {/* Fit preset labels closely; cap long custom ranges and show
+                    their exact times in the tooltip. */}
+                <span className="max-w-52 truncate text-left">{label}</span>
                 <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
               </Button>
             </PopoverTrigger>
@@ -177,10 +175,12 @@ export function TimeRangePicker({
           <TooltipContent>{exactTimes}</TooltipContent>
         </Tooltip>
         <PopoverContent
-          align="start"
-          className="w-[min(40rem,calc(100vw-2rem))] p-0"
+          align="end"
+          sideOffset={8}
+          collisionPadding={24}
+          className="w-[min(32rem,calc(100vw-3rem))] p-0"
         >
-          <div className="grid sm:grid-cols-[minmax(0,1fr)_14rem]">
+          <div className="grid sm:grid-cols-[minmax(0,1fr)_12rem]">
             <form
               onSubmit={applyTyped}
               className="flex flex-col gap-3 p-4"
@@ -248,12 +248,12 @@ export function TimeRangePicker({
                   type="search"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search quick ranges"
+                  placeholder="Search presets"
                   aria-label="Search quick ranges"
                   className="h-8 pl-8 text-sm"
                 />
               </div>
-              <ul className="flex max-h-80 flex-col overflow-y-auto">
+              <ul className="flex max-h-64 flex-col overflow-y-auto">
                 {shownRanges.map((range) => (
                   <li key={range.label}>
                     <QuickRangeButton

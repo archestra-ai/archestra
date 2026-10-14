@@ -547,4 +547,57 @@ describe("Connection setup primary providers", () => {
       expect((await order())[0]).toBe("openai");
     });
   });
+  test("Connect defaults apply to new keys and never switch the mode of an existing token", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id);
+    const secret = await makeSecret();
+    await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+      isPrimary: true,
+    });
+    const params = {
+      ...setupOptions,
+      organizationId: org.id,
+      userId: user.id,
+      userTeamIds: [],
+    };
+    const fixed = await ensurePrimaryProviderKey(params);
+    const reused = await ensurePrimaryProviderKey({
+      ...params,
+      includeFutureProviders: true,
+    });
+    expect(reused.virtualApiKeyId).toBe(fixed.virtualApiKeyId);
+    expect(
+      await VirtualApiKeyModel.findById(fixed.virtualApiKeyId),
+    ).toMatchObject({ includeFutureProviders: false });
+    const automatic = await ensurePrimaryProviderKey({
+      ...params,
+      keyName: "Automatic Connect",
+      includeFutureProviders: true,
+    });
+    expect(
+      await VirtualApiKeyModel.getProviderApiKeys(automatic.virtualApiKeyId),
+    ).toEqual([]);
+    expect(
+      await VirtualApiKeyModel.findById(automatic.virtualApiKeyId),
+    ).toMatchObject({ includeFutureProviders: true });
+    await ensurePrimaryProviderKey({
+      ...params,
+      keyName: "Automatic Connect",
+      includeFutureProviders: false,
+    });
+    expect(
+      await VirtualApiKeyModel.findById(automatic.virtualApiKeyId),
+    ).toMatchObject({ includeFutureProviders: true });
+    expect(
+      await VirtualApiKeyModel.getProviderApiKeys(automatic.virtualApiKeyId),
+    ).toEqual([]);
+  });
 });

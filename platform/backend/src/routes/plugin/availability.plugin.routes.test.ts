@@ -4,15 +4,16 @@ import { test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
 import pluginRoutes from "./plugin.routes";
 
-describe("plugin feature gate", () => {
+describe("plugins with beta disabled", () => {
   const ctx = useRouteTestApp(pluginRoutes);
 
-  test("returns not found while the deployment gate is off", async () => {
-    config.plugins.enabled = false;
+  test("lists plugins while beta is off", async () => {
+    config.beta = false;
     const response = await ctx.app.inject({
       method: "GET",
       url: "/api/plugins",
     });
-    expect(response.statusCode).toBe(404);
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual([]);
   });
 });

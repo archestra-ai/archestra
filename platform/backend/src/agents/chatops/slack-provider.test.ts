@@ -93,6 +93,104 @@ function makeEventPayload(
   };
 }
 
+// Slack's composer represents quotes and mentions as rich-text elements.
+// Generic data mirrors a quoted report followed by a task request.
+const QUOTED_REPORT =
+  "A user outside the support team is routed to its server.";
+const QUOTE_REQUEST = " create a task from the report above";
+const QUOTED_BLOCKS = [
+  {
+    type: "rich_text",
+    elements: [
+      {
+        type: "rich_text_quote",
+        elements: [{ type: "text", text: QUOTED_REPORT }],
+      },
+      {
+        type: "rich_text_section",
+        elements: [
+          { type: "user", user_id: "UBOT123" },
+          { type: "text", text: QUOTE_REQUEST },
+        ],
+      },
+    ],
+  },
+];
+
+describe("SlackProvider quoted message content", () => {
+  test.each([
+    undefined,
+    "",
+    "   ",
+  ])("keeps the quoted report and request when fallback text is %j", async (text) => {
+    const provider = createProvider();
+    const result = await provider.parseWebhookNotification(
+      makeEventPayload(
+        {},
+        {
+          text,
+          blocks: QUOTED_BLOCKS,
+        },
+      ),
+      {},
+    );
+    expect(result?.text).toContain(QUOTED_REPORT);
+    expect(result?.text).toContain(QUOTE_REQUEST.trim());
+  });
+
+  test("a mention in rich text activates message events and keeps follow-ups addressed", async () => {
+    const provider = createProvider();
+    const root = makeEventPayload(
+      {},
+      { type: "message", text: undefined, blocks: QUOTED_BLOCKS },
+    );
+    const result = await provider.parseWebhookNotification(root, {});
+    expect(result?.text).toContain(QUOTED_REPORT);
+    expect(result?.metadata?.botMentioned).toBe(true);
+    expect(
+      await provider.parseWebhookNotification(
+        makeEventPayload(
+          {},
+          {
+            type: "message",
+            text: "see the report above",
+            thread_ts: root.event.ts,
+          },
+        ),
+        {},
+      ),
+    ).not.toBeNull();
+  });
+
+  test("thread history retains a rich-text quoted root for a plain-text follow-up", async () => {
+    const provider = createProvider();
+    // biome-ignore lint/suspicious/noExplicitAny: inject the Slack API boundary
+    (provider as any).client = {
+      conversations: {
+        replies: vi.fn().mockResolvedValue({
+          messages: [
+            {
+              ts: "1234567890.123456",
+              user: "U_SENDER",
+              blocks: QUOTED_BLOCKS,
+            },
+            { ts: "1234567890.123457", user: "U_SENDER", text: "see above" },
+          ],
+        }),
+      },
+    };
+    const history = await provider.getThreadHistory({
+      channelId: "C12345",
+      workspaceId: "T12345",
+      threadId: "1234567890.123456",
+      excludeMessageId: "1234567890.123457",
+    });
+    expect(history).toHaveLength(1);
+    expect(history[0]?.text).toContain(QUOTED_REPORT);
+    expect(history[0]?.text).toContain(QUOTE_REQUEST.trim());
+  });
+});
+
 // =============================================================================
 // validateWebhookRequest
 // =============================================================================

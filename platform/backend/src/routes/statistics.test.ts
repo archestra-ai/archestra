@@ -1515,3 +1515,124 @@ describe("GET /api/statistics/me/breakdown", () => {
     });
   });
 });
+
+describe("GET /api/statistics/mcp-tool-calls", () => {
+  let app: FastifyInstanceWithZod;
+  let currentUser: User;
+  let organizationId: string;
+
+  beforeEach(async ({ makeAdmin, makeOrganization, makeMember }) => {
+    currentUser = await makeAdmin();
+    organizationId = (await makeOrganization()).id;
+    await makeMember(currentUser.id, organizationId, { role: "admin" });
+    vi.mocked(hasPermission).mockResolvedValue({
+      success: true,
+    } as Awaited<ReturnType<typeof hasPermission>>);
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (request as typeof request & { user: User }).user = currentUser;
+      (request as typeof request & { organizationId: string }).organizationId =
+        organizationId;
+    });
+    const { default: statisticsRoutes } = await import("./statistics");
+    await app.register(statisticsRoutes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  async function seedCalls(
+    agentId: string,
+    calls: Array<{ userId: string; name: string }>,
+  ) {
+    const { McpToolCallModel } = await import("@/models");
+    for (const call of calls) {
+      await McpToolCallModel.create({
+        agentId,
+        mcpServerName: "github",
+        method: "tools/call",
+        toolCall: { id: randomUUID(), name: call.name, arguments: {} },
+        toolResult: { content: [], isError: false },
+        userId: call.userId,
+        authMethod: null,
+        createdAt: new Date("2026-10-01T12:00:00Z"),
+      });
+    }
+  }
+
+  const RANGE = "custom:2026-09-30T00:00:00.000Z_2026-10-02T00:00:00.000Z";
+
+  test("groups by a comma-separated dimension list", async ({
+    makeAgent,
+    makeUser,
+  }) => {
+    const agent = await makeAgent({ organizationId });
+    const someone = await makeUser();
+    await seedCalls(agent.id, [
+      { userId: someone.id, name: "github__search_code" },
+      { userId: someone.id, name: "github__search_code" },
+      { userId: currentUser.id, name: "github__create_pull_request" },
+    ]);
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/statistics/mcp-tool-calls?timeframe=${RANGE}&groupBy=day,toolName`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      data: [
+        {
+          day: "2026-10-01",
+          toolName: "github__search_code",
+          calls: 2,
+          errors: 0,
+        },
+        {
+          day: "2026-10-01",
+          toolName: "github__create_pull_request",
+          calls: 1,
+          errors: 0,
+        },
+      ],
+      totals: { calls: 3, errors: 0 },
+      pagination: { total: 2 },
+    });
+  });
+
+  test("shows only the caller's own calls without member:read", async ({
+    makeAgent,
+    makeUser,
+  }) => {
+    vi.mocked(hasPermission).mockResolvedValue({
+      success: false,
+    } as Awaited<ReturnType<typeof hasPermission>>);
+    const agent = await makeAgent({ organizationId });
+    const someone = await makeUser();
+    await seedCalls(agent.id, [
+      { userId: someone.id, name: "github__search_code" },
+      { userId: currentUser.id, name: "github__search_code" },
+    ]);
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/statistics/mcp-tool-calls?timeframe=${RANGE}&groupBy=userId`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toEqual([
+      expect.objectContaining({ userId: currentUser.id, calls: 1 }),
+    ]);
+  });
+
+  test("rejects a dimension the endpoint does not support", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/statistics/mcp-tool-calls?groupBy=day,model",
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
+});

@@ -26,7 +26,7 @@ import {
 } from "@/test";
 
 beforeEach(() => {
-  config.plugins.enabled = true;
+  config.beta = false;
 });
 
 async function seedSkill(params: {

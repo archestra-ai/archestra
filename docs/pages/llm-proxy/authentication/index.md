@@ -41,10 +41,10 @@ The request shows under **Logs → LLM Proxy**, with the key's name.
 
 <span id="provider-matching"></span>
 
-- The key needs a mapping for the route's provider. An OpenAI route needs an OpenAI key. On the [Model Router](/docs/llm-proxy/model-router), the model's prefix picks the mapping.
-- Self-hosted providers can map several endpoints. Archestra sends each request to the endpoint that serves the model.
+- With **Selected providers**, the key needs a mapping for the route's provider. An OpenAI route needs an OpenAI key. On the [Model Router](/docs/llm-proxy/model-router), the model's prefix picks the mapping.
+- Self-hosted providers can map several endpoints. Archestra sends each request to the endpoint that serves the model. You can edit a virtual key to add providers or endpoints without changing its token.
+- Choose **Current and future providers** to automatically use each provider's shared **Primary** API key, including providers added later. Personal and subscription keys are excluded. You can optionally select a different key for an existing provider. Connect settings apply this option to newly issued keys.
 - **To share a key** with a team, add the team under its permissions, when you create the key or later.
-- Admins can create a key on behalf of another member by picking its owner. The owner can reveal the key.
 - To bill a team, pick it as the payer. The key's spend then counts toward that team's [costs](/docs/llm-proxy/costs-and-limits#track-spending) and [limits](/docs/llm-proxy/costs-and-limits#set-a-budget), not its creator's. A spend cap there limits the key itself.
 
 <span id="creating-passthrough-virtual-keys"></span><span id="configuring-claude-code-and-claude-desktop"></span>

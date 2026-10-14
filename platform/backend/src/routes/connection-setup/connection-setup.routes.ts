@@ -68,6 +68,7 @@ import {
   readVirtualKeyValue,
 } from "@/services/connection-setup";
 import { ResourcePermissions } from "@/services/resource-permissions";
+import { resolveVirtualKeyProviderMappings } from "@/services/virtual-key-providers";
 import {
   isReservedMarketplaceName,
   resolvePluginName,
@@ -511,6 +512,9 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
               keyName: multiProviderKey.keyName,
               supportedProviders: INSTALLER_CLIENT_KEY_PROVIDERS[clientId],
               mappedKeys,
+              includeFutureProviders:
+                organization.connectionClientFutureProviders?.[clientId] ??
+                false,
               organizationId,
               userId: user.id,
               userTeamIds: await TeamModel.getUserTeamIds(user.id),
@@ -524,6 +528,9 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 userTeamIds: await TeamModel.getUserTeamIds(user.id),
                 provider,
                 clientId,
+                includeFutureProviders:
+                  organization.connectionClientFutureProviders?.[clientId] ??
+                  false,
                 preferredProviderKeyId:
                   mappedKeys?.find((key) => key.provider === provider)
                     ?.providerApiKeyId ?? null,
@@ -594,9 +601,6 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
         if (uniqueIds.length > 0) {
           assertConnectPluginsEnabled(organization);
-          if (!config.plugins.enabled) {
-            throw new ApiError(404, "Plugins are not enabled");
-          }
           const canDeliverPlugins = await userCanDeliverPlugins({
             userId: user.id,
             organizationId,
@@ -638,7 +642,6 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       } else if (
         !isOpenCodeFamilyClient(clientId) &&
-        config.plugins.enabled &&
         organization.connectionPluginsEnabled
       ) {
         const canDeliverPlugins = await userCanDeliverPlugins({
@@ -1282,7 +1285,6 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
   let pluginNames: string[] = [];
   if (pluginIds.length > 0) {
     assertConnectPluginsEnabledOrGone(organization);
-    if (!config.plugins.enabled) throw GONE();
     const canDeliverPlugins = await userCanDeliverPlugins({
       userId: setup.userId,
       organizationId: setup.organizationId,
@@ -1687,7 +1689,7 @@ async function getCursorModels(params: {
   virtualApiKeyId: string;
   defaultModelId: string | null;
 }): Promise<{ ids: string[]; defaultId: string | null }> {
-  const mappings = await VirtualApiKeyModel.getProviderApiKeysForRouting(
+  const mappings = await resolveVirtualKeyProviderMappings(
     params.virtualApiKeyId,
   );
   const models = await listRoutableModels({

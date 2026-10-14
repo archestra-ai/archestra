@@ -62,7 +62,6 @@ import { prefetchApps } from "@/lib/app.query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
-import { useFeature } from "@/lib/config/config.query";
 import { useDocsScreenshotMode } from "@/lib/docs-screenshot-mode";
 import { useGithubStars } from "@/lib/github/github.query";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
@@ -525,7 +524,6 @@ export function AppSidebar() {
     mcpGateway: ["read"],
   });
   const showConnect = Boolean(canReadMcpGateway || canReadLlmProxy);
-  const pluginsEnabled = useFeature("plugins");
   const { data: guardrailsDeployment } = useGuardrailsDeployment();
 
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
@@ -558,7 +556,6 @@ export function AppSidebar() {
       contentNavGroups.map((group) => ({
         ...group,
         items: group.items
-          .filter((item) => item.url !== "/plugins" || pluginsEnabled === true)
           // Costs & Limits is one row over two pages, so it has to choose
           // which one it opens: a reader who may read limits but not costs
           // would otherwise land on a page they cannot see.
@@ -596,7 +593,7 @@ export function AppSidebar() {
             return item;
           }),
       })),
-    [pluginsEnabled, guardrailsDeployment?.enabled, permissionMap],
+    [guardrailsDeployment?.enabled, permissionMap],
   );
 
   return (

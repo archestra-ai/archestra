@@ -906,9 +906,8 @@ const SKILL_RUNTIME_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set(
 );
 
 /**
- * Plugin management tools. Never auto-assigned: the whole group follows the
- * `plugins` deployment beta flag (see `config.plugins.enabled`), stays out of
- * the default seed sets, and is reached through manual assignment or the
+ * Plugin management tools. Never auto-assigned: the group stays out of
+ * the default seed sets and is reached through manual assignment or the
  * search_tools/run_tool dynamic surface.
  */
 export const PLUGIN_ARCHESTRA_TOOL_SHORT_NAMES = [

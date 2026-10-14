@@ -31,6 +31,7 @@ import { setCollectedDelegationMarkers } from "@/routes/proxy/utils/delegation-m
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
+import { resolveVirtualKeyProviderMappings } from "@/services/virtual-key-providers";
 import type { GatewayAgent, LLMProvider } from "@/types";
 import {
   ApiError,
@@ -911,7 +912,7 @@ async function getModelRouterAuth(
   });
   try {
     const resolved = await validateVirtualApiKeyToken(bearerToken);
-    const mappings = await VirtualApiKeyModel.getProviderApiKeysForRouting(
+    const mappings = await resolveVirtualKeyProviderMappings(
       resolved.virtualKey.id,
     );
     if (mappings.length === 0) {

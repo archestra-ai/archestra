@@ -79,7 +79,7 @@ Archestra reads its configuration from environment variables. Pass them with `-e
 - **`ARCHESTRA_BETA`** - Turns on beta features.
   - Default: `false`
   - Values: `true`, `false`
-  - Turns on plugins directly. Guardrails and Agent Runtime do not use this switch.
+  - Plugins, Guardrails, and Agent Runtime do not use this switch.
   - Also turns on [`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED`](/docs/reference/configuration#ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED) when it is left blank. Set to `false`, it stays off.
 
 - **`ARCHESTRA_QUICKSTART`** - Runs MCP servers in a small Kubernetes (KinD) cluster inside the Docker container.

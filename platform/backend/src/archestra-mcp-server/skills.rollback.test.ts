@@ -566,7 +566,7 @@ describe("skill tool execution", () => {
   });
 
   test("list_skills and load_skill activate a plugin skill without copying it", async () => {
-    config.plugins.enabled = true;
+    config.beta = false;
     const input: CreatePlugin = {
       displayName: "Portable bundle",
       description: "Portable skills",
@@ -721,7 +721,7 @@ describe("skill tool execution", () => {
   });
 
   test("suffixes a plugin skill name when a native skill uses it", async () => {
-    config.plugins.enabled = true;
+    config.beta = false;
     await seedSkill({
       skill: {
         name: "release-guide",
@@ -776,7 +776,7 @@ describe("skill tool execution", () => {
   });
 
   test("uses the XML-safe listed name to load a projected skill", async () => {
-    config.plugins.enabled = true;
+    config.beta = false;
     const plugin = await PluginModel.create({
       ...accessGrants("org"),
       organizationId,
@@ -836,7 +836,7 @@ describe("skill tool execution", () => {
   });
 
   test("assigns duplicate projected names by stable source identity", async () => {
-    config.plugins.enabled = true;
+    config.beta = false;
     const plugin = await PluginModel.create({
       ...accessGrants("org"),
       organizationId,
@@ -879,7 +879,7 @@ describe("skill tool execution", () => {
   });
 
   test("keeps legacy references ahead of colliding projected names", async () => {
-    config.plugins.enabled = true;
+    config.beta = false;
     const original = await PluginModel.create({
       ...accessGrants("org"),
       organizationId,

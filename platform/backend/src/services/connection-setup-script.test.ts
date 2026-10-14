@@ -56,6 +56,7 @@ describe.each([
             model: "gpt-5",
             mcp_servers: {
               docs: { url: "https://docs.example.com/mcp" },
+              "MY-GATEWAY": { url: "https://other.example.com/mcp" },
               [serverName]: { url: MCP.url, required: true },
             },
             model_providers: { custom: { name: "custom" } },
@@ -111,7 +112,7 @@ async function withCodexConfig(
     await Promise.all([home, bin, codexHome].map((dir) => mkdir(dir)));
     await writeFile(
       configPath,
-      'model = "gpt-5"\n\n[mcp_servers.docs]\nurl = "https://docs.example.com/mcp"\n\n[model_providers.custom]\nname = "custom"\n\n[features]\nshell_tool = true\n',
+      'model = "gpt-5"\n\n[mcp_servers.docs]\nurl = "https://docs.example.com/mcp"\n\n[mcp_servers.MY-GATEWAY]\nurl = "https://other.example.com/mcp"\n\n[model_providers.custom]\nname = "custom"\n\n[features]\nshell_tool = true\n',
       { mode: 0o600 },
     );
     const cliPath = path.join(bin, "codex");

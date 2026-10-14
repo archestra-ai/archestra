@@ -114,6 +114,7 @@ export function useMcpToolCalls({
       limit === DEFAULT_TABLE_LIMIT &&
       !agentId &&
       !mcpServerName &&
+      !userId &&
       !startDate &&
       !endDate
         ? initialData

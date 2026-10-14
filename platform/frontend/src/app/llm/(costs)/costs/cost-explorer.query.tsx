@@ -167,6 +167,50 @@ export function useUserUsageWithSeries({
   });
 }
 
+export function useAppCostAttribution({
+  timeframe,
+  enabled,
+}: {
+  timeframe: StatisticsTimeFrame;
+  enabled: boolean;
+}) {
+  return useQuery({
+    queryKey: ["cost-attribution", "getAppStatistics", timeframe],
+    queryFn: () =>
+      collectPages(async (offset) => {
+        const { data, error } = await archestraApiSdk.getAppStatistics({
+          query: { timeframe, limit: 100, offset },
+        });
+        throwOnApiError(error, { toastOnError: false });
+        if (!data) throw new Error("No attribution response received");
+        return data;
+      }),
+    enabled,
+  });
+}
+
+export function useSkillCostAttribution({
+  timeframe,
+  enabled,
+}: {
+  timeframe: StatisticsTimeFrame;
+  enabled: boolean;
+}) {
+  return useQuery({
+    queryKey: ["cost-attribution", "getSkillStatistics", timeframe],
+    queryFn: () =>
+      collectPages(async (offset) => {
+        const { data, error } = await archestraApiSdk.getSkillStatistics({
+          query: { timeframe, limit: 100, offset },
+        });
+        throwOnApiError(error, { toastOnError: false });
+        if (!data) throw new Error("No attribution response received");
+        return data;
+      }),
+    enabled,
+  });
+}
+
 /** Fetch every group without exceeding the endpoint's per-request limit. */
 async function collectPages<
   T extends {

@@ -201,7 +201,10 @@ export default function CostExplorer() {
         ))}
       </div>
 
-      <section className="overflow-hidden rounded-xl border bg-card">
+      <section
+        aria-label="Cost explorer"
+        className="overflow-hidden rounded-xl border bg-card"
+      >
         {/* Query bar */}
         <div className="flex flex-wrap items-center gap-2 border-b bg-muted/30 px-3 py-2.5">
           <QueryChip
@@ -310,6 +313,9 @@ export default function CostExplorer() {
 
           {attributionNote && (
             <p className="text-xs text-muted-foreground">{attributionNote}</p>
+          )}
+          {cube.notice && (
+            <p className="text-xs text-muted-foreground">{cube.notice}</p>
           )}
           <MetricNote
             caution={metric.caution}

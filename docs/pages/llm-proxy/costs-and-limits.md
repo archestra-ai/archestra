@@ -29,8 +29,8 @@ Go to **Costs & Limits → Costs** and pick a timeframe. You need [`llmCost:read
 3. Use **Copy as CSV** to export the result. The API call below the table identifies the source endpoint.
 
 - Subscription estimates value usage at equivalent API rates. They exclude subscription fees and are not a bill.
-- App opens and tool calls measure activity. Inference costs belong to requests attributed to app sessions; opening an app does not itself imply inference.
-- Skills show activations, context tokens, and distinct people. Access to app and skill breakdowns follows their resource permissions. Other people's usage also requires access to the member list.
+- App opens and tool calls measure activity. The app spend view includes build and runtime costs, marks shared build sessions, and compares runtime usage with the chat-equivalent estimate. Opening an app does not itself imply inference.
+- Skills show activations, context tokens, distinct people, and attributed turn spend. Skill spend can overlap when several skills share a turn; partial context measurements are marked. Access to app and skill breakdowns follows their resource permissions. Other people's usage also requires access to the member list.
 
 <span id="proxy-cost-attribution"></span><span id="per-user-usage"></span><span id="per-app-cost"></span><span id="per-skill-cost"></span><span id="attributing-external-proxy-traffic"></span>
 

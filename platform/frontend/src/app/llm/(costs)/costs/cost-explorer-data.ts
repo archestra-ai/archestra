@@ -24,7 +24,9 @@ import {
   formatInt,
   type SkillUsageDimension,
   type ToolCallUsageDimension,
+  useAppCostAttribution,
   useAppUsage,
+  useSkillCostAttribution,
   useSkillUsage,
   useToolCallUsage,
   useUserUsageWithSeries,
@@ -239,11 +241,23 @@ export function bucketFormatter(buckets: string[]) {
   const step =
     buckets.length > 1 ? parse(buckets[1]) - parse(buckets[0]) : 86_400_000;
   const daily = step >= 86_400_000;
+  const multipleDays = buckets.some(
+    (bucket) =>
+      new Date(parse(bucket)).toISOString().slice(0, 10) !==
+      new Date(parse(buckets[0])).toISOString().slice(0, 10),
+  );
   const fmt = new Intl.DateTimeFormat(
     "en-US",
     daily
       ? { month: "short", day: "numeric", timeZone: "UTC" }
-      : { hour: "2-digit", minute: "2-digit" },
+      : {
+          ...(multipleDays
+            ? { month: "short" as const, day: "numeric" as const }
+            : {}),
+          hour: "2-digit",
+          minute: "2-digit",
+          timeZone: "UTC",
+        },
   );
   return (b: string) => fmt.format(parse(b));
 }
@@ -306,6 +320,7 @@ export type Cube = {
   api: string;
   isLoading: boolean;
   error?: unknown;
+  notice?: string;
   retry: () => void;
   total: number;
 };
@@ -332,7 +347,23 @@ export function usePivotCube(
     enabled: on("app"),
     limit: 100,
   };
-  const appQ = useAppUsage(appArgs);
+  const appCosts =
+    src.kind === "app" &&
+    q.group === "app" &&
+    q.metric === "billed" &&
+    q.split === "none";
+  const appQ = useAppUsage({
+    ...appArgs,
+    enabled: appArgs.enabled && !appCosts,
+  });
+  const appCostQ = useAppCostAttribution({
+    timeframe,
+    enabled: enabled && appCosts,
+  });
+  const skillCostQ = useSkillCostAttribution({
+    timeframe,
+    enabled: on("skill") && q.group === "skill",
+  });
   const skillArgs = {
     timeframe,
     groupBy:
@@ -395,7 +426,9 @@ export function usePivotCube(
       src.kind === "tool"
         ? toolQ
         : src.kind === "app"
-          ? appQ
+          ? appCosts
+            ? appCostQ
+            : appQ
           : src.kind === "skill"
             ? skillQ
             : src.kind === "team"
@@ -410,7 +443,9 @@ export function usePivotCube(
     const failed = [
       primary,
       ...(src.kind === "proxy" ? itemQs : []),
-      ...(src.kind === "skill" && q.group === "skill" ? [skillReachQ] : []),
+      ...(src.kind === "skill" && q.group === "skill"
+        ? [skillReachQ, skillCostQ]
+        : []),
     ].find((query) => query.isError);
     const base = {
       api: apiFor(src, tf, q),
@@ -419,7 +454,10 @@ export function usePivotCube(
       retry: () => {
         void primary.refetch();
         for (const query of itemQs) void query.refetch();
-        if (src.kind === "skill") void skillReachQ.refetch();
+        if (src.kind === "skill") {
+          void skillReachQ.refetch();
+          void skillCostQ.refetch();
+        }
       },
     };
     switch (src.kind) {
@@ -459,6 +497,52 @@ export function usePivotCube(
         };
       }
       case "app": {
+        if (appCosts) {
+          const rows = appCostQ.data?.data ?? [];
+          const facts: Fact[] = rows.map((row) => ({
+            g: row.appId,
+            gLabel: row.appName,
+            gSub: row.authorName ?? undefined,
+            gTag: !row.hasBuildSession
+              ? "No recorded build session"
+              : row.buildSessionAppCount > 1
+                ? `Shared build session · ${row.buildSessionAppCount} apps`
+                : undefined,
+            b: "",
+            v: row.buildCost + row.runtimeCost,
+            extra: {
+              build: row.hasBuildSession ? row.buildCost : -1,
+              runtime: row.runtimeCost,
+              chat: row.estimatedChatEquivalentCost,
+              savings: row.estimatedNetSavings,
+            },
+          }));
+          return {
+            ...assemble(facts),
+            ...base,
+            api: `GET /api/statistics/apps?timeframe=${tf}`,
+            isLoading: appCostQ.isLoading,
+            notice: `Build cost belongs to the authoring session and may be shared by several apps. Runtime cost is the app's own inference. Chat-equivalent estimates use the measured average of ${formatCost(appCostQ.data?.chatBaselineCostPerSession ?? 0)} across ${appCostQ.data?.chatBaselineSessions ?? 0} chat sessions.`,
+            extraCols: [
+              {
+                id: "build",
+                label: "Build spend",
+                format: (value) => (value < 0 ? "—" : formatCost(value)),
+              },
+              { id: "runtime", label: "Runtime spend", format: formatCost },
+              {
+                id: "chat",
+                label: "Chat-equivalent estimate",
+                format: formatCost,
+              },
+              {
+                id: "savings",
+                label: "Estimated net savings",
+                format: formatCost,
+              },
+            ],
+          };
+        }
         const rows = appQ.data?.data ?? [];
         const pick = (r: (typeof rows)[number]) =>
           metric === "billed"
@@ -513,16 +597,44 @@ export function usePivotCube(
         });
         const cube = assemble(facts);
         if (q.group === "skill") {
-          for (const row of cube.rows)
+          const attribution = new Map(
+            (skillCostQ.data?.data ?? []).map((row) => [row.skillId, row]),
+          );
+          for (const row of cube.rows) {
             row.extras.people = reach.get(row.key) ?? 0;
+            const context = attribution.get(row.key);
+            if (context) {
+              row.extras.turnSpend = context.attributedCost;
+              row.extras.turnRequests = context.attributedRequests;
+              if (context.measuredActivations < context.activations)
+                row.tag = `${context.measuredActivations} of ${context.activations} context measurements`;
+            }
+          }
         }
         return {
           ...cube,
           ...base,
-          isLoading: skillQ.isLoading,
+          isLoading:
+            skillQ.isLoading || (q.group === "skill" && skillCostQ.isLoading),
+          notice:
+            q.group === "skill"
+              ? "Context tokens measure the skill's injected content. Attributed turn spend covers entire turns and can overlap with other skills; it is not an exclusive skill cost. The attribution source is GET /api/statistics/skills."
+              : undefined,
           extraCols:
             q.group === "skill"
-              ? [{ id: "people", label: "People", format: formatInt }]
+              ? [
+                  { id: "people", label: "People", format: formatInt },
+                  {
+                    id: "turnSpend",
+                    label: "Attributed turn spend",
+                    format: formatCost,
+                  },
+                  {
+                    id: "turnRequests",
+                    label: "Attributed requests",
+                    format: formatInt,
+                  },
+                ]
               : [],
         };
       }
@@ -536,6 +648,7 @@ export function usePivotCube(
                 label: t.teamName,
                 sub: `${t.members} members`,
                 series: t.timeSeries,
+                totals: t,
               }))
             : src.kind === "agent"
               ? (agentQ.data ?? []).map((a) => ({
@@ -543,12 +656,14 @@ export function usePivotCube(
                   label: a.agentName,
                   sub: a.teamName,
                   series: a.timeSeries,
+                  totals: a,
                 }))
               : (modelQ.data ?? []).map((m) => ({
                   key: m.model,
                   label: m.model,
                   sub: undefined,
                   series: m.timeSeries,
+                  totals: m,
                 }));
         const facts: Fact[] = list.flatMap((item) =>
           item.series.map((p) => ({
@@ -559,32 +674,69 @@ export function usePivotCube(
             v: pointValue(metric, p),
           })),
         );
+        const totals = new Map(
+          list.map((item) => [
+            item.key,
+            metric === "billed"
+              ? item.totals.cost
+              : metric === "subscription"
+                ? item.series.reduce(
+                    (total, point) => total + pointValue(metric, point),
+                    0,
+                  )
+                : pointValue(metric, item.totals),
+          ]),
+        );
+        const meta = new Map(
+          list.map((item) => [
+            item.key,
+            { g: item.key, gLabel: item.label, gSub: item.sub },
+          ]),
+        );
         const loading =
           src.kind === "team"
             ? teamQ.isLoading
             : src.kind === "agent"
               ? agentQ.isLoading
               : modelQ.isLoading;
-        return { ...assemble(facts), ...base, isLoading: loading };
+        return {
+          ...assemble(facts, { totals, meta }),
+          ...base,
+          isLoading: loading,
+        };
       }
       case "user": {
         const facts: Fact[] = (userQ.data?.data ?? []).flatMap((u) =>
           src.models
             ? (u.models ?? []).flatMap((m) =>
-                (m.timeSeries ?? []).map((p) => ({
+                (m.timeSeries?.length
+                  ? m.timeSeries
+                  : [{ ...m, timestamp: "" }]
+                ).map((p) => ({
                   g: u.userId,
                   gLabel: u.userName,
                   gSub: u.userEmail,
+                  gTag:
+                    u.billedCost === 0 && u.subscriptionCost > 0
+                      ? "Subscription usage"
+                      : undefined,
                   s: m.model,
                   sLabel: m.model,
                   b: p.timestamp,
                   v: pointValue(metric, p),
                 })),
               )
-            : (u.timeSeries ?? []).map((p) => ({
+            : (u.timeSeries?.length
+                ? u.timeSeries
+                : [{ ...u, timestamp: "" }]
+              ).map((p) => ({
                 g: u.userId,
                 gLabel: u.userName,
                 gSub: u.userEmail,
+                gTag:
+                  u.billedCost === 0 && u.subscriptionCost > 0
+                    ? "Subscription usage"
+                    : undefined,
                 b: p.timestamp,
                 v: pointValue(metric, p),
               })),
@@ -631,6 +783,13 @@ export function usePivotCube(
     toolQ.error,
     toolQ.data,
     toolQ.isLoading,
+    appCosts,
+    appCostQ.data,
+    appCostQ.error,
+    appCostQ.isLoading,
+    skillCostQ.data,
+    skillCostQ.error,
+    skillCostQ.isLoading,
     appQ.error,
     appQ.data,
     appQ.isLoading,
@@ -805,7 +964,7 @@ function assemble(
 ): Omit<Cube, "api" | "isLoading" | "extraCols" | "error" | "retry"> & {
   extraCols: ExtraCol[];
 } {
-  const buckets = [...new Set(facts.map((f) => f.b))].sort();
+  const buckets = [...new Set(facts.map((f) => f.b).filter(Boolean))].sort();
   const idx = new Map(buckets.map((b, i) => [b, i]));
   type Acc = CubeRow & { childMap: Map<string, CubeChild> };
   const rows = new Map<string, Acc>();
@@ -834,10 +993,10 @@ function assemble(
   };
   for (const f of facts) {
     const row = ensure(f);
-    const i = idx.get(f.b) ?? 0;
-    row.series[i] += f.v;
+    const i = idx.get(f.b);
+    if (i !== undefined) row.series[i] += f.v;
     row.total += f.v;
-    row.hasSeries = true;
+    row.hasSeries ||= i !== undefined;
     for (const [k, v] of Object.entries(f.extra ?? {}))
       row.extras[k] = (row.extras[k] ?? 0) + v;
     if (f.s !== undefined) {
@@ -851,7 +1010,7 @@ function assemble(
         };
         row.childMap.set(f.s, child);
       }
-      child.series[i] += f.v;
+      if (i !== undefined) child.series[i] += f.v;
       child.total += f.v;
       const st = splitTotals.get(f.s) ?? {
         key: f.s,
@@ -872,7 +1031,7 @@ function assemble(
       ...row,
       children: [...childMap.values()].sort((a, b) => b.total - a.total),
     }))
-    .filter((r) => r.total > 0 || r.hasSeries)
+    .filter((r) => r.total > 0 || r.hasSeries || r.tag || opts.meta?.has(r.key))
     .sort((a, b) => b.total - a.total);
   return {
     buckets,

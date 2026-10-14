@@ -83,6 +83,7 @@ export function QueryChip<T extends string>({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <UnstyledButton
+          aria-label={`${label} ${current?.label ?? ""}`}
           className={cn(
             "group inline-flex h-8 min-w-0 items-center gap-1.5 rounded-md border bg-background px-2.5 text-sm transition-colors hover:bg-accent dark:bg-input/30 dark:hover:bg-input/50",
             tone === "caution" &&
@@ -448,20 +449,28 @@ export function PivotChart({
 
 function Legend({ items }: { items: { label: string; color: string }[] }) {
   return (
-    <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
+    <ul
+      aria-label="Usage chart legend"
+      className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs"
+    >
       {items.map((it) => (
-        <span
+        <li
           key={it.label}
-          className="inline-flex min-w-0 items-center gap-1.5"
+          className="inline-flex min-w-0 max-w-full items-center gap-1.5"
         >
           <span
             className="size-2.5 shrink-0 rounded-[3px]"
             style={{ background: it.color }}
           />
-          <span className="truncate text-muted-foreground">{it.label}</span>
-        </span>
+          <span
+            title={it.label}
+            className="min-w-0 break-words text-muted-foreground"
+          >
+            {it.label}
+          </span>
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }
 

@@ -9,6 +9,7 @@ import { parse as parseToml } from "smol-toml";
 export type ToolEntry = {
   name: string;
   delta: unknown;
+  forwards: unknown;
   requires: unknown;
   annotator: unknown;
   tags: string[];
@@ -35,6 +36,7 @@ export function toolEntries(text: string): ToolEntry[] {
           {
             name: entry.name,
             delta: entry.delta,
+            forwards: entry.forwards,
             requires: entry.requires,
             annotator: entry.annotator,
             tags: stringList(entry.tags),

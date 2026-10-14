@@ -1,6 +1,7 @@
 "use client";
 
 import { Terminal } from "lucide-react";
+import { ClientMarkTile, markTileRadius } from "@/components/client-mark-tile";
 import type { ConnectClient } from "./clients";
 
 interface ClientIconProps {
@@ -9,7 +10,23 @@ interface ClientIconProps {
 }
 
 export function ClientIcon({ client, size = 36 }: ClientIconProps) {
-  const radius = Math.round(size / 4.25);
+  if (client.svg) {
+    return (
+      <ClientMarkTile
+        mark={{
+          viewBox: client.svgViewBox ?? "0 0 24 24",
+          path: client.svg,
+          fillRule: client.svgFillRule,
+          accent: client.svgAccent,
+          color: client.iconColor || "currentColor",
+          background: client.tileBg || "var(--muted)",
+        }}
+        label={client.label}
+        size={size}
+      />
+    );
+  }
+  const radius = markTileRadius(size);
   return (
     <div
       className="flex shrink-0 items-center justify-center border"
@@ -20,24 +37,7 @@ export function ClientIcon({ client, size = 36 }: ClientIconProps) {
         background: client.tileBg || "var(--muted)",
       }}
     >
-      {client.svg ? (
-        <svg
-          viewBox={client.svgViewBox ?? "0 0 24 24"}
-          width={size * 0.6}
-          height={size * 0.6}
-          role="img"
-          aria-label={`${client.label} logo`}
-        >
-          {client.svgAccent && (
-            <path d={client.svgAccent.path} fill={client.svgAccent.color} />
-          )}
-          <path
-            d={client.svg}
-            fill={client.iconColor || "currentColor"}
-            fillRule={client.svgFillRule}
-          />
-        </svg>
-      ) : client.iconOverride ? (
+      {client.iconOverride ? (
         <div
           className="flex size-full items-center justify-center font-mono font-bold"
           style={{

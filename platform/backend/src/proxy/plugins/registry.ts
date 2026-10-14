@@ -106,6 +106,7 @@ export type LlmProxyRuntimeToolProof = {
 /**
  * Outcome of plugin tool call evaluation.
  * `blocked` lists calls replaced with notice calls.
+ * `rewritten` lists calls released in a form the policy authorized.
  * `annotated` lists approved calls with appended delegation markers.
  * `runtimeProofs` lists approved calls with signed execution proofs.
  */
@@ -114,6 +115,7 @@ export type LlmProxyToolCallsOutcome =
       decision: "allow";
       toolCalls: readonly LlmProxyToolCall[];
       blocked?: readonly { id: string; name: string; reason: string }[];
+      rewritten?: readonly { id: string; name: string }[];
       annotated?: readonly LlmProxyToolCallAnnotation[];
       runtimeProofs?: readonly LlmProxyRuntimeToolProof[];
     }
@@ -341,19 +343,22 @@ export class LlmProxyPluginRegistry {
       // Every returned call must match one of the input calls:
       // - Untouched
       // - Reported as blocked (replaced with a platform notice call)
+      // - Reported as rewritten (released in a form the policy authorized)
       // - Reported as annotated (with only an approved delegation marker appended)
       // - Reported with a valid runtime proof and otherwise unchanged arguments
-      for (const entry of result.blocked ?? []) {
-        // Validate that reported blocked calls were part of the input batch.
+      const blockedIds = new Set<string>();
+      for (const entry of [
+        ...(result.blocked ?? []),
+        ...(result.rewritten ?? []),
+      ]) {
+        // Validate that reported substitutions were part of the input batch.
         if (given.get(entry.id)?.name !== entry.name) {
           throw new Error(
             `Finalizer ${plugin.id} reported a block on a call the policies never saw: ${entry.id}`,
           );
         }
+        blockedIds.add(entry.id);
       }
-      const blockedIds = new Set(
-        (result.blocked ?? []).map((entry) => entry.id),
-      );
       const annotations = new Map<string, LlmProxyToolCallAnnotation>();
       for (const entry of result.annotated ?? []) {
         if (

@@ -21,10 +21,15 @@ describe("OpenCode routing plugin", () => {
       openai: "https://example.com/v1/openai",
       cerebras: "https://example.com/v1/cerebras",
       zhipuai: "https://example.com/v1/zhipuai",
+      "archestra-kimi": "https://example.com/v1/kimi",
     };
     const headers = {
       "X-Archestra-Agent-Id": "opencode",
       "X-Archestra-Virtual-Key": "arch_passthroughcafe",
+    };
+    const providerTwins = {
+      moonshotai: "archestra-kimi",
+      "kimi-code-plan-global": "archestra-kimi",
     };
     const originalFetch = globalThis.fetch;
     const originalDataHome = process.env.XDG_DATA_HOME;
@@ -52,7 +57,10 @@ describe("OpenCode routing plugin", () => {
           },
         }),
       );
-      await writeFile(file, renderOpenCodeRoutingPlugin({ routes, headers }));
+      await writeFile(
+        file,
+        renderOpenCodeRoutingPlugin({ routes, headers, providerTwins }),
+      );
       const module = await import(
         `${pathToFileURL(file).href}?t=${Date.now()}`
       );
@@ -62,8 +70,18 @@ describe("OpenCode routing plugin", () => {
         disabled_providers: ["google", "direct"],
         model: "zhipuai/glm-model",
         small_model: "google/gemini-model",
+        // Kilo Code pins its compaction agent to a Kimi Code plan provider,
+        // which moves to the routed Kimi twin; a subagent pinned to a routed
+        // provider without a credential would fail its turn with "Model not
+        // found", so that pin goes; a pin on an active route stays.
+        agent: {
+          compaction: { model: "kimi-code-plan-global/k3" },
+          general: { model: "zhipuai/glm-model", prompt: "research" },
+          build: { model: "anthropic/claude-model" },
+        },
         provider: {
           anthropic: { options: { apiKey: "configured-key" } },
+          "archestra-kimi": { options: { apiKey: "arch_virtualkey" } },
           google: {
             options: {
               baseURL: "https://generativelanguage.googleapis.com/v1beta",
@@ -83,6 +101,7 @@ describe("OpenCode routing plugin", () => {
           "openai",
           "cerebras",
           "zhipuai",
+          "archestra-kimi",
         ],
         disabled_providers: ["direct"],
         small_model: "google/gemini-model",
@@ -99,6 +118,11 @@ describe("OpenCode routing plugin", () => {
         },
       });
       expect(config).not.toHaveProperty("model");
+      expect(config.agent).toEqual({
+        compaction: { model: "archestra-kimi/k3" },
+        general: { prompt: "research" },
+        build: { model: "anthropic/claude-model" },
+      });
       expect(config.provider).not.toHaveProperty("zhipuai");
       expect(
         (

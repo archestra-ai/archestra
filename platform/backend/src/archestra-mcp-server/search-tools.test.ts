@@ -18,7 +18,6 @@ import { beforeEach, vi } from "vitest";
 import config from "@/config";
 import { ConversationEnabledToolModel, ToolModel } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
-import * as guardrailsDeployment from "@/services/guardrails-deployment";
 import { describe, expect, test } from "@/test";
 import type { ArchestraContext } from ".";
 import { executeArchestraTool } from ".";
@@ -277,7 +276,7 @@ describe("search_tools", () => {
     const previous = config.openappa.enabled;
     config.openappa.enabled = true;
     const read = vi
-      .spyOn(guardrailsDeployment, "isGuardrailsV2Active")
+      .spyOn(GuardrailsDeploymentModel, "get")
       .mockRejectedValue(new Error("deployment row unavailable"));
     try {
       const org = await makeOrganization();

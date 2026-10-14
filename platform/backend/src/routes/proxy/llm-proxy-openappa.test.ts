@@ -1340,6 +1340,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         id: "deployment",
         enabled: false,
         unsupportedClientAction: "bypass",
+        superyellEnabled: true,
       });
 
       const response = await post(continuation("msg_made_elsewhere"));
@@ -1891,6 +1892,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             id: "global",
             enabled: false,
             unsupportedClientAction: "bypass",
+            superyellEnabled: true,
           };
         }
         return realGet();

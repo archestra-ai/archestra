@@ -70,6 +70,41 @@ describe("McpElicitationCard", () => {
     });
   });
 
+  it("shows a link, a command and the agent's line breaks in the question as such, and a link click answers nothing", async () => {
+    const user = userEvent.setup();
+    const onRespond = vi.fn().mockResolvedValue(true);
+    const url =
+      "https://example.com/agents/agent-1?setup=credentials&keys=MY_TOKEN";
+
+    render(
+      <McpElicitationCard
+        requests={[
+          singleChoice({
+            id: "q-1",
+            message: `Open ${url} and save the token.\nThen run \`kubectl port-forward pod/web 3000:3000\`.\nDone?`,
+            options: ["Done", "Not yet"],
+          }),
+        ]}
+        onRespond={onRespond}
+      />,
+    );
+
+    const card = screen.getByTestId("mcp-elicitation-card");
+    const link = within(card).getByText(url);
+    expect(link.closest("[data-streamdown='link']")).not.toBeNull();
+    expect(
+      within(card).getByText("kubectl port-forward pod/web 3000:3000").tagName,
+    ).toBe("CODE");
+    expect(card.querySelectorAll("br")).toHaveLength(2);
+
+    await user.click(link);
+
+    expect(onRespond).not.toHaveBeenCalled();
+    expect(
+      within(card).getByRole("button", { name: "Done" }),
+    ).toBeInTheDocument();
+  });
+
   it("renders an OpenAPPA review as a collapsed tool card and submits approval from Approve", async () => {
     const user = userEvent.setup();
     const onRespond = vi.fn().mockResolvedValue(true);
@@ -472,6 +507,44 @@ describe("McpElicitationCard", () => {
       action: "accept",
       content: { choice: "my-org", [ASK_USER_OTHER_ANSWER_FIELD]: "" },
     });
+  });
+
+  it("hands a lone question's Type something to the chat composer", async () => {
+    const user = userEvent.setup();
+    const onRespond = vi.fn().mockResolvedValue(true);
+    const onTypeAnswer = vi.fn();
+    render(
+      <McpElicitationCard
+        requests={[
+          {
+            ...singleChoice({
+              id: "q-owner",
+              message: "Owner?",
+              options: ["my-user", "my-org"],
+            }),
+            requestedSchema: {
+              type: "object",
+              properties: {
+                choice: { type: "string", enum: ["my-user", "my-org"] },
+                [ASK_USER_OTHER_ANSWER_FIELD]: {
+                  type: "string",
+                  title: "Type something",
+                },
+              },
+              required: [],
+            },
+          },
+        ]}
+        onRespond={onRespond}
+        onTypeAnswer={onTypeAnswer}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Type something/ }));
+
+    expect(onTypeAnswer).toHaveBeenCalledOnce();
+    expect(onRespond).not.toHaveBeenCalled();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 
   it("shows only navigation in the footer of every tab but the last", async () => {
@@ -1096,7 +1169,8 @@ describe("McpElicitationCard", () => {
     expect(typed).toHaveTextContent("Which site?GoogleTyped answer");
   });
 
-  it("lists the offered options under an answered question", () => {
+  it("folds the offered options under an answered question until expanded", async () => {
+    const user = userEvent.setup();
     render(
       <McpElicitationCard
         groupId="assistant-1-ask-user-1"
@@ -1112,6 +1186,11 @@ describe("McpElicitationCard", () => {
         onRespond={vi.fn().mockResolvedValue(true)}
       />,
     );
+
+    expect(
+      screen.queryByRole("list", { name: "Offered options" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Show 2 options" }));
 
     const options = within(
       screen.getByRole("list", { name: "Offered options" }),

@@ -1176,6 +1176,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // Resolved once for the batch, by the first denial that has no notice tool.
     let pendingServersTool: Promise<string | undefined> | undefined;
     const blocked: { id: string; name: string; reason: string }[] = [];
+    const rewritten: { id: string; name: string }[] = [];
     const annotated: LlmProxyToolCallAnnotation[] = [];
     const runtimeProofs: LlmProxyRuntimeToolProof[] = [];
     const mint = this.delegationMinter(
@@ -1187,11 +1188,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     for (const call of calls) {
       if (handbackIds.has(call.id)) {
         const handback = await admitChildHandback({ binding, call });
-        blocked.push({
-          id: call.id,
-          name: call.name,
-          reason: "OpenAPPA replaced the child return with admitted bytes",
-        });
+        rewritten.push({ id: call.id, name: call.name });
         released.push(handback.call);
         if (calls.length === 1) {
           binding.completedHandbackReturn = handback.returnText;
@@ -1201,12 +1198,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       const inbox = peerInbox.get(call.id);
       if (inbox?.kind === "release") {
         if (inbox.call !== call) {
-          blocked.push({
-            id: call.id,
-            name: call.name,
-            reason:
-              "OpenAPPA bound this peer-message call to the authenticated session",
-          });
+          rewritten.push({ id: call.id, name: call.name });
         }
         released.push(inbox.call);
         continue;
@@ -1217,12 +1209,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       const relay = relays.get(call.id);
       if (relay?.kind === "release") {
         if (relay.call !== call) {
-          blocked.push({
-            id: call.id,
-            name: call.name,
-            reason:
-              "OpenAPPA replaced the message with the text the return check admitted",
-          });
+          rewritten.push({ id: call.id, name: call.name });
         }
         released.push(relay.call);
         continue;
@@ -1409,6 +1396,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const stamp = trajectoryStamper(binding, context);
     if (
       blocked.length === 0 &&
+      rewritten.length === 0 &&
       annotated.length === 0 &&
       !stamp &&
       handbackIds.size === 0 &&
@@ -1420,6 +1408,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       decision: "allow",
       toolCalls: stamp ? released.map(stamp) : released,
       ...(blocked.length > 0 ? { blocked } : {}),
+      ...(rewritten.length > 0 ? { rewritten } : {}),
       ...(annotated.length > 0 ? { annotated } : {}),
       ...(runtimeProofs.length > 0 ? { runtimeProofs } : {}),
     };
@@ -2154,7 +2143,7 @@ function runtimeLaunchResult(
   }
   const text = RUNTIME_LAUNCH_FAILURE_TEXT[outcome.reason];
   return outcome.reason === "credentials_needed" && outcome.setup_url
-    ? `${text} Ask the user to add them here, then start the run again: ${outcome.setup_url}`
+    ? `${text} Put this link in your reply text, never inside a question form, so the user can add them, then start the run again: ${outcome.setup_url}`
     : text;
 }
 

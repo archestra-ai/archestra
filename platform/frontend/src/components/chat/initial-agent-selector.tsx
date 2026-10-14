@@ -1120,7 +1120,14 @@ function AgentToolSummary({
             />
           </UnstyledButton>
         </HoverCardTrigger>
-        <HoverCardContent side="top" align="start" className="w-80 p-3">
+        {/* Capped to the room above the composer: a long list otherwise runs
+            off the top of a short window (Safari shows it clipped). */}
+        <HoverCardContent
+          side="top"
+          align="start"
+          collisionPadding={8}
+          className="w-80 max-h-(--radix-hover-card-content-available-height) overflow-y-auto p-3"
+        >
           {subagents.length > 0 && (
             <SummaryGroup title="Subagents">
               {subagents.map((agent) => (

@@ -175,8 +175,12 @@ describe("implicit OpenAPPA policy read tools", () => {
       makeOrganization,
       makeUser,
       makeMember,
+      role: "admin",
     });
     const agent = await makeAgent({ organizationId, agentType: "agent" });
+    expect(
+      await listed({ agentId: agent.id, organizationId, userId }),
+    ).toContain(GET_POLICY);
     config.openappa.enabled = false;
     expect(
       await listed({ agentId: agent.id, organizationId, userId }),
@@ -240,6 +244,7 @@ describe("implicit OpenAPPA policy read tools", () => {
       makeOrganization,
       makeUser,
       makeMember,
+      role: "admin",
     });
     const agent = await makeAgent({ organizationId, agentType: "agent" });
     const delegated = {

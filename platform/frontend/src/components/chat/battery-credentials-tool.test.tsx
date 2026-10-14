@@ -182,34 +182,6 @@ it("creates and connects a new token through the credential dialogs, then select
   );
 });
 
-it("connects the secret an earlier attempt made instead of creating another", async () => {
-  const user = userEvent.setup();
-  definitions = [
-    ...definitions,
-    definition({
-      id: "earlier",
-      key: "credential-github-token",
-      name: "GitHub token",
-      organizationConfigured: false,
-    }),
-  ];
-  const onSendMessage = vi.fn();
-  renderCard({ request: { batteries: [request.batteries[1]] }, onSendMessage });
-
-  await addToken(user, "Connect GitHub token", "ghp_secret");
-  await user.click(screen.getByRole("button", { name: "Done" }));
-
-  expect(
-    definitions.filter((entry) => entry.name === "GitHub token"),
-  ).toHaveLength(1);
-  expect(connected).toEqual([
-    { key: "credential-github-token", value: "ghp_secret" },
-  ]);
-  expect(onSendMessage).toHaveBeenCalledExactlyOnceWith(
-    "Battery credentials: GitHub APPA_PROVIDER_GITHUB_TOKEN → credential-github-token.",
-  );
-});
-
 it("adds another numbered token when the variable's token is already connected", async () => {
   const user = userEvent.setup();
   definitions = [
@@ -219,6 +191,13 @@ it("adds another numbered token when the variable's token is already connected",
       key: "credential-github-token",
       name: "GitHub token",
     }),
+    // A name is taken whether or not its credential is connected.
+    definition({
+      id: "unconnected",
+      key: "credential-github-token-2",
+      name: "GitHub token 2",
+      organizationConfigured: false,
+    }),
   ];
   const onSendMessage = vi.fn();
   renderCard({ request: { batteries: [request.batteries[1]] }, onSendMessage });
@@ -227,13 +206,40 @@ it("adds another numbered token when the variable's token is already connected",
   await user.click(screen.getByRole("button", { name: "Done" }));
 
   expect(definitions.map((entry) => entry.name)).toEqual(
-    expect.arrayContaining(["GitHub token", "GitHub token 2"]),
+    expect.arrayContaining([
+      "GitHub token",
+      "GitHub token 2",
+      "GitHub token 3",
+    ]),
   );
   expect(connected).toEqual([
-    { key: "credential-github-token-2", value: "ghp_second" },
+    { key: "credential-github-token-3", value: "ghp_second" },
   ]);
   expect(onSendMessage).toHaveBeenCalledExactlyOnceWith(
-    "Battery credentials: GitHub APPA_PROVIDER_GITHUB_TOKEN → credential-github-token-2.",
+    "Battery credentials: GitHub APPA_PROVIDER_GITHUB_TOKEN → credential-github-token-3.",
+  );
+});
+
+it("makes no token when Connect is closed without a value", async () => {
+  const user = userEvent.setup();
+  renderCard({
+    request: { batteries: [request.batteries[1]] },
+    onSendMessage: vi.fn(),
+  });
+
+  await waitFor(() => expect(definitionsLoaded()).toBe(true));
+  await user.click(screen.getByRole("combobox"));
+  await user.click(
+    await screen.findByRole("option", { name: "Add new token" }),
+  );
+  const dialog = await screen.findByRole("dialog", { name: /^Connect/ });
+  await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(definitions.map((entry) => entry.name)).not.toContain("GitHub token");
+  expect(connected).toEqual([]);
+  expect(screen.getByRole("combobox")).toHaveTextContent(
+    "Pick existing credential",
   );
 });
 
@@ -311,7 +317,7 @@ it("asks for a Vault reference instead of a secret when the secrets manager is e
   await waitFor(() => expect(definitionsLoaded()).toBe(true));
   await user.click(screen.getByRole("combobox"));
   await user.click(
-    await screen.findByRole("option", { name: "Connect GitHub token" }),
+    await screen.findByRole("option", { name: "Add new token" }),
   );
 
   expect(

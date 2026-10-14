@@ -465,6 +465,18 @@ export const auth = betterAuth({
               "[databaseHooks:user] Failed to purge personal MCP credentials",
             );
           }
+          organizationsOfDeletedUser.set(
+            user.id,
+            await MemberModel.findOrganizationIdsByUserId(user.id),
+          );
+        },
+        // The deleted member leaves the member rosters of their organizations.
+        after: async (user: { id: string }) => {
+          const organizationIds = organizationsOfDeletedUser.get(user.id) ?? [];
+          organizationsOfDeletedUser.delete(user.id);
+          await openappaBatteriesService.recompileOrganizations(
+            organizationIds,
+          );
         },
       },
     },
@@ -620,6 +632,12 @@ type MemberRemoveStash = {
 };
 
 const memberRemoveByRequest = new WeakMap<Request, MemberRemoveStash>();
+
+/** When an SSO callback (OIDC or SAML) began, to tell the memberships it provisioned. */
+const ssoCallbackStartedAt = new WeakMap<Request, Date>();
+
+/** Organizations of users being deleted, recomposed once the deletion commits. */
+const organizationsOfDeletedUser = new Map<string, string[]>();
 
 /**
  * Same shape for `/organization/leave` — the self-service twin of
@@ -1133,6 +1151,8 @@ export async function handleBeforeHook(ctx: HookEndpointContext) {
   }
 
   logger.trace({ path, method }, "[auth:beforeHook] Processing auth request");
+  if (beforeRequest && isSsoCallbackPath(path))
+    ssoCallbackStartedAt.set(beforeRequest, new Date());
   if (
     (path === "/organization/update-member-role" ||
       path === "/organization/invite-member") &&
@@ -1623,6 +1643,17 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
   }
 
   logger.trace({ path, method }, "[auth:afterHook] Processing post-auth hook");
+
+  // SSO provisioning may have made the user a member during this callback.
+  const ssoStartedAt = request && ssoCallbackStartedAt.get(request);
+  if (request) ssoCallbackStartedAt.delete(request);
+  if (ssoStartedAt && context?.newSession?.user)
+    await openappaBatteriesService.recompileOrganizations(
+      await MemberModel.findOrganizationIdsJoinedSince({
+        userId: context.newSession.user.id,
+        since: ssoStartedAt,
+      }),
+    );
 
   // Delete invitation from DB when canceled (instead of marking as canceled)
   if (path === "/organization/cancel-invitation" && method === "POST") {
@@ -2368,13 +2399,16 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
 
         // Then sync teams (based on SSO groups)
         await syncSsoTeams(userId, user.email, providerIdHint);
-
-        // SSO provisioning may have just made the user a member.
-        await recomposeOrganizationsOf(userId);
       }
       // SPDX-SnippetEnd
     }
   }
+}
+
+function isSsoCallbackPath(path: string): boolean {
+  return ["/sso/callback/", "/sso/saml2/callback/", "/sso/saml2/sp/acs/"].some(
+    (prefix) => path.startsWith(prefix),
+  );
 }
 
 async function recomposeOrganizationsOf(userId: string): Promise<void> {

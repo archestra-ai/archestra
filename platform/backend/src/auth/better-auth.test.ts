@@ -35,7 +35,7 @@ import InvitationModel from "@/models/invitation";
 import McpServerModel from "@/models/mcp-server";
 import SecretModel from "@/models/secret";
 import { openappaBatteriesService } from "@/openappa/batteries";
-import { beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
 import {
   deployGithubWithRoster,
@@ -130,6 +130,27 @@ function createMockContext(overrides: {
       (overrides.requestUrl ? new Request(overrides.requestUrl) : undefined),
     context: overrides.context,
   } as HookEndpointContext;
+}
+
+/** Calls a better-auth endpoint over HTTP as the holder of `session`. */
+async function postAsSession(params: {
+  path: string;
+  session: { token: string };
+  body: Record<string, unknown>;
+}) {
+  const secret = process.env.ARCHESTRA_AUTH_SECRET as string;
+  const signature = await makeSignature(params.session.token, secret);
+  return auth.handler(
+    new Request(`http://localhost:3000/api/auth${params.path}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: "http://localhost:3000",
+        cookie: `archestra.session_token=${encodeURIComponent(`${params.session.token}.${signature}`)}`,
+      },
+      body: JSON.stringify(params.body),
+    }),
+  );
 }
 
 describe("handleBeforeHook", () => {
@@ -1457,7 +1478,7 @@ describe("handleAfterHook", () => {
       await openappaBatteriesService.recompile(organizationId);
       expect(await storedHostMembers(organizationId)).toEqual({});
 
-      const removed = await post({
+      const removed = await postAsSession({
         path: "/organization/remove-member",
         session: await makeSession(admin.id, {
           activeOrganizationId: organizationId,
@@ -1472,7 +1493,7 @@ describe("handleAfterHook", () => {
       const invitation = await makeInvitation(organizationId, admin.id, {
         email: ana.email,
       });
-      const accepted = await post({
+      const accepted = await postAsSession({
         path: "/organization/accept-invitation",
         session: await makeSession(ana.id),
         body: { invitationId: invitation.id },
@@ -1483,26 +1504,187 @@ describe("handleAfterHook", () => {
       config.openappa = openappa;
       config.daggerRuntime.enabled = sandbox;
     }
+  });
 
-    async function post(params: {
+  describe("the member roster", () => {
+    const openappa = { ...config.openappa };
+    const sandbox = config.daggerRuntime.enabled;
+    afterEach(() => {
+      config.openappa = { ...openappa };
+      config.daggerRuntime.enabled = sandbox;
+    });
+
+    const setUp = async (fixtures: {
+      makeOrganization: () => Promise<{ id: string }>;
+      makeAdmin: () => Promise<{ id: string }>;
+      makeUser: (overrides?: {
+        email?: string;
+      }) => Promise<{ id: string; email: string }>;
+      makeMember: (
+        userId: string,
+        organizationId: string,
+        overrides?: { role?: string },
+      ) => Promise<unknown>;
+      makeInternalMcpCatalog: (overrides: {
+        organizationId: string;
+        name: string;
+      }) => Promise<{ id: string }>;
+      makeTool: (overrides: {
+        catalogId: string;
+        name: string;
+        rawName: string;
+      }) => Promise<unknown>;
+    }) => {
+      const organizationId = (await fixtures.makeOrganization()).id;
+      const admin = await fixtures.makeAdmin();
+      await fixtures.makeMember(admin.id, organizationId, { role: "admin" });
+      await deployGithubWithRoster({
+        organizationId,
+        userId: admin.id,
+        ...fixtures,
+      });
+      /** A user whose GitHub connection to the organization outlives their membership. */
+      const connected = async (email: string, githubId: number) => {
+        const user = await fixtures.makeUser({ email });
+        await RuntimeCredentialConnectionModel.upsert({
+          organizationId,
+          scope: "personal",
+          userId: user.id,
+          credentialId: "github-user",
+          value: "token",
+          githubId: GitHubUserIdSchema.parse(githubId),
+        });
+        return user;
+      };
+      return { organizationId, connected };
+    };
+
+    const ssoCallback = async (params: {
       path: string;
-      session: { token: string };
-      body: Record<string, unknown>;
-    }) {
-      const secret = process.env.ARCHESTRA_AUTH_SECRET as string;
-      const signature = await makeSignature(params.session.token, secret);
-      return auth.handler(
-        new Request(`http://localhost:3000/api/auth${params.path}`, {
+      user: { id: string; email: string };
+      provision: () => Promise<unknown>;
+    }) => {
+      const request = new Request(
+        `http://localhost:3000/api/auth${params.path}`,
+        {
           method: "POST",
-          headers: {
-            "content-type": "application/json",
-            origin: "http://localhost:3000",
-            cookie: `archestra.session_token=${encodeURIComponent(`${params.session.token}.${signature}`)}`,
+        },
+      );
+      await handleBeforeHook(
+        createMockContext({ path: params.path, method: "POST", request }),
+      );
+      await params.provision();
+      await handleAfterHook(
+        createMockContext({
+          path: params.path,
+          method: "POST",
+          request,
+          context: {
+            newSession: {
+              user: params.user,
+              session: { id: crypto.randomUUID() },
+            },
           },
-          body: JSON.stringify(params.body),
         }),
       );
-    }
+    };
+
+    test("a SAML sign-in that provisions a connected user adds them", async ({
+      makeOrganization,
+      makeAdmin,
+      makeUser,
+      makeMember,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const { organizationId, connected } = await setUp({
+        makeOrganization,
+        makeAdmin,
+        makeUser,
+        makeMember,
+        makeInternalMcpCatalog,
+        makeTool,
+      });
+      const ana = await connected("ana@corp.example", 1001);
+      await openappaBatteriesService.recompile(organizationId);
+      expect(await storedHostMembers(organizationId)).toEqual({});
+
+      await ssoCallback({
+        path: "/sso/saml2/sp/acs/corp-saml",
+        user: ana,
+        provision: () => makeMember(ana.id, organizationId),
+      });
+      expect(await storedHostMembers(organizationId)).toEqual({
+        "github:1001": "ana@corp.example",
+      });
+    });
+
+    test("an SSO sign-in that provisions nobody composes nothing", async ({
+      makeOrganization,
+      makeAdmin,
+      makeUser,
+      makeMember,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const { organizationId, connected } = await setUp({
+        makeOrganization,
+        makeAdmin,
+        makeUser,
+        makeMember,
+        makeInternalMcpCatalog,
+        makeTool,
+      });
+      const ana = await connected("ana@corp.example", 1001);
+      await makeMember(ana.id, organizationId);
+      await openappaBatteriesService.recompile(organizationId);
+      // Bob's membership lands without a recompose; only a recompose would show him.
+      const bob = await connected("bob@corp.example", 1002);
+      await makeMember(bob.id, organizationId);
+
+      await ssoCallback({
+        path: "/sso/saml2/callback/corp-saml",
+        user: ana,
+        provision: async () => undefined,
+      });
+      expect(await storedHostMembers(organizationId)).toEqual({
+        "github:1001": "ana@corp.example",
+      });
+    });
+
+    test("a user who deletes their account leaves it", async ({
+      makeOrganization,
+      makeAdmin,
+      makeUser,
+      makeMember,
+      makeSession,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const { organizationId, connected } = await setUp({
+        makeOrganization,
+        makeAdmin,
+        makeUser,
+        makeMember,
+        makeInternalMcpCatalog,
+        makeTool,
+      });
+      const ana = await connected("ana@corp.example", 1001);
+      await makeMember(ana.id, organizationId);
+      const bob = await connected("bob@corp.example", 1002);
+      await makeMember(bob.id, organizationId);
+      await openappaBatteriesService.recompile(organizationId);
+
+      const deleted = await postAsSession({
+        path: "/delete-user",
+        session: await makeSession(ana.id),
+        body: {},
+      });
+      expect(deleted.status, await deleted.clone().text()).toBe(200);
+      expect(await storedHostMembers(organizationId)).toEqual({
+        "github:1002": "bob@corp.example",
+      });
+    });
   });
 
   describe("sign-in active organization", () => {

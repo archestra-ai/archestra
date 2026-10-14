@@ -40,7 +40,7 @@ import {
   takeLeadingAttestation,
   verifyToolAttestation,
 } from "@/archestra-mcp-server/tool-attestation";
-import mcpClient from "@/clients/mcp-client";
+import mcpClient, { McpServerStoppedError } from "@/clients/mcp-client";
 import config from "@/config";
 import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import {
@@ -62,6 +62,7 @@ import { jwksValidator } from "@/services/jwks-validator";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { ApiError } from "@/types/api";
+import { handleTaskMethod, MCP_TASKS_EXTENSION_ID } from "./tasks";
 import {
   authenticateMCPGatewayRequest,
   createAgentServer,
@@ -98,6 +99,7 @@ type TestCallToolHandler = (
   content: Array<{ type: string; text: string }>;
   isError?: boolean;
   resultType?: string;
+  task?: { taskId: string };
   structuredContent?: { items?: unknown[] };
 }>;
 
@@ -3751,6 +3753,111 @@ describe("createAgentServer tools/list", () => {
   describe("tool execution errors", () => {
     setupTestCacheManager();
 
+    test.for([
+      {
+        label: "silent server",
+        error: new McpServerStoppedError("not_answering"),
+      },
+      {
+        label: "closed connection",
+        error: new McpServerStoppedError("connection_closed"),
+      },
+      { label: "unexpected error", error: new Error("PRIVATE_SENTINEL") },
+    ])("settles a detached $label without losing its error contract", async ({
+      error,
+    }, {
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeOrganization,
+      makeTool,
+    }) => {
+      config.mcpGateway.toolCallTimeoutMs = 20;
+      const org = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: org.id,
+        name: "qa-errors",
+      });
+      const tool = await makeTool({
+        catalogId: catalog.id,
+        name: "qa-errors__execute",
+        parameters: { type: "object", properties: {} },
+      });
+      await makeAgentTool(agent.id, tool.id);
+      let rejectExecution!: (reason: unknown) => void;
+      const pending = new Promise<never>((_resolve, reject) => {
+        rejectExecution = reject;
+      });
+      const execute = vi
+        .spyOn(mcpClient, "executeToolCallForOwner")
+        .mockImplementationOnce(() => pending);
+      onTestFinished(() => execute.mockRestore());
+      const { server } = await createAgentServer({
+        agentId: agent.id,
+        mrtr: { enabled: true },
+      });
+      const handler = (
+        server.server as unknown as {
+          _requestHandlers: Map<string, TestCallToolHandler>;
+        }
+      )._requestHandlers.get("tools/call");
+      if (!handler) throw new Error("Expected tools/call handler");
+      const result = await handler(
+        {
+          method: "tools/call",
+          params: {
+            name: tool.name,
+            arguments: {},
+            _meta: {
+              "io.modelcontextprotocol/clientCapabilities": {
+                extensions: { [MCP_TASKS_EXTENSION_ID]: {} },
+              },
+            },
+          },
+        },
+        { sendRequest: vi.fn() },
+      );
+      expect(result.resultType).toBe("task");
+      expect(result.task?.taskId).toBeDefined();
+      await vi.waitFor(() => expect(execute).toHaveBeenCalledOnce());
+      rejectExecution(error);
+      await vi.waitFor(async () => {
+        const state = await handleTaskMethod({
+          body: {
+            method: "tasks/get",
+            params: { taskId: result.task?.taskId },
+          },
+          agentId: agent.id,
+          principal: "anonymous",
+        });
+        expect(state).toMatchObject({
+          result: {
+            task:
+              error instanceof McpServerStoppedError
+                ? {
+                    status: "failed",
+                    error: { code: -32603, message: error.message },
+                  }
+                : {
+                    status: "completed",
+                    result: {
+                      resultType: "complete",
+                      isError: true,
+                      content: [
+                        {
+                          type: "text",
+                          text: "Error: An internal error occurred while executing tool",
+                        },
+                      ],
+                    },
+                  },
+          },
+        });
+        expect(JSON.stringify(state)).not.toContain("PRIVATE_SENTINEL");
+      });
+    });
+
     test("returns the real yell missing-identity reason as tool content", async ({
       makeAgent,
       makeMember,
@@ -3815,6 +3922,12 @@ describe("createAgentServer tools/list", () => {
         error: new ApiError(500, "PRIVATE_SENTINEL"),
       },
       { label: "unexpected error", error: new Error("PRIVATE_SENTINEL") },
+      {
+        label: "spoofed server-stopped error",
+        error: Object.assign(new Error("PRIVATE_SENTINEL"), {
+          name: "McpServerStoppedError",
+        }),
+      },
       {
         label: "HTTP transport error",
         error: new StreamableHTTPError(503, "PRIVATE_SENTINEL"),

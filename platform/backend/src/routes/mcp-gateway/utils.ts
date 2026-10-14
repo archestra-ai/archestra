@@ -77,7 +77,10 @@ import {
   type ArchestraElicitationOutcome,
   ELICITATION_ANSWER_TIMEOUT_MS,
 } from "@/clients/chat-mcp-elicitation";
-import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
+import mcpClient, {
+  McpServerStoppedError,
+  type TokenAuthContext,
+} from "@/clients/mcp-client";
 import { isToolRejectedForMcpHeaders } from "@/clients/mcp-param-headers";
 import config from "@/config";
 import logger from "@/logging";
@@ -1417,6 +1420,10 @@ export async function createAgentServer(params: {
           agentLabels: agent.labels,
           requestSizeBytes: args ? JSON.stringify(args).length : undefined,
         });
+
+        // Liveness failures carry authored text and must settle detached tasks
+        // as failed rather than as completed error results.
+        if (error instanceof McpServerStoppedError) throw error;
 
         if (
           error instanceof McpError ||

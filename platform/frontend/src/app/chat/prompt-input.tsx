@@ -223,6 +223,12 @@ export interface ArchestraPromptInputProps
   /** Render the new-chat composer as a dedicated runtime launcher. */
   runtimeMode?: boolean;
   runtimeAgentName?: string;
+  /**
+   * Open the encrypted-chat/runtime drawer under the composer as an overlay
+   * instead of above it in the flow — for the new-chat screen, where the
+   * composer is vertically centered and would otherwise jump when it opens.
+   */
+  drawerBelow?: boolean;
 }
 
 type SlashCommand = {
@@ -289,6 +295,7 @@ const PromptInputContent = ({
   placeholderPreview,
   runtimeMode = false,
   runtimeAgentName,
+  drawerBelow = false,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
   sandboxAvailable: boolean;
@@ -946,6 +953,49 @@ const PromptInputContent = ({
     ],
   );
 
+  // EncryptedChat/runtime "drawer": a slim strip tucked against the composer,
+  // carrying the explanation that used to live in the toggle's tooltip.
+  // Paired with the dashed composer border so an encrypted chat is
+  // unmistakable while composing. With drawerBelow it overlays the space under
+  // the composer rather than taking layout room above it.
+  const drawerPlacement = drawerBelow
+    ? "absolute inset-x-3 top-full z-10 -mt-px rounded-b-lg border-t-0 slide-in-from-top-2"
+    : "mx-3 -mb-px rounded-t-lg border-b-0 slide-in-from-bottom-2";
+  const drawer = runtimeMode ? (
+    <div
+      className={cn(
+        "flex items-center gap-2 border border-primary/50 bg-primary/5 px-3 py-1.5 text-xs text-muted-foreground animate-in fade-in",
+        drawerPlacement,
+      )}
+    >
+      <TerminalSquare className="size-3.5 text-primary" />
+      <span>
+        Starts {runtimeAgentName ?? "this Agent"} in its dedicated runtime. This
+        becomes its live terminal when ready.
+      </span>
+    </div>
+  ) : encryptedChatActive ? (
+    <div
+      data-testid={E2eTestId.EncryptedChatNotice}
+      className={cn(
+        "flex items-center gap-2 border border-dashed border-muted-foreground/60 bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground animate-in fade-in",
+        drawerPlacement,
+      )}
+    >
+      <EncryptedChatIcon className="size-3.5" />
+      <span>
+        Use this mode for highly sensitive work. This chat is private from the
+        team running {appName}: your messages are encrypted with a key stored in
+        this browser, so you can't open the chat anywhere else. A backup key is
+        held in escrow in case it's ever needed. Keep in mind that{" "}
+        {currentProvider
+          ? `${providerCatalog.label(currentProvider)}, your LLM provider,`
+          : "your LLM provider"}{" "}
+        still sees the conversation.
+      </span>
+    </div>
+  ) : null;
+
   return (
     <div className="relative">
       {rejectedCredential && (
@@ -1050,38 +1100,7 @@ const PromptInputContent = ({
           </PromptInputCommand>
         </div>
       )}
-      {/* EncryptedChat "drawer": a slim strip tucked against the composer's top
-          edge, carrying the explanation that used to live in the toggle's
-          tooltip. Paired with the dashed composer border below so an
-          encrypted chat is unmistakable while composing. */}
-      {runtimeMode && (
-        <div className="mx-3 -mb-px flex items-center gap-2 rounded-t-lg border border-b-0 border-primary/50 bg-primary/5 px-3 py-1.5 text-xs text-muted-foreground animate-in fade-in slide-in-from-bottom-2">
-          <TerminalSquare className="size-3.5 text-primary" />
-          <span>
-            Starts {runtimeAgentName ?? "this Agent"} in its dedicated runtime.
-            This becomes its live terminal when ready.
-          </span>
-        </div>
-      )}
-      {encryptedChatActive && !runtimeMode && (
-        <div
-          data-testid={E2eTestId.EncryptedChatNotice}
-          className="mx-3 -mb-px flex items-center gap-2 rounded-t-lg border border-b-0 border-dashed border-muted-foreground/60 bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground animate-in fade-in slide-in-from-bottom-2"
-        >
-          <EncryptedChatIcon className="size-3.5" />
-          <span>
-            Use this mode for highly sensitive work. This chat is private from
-            the team running {appName}: your messages are encrypted with a key
-            stored in this browser, so you can't open the chat anywhere else. A
-            backup key is held in escrow in case it's ever needed. Keep in mind
-            that{" "}
-            {currentProvider
-              ? `${providerCatalog.label(currentProvider)}, your LLM provider,`
-              : "your LLM provider"}{" "}
-            still sees the conversation.
-          </span>
-        </div>
-      )}
+      {!drawerBelow && drawer}
       {conversationId && !runtimeMode && (
         <OpenappaSessionStatus
           key={conversationId}
@@ -1242,6 +1261,7 @@ const PromptInputContent = ({
           </div>
         </PromptInputFooter>
       </PromptInput>
+      {drawerBelow && drawer}
       <SensitiveDataConfirmDialog
         open={sensitiveDataDialogOpen}
         onConfirm={handleSensitiveDataConfirm}
@@ -1300,6 +1320,7 @@ const ArchestraPromptInput = ({
   placeholderPreview,
   runtimeMode,
   runtimeAgentName,
+  drawerBelow,
 }: ArchestraPromptInputProps) => {
   const { data: activeAgent } = useProfile(agentId ?? undefined);
   const sandboxAvailable = activeAgent?.sandboxAvailable ?? false;
@@ -1412,6 +1433,7 @@ const ArchestraPromptInput = ({
           placeholderPreview={placeholderPreview}
           runtimeMode={runtimeMode}
           runtimeAgentName={runtimeAgentName}
+          drawerBelow={drawerBelow}
           prefillText={prefillText}
           onPrefillApplied={onPrefillApplied}
           externalMcpSkillAttachment={externalMcpSkillAttachment}

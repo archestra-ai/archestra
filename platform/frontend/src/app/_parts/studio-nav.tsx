@@ -168,7 +168,7 @@ export const contentNavGroups: NavGroup[] = [
         customIsActive: (pathname: string) => pathname.startsWith("/openappa"),
         beta: true,
         badgeLabel: "Beta",
-        badgeTooltip: "Guardrails is still undergoing some UI polishing.",
+        badgeTooltip: "Guardrails is still undergoing some UX polishing.",
         dotKey: "nav:guardrails",
       },
       {

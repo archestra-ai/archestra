@@ -1038,14 +1038,12 @@ pub async fn read_openappa_opening_policy(root: String) -> napi::Result<Option<S
     }
     let state = initialized().await?;
     let leased = state.lease().await?;
-    tokio::task::spawn_blocking(move || {
-        match leased.state.store.log(&TrajectoryId(root)) {
-            Ok(log) => String::from_utf8(log.policy_file().to_vec())
-                .map(Some)
-                .map_err(|_| error("OpenAPPA opening policy is not UTF-8")),
-            Err(appa_eventlog::ReadError::UnknownRoot { .. }) => Ok(None),
-            Err(read) => Err(error(read)),
-        }
+    tokio::task::spawn_blocking(move || match leased.state.store.log(&TrajectoryId(root)) {
+        Ok(log) => String::from_utf8(log.policy_file().to_vec())
+            .map(Some)
+            .map_err(|_| error("OpenAPPA opening policy is not UTF-8")),
+        Err(appa_eventlog::ReadError::UnknownRoot { .. }) => Ok(None),
+        Err(read) => Err(error(read)),
     })
     .await
     .map_err(error)?

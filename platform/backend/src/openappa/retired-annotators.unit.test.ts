@@ -321,6 +321,21 @@ describe("unservedAnnotator", () => {
       null,
     );
   });
+
+  test("does not invalidate a new session for an unused retained declaration", () => {
+    const { kept } = retire({
+      openings: [opening("a1", URL_BOUND)],
+      composed: JUDGED_BY_B,
+    });
+    const openingPolicy = withKeptAnnotators(JUDGED_BY_B, kept);
+    expect(openingPolicy).not.toBeNull();
+    expect(
+      unservedAnnotator({
+        opening: openingPolicy ?? "",
+        served: JUDGED_BY_B,
+      }),
+    ).toBeNull();
+  });
 });
 
 function retire(params: {

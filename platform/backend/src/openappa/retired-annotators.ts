@@ -20,6 +20,7 @@ import { asRecord, parsePolicyToml } from "./policy-text";
 export type OpeningPolicy = {
   hash: string;
   annotators: Record<string, unknown>[];
+  routedAnnotators: ReadonlySet<string>;
   externals: Record<string, unknown>;
   credentials: Record<string, unknown>;
 };
@@ -47,14 +48,19 @@ export function readOpeningPolicy(
   return {
     hash,
     annotators: records(asRecord(document.policy)?.annotator),
+    routedAnnotators: new Set(
+      records(asRecord(document.policy)?.tool).flatMap((table) =>
+        typeof table.annotator === "string" ? [table.annotator] : [],
+      ),
+    ),
     externals: asRecord(document.externals) ?? {},
     credentials: asRecord(document.credentials) ?? {},
   };
 }
 
 /**
- * An annotator the opening policy bound that the served policy does not still
- * answer the same way. Null when every opening binding is present unchanged.
+ * An annotator the opening policy routes calls to that the served policy does
+ * not still answer the same way. Unused retained declarations do not count.
  */
 export function unservedAnnotator(params: {
   opening: string;
@@ -70,7 +76,8 @@ export function unservedAnnotator(params: {
   );
   for (const declaration of opening.annotators) {
     const name = declaration.name;
-    if (typeof name !== "string") continue;
+    if (typeof name !== "string" || !opening.routedAnnotators.has(name))
+      continue;
     const required = keptFrom({ opening, declaration, name });
     const present = current.get(name);
     if (

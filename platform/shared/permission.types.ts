@@ -117,8 +117,7 @@ export const resourceDescriptions: Record<Resource, string> = {
   plugin: "Opaque plugins that execute hooks on connected developer machines",
   app: "User-authored MCP Apps — interactive apps with their own data store and tools",
   mcpGateway: "Unified MCP endpoints that aggregate tools for clients",
-  mcpOauthClient:
-    "OAuth clients (service accounts) authorized to call MCP gateways",
+  mcpOauthClient: "OAuth client registrations authorized to call MCP Gateways",
   llmProxy: "The LLM Proxy endpoint with security policies and observability",
   openappaPolicy: "OpenAPPA policy, batteries, and coverage",
   openappaDiagnostics: "Agent yells and OpenAPPA consult logs",
@@ -129,7 +128,7 @@ export const resourceDescriptions: Record<Resource, string> = {
   scheduledTask: "Scheduled agent tasks that run on a schedule",
   llmProviderApiKey: "LLM provider API keys and their visibility",
   llmVirtualKey: "LLM virtual keys and their visibility",
-  llmOauthClient: "OAuth clients authorized to call the LLM Proxy",
+  llmOauthClient: "OAuth client registrations authorized to call the LLM Proxy",
   llmModel: "LLM model catalog entries and chat capabilities",
   llmLimit: "LLM usage limits",
   llmCost: "Organization-wide LLM usage and cost analytics",

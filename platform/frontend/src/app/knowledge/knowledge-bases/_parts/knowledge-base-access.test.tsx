@@ -102,7 +102,7 @@ it("creates a knowledge base with different permissions for selected teams", asy
   await user.click(
     screen.getByRole("combobox", { name: "Permission for Engineering" }),
   );
-  await user.click(screen.getByRole("option", { name: "Can edit" }));
+  await user.click(screen.getByRole("option", { name: "Can update" }));
   await user.click(
     screen.getByRole("button", { name: "Create Knowledge Base" }),
   );

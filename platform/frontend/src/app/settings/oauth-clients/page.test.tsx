@@ -21,6 +21,7 @@ vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
 vi.mock("sonner");
+vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/app/settings/layout", () => ({
   useSetSettingsAction: vi.fn(() => () => undefined),
 }));
@@ -31,6 +32,7 @@ import {
   useScopedCapabilities,
   useSession,
 } from "@/lib/auth/auth.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useOrganization } from "@/lib/organization.query";
 import OauthClientsPage from "./page";
 
@@ -72,6 +74,7 @@ afterAll(() => server.close());
 describe("OauthClientsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useAppName).mockReturnValue("Example");
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
     );
@@ -268,7 +271,7 @@ describe("OauthClientsPage", () => {
     );
   });
 
-  it("offers the permissions of both client kinds as header buttons", async () => {
+  it("offers one permissions entry for both client kinds", async () => {
     let headerAction: React.ReactNode = null;
     const { useSetSettingsAction } = await import("@/app/settings/layout");
     vi.mocked(useSetSettingsAction).mockReturnValue((node) => {
@@ -289,14 +292,10 @@ describe("OauthClientsPage", () => {
       </QueryClientProvider>,
     );
 
+    expect(screen.getByRole("button", { name: "Permissions" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Permissions" }));
     expect(
-      screen.getByRole("button", { name: "LLM client permissions" }),
-    ).toBeVisible();
-    await user.click(
-      screen.getByRole("button", { name: "MCP client permissions" }),
-    );
-    expect(
-      await screen.findByRole("dialog", { name: /Permissions for all/ }),
+      await screen.findByRole("dialog", { name: "OAuth client permissions" }),
     ).toBeVisible();
   });
 });

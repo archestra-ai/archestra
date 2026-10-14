@@ -3,8 +3,8 @@ title: Agent Runtime Setup
 sidebarTitle: Setup
 description: Prepare Kubernetes nodes, storage, and the Agent Sandbox controller for Agent Runtime
 order: 1
-alpha: "Agent Runtime is in Alpha and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-13
+beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
+lastUpdated: 2026-10-14
 ---
 
 Prepare your cluster once, and every agent can get a dedicated runtime. Each run becomes a pod with its own persistent volume, created by the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/).

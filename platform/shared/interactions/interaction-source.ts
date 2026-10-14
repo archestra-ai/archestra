@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { OpenCodeFamilyClientId } from "../opencode-family";
 
 /**
  * Where an LLM proxy request originated from.
@@ -40,6 +41,25 @@ export const InteractionSourceSchema = z.enum([
 ]);
 
 export type InteractionSource = z.infer<typeof InteractionSourceSchema>;
+
+/** How an OpenCode-family client frames a turn. */
+export type OpenCodeFamilyTurnKind =
+  | "main"
+  | "subagent"
+  | "title"
+  | "compaction";
+
+/**
+ * The source of an OpenCode-family turn, e.g. `kilo:subagent`. The return
+ * type holds every member's sources to the schema above, so adding a family
+ * member without its sources fails to compile.
+ */
+export function openCodeFamilySource(
+  clientId: OpenCodeFamilyClientId,
+  kind: OpenCodeFamilyTurnKind,
+): InteractionSource {
+  return `${clientId}:${kind}` as const;
+}
 
 /**
  * Display configuration for interaction sources.

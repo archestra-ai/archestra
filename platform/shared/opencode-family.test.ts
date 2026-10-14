@@ -11,6 +11,7 @@ import {
   isKiloUserAgent,
   isOpenCodeUserAgent,
 } from "./interactions/client";
+import { openCodeFamilySource } from "./interactions/interaction-source";
 import {
   isOpenCodeFamilyClient,
   isOpenCodeFamilySessionSource,
@@ -104,6 +105,8 @@ describe("OpenCode family", () => {
     expect(isOpenCodeFamilySessionSource("kilo_session")).toBe(true);
     expect(isOpenCodeFamilySessionSource("opencode_session")).toBe(true);
     expect(isOpenCodeFamilySessionSource("codex_session")).toBe(false);
+    expect(openCodeFamilySource("kilo", "subagent")).toBe("kilo:subagent");
+    expect(openCodeFamilySource("opencode", "main")).toBe("opencode:main");
     expect(clientFilterToAgentIds("kilo")).toEqual(["kilo"]);
     expect(
       CLIENT_FILTER_OPTIONS.find((option) => option.value === "kilo"),

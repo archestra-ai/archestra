@@ -17,6 +17,7 @@ import {
   isCodexOriginator,
   isProviderApiKeyOptional,
   OPENCODE_AGENT_HEADER,
+  openCodeFamilySource,
   PROVIDER_BASE_URL_HEADER,
   providerDisplayNames,
   providerRequiresPerUserCredential,
@@ -813,15 +814,16 @@ export async function handleLLMProxy<
   // source prefix (opencode:main, kilo:main, ...).
   const openCodeSource: InteractionSource | undefined =
     externalAgentId && isOpenCodeFamilyClient(externalAgentId)
-      ? `${externalAgentId}:${
+      ? openCodeFamilySource(
+          externalAgentId,
           openCodeParentSession
             ? "subagent"
             : openCodeAgent === "title"
               ? "title"
               : openCodeAgent === "compaction"
                 ? "compaction"
-                : "main"
-        }`
+                : "main",
+        )
       : undefined;
   const untrustedAppaChatSource =
     isAppaChatSource(parsedSource) && !isLoopbackRequest(request);

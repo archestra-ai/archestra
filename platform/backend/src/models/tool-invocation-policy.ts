@@ -285,9 +285,10 @@ class ToolInvocationPolicyModel {
     const specificPolicies = policies.filter((p) => p.conditions.length > 0);
     const defaultPolicies = policies.filter((p) => p.conditions.length === 0);
 
-    // Check specific policies first
-    for (const policy of specificPolicies) {
-      const conditionsMatch = policy.conditions.every((condition) => {
+    // Any matching specific policy that requires approval wins; otherwise a
+    // matching specific policy overrides the default policies.
+    const matchingSpecificPolicies = specificPolicies.filter((policy) =>
+      policy.conditions.every((condition) => {
         const { key, value, operator } = condition;
         if (key.startsWith("context.")) {
           return ToolInvocationPolicyModel.evaluateContextCondition(
@@ -303,24 +304,30 @@ class ToolInvocationPolicyModel {
           operator,
           toolInput,
         );
-      });
+      }),
+    );
 
-      if (conditionsMatch && policy.action === "require_approval") {
-        logger.info(
-          { toolName },
-          "checkApprovalRequired: specific policy requires approval",
-        );
-        return true;
-      }
+    if (
+      matchingSpecificPolicies.some(
+        (policy) => policy.action === "require_approval",
+      )
+    ) {
+      logger.info(
+        { toolName },
+        "checkApprovalRequired: specific policy requires approval",
+      );
+      return true;
+    }
 
-      // If a specific policy matched but is not require_approval, it takes precedence
-      if (conditionsMatch) {
-        logger.debug(
-          { toolName, action: policy.action },
-          "checkApprovalRequired: specific policy matched, no approval needed",
-        );
-        return false;
-      }
+    if (matchingSpecificPolicies.length > 0) {
+      logger.debug(
+        {
+          toolName,
+          actions: matchingSpecificPolicies.map((policy) => policy.action),
+        },
+        "checkApprovalRequired: specific policy matched, no approval needed",
+      );
+      return false;
     }
 
     // Fall back to default policy

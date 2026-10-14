@@ -656,7 +656,7 @@ exit 0
     test.each([
       "my-gateway",
       "gw.with.dots",
-    ])("writes required inside the inserted %s table, before a trailing table", async (serverName) => {
+    ])("writes required inside the inserted %s table, preserving case-distinct servers and trailing tables", async (serverName) => {
       const root = await mkdtemp(
         path.join(tmpdir(), "archestra-codex-required-powershell-"),
       );
@@ -665,13 +665,21 @@ exit 0
       const codexHome = path.join(home, ".codex");
       const setupPath = path.join(root, "setup.ps1");
       const driverPath = path.join(root, "driver.ps1");
+      const otherServerName = serverName.toUpperCase();
+      const otherHeader = /^[A-Za-z0-9_-]+$/.test(otherServerName)
+        ? `[mcp_servers.${otherServerName}]`
+        : `[mcp_servers."${otherServerName}"]`;
+      const otherServer = { url: "https://other.example.com/mcp" };
       try {
         await Promise.all(
           [bin, codexHome].map((dir) => mkdir(dir, { recursive: true })),
         );
         await writeFile(
           path.join(codexHome, "config.toml"),
-          CODEX_CONFIG_WITH_TRAILING_TABLE,
+          CODEX_CONFIG_WITH_TRAILING_TABLE.replace(
+            "[mcp_servers.docs]",
+            `${otherHeader}\nurl = "${otherServer.url}"\n\n[mcp_servers.docs]`,
+          ),
         );
         await writeFile(path.join(bin, "codex"), codexMcpStub("USERPROFILE"));
         await chmod(path.join(bin, "codex"), 0o755);
@@ -731,6 +739,7 @@ exit 0
           features: { required?: boolean };
         };
         expect(config.mcp_servers[serverName]?.required).toBe(true);
+        expect(config.mcp_servers[otherServerName]).toEqual(otherServer);
         expect(config.model_providers.custom_proxy.required).toBeUndefined();
         expect(config.features.required).toBeUndefined();
         await execFileAsync(
@@ -744,6 +753,9 @@ exit 0
         );
         expect(removed).not.toContain("required = true");
         expect(removed).not.toContain(header);
+        expect(parseToml(removed)).toMatchObject({
+          mcp_servers: { [otherServerName]: otherServer },
+        });
         expect(removed).toContain("[model_providers.custom_proxy]");
       } finally {
         await rm(root, { recursive: true, force: true });

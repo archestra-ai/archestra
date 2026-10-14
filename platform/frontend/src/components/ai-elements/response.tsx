@@ -2,6 +2,7 @@
 
 import { code } from "@streamdown/code";
 import { type ComponentProps, memo, useMemo } from "react";
+import remarkBreaks from "remark-breaks";
 import {
   defaultRehypePlugins,
   defaultRemarkPlugins,
@@ -11,6 +12,12 @@ import { cn } from "@/lib/utils/tailwind";
 
 type ResponseProps = ComponentProps<typeof Streamdown> & {
   isStreaming?: boolean;
+  /**
+   * Keep every line break the author wrote, as plain text would. Markdown
+   * otherwise joins the lines of a paragraph; a question or a short note an
+   * agent wrote line by line reads wrong that way.
+   */
+  preserveLineBreaks?: boolean;
 };
 
 // An app's standalone-page link with the leading slash dropped (`a/<segment>`,
@@ -52,6 +59,11 @@ const remarkCanonicalizeAppLinks = () => (tree: unknown) =>
 const REMARK_PLUGINS: ResponseProps["remarkPlugins"] = [
   ...Object.values(defaultRemarkPlugins),
   remarkCanonicalizeAppLinks,
+];
+
+const REMARK_PLUGINS_WITH_BREAKS: ResponseProps["remarkPlugins"] = [
+  ...REMARK_PLUGINS,
+  remarkBreaks,
 ];
 
 // Scrollable code regions must be reachable and scrollable by keyboard
@@ -104,7 +116,13 @@ export function isSameOriginUrl(url: string): boolean {
 }
 
 export const Response = memo(
-  ({ className, linkSafety, isStreaming = false, ...props }: ResponseProps) => {
+  ({
+    className,
+    linkSafety,
+    isStreaming = false,
+    preserveLineBreaks = false,
+    ...props
+  }: ResponseProps) => {
     const mergedLinkSafety = useMemo(
       () => ({
         enabled: true,
@@ -183,7 +201,9 @@ export const Response = memo(
           "group-[.is-assistant]:[&_[data-streamdown='link']]:text-foreground",
           className,
         )}
-        remarkPlugins={REMARK_PLUGINS}
+        remarkPlugins={
+          preserveLineBreaks ? REMARK_PLUGINS_WITH_BREAKS : REMARK_PLUGINS
+        }
         rehypePlugins={REHYPE_PLUGINS}
         linkSafety={mergedLinkSafety}
         {...props}

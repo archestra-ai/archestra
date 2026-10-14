@@ -27,12 +27,14 @@ import {
   TOOL_UPLOAD_FILE_FULL_NAME,
   TOOL_WHOAMI_FULL_NAME,
 } from "@archestra/shared";
+import { StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import {
   ErrorCode,
   type ListToolsResult,
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 import { type MockInstance, onTestFinished, vi } from "vitest";
+import { ZodError } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import {
   takeLeadingAttestation,
@@ -58,6 +60,8 @@ import {
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import { jwksValidator } from "@/services/jwks-validator";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
+import { ApiError } from "@/types/api";
 import {
   authenticateMCPGatewayRequest,
   createAgentServer,
@@ -3692,6 +3696,191 @@ describe("createAgentServer tools/list", () => {
     expect(searchTool?.description).toContain(
       "github (Repositories, issues, and pull requests)",
     );
+  });
+
+  describe("tool execution errors", () => {
+    setupTestCacheManager();
+
+    test("returns the real yell missing-identity reason as tool content", async ({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      config.openappa.enabled = true;
+      config.openappa.yellEnabled = true;
+      config.enterpriseFeatures.aiSecurity = true;
+      await GuardrailsDeploymentModel.setEnabled(true);
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({ organizationId: org.id });
+      const { server } = await createAgentServer({
+        agentId: agent.id,
+        tokenAuth: {
+          tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+          teamId: null,
+          isOrganizationToken: false,
+          organizationId: org.id,
+          isUserToken: true,
+          userId: user.id,
+        },
+      });
+      const handler = (
+        server.server as unknown as {
+          _requestHandlers: Map<string, TestCallToolHandler>;
+        }
+      )._requestHandlers.get("tools/call");
+      if (!handler) throw new Error("Expected tools/call handler");
+      const result = await handler(
+        {
+          method: "tools/call",
+          params: {
+            name: "archestra__yell",
+            arguments: { message: "QA feedback", with_trajectory: false },
+          },
+        },
+        { sendRequest: vi.fn() },
+      );
+      expect(result).toMatchObject({
+        resultType: "complete",
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: "Error: OpenAPPA reporting requires an authenticated session and tool-call identity",
+          },
+        ],
+      });
+    });
+
+    test.for([
+      {
+        label: "authored client error",
+        error: new ApiError(403, "Access denied"),
+        message: "Error: Access denied",
+      },
+      {
+        label: "internal API error",
+        error: new ApiError(500, "PRIVATE_SENTINEL"),
+      },
+      { label: "unexpected error", error: new Error("PRIVATE_SENTINEL") },
+      {
+        label: "HTTP transport error",
+        error: new StreamableHTTPError(503, "PRIVATE_SENTINEL"),
+      },
+      {
+        label: "numeric-code Error",
+        error: Object.assign(new Error("PRIVATE_SENTINEL"), { code: -32603 }),
+      },
+      {
+        label: "SQL unique violation",
+        error: Object.assign(new Error("PRIVATE_SENTINEL"), {
+          code: "23505",
+          detail: "PRIVATE_SENTINEL",
+        }),
+        message:
+          "Error: A record with the same value already exists (executing tool)",
+      },
+      {
+        label: "other string-code error",
+        error: Object.assign(new Error("PRIVATE_SENTINEL"), {
+          code: "ECONNRESET",
+        }),
+      },
+      {
+        label: "malformed protocol object",
+        error: { code: -32603.5, message: "PRIVATE_SENTINEL" },
+      },
+      { label: "thrown string", error: "PRIVATE_SENTINEL" },
+      { label: "thrown null", error: null },
+      {
+        label: "custom validation message and path",
+        error: new ZodError([
+          {
+            code: "custom",
+            path: ["PRIVATE_SENTINEL"],
+            message: "PRIVATE_SENTINEL",
+          },
+        ]),
+        message: "Error: Invalid tool arguments",
+      },
+      {
+        label: "MCP protocol error",
+        error: new McpError(
+          ErrorCode.InvalidParams,
+          "Invalid protocol parameters",
+          { field: "name" },
+        ),
+        protocol: true,
+      },
+      {
+        label: "authored protocol object",
+        error: {
+          code: -32601,
+          message: "Method not found",
+          data: { method: "unknown" },
+        },
+        protocol: true,
+      },
+    ])("handles $label without leaking execution details", async ({
+      error,
+      message,
+      protocol,
+    }, {
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeOrganization,
+      makeTool,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: org.id,
+        name: "qa-errors",
+      });
+      const tool = await makeTool({
+        catalogId: catalog.id,
+        name: "qa-errors__execute",
+        parameters: { type: "object", properties: {} },
+      });
+      await makeAgentTool(agent.id, tool.id);
+      const execute = vi
+        .spyOn(mcpClient, "executeToolCallForOwner")
+        .mockRejectedValueOnce(error);
+      onTestFinished(() => execute.mockRestore());
+      const { server } = await createAgentServer({ agentId: agent.id });
+      const handler = (
+        server.server as unknown as {
+          _requestHandlers: Map<string, TestCallToolHandler>;
+        }
+      )._requestHandlers.get("tools/call");
+      if (!handler) throw new Error("Expected tools/call handler");
+      const response = handler(
+        { method: "tools/call", params: { name: tool.name, arguments: {} } },
+        { sendRequest: vi.fn() },
+      );
+      if (protocol) {
+        await expect(response).rejects.toBe(error);
+      } else {
+        const result = await response;
+        expect(result).toMatchObject({
+          resultType: "complete",
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text:
+                message ??
+                "Error: An internal error occurred while executing tool",
+            },
+          ],
+        });
+        expect(JSON.stringify(result)).not.toContain("PRIVATE_SENTINEL");
+      }
+      expect(execute).toHaveBeenCalledOnce();
+    });
   });
 
   test("preserves user context when calling restricted Archestra tools", async ({

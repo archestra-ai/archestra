@@ -5,7 +5,11 @@ import { BrowserStorageStateModel } from "@/models";
 import { extractRunCodeResult } from "./run-code-result";
 
 // Declared before the class: the singleton below is built at module load
-type SessionStatus = "restored" | "failed";
+//   restored        - got the saved state; may only update the saved row, so a
+//                     row an admin deleted is never re-created
+//   restored-empty  - nothing was saved; its first save may create the row
+//   stopped         - never saves (restore failed or the row was deleted)
+type SessionStatus = "restored" | "restored-empty" | "stopped";
 
 const SAVE_DEBOUNCE_MS = 3_000;
 const SESSION_STATUS_TTL_MS = 24 * 60 * 60 * 1000;
@@ -24,7 +28,7 @@ const MAX_STATE_BYTES = 1_000_000;
  */
 class BrowserStorageSync {
   // Per MCP session: whether its context received the saved state. Only
-  // sessions that did may save, so an unrestored empty context can never
+  // restored sessions may save, so an unrestored empty context can never
   // overwrite a saved login.
   private sessionStatus = new LRUCacheManager<SessionStatus>({
     maxSize: 10_000,
@@ -63,7 +67,8 @@ class BrowserStorageSync {
     userId: string;
   }): void {
     const { sessionId } = params;
-    if (this.sessionStatus.get(sessionId) !== "restored") return;
+    const status = this.sessionStatus.get(sessionId);
+    if (status !== "restored" && status !== "restored-empty") return;
 
     clearTimeout(this.pendingSaves.get(sessionId));
     const timer = setTimeout(() => {
@@ -89,14 +94,14 @@ class BrowserStorageSync {
         // backslash, so site-controlled cookie values cannot break out of it.
         await runCode(client, buildRestoreCode(state));
       }
-      this.sessionStatus.set(sessionId, "restored");
+      this.sessionStatus.set(sessionId, state ? "restored" : "restored-empty");
       logger.debug(
         { userId, sessionId, hadSavedState: !!state },
         "[BrowserStorageSync] Browser context restored",
       );
     } catch (error) {
       // Don't retry on every tool call, and never let this context save
-      this.sessionStatus.set(sessionId, "failed");
+      this.sessionStatus.set(sessionId, "stopped");
       logger.warn(
         { userId, sessionId, error },
         "[BrowserStorageSync] Failed to restore saved browser state",
@@ -123,7 +128,20 @@ class BrowserStorageSync {
         );
         return;
       }
-      await BrowserStorageStateModel.upsert(userId, state);
+      if (this.sessionStatus.get(sessionId) === "restored-empty") {
+        await BrowserStorageStateModel.upsert(userId, state);
+        this.sessionStatus.set(sessionId, "restored");
+        return;
+      }
+      const updated = await BrowserStorageStateModel.update(userId, state);
+      if (!updated) {
+        // An admin signed the user out: keep this browser's state unsaved
+        this.sessionStatus.set(sessionId, "stopped");
+        logger.debug(
+          { userId, sessionId },
+          "[BrowserStorageSync] Saved browser state was deleted; stopped saving this session",
+        );
+      }
     } catch (error) {
       // The session may have closed since the tool call; next call retries
       logger.debug(

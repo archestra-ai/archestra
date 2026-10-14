@@ -5,6 +5,7 @@ import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
 import AppModel from "@/models/app";
+import BrowserStorageStateModel from "@/models/browser-storage-state";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
@@ -932,9 +933,8 @@ export const AUDIT_DECISIONS = {
     reason: "ephemeral browser tab state; per-user UI cache",
   },
   browserStorageStatesTable: {
-    audited: false,
-    reason:
-      "per-user browser cookies synced automatically after tool calls; no API mutates it",
+    audited: true,
+    model: BrowserStorageStateModel,
   },
 
   // =========================================================================

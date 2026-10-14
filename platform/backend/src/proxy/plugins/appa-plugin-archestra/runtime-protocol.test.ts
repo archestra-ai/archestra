@@ -379,7 +379,7 @@ describe("protected runtime protocol", () => {
     });
 
     expect(outcome?.toolResultUpdates["runtime-call"]).toBe(
-      `No runtime was started. This Agent's Agent Runtime needs credentials that are not set up yet. Ask the user to add them here, then start the run again: ${setupUrl}`,
+      `No runtime was started. This Agent's Agent Runtime needs credentials that are not set up yet. Put this link in your reply text, never inside a question form, so the user can add them, then start the run again: ${setupUrl}`,
     );
     expect(processed.mock.calls[0][0].classifySpawnResult?.(reported)).toBe(
       "failed",

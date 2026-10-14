@@ -68,6 +68,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
+import { Button } from "@/components/ui/button";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Select,
@@ -194,6 +196,8 @@ function SkillsList() {
   const pageSize = Number(searchParams.get("pageSize") || DEFAULT_TABLE_LIMIT);
   const search = searchParams.get("search") || "";
   const sourceRepo = searchParams.get("sourceRepo") || "";
+  const importedIds = searchParams.get("imported")?.split(",").filter(Boolean);
+  const hasImportFilter = Boolean(importedIds?.length);
   // Label filtering is server-side, so the value rides the list query.
   const labelsFilter = searchParams.get("labels") || undefined;
   const scopeFilter = useScopeFilterParams();
@@ -217,8 +221,11 @@ function SkillsList() {
   );
   const pluginSkillsEnabled = canReadPlugins === true;
   const kindParam = searchParams.get("kind");
-  const requestedKind: SkillKind =
-    kindParam === "standalone" || kindParam === "mcp" || kindParam === "plugin"
+  const requestedKind: SkillKind = hasImportFilter
+    ? "standalone"
+    : kindParam === "standalone" ||
+        kindParam === "mcp" ||
+        kindParam === "plugin"
       ? kindParam
       : "all";
   const kind: SkillKind =
@@ -250,6 +257,7 @@ function SkillsList() {
   const listFilters = {
     search: search || undefined,
     sourceRepo: sourceRepo || undefined,
+    skillIds: hasImportFilter ? importedIds : undefined,
     labels: labelsFilter,
     scope: scopeFilter.scope,
     teamIds: scopeFilter.teamIds,
@@ -343,6 +351,7 @@ function SkillsList() {
   const setKindFilter = useCallback(
     (value: string) => {
       const params = new URLSearchParams(searchParams.toString());
+      params.delete("imported");
       if (value === "all") {
         params.delete("kind");
       } else {
@@ -518,6 +527,7 @@ function SkillsList() {
     ? totalStandaloneSkills
     : items.length;
   const hasActiveFilters =
+    hasImportFilter ||
     !!search ||
     !!sourceRepo ||
     Boolean(labelsFilter) ||
@@ -559,6 +569,7 @@ function SkillsList() {
     const params = new URLSearchParams(searchParams.toString());
     for (const key of [
       "search",
+      "imported",
       "sourceRepo",
       "scope",
       "teamIds",
@@ -915,6 +926,32 @@ function SkillsList() {
             <SkillsEmptyState />
           ) : (
             <>
+              {hasImportFilter && (
+                <InlineNotice variant="info">
+                  <Info />
+                  <span className="font-medium">Just imported</span>
+                  <InlineNoticeText>
+                    Showing only the skills created by this import.
+                  </InlineNoticeText>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="ml-auto"
+                    onClick={() => {
+                      const params = new URLSearchParams(
+                        searchParams.toString(),
+                      );
+                      params.delete("imported");
+                      params.delete("page");
+                      router.push(`${pathname}?${params.toString()}`, {
+                        scroll: false,
+                      });
+                    }}
+                  >
+                    <span>Show all skills</span>
+                  </Button>
+                </InlineNotice>
+              )}
               <CollectionFilters>
                 <FilterBar
                   leading

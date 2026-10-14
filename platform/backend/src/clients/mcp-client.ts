@@ -1737,8 +1737,13 @@ class McpClient {
           : undefined;
       // Health check idle clients to verify the connection is still alive.
       // Recently-used clients skip the ping and recover on actual call failure.
+      // A client whose transport already closed (the SDK clears it on close)
+      // cannot answer; its ping fails at once, so the catch replaces it.
       try {
-        if (this.shouldValidateActiveConnection(connectionKey)) {
+        if (
+          !reusableClient.transport ||
+          this.shouldValidateActiveConnection(connectionKey)
+        ) {
           await reusableClient.ping();
           this.activeConnectionLastValidatedAt.set(connectionKey, Date.now());
         }
@@ -2897,6 +2902,7 @@ class McpClient {
         podName: podName,
         containerName: "mcp-server",
         startTimeoutMs: config.mcpGateway.toolCallTimeoutMs,
+        maxMessageBytes: config.mcpGateway.stdioMaxMessageBytes,
       });
     }
 
@@ -6025,7 +6031,7 @@ function formatActionableAuthError(params: {
     params.detail,
     `To ${params.actionLabel}, visit this URL: ${params.url}`,
     "",
-    "IMPORTANT: You MUST display the URL above to the user exactly as shown. Do NOT omit it or paraphrase it.",
+    "IMPORTANT: You MUST display the URL above to the user exactly as shown, in your reply text, never inside a question form. Do NOT omit it or paraphrase it.",
     "",
     params.postAction,
   ].join("\n");

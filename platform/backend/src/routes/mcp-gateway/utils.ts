@@ -34,10 +34,12 @@ import {
   ListResourceTemplatesRequestSchema,
   ListToolsRequestSchema,
   type ListToolsResult,
+  McpError,
   ReadResourceRequestSchema,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { FastifyRequest } from "fastify";
+import { ZodError } from "zod";
 import {
   archestraMcpBranding,
   executeArchestraTool,
@@ -50,10 +52,17 @@ import {
   getUnassignedDiscoverableTools,
   resolveDynamicTool,
 } from "@/archestra-mcp-server/dynamic-tools";
-import { structuredToolErrorResult } from "@/archestra-mcp-server/helpers";
+import {
+  catchError,
+  errorResult,
+  structuredToolErrorResult,
+} from "@/archestra-mcp-server/helpers";
 import { userHasPermission } from "@/auth/utils";
 import { LRUCacheManager } from "@/cache-manager";
-import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
+import mcpClient, {
+  McpServerStoppedError,
+  type TokenAuthContext,
+} from "@/clients/mcp-client";
 import { isToolRejectedForMcpHeaders } from "@/clients/mcp-param-headers";
 import config from "@/config";
 import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
@@ -107,6 +116,7 @@ import {
   type SelectUserToken,
   type ToolExposureMode,
 } from "@/types";
+import { ApiError } from "@/types/api";
 import { APP_LAUNCH_TOOL_NAME } from "@/types/app";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
@@ -1204,15 +1214,33 @@ export async function createAgentServer(params: {
           requestSizeBytes: args ? JSON.stringify(args).length : undefined,
         });
 
-        if (typeof error === "object" && error !== null && "code" in error) {
+        // Liveness failures carry authored text and must settle detached tasks
+        // as failed rather than as completed error results.
+        if (error instanceof McpServerStoppedError) throw error;
+
+        if (
+          error instanceof McpError ||
+          (typeof error === "object" &&
+            error !== null &&
+            Object.getPrototypeOf(error) === Object.prototype &&
+            "code" in error &&
+            Number.isSafeInteger(error.code) &&
+            "message" in error &&
+            typeof error.message === "string")
+        ) {
           throw error; // Re-throw JSON-RPC errors
         }
 
-        throw {
-          code: -32603, // Internal error
-          message: "Tool execution failed",
-          data: error instanceof Error ? error.message : "Unknown error",
-        };
+        if (error instanceof ApiError && error.statusCode < 500) {
+          logger.warn({ err: error }, "MCP tool execution refused");
+          return complete(errorResult(error.message));
+        }
+        // Custom validation messages and paths can contain submitted secrets.
+        if (error instanceof ZodError) {
+          logger.warn({ err: error }, "MCP tool arguments failed validation");
+          return complete(errorResult("Invalid tool arguments"));
+        }
+        return complete(catchError(error, "executing tool"));
       }
     };
 

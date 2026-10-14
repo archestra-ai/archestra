@@ -33,6 +33,7 @@ import {
 } from "@/components/settings/settings-block";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -479,7 +480,13 @@ export default function AgentSettingsPage() {
         className="space-y-3 border-t pt-6"
       >
         <h2 id="agent-runtime-heading" className="text-base font-semibold">
-          Agent Runtime
+          <span>Agent Runtime</span>{" "}
+          <Badge
+            variant="outline"
+            className="align-middle border-transparent bg-sidebar-chip px-1.5 py-0 text-[10px] text-sidebar-emphasis dark:border-sidebar-emphasis dark:bg-sidebar"
+          >
+            Beta
+          </Badge>
         </h2>
         {runtimeEnabled === false && <AgentRuntimeUnavailableNotice />}
         <div

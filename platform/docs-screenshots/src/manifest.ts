@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { USAGE_TIMEFRAME } from "./determinism";
 import type { Shot } from "./shot";
 
 /**
@@ -85,12 +86,17 @@ export const SHOTS: Shot[] = [
       const { verificationPath } = await response.json();
       await page.goto(verificationPath);
       await page.waitForLoadState("networkidle");
+      const code = page.getByText(/^[A-F0-9]{4}-[A-F0-9]{4}$/);
+      await code.waitFor();
+      await code.evaluate((element) => {
+        element.textContent = "0123-4567";
+      });
     },
     viewport: { width: 1100, height: 480 },
   },
   {
     asset: "automated_screenshots/chat_composer",
-    route: () => "/chat",
+    route: (seed) => `/chat?agentId=${seed.agents["Support Triage"]}`,
     beforeNavigate: async (page) => {
       await page.route("**/api/llm-models/available*", async (route) => {
         await route.fulfill({
@@ -336,11 +342,16 @@ export const SHOTS: Shot[] = [
   {
     asset: "automated_screenshots/platform-projects_project-overview",
     route: (seed) => `/projects/${seed.projects["Q4 Launch Plan"]}`,
+    beforeNavigate: async (page, seed) => {
+      await page.addInitScript((id) => {
+        window.localStorage.setItem("selected-chat-agent", id);
+      }, seed.agents["Support Triage"]);
+    },
   },
 
   {
     asset: "automated_screenshots/platform-agent-skills_skills-in-studio",
-    route: () => "/skills",
+    route: () => "/skills?sortBy=name&sortDirection=asc",
   },
   {
     asset: "automated_screenshots/platform-agent-skills_import-from-github",
@@ -416,7 +427,8 @@ export const SHOTS: Shot[] = [
   },
   {
     asset: "automated_screenshots/llm-proxy_my-usage",
-    route: () => "/llm/usage?timeframe=30d",
+    fixedTime: true,
+    route: () => `/llm/usage?timeframe=${encodeURIComponent(USAGE_TIMEFRAME)}`,
     viewport: { width: 1440, height: 900 },
     prepare: async (page) => {
       await page.getByText("Where your tokens went").first().waitFor();
@@ -425,7 +437,8 @@ export const SHOTS: Shot[] = [
   },
   {
     asset: "automated_screenshots/llm-proxy_costs",
-    route: () => "/llm/costs?timeframe=30d",
+    fixedTime: true,
+    route: () => `/llm/costs?timeframe=${encodeURIComponent(USAGE_TIMEFRAME)}`,
     viewport: { width: 1440, height: 780 },
     prepare: async (page) => {
       await page.getByText("Billed spend").first().waitFor();

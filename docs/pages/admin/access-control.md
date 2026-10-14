@@ -45,6 +45,8 @@ Granular access control is an Enterprise feature, including the [small-team allo
 
 To share a resource, add recipients in its permissions, next to its other settings. One field adds everyone in the organization, a role, a team, a person, or a service account. Each recipient gets its own level: **Can view**, **Can use**, **Can edit**, or **Full access**. A new recipient starts at **Can use** when you may grant it. Save, then confirm the recipient appears with the intended level.
 
+Sharing with everyone or a role makes a resource Org-wide, which takes **Full access** on every resource of that kind or [`accessPolicies:update`](/docs/reference/permissions#accessPolicies:update). By default, Admin and Platform Admin hold this for every kind, and Editor for models and credentials. Without it, the field does not offer everyone or the roles, but you can still lower or remove such a grant.
+
 For grants covering every object of a kind, open the resource list's **More actions** menu beside **Create** or **Add**, then choose **Permissions**. Global policy administration requires [`accessPolicies:read`](/docs/reference/permissions#accessPolicies:read) to view or [`accessPolicies:update`](/docs/reference/permissions#accessPolicies:update) to edit. An individual resource requires `manage-permissions` on that resource.
 
 At least one recipient must keep **Full access** in the permissions for every object of a kind. Without it, nobody can edit, delete, or share objects that other people created, so **Save** stays off until one recipient has it.
@@ -71,6 +73,7 @@ What to know:
 
 - Grants to people and service accounts do not change the level.
 - Organization-wide grants on every resource of a kind do not count, such as Admin's full access.
+- Chats and agent runs are the exception to [who can make a resource Org-wide](#granular-access-control): their owner can share them with anyone.
 
 ### Find Resources by Access
 

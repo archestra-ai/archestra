@@ -3,6 +3,7 @@
 import {
   type archestraApiTypes,
   DocsPage,
+  getDefaultMcpImagePullPolicy,
   isBuiltInCatalogId,
 } from "@archestra/shared";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -593,6 +594,7 @@ export function McpCatalogForm({
   const isTransportTypeDirty = deploymentField("transportType");
   const isHttpPortDirty = deploymentField("httpPort");
   const isHttpPathDirty = deploymentField("httpPath");
+  const isImagePullPolicyDirty = deploymentField("imagePullPolicy");
 
   // The per-field `is*Dirty` flags below drive `ReinstallHint` badges
   // next to individual inputs. The form-level cascade decision lives in
@@ -1241,6 +1243,54 @@ export function McpCatalogForm({
                               : "A dedicated deployment per installation."}
                         </FieldDescription>
                       </div>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <FormField
+                        control={form.control}
+                        name="localConfig.imagePullPolicy"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>
+                              Image pull policy
+                              <ReinstallHint show={isImagePullPolicyDirty} />
+                            </FormLabel>
+                            <FormControl>
+                              <Select
+                                onValueChange={field.onChange}
+                                // Unset follows the image: `:latest` and
+                                // untagged images pull on every rollout.
+                                value={
+                                  field.value ||
+                                  getDefaultMcpImagePullPolicy(
+                                    form.watch("localConfig.dockerImage") ||
+                                      mcpServerBaseImage,
+                                  )
+                                }
+                              >
+                                <SelectTrigger
+                                  aria-label="Image pull policy"
+                                  className="w-full"
+                                >
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Always">Always</SelectItem>
+                                  <SelectItem value="IfNotPresent">
+                                    IfNotPresent
+                                  </SelectItem>
+                                  <SelectItem value="Never">Never</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </FormControl>
+                            <FieldDescription>
+                              Always picks up a new image behind the same tag on
+                              restart. IfNotPresent reuses the node&apos;s copy,
+                              so pods start while the registry is down.
+                            </FieldDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
                     </div>
                     {form.watch("localConfig.transportType") ===
                       "streamable-http" && (

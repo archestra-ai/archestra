@@ -44,12 +44,17 @@ export async function resolveAgentRuntimeCredentials(params: {
     Partial<Pick<ResolvedAgentRuntime, "command">>;
   organizationId: string;
   userId: string | null;
+  /** Shared-credential authorizer; a service account has no personal user row. */
+  authorizationUserId?: string | null;
 }): Promise<AgentRuntimeCredentialResolution> {
   const { shared, perUser } = splitDeclarations(applicableCredentials(params));
   await requireSharedCredentialAccess({
     shared,
     organizationId: params.organizationId,
-    userId: params.userId,
+    userId:
+      params.authorizationUserId === undefined
+        ? params.userId
+        : params.authorizationUserId,
   });
   const batch = await CredentialResolutionBatch.create({
     organizationId: params.organizationId,
@@ -151,6 +156,8 @@ export async function preflightAgentRuntimeCredentials(params: {
     Partial<Pick<ResolvedAgentRuntime, "command">>;
   organizationId: string;
   userId: string | null;
+  /** Shared-credential authorizer; a service account has no personal user row. */
+  authorizationUserId?: string | null;
 }): Promise<{
   configured: string[];
   missing: MissingAgentRuntimeCredential[];
@@ -160,7 +167,10 @@ export async function preflightAgentRuntimeCredentials(params: {
   await requireSharedCredentialAccess({
     shared,
     organizationId: params.organizationId,
-    userId: params.userId,
+    userId:
+      params.authorizationUserId === undefined
+        ? params.userId
+        : params.authorizationUserId,
   });
   const batch = await CredentialResolutionBatch.create({
     organizationId: params.organizationId,

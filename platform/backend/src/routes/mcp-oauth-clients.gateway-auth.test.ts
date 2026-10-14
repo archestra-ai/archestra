@@ -4,8 +4,13 @@ import {
   MCP_OAUTH_CLIENT_REFERENCE_PREFIX,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
+import { A2AManager } from "@/agents/a2a/a2a-manager";
 import db, { schema } from "@/database";
-import { McpOauthClientModel, OAuthAccessTokenModel } from "@/models";
+import {
+  McpOauthClientModel,
+  OAuthAccessTokenModel,
+  ServiceAccountModel,
+} from "@/models";
 import { describe, expect, test } from "@/test";
 import { validateMCPGatewayToken } from "./mcp-gateway/utils";
 
@@ -463,6 +468,78 @@ describe("MCP OAuth client gateway authorization", () => {
     ).not.toBeNull();
     expect(
       await validateMCPGatewayToken(otherGateway.id, accessToken),
+    ).toBeNull();
+  });
+  test("a bound OAuth client resolves the same actor as its account key, honors grants, and revokes tokens on rebind", async ({
+    makeOrganization,
+    makeAgent,
+    makeServiceAccount,
+  }) => {
+    const org = await makeOrganization();
+    const account = await makeServiceAccount(org.id);
+    const other = await makeServiceAccount(org.id);
+    const gateway = await makeAgent({ organizationId: org.id, access: "org" });
+    const privateGateway = await makeAgent({
+      organizationId: org.id,
+      access: "personal",
+    });
+    const { oauthClient } = await McpOauthClientModel.create({
+      organizationId: org.id,
+      authorId: crypto.randomUUID(),
+      name: "worker",
+      serviceAccountId: account.id,
+      allowedGatewayIds: [gateway.id, privateGateway.id],
+    });
+    const token = await mintToken({
+      clientId: oauthClient.clientId,
+      referenceClientUuid: oauthClient.id,
+    });
+    const accountToken = await ServiceAccountModel.createToken({
+      serviceAccountId: account.id,
+      organizationId: org.id,
+      name: "key",
+    });
+    expect(
+      await new A2AManager().resolveActorByMCPGatewayToken(gateway.id, token),
+    ).toEqual(
+      await new A2AManager().resolveActorByMCPGatewayToken(
+        gateway.id,
+        accountToken.token,
+      ),
+    );
+    expect(await validateMCPGatewayToken(privateGateway.id, token)).toBeNull();
+    await McpOauthClientModel.update({
+      id: oauthClient.id,
+      organizationId: org.id,
+      name: "renamed",
+    });
+    expect(
+      (await validateMCPGatewayToken(gateway.id, token))?.serviceAccountId,
+    ).toBe(account.id);
+    await McpOauthClientModel.update({
+      id: oauthClient.id,
+      organizationId: org.id,
+      name: "worker",
+      serviceAccountId: other.id,
+    });
+    expect(await validateMCPGatewayToken(gateway.id, token)).toBeNull();
+    const rebound = await mintToken({
+      clientId: oauthClient.clientId,
+      referenceClientUuid: oauthClient.id,
+    });
+    expect(
+      (await validateMCPGatewayToken(gateway.id, rebound))?.serviceAccountId,
+    ).toBe(other.id);
+    await db
+      .update(schema.serviceAccountsTable)
+      .set({ disabled: true })
+      .where(eq(schema.serviceAccountsTable.id, other.id));
+    expect(await validateMCPGatewayToken(gateway.id, rebound)).toBeNull();
+    await db
+      .delete(schema.serviceAccountsTable)
+      .where(eq(schema.serviceAccountsTable.id, other.id));
+    expect(
+      await McpOauthClientModel.findByClientId(oauthClient.clientId),
     ).toBeNull();
   });
 });

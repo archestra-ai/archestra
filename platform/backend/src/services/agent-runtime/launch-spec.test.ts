@@ -5,11 +5,14 @@ import {
 } from "@archestra/shared";
 import { assert, vi } from "vitest";
 import config from "@/config";
+import { agentRuntimeManager } from "@/k8s/agent-runtime";
 import {
   AgentModel,
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
+  RuntimeCredentialConnectionModel,
+  RuntimeCredentialDefinitionModel,
   ServiceAccountModel,
   SkillModel,
   ToolModel,
@@ -36,6 +39,7 @@ import {
 } from "@/types";
 import { preflightAgentRuntimeCredentials } from "./credentials";
 import { buildAgentRunLaunchSpec } from "./launch-spec";
+import { preflightAgentRuntimeLaunch } from "./preflight";
 
 describe("buildAgentRunLaunchSpec", () => {
   let previousPlatformBaseUrl: string;
@@ -377,24 +381,30 @@ describe("buildAgentRunLaunchSpec", () => {
     });
 
     const runId = crypto.randomUUID();
-    const { spec, gatewayTokenId } = await buildAgentRunLaunchSpec({
-      runtime: runtime(setup.agent, "openai_responses"),
-      taskId: crypto.randomUUID(),
-      runId,
-      agentId: setup.agent.id,
-      actor: {
-        id: serviceAccount.id,
-        kind: "serviceAccount",
+    const { spec, virtualApiKeyId, gatewayTokenId } =
+      await buildAgentRunLaunchSpec({
+        runtime: runtime(setup.agent, "openai_responses"),
+        taskId: crypto.randomUUID(),
+        runId,
+        agentId: setup.agent.id,
+        actor: {
+          id: serviceAccount.id,
+          kind: "serviceAccount",
+          organizationId: setup.agent.organizationId,
+        },
         organizationId: setup.agent.organizationId,
-      },
-      organizationId: setup.agent.organizationId,
-      runtimeScope: "agent-tests",
-      effectiveNetworkPolicy: { source: "built_in", policy: null },
-      appName: "Archestra",
-      runMode: "one_shot",
-      task: "Process an incoming message.",
-    });
+        runtimeScope: "agent-tests",
+        effectiveNetworkPolicy: { source: "built_in", policy: null },
+        appName: "Archestra",
+        runMode: "one_shot",
+        task: "Process an incoming message.",
+      });
 
+    assert(virtualApiKeyId);
+    expect(
+      (await VirtualApiKeyModel.findById(virtualApiKeyId))
+        ?.createdByServiceAccountId,
+    ).toBe(serviceAccount.id);
     const verified = await ServiceAccountModel.verifyToken(
       spec.secretEnv.ARCHESTRA_MCP_GATEWAY_TOKEN,
     );
@@ -418,6 +428,110 @@ describe("buildAgentRunLaunchSpec", () => {
       ),
     ).toBeNull();
   });
+
+  for (const role of ["member", "admin"]) {
+    test(`applies the shared registry credential guard to a ${role} service-account actor`, async ({
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+      makeServiceAccount,
+    }) => {
+      const setup = await makeConfiguredAgent({
+        provider: "gemini",
+        makeOrganization,
+        makeAdmin,
+        makeMember,
+        makeSecret,
+        makeLlmProviderApiKey,
+        makeAgent,
+      });
+      const organizationId = setup.agent.organizationId;
+      const account = await makeServiceAccount(organizationId, { role });
+      await RuntimeCredentialDefinitionModel.create({
+        organizationId,
+        createdBy: setup.user.id,
+        definition: {
+          key: "pipeline-token",
+          name: "Pipeline token",
+          description: "Pipeline credential",
+          icon: "key",
+          allowPersonal: false,
+          allowOrganization: true,
+        },
+      });
+      await RuntimeCredentialConnectionModel.upsert({
+        organizationId,
+        scope: "organization",
+        userId: null,
+        credentialId: "pipeline-token",
+        value: "test-pipeline-secret",
+      });
+      const configured = {
+        ...runtime(setup.agent, "openai_responses"),
+        credentials: [
+          {
+            key: "PIPELINE_TOKEN",
+            credentialId: "pipeline-token",
+            label: "Pipeline token",
+            scope: "shared" as const,
+            required: true,
+          },
+        ],
+      };
+      const actor = {
+        kind: "serviceAccount" as const,
+        id: account.id,
+        organizationId,
+      };
+      vi.spyOn(
+        agentRuntimeManager,
+        "assertSandboxApiInstalled",
+      ).mockResolvedValue(undefined);
+      vi.spyOn(agentRuntimeManager, "isEnabled", "get").mockReturnValue(true);
+      const preflight = () =>
+        preflightAgentRuntimeLaunch({
+          runtime: configured,
+          agent: setup.agent,
+          actor,
+        });
+      const launch = () =>
+        buildAgentRunLaunchSpec({
+          runtime: configured,
+          actor,
+          organizationId,
+          taskId: crypto.randomUUID(),
+          runId: crypto.randomUUID(),
+          agentId: setup.agent.id,
+          runtimeScope: "agent-tests",
+          effectiveNetworkPolicy: { source: "built_in", policy: null },
+          appName: "Archestra",
+          runMode: "one_shot",
+        });
+      if (role === "member") {
+        await expect(preflight()).rejects.toMatchObject({ statusCode: 403 });
+        await expect(launch()).rejects.toMatchObject({ statusCode: 403 });
+      } else {
+        await expect(preflight()).resolves.toBeUndefined();
+        expect((await launch()).spec.secretEnv.PIPELINE_TOKEN).toBe(
+          "test-pipeline-secret",
+        );
+        // Authorization must not fabricate a human owner for personal credentials.
+        const personal = await preflightAgentRuntimeCredentials({
+          runtime: {
+            ...configured,
+            credentials: [{ ...configured.credentials[0], scope: "per_user" }],
+          },
+          organizationId,
+          userId: null,
+          authorizationUserId: `service-account:${account.id}`,
+        });
+        expect(personal.missing).toHaveLength(1);
+      }
+    });
+  }
 
   test("refuses a team run actor now that team tokens are retired", async ({
     makeOrganization,

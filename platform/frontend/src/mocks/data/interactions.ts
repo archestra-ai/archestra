@@ -82,6 +82,7 @@ export function makeInteraction(
     appId: null,
     externalAgentId: null,
     runId: null,
+    serviceAccountId: null,
     userId: null,
     virtualKeyId: null,
     passthroughVirtualKeyId: null,

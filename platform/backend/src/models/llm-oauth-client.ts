@@ -149,6 +149,7 @@ class LlmOauthClientModel {
   static async create(params: {
     organizationId: string;
     name: string;
+    serviceAccountId?: string | null;
     grantType?: LlmOauthClientGrantType;
     providerApiKeys?: LlmOauthClientProviderKey[];
     redirectUris?: string[];
@@ -191,6 +192,7 @@ class LlmOauthClientModel {
           clientId: `llm_oauth_${randomBytes(18).toString("base64url")}`,
           clientSecret: clientSecretHash,
           name: params.name,
+          serviceAccountId: params.serviceAccountId ?? null,
           // authorization_code is a confidential client (client_secret_post) that
           // additionally requires PKCE; its tokens flow through better-auth's
           // standard authorize→token exchange and are user-bound.
@@ -342,6 +344,7 @@ class LlmOauthClientModel {
     id: string;
     organizationId: string;
     name: string;
+    serviceAccountId?: string | null;
     providerApiKeys?: LlmOauthClientProviderKey[];
     redirectUris?: string[];
     /** Omit to keep the current billing team. */
@@ -378,10 +381,22 @@ class LlmOauthClientModel {
     };
 
     const client = await withDbTransaction(async (tx) => {
+      if (
+        params.serviceAccountId !== undefined &&
+        params.serviceAccountId !== existing.serviceAccountId
+      ) {
+        // A token issued to the old principal must never become the new principal.
+        await tx
+          .delete(schema.oauthAccessTokensTable)
+          .where(eq(schema.oauthAccessTokensTable.clientId, existing.clientId));
+      }
       const [row] = await tx
         .update(schema.oauthClientsTable)
         .set({
           name: params.name,
+          ...(params.serviceAccountId !== undefined
+            ? { serviceAccountId: params.serviceAccountId }
+            : {}),
           // Merged, so keys this model no longer writes (the retired `scope`)
           // stay on the row as history rather than vanishing on first edit.
           metadata: sql`${schema.oauthClientsTable.metadata} || ${JSON.stringify(metadata)}::jsonb`,
@@ -451,6 +466,7 @@ class LlmOauthClientModel {
       id: client.id,
       name: client.name,
       clientId: client.clientId,
+      serviceAccountId: client.serviceAccountId,
       organizationId: client.organizationId,
       grantType: client.grantType,
       // Sort by providerApiKeyId so audit diffs ignore source ordering and
@@ -636,6 +652,7 @@ async function hydrateOauthClients(
       {
         id: client.id,
         clientId: client.clientId,
+        serviceAccountId: client.serviceAccountId,
         name: client.name ?? client.clientId,
         organizationId: metadata.organizationId,
         grantType: metadata.grantType,

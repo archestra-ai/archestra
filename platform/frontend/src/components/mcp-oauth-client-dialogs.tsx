@@ -9,6 +9,7 @@ import { CreatedByHeader } from "@/components/credential-billing/created-by-head
 import { ChoiceCards } from "@/components/oauth-client/choice-cards";
 import { GatewayPicker } from "@/components/oauth-client/gateway-picker";
 import { OAuthClientIdentityFields } from "@/components/oauth-client/identity-fields";
+import { OAuthServiceAccountField } from "@/components/oauth-client/service-account-field";
 import {
   parseRedirectUris,
   RedirectUrisField,
@@ -44,6 +45,7 @@ export function EditOAuthClientDialog({
   isSubmitting: boolean;
 }) {
   const [name, setName] = useState("");
+  const [serviceAccountId, setServiceAccountId] = useState<string | null>(null);
   const [selectedGatewayIds, setSelectedGatewayIds] = useState<string[]>([]);
   const [grantsGateways, setGrantsGateways] = useState(false);
   const [redirectUrisText, setRedirectUrisText] = useState("");
@@ -64,12 +66,14 @@ export function EditOAuthClientDialog({
   useEffect(() => {
     if (!oauthClient) return;
     setName(oauthClient.name);
+    setServiceAccountId(oauthClient.serviceAccountId ?? null);
     setSelectedGatewayIds(oauthClient.allowedGatewayIds);
     setGrantsGateways(oauthClient.allowedGatewayIds.length > 0);
     setRedirectUrisText(oauthClient.redirectUris.join("\n"));
     setLabels(oauthClient.labels);
     initialSnapshotRef.current = {
       name: oauthClient.name,
+      serviceAccountId: oauthClient.serviceAccountId ?? null,
       selectedGatewayIds: oauthClient.allowedGatewayIds,
       redirectUrisText: oauthClient.redirectUris.join("\n"),
       labels: oauthClient.labels,
@@ -95,6 +99,7 @@ export function EditOAuthClientDialog({
     (initialSnapshotRef.current !== null &&
       hasUnsavedChanges(initialSnapshotRef.current, {
         name,
+        serviceAccountId,
         selectedGatewayIds: grantedGatewayIds,
         redirectUrisText,
         labels,
@@ -126,6 +131,10 @@ export function EditOAuthClientDialog({
         await onSubmit(oauthClient.id, {
           name: name.trim(),
           grantType: oauthClient.grantType,
+          ...(!isAuthorizationCode &&
+            serviceAccountId !== (oauthClient.serviceAccountId ?? null) && {
+              serviceAccountId,
+            }),
           allowedGatewayIds: grantedGatewayIds,
           ...(isAuthorizationCode && { redirectUris }),
           labels: finalLabels,
@@ -158,6 +167,12 @@ export function EditOAuthClientDialog({
           }
         />
 
+        {!isAuthorizationCode && (
+          <OAuthServiceAccountField
+            value={serviceAccountId}
+            onChange={setServiceAccountId}
+          />
+        )}
         {isAuthorizationCode && (
           <div>
             <RedirectUrisField

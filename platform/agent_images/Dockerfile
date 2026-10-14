@@ -29,7 +29,8 @@ WORKDIR /home/node/workspace
 RUN --network=none \
     --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/workspace-files.py \
- && python3 /tmp/agent-image-tests/interactive-resume.py
+ && python3 /tmp/agent-image-tests/interactive-resume.py \
+ && ARCHESTRA_TEST_WRAPPERS=/usr/local/bin python3 /tmp/agent-image-tests/mcp-startup-diagnostic.py
 
 FROM agent-base AS agent-claude-code
 USER root

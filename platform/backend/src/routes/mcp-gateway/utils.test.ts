@@ -340,31 +340,24 @@ describe("validateMCPGatewayToken", () => {
       agentAccessSpy.mockRestore();
     });
 
-    test("reuses resolved service account tokens across profiles", async ({
+    test("disabling a service account invalidates an already-used key across gateways immediately", async ({
       makeAgent,
       makeOrganization,
       makeServiceAccountToken,
     }) => {
       const org = await makeOrganization();
-      const { value } = await makeServiceAccountToken({
+      const { value, serviceAccount } = await makeServiceAccountToken({
         organizationId: org.id,
       });
-      const verifyTokenSpy = vi.spyOn(ServiceAccountModel, "verifyToken");
-
-      const firstResult = await validateMCPGatewayToken(
-        (await makeAgent({ organizationId: org.id })).id,
-        value,
-      );
-      const secondResult = await validateMCPGatewayToken(
-        (await makeAgent({ organizationId: org.id })).id,
-        value,
-      );
-
-      expect(firstResult).not.toBeNull();
-      expect(secondResult).not.toBeNull();
-      expect(verifyTokenSpy).toHaveBeenCalledTimes(1);
-
-      verifyTokenSpy.mockRestore();
+      const first = await makeAgent({ organizationId: org.id });
+      const second = await makeAgent({ organizationId: org.id });
+      expect(await validateMCPGatewayToken(first.id, value)).not.toBeNull();
+      expect(await validateMCPGatewayToken(second.id, value)).not.toBeNull();
+      await ServiceAccountModel.update(serviceAccount.id, org.id, {
+        disabled: true,
+      });
+      expect(await validateMCPGatewayToken(first.id, value)).toBeNull();
+      expect(await validateMCPGatewayToken(second.id, value)).toBeNull();
     });
   });
 

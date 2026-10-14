@@ -13,6 +13,7 @@ import {
 } from "@archestra/shared";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { getBedrockRegion } from "@/clients/bedrock-credentials";
 import { selectMCPGatewayToken } from "@/clients/chat-mcp-client";
 import config from "@/config";
@@ -111,6 +112,10 @@ export async function buildAgentRunLaunchSpec(params: {
     runtime: params.runtime,
     organizationId: params.organizationId,
     userId: actorUserId,
+    authorizationUserId:
+      params.actor.kind === "serviceAccount"
+        ? serviceAccountUserId(params.actor.id)
+        : actorUserId,
   });
   if (credentials.misconfigured.length > 0) {
     throw new ApiError(
@@ -696,7 +701,7 @@ function virtualKeyVisibility(actor: A2AActor): {
   if (actor.kind === "serviceAccount") {
     return {
       scope: "org",
-      authorId: null,
+      authorId: serviceAccountUserId(actor.id),
       initialPermissionGrants: [
         {
           subject: { type: "serviceAccount", id: actor.id },

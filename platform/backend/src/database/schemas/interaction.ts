@@ -24,6 +24,7 @@ import type {
 } from "@/types";
 import agentsTable from "./agent";
 import environmentsTable from "./environment";
+import serviceAccountsTable from "./service-account";
 import usersTable from "./user";
 import virtualApiKeysTable from "./virtual-api-key";
 
@@ -57,6 +58,10 @@ const interactionsTable = pgTable(
     userId: text("user_id").references(() => usersTable.id, {
       onDelete: "set null",
     }),
+    serviceAccountId: uuid("service_account_id").references(
+      () => serviceAccountsTable.id,
+      { onDelete: "set null" },
+    ),
     virtualKeyId: uuid("virtual_key_id").references(
       () => virtualApiKeysTable.id,
       { onDelete: "set null" },

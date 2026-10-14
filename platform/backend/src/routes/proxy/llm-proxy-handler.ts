@@ -33,6 +33,7 @@ import {
 } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { RequestLookups } from "@/auth/request-lookups";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { anthropicVertexClient } from "@/clients/anthropic-vertex";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
@@ -302,6 +303,7 @@ export interface LLMProxyContext<TRequest> {
   /** Team the authenticating credential's spend is charged to. */
   billingTeamId?: string;
   userId?: string;
+  serviceAccountId?: string;
   resolvedUser?: { id: string; email: string; name: string } | null;
   virtualKeyId?: string;
   passthroughVirtualKeyId?: string;
@@ -340,6 +342,7 @@ export interface StreamTiming {
 }
 
 export type LLMProxyAuthOverride = {
+  serviceAccountId?: string;
   apiKey: string | undefined;
   baseUrl: string | undefined;
   /** Mapped chat_api_key row ID; used by the proxy to look up per-key settings (e.g. extra headers). */
@@ -779,6 +782,7 @@ export async function handleLLMProxy<
     );
   // The X-Archestra-User-Id header is an unauthenticated hint; it does not
   // participate in the cross-credential user-consistency check below.
+  let serviceAccountId = authOverride?.serviceAccountId;
   let userId = (await utils.headers.userId.getUser(headersForExtraction))
     ?.userId;
   let resolvedUser = userId ? await UserModel.getById(userId) : null;
@@ -1083,6 +1087,7 @@ export async function handleLLMProxy<
       authMethod = oauthResult.authMethod;
       authenticatedApp = oauthResult.authenticatedApp;
       billingTeamId ??= oauthResult.billingTeamId;
+      serviceAccountId = oauthResult.serviceAccountId;
       if (oauthResult.userId) {
         oauthUserId = oauthResult.userId;
         userId = oauthResult.userId;
@@ -1113,6 +1118,7 @@ export async function handleLLMProxy<
       perKeyChatApiKeyId = virtualResult.chatApiKeyId;
       wasVirtualKeyResolved = true;
       virtualKeyId = virtualResult.virtualKeyId;
+      serviceAccountId = virtualResult.serviceAccountId;
       billingTeamId ??= virtualResult.billingTeamId;
       // A personal standard virtual key identifies its owner; include it in the
       // cross-credential consistency check.
@@ -1260,6 +1266,17 @@ export async function handleLLMProxy<
   // whose author is the acting user (Codex ChatGPT subscription, Claude Code
   // virtual key). Consistency with any other authenticated identity was just
   // asserted, so this can never disagree with them.
+  if (serviceAccountId && authenticatedUserId) {
+    throw new ApiError(
+      401,
+      "Credentials identify both a user and a service account.",
+    );
+  }
+  if (serviceAccountId) {
+    // A caller-supplied user hint cannot change the credential's principal.
+    userId = undefined;
+    resolvedUser = null;
+  }
   if (!userId && regularVirtualKeyUserId) {
     userId = regularVirtualKeyUserId;
     resolvedUser = await UserModel.getById(userId);
@@ -1501,7 +1518,9 @@ export async function handleLLMProxy<
       provider: providerName,
       modelId: actualModel,
       organizationId: resolvedAgent.organizationId,
-      authenticatedUserId,
+      authenticatedUserId: serviceAccountId
+        ? serviceAccountUserId(serviceAccountId)
+        : authenticatedUserId,
     });
     if (!modelTeamAccess.allowed) {
       logger.info(
@@ -2501,6 +2520,7 @@ export async function handleLLMProxy<
       authenticatedApp,
       billingTeamId,
       userId,
+      serviceAccountId,
       resolvedUser,
       virtualKeyId,
       passthroughVirtualKeyId,
@@ -2579,6 +2599,7 @@ export async function handleLLMProxy<
         externalAgentId,
         runId,
         userId,
+        serviceAccountId,
         virtualKeyId,
         passthroughVirtualKeyId,
         appId: attributedAppId,
@@ -2712,6 +2733,7 @@ async function handleStreaming<
     authenticatedApp,
     billingTeamId,
     userId,
+    serviceAccountId,
     virtualKeyId,
     passthroughVirtualKeyId,
     resolvedUser,
@@ -2874,6 +2896,7 @@ async function handleStreaming<
         externalAgentId,
         runId,
         userId,
+        serviceAccountId,
         virtualKeyId,
         passthroughVirtualKeyId,
         appId,
@@ -3610,6 +3633,7 @@ async function handleStreaming<
           billingTeamId,
           runId,
           userId,
+          serviceAccountId,
           virtualKeyId,
           passthroughVirtualKeyId,
           appId,
@@ -3683,6 +3707,7 @@ async function handleNonStreaming<
     authenticatedApp,
     billingTeamId,
     userId,
+    serviceAccountId,
     virtualKeyId,
     passthroughVirtualKeyId,
     resolvedUser,
@@ -4054,6 +4079,7 @@ async function handleNonStreaming<
         billingTeamId,
         runId,
         userId,
+        serviceAccountId,
         virtualKeyId,
         passthroughVirtualKeyId,
         appId,
@@ -4198,6 +4224,7 @@ async function handleNonStreaming<
       billingTeamId,
       runId,
       userId,
+      serviceAccountId,
       virtualKeyId,
       passthroughVirtualKeyId,
       appId,

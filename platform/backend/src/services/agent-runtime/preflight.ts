@@ -1,4 +1,5 @@
 import type { A2AActor } from "@/agents/a2a/a2a-base";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import type { Agent, ResolvedAgentRuntime } from "@/types";
 import { AgentRuntimeCredentialsRequiredError, ApiError } from "@/types";
 import { resolveAgentRuntimeBackendDriver } from "./backends";
@@ -26,6 +27,8 @@ export async function preflightAgentRuntimeLaunch(params: {
     runtime,
     organizationId: actor.organizationId,
     userId,
+    authorizationUserId:
+      actor.kind === "serviceAccount" ? serviceAccountUserId(actor.id) : userId,
   });
   if (credentials.misconfigured.length > 0) {
     throw new ApiError(

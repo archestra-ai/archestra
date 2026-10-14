@@ -28,14 +28,27 @@ export async function isGuardrailsV2Active(): Promise<boolean> {
   return (await readGuardrailsV2Activation()) === "active";
 }
 export async function getGuardrailsDeployment() {
-  const { enabled, unsupportedClientAction } =
+  const { enabled, unsupportedClientAction, superyellEnabled } =
     await GuardrailsDeploymentModel.get();
   return {
     enabled,
     unsupportedClientAction,
+    superyellEnabled,
     featureEnabled: enterpriseTier.isOpenappaActive(),
     active: enterpriseTier.isOpenappaActive() && enabled,
   };
+}
+
+export const SUPERYELL_DISABLED_MESSAGE =
+  "An administrator turned off superyell in Guardrails settings, so OpenAPPA cannot be turned off for this session. Use yell to report the problem instead.";
+
+/**
+ * Whether agents are offered superyell and may run it: enforcement is on and
+ * an administrator has not turned superyell off in Guardrails settings.
+ */
+export async function isSuperyellAvailable(): Promise<boolean> {
+  const { active, superyellEnabled } = await getGuardrailsDeployment();
+  return active && superyellEnabled;
 }
 
 /**
@@ -49,6 +62,7 @@ export async function getGuardrailsDeployment() {
 export async function setGuardrailsDeployment(update: {
   enabled?: boolean;
   unsupportedClientAction?: UnsupportedAppaClientAction;
+  superyellEnabled?: boolean;
 }) {
   if (update.enabled && enterpriseTier.isOpenappaActive()) {
     const refusals = await refusedPolicies();

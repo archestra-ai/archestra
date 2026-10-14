@@ -171620,6 +171620,9 @@
                         "block"
                       ]
                     },
+                    "superyellEnabled": {
+                      "type": "boolean"
+                    },
                     "featureEnabled": {
                       "type": "boolean"
                     },
@@ -171630,6 +171633,7 @@
                   "required": [
                     "enabled",
                     "unsupportedClientAction",
+                    "superyellEnabled",
                     "featureEnabled",
                     "active"
                   ],
@@ -171899,6 +171903,9 @@
                       "bypass",
                       "block"
                     ]
+                  },
+                  "superyellEnabled": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -171923,6 +171930,9 @@
                         "block"
                       ]
                     },
+                    "superyellEnabled": {
+                      "type": "boolean"
+                    },
                     "featureEnabled": {
                       "type": "boolean"
                     },
@@ -171933,6 +171943,7 @@
                   "required": [
                     "enabled",
                     "unsupportedClientAction",
+                    "superyellEnabled",
                     "featureEnabled",
                     "active"
                   ],

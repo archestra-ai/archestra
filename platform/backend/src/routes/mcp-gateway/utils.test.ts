@@ -1792,6 +1792,55 @@ describe("createAgentServer tools/list", () => {
     );
   });
 
+  test("hides superyell, and keeps yell, when an administrator turns superyell off", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const previousEnabled = config.openappa.enabled;
+    config.openappa.enabled = true;
+    await GuardrailsDeploymentModel.set({
+      enabled: true,
+      superyellEnabled: false,
+    });
+    onTestFinished(() => {
+      config.openappa.enabled = previousEnabled;
+    });
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      toolExposureMode: "search_and_run_only",
+    });
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      },
+    });
+    const listToolsHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+    if (!listToolsHandler) throw new Error("Expected tools/list handler");
+    const response = await listToolsHandler({
+      method: "tools/list",
+      params: {},
+    });
+    const names = response.tools.map((tool) => tool.name);
+    expect(names).not.toContain(archestraMcpBranding.getToolName("superyell"));
+    expect(names).toContain(archestraMcpBranding.getToolName("yell"));
+  });
+
   test("hides remedy tools while the deployment switch is off and still lists policy tools", async ({
     makeAgent,
     makeMember,

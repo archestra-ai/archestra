@@ -111,7 +111,10 @@ import {
   sanitizeAppNameForToolMetadata,
 } from "@/services/apps/app-run-link";
 import { filterToolsByCallerCatalogAccess } from "@/services/caller-catalog-access";
-import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
+import {
+  isGuardrailsV2Active,
+  isSuperyellAvailable,
+} from "@/services/guardrails-deployment";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import {
   discoverOidcJwksUrl,
@@ -445,6 +448,8 @@ export async function buildAgentMcpToolList(params: {
       : [];
   // A thrown switch read must fail the list, not look like the switch is off.
   const remediesActive = await isGuardrailsV2Active();
+  // superyell can also arrive assigned, so it is dropped from the whole list.
+  const superyellAvailable = await isSuperyellAvailable();
   const implicitOpenAppaTools = getArchestraMcpTools().filter((tool) => {
     const shortName = archestraMcpBranding.getToolShortName(tool.name);
     if (APPA_IMPLICIT_TOOL_SHORT_NAMES.has(shortName ?? "")) {
@@ -485,6 +490,10 @@ export async function buildAgentMcpToolList(params: {
         },
       })),
     ].map(toMcpListTool),
+  ).filter(
+    (tool) =>
+      superyellAvailable ||
+      archestraMcpBranding.getToolShortName(tool.name) !== "superyell",
   );
 
   // Filter Archestra tools based on user RBAC permissions

@@ -52,7 +52,7 @@ The command changes nothing on your computer until you approve it in your browse
 2. Click **Copy** and run the command in a terminal. It prints a code and opens an approval page in your browser.
 3. Check that the code in the browser matches the code in the terminal. Tick **This code matches the code in my terminal** and click **Approve connection**.
 4. Back in the terminal, the installer sets up your client and lists what it set up. When it asks **Sign in now?**, press Enter to sign in to the gateway in your browser.
-5. Open a new terminal and run the command the installer prints last. It starts your client with a first question, such as `opencode --prompt 'What can you do with my Archestra tools from the archestra MCP server? Do not call, test, reconnect or sign in to my other MCP servers. Leave them out of your answer.'`. The question keeps your client on the gateway, so it leaves your other MCP servers alone. Cursor has no command: open Cursor.
+5. Open a new terminal and run the command the installer prints last. It starts your client with a first question about the gateway's tools, leaving your other MCP servers alone. Cursor has no command: open Cursor.
 
 ![The browser approval page with a code to match against the terminal](/docs/automated_screenshots/platform-connection_browser-approval.webp)
 

@@ -1300,7 +1300,7 @@ describe("ConnectPage after copying the command", () => {
         connectionDefaultMcpGatewayId: "gw-1",
       },
     });
-    render(<ConnectionPage />);
+    return render(<ConnectionPage />);
   }
 
   const copyCommand = () =>
@@ -1379,6 +1379,30 @@ describe("ConnectPage after copying the command", () => {
     expect(status()).toHaveTextContent(
       "Connected. Next, ask Cursor what it can do now",
     );
+  });
+
+  it("stops waiting when the gateway server name changes, but keeps a connected prompt", async () => {
+    const view = show(["cursor"]);
+    await copyCommand();
+    expect(status()).toHaveTextContent("Waiting for approval");
+
+    const rename = (name: string) => {
+      vi.mocked(useProfile).mockReturnValue({
+        data: { id: "gw-1", name, slug: "team", tools: [] },
+        isPending: false,
+      } as unknown as ReturnType<typeof useProfile>);
+      view.rerender(<ConnectionPage />);
+    };
+    rename("Renamed gateway");
+    expect(status()).toBeNull();
+
+    await copyCommand();
+    await approveElsewhere();
+    const renamedWelcome = welcome.replace("team_gateway", "renamed_gateway");
+    expect(screen.getByText(renamedWelcome)).toBeVisible();
+
+    rename("Another gateway name");
+    expect(screen.getByText(renamedWelcome)).toBeVisible();
   });
 
   it("shows the starter prompt from the link", async () => {

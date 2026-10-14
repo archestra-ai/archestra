@@ -665,6 +665,12 @@ function ConnectArea({
         keptPlugins.length === 0),
   );
 
+  const serverName = gatewayServerName({
+    client,
+    gateway: data.gateway,
+    appName: data.appName,
+    tools: choices.tools && data.partsFor(client).tools,
+  });
   // After copying: the status card under the band. A changed pick or choice
   // sends it back to idle, except once connected.
   const setupKey = [
@@ -674,14 +680,9 @@ function ConnectArea({
     download,
     ...leftOutParts,
     data.gateway?.id,
+    serverName,
     ...keptPlugins.map((p) => p.id),
   ].join();
-  const serverName = gatewayServerName({
-    client,
-    gateway: data.gateway,
-    appName: data.appName,
-    tools: choices.tools && data.partsFor(client).tools,
-  });
   const [run, setRun] = useState<AfterConnectRun>({
     phase: "idle",
     key: setupKey,

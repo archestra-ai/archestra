@@ -134,6 +134,7 @@ vi.mock("@/lib/chat/chat.query", () => ({
     variables: undefined,
   }),
   usePinConversation: () => ({ mutate: vi.fn() }),
+  fetchConversation: vi.fn(),
 }));
 
 vi.mock("@/lib/config/config.query");
@@ -142,6 +143,10 @@ vi.mock("@/lib/projects/projects.query", () => ({
   useProjects: () => ({ data: mockProjects }),
   usePinProject: () => ({ mutate: vi.fn() }),
   useCreateProject: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useCreateProjectFromConversation: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
 }));
 
 vi.mock("@/lib/app.query", () => ({
@@ -285,6 +290,7 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
       {children}
     </button>
   ),
+  DropdownMenuSeparator: () => <hr />,
   DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => (
     <>{children}</>
   ),
@@ -342,7 +348,7 @@ vi.mock("lucide-react", async (importOriginal) => {
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 // Import after mocks
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { ChatSidebarSection } from "./chat-sidebar-section";
 
@@ -361,6 +367,9 @@ beforeEach(() => {
   vi.mocked(useHasPermissions).mockReturnValue({
     data: true,
   } as ReturnType<typeof useHasPermissions>);
+  vi.mocked(useSession).mockReturnValue({
+    data: { user: { id: "user-1" } },
+  } as ReturnType<typeof useSession>);
   vi.mocked(useFeature).mockReturnValue(true);
 });
 
@@ -377,6 +386,7 @@ function makeConv(
   return {
     id,
     title,
+    userId: "user-1",
     pinnedAt: opts?.pinnedAt ?? null,
     updatedAt,
     lastMessageAt: opts?.lastMessageAt ?? updatedAt,

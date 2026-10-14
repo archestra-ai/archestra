@@ -83,7 +83,7 @@ test.describe("Skills import", () => {
     // skillPaths: ["skills/target"]}; anything else comes back skipped, the
     // dialog stays open, and the assertions below fail. Closing therefore
     // pins the request payload.
-    await dialog.getByRole("button", { name: /^Import/ }).click();
+    await dialog.getByRole("button", { name: /^Import(?: \(|$)/ }).click();
     await expect(dialog).toBeHidden();
 
     // onImported navigates to the skills list.
@@ -119,7 +119,7 @@ test.describe("Skills import", () => {
     });
     await expect(dialog).toContainText("1 of 1 selected");
 
-    await dialog.getByRole("button", { name: /^Import/ }).click();
+    await dialog.getByRole("button", { name: /^Import(?: \(|$)/ }).click();
 
     // The mutation's toast reports the skip; once it shows, the import round
     // trip is complete and the dialog must still be open.
@@ -281,6 +281,7 @@ test.describe("Skills import", () => {
     });
     await expect(selectDialog).toContainText("git.acme.example/acme/skills");
     await expect(selectDialog).toContainText("1 of 1 selected");
+    await selectDialog.getByRole("button", { name: "Import settings" }).click();
     await expect(
       selectDialog.getByRole("combobox", { name: "Keep in sync" }),
     ).toContainText("Once a day");
@@ -289,7 +290,9 @@ test.describe("Skills import", () => {
         request.method() === "POST" &&
         new URL(request.url()).pathname.endsWith("/api/skills/github/import"),
     );
-    await selectDialog.getByRole("button", { name: /^Import/ }).click();
+    await selectDialog
+      .getByRole("button", { name: /^Import(?: \(|$)/ })
+      .click();
     expect((await importRequest).postDataJSON()).toEqual({
       repoUrl,
       path: "packages/skills",
@@ -366,7 +369,7 @@ test.describe("Skills import", () => {
       .click();
     await page
       .getByRole("dialog", { name: "Select skills to import" })
-      .getByRole("button", { name: /^Import/ })
+      .getByRole("button", { name: /^Import(?: \(|$)/ })
       .click();
 
     await expect(

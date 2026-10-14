@@ -1425,6 +1425,20 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetCostSavingsStatistics]: {
     llmCost: ["read"],
   },
+  // Grouped usage reporting. Like GetUserStatistics, the routes additionally
+  // require member:read before returning anyone else's usage, and app/skill
+  // usage narrow to the apps and skills the caller can see.
+  [RouteId.GetMcpToolCallUsage]: {
+    llmCost: ["read"],
+  },
+  [RouteId.GetAppUsage]: {
+    llmCost: ["read"],
+    app: ["read"],
+  },
+  [RouteId.GetSkillUsage]: {
+    llmCost: ["read"],
+    skill: ["read"],
+  },
   // Secrets Routes
   [RouteId.GetSecretsType]: {
     organizationSettings: ["read"],

@@ -1,5 +1,5 @@
 {
-  "id": "eb431aa1-5d6e-49aa-920d-9d18e06dc3c5",
+  "id": "4f3993b9-1e9c-498e-af91-2ab5e1de601c",
   "prevId": "00b9603d-4a40-459a-8886-1cdb92b1f333",
   "version": "7",
   "dialect": "postgresql",
@@ -16111,6 +16111,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "tool_name": {
+          "name": "tool_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_error": {
+          "name": "is_error",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
         "encrypted_chat_conversation_id": {
           "name": "encrypted_chat_conversation_id",
           "type": "uuid",
@@ -18536,12 +18548,6 @@
         },
         "connection_base_urls": {
           "name": "connection_base_urls",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "connection_client_future_providers": {
-          "name": "connection_client_future_providers",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false
@@ -26674,13 +26680,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'standard'"
-        },
-        "include_future_providers": {
-          "name": "include_future_providers",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "secret_id": {
           "name": "secret_id",

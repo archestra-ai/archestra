@@ -1,4 +1,5 @@
 import {
+  boolean,
   index,
   jsonb,
   pgTable,
@@ -48,6 +49,16 @@ const mcpToolCallsTable = pgTable(
     // - tools/list: { tools: [...] }
     // - initialize: { capabilities, serverInfo }
     toolResult: jsonb("tool_result").$type<unknown>(),
+    /**
+     * Plaintext copies of the call's tool name and outcome, so usage statistics
+     * can group on them in SQL: `tool_call`/`tool_result` may be encrypted, and
+     * name plus status is exactly what the `mcp_tool_calls_total` metric already
+     * exposes. Set only for `tools/call` rows. `tool_name` stays null on
+     * encrypted-chat rows, whose content the server must not read. Null on rows
+     * written before these columns existed; readers fall back to the JSON.
+     */
+    toolName: varchar("tool_name", { length: 255 }),
+    isError: boolean("is_error"),
     /**
      * Non-null marks `toolCall`/`toolResult` as encrypted under an encrypted-chat
      * conversation's browser-held key rather than the server key, and names the

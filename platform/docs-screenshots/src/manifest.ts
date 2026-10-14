@@ -620,7 +620,10 @@ async function showGuardrailsEnforced(page: Page) {
     });
   });
   await page.reload();
-  await page.getByText("Policy coverage", { exact: true }).waitFor();
+  await page.getByText("Enforcement on", { exact: true }).waitFor();
+  await page
+    .getByRole("heading", { name: "How your policy decides", exact: true })
+    .waitFor();
   await page.waitForLoadState("networkidle");
 }
 

@@ -4,20 +4,30 @@ import {
   RouteId,
   StatisticsTimeFrameSchema,
 } from "@archestra/shared";
+import type { FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { hasPermission } from "@/auth";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
-import { AppAccessModel, SkillTeamModel, StatisticsModel } from "@/models";
+import {
+  AppAccessModel,
+  SkillTeamModel,
+  StatisticsModel,
+  UsageStatisticsModel,
+} from "@/models";
 import { callerIsAppAdmin } from "@/services/apps/app-authorization";
 import {
   AgentStatisticsSchema,
   APP_STATISTICS_SORT_BY,
+  APP_USAGE_DIMENSIONS,
   AppStatisticsSchema,
+  AppUsageResponseSchema,
   ChatCostBaselineSchema,
   CostSavingsStatisticsSchema,
   constructResponseSchema,
   createSortingQuerySchema,
+  MCP_TOOL_CALL_USAGE_DIMENSIONS,
+  McpToolCallUsageResponseSchema,
   ModelStatisticsSchema,
   MyStatisticsSchema,
   MyUsageBreakdownSchema,
@@ -25,7 +35,9 @@ import {
   ProxyCostQuerySchema,
   ProxyCostStatisticsSchema,
   SKILL_STATISTICS_SORT_BY,
+  SKILL_USAGE_DIMENSIONS,
   SkillStatisticsSchema,
+  SkillUsageResponseSchema,
   TeamStatisticsSchema,
   USER_STATISTICS_SORT_BY,
   UserStatisticsSchema,
@@ -406,6 +418,175 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       );
     },
   );
+
+  fastify.get(
+    "/api/statistics/mcp-tool-calls",
+    {
+      schema: {
+        operationId: RouteId.GetMcpToolCallUsage,
+        description:
+          "Get MCP tool-call counts grouped by any combination of `day`, `mcpServerName`, `toolName`, `userId`, `agentId` and `appId` — one row per group, with its call and error counts. Group by `day` (UTC calendar days) for a daily series, e.g. `groupBy=day,toolName`. Counts `tools/call` requests made by agents, gateways and apps. Callers without `member:read` see only their own calls.",
+        tags: ["Statistics"],
+        querystring: UsageQuerySchema.extend({
+          groupBy: groupByQuerySchema(MCP_TOOL_CALL_USAGE_DIMENSIONS, [
+            "mcpServerName",
+            "toolName",
+          ]),
+          agentId: z.string().uuid().optional(),
+          appId: z.string().uuid().optional(),
+          mcpServerName: z.string().min(1).max(255).optional(),
+          toolName: z.string().min(1).max(255).optional(),
+        }),
+        response: constructResponseSchema(McpToolCallUsageResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      const {
+        query: { limit, offset, ...filters },
+        organizationId,
+      } = request;
+      return reply.send(
+        await UsageStatisticsModel.getMcpToolCallUsage({
+          ...filters,
+          pagination: { limit, offset },
+          ...(await usageScope(request)),
+          organizationId,
+        }),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/statistics/app-usage",
+    {
+      schema: {
+        operationId: RouteId.GetAppUsage,
+        description:
+          "Get app usage grouped by any combination of `day`, `appId` and `userId` — one row per group: times the app was opened, tool calls it made, and the LLM requests, tokens and spend it generated. Group by `day` (UTC calendar days) for a daily series. Apps outside the caller's visibility are excluded, and callers without `member:read` see only their own usage.",
+        tags: ["Statistics"],
+        querystring: UsageQuerySchema.extend({
+          groupBy: groupByQuerySchema(APP_USAGE_DIMENSIONS, ["appId"]),
+          appId: z.string().uuid().optional(),
+        }),
+        response: constructResponseSchema(AppUsageResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      const {
+        query: { limit, offset, ...filters },
+        organizationId,
+        user,
+      } = request;
+      const accessibleAppIds = (await callerIsAppAdmin(user.id, organizationId))
+        ? undefined
+        : await AppAccessModel.getUserAccessibleAppIds({
+            organizationId,
+            userId: user.id,
+          });
+      return reply.send(
+        await UsageStatisticsModel.getAppUsage({
+          ...filters,
+          pagination: { limit, offset },
+          ...(await usageScope(request)),
+          organizationId,
+          accessibleAppIds,
+        }),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/statistics/skill-usage",
+    {
+      schema: {
+        operationId: RouteId.GetSkillUsage,
+        description:
+          "Get skill usage grouped by any combination of `day`, `skillId` and `userId` — one row per group: activations, the context tokens they added, and how many distinct people activated a skill. Group by `day` (UTC calendar days) for a daily series. Covers the organization's own skills. Skills outside the caller's scope are excluded, and callers without `member:read` see only their own usage.",
+        tags: ["Statistics"],
+        querystring: UsageQuerySchema.extend({
+          groupBy: groupByQuerySchema(SKILL_USAGE_DIMENSIONS, ["skillId"]),
+          skillId: z.string().uuid().optional(),
+        }),
+        response: constructResponseSchema(SkillUsageResponseSchema),
+      },
+    },
+    async (request, reply) => {
+      const {
+        query: { limit, offset, ...filters },
+        organizationId,
+        user,
+      } = request;
+      const checker = await getSkillPermissionChecker({
+        userId: user.id,
+        organizationId,
+      });
+      const accessibleSkillIds = checker.isAdmin
+        ? undefined
+        : await SkillTeamModel.getUserAccessibleSkillIds({
+            organizationId,
+            userId: user.id,
+          });
+      return reply.send(
+        await UsageStatisticsModel.getSkillUsage({
+          ...filters,
+          pagination: { limit, offset },
+          ...(await usageScope(request)),
+          organizationId,
+          accessibleSkillIds,
+        }),
+      );
+    },
+  );
 };
 
 export default statisticsRoutes;
+
+// ===== Internal =====
+
+/** Filters shared by the grouped usage endpoints. */
+const UsageQuerySchema = StatisticsQuerySchema.extend({
+  userId: z.string().min(1).optional().describe("Only this person's usage."),
+  teamId: z
+    .string()
+    .min(1)
+    .optional()
+    .describe("Only usage by direct members of this team."),
+}).merge(PaginationQuerySchema);
+
+/** A comma-separated `groupBy` list of the endpoint's dimensions. */
+function groupByQuerySchema<const D extends readonly [string, ...string[]]>(
+  dimensions: D,
+  defaultValue: D[number][],
+) {
+  return z
+    .preprocess(
+      (value) =>
+        typeof value === "string" ? value.split(",").filter(Boolean) : value,
+      z.array(z.enum(dimensions)).min(1),
+    )
+    .optional()
+    .default(defaultValue)
+    .describe(
+      `Comma-separated dimensions to group by: ${dimensions.join(", ")}. Defaults to ${defaultValue.join(",")}.`,
+    );
+}
+
+/**
+ * Seeing other people's usage implies seeing the roster, so — as for
+ * per-user statistics — it requires `member:read`; without it the results
+ * narrow to the caller's own usage.
+ */
+async function usageScope({
+  user,
+  organizationId,
+  headers,
+  serviceAccount,
+}: FastifyRequest): Promise<{ restrictToUserId?: string }> {
+  const { success: canReadAllUsers } = await hasPermission(
+    { member: ["read"] },
+    headers,
+    serviceAccount,
+    { userId: user.id, organizationId },
+  );
+  return canReadAllUsers ? {} : { restrictToUserId: user.id };
+}

@@ -132,6 +132,7 @@ function generateLlmApiPermissionsSection(): string {
 | User cost statistics for all users | \`llmCost:read\` and \`member:read\` | Identified users in the active organization |
 | App cost statistics | \`llmCost:read\` and \`app:read\` | Apps allowed by the caller’s read grants |
 | Skill cost statistics | \`llmCost:read\` and \`skill:read\` | Skills allowed by the caller’s read grants |
+| Tool-call, app, and skill usage (\`/api/statistics/mcp-tool-calls\`, \`app-usage\`, \`skill-usage\`) | \`llmCost:read\`, plus \`app:read\` or \`skill:read\` for apps and skills | The caller's usage; add \`member:read\` for everyone's |
 | LLM and MCP logs for the caller | \`log:read\` | Records attributed to the caller |
 | All LLM and MCP logs | \`log:read\` and \`log:admin\` | All records in the active organization, including unattributed traffic |
 

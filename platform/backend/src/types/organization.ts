@@ -271,6 +271,14 @@ export const ConnectionBaseUrlSchema = z.object({
  * per provider, or several for providers whose keys are separate endpoints. A
  * client with no keys falls back to the user's own key resolution.
  */
+export const ConnectionClientFutureProvidersSchema = z.partialRecord(
+  ConnectionSetupClientIdSchema,
+  z.boolean(),
+);
+export type ConnectionClientFutureProviders = z.infer<
+  typeof ConnectionClientFutureProvidersSchema
+>;
+
 export const ConnectionClientProviderKeysSchema = z.partialRecord(
   ConnectionSetupClientIdSchema,
   z.array(
@@ -356,6 +364,8 @@ const extendedFields = {
   sessionMaxAgeSeconds: z.number().int().nullable(),
   oauthAccessTokenLifetimeSeconds: OAuthAccessTokenLifetimeSecondsSchema,
   connectionBaseUrls: z.array(ConnectionBaseUrlSchema).nullable(),
+  connectionClientFutureProviders:
+    ConnectionClientFutureProvidersSchema.nullable(),
   connectionClientProviderKeys: ConnectionClientProviderKeysSchema.nullable(),
   // The stored (lenient) shapes: a jsonb value written by an older build must
   // not 500 the organization read.
@@ -547,6 +557,8 @@ export const UpdateAuthSettingsSchema = z.object({
 
 export const UpdateConnectionSettingsSchema = z.object({
   connectionDefaultMcpGatewayId: z.string().uuid().nullable().optional(),
+  connectionClientFutureProviders:
+    ConnectionClientFutureProvidersSchema.nullable().optional(),
   connectionClientProviderKeys:
     ConnectionClientProviderKeysSchema.nullable().optional(),
   connectionDefaultClientId: z.string().max(64).nullable().optional(),

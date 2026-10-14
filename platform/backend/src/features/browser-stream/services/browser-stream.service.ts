@@ -133,6 +133,11 @@ export class BrowserStreamService {
     ConversationStateKey,
     Promise<TabResult>
   >();
+  // Last input order sent per conversation (see buildInputActionCode)
+  private readonly inputSequence = new LRUCacheManager<InputOrder>({
+    maxSize: 10_000,
+    defaultTtl: 60 * TimeInMs.Minute,
+  });
 
   /**
    * Execute a Playwright MCP tool directly via mcpClient, bypassing the MCP Gateway.
@@ -1266,10 +1271,31 @@ export class BrowserStreamService {
     agentId: string,
     conversationId: string,
     userContext: BrowserUserContext,
+    options?: {
+      /**
+       * A quick frame while the user types or clicks: one screenshot call that
+       * Playwright MCP answers at once, without the URL, viewport check or
+       * caret. A settled frame instead runs through browser_run_code, which
+       * MCP holds for a second or more after it runs.
+       */
+      fast?: boolean;
+    },
   ): Promise<ScreenshotResult> {
     // NOTE: We do NOT call selectOrCreateTab here.
     // Tab is selected once on subscription. After that, we just capture
     // whatever is current, so LLM navigation works correctly.
+
+    if (!options?.fast) {
+      const runCodeTool = await this.findRunCodeTool(agentId);
+      if (runCodeTool) {
+        return this.takeSettledScreenshot({
+          runCodeTool,
+          agentId,
+          conversationId,
+          userContext,
+        });
+      }
+    }
 
     const toolName = await this.findScreenshotTool(agentId);
     if (!toolName) {
@@ -1279,8 +1305,11 @@ export class BrowserStreamService {
       );
     }
 
-    // Always use fixed viewport dimensions for consistent page rendering
-    await this.resizeBrowser(agentId, conversationId, userContext);
+    // Fixed viewport dimensions for consistent page rendering; a quick frame
+    // trusts the viewport the last settled frame set
+    if (!options?.fast) {
+      await this.resizeBrowser(agentId, conversationId, userContext);
+    }
 
     logScreenshotInfo(
       { agentId, conversationId, toolName },
@@ -1351,7 +1380,9 @@ export class BrowserStreamService {
 
     // Get URL reliably using browser_evaluate instead of extracting from screenshot response
     // This ensures the URL matches the page content shown in the screenshot
-    const url = await this.getCurrentUrl(agentId, conversationId, userContext);
+    const url = options?.fast
+      ? undefined
+      : await this.getCurrentUrl(agentId, conversationId, userContext);
 
     // NOTE: URL sync moved to websocket handler (sendScreenshot) to prevent race conditions
     // when user switches conversations while screenshot is in-flight.
@@ -1359,6 +1390,41 @@ export class BrowserStreamService {
     return {
       screenshot,
       url,
+      viewportWidth: DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH,
+      viewportHeight: DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT,
+    };
+  }
+
+  /**
+   * One browser call for a settled frame: set the viewport if it drifted, then
+   * capture with the caret visible, plus the URL. Replaces the separate
+   * resize, screenshot and URL calls.
+   */
+  private async takeSettledScreenshot(params: {
+    runCodeTool: string;
+    agentId: string;
+    conversationId: string;
+    userContext: BrowserUserContext;
+  }): Promise<ScreenshotResult> {
+    const { runCodeTool, agentId, conversationId, userContext } = params;
+    const result = await this.executeTool({
+      toolName: runCodeTool,
+      args: { code: SETTLED_FRAME_CODE },
+      agentId,
+      conversationId,
+      userContext,
+    });
+    if (result.isError) {
+      const errorText = this.extractTextContent(result.content);
+      throw new ApiError(500, errorText || "Screenshot failed");
+    }
+    const frame = this.parseInputActionFrame(result.content);
+    if (!frame) {
+      return { error: "No screenshot returned from browser tool" };
+    }
+    return {
+      screenshot: frame.screenshot,
+      url: frame.url || undefined,
       viewportWidth: DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH,
       viewportHeight: DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT,
     };
@@ -1618,6 +1684,17 @@ export class BrowserStreamService {
     );
   }
 
+  private nextInputOrder(conversationId: string): InputOrder {
+    // A fresh token whenever the sequence restarts, so the page's gate resets
+    // with it instead of comparing against an old, higher count
+    const last = this.inputSequence.get(conversationId);
+    const order = last
+      ? { token: last.token, seq: last.seq + 1 }
+      : { token: randomUUID(), seq: 1 };
+    this.inputSequence.set(conversationId, order);
+    return order;
+  }
+
   /**
    * Click on an element using element ref from snapshot OR coordinates
    * For coordinates, uses browser_run_code to perform Playwright mouse.click()
@@ -1636,17 +1713,9 @@ export class BrowserStreamService {
     x?: number,
     y?: number,
   ): Promise<ClickResult> {
-    const tabResult = await this.selectOrCreateTab(
-      agentId,
-      conversationId,
-      userContext,
-    );
-    if (!tabResult.success) {
-      throw new ApiError(
-        500,
-        tabResult.error ?? "Failed to select browser tab",
-      );
-    }
+    // No tab selection: input goes to the current tab, the one every frame
+    // shows (each conversation has its own browser; the tab was selected on
+    // subscribe). Selecting it again cost two browser calls per keystroke.
 
     // No resize here: takeScreenshot resizes before every frame, so the frame
     // the user clicked on already matches the viewport coordinates.
@@ -1679,6 +1748,7 @@ export class BrowserStreamService {
         // Native Playwright mouse click, plus a frame in the same call
         const code = buildInputActionCode(
           `await page.mouse.click(${safeX}, ${safeY});`,
+          this.nextInputOrder(conversationId),
         );
 
         try {
@@ -1771,17 +1841,9 @@ export class BrowserStreamService {
     text: string,
     element?: string,
   ): Promise<TypeResult> {
-    const tabResult = await this.selectOrCreateTab(
-      agentId,
-      conversationId,
-      userContext,
-    );
-    if (!tabResult.success) {
-      throw new ApiError(
-        500,
-        tabResult.error ?? "Failed to select browser tab",
-      );
-    }
+    // No tab selection: input goes to the current tab, the one every frame
+    // shows (each conversation has its own browser; the tab was selected on
+    // subscribe). Selecting it again cost two browser calls per keystroke.
 
     // If no element specified, use page.keyboard.type() to type into focused element
     if (!element) {
@@ -1797,6 +1859,7 @@ export class BrowserStreamService {
         // Native Playwright keyboard type, plus a frame in the same call
         const playwrightCode = buildInputActionCode(
           `await page.keyboard.type(${safeText});`,
+          this.nextInputOrder(conversationId),
         );
 
         const result = await this.executeTool({
@@ -1866,17 +1929,9 @@ export class BrowserStreamService {
     userContext: BrowserUserContext,
     key: string,
   ): Promise<ScrollResult> {
-    const tabResult = await this.selectOrCreateTab(
-      agentId,
-      conversationId,
-      userContext,
-    );
-    if (!tabResult.success) {
-      throw new ApiError(
-        500,
-        tabResult.error ?? "Failed to select browser tab",
-      );
-    }
+    // No tab selection: input goes to the current tab, the one every frame
+    // shows (each conversation has its own browser; the tab was selected on
+    // subscribe). Selecting it again cost two browser calls per keystroke.
 
     // Prefer run_code: it returns a frame in the same call
     const runCodeTool = await this.findRunCodeTool(agentId);
@@ -1887,6 +1942,7 @@ export class BrowserStreamService {
         args: {
           code: buildInputActionCode(
             `await page.keyboard.press(${JSON.stringify(key)});`,
+            this.nextInputOrder(conversationId),
           ),
         },
         agentId,
@@ -1939,17 +1995,9 @@ export class BrowserStreamService {
     userContext: BrowserUserContext,
     params: { x: number; y: number; deltaX: number; deltaY: number },
   ): Promise<ScrollResult> {
-    const tabResult = await this.selectOrCreateTab(
-      agentId,
-      conversationId,
-      userContext,
-    );
-    if (!tabResult.success) {
-      throw new ApiError(
-        500,
-        tabResult.error ?? "Failed to select browser tab",
-      );
-    }
+    // No tab selection: input goes to the current tab, the one every frame
+    // shows (each conversation has its own browser; the tab was selected on
+    // subscribe). Selecting it again cost two browser calls per keystroke.
 
     const runCodeTool = await this.findRunCodeTool(agentId);
     if (!runCodeTool) {
@@ -1967,6 +2015,7 @@ export class BrowserStreamService {
     const deltaY = Math.round(params.deltaY);
     const code = buildInputActionCode(
       `await page.mouse.move(${x}, ${y}); await page.mouse.wheel(${deltaX}, ${deltaY});`,
+      this.nextInputOrder(conversationId),
     );
 
     const result = await this.executeTool({
@@ -2044,11 +2093,37 @@ export class BrowserStreamService {
 
 /**
  * Wrap an input action so the same browser call also returns a frame and the
- * URL. Saves the separate resize/screenshot/URL calls after every input, and
- * captures with the text caret visible (Playwright hides it by default).
+ * URL, captured with the text caret visible (Playwright hides it by default).
+ *
+ * Inputs are sent without waiting for the previous one: Playwright MCP holds
+ * every action call for at least a second after it runs (and longer while the
+ * page has requests in flight), so serial input meant ~3 s per keystroke. The
+ * calls run concurrently, so each waits in the page for its predecessor by
+ * sequence number to keep keystrokes in order. A new token starts a new
+ * sequence; a missing predecessor (lost call) stops blocking after 5 s.
+ *
+ * browser_run_code evaluates this in a bare vm context holding only `page`:
+ * JS built-ins exist, Node globals such as setTimeout do not.
  */
-function buildInputActionCode(action: string): string {
+function buildInputActionCode(action: string, order: InputOrder): string {
+  const token = JSON.stringify(order.token);
   // The capture is best-effort: a slow frame must not turn a completed action
   // into a reported failure.
-  return `async (page) => { ${action} try { const shot = await page.screenshot({ type: "jpeg", quality: 70, caret: "initial", timeout: 1500 }); return { url: page.url(), screenshot: shot.toString("base64") }; } catch { return { url: page.url() }; } }`;
+  return `async (page) => {
+  let gate = page.__archestraInputGate;
+  if (!gate || gate.token !== ${token}) gate = page.__archestraInputGate = { token: ${token}, done: 0 };
+  const deadline = Date.now() + 5000;
+  while (gate.done < ${order.seq - 1} && Date.now() < deadline) await page.waitForTimeout(5);
+  try { ${action} } finally { gate.done = Math.max(gate.done, ${order.seq}); }
+  try { const shot = await page.screenshot({ type: "jpeg", quality: 70, caret: "initial", timeout: 1500 }); return { url: page.url(), screenshot: shot.toString("base64") }; } catch { return { url: page.url() }; }
+}`;
 }
+
+type InputOrder = { token: string; seq: number };
+
+const SETTLED_FRAME_CODE = `async (page) => {
+  const size = page.viewportSize();
+  if (!size || size.width !== ${DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH} || size.height !== ${DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT}) await page.setViewportSize({ width: ${DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH}, height: ${DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT} });
+  const shot = await page.screenshot({ type: "jpeg", quality: 70, caret: "initial", timeout: 5000 });
+  return { url: page.url(), screenshot: shot.toString("base64") };
+}`;

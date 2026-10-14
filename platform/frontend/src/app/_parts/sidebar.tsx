@@ -56,13 +56,17 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { SHORTCUT_NEW_CHAT, SHORTCUT_SEARCH } from "@/consts";
 import { prefetchApps } from "@/lib/app.query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
-import { useFeature } from "@/lib/config/config.query";
 import { useDocsScreenshotMode } from "@/lib/docs-screenshot-mode";
 import { useGithubStars } from "@/lib/github/github.query";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
@@ -217,7 +221,16 @@ const NavPrimary = ({
         <SidebarPrefetchLink
           href={item.url}
           data-testid={item.testId}
-          className="relative"
+          className={cn(
+            "relative",
+            // The dot is pinned to the row's right edge, where a badge also
+            // ends; pad the row so the badge clears the dot instead of
+            // sitting underneath it.
+            item.beta &&
+              item.dotKey &&
+              unseenDotKeys.has(item.dotKey) &&
+              "pr-4",
+          )}
           onClick={() => {
             if (item.dotKey) onDotItemVisit(item.dotKey);
             if (isMobile) setOpenMobile(false);
@@ -226,12 +239,10 @@ const NavPrimary = ({
           <item.icon className={item.iconClassName} />
           <span className="min-w-0 flex-1 truncate">{item.title}</span>
           {item.beta && (
-            <Badge
-              variant="outline"
-              className="ml-auto shrink-0 border-transparent bg-sidebar-chip px-1.5 py-0 text-[10px] text-sidebar-emphasis dark:border-sidebar-emphasis dark:bg-sidebar group-data-[collapsible=icon]:hidden"
-            >
-              {item.badgeLabel ?? "New"}
-            </Badge>
+            <NavItemBadge
+              label={item.badgeLabel ?? "New"}
+              tooltip={item.badgeTooltip}
+            />
           )}
           {item.dotKey && (
             <OnboardingDot
@@ -525,7 +536,6 @@ export function AppSidebar() {
     mcpGateway: ["read"],
   });
   const showConnect = Boolean(canReadMcpGateway || canReadLlmProxy);
-  const pluginsEnabled = useFeature("plugins");
   const { data: guardrailsDeployment } = useGuardrailsDeployment();
 
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
@@ -558,7 +568,6 @@ export function AppSidebar() {
       contentNavGroups.map((group) => ({
         ...group,
         items: group.items
-          .filter((item) => item.url !== "/plugins" || pluginsEnabled === true)
           // Costs & Limits is one row over two pages, so it has to choose
           // which one it opens: a reader who may read limits but not costs
           // would otherwise land on a page they cannot see.
@@ -596,7 +605,7 @@ export function AppSidebar() {
             return item;
           }),
       })),
-    [pluginsEnabled, guardrailsDeployment?.enabled, permissionMap],
+    [guardrailsDeployment?.enabled, permissionMap],
   );
 
   return (
@@ -793,6 +802,24 @@ function getPrefetchHref(href: React.ComponentProps<typeof Link>["href"]) {
 }
 
 const NO_UNSEEN_KEYS: Set<NavDotKey> = new Set();
+
+function NavItemBadge({ label, tooltip }: { label: string; tooltip?: string }) {
+  const badge = (
+    <Badge
+      variant="outline"
+      className="ml-auto shrink-0 border-transparent bg-sidebar-chip px-1.5 py-0 text-[10px] text-sidebar-emphasis dark:border-sidebar-emphasis dark:bg-sidebar group-data-[collapsible=icon]:hidden"
+    >
+      {label}
+    </Badge>
+  );
+  if (!tooltip) return badge;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{badge}</TooltipTrigger>
+      <TooltipContent side="right">{tooltip}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 /**
  * The Chats sidebar's first action: an outlined button, set apart from the

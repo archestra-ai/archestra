@@ -52,7 +52,9 @@ import {
   getHitlReviewResult,
   type HitlReviewOutcome,
   hitlReviewAskedInForm,
+  isHitlReviewOutcome,
   recordHitlRuling,
+  sealHitlClosure,
 } from "@/openappa/hitl-review";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
 import {
@@ -126,7 +128,7 @@ import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import { collectDeclaredToolNames } from "@/routes/proxy/utils/declared-tool-names";
 import type { ToolNameResolution } from "@/routes/proxy/utils/gateway-tool-names";
 import { readGuardrailsV2Activation } from "@/services/guardrails-deployment";
-import { ApiError } from "@/types";
+import { ApiError, type CommonToolResult } from "@/types";
 import type {
   RuntimeLaunchFailureReason,
   RuntimeLaunchOutcome,
@@ -147,6 +149,8 @@ import {
   type AppaRelayMessage,
   type AppaTrustedContext,
   type AskUserArguments,
+  type NativeQuestionNoAnswer,
+  type NativeQuestionReading,
 } from "./types";
 import { withCallerScope, withoutCallerScope } from "./utils";
 
@@ -507,25 +511,28 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const waitTool = binding.adapter?.pendingServersTool;
     // A ruling in the result of the client's wait tool is a denial that tool
     // carried: the model made another call there, and has to be told so.
-    const carriedDenials = new Set(
+    const carriedDenials = new Map(
       toolResults.flatMap((answer) =>
         answer.name === waitTool &&
         !answer.namespace &&
         result.toolResultUpdates[answer.id]?.denied &&
         !binding.request.restoredNoticeCallIds?.has(answer.id)
-          ? [answer.id]
+          ? [[answer.id, answer] as const]
           : [],
       ),
     );
     const toolResultUpdates = {
       ...childResultUpdates,
       ...Object.fromEntries(
-        Object.entries(result.toolResultUpdates).map(([id, result]) => [
-          id,
-          carriedDenials.has(id)
-            ? `[appa] OpenAPPA sent this ${waitTool} call in place of the tool call you made. Your call did not run. The remedy tools were still loading, so the client waited for them. The ruling on your call follows.\n\n${result.content}`
-            : result.content,
-        ]),
+        Object.entries(result.toolResultUpdates).map(([id, result]) => {
+          const wait = carriedDenials.get(id);
+          return [
+            id,
+            wait
+              ? `[appa] OpenAPPA sent this ${waitTool} call in place of the tool call you made. Your call did not run. The remedy tools were still loading, so the client waited for them.${waitFailure(wait)} The ruling on your call follows.\n\n${result.content}`
+              : result.content,
+          ];
+        }),
       ),
       ...failedLaunchResults,
     };
@@ -887,7 +894,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         offerIds.length > 0 &&
         (await hitlReviewAskedInForm({ session: binding.session, offerIds }))
           ? prepared
-          : this.asNativeQuestion(binding, prepared);
+          : this.asNativeQuestion(binding, prepared, offerIds.length > 0);
       changed ||= nativeQuestion !== prepared;
       prepared = nativeQuestion;
       const issued =
@@ -1169,6 +1176,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // Resolved once for the batch, by the first denial that has no notice tool.
     let pendingServersTool: Promise<string | undefined> | undefined;
     const blocked: { id: string; name: string; reason: string }[] = [];
+    const rewritten: { id: string; name: string }[] = [];
     const annotated: LlmProxyToolCallAnnotation[] = [];
     const runtimeProofs: LlmProxyRuntimeToolProof[] = [];
     const mint = this.delegationMinter(
@@ -1180,11 +1188,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     for (const call of calls) {
       if (handbackIds.has(call.id)) {
         const handback = await admitChildHandback({ binding, call });
-        blocked.push({
-          id: call.id,
-          name: call.name,
-          reason: "OpenAPPA replaced the child return with admitted bytes",
-        });
+        rewritten.push({ id: call.id, name: call.name });
         released.push(handback.call);
         if (calls.length === 1) {
           binding.completedHandbackReturn = handback.returnText;
@@ -1194,12 +1198,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       const inbox = peerInbox.get(call.id);
       if (inbox?.kind === "release") {
         if (inbox.call !== call) {
-          blocked.push({
-            id: call.id,
-            name: call.name,
-            reason:
-              "OpenAPPA bound this peer-message call to the authenticated session",
-          });
+          rewritten.push({ id: call.id, name: call.name });
         }
         released.push(inbox.call);
         continue;
@@ -1210,12 +1209,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       const relay = relays.get(call.id);
       if (relay?.kind === "release") {
         if (relay.call !== call) {
-          blocked.push({
-            id: call.id,
-            name: call.name,
-            reason:
-              "OpenAPPA replaced the message with the text the return check admitted",
-          });
+          rewritten.push({ id: call.id, name: call.name });
         }
         released.push(relay.call);
         continue;
@@ -1402,6 +1396,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const stamp = trajectoryStamper(binding, context);
     if (
       blocked.length === 0 &&
+      rewritten.length === 0 &&
       annotated.length === 0 &&
       !stamp &&
       handbackIds.size === 0 &&
@@ -1413,6 +1408,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       decision: "allow",
       toolCalls: stamp ? released.map(stamp) : released,
       ...(blocked.length > 0 ? { blocked } : {}),
+      ...(rewritten.length > 0 ? { rewritten } : {}),
       ...(annotated.length > 0 ? { annotated } : {}),
       ...(runtimeProofs.length > 0 ? { runtimeProofs } : {}),
     };
@@ -1676,6 +1672,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   private asNativeQuestion(
     binding: AppaPluginBinding,
     call: LlmProxyToolCallsContext["toolCalls"][number],
+    /** The call carries a server-held review, not arguments the model wrote. */
+    review: boolean,
   ): LlmProxyToolCallsContext["toolCalls"][number] {
     if (binding.runtimeSessionId) return call;
     const native = binding.adapter?.nativeQuestion;
@@ -1692,9 +1690,17 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     ) {
       return call;
     }
-    const args = parseAskUserArguments(call.arguments);
-    if (!args) return call;
-    if (args.allowMultiple && native.supportsMultiple === false) return call;
+    const parsed = parseAskUserArguments(call.arguments);
+    if (!parsed) return call;
+    if (parsed.allowMultiple && native.supportsMultiple === false) return call;
+    // A preview shows only a call this server holds. Text a model put in
+    // these fields of its own question could pass for a review's call.
+    const {
+      callPreview: _callPreview,
+      shortQuestion: _shortQuestion,
+      ...asked
+    } = parsed;
+    const args = review ? parsed : asked;
     return {
       id: call.id,
       name: native.toolName,
@@ -1813,6 +1819,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       ? undefined
       : name;
   }
+}
+
+/** The client's own report of a failed wait, so the model sees the real error. */
+function waitFailure(wait: CommonToolResult): string {
+  if (!wait.isError) return "";
+  const reported =
+    typeof wait.content === "string"
+      ? wait.content
+      : JSON.stringify(wait.content);
+  return ` The wait itself failed, and the client reported:\n${reported}\n`;
 }
 
 function notLoadedRulingKey(params: {
@@ -4550,7 +4566,8 @@ async function recordNativeHitlRulings(params: {
       : "none";
     if (reading === "unrecognized") {
       // A client version may word its answer differently. Nothing is read
-      // from it; a client with forms is asked again there.
+      // from it; a client with forms is asked again there. A known no-answer
+      // does not take this path.
       logger.warn(
         {
           client: params.binding.adapter?.id,
@@ -4571,7 +4588,33 @@ async function recordNativeHitlRulings(params: {
         continue;
       }
     }
-    const ruling = reading === "unrecognized" ? "none" : reading;
+    if (
+      isNativeNoAnswer(reading) ||
+      reading === "unrecognized" ||
+      reading === "none"
+    ) {
+      for (const offerId of claim.offerIds) {
+        const review = await getHitlReview({
+          session: params.binding.session,
+          offerId,
+        });
+        const sealed = await sealHitlClosure({
+          session: params.binding.session,
+          offerId,
+          ...(isNativeNoAnswer(reading) ? { closure: reading } : {}),
+        });
+        const ruling =
+          sealed === "approve" || sealed === "deny" ? sealed : "none";
+        recorded.push({
+          offerId,
+          ruling,
+          ...(review?.tool ? { reviewedTool: review.tool } : {}),
+          ...(review?.arguments ? { reviewedArguments: review.arguments } : {}),
+        });
+      }
+      continue;
+    }
+    const ruling = reading;
     logger.debug(
       {
         ruling,
@@ -4773,18 +4816,7 @@ async function pendingReviewResult(
     ok: false,
     outcome,
     offer_id: offerId,
-    instruction: {
-      review_required:
-        "Ask the user with the declared ask_user tool and this offer ID in remedy_offer_ids. The platform shows the exact review with Approve and Deny choices. Call execute_remedy_plan again only after the user approves.",
-      review_unanswered:
-        "The approval review expired without an answer. The protected call remains blocked; no ruling was granted. Do not retry this expired review.",
-      review_cancelled:
-        "The user cancelled the approval review. The protected call remains blocked; no ruling was granted. Do not reopen this review.",
-      review_unavailable:
-        "The approval review could not be delivered in this session. The protected call remains blocked; no ruling was granted.",
-      review_invalid:
-        "The approval review did not receive a valid decision. The protected call remains blocked; no ruling was granted.",
-    }[outcome],
+    instruction: reviewStatusInstruction(outcome),
   });
 }
 
@@ -4992,6 +5024,35 @@ async function hasRemedyOfferResult(params: {
   return true;
 }
 
+function reviewStatusInstruction(outcome: HitlReviewOutcome): string {
+  const instructions = {
+    review_required:
+      "Ask the user with the declared ask_user tool and this offer ID in remedy_offer_ids. The platform shows the exact review with Approve and Deny choices. Call execute_remedy_plan again only after the user approves.",
+    review_declined:
+      "The client declined the approval review. That is not a human denial. The protected call remains blocked; no ruling was granted. Do not reopen this review.",
+    review_unanswered:
+      "The approval review expired without an answer. The protected call remains blocked; no ruling was granted. Do not retry this expired review.",
+    review_cancelled:
+      "The client canceled the approval review. That does not show a person saw it. The protected call remains blocked; no ruling was granted. Do not reopen this review.",
+    review_unavailable:
+      "The approval review could not be delivered in this session. The protected call remains blocked; no ruling was granted.",
+    review_invalid:
+      "The approval review did not receive a valid decision. The protected call remains blocked; no ruling was granted.",
+  } satisfies Record<HitlReviewOutcome, string>;
+  return instructions[outcome];
+}
+
+function isNativeNoAnswer(
+  reading: NativeQuestionReading,
+): reading is NativeQuestionNoAnswer {
+  return (
+    reading === "declined" ||
+    reading === "cancelled" ||
+    reading === "unanswered" ||
+    reading === "unavailable"
+  );
+}
+
 function reviewRequiredOfferId(value: unknown, depth: number): string | null {
   const status = reviewResultStatus(value, depth);
   return status?.outcome === "review_required" ? status.offerId : null;
@@ -5028,11 +5089,7 @@ function reviewResultStatus(
   }
   if (!isRecord(value)) return null;
   if (
-    (value.outcome === "review_required" ||
-      value.outcome === "review_unanswered" ||
-      value.outcome === "review_cancelled" ||
-      value.outcome === "review_unavailable" ||
-      value.outcome === "review_invalid") &&
+    isHitlReviewOutcome(value.outcome) &&
     typeof value.offer_id === "string" &&
     value.offer_id.length > 0
   ) {

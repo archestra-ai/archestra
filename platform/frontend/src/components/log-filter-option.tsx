@@ -16,7 +16,7 @@ export function SourceFilterOption({ source }: { source: InteractionSource }) {
 export function ClientFilterOption({
   client,
 }: {
-  client: Pick<ClientFamily, "label" | "provider" | "icon">;
+  client: Pick<ClientFamily, "label" | "provider" | "icon" | "mark">;
 }) {
   return (
     <span className="flex items-center gap-2 min-w-0">

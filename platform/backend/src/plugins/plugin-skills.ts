@@ -1,4 +1,6 @@
+import { isPermissionActionGranted } from "@archestra/shared";
 import { userHasPermission } from "@/auth";
+import type { RequestLookups } from "@/auth/request-lookups";
 import {
   PluginModel,
   PluginSkillUsageEventModel,
@@ -24,6 +26,7 @@ import type { PluginSkillDetail, PluginSkillListItem } from "@/types";
 export async function listPluginSkills(params: {
   organizationId: string;
   userId?: string;
+  lookups?: RequestLookups;
 }): Promise<PluginSkillListItem[]> {
   const accessiblePluginIds = await resolvePluginAccess(params);
   const candidates = await PluginModel.findSkillManifestCandidates({
@@ -79,6 +82,7 @@ export async function getPluginSkill(params: {
   skillPath: string;
   organizationId: string;
   userId?: string;
+  lookups?: RequestLookups;
 }): Promise<PluginSkillDetail | null> {
   const accessiblePluginIds = await resolvePluginAccess(params);
   if (
@@ -162,18 +166,31 @@ export async function getPluginSkill(params: {
 async function resolvePluginAccess(params: {
   organizationId: string;
   userId?: string;
+  lookups?: RequestLookups;
 }): Promise<string[] | undefined> {
   if (!params.userId) {
     return PluginTeamModel.getUserAccessiblePluginIds({
       organizationId: params.organizationId,
     });
   }
-  const canRead = await userHasPermission(
-    params.userId,
-    params.organizationId,
-    "plugin",
-    "read",
-  );
+  const canRead = params.lookups
+    ? isPermissionActionGranted({
+        resource: "plugin",
+        grantedActions:
+          (
+            await params.lookups.permissions({
+              userId: params.userId,
+              organizationId: params.organizationId,
+            })
+          ).plugin ?? [],
+        requiredAction: "read",
+      })
+    : await userHasPermission(
+        params.userId,
+        params.organizationId,
+        "plugin",
+        "read",
+      );
   if (!canRead) return [];
   const isAdmin = await ResourcePermissions.allows({
     userId: params.userId,
@@ -181,12 +198,14 @@ async function resolvePluginAccess(params: {
     resource: "plugin",
     scope: "*",
     action: "update",
+    lookups: params.lookups,
   });
   return isAdmin
     ? undefined
     : PluginTeamModel.getUserAccessiblePluginIds({
         organizationId: params.organizationId,
         userId: params.userId,
+        lookups: params.lookups,
       });
 }
 

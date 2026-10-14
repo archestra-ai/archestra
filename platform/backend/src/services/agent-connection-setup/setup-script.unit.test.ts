@@ -20,6 +20,7 @@ import {
 import {
   CLAUDE_CODE_CLIENT_ID,
   CODEX_CLIENT_ID,
+  KILO_CLIENT_ID,
   OPENCODE_CLIENT_ID,
 } from "@archestra/shared/interactions/client";
 import { DEFAULT_MODELS } from "@archestra/shared/model-constants";
@@ -199,7 +200,7 @@ function fullContext(
             ...PROXY,
             provider: "openai",
             providerLabel: "OpenAI",
-            ...(clientId === "opencode"
+            ...(clientId === "opencode" || clientId === "kilo"
               ? {
                   primaryProviders: [
                     {
@@ -371,6 +372,7 @@ describe("Claude Code APPA permission installation", () => {
     "list_peer_messages",
     "read_peer_message",
     "yell",
+    "superyell",
     "ask_user",
   ].map((name) => `mcp__prod_gateway__archestra__${name}`);
 
@@ -445,6 +447,7 @@ describe("Claude Code APPA permission installation", () => {
       "list_peer_messages",
       "read_peer_message",
       "yell",
+      "superyell",
       "ask_user",
     ].map((name) => `mcp__company_gateway__company__${name}`);
     expect(result.settings.permissions.allow).toEqual([
@@ -555,6 +558,7 @@ describe("Claude Code APPA permission installation", () => {
       "list_peer_messages",
       "read_peer_message",
       "yell",
+      "superyell",
       "ask_user",
     ].map((name) => `mcp__prod_gateway__archestra__${name}`);
     const original = JSON.stringify({
@@ -818,6 +822,7 @@ const ALL_CLIENTS = [
   "copilot-cli",
   "cursor",
   "opencode",
+  "kilo",
 ] as const;
 
 describe("renderSetupScript", () => {
@@ -1721,6 +1726,118 @@ ${script.slice(pluginStart, pluginEnd)}
   });
 
   test.each([
+    "macos",
+    "windows",
+  ] as const)("kilo (%s): sets up Kilo Code in its own folders and never touches OpenCode's", (platform) => {
+    const script = renderSetupScript({
+      ...fullContext("kilo", platform),
+      proxy: OPENAI_PASSTHROUGH_PROXY,
+      runtimeHandoffInstructions: "Hand runtime work to Archestra.",
+    });
+
+    expect(script).toContain("kilo.json");
+    expect(script).toContain("kilo-routing-plugin-state.json");
+    expect(script).toContain("archestra-llm-proxy.js");
+    expect(script).toContain(KILO_CLIENT_ID);
+    expect(script).toContain("ARCHESTRA_KILO_GUARD");
+    expect(script).toContain("KILO_CONFIG_CONTENT");
+    expect(script).toContain(`kilo mcp auth ${MCP.serverName}`);
+    expect(script).toContain(
+      "kilo --prompt 'What can you do with my Archestra tools?'",
+    );
+    expect(script).toContain("If Kilo Code is already open, close it first");
+    // The guard removes the handoff plugin it installed when it removes itself.
+    expect(script).toContain(
+      platform === "windows"
+        ? "($GuardPath + '.prompt.md'), ($GuardPath + '.handoff.mjs')"
+        : '"$GUARD_PATH.prompt.md" "$GUARD_PATH.handoff.mjs"',
+    );
+    for (const openCodeOnly of [
+      "opencode.json",
+      "opencode-routing-plugin-state",
+      "opencode-connection-state",
+      "OPENCODE_CONFIG_CONTENT",
+      "ARCHESTRA_OPENCODE_GUARD",
+      "opencode mcp",
+      "opencode --",
+      "/opencode/",
+      "'opencode'",
+    ]) {
+      expect(script).not.toContain(openCodeOnly);
+    }
+  });
+
+  test("kilo: installs OpenCode 1's routing plugin and config at Kilo's own version numbers", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "kilo-setup-"));
+    const home = path.join(root, "home");
+    const bin = path.join(root, "bin");
+    const scriptPath = path.join(root, "setup.sh");
+    const commandLog = path.join(root, "kilo-commands.log");
+    try {
+      await mkdir(home);
+      await mkdir(bin);
+      // Kilo numbers its releases 7.x; OpenCode's check would read that as v2.
+      await writeFile(
+        path.join(bin, "kilo"),
+        `#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$FAKE_KILO_LOG"
+case "$1 $2" in
+  "--version ") printf '7.8.8\n' ;;
+  "mcp list") printf '⚠ prod_gateway needs authentication\n' ;;
+  "debug config") cat "$HOME/.config/kilo/kilo.json" ;;
+  *) exit 1 ;;
+esac
+`,
+      );
+      await chmod(path.join(bin, "kilo"), 0o755);
+      await writeFile(
+        scriptPath,
+        renderSetupScript({
+          ...fullContext("kilo", "linux"),
+          proxy: OPENAI_PASSTHROUGH_PROXY,
+          skills: null,
+        }),
+      );
+      const result = await execFileAsync("bash", [scriptPath], {
+        cwd: root,
+        env: {
+          ...process.env,
+          HOME: home,
+          XDG_CONFIG_HOME: path.join(home, ".config"),
+          XDG_DATA_HOME: path.join(home, ".local", "share"),
+          PATH: `${bin}:${process.env.PATH}`,
+          FAKE_KILO_LOG: commandLog,
+        },
+      });
+
+      expect(result.stdout).toContain("prod_gateway needs authentication");
+      expect(result.stdout).toContain("Kilo Code is connected to Archestra.");
+      const config = JSON.parse(
+        await readFile(path.join(home, ".config/kilo/kilo.json"), "utf8"),
+      );
+      expect(config.$schema).toBe("https://app.kilo.ai/config.json");
+      expect(config.mcp[MCP.serverName]).toEqual({
+        type: "remote",
+        url: MCP.url,
+      });
+      const plugin = await readFile(
+        path.join(home, ".config/kilo/plugins/archestra-llm-proxy.js"),
+        "utf8",
+      );
+      expect(plugin).toContain("export const ArchestraLlmProxy");
+      expect(plugin).toContain('const clientDir = "kilo";');
+      expect(plugin).toContain(`"${EXTERNAL_AGENT_ID_HEADER}":"kilo"`);
+      await expect(
+        readFile(path.join(home, ".config/opencode/opencode.json")),
+      ).rejects.toThrow();
+      // The script never asks Kilo its version: OpenCode 1's API is fixed.
+      expect(await readFile(commandLog, "utf8")).not.toContain("--version");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test.each([
     {
       major: 1,
       authMode: "primary-providers" as const,
@@ -2488,6 +2605,7 @@ ${script.slice(start, end)}
             "list_peer_messages",
             "read_peer_message",
             "yell",
+            "superyell",
             "ask_user",
           ].map((name) => [
             `${MCP.toolPrefix}${name}`,

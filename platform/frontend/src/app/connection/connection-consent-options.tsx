@@ -473,7 +473,7 @@ function proxySummary(
         ? "Your own key or subscription"
         : `Your own ${labels[0]} key or subscription`;
     case "all-providers":
-      return `${list} · one virtual key`;
+      return `${list} · one virtual key, plus your own sign-ins`;
     case "per-user":
       return `Connect your own ${labels[0] ?? "provider"} account`;
     case "unavailable":

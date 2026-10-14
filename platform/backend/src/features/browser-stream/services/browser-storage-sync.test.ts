@@ -94,6 +94,35 @@ describe("browserStorageSync", () => {
     expect(await BrowserStorageStateModel.get(user.id)).toBe(SAVED_STATE);
   });
 
+  test("a chat open during an admin sign-out never re-saves the login", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+  }) => {
+    const user = await makeUser();
+    const organization = await makeOrganization();
+    await makeMember(user.id, organization.id);
+    await BrowserStorageStateModel.upsert(user.id, SAVED_STATE);
+    const client = fakePlaywrightClient({ storageState: SAVED_STATE });
+    const target = {
+      client: client.asClient,
+      sessionId: crypto.randomUUID(),
+      userId: user.id,
+    };
+    await browserStorageSync.ensureRestored(target);
+
+    await BrowserStorageStateModel.deleteForOrganization({
+      userId: user.id,
+      organizationId: organization.id,
+    });
+    browserStorageSync.scheduleSave(target);
+    await vi.runAllTimersAsync();
+    browserStorageSync.scheduleSave(target);
+    await vi.runAllTimersAsync();
+
+    expect(await BrowserStorageStateModel.get(user.id)).toBeNull();
+  });
+
   test("saved state is encrypted at rest", async ({ makeUser }) => {
     const user = await makeUser();
     await BrowserStorageStateModel.upsert(user.id, SAVED_STATE);

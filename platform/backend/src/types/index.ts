@@ -106,6 +106,7 @@ export * from "./team-role";
 export * from "./team-token";
 export * from "./tool";
 export * from "./tool-owner";
+export * from "./usage-statistics";
 export * from "./user";
 export * from "./user-token";
 export * from "./virtual-api-key";

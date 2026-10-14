@@ -11,6 +11,7 @@ const SLACK_BOT_EVENTS = [
   "agent_session_stopped",
   "app_home_opened",
   "app_mention",
+  "reaction_added",
   "message.channels",
   "message.groups",
   "message.im",

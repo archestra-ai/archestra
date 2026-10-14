@@ -66,7 +66,7 @@ import { useReinstallInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catal
 import type { McpDeploymentFeedState } from "@/lib/mcp/mcp-server.query";
 import { useAutoModeAgents, useMcpServers } from "@/lib/mcp/mcp-server.query";
 import {
-  canFixInstall,
+  canReinstallInstall,
   type McpServerIssue,
 } from "@/lib/mcp/mcp-server-issues";
 import { useAssignableTeams } from "@/lib/teams/team.query";
@@ -376,13 +376,13 @@ export function McpServerCard({
     </PermissionButton>
   ) : null;
 
-  // The reinstall button follows `canFixInstall`, so an installs admin is
-  // never shown a reinstall prompt for a connection whose button the card
-  // then withholds because they do not own it.
+  // The reinstall button follows `canReinstallInstall`: an installs admin
+  // reinstalls others' connections, except a personal one waiting for its
+  // owner's new values.
   const userFlaggedInstalls = allServersForCatalog.filter(
     (s) =>
       s.reinstallRequired &&
-      canFixInstall({
+      canReinstallInstall({
         server: s,
         viewer: {
           userId: currentUserId ?? null,

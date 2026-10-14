@@ -229,7 +229,7 @@ describe("POST /api/connection-setups", () => {
     ).toEqual([]);
   });
 
-  test("primary routing is OpenCode- and Cursor-only and requires virtual-key creation permission", async () => {
+  test("primary routing is OpenCode-, Kilo Code- and Cursor-only and requires virtual-key creation permission", async () => {
     const request = {
       baseUrl: "http://localhost:9000/v1",
       proxyAuth: "primary-providers",
@@ -247,21 +247,23 @@ describe("POST /api/connection-setups", () => {
       });
       expect(response.statusCode).toBe(400);
       expect(response.json().error.message).toContain(
-        "only supported for OpenCode and Cursor",
+        "only supported for OpenCode, Kilo Code and Cursor",
       );
     }
     mockUserHasPermission.mockImplementation(
       async (_user, _org, resource) => resource !== "llmVirtualKey",
     );
-    expect(
-      (
-        await app.inject({
-          method: "POST",
-          url: "/api/connection-setups",
-          payload: { ...request, clientId: "opencode" },
-        })
-      ).statusCode,
-    ).toBe(403);
+    for (const clientId of ["opencode", "kilo"]) {
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: "/api/connection-setups",
+            payload: { ...request, clientId },
+          })
+        ).statusCode,
+      ).toBe(403);
+    }
   });
 
   test("provider alone opts the LLM Proxy in; llmProxyId alone selects nothing", async () => {

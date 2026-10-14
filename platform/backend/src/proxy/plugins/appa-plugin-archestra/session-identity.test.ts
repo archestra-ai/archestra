@@ -523,6 +523,68 @@ describe("client trajectory identity", () => {
     });
   });
 
+  describe("Kilo Code", () => {
+    // The headers Kilo 7.8.8 sends on every provider request.
+    const kiloHeaders = {
+      "user-agent":
+        "kilo/latest/7.8.8/cli ai-sdk/provider-utils/4.0.46 runtime/bun/1.4.2",
+      "x-session-affinity": OPENCODE_SESSION,
+      "x-session-id": OPENCODE_SESSION,
+    };
+
+    test("roots on Kilo's session id as its own native client", () => {
+      expect(
+        extractAppaSessionIdentity({
+          family: "anthropic:messages",
+          body: {},
+          headers: kiloHeaders,
+        }),
+      ).toMatchObject({
+        sessionId: OPENCODE_SESSION,
+        provenance: "kilo-session-header",
+      });
+    });
+
+    test("recognizes Kilo by the agent id its setup sends", () => {
+      expect(
+        extractAppaSessionIdentity({
+          family: "openai:chatCompletions",
+          body: {},
+          headers: {
+            "user-agent": "ai-sdk/openai-compatible/1.0.0",
+            "x-archestra-agent-id": "kilo",
+            "x-session-id": OPENCODE_SESSION,
+          },
+        }),
+      ).toMatchObject({ provenance: "kilo-session-header" });
+    });
+
+    test("names a subagent's parent like OpenCode does", () => {
+      expect(
+        nativeSpawnParentId({
+          headers: {
+            ...kiloHeaders,
+            "x-session-id": OPENCODE_FORK_SESSION,
+            "x-session-affinity": OPENCODE_FORK_SESSION,
+            "x-parent-session-id": OPENCODE_SESSION,
+          },
+          body: {},
+          sessionId: OPENCODE_FORK_SESSION,
+        }),
+      ).toBe(OPENCODE_SESSION);
+    });
+
+    test("refuses contradictory session headers under Kilo's name", () => {
+      expect(() =>
+        extractAppaSessionIdentity({
+          family: "anthropic:messages",
+          body: {},
+          headers: { ...kiloHeaders, "x-session-affinity": "ses_other" },
+        }),
+      ).toThrow("OpenAPPA cannot bind contradictory Kilo Code session headers");
+    });
+  });
+
   describe("OpenCode", () => {
     test("roots on the session id from X-Session-Id", () => {
       expect(

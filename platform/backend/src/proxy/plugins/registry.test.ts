@@ -164,6 +164,7 @@ describe("LlmProxyPluginRegistry", () => {
       answer: (toolCalls: Calls) => {
         toolCalls: Calls;
         blocked?: readonly { id: string; name: string; reason: string }[];
+        rewritten?: readonly { id: string; name: string }[];
       },
     ) => {
       const registry = new LlmProxyPluginRegistry();
@@ -193,6 +194,22 @@ describe("LlmProxyPluginRegistry", () => {
       decision: "allow",
       toolCalls: [{ id: "call-1", name: "notice" }],
     });
+
+    // An authorized rewrite is released, and is not reported as a block.
+    const rewrite = await finalize((toolCalls) => ({
+      toolCalls: [{ id: "call-1", name: "read", arguments: { path: "b" } }],
+      rewritten: [{ id: "call-1", name: toolCalls[0].name }],
+    }));
+    expect(rewrite).toEqual({
+      decision: "allow",
+      toolCalls: [{ id: "call-1", name: "read", arguments: { path: "b" } }],
+    });
+    await expect(
+      finalize((toolCalls) => ({
+        toolCalls,
+        rewritten: [{ id: "call-9", name: "read" }],
+      })),
+    ).rejects.toThrow("reported a block on a call the policies never saw");
 
     await expect(
       finalize(() => ({

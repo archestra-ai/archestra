@@ -1,6 +1,6 @@
 "use client";
 
-import { E2eTestId } from "@archestra/shared";
+import { E2eTestId, providerSupportsChat } from "@archestra/shared";
 import { useEffect, useMemo, useState } from "react";
 import { FormDialog } from "@/components/form-dialog";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
@@ -80,9 +80,15 @@ function SetDefaultModelDialog({
   onSaved: () => void;
 }) {
   const appName = useAppName();
-  const { data: availableKeys = [] } = useAvailableLlmProviderApiKeys({
+  const { data: fetchedKeys = [] } = useAvailableLlmProviderApiKeys({
     enabled: open,
   });
+  // The default model answers chats, so a key whose provider cannot chat
+  // (embeddings-only, decisions-only) is never a candidate.
+  const availableKeys = useMemo(
+    () => fetchedKeys.filter((key) => providerSupportsChat(key.provider)),
+    [fetchedKeys],
+  );
 
   const [selectedApiKeyId, setSelectedApiKeyId] = useState("");
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);

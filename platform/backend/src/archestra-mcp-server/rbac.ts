@@ -36,6 +36,7 @@ export const TOOL_PERMISSIONS: Record<
   // OpenAPPA
   execute_remedy_plan: null,
   yell: null,
+  superyell: null,
   get_remedy_plans: null,
   list_peer_messages: null,
   read_peer_message: null,

@@ -530,6 +530,10 @@ export const RouteId = {
   GetAgentRunOpenappaReview: "getAgentRunOpenappaReview",
   DecideAgentRunOpenappaReview: "decideAgentRunOpenappaReview",
 
+  // Saved browser login routes (Playwright)
+  GetBrowserStorageStates: "getBrowserStorageStates",
+  DeleteBrowserStorageState: "deleteBrowserStorageState",
+
   // Virtual API Key Routes
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
   GetVirtualApiKeyLabelValues: "virtualApiKeyLabelValues",
@@ -705,6 +709,9 @@ export const RouteId = {
   GetSkillStatistics: "getSkillStatistics",
   GetOverviewStatistics: "getOverviewStatistics",
   GetCostSavingsStatistics: "getCostSavingsStatistics",
+  GetMcpToolCallUsage: "getMcpToolCallUsage",
+  GetAppUsage: "getAppUsage",
+  GetSkillUsage: "getSkillUsage",
 
   // Secrets Routes
   GetSecretsType: "getSecretsType",

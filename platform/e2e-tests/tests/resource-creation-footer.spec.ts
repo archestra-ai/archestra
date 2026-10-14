@@ -2,9 +2,7 @@ import { UI_BASE_URL } from "../consts";
 import { expect, test } from "../fixtures";
 import { defineResourceCreationFooterTests } from "./resource-creation-footer";
 
-// Plugins follow ARCHESTRA_BETA, which this stack keeps off:
-// openappa/plugin-creation-footer.spec.ts covers them on the beta stack.
-defineResourceCreationFooterTests(["skills", "mcp/registry"]);
+defineResourceCreationFooterTests(["skills", "plugins", "mcp/registry"]);
 
 // SPDX-SnippetBegin
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.

@@ -4,6 +4,7 @@ import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
+import { AdvancedSection } from "@/components/advanced-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import {
   BudgetFields,
@@ -15,7 +16,7 @@ import { ProviderKeyList } from "@/components/credential-billing/provider-key-li
 import { FormDialog } from "@/components/form-dialog";
 import type { InitialPermissionGrant } from "@/components/initial-resource-permissions";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
-import { OwnerSelectField } from "@/components/owner-select-field";
+import { ProviderAccessField } from "@/components/provider-access-field";
 import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
 import { ResourceAccessSection } from "@/components/resource-access-section";
 import { Button } from "@/components/ui/button";
@@ -26,11 +27,10 @@ import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
 import { useConnectionBaseUrl } from "@/components/virtual-key-connection-base-url";
 import { VirtualKeyConnectionGuide } from "@/components/virtual-key-connection-guide";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useScopedCapabilities, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { formatRelativeTime } from "@/lib/utils/date-time";
-import { cn } from "@/lib/utils/tailwind";
 import {
   useAllVirtualApiKeys,
   useCreateVirtualApiKey,
@@ -82,9 +82,6 @@ export function CreateVirtualKeyDialogWithData({
     enabled: open && keyType === "standard",
     toastOnError: false,
   });
-  const { data: isVirtualKeyAdmin } = useHasPermissions({
-    llmVirtualKey: ["update"],
-  });
   const defaultExpirationSeconds = useFeature(
     "virtualKeyDefaultExpirationSeconds",
   );
@@ -96,7 +93,11 @@ export function CreateVirtualKeyDialogWithData({
       keyType={keyType}
       parentableKeys={apiKeys}
       connectionBaseUrl={connectionBaseUrl}
-      defaultExpirationSeconds={defaultExpirationSeconds ?? null}
+      defaultExpirationSeconds={
+        defaultExpirationSeconds === undefined
+          ? 30 * 24 * 60 * 60
+          : defaultExpirationSeconds
+      }
       currentUser={
         session?.user
           ? {
@@ -105,7 +106,6 @@ export function CreateVirtualKeyDialogWithData({
             }
           : null
       }
-      isVirtualKeyAdmin={!!isVirtualKeyAdmin}
       existingKeys={existingKeys?.data ?? []}
       initialProviderApiKeys={initialProviderApiKeys}
       onCreated={onCreated}
@@ -122,7 +122,6 @@ export function CreateVirtualKeyDialog({
   connectionBaseUrl,
   defaultExpirationSeconds,
   currentUser,
-  isVirtualKeyAdmin,
   existingKeys,
   initialProviderApiKeys,
   onCreated,
@@ -135,8 +134,6 @@ export function CreateVirtualKeyDialog({
   connectionBaseUrl: string;
   defaultExpirationSeconds: number | null;
   currentUser: { id: string; name: string | null } | null;
-  /** Admins may create the key on behalf of another member. */
-  isVirtualKeyAdmin: boolean;
   existingKeys: VirtualKeySummary[];
   initialProviderApiKeys?: ProviderApiKeyMappings;
   onCreated?: (key: CreatedVirtualKey) => void;
@@ -144,12 +141,19 @@ export function CreateVirtualKeyDialog({
 }) {
   const createMutation = useCreateVirtualApiKey();
 
+  const { data: capabilities } = useScopedCapabilities();
+  const canIncludeFutureProviders =
+    capabilities?.some(
+      (grant) =>
+        grant.resource === "llmProviderApiKey" &&
+        grant.action === "use" &&
+        grant.scope === "*",
+    ) ?? false;
   const [newKeyName, setNewKeyName] = useState("");
   const [expiresAt, setExpiresAt] = useState<Date | null>(null);
-  const [ownerId, setOwnerId] = useState("");
-  const [ownerName, setOwnerName] = useState<string | null>(null);
   const [billingTeamId, setBillingTeamId] = useState<string | null>(null);
   const [spendCap, setSpendCap] = useState<SpendCapValue>(null);
+  const [includeFutureProviders, setIncludeFutureProviders] = useState(false);
   const [providerApiKeyIds, setProviderApiKeyIds] =
     useState<ProviderApiKeyMappings>([]);
   const [grants, setGrants] = useState<InitialPermissionGrant[]>([]);
@@ -174,8 +178,8 @@ export function CreateVirtualKeyDialog({
   const generatedNameRef = useRef("");
 
   const isPassthrough = keyType === "passthrough";
-  const effectiveOwnerId = ownerId || currentUser?.id;
-  const effectiveOwnerName = ownerId ? ownerName : currentUser?.name;
+  const effectiveOwnerId = currentUser?.id;
+  const effectiveOwnerName = currentUser?.name;
   const generatedName = useMemo(
     () =>
       isPassthrough
@@ -193,14 +197,13 @@ export function CreateVirtualKeyDialog({
     prevOpenRef.current = open;
     if (open && !wasOpen) {
       setCreatedKey(null);
+      setIncludeFutureProviders(false);
       const initialExpiresAt = computeDefaultExpiresAt(
         defaultExpirationSeconds,
       );
       setNewKeyName(generatedName);
       generatedNameRef.current = generatedName;
       setExpiresAt(initialExpiresAt);
-      setOwnerId("");
-      setOwnerName(null);
 
       const given = initialProviderApiKeysRef.current;
       const initialMappings = isPassthrough
@@ -217,9 +220,9 @@ export function CreateVirtualKeyDialog({
       setLabels([]);
       initialSnapshotRef.current = {
         keyType,
+        includeFutureProviders: false,
         newKeyName: generatedName,
         expiresAt: initialExpiresAt,
-        ownerId: "",
         providerApiKeyIds: initialMappings,
         billingTeamId: null,
         spendCap: null,
@@ -263,7 +266,8 @@ export function CreateVirtualKeyDialog({
     });
   }, [createdKeyValue, generatedName, open]);
 
-  const hasProviderKeys = isPassthrough || providerApiKeyIds.length > 0;
+  const hasProviderKeys =
+    isPassthrough || includeFutureProviders || providerApiKeyIds.length > 0;
   const canSubmit =
     newKeyName.trim().length > 0 &&
     hasProviderKeys &&
@@ -278,7 +282,7 @@ export function CreateVirtualKeyDialog({
       keyType,
       newKeyName,
       expiresAt,
-      ownerId,
+      includeFutureProviders,
       providerApiKeyIds,
       billingTeamId,
       spendCap,
@@ -295,7 +299,6 @@ export function CreateVirtualKeyDialog({
       labels: finalLabels,
       billingTeamId: billingTeamId ?? undefined,
       spendCap: spendCap ?? undefined,
-      ownerId: isVirtualKeyAdmin && ownerId ? ownerId : undefined,
     };
     try {
       const result = await createMutation.mutateAsync({
@@ -304,6 +307,7 @@ export function CreateVirtualKeyDialog({
           : {
               ...shared,
               keyType: "standard",
+              includeFutureProviders,
               providerApiKeys: providerApiKeyIds,
               initialGrants: grants.map(({ subject, actions }) => ({
                 subject,
@@ -328,9 +332,8 @@ export function CreateVirtualKeyDialog({
     expiresAt,
     grants,
     isPassthrough,
-    isVirtualKeyAdmin,
     labels,
-    ownerId,
+    includeFutureProviders,
     providerApiKeyIds,
     newKeyName,
     onCreated,
@@ -393,14 +396,7 @@ export function CreateVirtualKeyDialog({
             />
           ) : (
             <>
-              <div
-                className={cn(
-                  "grid grid-cols-1 gap-3",
-                  isVirtualKeyAdmin
-                    ? "sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)]"
-                    : "sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]",
-                )}
-              >
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
                 <div className="space-y-2">
                   <Label htmlFor="virtual-key-name">Name</Label>
                   <Input
@@ -413,16 +409,6 @@ export function CreateVirtualKeyDialog({
                     }
                   />
                 </div>
-                {isVirtualKeyAdmin && (
-                  <OwnerSelectField
-                    id="virtual-key-owner"
-                    value={ownerId}
-                    onChange={setOwnerId}
-                    onSelectedOwnerChange={(owner) =>
-                      setOwnerName(owner.name ?? owner.email ?? null)
-                    }
-                  />
-                )}
                 <div className="space-y-2">
                   <Label htmlFor="virtual-key-expires">Expires</Label>
                   <ExpirySelect
@@ -433,33 +419,52 @@ export function CreateVirtualKeyDialog({
                 </div>
               </div>
               {!isPassthrough && (
-                <ProviderKeyList
-                  value={providerApiKeyIds}
-                  onChange={setProviderApiKeyIds}
-                  providerApiKeys={parentableKeys}
+                <ProviderAccessField
+                  surface="create"
+                  canIncludeFutureProviders={canIncludeFutureProviders}
+                  includeFutureProviders={includeFutureProviders}
+                  onIncludeFutureProvidersChange={(value) => {
+                    setIncludeFutureProviders(value);
+                    if (value) setProviderApiKeyIds([]);
+                  }}
+                  current={
+                    <ProviderKeyList
+                      alwaysOpen
+                      emptyLabel={
+                        includeFutureProviders
+                          ? "Uses primary API keys — add a provider to choose a different key"
+                          : "No providers selected — add one below"
+                      }
+                      value={providerApiKeyIds}
+                      onChange={setProviderApiKeyIds}
+                      providerApiKeys={parentableKeys}
+                    />
+                  }
                 />
               )}
-              <BudgetFields
-                subject="key"
-                idPrefix="virtual-key"
-                layout="inline"
-                billingTeamId={billingTeamId}
-                onBillingTeamIdChange={setBillingTeamId}
-                spendCap={spendCap}
-                onSpendCapChange={setSpendCap}
-              />
-              {!isPassthrough && (
-                <ResourceAccessSection
-                  resource="llmVirtualKey"
-                  grants={grants}
-                  onGrantsChange={setGrants}
+              <AdvancedSection keepMounted>
+                <BudgetFields
+                  subject="key"
+                  idPrefix="virtual-key"
+                  layout="inline"
+                  billingTeamId={billingTeamId}
+                  onBillingTeamIdChange={setBillingTeamId}
+                  spendCap={spendCap}
+                  onSpendCapChange={setSpendCap}
                 />
-              )}
-              <AdvancedLabelsSection
-                ref={labelsRef}
-                labels={labels}
-                onLabelsChange={setLabels}
-              />
+                {!isPassthrough && (
+                  <ResourceAccessSection
+                    resource="llmVirtualKey"
+                    grants={grants}
+                    onGrantsChange={setGrants}
+                  />
+                )}
+                <AdvancedLabelsSection
+                  ref={labelsRef}
+                  labels={labels}
+                  onLabelsChange={setLabels}
+                />
+              </AdvancedSection>
             </>
           )}
         </DialogBody>

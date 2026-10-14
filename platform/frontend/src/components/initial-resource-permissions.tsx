@@ -106,10 +106,10 @@ export function InitialResourcePermissions({
       {author && (
         <div
           data-testid="author-grant"
-          className="flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1 px-2.5"
+          className="flex min-h-9 items-center gap-2 px-2.5 py-2 sm:py-0"
         >
-          <div className="flex min-w-40 flex-1 flex-wrap items-baseline gap-x-2">
-            <span className="break-words font-medium">
+          <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
+            <span className="w-full break-words font-medium sm:w-auto">
               {author.name || author.email}
             </span>
             <span className="text-xs text-muted-foreground">
@@ -118,19 +118,21 @@ export function InitialResourcePermissions({
             <YouPill />
           </div>
           {/* Lines up with the editable rows' level, beside the remove column. */}
-          <span className="px-2 text-muted-foreground">
+          <span className="shrink-0 text-muted-foreground sm:px-2">
             {resourcePermissionPresets.manage.label}
           </span>
-          <span className="size-7 shrink-0" />
+          <span className="hidden size-7 shrink-0 sm:block" />
         </div>
       )}
       {grants.map((grant, index) => (
         <div
           key={`${grant.subject.type}:${grant.subject.id}`}
-          className="flex min-h-9 flex-wrap items-center gap-x-2 gap-y-1 px-2.5"
+          className="grid min-h-9 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 px-2.5 py-2 sm:flex sm:py-0"
         >
-          <div className="flex min-w-40 flex-1 flex-wrap items-baseline gap-x-2">
-            <span className="break-words font-medium">{grant.name}</span>
+          <div className="col-span-2 flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
+            <span className="min-w-0 max-w-full break-words font-medium">
+              {grant.name}
+            </span>
             <span className="text-xs text-muted-foreground">
               {subjectLabels[grant.subject.type]}
             </span>
@@ -155,8 +157,8 @@ export function InitialResourcePermissions({
           <Button
             type="button"
             variant="ghost"
-            size="icon-sm"
-            className="size-7 shrink-0 text-muted-foreground"
+            size="icon-xs"
+            className="shrink-0 text-muted-foreground"
             aria-label={`Remove access for ${grant.name}`}
             onClick={() =>
               onChange(grants.filter((_, entryIndex) => entryIndex !== index))

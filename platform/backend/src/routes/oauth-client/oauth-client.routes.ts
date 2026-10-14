@@ -200,6 +200,9 @@ const oauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["OAuth Clients"],
         querystring: PaginationQuerySchema.extend({
           search: z.string().trim().min(1).optional(),
+          capability: OAuthClientScopeSchema.optional().describe(
+            "Include clients that grant this API capability, including clients with other capabilities.",
+          ),
           providerApiKeyId: z.string().uuid().optional(),
           grantType: LlmOauthClientGrantTypeSchema.optional(),
           labels: z
@@ -222,6 +225,7 @@ const oauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         pagination: { limit: query.limit, offset: query.offset },
         search: query.search,
+        capabilities: query.capability ? [query.capability] : undefined,
         providerApiKeyId: query.providerApiKeyId,
         grantType: query.grantType,
         labels: parseLabelsParam(query.labels),

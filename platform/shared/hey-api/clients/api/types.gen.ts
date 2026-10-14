@@ -85362,6 +85362,10 @@ export type GetOauthClientsData = {
         limit?: number;
         offset?: number;
         search?: string;
+        /**
+         * Include clients that grant this API capability, including clients with other capabilities.
+         */
+        capability?: 'mcp' | 'a2a' | 'llm:proxy';
         providerApiKeyId?: string;
         grantType?: 'client_credentials' | 'authorization_code';
         /**

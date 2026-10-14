@@ -75,6 +75,8 @@ For example, `scope=mcp llm:proxy` gets one token for tools and inference. Each 
 
 Open an existing client and use **Access** to change its capabilities, gateways, agents, or provider keys. The client ID and secret stay the same.
 
+In **Settings → OAuth Clients**, use **All APIs** to find clients for a particular API. A client with several capabilities appears under each matching filter. The **Access** column summarizes its allowed targets and provider keys; clients that sign users in use each person's access.
+
 ## What to Know
 
 - Secret leaked? Open the client and click **Rotate secret**. The old secret stops working.

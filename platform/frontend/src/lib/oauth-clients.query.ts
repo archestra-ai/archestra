@@ -25,6 +25,7 @@ export function useOauthClients(params?: OauthClientsParams) {
   const limit = params?.limit ?? 20;
   const offset = params?.offset ?? 0;
   const search = params?.search;
+  const capability = params?.capability;
   const providerApiKeyId = params?.providerApiKeyId;
   const grantType = params?.grantType;
   const labels = params?.labels;
@@ -38,6 +39,7 @@ export function useOauthClients(params?: OauthClientsParams) {
       limit,
       offset,
       search,
+      capability,
       providerApiKeyId,
       grantType,
       labels,
@@ -49,6 +51,7 @@ export function useOauthClients(params?: OauthClientsParams) {
           limit,
           offset,
           search: search || undefined,
+          capability,
           providerApiKeyId: providerApiKeyId || undefined,
           grantType: grantType || undefined,
           labels,

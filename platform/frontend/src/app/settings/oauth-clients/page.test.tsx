@@ -163,10 +163,15 @@ describe("OauthClientsPage", () => {
       "MCP Gateway",
       "A2A",
       "LLM Proxy",
+      "1 allowed target",
+      "1 provider key",
       "Platform",
       "$200/month cap",
     ])
       expect(within(row).getByText(label)).toBeVisible();
+    expect(
+      screen.queryByRole("columnheader", { name: "Budget" }),
+    ).not.toBeInTheDocument();
     await user.click(within(row).getByText("Combined bot"));
     expect(
       await screen.findByRole("dialog", { name: /Combined bot/ }),
@@ -175,6 +180,27 @@ describe("OauthClientsPage", () => {
     for (const label of [/MCP Gateway/, /A2A/, /LLM Proxy/])
       expect(screen.getByRole("checkbox", { name: label })).toBeChecked();
     await waitFor(() => expect(requested).toContain("oauthClient/client-1"));
+  });
+
+  it("loads a capability filter from the URL and keeps combined clients visible", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("capability=mcp") as unknown as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    let capability: string | null = null;
+    server.use(
+      http.get(`${API_ORIGIN}/api/oauth-clients`, ({ request }) => {
+        capability = new URL(request.url).searchParams.get("capability");
+        return HttpResponse.json(page([client]));
+      }),
+    );
+    renderPage();
+    expect(await screen.findByText("Combined bot")).toBeVisible();
+    expect(capability).toBe("mcp");
+    expect(
+      screen.getByRole("combobox", { name: "Filter by API access" }),
+    ).toHaveTextContent("MCP Gateway");
   });
 
   it("offers a single canonical permissions control", async () => {

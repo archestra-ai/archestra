@@ -134,6 +134,8 @@ export function CreateManagedOAuthClientDialog({
                 <Input
                   id="oauth-client-name"
                   placeholder="support-assistant-prod"
+                  autoComplete="off"
+                  data-1p-ignore
                   {...form.register("name")}
                   autoFocus
                 />
@@ -208,7 +210,7 @@ export function CreateManagedOAuthClientDialog({
               <ReviewListRow label="Name" onEdit={() => setStep(0)}>
                 <span>{values.name}</span>
               </ReviewListRow>
-              <ReviewListRow label="Capabilities" onEdit={() => setStep(0)}>
+              <ReviewListRow label="API access" onEdit={() => setStep(0)}>
                 <span>
                   {oauthCapabilities
                     .filter((item) => values.scopes.includes(item.scope))

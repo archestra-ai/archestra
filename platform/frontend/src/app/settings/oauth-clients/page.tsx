@@ -84,6 +84,9 @@ function OauthClientsTable() {
   const search = searchParams.get("search") ?? "";
   const labels = searchParams.get("labels") ?? undefined;
   const providerApiKeyId = searchParams.get("providerApiKeyId") ?? undefined;
+  const capability = oauthCapabilities.find(
+    (item) => item.scope === searchParams.get("capability"),
+  )?.scope;
   const grantParam = searchParams.get("grantType");
   const grantType =
     grantParam === "client_credentials" || grantParam === "authorization_code"
@@ -95,6 +98,7 @@ function OauthClientsTable() {
     limit: Math.min(pageSize, 100),
     offset,
     search: search || undefined,
+    capability,
     labels,
     providerApiKeyId,
     grantType,
@@ -120,7 +124,12 @@ function OauthClientsTable() {
     credentials: CreatedCredentials;
   } | null>(null);
   const filtered = Boolean(
-    search || labels || providerApiKeyId || grantType || hasActiveScopeFilters,
+    search ||
+      labels ||
+      providerApiKeyId ||
+      capability ||
+      grantType ||
+      hasActiveScopeFilters,
   );
   const clearFilters = useCallback(
     () =>
@@ -128,6 +137,7 @@ function OauthClientsTable() {
         search: null,
         labels: null,
         providerApiKeyId: null,
+        capability: null,
         grantType: null,
         type: null,
         ...Object.fromEntries(
@@ -189,7 +199,7 @@ function OauthClientsTable() {
     },
     {
       id: "scopes",
-      header: "Reaches",
+      header: "APIs",
       size: 250,
       cell: ({ row }) => (
         <div className="flex flex-wrap gap-1.5">
@@ -209,41 +219,58 @@ function OauthClientsTable() {
     {
       id: "grantType",
       header: "Signs in",
-      size: 130,
+      size: 150,
       cell: ({ row }) => {
         const user = row.original.grantType === "authorization_code";
         const Icon = user ? Users : Server;
         return (
-          <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <Icon className="size-3.5" />
-            <span>{user ? "For its users" : "As itself"}</span>
-          </span>
+          <div className="space-y-1 text-sm text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <Icon className="size-3.5" />
+              <span>{user ? "For its users" : "As itself"}</span>
+            </span>
+            {row.original.serviceAccountId && (
+              <span className="block text-xs">Service account linked</span>
+            )}
+          </div>
         );
       },
     },
     {
-      id: "budget",
-      header: "Budget",
-      size: 160,
-      cell: ({ row }) =>
-        !row.original.scopes.includes("llm:proxy") ? (
-          <span className="text-muted-foreground">—</span>
-        ) : (
-          <div className="text-sm">
-            <span>
-              {row.original.grantType === "authorization_code"
-                ? "Each user"
-                : (row.original.billingTeam?.name ?? "No team")}
-            </span>
-            <div className="text-xs text-muted-foreground">
-              <span>
-                {row.original.spendCap
-                  ? `${formatSpendCap(row.original.spendCap)} cap`
-                  : "No cap"}
+      id: "access",
+      header: "Access",
+      size: 230,
+      cell: ({ row }) => {
+        const client = row.original;
+        const user = client.grantType === "authorization_code";
+        const llm = client.scopes.includes("llm:proxy");
+        const targets = client.allowedGatewayIds.length;
+        const keys = client.providerApiKeys.length;
+        return (
+          <div className="space-y-1 text-sm">
+            {user && <span className="block">Each user's access</span>}
+            {targets > 0 && (
+              <span className="block">
+                {targets} {user ? "additional" : "allowed"}{" "}
+                {targets === 1 ? "target" : "targets"}
               </span>
-            </div>
+            )}
+            {llm && !user && (
+              <span className="block">
+                {keys} provider {keys === 1 ? "key" : "keys"}
+              </span>
+            )}
+            {llm && (client.billingTeam || client.spendCap) && (
+              <div className="flex flex-wrap gap-x-2 text-xs text-muted-foreground">
+                {client.billingTeam && <span>{client.billingTeam.name}</span>}
+                {client.spendCap && (
+                  <span>{formatSpendCap(client.spendCap)} cap</span>
+                )}
+              </div>
+            )}
           </div>
-        ),
+        );
+      },
     },
     {
       id: "actions",
@@ -308,6 +335,24 @@ function OauthClientsTable() {
             className={filterSearchClass}
           />
           <ResourceAccessFilter resource="oauthClient" noun="OAuth clients" />
+          <FilterSelect
+            value={capability ?? "all"}
+            onValueChange={(value) =>
+              updateQueryParams({
+                capability: value === "all" ? null : value,
+                page: "1",
+              })
+            }
+            placeholder="Filter by API access"
+            showSearch={false}
+            items={[
+              { value: "all", label: "All APIs" },
+              ...oauthCapabilities.map(({ scope, label }) => ({
+                value: scope,
+                label,
+              })),
+            ]}
+          />
           <FilterSelect
             value={grantType ?? "all"}
             onValueChange={(value) =>

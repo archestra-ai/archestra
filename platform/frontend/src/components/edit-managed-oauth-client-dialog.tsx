@@ -167,7 +167,12 @@ export function EditManagedOAuthClientDialog({
       <div hidden={section !== "general"} className="space-y-5">
         <div className="space-y-2">
           <Label htmlFor="edit-oauth-name">Name</Label>
-          <Input id="edit-oauth-name" {...form.register("name")} />
+          <Input
+            id="edit-oauth-name"
+            autoComplete="off"
+            data-1p-ignore
+            {...form.register("name")}
+          />
         </div>
         <OAuthClientIdentityFields
           kindLabel={

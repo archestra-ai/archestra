@@ -31,12 +31,15 @@ export function RuntimeCredentialConnectionDialog({
   useExternalSecretsManager = false,
   onClose,
   onConnected,
+  silent = false,
 }: {
   definition: RuntimeCredentialDefinition;
   scope: "personal" | "organization";
   useExternalSecretsManager?: boolean;
   onClose: () => void;
   onConnected?: () => void;
+  /** Skips the "connected" toast, for a caller that shows the result itself. */
+  silent?: boolean;
 }) {
   const connect = useSetRuntimeCredentialConnection();
   const startGitHub = useStartGitHubUserConnection();
@@ -52,6 +55,7 @@ export function RuntimeCredentialConnectionDialog({
         name: definition.name,
         scope,
         value: nextValue,
+        ...(silent && { silent }),
       },
       {
         onSuccess: () => {

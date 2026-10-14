@@ -270,6 +270,8 @@ export function BatteryCredentialsTool({
           definition={connecting}
           scope="organization"
           useExternalSecretsManager={byosEnabled}
+          // The card's check says it instead.
+          silent
           onClose={() => setAdding(null)}
           onConnected={() =>
             choose(adding.battery, adding.variable, { key: connecting.key })

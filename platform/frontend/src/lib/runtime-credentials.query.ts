@@ -161,6 +161,7 @@ export function useSetRuntimeCredentialConnection() {
       name: string;
       scope: "personal" | "organization";
       value: string;
+      silent?: boolean;
     }) => {
       const { key, scope, value } = input;
       const request = { path: { key }, body: { value } };
@@ -171,7 +172,9 @@ export function useSetRuntimeCredentialConnection() {
       if (error) throw reportApiError(error);
       return data;
     },
-    (_, input) => toast.success(`${input.name} connected`),
+    (_, input) => {
+      if (!input.silent) toast.success(`${input.name} connected`);
+    },
   );
 }
 

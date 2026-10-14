@@ -7,6 +7,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
+import { toast } from "sonner";
 import {
   afterAll,
   afterEach,
@@ -21,6 +22,8 @@ import {
   BatteryCredentialsTool,
   parseBatteryCredentialRequest,
 } from "./battery-credentials-tool";
+
+vi.mock("sonner");
 
 // Radix Select uses scrollIntoView and pointer capture
 Element.prototype.scrollIntoView = vi.fn();
@@ -174,6 +177,11 @@ it("creates and connects a new token through the credential dialogs, then select
   expect(connected).toEqual([
     { key: "credential-github-token", value: "ghp_secret" },
   ]);
+  // The card's check reports the connection; no toast repeats it.
+  expect(
+    screen.getByRole("img", { name: "GitHub token connected" }),
+  ).toBeInTheDocument();
+  expect(toast.success).not.toHaveBeenCalledWith("GitHub token connected");
   expect(onSendMessage).toHaveBeenCalledExactlyOnceWith(
     "Battery credentials: GitHub APPA_PROVIDER_GITHUB_TOKEN → credential-github-token.",
   );

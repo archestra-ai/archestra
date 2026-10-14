@@ -56,7 +56,8 @@ export const SelectMcpToolCallSchema = createSelectSchema(
   // Server-side plumbing telling the read path which key the row is under.
   // Clients never need it: a locked row announces itself through the sentinel,
   // which carries the conversation id.
-  .omit({ encryptedChatConversationId: true })
+  // toolName/isError are statistics columns derived from toolCall/toolResult.
+  .omit({ encryptedChatConversationId: true, toolName: true, isError: true })
   .extend({
     userName: z.string().nullable(),
     // Name of the owning app for app-owned calls; null for agent-owned calls
@@ -81,6 +82,8 @@ export const InsertMcpToolCallSchema = createInsertSchema(
     source: McpGatewayCallSourceSchema.nullable().optional(),
   },
 )
+  // Derived by McpToolCallModel.create from toolCall/toolResult.
+  .omit({ toolName: true, isError: true })
   .extend({
     ownerType: ToolOwnerTypeSchema.optional(),
     agentId: z.string().uuid().nullable().optional(),

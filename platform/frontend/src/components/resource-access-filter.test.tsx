@@ -377,7 +377,24 @@ describe("Shared with box", () => {
 });
 
 describe("Owner box", () => {
+  it("is offered only while Admin access is on", () => {
+    renderFilter();
+    expect(
+      screen.queryByRole("button", { name: "Filter by owner" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("drops the picked owners when Admin access is turned off", async () => {
+    setQuery(`${ADMIN_ACCESS}&owner=user-alex`);
+    renderFilter();
+    const user = userEvent.setup();
+    await user.click(accessTrigger());
+    await user.click(option(/^Admin access/));
+    expect(push).toHaveBeenCalledWith("/agents?");
+  });
+
   it("lists people only, with the viewer pinned first as Me", async () => {
+    setQuery(ADMIN_ACCESS);
     renderFilter();
     const user = userEvent.setup();
     await user.click(ownerTrigger());
@@ -389,21 +406,27 @@ describe("Owner box", () => {
   });
 
   it("writes picked people as user ids", async () => {
+    setQuery(ADMIN_ACCESS);
     renderFilter();
     const user = userEvent.setup();
     await user.click(ownerTrigger());
     await user.click(
       await screen.findByRole("checkbox", { name: "Alex Reader" }),
     );
-    expect(push).toHaveBeenCalledWith("/agents?owner=user-alex");
+    expect(push).toHaveBeenCalledWith(
+      "/agents?access=mine%2Cshared%2Corg%2Cothers&owner=user-alex",
+    );
   });
 
   it("writes Me as the viewer's own id", async () => {
+    setQuery(ADMIN_ACCESS);
     renderFilter();
     const user = userEvent.setup();
     await user.click(ownerTrigger());
     await user.click(screen.getByRole("checkbox", { name: "Me" }));
-    expect(push).toHaveBeenCalledWith("/agents?owner=user-me");
+    expect(push).toHaveBeenCalledWith(
+      "/agents?access=mine%2Cshared%2Corg%2Cothers&owner=user-me",
+    );
   });
 });
 
@@ -427,7 +450,9 @@ it("offers no reset while every filter is at its default", async () => {
   expect(
     screen.queryByRole("button", { name: "Reset" }),
   ).not.toBeInTheDocument();
-  expect(ownerTrigger()).not.toHaveTextContent(/\d/);
+  expect(
+    screen.queryByRole("button", { name: "Filter by owner" }),
+  ).not.toBeInTheDocument();
 });
 
 /** The access selection that turns Admin access on. */

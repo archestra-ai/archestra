@@ -164,6 +164,16 @@ export interface StartupGuardClient {
   /** First-argument CLI commands that do not start an inference session. */
   utilitySubcommands: string[];
   /**
+   * More first-argument commands that start no conversation, so the runtime
+   * handoff instructions are not added to them.
+   */
+  handoffSkipSubcommands?: string[];
+  /**
+   * OpenCode and its forks load the runtime handoff plugin from inline config
+   * at launch: the env var that carries it, e.g. "OPENCODE_CONFIG_CONTENT".
+   */
+  inlineConfigEnv?: string;
+  /**
    * Reverse-of-connect commands for the `mcp)` disconnect case — may reference
    * `$MCP_SERVER_NAME` and must run silenced (`command <binary> ...`). Only
    * emitted when the guard covers an MCP gateway.
@@ -420,7 +430,7 @@ uninstall_guard() {
   }
   GUARD_UNINSTALLED=1
   rm -f "$GUARD_PATH.instructions-source.json" "$GUARD_PATH.instructions-refresh.py"
-  rm -f "$GUARD_PATH" "$SKIP_FILE" "$GUARD_PATH.prompt.md" 2>/dev/null || true
+  rm -f "$GUARD_PATH" "$SKIP_FILE" "$GUARD_PATH.prompt.md"${client.inlineConfigEnv ? ' "$GUARD_PATH.handoff.mjs"' : ""} 2>/dev/null || true
   rm -rf "$GUARD_PATH.instructions" 2>/dev/null || true
   for profile in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
     [ -f "$profile" ] || continue
@@ -1235,7 +1245,7 @@ export function buildStartupGuardInstallSection(
         ? handoffEnabled
           ? `mkdir -p "${guardPath}.instructions"\nif [ -s "${promptPath}" ]; then cp "${promptPath}" "${guardPath}.instructions/AGENTS.md"; else rm -f "${guardPath}.instructions/AGENTS.md"; fi`
           : `rm -f "${guardPath}.instructions/AGENTS.md"`
-        : client.clientId === "opencode"
+        : client.inlineConfigEnv
           ? handoffEnabled
             ? `printf '%s' ${sh(OPENCODE_HANDOFF_PLUGIN)} > "${guardPath}.handoff.mjs"\nchmod 600 "${guardPath}.handoff.mjs"`
             : `rm -f "${guardPath}.handoff.mjs"`
@@ -1247,15 +1257,15 @@ export function buildStartupGuardInstallSection(
     if [ -n "$archestra_prompt_config" ]; then set -- -c "$archestra_prompt_config" "$@"; fi`
       : client.clientId === "copilot-cli"
         ? `archestra_instructions_dir="${guardPath}.instructions"`
-        : client.clientId === "opencode"
+        : client.inlineConfigEnv
           ? `if [ -r "${guardPath}.handoff.mjs" ]; then archestra_opencode_handoff="${guardPath}.handoff.mjs"; fi`
           : `set -- --append-system-prompt-file "${promptPath}" "$@"`;
   const promptArgs = handoffEnabled
     ? `
   local archestra_add_prompt=1 archestra_arg
-  ${client.clientId === "copilot-cli" ? "local archestra_instructions_dir=''" : client.clientId === "opencode" ? "local archestra_opencode_handoff=''" : ""}
+  ${client.clientId === "copilot-cli" ? "local archestra_instructions_dir=''" : client.inlineConfigEnv ? "local archestra_opencode_handoff=''" : ""}
   case "\${1:-}" in
-    auth|mcp|plugin|plugins|install|uninstall|update|upgrade|doctor|setup-token|completion|completions|config|agents|login|logout|mcp-server|app-server|remote-control|app|sandbox|debug|apply|a|archive|delete|unarchive|cloud|exec-server|features|help${client.clientId === "opencode" ? "|serve|web|acp|models|stats|export|import|github|session|attach|providers|db|pr|agent" : ""}) archestra_add_prompt=0 ;;
+    auth|mcp|plugin|plugins|install|uninstall|update|upgrade|doctor|setup-token|completion|completions|config|agents|login|logout|mcp-server|app-server|remote-control|app|sandbox|debug|apply|a|archive|delete|unarchive|cloud|exec-server|features|help${(client.handoffSkipSubcommands ?? []).map((command) => `|${command}`).join("")}) archestra_add_prompt=0 ;;
   esac
   for archestra_arg in "$@"; do
     case "$archestra_arg" in
@@ -1350,14 +1360,14 @@ ${client.binary}() {
       ? `if [ -n "$archestra_instructions_dir" ]; then
     COPILOT_CUSTOM_INSTRUCTIONS_DIRS="\${COPILOT_CUSTOM_INSTRUCTIONS_DIRS:+$COPILOT_CUSTOM_INSTRUCTIONS_DIRS,}$archestra_instructions_dir" command ${client.binary} "$@"
   else`
-      : handoffEnabled && client.clientId === "opencode"
-        ? `if [ -n "$archestra_opencode_handoff" ] && [ -z "\${OPENCODE_CONFIG_CONTENT:-}" ]; then
-    OPENCODE_CONFIG_CONTENT="{\\"plugin\\":[\\"file://$archestra_opencode_handoff\\"]}" command ${client.binary} "$@"
+      : handoffEnabled && client.inlineConfigEnv
+        ? `if [ -n "$archestra_opencode_handoff" ] && [ -z "\${${client.inlineConfigEnv}:-}" ]; then
+    ${client.inlineConfigEnv}="{\\"plugin\\":[\\"file://$archestra_opencode_handoff\\"]}" command ${client.binary} "$@"
   else`
         : ""
   }
   command ${client.binary} "$@"
-  ${handoffEnabled && (client.clientId === "copilot-cli" || client.clientId === "opencode") ? "fi" : ""}
+  ${handoffEnabled && (client.clientId === "copilot-cli" || client.inlineConfigEnv) ? "fi" : ""}
   archestra_client_status=$?
   ${refreshBlock ? `${refreshFunctionName} "$@" || true` : ":"}
   return "$archestra_client_status"

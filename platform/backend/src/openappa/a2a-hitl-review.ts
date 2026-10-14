@@ -262,7 +262,7 @@ async function handRulingToRemedyCall(params: {
     trajectory: _trajectory,
     ...remedyArguments
   } = row.remedyArguments;
-  await stageHitlReview({
+  const staged = await stageHitlReview({
     session,
     review: {
       offerId: offer.offerId,
@@ -270,6 +270,9 @@ async function handRulingToRemedyCall(params: {
       remedyArguments,
     },
   });
+  if (staged.status !== "staged") {
+    throw new Error("Could not record the OpenAPPA ruling");
+  }
   if (!(await recordHitlRuling({ session, offerId: offer.offerId, ruling }))) {
     throw new Error("Could not record the OpenAPPA ruling");
   }

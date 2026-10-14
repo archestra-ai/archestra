@@ -133,6 +133,32 @@ describe("isOAuthClientForConnectClient", () => {
     ).toBe(true);
   });
 
+  test("tells Kilo Code's sign-in apart from OpenCode's on the same callback", () => {
+    // What kilo 7.8.8 registers: CIMD on its default callback port, DCR as
+    // "Kilo" otherwise. OpenCode uses the same callback.
+    const kiloCimd = {
+      clientId: "https://kilo.ai/docs/oauth/kilo/client.json",
+      name: null,
+      redirectUris: ["http://127.0.0.1:19876/mcp/oauth/callback"],
+    };
+    const kiloDcr = {
+      clientId: "dcr-kilo",
+      name: "Kilo",
+      redirectUris: ["http://127.0.0.1:41000/mcp/oauth/callback"],
+    };
+    expect(isOAuthClientForConnectClient("kilo", kiloCimd)).toBe(true);
+    expect(isOAuthClientForConnectClient("kilo", kiloDcr)).toBe(true);
+    expect(isOAuthClientForConnectClient("opencode", kiloCimd)).toBe(false);
+    expect(isOAuthClientForConnectClient("opencode", kiloDcr)).toBe(false);
+    expect(
+      isOAuthClientForConnectClient("kilo", {
+        clientId: "dcr-opencode",
+        name: "OpenCode",
+        redirectUris: ["http://127.0.0.1:19876/mcp/oauth/callback"],
+      }),
+    ).toBe(false);
+  });
+
   test("matches Claude Desktop's installer sign-in by its DCR name and fixed loopback redirect", () => {
     const desktop = {
       clientId: "dcr-desktop",
@@ -198,6 +224,16 @@ describe("isOAuthClientForConnectClient", () => {
         redirectUris: ["http://127.0.0.1:53280/callback"],
       }),
     ).toBe("claude-desktop");
+    expect(
+      await agentOf({
+        clientId: "https://kilo.ai/docs/oauth/kilo/client.json",
+        name: null,
+        redirectUris: ["http://127.0.0.1:19876/mcp/oauth/callback"],
+      }),
+    ).toBe("kilo");
+    expect(
+      await agentOf({ clientId: "dcr-5", name: "Kilo", redirectUris: [] }),
+    ).toBe("kilo");
     expect(await agentOf(other)).toBeNull();
   });
 });

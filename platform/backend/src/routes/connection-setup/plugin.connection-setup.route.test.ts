@@ -11,7 +11,7 @@ vi.mock("@/auth");
 vi.mock("@/cache-manager");
 vi.mock("@/config", async () =>
   (await import("@/test/mocks/config")).configModuleMock({
-    plugins: { enabled: true },
+    beta: false,
   }),
 );
 

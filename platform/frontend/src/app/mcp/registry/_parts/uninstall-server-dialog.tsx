@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -48,12 +49,24 @@ interface UninstallServerDialogProps {
 export function UninstallServerDialog({
   open,
   onClose,
-  installs,
+  installs: liveInstalls,
   isCancelingInstallation = false,
   onCancelInstallation,
   onUninstalled,
 }: UninstallServerDialogProps) {
   const uninstallMutation = useDeleteMcpServer();
+
+  // Callers derive installs from the server list, which drops a server as
+  // soon as its uninstall lands. Hold what the user confirmed so the dialog
+  // doesn't go blank while it finishes and closes.
+  const [installs, setInstalls] = useState(liveInstalls);
+  if (
+    liveInstalls !== installs &&
+    liveInstalls.length > 0 &&
+    !uninstallMutation.isPending
+  ) {
+    setInstalls(liveInstalls);
+  }
 
   const server = installs[0]?.server ?? null;
   const servers = installs.map((install) => install.server);

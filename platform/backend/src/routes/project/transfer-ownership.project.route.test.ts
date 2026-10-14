@@ -18,7 +18,7 @@ describe("POST /api/projects/:id/transfer-ownership", () => {
   let organizationId: string;
   let create: (ownerId?: string, name?: string) => Promise<{ id: string }>;
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
-    config.plugins.enabled = true;
+    config.beta = false;
     organizationId = (await makeOrganization()).id;
     user = await makeUser();
     recipient = await makeUser();

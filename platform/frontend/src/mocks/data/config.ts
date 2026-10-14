@@ -71,7 +71,7 @@ export function makeConfig(
       environmentNamespaces: [],
       isQuickstart: false,
       ngrokDomain: "",
-      virtualKeyDefaultExpirationSeconds: 3600,
+      virtualKeyDefaultExpirationSeconds: 30 * 24 * 60 * 60,
       mcpSandboxDomain: null,
       chatSecretScanEnabled: true,
       encryptedChatEnabled: false,

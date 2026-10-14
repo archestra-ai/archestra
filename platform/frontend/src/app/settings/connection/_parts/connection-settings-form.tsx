@@ -33,7 +33,6 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useProfiles } from "@/lib/agent.query";
 import config from "@/lib/config/config";
-import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
@@ -82,6 +81,9 @@ export function ConnectionSettingsForm() {
     >
   >({});
   // client → provider API keys its setup command's virtual key maps to
+  const [clientFutureProviders, setClientFutureProviders] = useState<
+    Record<string, boolean>
+  >({});
   const [clientProviderKeys, setClientProviderKeys] =
     useState<ClientProviderKeys>({});
   const [skillsEnabled, setSkillsEnabled] = useState(true);
@@ -90,7 +92,6 @@ export function ConnectionSettingsForm() {
   const [runtimeHandoffEnabled, setRuntimeHandoffEnabled] = useState(true);
   const [runtimeHandoffInstructions, setRuntimeHandoffInstructions] =
     useState(defaultInstructions);
-  const pluginsFeatureEnabled = useFeature("plugins") === true;
   const { data: providerApiKeys } = useLlmProviderApiKeys();
 
   // Env-configured candidate URLs the admin can curate. Keep order stable so
@@ -109,6 +110,9 @@ export function ConnectionSettingsForm() {
     );
     setBaseUrlMeta(buildBaseUrlMeta(organization.connectionBaseUrls ?? null));
     setClientProviderKeys(organization.connectionClientProviderKeys ?? {});
+    setClientFutureProviders(
+      organization.connectionClientFutureProviders ?? {},
+    );
     setSkillsEnabled(organization.connectionSkillsEnabled);
     setLlmProxyEnabled(organization.connectionLlmProxyEnabled);
     setPluginsEnabled(organization.connectionPluginsEnabled);
@@ -184,6 +188,8 @@ export function ConnectionSettingsForm() {
   });
 
   const hasChanges =
+    JSON.stringify(clientFutureProviders) !==
+      JSON.stringify(organization?.connectionClientFutureProviders ?? {}) ||
     JSON.stringify(withoutEmptyClients(clientProviderKeys)) !==
       JSON.stringify(withoutEmptyClients(serverClientProviderKeys)) ||
     gatewayId !== serverGatewayId ||
@@ -195,7 +201,7 @@ export function ConnectionSettingsForm() {
     llmProxyEnabled !== serverLlmProxyEnabled ||
     runtimeHandoffEnabled !== serverRuntimeHandoffEnabled ||
     runtimeHandoffInstructions !== serverRuntimeHandoffInstructions ||
-    (pluginsFeatureEnabled && pluginsEnabled !== serverPluginsEnabled) ||
+    pluginsEnabled !== serverPluginsEnabled ||
     baseUrlsDirty;
 
   // Collapse "all selected" back to null so future clients/providers are
@@ -221,6 +227,7 @@ export function ConnectionSettingsForm() {
         ? { connectionClientOrder: selectedClientOrder }
         : {}),
       connectionBaseUrls: collapseBaseUrlMeta(envBaseUrls, baseUrlMeta),
+      connectionClientFutureProviders: clientFutureProviders,
       connectionClientProviderKeys: withoutEmptyClients(clientProviderKeys),
       ...(skillsEnabled !== serverSkillsEnabled
         ? { connectionSkillsEnabled: skillsEnabled }
@@ -228,7 +235,7 @@ export function ConnectionSettingsForm() {
       ...(llmProxyEnabled !== serverLlmProxyEnabled
         ? { connectionLlmProxyEnabled: llmProxyEnabled }
         : {}),
-      ...(pluginsFeatureEnabled && pluginsEnabled !== serverPluginsEnabled
+      ...(pluginsEnabled !== serverPluginsEnabled
         ? { connectionPluginsEnabled: pluginsEnabled }
         : {}),
     });
@@ -361,19 +368,17 @@ export function ConnectionSettingsForm() {
                 />
               </SettingRow>
 
-              {pluginsFeatureEnabled && (
-                <SettingRow
-                  title="Plugins on Connect"
-                  description="Offer installing approved plugins. Existing installs keep working."
-                >
-                  <Switch
-                    checked={pluginsEnabled}
-                    onCheckedChange={setPluginsEnabled}
-                    disabled={locked}
-                    aria-label="Offer plugins on the Connect page"
-                  />
-                </SettingRow>
-              )}
+              <SettingRow
+                title="Plugins on Connect"
+                description="Offer installing approved plugins. Existing installs keep working."
+              >
+                <Switch
+                  checked={pluginsEnabled}
+                  onCheckedChange={setPluginsEnabled}
+                  disabled={locked}
+                  aria-label="Offer plugins on the Connect page"
+                />
+              </SettingRow>
 
               <SettingSection
                 title="Agents users can connect"
@@ -384,6 +389,18 @@ export function ConnectionSettingsForm() {
                   shownClientIds={shownClientIds}
                   onShownClientIdsChange={setShownClientIds}
                   onOrderChange={setClientOrder}
+                  clientFutureProviders={clientFutureProviders}
+                  onClientFutureProvidersChange={(clientId, value) => {
+                    setClientFutureProviders((previous) => ({
+                      ...previous,
+                      [clientId]: value,
+                    }));
+                    if (value)
+                      setClientProviderKeys((previous) => ({
+                        ...previous,
+                        [clientId]: [],
+                      }));
+                  }}
                   clientProviderKeys={clientProviderKeys}
                   onClientKeysChange={(clientId, value) =>
                     setClientProviderKeys((prev) => ({

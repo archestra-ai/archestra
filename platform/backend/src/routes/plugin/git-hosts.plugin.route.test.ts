@@ -22,7 +22,7 @@ describe("plugin imports from GitLab and self-hosted GitHub", () => {
   const server = useMswServer();
 
   beforeEach(() => {
-    config.plugins.enabled = true;
+    config.beta = false;
     grantEverywhere(["plugin"]);
   });
 

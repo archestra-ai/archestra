@@ -7,7 +7,8 @@ Use these fields to declare trust restrictions and requirements:
 | Field | Meaning | Example |
 |---|---|---|
 | `delta.trust` | Declares the result's trust rank. Reading it can lower the trajectory's trust. | `delta = { trust = "suspicious" }` |
-| `requires.trust` | Sets the minimum trust rank needed to allow the call. | `requires = { trust = "trusted" }` |
+| `forwards.trust` | Declares the trust rank of content the tool sends beyond its arguments. | `forwards = { trust = "suspicious" }` |
+| `requires.trust` | Sets the minimum trust rank of what the call sends. | `requires = { trust = "trusted" }` |
 
 Both fields must use a name from the policy's trust chain: the ordered list of ranks from least trusted to most trusted.
 

@@ -8,6 +8,7 @@ import {
   isCodeRuntimeArchestraToolShortName,
   isImplicitOpenAppaReadToolShortName,
   isSkillTool,
+  isYellToolShortName,
   OPENAPPA_RUNTIME_TOOL_SHORT_NAMES,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_CANCEL_RUN_SHORT_NAME,
@@ -40,7 +41,11 @@ import {
   agentToolExclusionsService,
   isToolIdentityExcluded,
 } from "@/services/agent-tool-exclusions";
-import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
+import {
+  isGuardrailsV2Active,
+  isSuperyellAvailable,
+  SUPERYELL_DISABLED_MESSAGE,
+} from "@/services/guardrails-deployment";
 import { ApiError } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
 // Import all groups
@@ -253,14 +258,6 @@ function getHookToolNames(): ReadonlySet<string> {
   return hookToolNamesCache;
 }
 
-let pluginToolNamesCache: ReadonlySet<string> | undefined;
-function getPluginToolNames(): ReadonlySet<string> {
-  if (!pluginToolNamesCache) {
-    pluginToolNamesCache = new Set(pluginTools.map((tool) => tool.name));
-  }
-  return pluginToolNamesCache;
-}
-
 export function getArchestraMcpTools() {
   return brandTools(
     getAllTools()
@@ -374,12 +371,18 @@ export async function executeArchestraTool(
     args = original;
   }
   if (
-    archestraMcpBranding.getToolShortName(toolName) === "yell" &&
+    isYellToolShortName(archestraMcpBranding.getToolShortName(toolName)) &&
     (!openappaYellEnabled() || !(await isGuardrailsV2Active()))
   ) {
     // An unavailable feedback tool is a recoverable tool refusal, not a
     // failed agent run. Keep the result with the agent so it can continue.
     return errorResult("OpenAPPA reporting is disabled");
+  }
+  if (
+    archestraMcpBranding.getToolShortName(toolName) === "superyell" &&
+    !(await isSuperyellAvailable())
+  ) {
+    return errorResult(SUPERYELL_DISABLED_MESSAGE);
   }
   // A child runs outside APPA and must not execute remedies on the parent's
   // shared logging session. Direct calls also respect the feature flag.
@@ -536,18 +539,15 @@ export async function preflightArchestraToolCall(params: {
  * container and lifecycle hooks execute inside that same sandbox, so both are
  * unusable without the code runtime and advertising them would promise the
  * model a capability the call cannot deliver. The persistent-file tools only
- * touch the file store, so they stay on. Plugin tools follow the plugins beta
- * flag for the same reason: the REST surface they mirror is a 404 while the
- * flag is off.
+ * touch the file store, so they stay on.
  */
 function isToolRuntimeEnabled(canonicalName: string): boolean {
   const shortName = archestraMcpBranding.getToolShortName(canonicalName);
-  if (shortName === "yell") return openappaYellEnabled();
+  if (isYellToolShortName(shortName)) return openappaYellEnabled();
   if (isOpenappaTool(shortName)) return openappaEnabled();
   if (shortName && isCodeRuntimeArchestraToolShortName(shortName))
     return config.skillsSandbox.enabled;
   if (getHookToolNames().has(canonicalName)) return config.hooks.enabled;
-  if (getPluginToolNames().has(canonicalName)) return config.plugins.enabled;
   return true;
 }
 
@@ -613,7 +613,7 @@ async function resolveToolAssignment(
       shortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME ||
       shortName === TOOL_LIST_PEER_MESSAGES_SHORT_NAME ||
       shortName === TOOL_READ_PEER_MESSAGE_SHORT_NAME ||
-      (shortName === "yell" && openappaYellEnabled())) &&
+      (isYellToolShortName(shortName) && openappaYellEnabled())) &&
     (await isGuardrailsV2Active())
   )
     return null;

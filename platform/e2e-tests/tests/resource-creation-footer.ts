@@ -6,8 +6,6 @@ type Resource = "skills" | "plugins" | "mcp/registry";
 
 /**
  * Create and edit actions stay reachable at every supported viewport width.
- * Shared by the default lite suite and the beta stack: plugins follow
- * ARCHESTRA_BETA, which the default lite stack keeps off.
  */
 export function defineResourceCreationFooterTests(
   resources: readonly Resource[],

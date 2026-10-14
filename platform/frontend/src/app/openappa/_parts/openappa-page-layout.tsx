@@ -97,7 +97,7 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
         <span>
           {page.title}{" "}
           <Badge variant="secondary" className="align-middle">
-            Alpha
+            Beta
           </Badge>
         </span>
       }

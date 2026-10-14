@@ -157,8 +157,8 @@ describe("agent activation-skill policy routes", () => {
   test("keeps collision-projected names stable across the editor and runtime policy", async ({
     makeAgent,
   }) => {
-    const previousPluginsEnabled = config.plugins.enabled;
-    config.plugins.enabled = true;
+    const previousPluginsEnabled = config.beta;
+    config.beta = false;
     try {
       const name = `shared-${crypto.randomUUID().slice(0, 8)}`;
       await makeSkill({ name });
@@ -234,7 +234,7 @@ describe("agent activation-skill policy routes", () => {
       });
       expect(runtime.skills).toEqual([projectedPlugin]);
     } finally {
-      config.plugins.enabled = previousPluginsEnabled;
+      config.beta = previousPluginsEnabled;
     }
   });
 

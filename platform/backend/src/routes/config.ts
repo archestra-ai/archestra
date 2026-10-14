@@ -258,7 +258,7 @@ export function getConfigResponse(): z.infer<typeof ConfigResponseSchema> {
         allowPrivileged: config.agentRuntime.allowPrivileged,
         resources: config.agentRuntime.resources,
       },
-      plugins: config.plugins.enabled,
+      plugins: true,
       sandboxArtifactBytesLimit: config.skillsSandbox.artifactBytesLimit,
       chatAttachmentStorageBytesLimit: config.chat.attachmentStorageBytesLimit,
       apiBodyLimitBytes: config.api.bodyLimit,

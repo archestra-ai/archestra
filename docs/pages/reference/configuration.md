@@ -79,7 +79,7 @@ Archestra reads its configuration from environment variables. Pass them with `-e
 - **`ARCHESTRA_BETA`** - Turns on beta features.
   - Default: `false`
   - Values: `true`, `false`
-  - Turns on plugins directly. Guardrails and Agent Runtime do not use this switch.
+  - Plugins, Guardrails, and Agent Runtime do not use this switch.
   - Also turns on [`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED`](/docs/reference/configuration#ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED) when it is left blank. Set to `false`, it stays off.
 
 - **`ARCHESTRA_QUICKSTART`** - Runs MCP servers in a small Kubernetes (KinD) cluster inside the Docker container.
@@ -1464,4 +1464,4 @@ Retention is an Enterprise feature: the backend does not start when a window is 
 - **`ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS`** - PostgreSQL connections each backend process opens for guardrail checks.
   - Default: `4`
   - Values: `1`–`64`
-  - A check that waits more than 30 seconds for a connection fails. Raise it when policies consult slow external authorities.
+  - A check holds a connection only for each database step, never while it waits on an external consult. A step that waits more than 30 seconds for a free connection fails.

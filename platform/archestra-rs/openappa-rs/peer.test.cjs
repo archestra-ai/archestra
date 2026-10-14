@@ -199,7 +199,7 @@ context_control = true
   assert.equal(sendAdmission.decision, 'allow_call', JSON.stringify(sendAdmission));
   await client.query(`CREATE OR REPLACE FUNCTION openappa_peer_fail_send() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected receipt failure'; END $$`);
   await client.query('DROP TRIGGER IF EXISTS openappa_peer_fail_send ON openappa_operations');
-  await client.query(`CREATE TRIGGER openappa_peer_fail_send BEFORE UPDATE ON openappa_operations FOR EACH ROW WHEN (NEW.operation_id = 'peer_send:send-interrupted') EXECUTE FUNCTION openappa_peer_fail_send()`);
+  await client.query(`CREATE TRIGGER openappa_peer_fail_send BEFORE UPDATE ON openappa_operations FOR EACH ROW WHEN (NEW.operation_id = 'peer_send:send-interrupted' AND NEW.status = 'complete') EXECUTE FUNCTION openappa_peer_fail_send()`);
   const interrupted = {
     operation_id: 'peer_send:send-interrupted',
     recipient_session_id: child.session_id,
@@ -235,7 +235,7 @@ context_control = true
     const request = { ...parent, tool_call_id: failure.call, tool: 'archestra__list_peer_messages' };
     const listTracked = () => native.listPeerMessages(JSON.stringify(request), policy).then(JSON.parse);
     await client.query(`CREATE OR REPLACE FUNCTION openappa_peer_fail_list() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected list receipt failure'; END $$`);
-    await client.query(`CREATE TRIGGER openappa_peer_fail_list BEFORE UPDATE ON ${failure.table} FOR EACH ROW WHEN (NEW.organization_id = '${organization_id}' AND NEW.${failure.column} = '${failure.id}') EXECUTE FUNCTION openappa_peer_fail_list()`);
+    await client.query(`CREATE TRIGGER openappa_peer_fail_list BEFORE UPDATE ON ${failure.table} FOR EACH ROW WHEN (NEW.organization_id = '${organization_id}' AND NEW.${failure.column} = '${failure.id}' AND NEW.status = 'complete') EXECUTE FUNCTION openappa_peer_fail_list()`);
     try {
       await assert.rejects(listTracked, /database|db error|injected list receipt failure/);
     } finally {

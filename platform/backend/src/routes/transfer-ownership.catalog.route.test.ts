@@ -23,7 +23,7 @@ describe("POST /api/internal_mcp_catalog/:id/transfer-ownership", () => {
       makeMember,
       makeInternalMcpCatalog,
     }) => {
-      config.plugins.enabled = true;
+      config.beta = false;
       organizationId = (await makeOrganization()).id;
       user = await makeUser();
       recipient = await makeUser();

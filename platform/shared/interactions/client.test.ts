@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { OPENCODE_FAMILY } from "../opencode-family";
 import {
   ARCHESTRA_CODEX_CONNECTION_ORIGINATOR,
   CLIENT_FILTER_OPTIONS,
@@ -7,7 +8,11 @@ import {
   clientForExternalAgentIds,
   isCodexOriginator,
   isCodexUserAgent,
+  isKiloClientAgentId,
+  isKiloUserAgent,
   isOpenCodeClientAgentId,
+  isOpenCodeUserAgent,
+  KILO_CLIENT_ID,
   OPENCODE_CLIENT_ID,
 } from "./client";
 
@@ -56,6 +61,7 @@ describe("OpenCode client attribution", () => {
       "cursor",
       "codex",
       "opencode",
+      "kilo",
       "copilot-cli",
     ]);
   });
@@ -67,7 +73,7 @@ describe("OpenCode client attribution", () => {
     ).toMatchObject({
       filter: "opencode",
       label: "OpenCode",
-      icon: "/icons/opencode.png",
+      mark: OPENCODE_FAMILY.opencode.mark,
     });
   });
 
@@ -78,8 +84,38 @@ describe("OpenCode client attribution", () => {
       expect.objectContaining({
         value: "opencode",
         label: "OpenCode",
-        icon: "/icons/opencode.png",
+        mark: OPENCODE_FAMILY.opencode.mark,
       }),
     );
+  });
+});
+
+describe("Kilo Code client attribution", () => {
+  test("recognizes Kilo's own User-Agent and leaves OpenCode's alone", () => {
+    const kilo =
+      "kilo/latest/7.8.8/cli ai-sdk/provider-utils/4.0.46 runtime/bun/1.4.2";
+    expect(isKiloUserAgent(kilo)).toBe(true);
+    expect(isOpenCodeUserAgent(kilo)).toBe(false);
+    for (const userAgent of [
+      "opencode/1.17.0",
+      "kilocode/1.0.0",
+      "my-kilo/1.0.0",
+      "",
+      undefined,
+      null,
+    ]) {
+      expect(isKiloUserAgent(userAgent)).toBe(false);
+    }
+  });
+
+  test("resolves stored ids and the logs filter to the Kilo Code family", () => {
+    expect(isKiloClientAgentId(" KILO ")).toBe(true);
+    expect(clientForExternalAgentIds(["kilo"])).toMatchObject({
+      filter: "kilo",
+      label: "Kilo Code",
+      mark: OPENCODE_FAMILY.kilo.mark,
+    });
+    expect(ClientFilterSchema.parse("kilo")).toBe("kilo");
+    expect(clientFilterToAgentIds("kilo")).toEqual([KILO_CLIENT_ID]);
   });
 });

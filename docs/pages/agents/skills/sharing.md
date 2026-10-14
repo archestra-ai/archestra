@@ -2,7 +2,7 @@
 title: Sharing Skills
 description: Install Archestra skills in your coding agents from one shared marketplace
 order: 3
-lastUpdated: 2026-10-13
+lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -55,6 +55,10 @@ Use this to add shared skills to a client by hand. Every deployment has one URL:
 
    ```bash tab="OpenCode"
    git clone <marketplace-url> "$HOME/.config/opencode/skills/<marketplace-name>"
+   ```
+
+   ```bash tab="Kilo Code"
+   git clone <marketplace-url> "$HOME/.config/kilo/skills/<marketplace-name>"
    ```
 
 3. When `git` asks you to sign in, enter any username. The password is your personal token from **Personal Settings**. If your client never shows a sign-in prompt, expand **Set up credentials manually** and run the command there.

@@ -124,8 +124,10 @@ export function AgentRuntimeFields({
                 {value ? "Enabled" : "Disabled"}
               </Label>
               <FieldDescription>
-                {runtimeEnabled === false && value === null
-                  ? "Unavailable: this cluster does not have the Agent Sandbox controller installed."
+                {runtimeEnabled === false
+                  ? value === null
+                    ? "Unavailable: this cluster does not have the Agent Sandbox controller installed."
+                    : "Agent Runtime is off on this deployment, so runs fail. Turn this off to answer in regular conversations instead."
                   : "Selecting this agent in Chat starts a run in the container instead of a foreground conversation."}
               </FieldDescription>
             </div>

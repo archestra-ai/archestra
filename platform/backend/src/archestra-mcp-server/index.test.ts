@@ -58,11 +58,22 @@ describe("getAllArchestraMcpTools", () => {
   });
 
   test("advertises no pattern a provider refuses as a regex", () => {
-    // OpenAI rejects a function schema whose pattern uses a Unicode property
-    // escape such as \p{Cc}, which fails every request from an agent holding
-    // that tool, not just the call.
+    // OpenAI fails every request from an agent holding a tool whose schema has
+    // a pattern it refuses, not just the call: a Unicode property escape such
+    // as \p{Cc} is rejected, and a group repeated with `+`, such as
+    // `(\/[a-z]+)+`, ends the model's turn with no reply.
+    const patterns = (schema: unknown): string[] =>
+      schema && typeof schema === "object"
+        ? Object.entries(schema).flatMap(([key, value]) =>
+            key === "pattern" && typeof value === "string"
+              ? [value]
+              : patterns(value),
+          )
+        : [];
     const offenders = getAllArchestraMcpTools().filter((tool) =>
-      /\\[pP]\{/.test(JSON.stringify(tool.inputSchema)),
+      patterns(tool.inputSchema).some(
+        (pattern) => /\\[pP]\{/.test(pattern) || /\)\+/.test(pattern),
+      ),
     );
 
     expect(offenders.map((tool) => tool.name)).toEqual([]);

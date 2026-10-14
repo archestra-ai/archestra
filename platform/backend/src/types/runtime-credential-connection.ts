@@ -19,6 +19,14 @@ export type RuntimeCredentialConnection = z.infer<
   typeof SelectRuntimeCredentialConnectionSchema
 >;
 
+/** Numeric GitHub account id, stable across login renames. */
+export const GitHubUserIdSchema = z
+  .number()
+  .int()
+  .positive()
+  .brand<"GitHubUserId">();
+export type GitHubUserId = z.infer<typeof GitHubUserIdSchema>;
+
 /**
  * Why a credential an MCP server is configured with cannot be resolved for
  * the person installing it:

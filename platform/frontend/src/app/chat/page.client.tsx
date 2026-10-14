@@ -3763,6 +3763,7 @@ export function ChatPageContent({
                                   </div>
                                 )}
                                 <ArchestraPromptInput
+                                  drawerBelow
                                   onSubmit={handleInitialSubmit}
                                   placeholderPreview={suggestionPreview}
                                   toolsUnavailable={initialToolsUnavailable}

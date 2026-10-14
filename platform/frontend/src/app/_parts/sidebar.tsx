@@ -348,11 +348,7 @@ const NavPrimary = ({
           <SidebarMenuButton
             tooltip="Search chats"
             onClick={() => {
-              window.dispatchEvent(
-                new CustomEvent("open-conversation-search", {
-                  detail: { recentChatsView: true },
-                }),
-              );
+              window.dispatchEvent(new CustomEvent("open-conversation-search"));
             }}
           >
             <MoreHorizontal />

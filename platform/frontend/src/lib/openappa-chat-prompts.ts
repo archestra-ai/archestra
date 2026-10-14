@@ -57,16 +57,39 @@ export function openAppaYellInvestigationPrompt(yellId: string): string {
 
 /**
  * The prompt text a launch link's key names, or undefined when the key is
- * unknown or names a target prompt and no target is given.
+ * unknown or names a target prompt and no target is given. A policy prompt
+ * given a target (and optionally one of its tools) is narrowed to it.
  */
 export function resolveOpenAppaLaunchPrompt(
   key: string,
-  target?: { kind: OpenAppaPolicyTargetKind; name: string; id: string },
+  target?: OpenAppaLaunchTarget,
 ): string | undefined {
-  if (Object.hasOwn(POLICY_LAUNCH_PROMPTS, key))
-    return POLICY_LAUNCH_PROMPTS[key as keyof typeof POLICY_LAUNCH_PROMPTS];
+  if (Object.hasOwn(POLICY_LAUNCH_PROMPTS, key)) {
+    const prompt =
+      POLICY_LAUNCH_PROMPTS[key as keyof typeof POLICY_LAUNCH_PROMPTS];
+    if (!target) return prompt;
+    const subject = describeOpenAppaPolicyTarget(target.kind, target.name);
+    const focus = target.tool
+      ? `Focus on the tool "${target.tool}" of ${subject}.`
+      : `Focus on ${subject}.`;
+    return `${prompt} ${focus}${targetLines(target)}`;
+  }
   if (!isOpenAppaTargetPromptKey(key) || !target) return undefined;
   return `${TARGET_LAUNCH_PROMPTS[key](
     describeOpenAppaPolicyTarget(target.kind, target.name),
-  )}\n\nTarget type: ${target.kind}\nTarget ID: ${target.id}`;
+  )}${targetLines(target)}`;
+}
+
+export type OpenAppaLaunchTarget = {
+  kind: OpenAppaPolicyTargetKind;
+  name: string;
+  id: string;
+  /** One of the target's tools, by name. */
+  tool?: string;
+};
+
+function targetLines(target: OpenAppaLaunchTarget): string {
+  return `\n\nTarget type: ${target.kind}\nTarget ID: ${target.id}${
+    target.tool ? `\nTool: ${target.tool}` : ""
+  }`;
 }

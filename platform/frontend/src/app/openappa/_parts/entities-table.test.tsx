@@ -225,7 +225,7 @@ test("lists MCP servers including Archestra, warns where under half the tools ha
       name: "Custom rule: 1, Battery rule: 1, No rule: 1",
     }),
   ).toBeVisible();
-  for (const header of ["Name", "Type", "Tool coverage"])
+  for (const header of ["Name", "Tool coverage", "Actions"])
     expect(targets.getByRole("columnheader", { name: header })).toBeVisible();
   expect(targets.getByRole("columnheader", { name: "Name" })).toHaveAttribute(
     "aria-sort",
@@ -233,7 +233,7 @@ test("lists MCP servers including Archestra, warns where under half the tools ha
   );
   expect(targets.queryByText("Auto mode")).toBeNull();
   expect(targets.getByText("4 of 19 · low")).toBeVisible();
-  fireEvent.click(targets.getByRole("button", { name: /Archestra/ }));
+  fireEvent.click(targets.getByRole("button", { name: "Archestra" }));
   const archestraSummary = within(await screen.findByRole("dialog"));
   for (const [value, label] of [
     ["3", "synced tools"],
@@ -246,16 +246,26 @@ test("lists MCP servers including Archestra, warns where under half the tools ha
   }
   expect(await archestraSummary.findByText("No rule")).toBeVisible();
   const dialog = screen.getByRole("dialog");
+  // One server's tools: no server column, and Explain and Improve once.
   expect(
-    within(dialog).getByRole("columnheader", { name: "MCP server" }),
+    within(dialog).queryByRole("columnheader", { name: "MCP server" }),
+  ).toBeNull();
+  expect(
+    within(dialog).getByRole("columnheader", { name: "Tool" }),
   ).toBeVisible();
   expect(
-    within(dialog).getByRole("columnheader", { name: "Tool name" }),
+    within(dialog).getByLabelText("Explain in chat: Archestra"),
+  ).toBeVisible();
+  expect(
+    within(dialog).getByLabelText("Improve in chat: Archestra"),
   ).toBeVisible();
   expect(await within(dialog).findByText("search_tools")).toBeVisible();
+  expect(
+    within(dialog).getByLabelText("Improve in chat: search_tools"),
+  ).toBeVisible();
   expect(within(dialog).queryByText("get_issue")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Close" }));
-  fireEvent.click(targets.getByRole("button", { name: /GitHub/ }));
+  fireEvent.click(targets.getByRole("button", { name: "GitHub" }));
   const githubSummary = within(await screen.findByRole("dialog"));
   expect(
     githubSummary.getByText("synced tools").parentElement,

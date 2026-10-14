@@ -874,6 +874,7 @@ function candidate(params: {
 }): Candidate {
   const { entry, spelled, match, source, enforced } = params;
   const delta = asRecord(entry.delta) ?? {};
+  const forwards = asRecord(entry.forwards) ?? {};
   const requires = asRecord(entry.requires) ?? {};
   const rule: CoverageRule = {
     ...source,
@@ -882,6 +883,10 @@ function candidate(params: {
     delta: {
       ...(typeof delta.trust === "string" ? { trust: delta.trust } : {}),
       ...optionalList("audience", audience(delta.audience)),
+    },
+    forwards: {
+      ...(typeof forwards.trust === "string" ? { trust: forwards.trust } : {}),
+      ...optionalList("audience", audience(forwards.audience)),
     },
     requires: {
       ...(typeof requires.trust === "string" ? { trust: requires.trust } : {}),
@@ -892,10 +897,12 @@ function candidate(params: {
     enforced,
   };
   const attention = rule.requires.attention ?? [];
-  const requiresAnything = Object.entries(requires).some(
-    ([key, value]) =>
-      !(key === "attention" && Array.isArray(value) && value.length === 0),
-  );
+  // `audience.within` is ignored by the runtime, so it requires nothing.
+  const requiresAnything = Object.entries(requires).some(([key, value]) => {
+    if (key === "attention") return !Array.isArray(value) || value.length > 0;
+    if (key === "audience") return (audience(value)?.length ?? 0) > 0;
+    return true;
+  });
   let kind: Candidate["kind"];
   if (attention.length > 0) kind = "approval";
   else if (requiresAnything) kind = "write";

@@ -7,6 +7,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
+import { toast } from "sonner";
 import {
   afterAll,
   afterEach,
@@ -21,6 +22,8 @@ import {
   BatteryCredentialsTool,
   parseBatteryCredentialRequest,
 } from "./battery-credentials-tool";
+
+vi.mock("sonner");
 
 // Radix Select uses scrollIntoView and pointer capture
 Element.prototype.scrollIntoView = vi.fn();
@@ -122,7 +125,7 @@ afterAll(() => {
   archestraApiClient.setConfig({ baseUrl: "" });
 });
 
-it("steps through batteries and sends the picked key or skip per variable on Done", async () => {
+it("steps through batteries and sends the picked key, or skipped for one left unpicked, on Done", async () => {
   const user = userEvent.setup();
   const onSendMessage = vi.fn();
   renderCard({ request, onSendMessage });
@@ -130,6 +133,7 @@ it("steps through batteries and sends the picked key or skip per variable on Don
   expect(card).toHaveTextContent("1 of 2");
   expect(screen.getByRole("region", { name: "Slack" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Skip" })).toBeInTheDocument();
 
   await waitFor(() => expect(definitionsLoaded()).toBe(true));
   await user.click(screen.getByRole("combobox"));
@@ -139,10 +143,6 @@ it("steps through batteries and sends the picked key or skip per variable on Don
 
   expect(card).toHaveTextContent("2 of 2");
   expect(screen.getByRole("region", { name: "GitHub" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Done" })).toBeDisabled();
-  await user.click(
-    screen.getByRole("button", { name: "Skip APPA_PROVIDER_GITHUB_TOKEN" }),
-  );
 
   await user.click(screen.getByRole("button", { name: "Back" }));
   expect(screen.getByRole("region", { name: "Slack" })).toHaveTextContent(
@@ -174,36 +174,72 @@ it("creates and connects a new token through the credential dialogs, then select
   expect(connected).toEqual([
     { key: "credential-github-token", value: "ghp_secret" },
   ]);
+  // The dropdown shows the new token; no toast repeats it.
+  expect(screen.getByRole("combobox")).toHaveTextContent("GitHub token");
+  expect(toast.success).not.toHaveBeenCalled();
   expect(onSendMessage).toHaveBeenCalledExactlyOnceWith(
     "Battery credentials: GitHub APPA_PROVIDER_GITHUB_TOKEN → credential-github-token.",
   );
 });
 
-it("connects the secret an earlier attempt made instead of creating another", async () => {
+it("adds another numbered token when the variable's token is already connected", async () => {
   const user = userEvent.setup();
   definitions = [
     ...definitions,
     definition({
-      id: "earlier",
+      id: "connected",
       key: "credential-github-token",
       name: "GitHub token",
+    }),
+    // A name is taken whether or not its credential is connected.
+    definition({
+      id: "unconnected",
+      key: "credential-github-token-2",
+      name: "GitHub token 2",
       organizationConfigured: false,
     }),
   ];
   const onSendMessage = vi.fn();
   renderCard({ request: { batteries: [request.batteries[1]] }, onSendMessage });
 
-  await addToken(user, "Connect GitHub token", "ghp_secret");
+  await addToken(user, "Add new token", "ghp_second");
   await user.click(screen.getByRole("button", { name: "Done" }));
 
-  expect(
-    definitions.filter((entry) => entry.name === "GitHub token"),
-  ).toHaveLength(1);
+  expect(definitions.map((entry) => entry.name)).toEqual(
+    expect.arrayContaining([
+      "GitHub token",
+      "GitHub token 2",
+      "GitHub token 3",
+    ]),
+  );
   expect(connected).toEqual([
-    { key: "credential-github-token", value: "ghp_secret" },
+    { key: "credential-github-token-3", value: "ghp_second" },
   ]);
   expect(onSendMessage).toHaveBeenCalledExactlyOnceWith(
-    "Battery credentials: GitHub APPA_PROVIDER_GITHUB_TOKEN → credential-github-token.",
+    "Battery credentials: GitHub APPA_PROVIDER_GITHUB_TOKEN → credential-github-token-3.",
+  );
+});
+
+it("makes no token when Connect is closed without a value", async () => {
+  const user = userEvent.setup();
+  renderCard({
+    request: { batteries: [request.batteries[1]] },
+    onSendMessage: vi.fn(),
+  });
+
+  await waitFor(() => expect(definitionsLoaded()).toBe(true));
+  await user.click(screen.getByRole("combobox"));
+  await user.click(
+    await screen.findByRole("option", { name: "Add new token" }),
+  );
+  const dialog = await screen.findByRole("dialog", { name: /^Connect/ });
+  await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(definitions.map((entry) => entry.name)).not.toContain("GitHub token");
+  expect(connected).toEqual([]);
+  expect(screen.getByRole("combobox")).toHaveTextContent(
+    "Pick existing credential",
   );
 });
 
@@ -239,11 +275,9 @@ it("gives each variable of a two-token battery its own secret", async () => {
   });
 
   await waitFor(() => expect(definitionsLoaded()).toBe(true));
-  const [first, second] = screen.getAllByRole("button", {
-    name: "Add new token",
-  });
-  await addTokenFrom(user, first, "token-value");
-  await addTokenFrom(user, second, "host-value");
+  const [first, second] = screen.getAllByRole("combobox");
+  await addTokenFrom(user, first, "Add new token", "token-value");
+  await addTokenFrom(user, second, "Add new token", "host-value");
   await user.click(screen.getByRole("button", { name: "Done" }));
 
   expect(definitions.map((entry) => entry.name)).toEqual(
@@ -280,8 +314,10 @@ it("asks for a Vault reference instead of a secret when the secrets manager is e
     byosEnabled: true,
   });
 
+  await waitFor(() => expect(definitionsLoaded()).toBe(true));
+  await user.click(screen.getByRole("combobox"));
   await user.click(
-    await screen.findByRole("button", { name: "Connect GitHub token" }),
+    await screen.findByRole("option", { name: "Add new token" }),
   );
 
   expect(
@@ -334,28 +370,25 @@ function renderCard(params: {
 
 async function addToken(
   user: ReturnType<typeof userEvent.setup>,
-  button: string,
+  option: string,
   value: string,
 ) {
-  await addTokenFrom(
-    user,
-    await screen.findByRole("button", { name: button }),
-    value,
-  );
+  await waitFor(() => expect(definitionsLoaded()).toBe(true));
+  await addTokenFrom(user, screen.getByRole("combobox"), option, value);
 }
 
+/** Opens the add-token dialogs from a variable's dropdown and connects a value. */
 async function addTokenFrom(
   user: ReturnType<typeof userEvent.setup>,
-  button: HTMLElement,
+  combobox: HTMLElement,
+  option: string,
   value: string,
 ) {
-  await user.click(button);
-  const define = screen.queryByRole("dialog", { name: /credential/i });
-  if (define)
-    await user.click(
-      within(define).getByRole("button", { name: /^(Create|Add|Save)/ }),
-    );
+  await user.click(combobox);
+  await user.click(await screen.findByRole("option", { name: option }));
+  // Only the value is asked for: the card makes the credential itself.
   const dialog = await screen.findByRole("dialog", { name: /^Connect/ });
+  expect(screen.queryByRole("dialog", { name: /Add credential/ })).toBeNull();
   await user.type(within(dialog).getByLabelText(/Value/i), value);
   await user.click(within(dialog).getByRole("button", { name: "Connect" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());

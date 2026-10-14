@@ -64,6 +64,8 @@ pids
 
 # OS crash dumps
 core
+!archestra-rs/vendor/dagger-sdk-0.21.9/src/core/
+!archestra-rs/vendor/dagger-sdk-0.21.9/src/core/**
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json

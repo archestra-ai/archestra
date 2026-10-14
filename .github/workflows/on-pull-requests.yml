@@ -210,13 +210,6 @@ jobs:
           head-ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.head_sha || '' }}
           # merge_group has no PR to comment on.
           comment-summary-in-pr: ${{ github.event_name == 'pull_request' && 'on-failure' || 'never' }}
-          # GHSA-82j2-j2ch-gfr8 (rustls-webpki <0.103.13 CRL-parsing DoS) is a
-          # transitive dep of dagger-sdk, which pins reqwest 0.11 + rustls-tls
-          # (rustls 0.21 caps rustls-webpki at <0.102) — no patched version is
-          # reachable. The Dagger client only does TLS against a trusted local
-          # engine session, so attacker-controlled CRL parsing is not reachable.
-          # Revisit once dagger-sdk moves to reqwest 0.12 / rustls 0.23.
-          allow-ghsas: GHSA-82j2-j2ch-gfr8
 
   # Required checks retain their names on PRs, but expensive validation runs
   # against the merge queue's combined SHA. PR-only policy checks above still

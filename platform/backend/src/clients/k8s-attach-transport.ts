@@ -3,7 +3,6 @@ import { Readable, Writable } from "node:stream";
 import type { Attach } from "@kubernetes/client-node";
 import {
   deserializeMessage,
-  STDIO_DEFAULT_MAX_BUFFER_SIZE,
   serializeMessage,
 } from "@modelcontextprotocol/sdk/shared/stdio.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
@@ -23,6 +22,11 @@ interface K8sAttachTransportParams {
   containerName: string;
   /** Bound on the k8s attach handshake; a pod that never answers fails start(). */
   startTimeoutMs: number;
+  /**
+   * Largest stdout line (one JSON-RPC message) accepted from the server, in
+   * bytes. A longer line is dropped and fails only the request it answers.
+   */
+  maxMessageBytes: number;
 }
 
 /**
@@ -42,9 +46,12 @@ interface K8sAttachTransportParams {
 export class K8sAttachTransport implements Transport {
   private ws?: WebSocket;
   private stdinStream?: Readable;
-  private lineReader = new StdoutLineReader();
+  private lineReader: StdoutLineReader;
   private isStarted = false;
   private closed = false;
+  // Set by close() only; the start timeout also sets `closed` without running
+  // close(), and a later close() must still release the streams.
+  private shutDown = false;
   private readonly idPrefix = `archestra-${randomUUID()}-`;
   private nextWireId = 0;
   // Our in-flight requests, by the id the pod sees.
@@ -59,7 +66,9 @@ export class K8sAttachTransport implements Transport {
   onerror?: (error: Error) => void;
   onmessage?: (message: JSONRPCMessage) => void;
 
-  constructor(private params: K8sAttachTransportParams) {}
+  constructor(private params: K8sAttachTransportParams) {
+    this.lineReader = new StdoutLineReader(params.maxMessageBytes);
+  }
 
   async start(): Promise<void> {
     if (this.isStarted) {
@@ -95,6 +104,11 @@ export class K8sAttachTransport implements Transport {
       // Create stdout stream that processes JSON-RPC responses continuously
       const stdoutStream = new Writable({
         write: (chunk, _encoding, callback) => {
+          // Nothing is delivered after close.
+          if (this.closed) {
+            callback();
+            return;
+          }
           for (const line of this.lineReader.append(chunk)) {
             if (line.kind === "oversized") {
               this.failOversizedReply(line.id);
@@ -106,6 +120,10 @@ export class K8sAttachTransport implements Transport {
               const message = this.claimIncoming(deserializeMessage(line.text));
               if (message) this.onmessage?.(message);
             } catch (error) {
+              // JSON that answers one of our requests but is not valid
+              // JSON-RPC would otherwise leave that call waiting for its
+              // timeout.
+              if (this.failInvalidReply(line.text)) continue;
               // The MCP server might output non-JSON lines (startup messages,
               // debug output, etc.) between JSON-RPC messages.
               logger.debug(
@@ -123,10 +141,24 @@ export class K8sAttachTransport implements Transport {
         },
       });
 
-      // Handle stream errors
+      // Handle stream errors. The attach is unusable after one, so close at
+      // once: the SDK then fails pending requests instead of waiting out their
+      // timeouts.
       stdoutStream.on("error", (error) => {
         logger.error({ err: error }, "K8sAttachTransport stdout error");
         this.onerror?.(error);
+        void this.close();
+      });
+
+      // The Kubernetes client ends stdout when the attach stream closes. No
+      // reply can arrive after that.
+      stdoutStream.on("finish", () => {
+        if (this.shutDown) return;
+        logger.warn(
+          { podName, containerName },
+          "K8sAttachTransport stdout ended",
+        );
+        void this.close();
       });
 
       this.stdinStream.on("error", (error) => {
@@ -166,17 +198,18 @@ export class K8sAttachTransport implements Transport {
               { podName, containerName },
               "K8sAttachTransport WebSocket closed",
             );
-            this.isStarted = false;
-            this.onclose?.();
+            void this.close();
           });
 
-          // Handle WebSocket errors
+          // Handle WebSocket errors. An errored attach delivers nothing more,
+          // so close the transport to fail pending requests at once.
           ws.on("error", (error: Error) => {
             logger.error(
               { err: error, podName, containerName },
               "K8sAttachTransport WebSocket error",
             );
             this.onerror?.(error);
+            void this.close();
           });
 
           resolve();
@@ -203,6 +236,10 @@ export class K8sAttachTransport implements Transport {
 
   async close(): Promise<void> {
     this.closed = true;
+    // Our own ws.close() below fires the websocket's close event, which calls
+    // close() again.
+    if (this.shutDown) return;
+    this.shutDown = true;
 
     if (this.ws) {
       this.ws.close();
@@ -228,7 +265,7 @@ export class K8sAttachTransport implements Transport {
    * caller waiting out its timeout.
    */
   private failOversizedReply(wireId: string | number | undefined): void {
-    const { podName, containerName } = this.params;
+    const { podName, containerName, maxMessageBytes } = this.params;
     // Every attach sees the line; only the one that sent the request answers.
     const request =
       typeof wireId === "string" ? this.releaseRequest(wireId) : undefined;
@@ -240,21 +277,51 @@ export class K8sAttachTransport implements Transport {
       return;
     }
     logger.warn(
-      {
-        podName,
-        containerName,
-        id: request.id,
-        maxBytes: STDIO_DEFAULT_MAX_BUFFER_SIZE,
-      },
+      { podName, containerName, id: request.id, maxBytes: maxMessageBytes },
       "Dropped an MCP server stdout message over the size limit",
     );
+    this.answerWithError(
+      request.id,
+      `The MCP server's reply was larger than ${formatBytes(maxMessageBytes)}, so this tool call was stopped. Ask for less data, for example with a filter or a limit.`,
+    );
+  }
+
+  /**
+   * Answer the request a JSON reply belongs to when the reply fails the
+   * JSON-RPC schema. Returns false when the line is not JSON or not a reply to
+   * this connection.
+   */
+  private failInvalidReply(text: string): boolean {
+    let value: unknown;
+    try {
+      value = JSON.parse(text);
+    } catch {
+      return false;
+    }
+    if (typeof value !== "object" || value === null || "method" in value) {
+      return false;
+    }
+    const wireId = (value as { id?: unknown }).id;
+    const request =
+      typeof wireId === "string" ? this.releaseRequest(wireId) : undefined;
+    if (!request) return false;
+    const { podName, containerName } = this.params;
+    logger.warn(
+      { podName, containerName, id: request.id },
+      "MCP server sent a reply that is not valid JSON-RPC",
+    );
+    this.answerWithError(
+      request.id,
+      "The MCP server sent a reply that is not valid JSON-RPC, so this tool call was stopped. Try again. If it keeps happening, check the MCP server.",
+    );
+    return true;
+  }
+
+  private answerWithError(id: RequestId, message: string): void {
     this.onmessage?.({
       jsonrpc: "2.0",
-      id: request.id,
-      error: {
-        code: ErrorCode.InternalError,
-        message: `The MCP server's reply was larger than ${STDIO_DEFAULT_MAX_BUFFER_SIZE / (1024 * 1024)} MB, so this tool call was stopped. Ask for less data, for example with a filter or a limit.`,
-      },
+      id,
+      error: { code: ErrorCode.InternalError, message },
     });
   }
 
@@ -364,10 +431,18 @@ type StdoutLine =
  * is discarded as it arrives and only its start and end are kept, to recover
  * the request id. The SDK buffer throws instead, which here escaped the stream
  * callback and took the process down.
+ *
+ * The work is linear in the input. A partial line is kept as a list of pieces
+ * and joined once, when it ends. Joining it on every chunk, as the SDK buffer
+ * does, copies a 10 MB reply that arrives in 1 KB chunks about 10,000 times
+ * and blocks the event loop for tens of seconds.
  */
 class StdoutLineReader {
-  private buffer?: Buffer;
+  private pieces: Buffer[] = [];
+  private size = 0;
   private oversized?: { head: Buffer; tail: Buffer };
+
+  constructor(private readonly maxBytes: number) {}
 
   append(chunk: Buffer): StdoutLine[] {
     const lines: StdoutLine[] = [];
@@ -375,44 +450,56 @@ class StdoutLineReader {
     while (data.length > 0) {
       const newline = data.indexOf(0x0a);
       const piece = newline === -1 ? data : data.subarray(0, newline);
-
-      if (this.oversized) {
-        this.oversized.tail = keepTail(
-          Buffer.concat([this.oversized.tail, keepTail(piece)]),
-        );
-        if (newline === -1) return lines;
-        lines.push({ kind: "oversized", id: findMessageId(this.oversized) });
-        this.oversized = undefined;
-      } else {
-        const line = this.buffer ? Buffer.concat([this.buffer, piece]) : piece;
-        this.buffer = undefined;
-        if (line.length > STDIO_DEFAULT_MAX_BUFFER_SIZE) {
-          const ends = {
-            head: Buffer.from(line.subarray(0, ID_PROBE_BYTES)),
-            tail: Buffer.from(keepTail(line)),
-          };
-          if (newline === -1) {
-            this.oversized = ends;
-            return lines;
-          }
-          lines.push({ kind: "oversized", id: findMessageId(ends) });
-        } else if (newline === -1) {
-          // Copy a bare view so a held partial line does not pin the chunk.
-          this.buffer = line === piece ? Buffer.from(piece) : line;
-          return lines;
-        } else {
-          const text = line.toString("utf8").replace(/\r$/, "");
-          if (text.trim()) lines.push({ kind: "line", text });
-        }
-      }
+      this.collect(piece, newline === -1);
+      if (newline === -1) return lines;
+      const line = this.finishLine();
+      if (line) lines.push(line);
       data = data.subarray(newline + 1);
     }
     return lines;
   }
 
   clear(): void {
-    this.buffer = undefined;
+    this.pieces = [];
+    this.size = 0;
     this.oversized = undefined;
+  }
+
+  private collect(piece: Buffer, held: boolean): void {
+    if (this.oversized) {
+      this.oversized.tail = keepTail(
+        Buffer.concat([this.oversized.tail, keepTail(piece)]),
+      );
+      return;
+    }
+    if (this.size + piece.length > this.maxBytes) {
+      // Joined once, when the line passes the cap.
+      const line = Buffer.concat([...this.pieces, piece]);
+      this.oversized = {
+        head: Buffer.from(line.subarray(0, ID_PROBE_BYTES)),
+        tail: Buffer.from(keepTail(line)),
+      };
+      this.pieces = [];
+      this.size = 0;
+      return;
+    }
+    // Copy a held view so a partial line does not pin the whole chunk.
+    this.pieces.push(held ? Buffer.from(piece) : piece);
+    this.size += piece.length;
+  }
+
+  private finishLine(): StdoutLine | undefined {
+    if (this.oversized) {
+      const id = findMessageId(this.oversized);
+      this.oversized = undefined;
+      return { kind: "oversized", id };
+    }
+    const text = Buffer.concat(this.pieces, this.size)
+      .toString("utf8")
+      .replace(/\r$/, "");
+    this.pieces = [];
+    this.size = 0;
+    return text.trim() ? { kind: "line", text } : undefined;
   }
 }
 
@@ -420,6 +507,13 @@ const ID_PROBE_BYTES = 4096;
 const HEAD_ID =
   /^\s*\{\s*(?:"jsonrpc"\s*:\s*"2\.0"\s*,\s*)?"id"\s*:\s*(-?\d+|"(?:[^"\\]|\\.)*")/;
 const TAIL_ID = /[{,]\s*"id"\s*:\s*(-?\d+|"(?:[^"\\]|\\.)*")\s*\}\s*$/;
+
+function formatBytes(bytes: number): string {
+  const megabyte = 1024 * 1024;
+  if (bytes % megabyte === 0) return `${bytes / megabyte} MB`;
+  if (bytes % 1024 === 0) return `${bytes / 1024} KB`;
+  return `${bytes} bytes`;
+}
 
 function keepTail(buffer: Buffer): Buffer {
   return buffer.length > ID_PROBE_BYTES

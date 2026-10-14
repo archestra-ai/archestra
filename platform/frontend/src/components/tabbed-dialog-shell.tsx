@@ -23,6 +23,7 @@ import {
   UnsavedChangesDialog,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { cn } from "@/lib/utils/tailwind";
 
 export interface TabbedDialogNavItem<TSection extends string> {
@@ -88,6 +89,7 @@ export function TabbedDialogShell<TSection extends string>({
   getNavItemTestId,
   isDirty = false,
 }: TabbedDialogShellProps<TSection>) {
+  const isMobile = useIsMobile();
   const [footerSlot, setFooterSlot] = useState<HTMLDivElement | null>(null);
   const guard = useUnsavedChangesGuard({ isDirty, onOpenChange });
   const formContent = (
@@ -146,7 +148,7 @@ export function TabbedDialogShell<TSection extends string>({
             ))}
           </div>
 
-          {sidebarFooter && (
+          {sidebarFooter && !isMobile && (
             <div className="px-2 pb-3 flex flex-col gap-1.5">
               {sidebarFooter}
             </div>
@@ -210,7 +212,7 @@ export function TabbedDialogShell<TSection extends string>({
           >
             <TabbedDialogFooterSlot.Provider value={footerSlot}>
               {children}
-              {sidebarFooter && (
+              {sidebarFooter && isMobile && (
                 <div className="mt-4 md:hidden">{sidebarFooter}</div>
               )}
             </TabbedDialogFooterSlot.Provider>

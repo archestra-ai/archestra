@@ -68,6 +68,7 @@ export function buildEnding(
             ? quote(agent.signIn.command)
             : agent.signIn.howTo,
           howTo: agent.signIn.howTo,
+          gatewayName: ctx.mcp.serverName,
         }
       : null;
   return {
@@ -130,7 +131,7 @@ export function renderEndingNextSteps(ending: SetupEnding): string {
   if (ending.signIn) {
     lines.push(
       "",
-      `Sign in to ${ending.appName} tools:`,
+      `Authorize ${ending.label} for the "${ending.signIn.gatewayName}" MCP gateway:`,
       `  ${ending.signIn.text}`,
     );
   }

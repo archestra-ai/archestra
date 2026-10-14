@@ -2,7 +2,7 @@
 title: Pricing Model
 order: 5
 description: How Archestra Platform is priced and licensed
-lastUpdated: 2026-09-21
+lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -33,6 +33,6 @@ The following components are licensed under the Enterprise License and are not p
 
 ## Platform + AI Security
 
-The Platform + AI Security tier adds Guardrails, the [OpenAPPA](https://www.openappa.com/) integration (in alpha), on top of the Enterprise features above. OpenAPPA itself is MIT-licensed; the integration is licensed under the Enterprise License, with the same Small Team Clause, and is activated with [`ARCHESTRA_ENTERPRISE_LICENSE_AI_SECURITY_ACTIVATED`](/docs/reference/configuration#ARCHESTRA_ENTERPRISE_LICENSE_AI_SECURITY_ACTIVATED).
+The Platform + AI Security tier adds Guardrails, the [OpenAPPA](https://www.openappa.com/) integration (in beta), on top of the Enterprise features above. OpenAPPA itself is MIT-licensed; the integration is licensed under the Enterprise License, with the same Small Team Clause, and is activated with [`ARCHESTRA_ENTERPRISE_LICENSE_AI_SECURITY_ACTIVATED`](/docs/reference/configuration#ARCHESTRA_ENTERPRISE_LICENSE_AI_SECURITY_ACTIVATED).
 
 If you'd like to pilot the Enterprise feature set, reach out to sales@archestra.ai for a PoC license.

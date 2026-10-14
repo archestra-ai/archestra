@@ -2,7 +2,7 @@
 title: Importing Skills
 description: Bring skills in from GitHub, GitLab, MCP servers, and plugins
 order: 2
-lastUpdated: 2026-10-12
+lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -23,9 +23,10 @@ Point Archestra at a repository, and it finds every folder with a `SKILL.md`, ho
 2. Pick **GitHub** or **GitLab**.
 3. Pick how to sign in: a GitHub App, a GitLab token, or **Public repository** (**Public project** on GitLab).
 4. Pick the repository, or paste its URL. A link to a folder imports only that folder. To set a branch or folder, open **Advanced**.
-5. Click **Find skills**, select the skills, pick a **Keep in sync** schedule and who can use them, and click **Import**.
+5. Click **Find skills**. Search the list and select the skills. **Selected** shows your selection across searches.
+6. Open **Import settings** to change the **Keep in sync** schedule or who can use the skills, then click **Import**.
 
-The skills then show on **Skills**, marked **synced**.
+The skills created by that import show on **Skills**, marked **synced**. Click **Show all skills** to clear the import filter.
 
 ![The Import skills dialog, asking whether the repository is on GitHub or GitLab](/docs/automated_screenshots/platform-agent-skills_import-from-github.webp)
 

@@ -242880,6 +242880,14 @@
                                 }
                               ]
                             }
+                          },
+                          "imagePullPolicy": {
+                            "type": "string",
+                            "enum": [
+                              "Always",
+                              "IfNotPresent",
+                              "Never"
+                            ]
                           }
                         },
                         "additionalProperties": false
@@ -243925,6 +243933,14 @@
                             }
                           ]
                         }
+                      },
+                      "imagePullPolicy": {
+                        "type": "string",
+                        "enum": [
+                          "Always",
+                          "IfNotPresent",
+                          "Never"
+                        ]
                       }
                     }
                   },
@@ -244635,6 +244651,14 @@
                               }
                             ]
                           }
+                        },
+                        "imagePullPolicy": {
+                          "type": "string",
+                          "enum": [
+                            "Always",
+                            "IfNotPresent",
+                            "Never"
+                          ]
                         }
                       },
                       "additionalProperties": false
@@ -246260,6 +246284,14 @@
                               }
                             ]
                           }
+                        },
+                        "imagePullPolicy": {
+                          "type": "string",
+                          "enum": [
+                            "Always",
+                            "IfNotPresent",
+                            "Never"
+                          ]
                         }
                       },
                       "additionalProperties": false
@@ -247209,6 +247241,14 @@
                             }
                           ]
                         }
+                      },
+                      "imagePullPolicy": {
+                        "type": "string",
+                        "enum": [
+                          "Always",
+                          "IfNotPresent",
+                          "Never"
+                        ]
                       }
                     }
                   },
@@ -247801,6 +247841,14 @@
                               }
                             ]
                           }
+                        },
+                        "imagePullPolicy": {
+                          "type": "string",
+                          "enum": [
+                            "Always",
+                            "IfNotPresent",
+                            "Never"
+                          ]
                         }
                       },
                       "additionalProperties": false
@@ -250534,6 +250582,14 @@
                                 }
                               ]
                             }
+                          },
+                          "imagePullPolicy": {
+                            "type": "string",
+                            "enum": [
+                              "Always",
+                              "IfNotPresent",
+                              "Never"
+                            ]
                           }
                         },
                         "additionalProperties": false
@@ -251514,6 +251570,14 @@
                               }
                             ]
                           }
+                        },
+                        "imagePullPolicy": {
+                          "type": "string",
+                          "enum": [
+                            "Always",
+                            "IfNotPresent",
+                            "Never"
+                          ]
                         }
                       },
                       "additionalProperties": false
@@ -405913,6 +405977,20 @@
             "in": "query",
             "name": "sourceRepo",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              }
+            },
+            "in": "query",
+            "name": "skillIds",
+            "required": false,
+            "description": "Restrict results to these skill IDs (comma-separated)."
           },
           {
             "schema": {

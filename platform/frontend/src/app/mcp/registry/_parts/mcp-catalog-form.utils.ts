@@ -2,6 +2,7 @@ import {
   type AgentScope,
   type archestraApiTypes,
   type archestraCatalogTypes,
+  type ImagePullPolicy,
   type ImagePullSecretConfig,
   isVaultReference,
   parseVaultReference,
@@ -98,6 +99,7 @@ export function transformFormToApiData(
         : undefined,
       httpPath: values.localConfig.httpPath || undefined,
       serviceAccount: values.localConfig.serviceAccount || undefined,
+      imagePullPolicy: values.localConfig.imagePullPolicy || undefined,
       imagePullSecrets:
         values.localConfig.imagePullSecrets?.filter((s) => {
           if (s.source === "existing") return s.name.trim().length > 0;
@@ -424,6 +426,7 @@ export function transformCatalogItemToFormValues(
         httpPath?: string;
         serviceAccount?: string;
         imagePullSecrets?: ImagePullSecretConfig[];
+        imagePullPolicy?: ImagePullPolicy;
       }
     | undefined;
   if (item.localConfig) {
@@ -471,6 +474,7 @@ export function transformCatalogItemToFormValues(
       httpPort: config.httpPort?.toString() || undefined,
       httpPath: config.httpPath || undefined,
       serviceAccount: config.serviceAccount || undefined,
+      imagePullPolicy: config.imagePullPolicy || undefined,
       // Normalize imagePullSecrets: legacy { name } → { source: "existing", name }
       // Also hydrate passwords from localConfigSecret for credentials entries
       imagePullSecrets: (item.localConfig.imagePullSecrets || []).map(

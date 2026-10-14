@@ -61,7 +61,9 @@ function radioCardClass({
 } = {}) {
   return cn(
     "border border-border bg-raised transition-colors hover:border-primary/40",
-    "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
+    // Rings draw inside the border: an outer ring gets clipped by any
+    // scrolling or overflow-hidden ancestor.
+    "ring-inset has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
     // Selected: a 2px primary edge (border + 1px ring, so nothing shifts) on
     // the same white fill. A tint read as greyed out next to white cards.
     "has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:ring-1 has-[[data-state=checked]]:ring-primary has-[[data-state=checked]]:hover:border-primary",

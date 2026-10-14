@@ -25,6 +25,7 @@ import { CatalogSourceCard } from "@/components/catalog-source-card";
 import { CHANNEL_ICON_SRC, ChannelIcon } from "@/components/channel-icon";
 import { ProviderIcon } from "@/components/provider-icon";
 import { QueryLoadError } from "@/components/query-load-error";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
@@ -175,7 +176,17 @@ export function AgentCatalog({
           its cards wait for the fresh settings read that decides which
           coding agents are offered. */}
       <CatalogSection
-        title="Coding agents"
+        title={
+          <>
+            <span>Coding agents</span>{" "}
+            <Badge
+              variant="outline"
+              className="align-middle border-transparent bg-sidebar-chip px-1.5 py-0 text-[10px] text-sidebar-emphasis dark:border-sidebar-emphasis dark:bg-sidebar"
+            >
+              Beta
+            </Badge>
+          </>
+        }
         description={`Each one runs in its own container, with a live terminal and files that persist between messages. Its model and tool calls go through ${appName}, so logs, guardrails and cost limits apply.`}
       >
         {runtimeAvailable === false && <AgentRuntimeUnavailableNotice />}
@@ -356,7 +367,7 @@ function CatalogSection({
   description,
   children,
 }: {
-  title: string;
+  title: ReactNode;
   description: string;
   children: ReactNode;
 }) {

@@ -64,6 +64,7 @@ pids
 
 # OS crash dumps
 core
+# Preserve SDK sources; update both exceptions when replacing the vendored version.
 !archestra-rs/vendor/dagger-sdk-0.21.9/src/core/
 !archestra-rs/vendor/dagger-sdk-0.21.9/src/core/**
 

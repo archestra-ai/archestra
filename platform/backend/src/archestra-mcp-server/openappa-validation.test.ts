@@ -390,12 +390,16 @@ test("readers can inspect and preview but cannot publish specifications", async 
   makeOrganization,
   makeUser,
   makeMember,
+  makeCustomRole,
   makeAgent,
   seedAndAssignArchestraTools,
 }) => {
   const organization = await makeOrganization();
   const user = await makeUser();
-  await makeMember(user.id, organization.id, { role: "member" });
+  const reader = await makeCustomRole(organization.id, {
+    permission: { openappaPolicy: ["read"] },
+  });
+  await makeMember(user.id, organization.id, { role: reader.role });
   const agent = await makeAgent({ organizationId: organization.id });
   await seedAndAssignArchestraTools(agent.id);
   const context = {

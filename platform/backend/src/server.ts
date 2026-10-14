@@ -28,6 +28,7 @@ import fastifyCors, { type FastifyCorsOptions } from "@fastify/cors";
 import fastifyFormbody from "@fastify/formbody";
 import fastifySwagger from "@fastify/swagger";
 import * as Sentry from "@sentry/node";
+import type { FastifyRequest } from "fastify";
 import {
   createJsonSchemaTransformObject,
   jsonSchemaTransform,
@@ -53,6 +54,7 @@ import { cacheManager } from "@/cache-manager";
 import { registerMcpClientHibernationInvalidation } from "@/clients/mcp-client";
 // SPDX-SnippetEnd
 import config, {
+  resolveAllowedOrigins,
   shouldRunRenderer,
   shouldRunWebServer,
   shouldRunWorker,
@@ -164,6 +166,7 @@ import {
   READY_PATH,
   SKILL_MARKETPLACE_PREFIX,
 } from "./routes/route-paths";
+import { beginLlmProxyDrain } from "./server/llm-proxy-drain";
 import {
   UserConfigFieldDefaultSchema,
   UserConfigFieldSchema,
@@ -1122,8 +1125,10 @@ const startWebServer = async () => {
     //     clients on arbitrary origins can complete the OAuth handshake.
     //   - every other route keeps the restricted, credentialed policy bound to
     //     the configured origins. See isPublicOAuthCorsPath for the rationale.
-    const restrictedCorsOptions: FastifyCorsOptions = {
-      origin: corsOrigins,
+    const restrictedCorsOptions = (
+      req: FastifyRequest,
+    ): FastifyCorsOptions => ({
+      origin: allowedOriginsFor(req),
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders: [
         "Content-Type",
@@ -1133,7 +1138,7 @@ const startWebServer = async () => {
       ],
       exposedHeaders: ["Set-Cookie"],
       credentials: true,
-    };
+    });
     const publicOAuthCorsOptions: FastifyCorsOptions = {
       origin: true,
       methods: ["GET", "POST", "OPTIONS"],
@@ -1158,9 +1163,7 @@ const startWebServer = async () => {
 
     logger.debug(
       {
-        corsOrigins: corsOrigins.map((o) =>
-          o instanceof RegExp ? o.toString() : o,
-        ),
+        corsOrigins,
         trustedOrigins: config.auth.trustedOrigins,
       },
       "CORS and trusted origins configured",
@@ -1249,20 +1252,40 @@ const startWebServer = async () => {
 async function registerMaintenanceModeRoutes(
   fastify: FastifyInstanceWithZod,
 ): Promise<void> {
-  await fastify.register(fastifyCors, {
-    origin: corsOrigins,
-    methods: ["GET", "OPTIONS"],
-    allowedHeaders: [
-      "Content-Type",
-      "X-Requested-With",
-      "Cookie",
-      apiKeyAuthorizationHeaderName,
-    ],
-    exposedHeaders: ["Set-Cookie"],
-    credentials: true,
-  });
+  await fastify.register(
+    fastifyCors,
+    () =>
+      (
+        req: FastifyRequest,
+        callback: (err: Error | null, options: FastifyCorsOptions) => void,
+      ) => {
+        callback(null, {
+          origin: allowedOriginsFor(req),
+          methods: ["GET", "OPTIONS"],
+          allowedHeaders: [
+            "Content-Type",
+            "X-Requested-With",
+            "Cookie",
+            apiKeyAuthorizationHeaderName,
+          ],
+          exposedHeaders: ["Set-Cookie"],
+          credentials: true,
+        });
+      },
+  );
   await fastify.register(routes.healthRoutes);
   await fastify.register(publicConfigRoutes);
+}
+
+function allowedOriginsFor(req: FastifyRequest): string[] {
+  const forwardedHost = req.headers["x-forwarded-host"];
+  return resolveAllowedOrigins({
+    configuredOrigins: corsOrigins,
+    forwardedHost: Array.isArray(forwardedHost)
+      ? forwardedHost[0]
+      : forwardedHost,
+    host: req.headers.host,
+  });
 }
 
 function registerWebServerShutdown(
@@ -1273,8 +1296,19 @@ function registerWebServerShutdown(
     activeChatRunReaperIntervalId?: NodeJS.Timeout;
   } = {},
 ): void {
+  let shuttingDown = false;
   const gracefulShutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     fastify.log.info(`Received ${signal}, shutting down gracefully...`);
+    beginLlmProxyDrain(fastify);
+    // Leave time after the 60s proxy drain for dependency cleanup, but never
+    // let unrelated long-lived connections or cleanup exceed the supervisor.
+    const shutdownDeadline = setTimeout(() => {
+      fastify.log.error("Graceful shutdown timed out");
+      process.exit(1);
+    }, 80_000);
+    shutdownDeadline.unref();
 
     // Stop accepting new runs before snapshotting, so nothing created after this
     // point escapes the cleanup below.
@@ -1395,8 +1429,10 @@ function registerWebServerShutdown(
         );
       }
 
+      clearTimeout(shutdownDeadline);
       process.exit(0);
     } catch (error) {
+      clearTimeout(shutdownDeadline);
       fastify.log.error({ error }, "Error during shutdown");
       process.exit(1);
     }

@@ -1301,12 +1301,16 @@ describe("guardrails batteries", () => {
     expect(failure.retryAfterSeconds).toBeUndefined();
   });
 
-  test("a member without policy update cannot install", async ({
+  test("a policy reader without policy update cannot install", async ({
     makeUser,
     makeMember,
+    makeCustomRole,
   }) => {
     const member = await makeUser();
-    await makeMember(member.id, organizationId);
+    const reader = await makeCustomRole(organizationId, {
+      permission: { openappaPolicy: ["read"] },
+    });
+    await makeMember(member.id, organizationId, { role: reader.role });
     const memberApp = createFastifyInstance();
     memberApp.addHook("onRequest", async (request) => {
       Object.assign(request, { user: member, organizationId });

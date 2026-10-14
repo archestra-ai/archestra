@@ -10,6 +10,12 @@ interface RenderOpenCodeRoutingPluginParams {
    * on a provider that already authenticates with a virtual key.
    */
   routeHeaders?: Record<string, Record<string, string>>;
+  /**
+   * Native provider id → the routed Archestra provider that serves the same
+   * models, so a model pinned under a native id (kimi-code-plan-global/k3)
+   * moves to its twin (archestra-kimi/k3) instead of failing as not found.
+   */
+  providerTwins?: Record<string, string>;
   /** The client the plugin runs in; OpenCode when omitted. */
   client?: OpenCodeFamilyClient;
 }
@@ -34,6 +40,7 @@ const routes = ${JSON.stringify(params.routes)};
 let activeRoutes = { ...routes };
 const managedHeaders = ${JSON.stringify(params.headers)};
 const routeHeaders = ${JSON.stringify(params.routeHeaders ?? {})};
+const providerTwins = ${JSON.stringify(params.providerTwins ?? {})};
 const headersFor = (providerId) => ({ ...managedHeaders, ...(routeHeaders[providerId] ?? {}) });
 const credentialEnvByProvider = ${JSON.stringify(OPENCODE_CREDENTIAL_ENV_BY_PROVIDER)};
 const normalizeUrl = (value) => String(value ?? "").replace(/\\/+$/, "");
@@ -132,9 +139,27 @@ export const ArchestraLlmProxy = async () => ({
       provider.options.headers = { ...(provider.options.headers ?? {}), ...headersFor(providerId) };
       config.provider[providerId] = provider;
     }
+    // A model pinned to a provider the connection does not route would fail
+    // its turn with "Model not found": the default model, the small model,
+    // and an agent's own model (Kilo Code pins its compaction agent to a Kimi
+    // plan model, a subagent may be pinned to another vendor). The pin moves
+    // to the routed twin that serves the same models; without one it is
+    // dropped and the client falls back to the session's model.
+    const rehome = (model) => {
+      if (typeof model !== "string") return model;
+      const providerId = model.split("/", 1)[0];
+      if (activeRoutes[providerId]) return model;
+      const twin = providerTwins[providerId];
+      return twin && activeRoutes[twin] ? twin + model.slice(providerId.length) : undefined;
+    };
     for (const field of ["model", "small_model"]) {
-      const providerId = typeof config[field] === "string" ? config[field].split("/", 1)[0] : null;
-      if (providerId && !activeRoutes[providerId]) delete config[field];
+      const kept = rehome(config[field]);
+      if (kept === undefined) delete config[field]; else config[field] = kept;
+    }
+    for (const agent of Object.values(config.agent ?? {})) {
+      if (!agent || typeof agent !== "object") continue;
+      const kept = rehome(agent.model);
+      if (kept === undefined) delete agent.model; else agent.model = kept;
     }
   },
   async "chat.params"(input) {
@@ -244,6 +269,7 @@ export function renderOpenCodeRoutingPluginV2(
   return `const routes = ${JSON.stringify(params.routes)};
 const managedHeaders = ${JSON.stringify(params.headers)};
 const routeHeaders = ${JSON.stringify(params.routeHeaders ?? {})};
+const providerTwins = ${JSON.stringify(params.providerTwins ?? {})};
 // white-label-ok: This constant is a stable wire header identifier.
 const openCodeAgentHeader = ${JSON.stringify(OPENCODE_AGENT_HEADER)};
 const openAiOAuthBridgeHeader = "x-archestra-opencode-oauth-bridge";

@@ -631,11 +631,18 @@ class AgentRunModel {
     return closed.length > 0;
   }
 
-  static async clearVirtualApiKey(id: string): Promise<void> {
+  static async clearRunKeys(id: string): Promise<void> {
     await db
       .update(schema.agentRunsTable)
-      .set({ virtualApiKeyId: null })
+      .set({ virtualApiKeyId: null, gatewayTokenId: null })
       .where(eq(schema.agentRunsTable.id, id));
+  }
+
+  /** Whether the run still holds a credential its cleanup must revoke. */
+  static holdsRunKeys(
+    run: Pick<AgentRunRecord, "virtualApiKeyId" | "gatewayTokenId">,
+  ): boolean {
+    return Boolean(run.virtualApiKeyId || run.gatewayTokenId);
   }
 
   /** Claim delivery, including a claim abandoned by a crashed sender. */

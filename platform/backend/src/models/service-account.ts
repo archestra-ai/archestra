@@ -92,10 +92,7 @@ class ServiceAccountModel {
       .from(schema.serviceAccountsTable)
       .leftJoin(
         tokens,
-        and(
-          eq(tokens.serviceAccountId, schema.serviceAccountsTable.id),
-          isNull(tokens.secretId),
-        ),
+        eq(tokens.serviceAccountId, schema.serviceAccountsTable.id),
       )
       .where(
         and(
@@ -177,12 +174,7 @@ class ServiceAccountModel {
     const tokens = await db
       .select()
       .from(schema.serviceAccountTokensTable)
-      .where(
-        and(
-          eq(schema.serviceAccountTokensTable.serviceAccountId, id),
-          isNull(schema.serviceAccountTokensTable.secretId),
-        ),
-      )
+      .where(eq(schema.serviceAccountTokensTable.serviceAccountId, id))
       .orderBy(desc(schema.serviceAccountTokensTable.createdAt));
 
     return {
@@ -467,7 +459,6 @@ class ServiceAccountModel {
             schema.serviceAccountTokensTable.serviceAccountId,
             params.serviceAccountId,
           ),
-          isNull(schema.serviceAccountTokensTable.secretId),
         ),
       )
       .returning({ id: schema.serviceAccountTokensTable.id });
@@ -499,7 +490,6 @@ class ServiceAccountModel {
             schema.serviceAccountTokensTable.serviceAccountId,
             params.serviceAccountId,
           ),
-          isNull(schema.serviceAccountTokensTable.secretId),
         ),
       )
       .returning();
@@ -537,9 +527,9 @@ class ServiceAccountModel {
   }
 
   /**
-   * Value of the account's platform-held token, minted on first use. The
-   * platform presents it to its own MCP gateway when it runs work as this
-   * account; it is never shown to anyone.
+   * Value of the account's platform key, minted on first use. The platform
+   * presents it to its own MCP gateway when it runs work as this account.
+   * The key is listed like any other, so deleting it rotates it here.
    */
   static async ensurePlatformTokenValue(
     serviceAccountId: string,
@@ -576,6 +566,36 @@ class ServiceAccountModel {
       throw new Error("Failed to create the service account platform token");
     }
     return winner;
+  }
+
+  /**
+   * A key for one Agent Runtime run, handed to its workload once. Only the
+   * hash is stored; the run's teardown revokes it, and the expiry bounds it
+   * if teardown never happens.
+   */
+  static async createRunToken(params: {
+    serviceAccountId: string;
+    runId: string;
+    expiresAt: Date;
+  }): Promise<{ tokenId: string; value: string }> {
+    const value = createTokenValue();
+    const [created] = await db
+      .insert(schema.serviceAccountTokensTable)
+      .values({
+        serviceAccountId: params.serviceAccountId,
+        name: `Agent run ${params.runId}`,
+        tokenHash: hashToken(value),
+        tokenStart: value.slice(0, 16),
+        expiresAt: params.expiresAt,
+      })
+      .returning({ id: schema.serviceAccountTokensTable.id });
+    return { tokenId: created.id, value };
+  }
+
+  static async revokeRunToken(tokenId: string): Promise<void> {
+    await db
+      .delete(schema.serviceAccountTokensTable)
+      .where(eq(schema.serviceAccountTokensTable.id, tokenId));
   }
 
   /**
@@ -789,7 +809,7 @@ function normalizeToken(
 }
 
 const SYSTEM_SERVICE_ACCOUNT_NAME = "System (built-in)";
-const PLATFORM_TOKEN_NAME = "Platform gateway token";
+const PLATFORM_TOKEN_NAME = "Platform key";
 const LAST_USED_REFRESH_INTERVAL_MS = 60_000;
 
 async function findSystemServiceAccount(

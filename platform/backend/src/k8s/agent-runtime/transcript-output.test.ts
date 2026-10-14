@@ -8,6 +8,7 @@ import {
   A2AContextModel,
   A2ATaskModel,
   AgentRunModel,
+  ServiceAccountModel,
   VirtualApiKeyModel,
 } from "@/models";
 import { AGENT_RUNTIME_CREDENTIALS_SECRET_KEY } from "@/services/agent-runtime/runtime-contract";
@@ -211,4 +212,71 @@ test("retains access only for the same live CLI and revokes it on workspace clea
     (await AgentRunModel.findByTaskId(run.taskId))?.virtualApiKeyId,
   ).toBeNull();
   expect(credentialData[AGENT_RUNTIME_CREDENTIALS_SECRET_KEY]).toBe("");
+});
+
+test("releasing a service-account run revokes the gateway key minted for it", async ({
+  makeOrganization,
+  makeAgent,
+  makeServiceAccountToken,
+}) => {
+  vi.spyOn(manager, "isEnabled", "get").mockReturnValue(true);
+  vi.spyOn(KubeConfig.prototype, "loadFromDefault").mockImplementation(
+    function (this: KubeConfig) {
+      this.loadFromOptions({
+        clusters: [{ name: "test", server: "https://kubernetes.example.test" }],
+        users: [{ name: "test" }],
+        contexts: [{ name: "test", cluster: "test", user: "test" }],
+        currentContext: "test",
+      });
+    },
+  );
+  vi.spyOn(CoreV1Api.prototype, "listNamespacedPod").mockResolvedValue({
+    items: [],
+  });
+  vi.spyOn(CoreV1Api.prototype, "readNamespacedSecret").mockResolvedValue({
+    data: {},
+  });
+  vi.spyOn(CoreV1Api.prototype, "deleteNamespacedSecret").mockResolvedValue({});
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const { serviceAccount } = await makeServiceAccountToken({
+    organizationId: organization.id,
+  });
+  const context = await A2AContextModel.create({
+    actorKind: "serviceAccount",
+    actorId: serviceAccount.id,
+  });
+  const task = await A2ATaskModel.create({
+    contextId: context.id,
+    agentId: agent.id,
+    state: "TASK_STATE_COMPLETED",
+  });
+  const runId = randomUUID();
+  const gatewayKey = await ServiceAccountModel.createRunToken({
+    serviceAccountId: serviceAccount.id,
+    runId,
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+  });
+  const run = await AgentRunModel.create({
+    id: runId,
+    taskId: task.id,
+    agentId: agent.id,
+    organizationId: organization.id,
+    actorKind: "serviceAccount",
+    actorId: serviceAccount.id,
+    backend: "kubernetes",
+    runtimeScope: "archestra-dev",
+    workloadName: `sa-run-${randomUUID()}`,
+    gatewayTokenId: gatewayKey.tokenId,
+  });
+  expect(
+    await ServiceAccountModel.verifyToken(gatewayKey.value),
+  ).not.toBeNull();
+
+  await manager.releaseRun(run);
+
+  expect(await ServiceAccountModel.verifyToken(gatewayKey.value)).toBeNull();
+  expect(
+    (await AgentRunModel.findByTaskId(run.taskId))?.gatewayTokenId,
+  ).toBeNull();
 });

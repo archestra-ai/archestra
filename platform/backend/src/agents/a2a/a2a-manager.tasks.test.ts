@@ -190,6 +190,7 @@ describe("A2AManager full task mode", () => {
       activeDeadlineSeconds: null,
       attentionState: null,
       virtualApiKeyId: null,
+      gatewayTokenId: null,
       completionTarget: null,
       completionNotificationClaimedAt: null,
       completionNotifiedAt: null,

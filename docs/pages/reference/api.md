@@ -37,6 +37,7 @@ What to know:
 
 - An account that acts for a team reaches what is shared with that team and uses the team's MCP server accounts. Linking one takes team admin or organization team management.
 - Disabling or deleting the account stops all of its keys. To rotate a key, create a new one, switch your clients to it, and delete the old one.
+- Archestra adds keys of its own when it runs work as the account: a **Platform key** for chat and triggers, and an **Agent run** key per runtime run, revoked when the run ends. Deleting the Platform key rotates it.
 - See [LLM API Permissions](/docs/admin/access-control#llm-api-permissions) for the roles that export costs and logs.
 
 ## Endpoints

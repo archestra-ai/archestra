@@ -1,5 +1,5 @@
 {
-  "id": "4ab6d44c-eab8-43da-a5fb-4370a1a74665",
+  "id": "654086af-c7f0-48cb-8c86-e2a4e1329d31",
   "prevId": "60720f54-f78f-4140-b40d-f5f9ffa1afac",
   "version": "7",
   "dialect": "postgresql",
@@ -3432,6 +3432,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "gateway_token_id": {
+          "name": "gateway_token_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "completion_target": {
           "name": "completion_target",
           "type": "jsonb",
@@ -3642,6 +3648,19 @@
           "tableTo": "virtual_api_keys",
           "columnsFrom": [
             "virtual_api_key_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "agent_runs_gateway_token_id_service_account_tokens_id_fk": {
+          "name": "agent_runs_gateway_token_id_service_account_tokens_id_fk",
+          "tableFrom": "agent_runs",
+          "tableTo": "service_account_tokens",
+          "columnsFrom": [
+            "gateway_token_id"
           ],
           "columnsTo": [
             "id"

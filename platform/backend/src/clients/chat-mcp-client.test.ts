@@ -2509,7 +2509,7 @@ describe("buildArchestraToolOutput", () => {
 });
 
 describe("selectMCPGatewayToken synthetic principals", () => {
-  test("a service-account principal presents its own platform token, never a personal one", async ({
+  test("a service-account principal presents its own platform key, never a personal one", async ({
     makeOrganization,
     makeUser,
     makeTeam,
@@ -2548,10 +2548,24 @@ describe("selectMCPGatewayToken synthetic principals", () => {
     // (that path fails on the user_id foreign key).
     const userTokens = await db.select().from(schema.userTokensTable);
     expect(userTokens).toHaveLength(0);
-    // The platform token is the account's to use, not one of its listed keys.
-    expect(
-      (await ServiceAccountModel.findById(account.id, org.id))?.tokens,
-    ).toEqual([]);
+    // The platform key is listed with the account's keys, and deleting it
+    // rotates it on next use.
+    const listed = (await ServiceAccountModel.findById(account.id, org.id))
+      ?.tokens;
+    expect(listed).toEqual([
+      expect.objectContaining({ id: first?.tokenId, name: "Platform key" }),
+    ]);
+    await ServiceAccountModel.deleteToken({
+      serviceAccountId: account.id,
+      tokenId: first?.tokenId ?? "",
+      organizationId: org.id,
+    });
+    const rotated = await chatClient.selectMCPGatewayToken(
+      agent.id,
+      `service-account:${account.id}`,
+      org.id,
+    );
+    expect(rotated?.tokenValue).not.toBe(first?.tokenValue);
   });
 
   test("a disabled or unknown service account gets no token", async ({

@@ -1,6 +1,9 @@
+ALTER TABLE "agent_runs" ADD COLUMN "gateway_token_id" uuid;--> statement-breakpoint
 ALTER TABLE "service_account_tokens" ADD COLUMN "secret_id" uuid;--> statement-breakpoint
 ALTER TABLE "service_accounts" ADD COLUMN "team_id" text;--> statement-breakpoint
 ALTER TABLE "service_accounts" ADD COLUMN "is_system" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_gateway_token_id_service_account_tokens_id_fk" FOREIGN KEY ("gateway_token_id") REFERENCES "public"."service_account_tokens"("id") ON DELETE set null ON UPDATE no action NOT VALID;--> statement-breakpoint
+ALTER TABLE "agent_runs" VALIDATE CONSTRAINT "agent_runs_gateway_token_id_service_account_tokens_id_fk";--> statement-breakpoint
 ALTER TABLE "service_account_tokens" ADD CONSTRAINT "service_account_tokens_secret_id_secret_id_fk" FOREIGN KEY ("secret_id") REFERENCES "public"."secret"("id") ON DELETE cascade ON UPDATE no action NOT VALID;--> statement-breakpoint
 ALTER TABLE "service_account_tokens" VALIDATE CONSTRAINT "service_account_tokens_secret_id_secret_id_fk";--> statement-breakpoint
 ALTER TABLE "service_accounts" ADD CONSTRAINT "service_accounts_team_id_team_id_fk" FOREIGN KEY ("team_id") REFERENCES "public"."team"("id") ON DELETE set null ON UPDATE no action NOT VALID;--> statement-breakpoint

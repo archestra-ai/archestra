@@ -26,6 +26,7 @@ import {
   AgentRunModel,
   AgentWorkspaceModel,
   OrganizationModel,
+  ServiceAccountModel,
   VirtualApiKeyModel,
 } from "@/models";
 import McpDeploymentLeaseModel, {
@@ -690,7 +691,7 @@ class AgentRuntimeManager {
         (await this.hasRetainedTerminal(session)),
     );
     if (!retainCredentials) {
-      await this.revokeVirtualKey(session);
+      await this.revokeRunKeys(session);
     }
     const clients = this.requireClients();
     // Keep the names for continuation's inherited-env unset list, but prevent
@@ -739,7 +740,7 @@ class AgentRuntimeManager {
   }
 
   async stopRun(session: AgentRunRecord): Promise<"suspended" | undefined> {
-    await this.revokeVirtualKey(session);
+    await this.revokeRunKeys(session);
     const pod = await this.findPod(session);
     if (pod?.status?.phase !== "Running" || !pod.metadata?.name) {
       await this.suspendWorkspace(session);
@@ -1240,7 +1241,7 @@ class AgentRuntimeManager {
   async teardown(session: AgentRunRecord): Promise<void> {
     // The key outlives the pod otherwise: a finished session's API key would
     // keep working, still charging the person it acted as.
-    await this.revokeVirtualKey(session);
+    await this.revokeRunKeys(session);
     await this.deleteWorkspace(session);
   }
 
@@ -1540,18 +1541,23 @@ class AgentRuntimeManager {
     }
   }
 
-  private async revokeVirtualKey(session: AgentRunRecord): Promise<void> {
-    if (!session.virtualApiKeyId) return;
+  private async revokeRunKeys(session: AgentRunRecord): Promise<void> {
+    if (!AgentRunModel.holdsRunKeys(session)) return;
     try {
-      await VirtualApiKeyModel.delete(session.virtualApiKeyId);
+      if (session.virtualApiKeyId) {
+        await VirtualApiKeyModel.delete(session.virtualApiKeyId);
+      }
+      if (session.gatewayTokenId) {
+        await ServiceAccountModel.revokeRunToken(session.gatewayTokenId);
+      }
     } catch (error) {
       logger.warn(
         { error, sessionId: session.id },
-        "Failed to revoke an Agent Runtime run session's virtual key",
+        "Failed to revoke an Agent Runtime run session's keys",
       );
       return;
     }
-    await AgentRunModel.clearVirtualApiKey(session.id);
+    await AgentRunModel.clearRunKeys(session.id);
   }
 
   private async readTurnOutput(params: {

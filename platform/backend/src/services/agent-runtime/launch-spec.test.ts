@@ -312,32 +312,35 @@ describe("buildAgentRunLaunchSpec", () => {
       makeLlmProviderApiKey,
       makeAgent,
     });
-    const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
-      runtime: runtime(setup.agent, "openai_responses"),
-      taskId: crypto.randomUUID(),
-      runId: crypto.randomUUID(),
-      agentId: setup.agent.id,
-      actor: {
-        id: "system",
-        kind: "system",
+    const { spec, virtualApiKeyId, gatewayTokenId } =
+      await buildAgentRunLaunchSpec({
+        runtime: runtime(setup.agent, "openai_responses"),
+        taskId: crypto.randomUUID(),
+        runId: crypto.randomUUID(),
+        agentId: setup.agent.id,
+        actor: {
+          id: "system",
+          kind: "system",
+          organizationId: setup.agent.organizationId,
+        },
         organizationId: setup.agent.organizationId,
-      },
-      organizationId: setup.agent.organizationId,
-      runtimeScope: "agent-tests",
-      effectiveNetworkPolicy: { source: "built_in", policy: null },
-      appName: "Archestra",
-      runMode: "one_shot",
-      task: "Process an incoming message.",
-    });
+        runtimeScope: "agent-tests",
+        effectiveNetworkPolicy: { source: "built_in", policy: null },
+        appName: "Archestra",
+        runMode: "one_shot",
+        task: "Process an incoming message.",
+      });
 
-    // The run acts as the organization's built-in system service account.
+    // The run acts as the organization's built-in system service account,
+    // through a key of its own.
     const systemAccount = await ServiceAccountModel.ensureSystemServiceAccount(
       setup.agent.organizationId,
     );
-    const systemToken = await ServiceAccountModel.ensurePlatformTokenValue(
-      systemAccount.id,
+    const verified = await ServiceAccountModel.verifyToken(
+      spec.secretEnv.ARCHESTRA_MCP_GATEWAY_TOKEN,
     );
-    expect(spec.secretEnv.ARCHESTRA_MCP_GATEWAY_TOKEN).toBe(systemToken.value);
+    expect(verified?.serviceAccount.id).toBe(systemAccount.id);
+    expect(verified?.token.id).toBe(gatewayTokenId);
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -351,7 +354,7 @@ describe("buildAgentRunLaunchSpec", () => {
     expect(virtualKey).toMatchObject({ scope: "org", authorId: null });
   });
 
-  test("uses the service account's own token for a service-account run actor", async ({
+  test("gives a service-account run actor a key of its own that expires with the run", async ({
     makeOrganization,
     makeAdmin,
     makeMember,
@@ -373,10 +376,11 @@ describe("buildAgentRunLaunchSpec", () => {
       organizationId: setup.agent.organizationId,
     });
 
-    const { spec } = await buildAgentRunLaunchSpec({
+    const runId = crypto.randomUUID();
+    const { spec, gatewayTokenId } = await buildAgentRunLaunchSpec({
       runtime: runtime(setup.agent, "openai_responses"),
       taskId: crypto.randomUUID(),
-      runId: crypto.randomUUID(),
+      runId,
       agentId: setup.agent.id,
       actor: {
         id: serviceAccount.id,
@@ -391,12 +395,28 @@ describe("buildAgentRunLaunchSpec", () => {
       task: "Process an incoming message.",
     });
 
-    const platformToken = await ServiceAccountModel.ensurePlatformTokenValue(
-      serviceAccount.id,
+    const verified = await ServiceAccountModel.verifyToken(
+      spec.secretEnv.ARCHESTRA_MCP_GATEWAY_TOKEN,
     );
-    expect(spec.secretEnv.ARCHESTRA_MCP_GATEWAY_TOKEN).toBe(
-      platformToken.value,
+    expect(verified?.serviceAccount.id).toBe(serviceAccount.id);
+    expect(verified?.token).toMatchObject({
+      id: gatewayTokenId,
+      name: `Agent run ${runId}`,
+      secretId: null,
+    });
+    // Bounded by the workload's own deadline even if teardown never runs.
+    expect(verified?.token.expiresAt?.getTime()).toBeLessThanOrEqual(
+      Date.now() + (spec.activeDeadlineSeconds ?? 0) * 1000,
     );
+
+    // Teardown revokes it.
+    assert(gatewayTokenId);
+    await ServiceAccountModel.revokeRunToken(gatewayTokenId);
+    expect(
+      await ServiceAccountModel.verifyToken(
+        spec.secretEnv.ARCHESTRA_MCP_GATEWAY_TOKEN,
+      ),
+    ).toBeNull();
   });
 
   test("refuses a team run actor now that team tokens are retired", async ({

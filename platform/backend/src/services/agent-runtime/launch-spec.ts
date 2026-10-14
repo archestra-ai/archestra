@@ -13,7 +13,6 @@ import {
 } from "@archestra/shared";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { getBedrockRegion } from "@/clients/bedrock-credentials";
 import { selectMCPGatewayToken } from "@/clients/chat-mcp-client";
 import config from "@/config";
@@ -24,6 +23,7 @@ import {
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
+  ServiceAccountModel,
   VirtualApiKeyModel,
 } from "@/models";
 import type { OpenAppaSession } from "@/openappa/service";
@@ -88,7 +88,11 @@ export async function buildAgentRunLaunchSpec(params: {
     OpenAppaSession,
     "session_id" | "caller_id" | "parent_id"
   >;
-}): Promise<{ spec: AgentRunLaunchSpec; virtualApiKeyId: string | null }> {
+}): Promise<{
+  spec: AgentRunLaunchSpec;
+  virtualApiKeyId: string | null;
+  gatewayTokenId: string | null;
+}> {
   const platformBaseUrl = config.agentRuntime.platformBaseUrl.replace(
     /\/+$/,
     "",
@@ -123,9 +127,8 @@ export async function buildAgentRunLaunchSpec(params: {
     );
   }
 
-  const gatewayToken = await resolveGatewayToken({
+  const gatewayPrincipal = await resolveGatewayPrincipal({
     actor: params.actor,
-    agentId: params.agentId,
     organizationId: params.organizationId,
   });
 
@@ -341,8 +344,18 @@ export async function buildAgentRunLaunchSpec(params: {
     task: params.task,
     inputs: params.inputFiles ?? [],
   });
+  const activeDeadlineSeconds =
+    (params.runtime.ttlHours ?? config.agentRuntime.defaultTtlHours) * 60 * 60;
+  // Minted last, once nothing above can throw and strand it.
+  const gatewayToken = await mintGatewayToken({
+    principal: gatewayPrincipal,
+    agentId: params.agentId,
+    organizationId: params.organizationId,
+    runId: params.runId,
+    expiresAt: new Date(Date.now() + activeDeadlineSeconds * 1000),
+  });
   const secretEnv: Record<string, string> = {
-    ARCHESTRA_MCP_GATEWAY_TOKEN: gatewayToken,
+    ARCHESTRA_MCP_GATEWAY_TOKEN: gatewayToken.value,
     ...(claudeCodeToken ? { CLAUDE_CODE_OAUTH_TOKEN: claudeCodeToken } : {}),
     ...(virtualKey ? { ARCHESTRA_VIRTUAL_KEY: virtualKeyValue } : {}),
     ...(!isClaudeCodeBedrock && !usesClaudeCodeSubscription
@@ -393,6 +406,7 @@ export async function buildAgentRunLaunchSpec(params: {
 
   return {
     virtualApiKeyId: virtualKey?.virtualKey.id ?? null,
+    gatewayTokenId: gatewayToken.tokenId,
     spec: {
       poolScope: `${params.organizationId}:${params.runtime.environmentId ?? "default"}`,
       taskId: params.taskId,
@@ -414,10 +428,7 @@ export async function buildAgentRunLaunchSpec(params: {
       ...(Object.keys(credentials.renewableCredentials).length
         ? { renewableCredentials: credentials.renewableCredentials }
         : {}),
-      activeDeadlineSeconds:
-        (params.runtime.ttlHours ?? config.agentRuntime.defaultTtlHours) *
-        60 *
-        60,
+      activeDeadlineSeconds,
       workspaceStorageSize: config.agentRuntime.workspaceStorageSize,
       workspaceStorageClass: config.agentRuntime.workspaceStorageClass,
       nodeSelector: config.agentRuntime.nodeSelector,
@@ -591,37 +602,69 @@ async function createProviderBackedVirtualKey(params: {
   });
 }
 
-async function resolveGatewayToken(params: {
+/**
+ * Who the run's MCP gateway calls act as: a user presents their personal
+ * token; every other actor acts through a service account, the organization's
+ * built-in one when no account is named.
+ */
+async function resolveGatewayPrincipal(params: {
   actor: A2AActor;
-  agentId: string;
   organizationId: string;
-}): Promise<string> {
+}): Promise<{ userId: string } | { serviceAccountId: string }> {
+  if (params.actor.kind === "user") return { userId: params.actor.id };
   // Team tokens are retired, so a team actor (only left on runs started
-  // before then) has no token to act with.
-  if (params.actor.kind !== "team") {
-    const selected = await selectMCPGatewayToken(
-      params.agentId,
-      runActorUserId(params.actor),
-      params.organizationId,
+  // before then) has nothing to act with.
+  const serviceAccount =
+    params.actor.kind === "serviceAccount"
+      ? await ServiceAccountModel.findAccount(
+          params.actor.id,
+          params.organizationId,
+        )
+      : params.actor.kind === "team"
+        ? null
+        : await ServiceAccountModel.ensureSystemServiceAccount(
+            params.organizationId,
+          );
+  if (!serviceAccount || serviceAccount.disabled) {
+    throw new ApiError(
+      500,
+      "Could not resolve an MCP gateway token for this run actor",
     );
-    if (selected?.tokenValue) return selected.tokenValue;
   }
-  throw new ApiError(
-    500,
-    "Could not resolve an MCP gateway token for this run actor",
-  );
+  return { serviceAccountId: serviceAccount.id };
 }
 
-/** The principal the run's gateway token is selected for. */
-function runActorUserId(actor: A2AActor): string {
-  switch (actor.kind) {
-    case "user":
-      return actor.id;
-    case "serviceAccount":
-      return serviceAccountUserId(actor.id);
-    default:
-      return "system";
+/**
+ * The bearer the run's workload presents to the MCP gateway. A service
+ * account gets a key for this run only, which the run's teardown revokes.
+ */
+async function mintGatewayToken(params: {
+  principal: { userId: string } | { serviceAccountId: string };
+  agentId: string;
+  organizationId: string;
+  runId: string;
+  expiresAt: Date;
+}): Promise<{ value: string; tokenId: string | null }> {
+  if ("serviceAccountId" in params.principal) {
+    const { tokenId, value } = await ServiceAccountModel.createRunToken({
+      serviceAccountId: params.principal.serviceAccountId,
+      runId: params.runId,
+      expiresAt: params.expiresAt,
+    });
+    return { value, tokenId };
   }
+  const selected = await selectMCPGatewayToken(
+    params.agentId,
+    params.principal.userId,
+    params.organizationId,
+  );
+  if (!selected?.tokenValue) {
+    throw new ApiError(
+      500,
+      "Could not resolve an MCP gateway token for this run actor",
+    );
+  }
+  return { value: selected.tokenValue, tokenId: null };
 }
 
 /**

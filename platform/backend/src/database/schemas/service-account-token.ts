@@ -23,10 +23,10 @@ const serviceAccountTokensTable = pgTable(
     tokenStart: text("token_start").notNull(),
     disabled: boolean("disabled").notNull().default(false),
     /**
-     * Set only on the account's platform-held token: the one the platform
-     * itself presents to the MCP gateway when it runs work as this account.
-     * A hash cannot be presented, so the value is also kept in the secret
-     * store. Never listed, counted, or editable.
+     * Set only on the account's platform key: the one the platform itself
+     * presents to its MCP gateway when it runs work as this account. A hash
+     * cannot be presented, so the value is also kept in the secret store.
+     * Listed like any other key; deleting it rotates it on next use.
      */
     secretId: uuid("secret_id").references(() => secretsTable.id, {
       onDelete: "cascade",

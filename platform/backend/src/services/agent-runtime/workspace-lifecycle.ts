@@ -48,7 +48,7 @@ export async function deleteAgentWorkspace(params: {
   try {
     const backend = resolveAgentRuntimeBackendDriver(workspace.backend);
     const latestRun = await AgentRunModel.findByTaskId(workspace.lastTaskId);
-    if (latestRun?.virtualApiKeyId)
+    if (latestRun && AgentRunModel.holdsRunKeys(latestRun))
       await cleanupAgentRun(latestRun, { requireTranscript: true });
     else if (latestRun) await backend.releaseRun(latestRun);
     await backend.deleteWorkspace(workspace);

@@ -136,32 +136,33 @@ async function startAgentRunSession(params: {
     task = promptWithContract(task, contract);
   }
 
-  const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
-    runtime: params.runtime,
-    taskId: params.taskId,
-    runId,
-    agentId: params.agentId,
-    actor: params.actor,
-    organizationId: params.organizationId,
-    runtimeScope,
-    effectiveNetworkPolicy,
-    appName: organization?.appName ?? DEFAULT_APP_NAME,
-    task,
-    runMode: params.runMode,
-    inputFiles,
-    ...(workspace
-      ? {
-          workspaceId: workspace.id,
-          runtimeSession: runtimeOpenAppaSession({
-            organizationId: params.organizationId,
+  const { spec, virtualApiKeyId, gatewayTokenId } =
+    await buildAgentRunLaunchSpec({
+      runtime: params.runtime,
+      taskId: params.taskId,
+      runId,
+      agentId: params.agentId,
+      actor: params.actor,
+      organizationId: params.organizationId,
+      runtimeScope,
+      effectiveNetworkPolicy,
+      appName: organization?.appName ?? DEFAULT_APP_NAME,
+      task,
+      runMode: params.runMode,
+      inputFiles,
+      ...(workspace
+        ? {
             workspaceId: workspace.id,
-            workloadName: workspace.workloadName,
-            actorKind: workspace.actorKind,
-            actorId: workspace.actorId,
-          }),
-        }
-      : {}),
-  });
+            runtimeSession: runtimeOpenAppaSession({
+              organizationId: params.organizationId,
+              workspaceId: workspace.id,
+              workloadName: workspace.workloadName,
+              actorKind: workspace.actorKind,
+              actorId: workspace.actorId,
+            }),
+          }
+        : {}),
+    });
 
   if (workspace) {
     spec.frozenName = workspace.workloadName;
@@ -196,6 +197,7 @@ async function startAgentRunSession(params: {
     runtimeScope,
     activeDeadlineSeconds: spec.activeDeadlineSeconds,
     virtualApiKeyId,
+    gatewayTokenId,
     completionTarget: params.completionTarget,
   });
 
@@ -246,7 +248,7 @@ async function startAgentRunSession(params: {
         );
       claimedWorkspace = true;
       const previous = await AgentRunModel.findByTaskId(workspace.lastTaskId);
-      if (previous?.virtualApiKeyId)
+      if (previous && AgentRunModel.holdsRunKeys(previous))
         await cleanupAgentRun(previous, { requireTranscript: true });
       if (params.runtimeCrossing) {
         await admitRuntimeSteer({

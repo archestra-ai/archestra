@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-09-17
+lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -1534,6 +1534,11 @@ A2A task streams work across replicas. A client can subscribe on one replica whi
 - **`ARCHESTRA_MCP_GATEWAY_WAKE_WAIT_TIMEOUT_MS`** - How long, in milliseconds, a tool call is held open while the MCP server behind it wakes from idle hibernation, before being answered with a retryable "still starting, retry shortly" result.
   - Default: `30000` (30 seconds)
   - Independent of the tool-call timeout above: that timeout governs the dispatched call and only starts counting once the woken server has accepted it. Keep this value below your clients' own request timeouts, or a client aborts the call first and sees a transport error instead of the retryable answer.
+- **`ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS`** - Optional limit, in milliseconds, on how long one notification stream stays open before the gateway ends it with a complete result.
+  - Default: `0` (no expiry). The stream stays open until the client disconnects.
+  - An abrupt proxy close can fail an open form. This setting is a partial mitigation, not a guarantee: clients can stop reconnecting after repeated clean ends, which stops tool-list change notifications. Enable it only after checking your client's behavior and accepting that limitation.
+  - Set a positive value below your proxy's maximum request duration. Heartbeats do not extend that maximum, and Archestra does not detect it. A GKE Ingress backend with no `timeoutSec` uses 30 seconds.
+  - Accepts whole numbers from `0` through `2147483647`. Invalid or larger values disable expiry, avoiding timer overflow.
 - **`ARCHESTRA_MCP_SKILLS_ENABLED`** - Beta gate for both directions of the draft MCP Skills extension (SEP-2640): publishing local Skills through gateways and projecting Skills discovered from installed MCP servers.
   - Default: unset (falls back to `ARCHESTRA_BETA`)
   - An explicit `false` keeps both directions off even when the master beta switch is enabled.

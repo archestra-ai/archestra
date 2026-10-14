@@ -1621,6 +1621,59 @@ describe("mcp gateway config", () => {
 
     expect(cfg.mcpGateway.toolCallTimeoutMs).toBe(60000);
   });
+
+  test("defaults the subscription stream cap to disabled", async () => {
+    delete process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS;
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.mcpGateway.subscriptionMaxDurationMs).toBe(0);
+  });
+
+  test("reads the subscription stream cap from the env var", async () => {
+    process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS = "20000";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.mcpGateway.subscriptionMaxDurationMs).toBe(20_000);
+  });
+
+  test("accepts zero as no subscription stream expiry", async () => {
+    process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS = "0";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.mcpGateway.subscriptionMaxDurationMs).toBe(0);
+  });
+
+  test("falls back when the subscription stream cap exceeds the timer range", async () => {
+    process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS =
+      "2147483648";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.mcpGateway.subscriptionMaxDurationMs).toBe(0);
+  });
+
+  test("accepts the largest delay a timer can schedule", async () => {
+    process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS =
+      "2147483647";
+
+    const { default: cfg } = await import("./config");
+
+    expect(cfg.mcpGateway.subscriptionMaxDurationMs).toBe(2_147_483_647);
+  });
+
+  test.each([
+    "-1",
+    "Infinity",
+    "NaN",
+    "1.5",
+  ])("disables subscription stream expiry for invalid value %s", async (value) => {
+    process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS = value;
+    const { default: cfg } = await import("./config");
+    expect(cfg.mcpGateway.subscriptionMaxDurationMs).toBe(0);
+  });
 });
 
 describe("rum export config", () => {

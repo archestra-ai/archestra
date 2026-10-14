@@ -33,7 +33,7 @@ const server = {
 test("a policy prompt given a target keeps its text and narrows to the target", () => {
   const plain = resolveOpenAppaLaunchPrompt("improveCoverage");
   const scoped = resolveOpenAppaLaunchPrompt("improveCoverage", server);
-  expect(scoped).toMatch(new RegExp(`^${plain?.replace(/\./g, "\\.")} `));
+  expect(scoped?.startsWith(`${plain} `)).toBe(true);
   expect(scoped).toContain('Focus on the MCP server "GitHub".');
   expect(scoped).toContain("Target ID: catalog-1");
 });

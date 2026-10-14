@@ -141,11 +141,13 @@ class BrowserStreamFeature {
     agentId: string,
     conversationId: string,
     userContext: BrowserUserContext,
+    options?: { fast?: boolean },
   ) {
     return this.getService().takeScreenshot(
       agentId,
       conversationId,
       userContext,
+      options,
     );
   }
 

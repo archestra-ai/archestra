@@ -408,8 +408,6 @@ export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
     "get_guardrails_policy",
     "get_openappa_policy_tests",
     "run_openappa_policy_tests",
-    "discover_openappa_validation_scenarios",
-    "draft_openappa_validation_scenario",
     "preview_openappa_validation_change",
     "publish_openappa_validation_change",
     "get_openappa_yell",

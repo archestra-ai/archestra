@@ -1209,11 +1209,14 @@ test("page selection can expand across pages and remains stable across filters",
   ).not.toBeInTheDocument();
   expect(
     within(pageActions).queryByRole("button", {
-      name: "Ask About Validations",
+      name: "Write a validation",
     }),
   ).not.toBeInTheDocument();
   expect(
-    screen.getByRole("button", { name: "Ask About Validations" }),
+    screen.getByRole("button", { name: "Write a validation" }),
+  ).toBeVisible();
+  expect(
+    screen.getByRole("button", { name: "Explain validations" }),
   ).toBeVisible();
   expect(
     screen.queryByRole("button", { name: "Write validations" }),

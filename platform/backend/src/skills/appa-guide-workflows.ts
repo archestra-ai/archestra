@@ -11,7 +11,7 @@ Approval and publishing follow **Approval in Archestra** and **Publish** in the 
 
 ## First policy: a small, usable start
 
-Use this while the policy's revision is 0 and its delivery is local, also for an explicit \`init\`; otherwise follow \`references/init.md\`. Skip validations unless the operator asks for them.
+Use this while the policy's revision is 0 and its delivery is local, also for an explicit \`init\`; otherwise follow \`references/init.md\`.
 
 1. Read the policy, then briefly inspect deployed servers (\`archestra__list_mcp_server_deployments\`) and battery fits (\`archestra__list_guardrails_battery_fits\` without \`mcpServerId\`). Do not enumerate every tool or ask the operator to classify servers.
 2. Use the returned starter text: it declares controls for built-in platform tool calls, the \`run_command\` annotator rule, context control, and the catch-all. Defer batteries, credentials, Git sync, and tuning until after the first save. Never invent a credential key. If the operator explicitly asks for more protection, inspect the relevant tools and ask at most one plain-language question.
@@ -19,7 +19,7 @@ Use this while the policy's revision is 0 and its delivery is local, also for an
 4. Preview the complete starter with \`content\` and the revision you read.
 5. Explain in at most three short sentences: the starter's declared controls for built-in platform tool calls will be saved and switched on (only saved, when the preview's \`turnsOnEnforcement\` is false); the other connected tools, named by one or two servers, keep working as they do now; and batteries for them can be set up next. When setup follows a broader safety goal, explain that establishing that goal still requires examining the relevant calls and dependencies; saving the starter does not establish it. Do not describe individual rules or server health unless asked, and avoid "audience", "catch-all", "composition", "revision", "preview", and "rule pack". This replaces the fuller proposal the shared rules ask for.
 6. Ask for approval with the question "Would you like me to save this policy and turn it on?" ("Would you like me to save this policy?" when \`turnsOnEnforcement\` is false). If the operator asks to see the TOML, also say that the include line loads the built-in rules you described, kept in a separate file. If asked for those rules too, show the effective policy separately and label it.
-7. Publish. Resume any still-pending authorized workflow for which policy setup was a prerequisite. Otherwise offer the next step in one sentence: batteries for the connected servers that have one (name them). Do not offer Git sync; the saved-revision banner already links to its setup.
+7. Publish. Resume any still-pending authorized workflow for which policy setup was a prerequisite. Otherwise offer the next step in one sentence: batteries for the connected servers that have one (name them). Then offer a validation as **When to offer one** in \`references/validation.md\` says. Do not offer Git sync; the saved-revision banner already links to its setup.
 
 ## Add batteries
 
@@ -86,7 +86,7 @@ Otherwise preview the change, then group the proposal by server:
 - every configured server whose tools could not be inspected: "<server> is configured, but I could not inspect its tools in this session."
 - whether approval saves a local revision or opens a GitHub PR; when the preview's \`turnsOnEnforcement\` is true, say that approving also turns on enforcement
 
-If required support is missing, end with **Needed for this to work** and propose concrete fixes. Then ask for approval in the same turn.
+If required support is missing, end with **Needed for this to work** and propose concrete fixes. Then ask for approval in the same turn. After the save, offer a validation as **When to offer one** in \`references/validation.md\` says.
 `;
 
 /** `references/adjust.md`: Changing the current policy. */
@@ -95,14 +95,13 @@ export const ADJUST_WORKFLOW = `# Adjust the current config (\`adjust\`)
 
 Start from the operator's requested outcome, not a full tool rescan. Approval and publishing follow **Approval in Archestra** and **Publish** in the skill body. If the outcome is ambiguous, ask one focused question and wait.
 
-An ordinary, concrete behavior change normally keeps one small intent check, as \`references/validation.md\` describes; then preview, approve, and publish the policy and the check together there, with the complete policy text rather than \`edits\`. Skip it when the operator asks, and for policy-only requests.
-
 1. Read the policy with \`archestra__get_guardrails_policy\`: \`content\`, \`revision\`, \`delivery\`, and \`effective\`.
 2. For syntax or rules the current config does not show, load the \`references/contracts.md\` index and the part it names, and \`references/archestra.md\` for the tool names Archestra evaluates. Before writing a rule on a tool's arguments, inspect it with \`archestra__inspect_guardrails_server\`, \`"detail": "full"\`, and \`"tools"\` naming it, unless this conversation already has that result.
 3. If a battery helps, check \`archestra__list_guardrails_battery_fits\` for it and add it to \`include\`. Existing root rules keep priority. Describe it as **Propose a battery** says. When it needs a token, collect it as steps 1–3 of **Add batteries** in \`references/first-policy.md\` say, then continue here.
 4. Preview the change with \`edits\` and the current revision.
 5. Summarize what changes, what stays the same, and any warnings, and whether approval saves locally or opens a GitHub PR. If the operator asked to see the change, show the preview's \`diff\` in a fenced diff block.
 6. Ask for approval in the same turn, then publish.
+7. For a targeted behavior change, offer a validation for it as **When to offer one** in \`references/validation.md\` says.
 
 When the operator asks why a call was blocked, follow **Explain a block** in the policy-writing rules first.
 `;

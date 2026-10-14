@@ -2,70 +2,55 @@
 
 /** `references/validation.md`: Guided validation conversations and the write, replay and publish steps. */
 // white-label-ok: applyBuiltInSkillBranding rebrands bundled references at reconcile
-export const VALIDATION_WORKFLOW = `# Validations
+export const VALIDATION_WORKFLOW = `# Validations (\`validate\`)
 
-A validation is a small \`.appa\` scenario that checks expected policy decisions across one or more ordered calls. Automatic discovery currently offers single-call examples. \`references/validation-writing.md\` has the syntax.
+A validation is a unit test for one case the operator cares about: a short \`.appa\` scenario of one or more calls and the decision the operator expects, such as "Slack data must never be posted to a public GitHub repository". Replay runs it offline against the policy; it executes no tools, models, or remote helpers. Saving a validation on its own never changes the policy or the enforcement switch. Approval follows **Save** below, not the policy's approval steps.
 
-- First setup and explicit policy-only work need no validations. Do not create checks just to increase coverage.
-- For validation-only work, this workflow owns review and saving; the shared policy-proposal approval steps do not apply.
-- Validation-only work leaves the policy unchanged. Include a policy change only when explicitly requested. Never delete a failing check or change its expectation to force a pass; if new intent contradicts an existing check, ask one focused question.
-- An ordinary, concrete behavior change normally keeps one clearly named file with one to three assertions. Do not build a test matrix or duplicate existing checks. Respect a request to skip validations.
+## When to offer one
 
-## Choose the requested operation
+Offer a validation only at these points, in one sentence, and never more than once per conversation:
 
-For an explicit request to run already-saved checks or record fresh results, call \`archestra__run_openappa_policy_tests\` directly and report its recorded results. This needs no discovery, drafting, or saving step.
+- **After a first policy or \`init\` is saved**: ask whether there is a specific case the policy must handle, with one example from the connected servers, and say you can write a validation for it.
+- **After a targeted behavior change is approved**: ask with one \`archestra__ask_user\` question, "Add a validation for this change?", with options "Write validation" and "Not now". With local delivery, ask after the save. When approval opens a pull request, ask before publishing, so the check joins the same pull request: preview it with the complete proposed policy as \`policyContent\`, and publish both with \`archestra__publish_openappa_validation_change\` instead of \`archestra__update_guardrails_policy\`.
+- **When the operator asks to validate the policy or write a validation**: go to **Get the case**.
 
-A request to explain or review existing checks is inspection only: read the relevant files and policy, then answer without drafting, previewing, or publishing changes. If a needed file is unavailable, report the gap; explain any supplied material within that limit.
+Do not offer one for explain, review, or yell requests, after the operator declines, or just to add coverage.
 
-A concrete requirement identifies an action and desired decision, plus starting conditions when relevant. A broad goal alone needs narrowing into a behavior the operator wants to check.
+## Get the case
 
-For an exploratory request without a concrete requirement, use **Discover before recommending an unspecified check** below directly. Discovery supplies policy and suite readiness; separate raw policy, suite, or tool reads are unnecessary before presenting its choices.
+1. A concrete case names an action and the expected decision, plus starting conditions when they matter (for example, after reading private Slack data). If the request or the change you just made gives one, go to **Write**.
+2. Otherwise ask in one sentence which case the policy must handle, with an example from the connected servers, and end the turn.
+3. If the operator asks what to check, name one or two cases the policy's own rules govern and ask them to pick one or describe their own.
 
-A concrete requirement, supplied candidate policy, or desired outcome different from discovery goes directly to drafting and preview. Read the current policy first, reusing reads from this turn. Once the policy prerequisite below is satisfied, load \`references/validation-writing.md\` alongside the suite read. Expectations come from the operator's requirement even if the policy fails it; ask only if a missing detail changes what should be allowed or blocked. Respect requests not to run tests.
+## Before you write
 
-## Establish the policy before choosing checks
+1. Read the policy with \`archestra__get_guardrails_policy\`. When \`revision = 0\` and \`delivery.mode = "revision"\`, no policy has been saved: say so, offer to set up a starting policy (\`references/first-policy.md\`), and do not write a validation. A saved policy can be validated while enforcement is off.
+2. Read the suite with \`archestra__get_openappa_policy_tests\`.
+   - A collection \`error\` means unavailable, not empty. For a stale source or conflict, read the policy and suite again once; otherwise report the blocker and stop.
+   - When \`source = "github"\` and \`activeDirectory\` is empty, preview and save are disabled: direct the operator to set a validation directory in GitHub source settings.
+   - After the operator changes the directory or Git sync, read both again and use the returned source, directory, revision, and version.
+3. Load \`references/validation-writing.md\` for the \`.appa\` syntax.
 
-When \`revision = 0\` and \`delivery.mode = "revision"\` (local delivery), the returned content is an **unsaved starter**, not a configured policy. For a request about the current policy, report that no OpenAPPA policy has been saved, so there is no saved current policy to validate. Offer to prepare the starter for review, or clarify the action and desired outcome the operator wants to govern. A broad safety goal remains unresolved; assess the starter's coverage from its declared rules during setup. Ask which next step they want, then wait. Do not offer runnable validations, inspect tool schemas, or draft or preview scenarios at this transition. If setup is already requested, load \`references/first-policy.md\` and follow its proposal and approval steps; a validation request alone does not authorize saving or enabling a policy. Resume current-policy validations after a read confirms the policy was saved.
+## Write
 
-This prerequisite concerns a missing policy, not disabled enforcement: a saved policy can be validated offline while enforcement is off. An explicitly supplied candidate policy can also be tested before saving; use that candidate and label the result as a draft-policy check. When testing a complete supplied candidate, pass it unchanged to preview; distinguish your transcription errors from errors in the supplied policy. Do not silently substitute the unsaved starter for the operator's intended policy.
+1. Build the calls from \`effective.content\` as the writing reference says. Inspect a tool's metadata only when the case needs arguments the policy's contracts do not show.
+2. Write one file with a descriptive name, a one-line intent comment, and one to three assertions. For Git, its path is a direct \`.appa\` child of \`activeDirectory\`; locally, use the returned directory. Reuse an existing file that already covers the case instead of adding a duplicate.
+3. Expectations come from the operator's case, even when the policy fails it today. Ask only if a missing detail changes what should be allowed or blocked. If the case needs a starting state, a contract or the deployment's starting label must establish it; tool names and imagined results do not. If nothing does, explain the gap and ask for the setup.
+4. Preview with \`archestra__preview_openappa_validation_change\`: explicit \`upsert\` and \`delete\`, \`expectedRevision\`, and \`expectedVersion\`. Omit \`policyContent\` unless a policy change is part of the request; never pass the current policy or blank text as a placeholder. Fix \`.appa\` syntax errors in the file only and preview again.
+5. Explain in at most three sentences, without tool calls or \`.appa\` text: the situation, the expected decision, and what the preview found. Keep passed, failed, and cannot-run distinct. \`cannot_run\` means replay could not decide offline, for example because the step needs a remote annotator; it is not a pass.
+6. If the check fails, say the policy does not handle this case yet and offer to change the policy (\`references/adjust.md\`). Never weaken or delete a check to make it pass.
+7. End the turn with one \`archestra__ask_user\` question, "Save this validation?", with options "Save" and "Not now". A typed answer is a change: apply it, preview again, and ask again. Respect "don't save yet".
 
-Once the policy to test is established, read the authoritative suite (\`archestra__get_openappa_policy_tests\`). Check whether replay and publication are available:
+## Save
 
-- A collection \`error\` means unavailable, not empty. If it reports a stale source or conflict and asks for a reload, refresh the policy and suite once. For other errors, or if a reload does not resolve it, report the blocker and do not preview or publish validations.
-- When \`source = "github"\` and \`activeDirectory\` is empty, preview and publication are disabled. Direct the operator to set a validation directory in GitHub source settings; do not attempt validation preview or publication.
-- If the operator changes the directory or disables Git sync, read both policy and suite again. Use the returned source, directory, revision, and version; never reuse the earlier \`disabled:...\` version. A local source needs no GitHub directory setup.
+1. Call \`archestra__publish_openappa_validation_change\` with the exact patch you previewed and the same \`expectedRevision\` and \`expectedVersion\`. On a conflict, read the policy and suite again, re-apply the file, preview, and ask again if the result changed.
+2. Locally, the validation is saved. With Git sync, give the pull request URL: it is active only after merge and sync.
+3. Report the file path and its last preview result in one or two sentences. Saving does not record a run: offer to run the saved suite.
 
-When replay is unavailable, still provide an already-requested text draft if the available policy and contracts support it, clearly labeled untested. Do not require a second request to draft. For an exploratory request, explain the setup needed before proposing runnable checks.
+## Run or explain saved validations
 
-An unavailable optional regression check does not block an authorized policy proposal: return to \`references/adjust.md\` for policy-only preview and approval, explaining that the check could not run. If the operator requires policy and checks together, keep that requirement and report the blocker instead of silently dropping the checks.
-
-## Discover before recommending an unspecified check
-
-For exploratory requests without a concrete requirement, call \`archestra__discover_openappa_validation_scenarios\` once. It checks policy readiness and constructs a bounded set of exact calls, then verifies them with native replay. Use its returned choices instead of designing hypothetical scenarios. Each choice describes an observed decision in a fresh session, not a recommended security requirement or coverage of a whole rule. Explain choices using **Help the operator understand a check** below, then ask which behavior they want to preserve and wait. Keep the association between each human-readable choice and its candidateId; identifiers are for tool calls, not choice labels. Existing files listed for a tool are related checks, not proof that they cover this behavior.
-
-If discovery returns setup_required or unavailable, explain the prerequisite and stop. A needs_input entry means automatic discovery cannot prepare this check. Follow its reason: a custom scenario or concrete arguments may allow normal preview. A cannot_run entry has no verified decision; drop that branch. Mention unavailable branches only when they affect the requested goal or explain why no useful choice is available, using the reported limitation in plain language. Replay makes no live helper or model requests, so its diagnostics cannot establish a live outage or health problem. An empty or limited result does not mean the policy has no other testable behaviors. Do not repeat unchanged discovery, invent prerequisites, or promise unavailable helper/model outcomes.
-
-After the operator chooses a returned scenario and confirms the observed outcome is the desired requirement, call \`archestra__draft_openappa_validation_scenario\` with its discoveryId and candidateId. This returns the exact file and a full-suite preview. Explain the returned check and result in plain language before its technical details; keep the returned file unchanged. Selection authorizes drafting and replay, not saving. If a choice expired or its policy/suite changed, refresh choices and ask again rather than substituting a scenario. For publication, use the returned exact file, revision and version in the saving steps below.
-
-For state-dependent requirements, a contract or deployment starting label must establish the required state. Tool names, imagined results and annotator hints do not establish it. During automatic exploration, if that prerequisite is absent, explain the gap and stop that branch; ask for the needed setup or another behavior. For an explicit concrete requirement, keep the requested assertion and replay it when possible: a missing policy restriction can be the defect the failing check exposes. Use replay to resolve a concrete uncertainty rather than repeatedly redesigning hypothetical cases.
-
-## Help the operator understand a check
-
-The operator should be able to choose without reading tool calls or an \`.appa\` file. Offer up to three individually verified choices. Give each a short behavior label containing its relevant starting scope, followed by at most two sentences: a concrete situation consistent with the tested inputs, the observed decision, and which unwanted change this exact check would detect. Describe a fresh session as a new conversation, including any relevant configured starting restriction. Keep scope attached to the claim itself, including in the selection question: explain the returned scenario, not the policy's broader capabilities.
-
-Use known tool purpose to explain the action; inspect only needed metadata if unclear. Metadata explains purpose; replay establishes the decision for the tested inputs and state. A motivating situation can illustrate why the tested step matters, but additional inputs, earlier actions and successful execution remain untested. Ask the operator to choose one returned candidate. A different-goal option starts clarification of the action and desired outcome; its feasibility remains to be checked.
-
-Explain only limits relevant to this choice. When only basic availability examples are found, say that and offer to clarify a more relevant goal. Discovery is incomplete. Lead draft review and results with the same situation: what should happen, what the test found, and what a failure would mean. Give the file path for reference and provide its exact source on request. Keep passing, failing, unavailable and untested results distinct.
-
-## Write, replay, and publish
-
-1. Load \`references/validation-writing.md\` for the \`.appa\` syntax before you write a scenario, if not already loaded.
-2. Construct calls from \`effective.content\` using the writing reference's naming and contract rules; offline replay does not require installed tools. Inspect live metadata only when the check needs arguments beyond those contracts. Preserve existing files and reuse a scenario that covers the intent.
-3. Write one focused scenario with a descriptive name and short intent comment. For Git, its path must be a direct \`.appa\` child of \`activeDirectory\`; for local files use the returned directory.
-4. When the suite is available, call \`archestra__preview_openappa_validation_change\` with explicit \`upsert\` and \`delete\` changes, \`expectedRevision\`, and \`expectedVersion\`. For validation-only work, omit \`policyContent\` or pass \`null\` if the client requires the field. Never pass the current policy, an empty string, or whitespace as a placeholder. Add \`policyContent\` only for an explicitly requested policy change: derive the complete text from the current root and your exact edits, preserving every unrelated line. Preview replays the whole suite against the composed policy without saving. It executes no tools, models, or remote helpers, so \`cannot_run\` is a limitation to explain, not a pass. Correct scenario syntax errors in the \`.appa\` files only; leave \`policyContent\` omitted or null while retrying validation-only work.
-5. Review changed validations as **Help the operator understand a check** describes. A preview refused before replay leaves the draft untested. For validation-only work, review the files, not a proposed policy.
-6. Choosing or drafting a check does not authorize saving. Respect "do not save yet" without asking to save; otherwise ask to save or adjust when publication is not already authorized. Publish with \`archestra__publish_openappa_validation_change\` using the exact previewed patch, saving locally or opening one PR for policy and validations together. If review was requested first, wait for approval even if the operator said "create" or "go ahead" with the draft. On a revision or version conflict, read again and reconcile; ask again if the behavior changes. Explain local saving or a pull request (a merge request on GitLab) when publication becomes relevant.
-7. Report the saved version or PR URL, remaining failures, and replay limits. A PR becomes active only after merge and sync. A specification-only save leaves enforcement unchanged and does not record a suite run. When the operator asks to run saved checks or record fresh results on the validations page, call \`archestra__run_openappa_policy_tests\` after saving locally (or after merge and sync for Git). Report its run ID, outcomes and stale status; a draft or publication replay is not a recorded run. Failures do not block policy activation; the operator's CI owns merge gating.
+- To run: call \`archestra__run_openappa_policy_tests\` (after merge and sync for Git), then report the run's passed, failed, and cannot-run counts and whether it is outdated.
+- To explain: read the policy and the suite, then say in plain language which case each validation checks and its latest result. Change nothing.
 `;
 
 /** `references/validation-writing.md`: Scenario syntax and test intent. */

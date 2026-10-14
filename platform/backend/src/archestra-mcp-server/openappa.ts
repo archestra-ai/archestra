@@ -102,10 +102,6 @@ import {
   runOpenAppaPolicyTests,
 } from "@/services/openappa-policy-tests";
 import {
-  discoverOpenAppaScenarios,
-  draftOpenAppaScenario,
-} from "@/services/openappa-scenario-discovery";
-import {
   previewOpenAppaValidationChange,
   publishOpenAppaValidationChange,
 } from "@/services/openappa-validation-change";
@@ -126,10 +122,6 @@ import {
 } from "@/types/openappa-external-consults";
 import { AppaGithubSourceSchema } from "@/types/openappa-github-sync";
 import { RunPolicyTestsSchema } from "@/types/openappa-policy-tests";
-import {
-  DiscoverOpenAppaScenariosSchema,
-  SelectOpenAppaScenarioSchema,
-} from "@/types/openappa-scenario-discovery";
 import {
   PreviewOpenAppaValidationChangeSchema,
   PublishOpenAppaValidationChangeSchema,
@@ -925,37 +917,6 @@ const registry = defineArchestraTools([
           }),
         );
       }),
-  }),
-  defineArchestraTool({
-    shortName: "discover_openappa_validation_scenarios",
-    title: "Find replayable validation scenarios",
-    annotations: { readOnlyHint: true },
-    description:
-      "Find up to three exact current-policy call scenarios verified by offline replay. Checks policy and suite readiness itself; no prerequisite policy, suite, or tool-schema reads are needed. No model-invented calls or files are needed. Each candidate states an observed decision, not a desired requirement or proof of general protection. Explain returned candidates as human situations: what behavior each checks, a concrete example consistent with its inputs and starting state, and which unwanted policy change it would catch. Use short behavior labels that include the tested starting scope; describe each choice in at most two sentences. Distinguish illustrative context from what replay actually checked, and ask which outcome the user wants to preserve, then wait. A needs_input entry requires a custom check; its reason explains the discovery limit; cannot_run means no offline decision was established, not evidence of a live helper outage. Stop those branches. Discovery is bounded and incomplete; do not retry unchanged inputs or invent missing state. Saves nothing. For an explicit concrete requirement or supplied candidate policy, use validation preview directly. Do not discover for inspection-only/no-tests requests.",
-    schema: DiscoverOpenAppaScenariosSchema,
-    async handler({ context }) {
-      return result(
-        await discoverOpenAppaScenarios(
-          organizationUser(context, AUTHENTICATED_CONTEXT_REQUIRED),
-        ),
-      );
-    },
-  }),
-  defineArchestraTool({
-    shortName: "draft_openappa_validation_scenario",
-    title: "Draft a selected validation scenario",
-    annotations: { readOnlyHint: true },
-    description:
-      "After the user chooses a discovered scenario and confirms its observed decision is the desired expectation, prepare its exact verified file and preview the full suite without saving. Pass the discoveryId and candidateId returned by discovery; do not reconstruct its calls. Explain the example behavior and result before technical details; retain the exact returned file and provide its source on request. Do not substitute a scenario or change the policy. Stale or expired choices need fresh discovery and user selection. Saving requires separate authorization and publish_openappa_validation_change with this exact file, expectedRevision and expectedVersion.",
-    schema: SelectOpenAppaScenarioSchema,
-    async handler({ args, context }) {
-      return result(
-        await draftOpenAppaScenario(
-          organizationUser(context, AUTHENTICATED_CONTEXT_REQUIRED),
-          args,
-        ),
-      );
-    },
   }),
   defineArchestraTool({
     shortName: "get_openappa_policy_tests",

@@ -2948,8 +2948,6 @@ Required RBAC permission: `update` on the MCP gateway (granted per item)
 | `preview_guardrails_policy_change` | Validate a proposed change to organization.appa.toml and return its unified `diff` and `changed` line counts. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `update_guardrails_policy` | Publish a change to organization.appa.toml. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
 | `bind_guardrails_credential` | Bind one battery credential variable to a runtime credential key, or pass key null to unbind it. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
-| `discover_openappa_validation_scenarios` | Find up to three exact current-policy call scenarios verified by offline replay. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
-| `draft_openappa_validation_scenario` | After the user chooses a discovered scenario and confirms its observed decision is the desired expectation, prepare its exact verified file and preview the full suite without saving. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `get_openappa_policy_tests` | Read the authoritative .appa validation files, their version, configured directory and accepted Git commit. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `run_openappa_policy_tests` | Replay the complete currently saved validation suite offline against the current policy and record the result in validation run history. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
 | `preview_openappa_validation_change` | Preview a patch of .appa validation files against the current policy, then replay the full resulting suite offline. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
@@ -3171,25 +3169,6 @@ Required RBAC permission: [`openappaPolicy:update`](/docs/reference/permissions#
 |-----------|------|----------|-------------|
 | `variable` | `string` | Yes | The battery's credential variable, e.g. APPA_PROVIDER_GITHUB_TOKEN. |
 | `key` | `string \| null` | Yes | The runtime credential key to bind, or null to unbind. |
-
-
-#### discover_openappa_validation_scenarios
-
-Required RBAC permission: [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read)
-
-This tool takes no arguments.
-
-
-#### draft_openappa_validation_scenario
-
-Required RBAC permission: [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read)
-
-##### Input
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `discoveryId` | `string` | Yes |  |
-| `candidateId` | `string` | Yes |  |
 
 
 #### get_openappa_policy_tests

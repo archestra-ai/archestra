@@ -108,12 +108,21 @@ export function ValidationActions() {
       <OpenAppaChatButton
         size="sm"
         variant="outline"
+        promptKey="explainValidations"
+        disabled={busy}
+      >
+        <Info />
+        <span>Explain validations</span>
+      </OpenAppaChatButton>
+      <OpenAppaChatButton
+        size="sm"
+        variant="outline"
         promptKey="writeValidations"
         permissions={{ openappaPolicy: ["read", "update"] }}
         disabled={busy}
       >
         <MessageCircle />
-        <span>Ask About Validations</span>
+        <span>Write a validation</span>
       </OpenAppaChatButton>
       {!github && canWrite && (
         <Button

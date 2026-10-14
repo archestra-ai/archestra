@@ -8,6 +8,7 @@ import {
   ClipboardCheck,
   Github,
   LoaderCircle,
+  MessageCircle,
   RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
@@ -38,6 +39,12 @@ import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
 import { ValidationStatusBadge } from "../validation/_parts/validation-parts";
 import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
+import { OpenAppaChatButton } from "./openappa-chat-button";
+import { ValidationRunChart } from "./validation-run-chart";
+import {
+  validationRunBars,
+  validationRunStatus,
+} from "./validation-run-history";
 
 /** Where the policy syncs from, the latest validation run, and the unresolved yells. */
 export function OverviewStatusCards() {
@@ -203,22 +210,13 @@ function GithubSyncCard() {
 function ValidationCard() {
   const history = useOpenAppaPolicyTestRuns(true);
   const run = history.data?.[0];
-  const status = run
-    ? run.executionError || !run.validation.valid || !run.files.length
-      ? "cannot_run"
-      : run.files.some((file) => file.status === "failed")
-        ? "failed"
-        : run.files.some((file) => file.status === "cannot_run")
-          ? "cannot_run"
-          : "passed"
-    : null;
+  const status = run ? validationRunStatus(run) : null;
   const statusLabel = status
     ? { passed: "Passed", failed: "Failed", cannot_run: "Cannot run" }[status]
     : "";
   const qualifiers = [run?.draft && "draft", run?.stale && "outdated"].filter(
     Boolean,
   );
-  const validationNoun = run?.files.length === 1 ? "validation" : "validations";
   return (
     <StatusCard
       icon={<ClipboardCheck />}
@@ -231,12 +229,25 @@ function ValidationCard() {
         ) : undefined
       }
       action={
-        <Button size="sm" variant="outline" asChild>
-          <Link href="/openappa/validation">
-            <span>View Validations</span>
-            <ArrowRight />
-          </Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {!history.isError && !history.isPending && !run && (
+            <OpenAppaChatButton
+              size="sm"
+              variant="outline"
+              promptKey="writeValidations"
+              permissions={{ openappaPolicy: ["read", "update"] }}
+            >
+              <MessageCircle />
+              <span>Write a validation</span>
+            </OpenAppaChatButton>
+          )}
+          <Button size="sm" variant="outline" asChild>
+            <Link href="/openappa/validation">
+              <span>View Validations</span>
+              <ArrowRight />
+            </Link>
+          </Button>
+        </div>
       }
     >
       {history.isError ? (
@@ -258,17 +269,14 @@ function ValidationCard() {
           <CardDescription className="leading-relaxed">
             {`Last run executed on ${formatDate({ date: run.createdAt })}.`}
           </CardDescription>
-          <p className="flex items-baseline gap-2">
-            <span className="text-3xl font-semibold tabular-nums">
-              {run.files.length}
-            </span>
-            <span className="text-sm text-muted-foreground">
-              {`${validationNoun} in this run`}
-            </span>
-          </p>
+          <ValidationRunChart bars={validationRunBars(history.data)} />
         </section>
       ) : (
-        <p className="text-sm text-muted-foreground">No runs yet.</p>
+        <CardDescription className="leading-relaxed">
+          Validations are unit tests for your policy. Each one checks that a
+          case you care about is blocked or allowed, for example that Slack data
+          never reaches a public GitHub repository.
+        </CardDescription>
       )}
     </StatusCard>
   );

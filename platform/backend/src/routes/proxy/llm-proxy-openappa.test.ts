@@ -757,13 +757,20 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     ]);
     const notice = noticeFrom(response.body, stream);
     expect(notice.name).toBe("archestra__get_remedy_plans");
-    // The model reads the ruling against the tool it asked for, not the
-    // wrapper the call was transported in.
+    // The notice names the policy target; its ruling explains that the
+    // dispatch already used the wrapper, so another route is not a remedy.
     expect(notice.input.tool).toBe("grain__list_meetings");
     expect(notice.input.arguments).toBe(JSON.stringify({ limit: 5 }));
-    expect(notice.input.ruling).toBe(
-      "[appa] NATIVE REFUSAL: execute_remedy_plan(offer_id: test-offer)",
+    expect(notice.input.ruling).toMatch(
+      /^\[appa\] NATIVE REFUSAL: execute_remedy_plan\(offer_id: test-offer\)/,
     );
+    expect(notice.input.ruling).toContain(
+      'already went through the run_tool wrapper "archestra__run_tool"',
+    );
+    expect(notice.input.ruling).toContain(
+      'tool_name targeting "grain__list_meetings"',
+    );
+    expect(notice.input.ruling).not.toContain("STOP this blocked action");
     expect(notice.input.notice).toEqual({
       v: 1,
       call_id: notice.id,
@@ -814,8 +821,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     const sent = providerRequests.at(-1) as {
       messages: { role: string; content: Record<string, unknown>[] }[];
     };
-    // History shows a direct call to the target with APPA's ruling as its
-    // result — the wrapper never enters the transcript the model reads.
+    // History still records the policy target, while the authoritative ruling
+    // retains the explanation that the wrapper was already checked.
     expect(sent.messages[1].content[0]).toEqual({
       type: "tool_use",
       id: notice.id,
@@ -826,9 +833,16 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       type: "tool_result",
       tool_use_id: notice.id,
       is_error: true,
-      content:
-        "[appa] NATIVE REFUSAL: execute_remedy_plan(offer_id: test-offer)",
+      content: expect.stringMatching(
+        /^\[appa\] NATIVE REFUSAL: execute_remedy_plan\(offer_id: test-offer\)/,
+      ),
     });
+    expect(sent.messages[2].content[0].content).toContain(
+      'already went through the run_tool wrapper "archestra__run_tool"',
+    );
+    expect(sent.messages[2].content[0].content).not.toContain(
+      "STOP this blocked action",
+    );
   });
 
   test("releases the retried dispatch as the wrapper after the remedy, still ruled on as the target", async () => {

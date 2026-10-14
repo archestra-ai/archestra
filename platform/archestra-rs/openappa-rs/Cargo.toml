@@ -9,12 +9,12 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-# OpenAPPA k2-kagent-multi-user on top of #640: battery targets the host composes
-# before the base, with leased receipts and row locks.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4291c62aeee10c665a03055b19fca2720ec2bf09", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4291c62aeee10c665a03055b19fca2720ec2bf09" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4291c62aeee10c665a03055b19fca2720ec2bf09", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4291c62aeee10c665a03055b19fca2720ec2bf09" }
+# OpenAPPA v0.34.0: battery targets the host composes before the base, with
+# leased receipts and row locks.
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4b62ce09427682bb9ea7de4609f394f050b01ba7", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4b62ce09427682bb9ea7de4609f394f050b01ba7" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4b62ce09427682bb9ea7de4609f394f050b01ba7", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "4b62ce09427682bb9ea7de4609f394f050b01ba7" }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"

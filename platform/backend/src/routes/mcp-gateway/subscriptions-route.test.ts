@@ -13,6 +13,7 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import config from "@/config";
 import { TeamTokenModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import mcpGatewayRoutes from "./index";
@@ -103,6 +104,49 @@ describe("MCP Gateway - subscriptions/listen route", () => {
       },
     });
     expect(ack.params.notifications).not.toHaveProperty("promptsListChanged");
+  });
+
+  test("an enabled duration cap ends the authenticated stream with its matching result", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    config.mcpGateway.subscriptionMaxDurationMs = 50;
+    const { token, url } = await setup({ makeAgent, makeOrganization });
+    const response = await fetch(url, {
+      method: "POST",
+      signal: AbortSignal.timeout(5_000),
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        authorization: `Bearer ${token.value}`,
+        "mcp-protocol-version": "2026-07-28",
+        "mcp-method": "subscriptions/listen",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "subscriptions/listen",
+        params: { notifications: { toolsListChanged: true } },
+        id: 43,
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    const frames = (await response.text())
+      .split("\n\n")
+      .filter((frame) => frame.includes("data: "))
+      .map((frame) => JSON.parse(frame.split("data: ")[1]));
+    expect(frames[0]).toMatchObject({
+      method: "notifications/subscriptions/acknowledged",
+      params: { _meta: { "io.modelcontextprotocol/subscriptionId": 43 } },
+    });
+    expect(frames.at(-1)).toEqual({
+      jsonrpc: "2.0",
+      id: 43,
+      result: {
+        resultType: "complete",
+        _meta: { "io.modelcontextprotocol/subscriptionId": 43 },
+      },
+    });
   });
 
   test("a legacy client gets method-not-found, not a stream", async ({

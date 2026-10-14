@@ -1,0 +1,1 @@
+ALTER TABLE "credential_connections" ADD COLUMN "github_id" bigint;

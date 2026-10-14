@@ -1,10 +1,14 @@
 "use client";
 
-import type { SupportedProvider } from "@archestra/shared";
+import {
+  providerRequiresPerUserCredential,
+  type SupportedProvider,
+} from "@archestra/shared";
 import {
   INSTALLER_CLIENT_IDS,
   INSTALLER_CLIENT_KEY_PROVIDERS,
   type InstallerClientId,
+  isOpenCodeFamilyClient,
 } from "@archestra/shared/connection-setup";
 import {
   closestCenter,
@@ -24,12 +28,12 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Plus, Terminal, X } from "lucide-react";
-import Link from "next/link";
 import { type ReactNode, useState } from "react";
 import { ClientIcon } from "@/app/connection/client-icon";
 import type { ConnectClient } from "@/app/connection/clients";
 import { ProviderKeyList } from "@/components/credential-billing/provider-key-list";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
+import { ProviderAccessField } from "@/components/provider-access-field";
 import { ProviderIcon } from "@/components/provider-icon";
 import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
 import { Button } from "@/components/ui/button";
@@ -77,6 +81,8 @@ export function AvailableAgentsList({
   shownClientIds,
   onShownClientIdsChange,
   onOrderChange,
+  clientFutureProviders,
+  onClientFutureProvidersChange,
   clientProviderKeys,
   onClientKeysChange,
   providerApiKeys,
@@ -88,6 +94,11 @@ export function AvailableAgentsList({
   onShownClientIdsChange: (ids: string[]) => void;
   /** Receives the full order: shown clients first, then hidden ones. */
   onOrderChange: (ids: string[]) => void;
+  clientFutureProviders: Partial<Record<InstallerClientId, boolean>>;
+  onClientFutureProvidersChange: (
+    clientId: InstallerClientId,
+    value: boolean,
+  ) => void;
   clientProviderKeys: ClientProviderKeys;
   onClientKeysChange: (
     clientId: InstallerClientId,
@@ -178,6 +189,9 @@ export function AvailableAgentsList({
                           installerId ? (
                             <KeysBadge
                               clientId={installerId}
+                              includeFutureProviders={
+                                clientFutureProviders[installerId] ?? false
+                              }
                               mapped={mappedKeys(installerId)}
                             />
                           ) : (
@@ -219,8 +233,8 @@ export function AvailableAgentsList({
                   <div className="min-w-0 space-y-1.5">
                     <DialogTitle>{openClient.label}</DialogTitle>
                     <DialogDescription>
-                      Keys you pick here are shared with everyone who connects
-                      this agent. Pick none to let each user bring their own.
+                      Choose which providers are available when users connect
+                      this agent.
                     </DialogDescription>
                   </div>
                 </div>
@@ -228,6 +242,12 @@ export function AvailableAgentsList({
               <DialogBody>
                 <ClientKeys
                   clientId={openId}
+                  includeFutureProviders={
+                    clientFutureProviders[openId] ?? false
+                  }
+                  onIncludeFutureProvidersChange={(value) =>
+                    onClientFutureProvidersChange(openId, value)
+                  }
                   keys={keysFor(openId)}
                   value={clientProviderKeys[openId] ?? []}
                   onChange={(value) => onClientKeysChange(openId, value)}
@@ -431,11 +451,15 @@ function HiddenFooter({
 function KeysBadge({
   clientId,
   mapped,
+  includeFutureProviders,
 }: {
   clientId: InstallerClientId;
   mapped: LlmProviderApiKeyResponse[];
+  includeFutureProviders: boolean;
 }) {
   const catalog = useModelProviderCatalog();
+  if (includeFutureProviders)
+    return <Pill tone="admin">Current and future providers</Pill>;
   if (mapped.length === 0) {
     return <Pill tone="own">{ownKeysLabel(clientId)}</Pill>;
   }
@@ -499,12 +523,16 @@ function Pill({
 }
 
 function ClientKeys({
+  includeFutureProviders,
+  onIncludeFutureProvidersChange,
   clientId,
   keys,
   value,
   onChange,
   disabled,
 }: {
+  includeFutureProviders: boolean;
+  onIncludeFutureProvidersChange: (value: boolean) => void;
   clientId: InstallerClientId;
   keys: LlmProviderApiKeyResponse[];
   value: ProviderApiKeyMappings;
@@ -512,26 +540,29 @@ function ClientKeys({
   disabled: boolean;
 }) {
   const own = ownKeysLabel(clientId).toLowerCase();
-  if (keys.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        <span>Setup uses {own}. To pick keys for everyone, add one under </span>
-        <Link href="/settings/llm" className="underline underline-offset-2">
-          LLM provider keys
-        </Link>
-        <span>.</span>
-      </p>
-    );
-  }
   return (
     <fieldset disabled={disabled} className="min-w-0">
-      <ProviderKeyList
-        label="Provider keys"
-        alwaysOpen
-        emptyLabel={`No keys picked: setup uses ${own}.`}
-        value={value}
-        onChange={onChange}
-        providerApiKeys={keys}
+      <ProviderAccessField
+        surface="connect"
+        canIncludeFutureProviders={INSTALLER_CLIENT_KEY_PROVIDERS[
+          clientId
+        ].some((provider) => !providerRequiresPerUserCredential(provider))}
+        includeFutureProviders={includeFutureProviders}
+        onIncludeFutureProvidersChange={onIncludeFutureProvidersChange}
+        current={
+          <ProviderKeyList
+            label="Provider keys"
+            alwaysOpen
+            emptyLabel={
+              includeFutureProviders
+                ? "Uses primary API keys — add a provider to choose a different key"
+                : `No keys picked: setup uses ${own}.`
+            }
+            value={value}
+            onChange={onChange}
+            providerApiKeys={keys}
+          />
+        }
       />
     </fieldset>
   );
@@ -542,7 +573,7 @@ function asInstallerClientId(id: string): InstallerClientId | null {
 }
 
 function ownKeysLabel(clientId: InstallerClientId): string {
-  return clientId === "cursor" || clientId === "opencode"
+  return clientId === "cursor" || isOpenCodeFamilyClient(clientId)
     ? "Users' primary keys"
     : "Users' own keys";
 }

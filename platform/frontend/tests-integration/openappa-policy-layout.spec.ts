@@ -221,7 +221,7 @@ for (const viewport of [
       await expect(dialog).toBeHidden();
       await page.goto("/openappa/policy");
       await expect(
-        page.getByRole("heading", { name: "Policy Alpha" }),
+        page.getByRole("heading", { name: "Policy Beta" }),
       ).toBeVisible();
       await expect(policySource).toBeVisible();
       await expect(

@@ -619,11 +619,10 @@ export function ImportMarketplaceDialog({
                           {PLUGIN_MARKETPLACE_IMPORT_LIMIT}-plugin import limit
                         </span>
                         <InlineNoticeText>
-                          For this beta, import up to{" "}
-                          {PLUGIN_MARKETPLACE_IMPORT_LIMIT} plugins at a time.
-                          Finish this import, reopen the marketplace, and select
-                          the next batch. Imported plugins will be marked and
-                          excluded from the next batch.
+                          Import up to {PLUGIN_MARKETPLACE_IMPORT_LIMIT} plugins
+                          at a time. Finish this import, reopen the marketplace,
+                          and select the next batch. Imported plugins will be
+                          marked and excluded from the next batch.
                         </InlineNoticeText>
                       </InlineNotice>
                     )}

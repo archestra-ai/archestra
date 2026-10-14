@@ -19,6 +19,7 @@ import { getVisibleDocsUrl } from "@/lib/docs/docs";
 import {
   useGuardrailsDeployment,
   useUpdateGuardrailsDeployment,
+  useUpdateSuperyellEnabled,
   useUpdateUnsupportedClientAction,
 } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -65,6 +66,44 @@ export function OpenAppaEnforcementSetting() {
               !deployment.data.featureEnabled ||
               isFresh !== false ||
               update.isPending
+            }
+            onCheckedChange={(checked) => update.mutate(checked)}
+          />
+        ) : (
+          <Skeleton className="h-5 w-9 rounded-full" />
+        )
+      }
+    />
+  );
+}
+
+/**
+ * Whether an agent may call superyell: send a report, then turn OpenAPPA off
+ * for its own session once a person approves.
+ */
+export function OpenAppaSuperyellSetting() {
+  const deployment = useGuardrailsDeployment();
+  const update = useUpdateSuperyellEnabled();
+  const { data: canManage } = useHasPermissions({
+    organizationSettings: ["update"],
+  });
+  const enabled = Boolean(deployment.data?.superyellEnabled);
+  return (
+    <SettingsBlock
+      id="superyell"
+      title="Allow superyell"
+      description={
+        enabled
+          ? "Agents can call superyell. After a person approves, it sends a report and turns guardrails off for that one session."
+          : "Agents can't call superyell, so guardrails can't be turned off for a session. They can still report problems with yell."
+      }
+      control={
+        deployment.data ? (
+          <Switch
+            aria-label="Allow superyell"
+            checked={enabled}
+            disabled={
+              !canManage || !deployment.data.featureEnabled || update.isPending
             }
             onCheckedChange={(checked) => update.mutate(checked)}
           />

@@ -966,4 +966,83 @@ describe("LLM proxy plugin lifecycle", () => {
       unregisterFirst();
     }
   });
+
+  test.for([
+    {
+      stream: false,
+      tool: "read_file",
+      client: {
+        nonStreamingToolCalls: [
+          { id: "call-1", name: "read_file", arguments: "{}" },
+        ],
+      },
+    },
+    {
+      // The stream ends before the usage chunk, so the turn is recorded
+      // without usage.
+      stream: true,
+      tool: "get_weather",
+      client: { includeToolCalls: true, interruptAtChunk: 2 },
+    },
+  ])("records calls an allowing plugin replaced with denial notices (stream: $stream)", async ({
+    stream,
+    tool,
+    client,
+  }, { makeAgent }) => {
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+      () => createOpenAiTestClient(client) as never,
+    );
+    const unregister = registerLlmProxyPlugin({
+      id: `test-notice-${crypto.randomUUID()}`,
+      finalizesToolCalls: true,
+      async onToolCalls({ toolCalls }) {
+        return {
+          decision: "allow",
+          toolCalls,
+          blocked: toolCalls.map((call) => ({
+            id: call.id,
+            name: call.name,
+            reason: "policy denied the call",
+          })),
+        };
+      },
+    });
+    const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/chat/completions`,
+        headers: {
+          authorization: "Bearer test-key",
+          "content-type": "application/json",
+        },
+        payload: {
+          model: "gpt-4o",
+          stream,
+          messages: [{ role: "user", content: "use the tool" }],
+          tools: [
+            {
+              type: "function",
+              function: {
+                name: tool,
+                parameters: { type: "object", properties: {} },
+              },
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      const [interaction] = await InteractionModel.getAllInteractionsForProfile(
+        agent.id,
+      );
+      expect(interaction.toolCallBlock).toEqual({
+        reason: "policy denied the call",
+        blockedToolCallCount: 1,
+      });
+    } finally {
+      unregister();
+    }
+  });
 });

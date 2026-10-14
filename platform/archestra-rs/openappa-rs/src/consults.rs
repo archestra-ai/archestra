@@ -1,6 +1,6 @@
 //! Every external consult a dispatch makes, kept as a row of
 //! `openappa_external_consults`: a dataset, never an input to a decision.
-use appa_eventlog::postgres::{LeasedPostgres, PostgresError};
+use appa_eventlog::postgres::PostgresError;
 use appa_runtime::api::{
     ConsultBackend, ConsultRecord, ConsultRecorder, ExternalOutcome, ExternalRole, NoAnswerClass,
 };
@@ -66,7 +66,7 @@ impl Attribution {
 
 /// Stores what `buffer` holds on the dispatch's leased connection. A failure is
 /// reported and swallowed: the dataset never changes what the dispatch returns.
-pub(crate) fn store(pg: &LeasedPostgres, attribution: Attribution, buffer: &ConsultBuffer) {
+pub(crate) fn store(pg: &crate::Sql<'_>, attribution: Attribution, buffer: &ConsultBuffer) {
     let Buffered { records, dropped } = buffer.take();
     if dropped > 0 {
         eprintln!(
@@ -84,7 +84,7 @@ pub(crate) fn store(pg: &LeasedPostgres, attribution: Attribution, buffer: &Cons
 }
 
 fn insert(
-    pg: &LeasedPostgres,
+    pg: &crate::Sql<'_>,
     attribution: Attribution,
     columns: Columns,
 ) -> Result<(), PostgresError> {

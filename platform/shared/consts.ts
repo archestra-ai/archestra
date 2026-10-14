@@ -1,3 +1,4 @@
+import { openCodeFamilyRecord } from "./opencode-family";
 /**
  * Loopback host every self-directed dial names — the frontend server reaching
  * the backend in the same container, and the backend reaching its own LLM
@@ -285,13 +286,13 @@ export const STARTUP_GUARD_INSTALL = {
     markerStart: "# >>> archestra copilot guard >>>",
     markerEnd: "# <<< archestra copilot guard <<<",
   },
-  opencode: {
-    scriptRelpath: ".archestra/opencode-startup-guard.sh",
-    psScriptRelpath: ".archestra/opencode-startup-guard.ps1",
-    skipRelpath: ".archestra/opencode-startup-guard.skip",
-    markerStart: "# >>> archestra opencode guard >>>",
-    markerEnd: "# <<< archestra opencode guard <<<",
-  },
+  ...openCodeFamilyRecord((client) => ({
+    scriptRelpath: `.archestra/${client.stateName}-startup-guard.sh`,
+    psScriptRelpath: `.archestra/${client.stateName}-startup-guard.ps1`,
+    skipRelpath: `.archestra/${client.stateName}-startup-guard.skip`,
+    markerStart: `# >>> archestra ${client.stateName} guard >>>`,
+    markerEnd: `# <<< archestra ${client.stateName} guard <<<`,
+  })),
 } as const;
 
 /** Client ids that get a startup guard (keys of {@link STARTUP_GUARD_INSTALL}). */

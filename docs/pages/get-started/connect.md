@@ -2,7 +2,7 @@
 title: Connect Your Agents
 description: Connect your AI client to Archestra's tools, models, and shared skills
 order: 2
-lastUpdated: 2026-10-13
+lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -15,14 +15,14 @@ Connect your AI client once, and Archestra governs everything it does. It gets A
 
 Open **Connect** in the Archestra sidebar and choose how to connect:
 
-- **Coding agents:** for [Claude Code](/docs/integrations/claude-code), Codex, Cursor, Copilot CLI, and OpenCode, you run one command in a terminal and approve the connection in your browser.
+- **Coding agents:** for [Claude Code](/docs/integrations/claude-code), Codex, Cursor, Copilot CLI, OpenCode, and Kilo Code, you run one command in a terminal and approve the connection in your browser.
 - **[Claude Desktop](/docs/integrations/claude-desktop#setup):** a downloadable installer sets up Desktop.
 - **[n8n](/docs/integrations/web-ui-and-automation#n8n):** you enter the gateway URL and model settings in your workflow.
 - **Any Client:** any tool that supports MCP or an OpenAI-compatible API. Copy the gateway URL, the proxy base URL, a key, and a Git URL for the shared skills.
 
 To leave out the proxy, skills, or plugins, open **Setup options** on the approval page before you approve. Your admin decides which provider keys the proxy uses for each client.
 
-Guardrails recognize Archestra Chat, Claude Code, Codex CLI, and OpenCode automatically. Custom clients and workflows need a [session header](/docs/agents/guardrails/clients#session-headers) so Guardrails can track their conversations.
+Guardrails recognize Archestra Chat, Claude Code, Codex CLI, OpenCode, and Kilo Code automatically. Custom clients and workflows need a [session header](/docs/agents/guardrails/clients#session-headers) so Guardrails can track their conversations.
 
 ![Connect with Codex selected and its setup command](/docs/automated_screenshots/platform-connection_connect-with-ai.webp)
 
@@ -33,14 +33,15 @@ Guardrails recognize Archestra Chat, Claude Code, Codex CLI, and OpenCode automa
 <span id="cursor"></span>
 <span id="copilot-cli"></span>
 <span id="opencode"></span>
+<span id="kilo"></span>
 
 ## Before You Start
 
-For Claude Code, Codex, Cursor, Copilot CLI, and OpenCode:
+For Claude Code, Codex, Cursor, Copilot CLI, OpenCode, and Kilo Code:
 
 - Node.js 18 or newer, and a terminal on the computer where you use the client.
-- The client's CLI on your `PATH`: `claude`, `codex`, `copilot`, or `opencode`. OpenCode must be 1.17 or newer. Copilot CLI proxy setup requires 1.0.95 or newer.
-- Python 3 for Claude Code and for Cursor's models. Git for Cursor and OpenCode skills.
+- The client's CLI on your `PATH`: `claude`, `codex`, `copilot`, `opencode`, or `kilo`. OpenCode must be 1.17 or newer. Copilot CLI proxy setup requires 1.0.95 or newer.
+- Python 3 for Claude Code and for Cursor's models. Git for Cursor, OpenCode, and Kilo Code skills.
 - An Archestra URL on HTTPS. Plain HTTP works only on `localhost`.
 
 ## Connect a Coding Agent
@@ -64,7 +65,8 @@ Some clients need one more step. The installer prints any other steps under **Go
 - **Codex:** if you skipped the sign-in, run `codex mcp login <gateway>`.
 - **Cursor:** quit and reopen Cursor, then sign in to the gateway under **Customize → MCPs**. Setup points Cursor's OpenAI API key settings at the [Model Router](/docs/llm-proxy/model-router) with a virtual key for your model providers. Cursor's model picker then lists only the models the Model Router offers you, such as `anthropic:claude-sonnet-4-6`. Setup switches off Cursor's built-in models. Switch one back on under **Settings → Models**.
 - **Copilot CLI:** setup saves your provider settings and available key in `providers.json` and selects the model in `settings.json`. If setup reports a missing key, add it to `providers.json`. The environment variables printed at the end are optional.
-- **OpenCode:** if you skipped the sign-in, run `opencode mcp auth <gateway>`. If setup adds Archestra model providers to OpenCode, it changes a `model` or `small_model` you set to the same model on Archestra. If Archestra does not offer that model, setup removes the setting. Disconnect restores your setting.
+- **OpenCode:** if you skipped the sign-in, run `opencode mcp auth <gateway>`. If setup adds Archestra model providers to OpenCode, it changes a `model`, `small_model` or agent `model` you set to the same model on Archestra. If Archestra does not offer that model, setup removes the setting, and an agent then uses the session's model. Disconnect restores your settings. Providers you sign in to from OpenCode itself, such as a ChatGPT or Claude subscription or your own key, also go through Archestra and are listed next to the Archestra providers. Restart OpenCode after signing in to one.
+- **Kilo Code:** if you skipped the sign-in, run `kilo mcp auth <gateway>`. Setup writes its settings to `~/.config/kilo/kilo.json` and leaves your `kilo.jsonc` as it is. Model settings work as for OpenCode, and the proxy settings turn off providers that do not go through Archestra, such as the Kilo Gateway.
 
 <span id="startup-guard"></span>
 
@@ -72,7 +74,7 @@ Some clients need one more step. The installer prints any other steps under **Go
 
 ## After Setup
 
-- **Launch check:** setup adds a block to your shell profile. Each time Claude Code, Codex, Copilot CLI, or OpenCode starts, it checks the connection. Press `C` there to disconnect. To turn it off, set `ARCHESTRA_CLAUDE_GUARD=0`, `ARCHESTRA_CODEX_GUARD=0`, `ARCHESTRA_COPILOT_GUARD=0`, or `ARCHESTRA_OPENCODE_GUARD=0`.
+- **Launch check:** setup adds a block to your shell profile. Each time Claude Code, Codex, Copilot CLI, OpenCode, or Kilo Code starts, it checks the connection. Press `C` there to disconnect. To turn it off, set `ARCHESTRA_CLAUDE_GUARD=0`, `ARCHESTRA_CODEX_GUARD=0`, `ARCHESTRA_COPILOT_GUARD=0`, `ARCHESTRA_OPENCODE_GUARD=0`, or `ARCHESTRA_KILO_GUARD=0`.
 - **Backups:** setup saves each config file it changes as a `.archestra-backup` file next to the original.
 - **Guardrail helpers in Codex:** setup lets Codex run the guardrail helper tools, such as [`ask_user`](/docs/reference/archestra-mcp-server#ask_user) and [`yell`](/docs/reference/archestra-mcp-server#yell), without a prompt each time. A call that needs your approval still shows the approval form. To get the prompts back, delete the `tools` tables under the gateway's entry in `~/.codex/config.toml`.
 - **Setup reference:** if an agent runs the installer, Guardrails do not apply to that agent's conversation for ten minutes, so it can finish the setup. The setup reference the installer prints marks that conversation. Every other session follows your Guardrails policy from its first request.

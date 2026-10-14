@@ -53,6 +53,25 @@ import ResourcePermissionSubjectModel, {
 } from "./resource-permission-subject";
 
 class LlmProviderApiKeyModel {
+  /** Shared primary candidates; credential eligibility is checked by the service. */
+  static async findSharedPrimaryKeys(organizationId: string) {
+    const rows = await db
+      .select({ id: schema.llmProviderApiKeysTable.id })
+      .from(schema.llmProviderApiKeysTable)
+      .where(
+        and(
+          eq(schema.llmProviderApiKeysTable.organizationId, organizationId),
+          isNull(schema.llmProviderApiKeysTable.userId),
+          eq(schema.llmProviderApiKeysTable.isPrimary, true),
+        ),
+      )
+      .orderBy(
+        schema.llmProviderApiKeysTable.provider,
+        schema.llmProviderApiKeysTable.id,
+      );
+    return LlmProviderApiKeyModel.findByIds(rows.map((row) => row.id));
+  }
+
   /** Usable primaries, preserving endpoint-local catalogs and ownership precedence. */
   static async getUsablePrimaryKeys(params: {
     organizationId: string;

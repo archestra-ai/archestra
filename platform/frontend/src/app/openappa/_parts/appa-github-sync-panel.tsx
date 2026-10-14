@@ -21,11 +21,7 @@ import { SettingsBlock } from "@/components/settings/settings-block";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  InlineNotice,
-  InlineNoticeBody,
-  InlineNoticeText,
-} from "@/components/ui/inline-notice";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {

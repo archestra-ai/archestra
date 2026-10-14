@@ -14,7 +14,7 @@ export function ClientSourceBadge({
   client,
   className,
 }: {
-  client: Pick<ClientFamily, "label" | "provider" | "icon">;
+  client: Pick<ClientFamily, "label" | "provider" | "icon" | "mark">;
   className?: string;
 }) {
   return (

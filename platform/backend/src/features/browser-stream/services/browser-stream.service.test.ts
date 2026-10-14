@@ -1,3 +1,4 @@
+import vm from "node:vm";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { BrowserStreamService } from "./browser-stream.service";
 import { Ok } from "./browser-stream.state.types";
@@ -23,6 +24,27 @@ function mockExecuteTool(
       "executeTool",
     )
     .mockImplementation(handler);
+}
+
+function mockNoRunCodeTool(service: BrowserStreamService) {
+  vi.spyOn(
+    service as unknown as { findRunCodeTool: () => Promise<string | null> },
+    "findRunCodeTool",
+  ).mockResolvedValue(null);
+}
+
+function mockToolNames(
+  service: BrowserStreamService,
+  names: { runCode: string | null; screenshot: string | null },
+) {
+  vi.spyOn(
+    service as unknown as { findRunCodeTool: () => Promise<string | null> },
+    "findRunCodeTool",
+  ).mockResolvedValue(names.runCode);
+  vi.spyOn(
+    service as unknown as { findScreenshotTool: () => Promise<string | null> },
+    "findScreenshotTool",
+  ).mockResolvedValue(names.screenshot);
 }
 
 describe("BrowserStreamService URL handling", () => {
@@ -60,6 +82,8 @@ describe("BrowserStreamService URL handling", () => {
       },
       "findScreenshotTool",
     ).mockResolvedValue("browser_take_screenshot");
+    // Without browser_run_code: separate screenshot and URL calls
+    mockNoRunCodeTool(browserService);
 
     // Mock getCurrentUrl to return a specific URL
     const getCurrentUrlSpy = vi
@@ -132,6 +156,8 @@ describe("BrowserStreamService URL handling", () => {
       },
       "findScreenshotTool",
     ).mockResolvedValue("browser_take_screenshot");
+    // Without browser_run_code: separate screenshot and URL calls
+    mockNoRunCodeTool(browserService);
 
     // Mock getCurrentUrl to return undefined (failed to get URL)
     vi.spyOn(browserService, "getCurrentUrl").mockResolvedValue(undefined);
@@ -190,6 +216,8 @@ describe("BrowserStreamService URL handling", () => {
       },
       "findScreenshotTool",
     ).mockResolvedValue("browser_take_screenshot");
+    // Without browser_run_code: separate screenshot and URL calls
+    mockNoRunCodeTool(browserService);
 
     const getCurrentUrlSpy = vi.spyOn(browserService, "getCurrentUrl");
 
@@ -207,6 +235,113 @@ describe("BrowserStreamService URL handling", () => {
 
     expect(result.error).toBe("No screenshot returned from browser tool");
     expect(result.screenshot).toBeUndefined();
+    expect(getCurrentUrlSpy).not.toHaveBeenCalled();
+  });
+
+  test("takeScreenshot takes a settled frame, caret and URL, in one run_code call", async () => {
+    const browserService = new BrowserStreamService();
+    mockToolNames(browserService, {
+      runCode: "browser_run_code",
+      screenshot: "browser_take_screenshot",
+    });
+    const getCurrentUrlSpy = vi.spyOn(browserService, "getCurrentUrl");
+    const executeTool = mockExecuteTool(browserService, async () => ({
+      isError: false,
+      content: [
+        {
+          type: "text",
+          text: `### Result\n${JSON.stringify({ url: "https://example.com/a", screenshot: "abc" })}`,
+        },
+      ],
+    }));
+
+    const result = await browserService.takeScreenshot(
+      "test-agent",
+      "test-conversation",
+      { userId: "test-user", organizationId: "test-org" },
+    );
+
+    expect(result).toMatchObject({
+      screenshot: "data:image/jpeg;base64,abc",
+      url: "https://example.com/a",
+    });
+    expect(executeTool).toHaveBeenCalledTimes(1);
+    expect(executeTool.mock.calls[0][0].toolName).toBe("browser_run_code");
+    expect(String(executeTool.mock.calls[0][0].args.code)).toContain(
+      'caret: "initial"',
+    );
+    expect(getCurrentUrlSpy).not.toHaveBeenCalled();
+  });
+
+  test("concurrent input runs in the page in the order it was sent", async () => {
+    const browserService = new BrowserStreamService();
+    mockToolNames(browserService, {
+      runCode: "browser_run_code",
+      screenshot: "browser_take_screenshot",
+    });
+    const codes: string[] = [];
+    mockExecuteTool(browserService, async ({ args }) => {
+      codes.push(String(args.code));
+      return { isError: false, content: [] };
+    });
+    const user = { userId: "test-user", organizationId: "test-org" };
+    for (const text of ["a", "b", "c"]) {
+      await browserService.type("test-agent", "test-conversation", user, text);
+    }
+
+    // Stand-in for the remote page: typing takes a while, so concurrent calls
+    // would interleave without the sequence gate
+    const typed: string[] = [];
+    const page = {
+      keyboard: {
+        type: async (text: string) => {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          typed.push(text);
+        },
+      },
+      screenshot: async () => Buffer.from(""),
+      url: () => "https://example.com",
+      waitForTimeout: (ms: number) =>
+        new Promise((resolve) => setTimeout(resolve, ms)),
+    };
+    // Like browser_run_code: a bare vm context with no Node globals
+    // (setTimeout and friends), so the code may only lean on `page`
+    const run = (code: string) =>
+      (
+        vm.runInNewContext(`(${code})`, {}) as (
+          p: typeof page,
+        ) => Promise<unknown>
+      )(page);
+    // The calls reach the browser in reverse order
+    await Promise.all([...codes].reverse().map(run));
+
+    expect(typed).toEqual(["a", "b", "c"]);
+  });
+
+  test("takeScreenshot fast: one screenshot call, no URL lookup or resize", async () => {
+    const browserService = new BrowserStreamService();
+    mockToolNames(browserService, {
+      runCode: "browser_run_code",
+      screenshot: "browser_take_screenshot",
+    });
+    const getCurrentUrlSpy = vi.spyOn(browserService, "getCurrentUrl");
+    const executeTool = mockExecuteTool(browserService, async () => ({
+      isError: false,
+      content: [{ type: "image", data: "quick", mimeType: "image/jpeg" }],
+    }));
+
+    const result = await browserService.takeScreenshot(
+      "test-agent",
+      "test-conversation",
+      { userId: "test-user", organizationId: "test-org" },
+      { fast: true },
+    );
+
+    expect(result.screenshot).toContain("quick");
+    expect(result.url).toBeUndefined();
+    expect(executeTool.mock.calls.map(([call]) => call.toolName)).toEqual([
+      "browser_take_screenshot",
+    ]);
     expect(getCurrentUrlSpy).not.toHaveBeenCalled();
   });
 

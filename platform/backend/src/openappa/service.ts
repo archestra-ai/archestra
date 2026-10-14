@@ -1118,6 +1118,8 @@ export async function evaluateToolCalls(
         decision.decision === "pass_control"
       ) {
         admitted.push(call.id);
+        if (shortName === "superyell" && decision.decision === "allow_call")
+          await releaseSuperyellReport({ dispatchCall, session, call, event });
         return { kind: "allow" as const };
       }
       // Denied calls return as notices; other calls in the batch stand.
@@ -1174,6 +1176,42 @@ export async function evaluateToolCalls(
     (result) => (result as PromiseFulfilledResult<AppaCallDecision>).value,
   );
 }
+
+/**
+ * The runtime sends a yell report only for a call it released as its own
+ * yell. A superyell is ruled on under its own name, so the approval its policy
+ * rule asks for stays its own. Once the runtime allows it, the runtime also
+ * rules on the yell the superyell carries, under its own call id, and the
+ * report the superyell sends takes that release. A yell the policy refuses
+ * leaves the report unsent; the superyell itself still runs.
+ */
+async function releaseSuperyellReport(params: {
+  dispatchCall: ReturnType<typeof sessionDispatch>;
+  session: OpenAppaSession;
+  call: { id: string };
+  event: Record<string, unknown>;
+}): Promise<void> {
+  const decision = await params.dispatchCall({
+    event: "tool_call",
+    operation_id: `call:${params.call.id}${SUPERYELL_REPORT_CALL_SUFFIX}`,
+    tool: "yell",
+    presentation: params.event.presentation,
+    arguments: params.event.arguments,
+    spawn: false,
+  });
+  if (decision.decision !== "allow_call")
+    logger.warn(
+      {
+        sessionId: params.session.session_id,
+        toolCallId: params.call.id,
+        decision: decision.decision,
+      },
+      "OpenAPPA did not release the report a superyell carries; the superyell runs without it",
+    );
+}
+
+/** Names the yell a superyell carries apart from the superyell's own call. */
+const SUPERYELL_REPORT_CALL_SUFFIX = "~yell";
 
 function isJson(text: string): boolean {
   try {

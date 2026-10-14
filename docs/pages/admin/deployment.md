@@ -2,7 +2,7 @@
 title: Deployment
 description: Install Archestra with Docker or Helm and configure production access
 order: 1
-lastUpdated: 2026-10-13
+lastUpdated: 2026-10-14
 ---
 
 Use Docker to try Archestra locally. Use Helm to run it in Kubernetes with a persistent database, workers, and MCP server workloads. The UI listens on port 3000; the backend listens on port 9000.
@@ -28,7 +28,7 @@ You need a Kubernetes cluster, Helm 3 or later, and `kubectl` access. Self-hoste
 Pin the chart version and review its defaults:
 
 ```bash
-export ARCHESTRA_VERSION="1.4.0-rc.38" # x-release-please-version
+export ARCHESTRA_VERSION="1.4.0-rc.39" # x-release-please-version
 helm show values \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --version "$ARCHESTRA_VERSION" > values.yaml
@@ -283,7 +283,7 @@ Admins configure the page under **Settings → Connect Page**, or with **Connect
 | Agents users can connect | The agents offered on Connect, in order. Drag to reorder, click **✕** to remove one, and use **Add back** to restore it. Click an agent to pick the provider keys its setup command shares with everyone who connects it. An agent with no keys picked uses each user's own. **Generic client** is always shown last. |
 | Instructions for connected agents | Added to the system prompt of every agent users connect from the Connect page. The default asks agents to offer moving a session to your deployment's Cloud runtime. CLI wrappers fetch saved changes before the next launch. |
 
-Claude Code, Codex, Copilot CLI, and OpenCode refresh these instructions before launch. Changes replace the managed copy and preserve the user’s own instructions.
+Claude Code, Codex, Copilot CLI, OpenCode, and Kilo Code refresh these instructions before launch. Changes replace the managed copy and preserve the user’s own instructions.
 
 - **Existing connections:** Run setup once to install the refresh capability. Unix wrappers require Python 3 to fetch updates.
 - **Temporary outages:** The client uses its last fetched copy.

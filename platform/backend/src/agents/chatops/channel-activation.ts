@@ -460,9 +460,8 @@ export function mightBeAddressedMuteCommand(text: string): boolean {
  * (Slack `shushing_face`, Teams `lipssealed`). Matching a single shared Set
  * avoids a per-provider mapping.
  *
- * Only Teams mutes on a reaction (and only ever receives reactions on the
- * bot's own messages). Slack threads are muted by the agent session's Stop
- * button instead.
+ * Slack resolves the reacted message to its thread root. Teams receives
+ * reactions on the bot's own messages.
  */
 export function isMuteReaction(reactionId: string): boolean {
   return THREAD_MUTE_REACTIONS.has(reactionId.trim().toLowerCase());
@@ -548,9 +547,8 @@ export async function applyChannelGate(params: {
    */
   botDisplayName?: string | null;
   /**
-   * Whether a "mute" message mutes the thread. Off for providers with a native
-   * Stop control (see ChatOpsProvider.hasNativeStopControl), where "mute" is
-   * just text for the agent. Defaults to on.
+   * Whether a "mute" message mutes the thread. Defaults to on; native Stop
+   * controls can coexist with mute commands.
    */
   muteCommandsEnabled?: boolean;
   /**

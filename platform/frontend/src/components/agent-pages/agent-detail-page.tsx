@@ -340,7 +340,9 @@ function AgentDetails({
               ...(steps.some((step) => step.id === "tools")
                 ? (["tools"] as const)
                 : []),
-              ...(runtimeEnabled && kind === "agent" && !isBuiltIn
+              ...((runtimeEnabled || agent.runtime != null) &&
+              kind === "agent" &&
+              !isBuiltIn
                 ? (["runtime"] as const)
                 : []),
               ...(hasMessagingChannels ? (["messaging"] as const) : []),

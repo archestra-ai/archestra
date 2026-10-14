@@ -25,6 +25,7 @@ import { TimeRangePicker } from "@/components/time-range-picker/time-range-picke
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { UserFilterSelect } from "@/components/user-client-filter-selects";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useProfiles } from "@/lib/agent.query";
 import { resourceOwnerLabel } from "@/lib/agent-owner-label";
@@ -42,6 +43,7 @@ import {
   canShowMcpToolCallStatus,
   resolveMcpToolCallStatus,
 } from "@/lib/mcp-logs/tool-call-status";
+import { useOrganizationMembers } from "@/lib/organization.query";
 import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { ErrorBoundary } from "../../_parts/error-boundary";
 
@@ -81,6 +83,7 @@ function McpToolCallsTable({
   const profileIdFromUrl =
     searchParams.get("profileId") || searchParams.get("profileID");
   const mcpServerNameFromUrl = searchParams.get("mcpServerName") ?? "all";
+  const userIdFromUrl = searchParams.get("userId") ?? "all";
   const searchFromUrl = searchParams.get("search");
   const cursorFromUrl = searchParams.get("cursor");
   const pageFromUrl = searchParams.get("page");
@@ -154,6 +157,14 @@ function McpToolCallsTable({
     [cursorPagination.goNewest, updateUrlParams],
   );
 
+  const handleUserFilterChange = useCallback(
+    (value: string) => {
+      cursorPagination.goNewest();
+      updateUrlParams({ userId: value === "all" ? null : value });
+    },
+    [cursorPagination.goNewest, updateUrlParams],
+  );
+
   // Date time range picker hook
   const dateTimePicker = useDateTimeRangePicker({
     startDateFromUrl,
@@ -195,6 +206,7 @@ function McpToolCallsTable({
     agentId: profileFilter !== "all" ? profileFilter : undefined,
     mcpServerName:
       mcpServerNameFromUrl !== "all" ? mcpServerNameFromUrl : undefined,
+    userId: userIdFromUrl !== "all" ? userIdFromUrl : undefined,
     limit: cursorPagination.pageSize,
     cursor: cursorPagination.cursor,
     startDate: dateTimePicker.startDateParam,
@@ -207,6 +219,10 @@ function McpToolCallsTable({
   });
 
   const { data: mcpServers } = useMcpServers();
+  // Without log:admin the server scopes every listing to the caller's own
+  // rows, so a user picker would have nothing to choose between.
+  const { data: canSeeAllLogs } = useHasPermissions({ log: ["admin"] });
+  const { data: members } = useOrganizationMembers(canSeeAllLogs === true);
   const { data: canReadMcpRegistry } = useHasPermissions({
     mcpRegistry: ["read"],
   });
@@ -511,6 +527,7 @@ function McpToolCallsTable({
   const hasFilters =
     profileFilter !== "all" ||
     mcpServerNameFromUrl !== "all" ||
+    userIdFromUrl !== "all" ||
     dateTimePicker.startDate !== undefined ||
     dateTimePicker.endDate !== undefined;
 
@@ -522,6 +539,7 @@ function McpToolCallsTable({
       profileId: null,
       profileID: null,
       mcpServerName: null,
+      userId: null,
       startDate: null,
       endDate: null,
       search: null,
@@ -584,6 +602,16 @@ function McpToolCallsTable({
             })}
             contentClassName="min-w-[min(20rem,calc(100vw-2rem))]"
           />
+          {canSeeAllLogs ? (
+            <UserFilterSelect
+              value={userIdFromUrl}
+              onValueChange={handleUserFilterChange}
+              users={members?.map((member) => ({
+                id: member.id,
+                name: member.name,
+              }))}
+            />
+          ) : null}
         </FilterBar>
       </CollectionFilters>
 

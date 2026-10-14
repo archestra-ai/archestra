@@ -258,6 +258,8 @@ export function BatteryCredentialsTool({
             icon: null,
           }}
           hideProvidedBy
+          // The dropdown shows the new token instead of a toast.
+          silent
           onClose={() => setAdding(null)}
           onCreated={(id) => setAdding({ ...adding, step: "connect", id })}
         />
@@ -267,7 +269,7 @@ export function BatteryCredentialsTool({
           definition={connecting}
           scope="organization"
           useExternalSecretsManager={byosEnabled}
-          // The card's check says it instead.
+          // The dropdown shows the connected token instead of a toast.
           silent
           onClose={() => setAdding(null)}
           onConnected={() =>

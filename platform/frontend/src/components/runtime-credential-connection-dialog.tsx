@@ -41,7 +41,7 @@ export function RuntimeCredentialConnectionDialog({
   /** Skips the "connected" toast, for a caller that shows the result itself. */
   silent?: boolean;
 }) {
-  const connect = useSetRuntimeCredentialConnection();
+  const connect = useSetRuntimeCredentialConnection({ silent });
   const startGitHub = useStartGitHubUserConnection();
   const form = useForm<ConnectionFormValues>({
     resolver: zodResolver(ConnectionFormSchema),
@@ -55,7 +55,6 @@ export function RuntimeCredentialConnectionDialog({
         name: definition.name,
         scope,
         value: nextValue,
-        ...(silent && { silent }),
       },
       {
         onSuccess: () => {

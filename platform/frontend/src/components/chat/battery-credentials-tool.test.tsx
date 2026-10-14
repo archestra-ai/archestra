@@ -176,7 +176,7 @@ it("creates and connects a new token through the credential dialogs, then select
   ]);
   // The dropdown shows the new token; no toast repeats it.
   expect(screen.getByRole("combobox")).toHaveTextContent("GitHub token");
-  expect(toast.success).not.toHaveBeenCalledWith("GitHub token connected");
+  expect(toast.success).not.toHaveBeenCalled();
   expect(onSendMessage).toHaveBeenCalledExactlyOnceWith(
     "Battery credentials: GitHub APPA_PROVIDER_GITHUB_TOKEN → credential-github-token.",
   );

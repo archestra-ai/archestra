@@ -4,7 +4,6 @@ import {
   type Action,
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
-  type OpenAppaPolicyTargetKind,
   type Permissions,
 } from "@archestra/shared";
 import Link from "next/link";
@@ -13,22 +12,17 @@ import { PermissionButton } from "@/components/ui/permission-button";
 import { useChatAgents } from "@/lib/agent.query";
 import {
   type OpenAppaLaunchPromptKey,
+  type OpenAppaLaunchTarget,
   openAppaYellInvestigationPrompt,
   resolveOpenAppaLaunchPrompt,
 } from "@/lib/openappa-chat-prompts";
 import { openAppaChatHref } from "@/lib/openappa-routes";
 
-type OpenAppaChatTarget = {
-  kind: OpenAppaPolicyTargetKind;
-  id: string;
-  name: string;
-};
-
 export type OpenAppaChatSubject =
   | {
       kind: "prompt";
       promptKey: OpenAppaLaunchPromptKey;
-      target?: OpenAppaChatTarget;
+      target?: OpenAppaLaunchTarget;
     }
   | { kind: "yell"; yellId: string }
   /** Sends nothing: the chat opens on the agent's suggested prompts. */
@@ -44,7 +38,7 @@ export function OpenAppaChatButton({
   permissions?: Permissions;
   /** Omit to open the chat on the agent's suggested prompts. */
   promptKey?: OpenAppaLaunchPromptKey;
-  target?: OpenAppaChatTarget;
+  target?: OpenAppaLaunchTarget;
 }) {
   const {
     agents,

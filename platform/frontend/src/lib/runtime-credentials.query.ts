@@ -91,14 +91,17 @@ export function useRuntimeCredentials(enabled = true) {
   });
 }
 
-export function useCreateRuntimeCredential() {
+/** `silent` skips the success toast, for a caller that shows the result itself. */
+export function useCreateRuntimeCredential({ silent = false } = {}) {
   return useCredentialMutation(
     async (body: archestraApiTypes.CreateRuntimeCredentialData["body"]) => {
       const { data, error } = await createRuntimeCredential({ body });
       if (error) throw reportApiError(error);
       return data;
     },
-    (_, body) => toast.success(`${body.name} added`),
+    (_, body) => {
+      if (!silent) toast.success(`${body.name} added`);
+    },
   );
 }
 
@@ -154,7 +157,8 @@ export function useDeleteRuntimeCredential() {
   );
 }
 
-export function useSetRuntimeCredentialConnection() {
+/** `silent` skips the success toast, for a caller that shows the result itself. */
+export function useSetRuntimeCredentialConnection({ silent = false } = {}) {
   return useCredentialMutation(
     async (input: {
       key: string;
@@ -171,7 +175,9 @@ export function useSetRuntimeCredentialConnection() {
       if (error) throw reportApiError(error);
       return data;
     },
-    (_, input) => toast.success(`${input.name} connected`),
+    (_, input) => {
+      if (!silent) toast.success(`${input.name} connected`);
+    },
   );
 }
 

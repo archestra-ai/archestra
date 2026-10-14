@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.3.73](https://github.com/archestra-ai/archestra/compare/platform-v1.3.72...platform-v1.3.73) (2026-10-14)
+
+
+### Bug Fixes
+
+* **agent-runtime:** keep delegated Claude Code runs open while background agents run (backport release/1.3) ([#8858](https://github.com/archestra-ai/archestra/issues/8858)) ([b4cb7a0](https://github.com/archestra-ai/archestra/commit/b4cb7a075a1d3653ed430c9d4156203061d58045))
+* **auth:** restrict unconfigured CORS and trusted origins to the request's own host (backport release/1.3) ([#8894](https://github.com/archestra-ai/archestra/issues/8894)) ([b1cbfec](https://github.com/archestra-ai/archestra/commit/b1cbfec52e592813494228ab747d4376f1a70ffe))
+* **chat:** show an error when a turn ends with only empty text (backport release/1.3) ([#8812](https://github.com/archestra-ai/archestra/issues/8812)) ([d84ee80](https://github.com/archestra-ai/archestra/commit/d84ee806c9ac3e552bb1eb5d596dbd922171a747))
+* **connect:** wait for the Codex gateway before the first request (backport release/1.3) ([#8866](https://github.com/archestra-ai/archestra/issues/8866), [#8873](https://github.com/archestra-ai/archestra/issues/8873)) ([#8901](https://github.com/archestra-ai/archestra/issues/8901)) ([a9bf328](https://github.com/archestra-ai/archestra/commit/a9bf328b8fa60b97e39a3c72c02c4e8ba96804dc))
+* **llm-proxy:** report a dropped upstream connection as a retryable server error (backport release/1.3) ([#8852](https://github.com/archestra-ai/archestra/issues/8852)) ([4de86fa](https://github.com/archestra-ai/archestra/commit/4de86fa11a804c3417040175581d670cb1579e04))
+* **llm-proxy:** retry early resets and drain requests (backport release/1.3) ([#8899](https://github.com/archestra-ai/archestra/issues/8899)) ([308f0ff](https://github.com/archestra-ai/archestra/commit/308f0ffbc0c6d6b4cfb10a3d92ae2cdd2387b491))
+* **mcp-gateway:** document listen timeouts and add opt-in expiry (backport release/1.3) ([#8867](https://github.com/archestra-ai/archestra/issues/8867)) ([#8902](https://github.com/archestra-ai/archestra/issues/8902)) ([c49c0b8](https://github.com/archestra-ai/archestra/commit/c49c0b8e016c1387e1613e009f81c41b533a0fed))
+* **mcp:** end MCP tool calls whose server stops answering, and survive oversi (backport release/1.3) ([#8860](https://github.com/archestra-ai/archestra/issues/8860)) ([f9af7c1](https://github.com/archestra-ai/archestra/commit/f9af7c1d400a6b5afb0ce65c74304e5fa05db4eb))
+* **mcp:** linear-time stdio reply reader and configurable reply cap (backport release/1.3) ([#8879](https://github.com/archestra-ai/archestra/issues/8879)) ([edf8d56](https://github.com/archestra-ai/archestra/commit/edf8d561a7fb569df469e6e20824e1b4badbb05f))
+* **mcp:** show safe tool execution errors (backport release/1.3) ([#8868](https://github.com/archestra-ai/archestra/issues/8868)) ([#8903](https://github.com/archestra-ai/archestra/issues/8903)) ([f7c2218](https://github.com/archestra-ai/archestra/commit/f7c221854a7ca3ff72645527af71f3655f3013e9))
+* **policies:** require approval when any matching specific policy requires it ([#8893](https://github.com/archestra-ai/archestra/issues/8893)) ([4455598](https://github.com/archestra-ai/archestra/commit/4455598396dfae3cb6e9cb363a08aaa7a890de7e))
+* **proxy:** send ChatGPT subscription tools as non-strict (backport release/1.3) ([#8819](https://github.com/archestra-ai/archestra/issues/8819)) ([234bc72](https://github.com/archestra-ai/archestra/commit/234bc72c4a03ed6782bb2e5b75288efaee87764b))
+* **sandbox:** remove Dagger's legacy TLS dependencies (backport ([1000cd3](https://github.com/archestra-ai/archestra/commit/1000cd38def6bf56e424fcd532ddb2ce2581f6c3))
+* **sandbox:** remove Dagger's legacy TLS dependencies (backport release/1.3) ([#8880](https://github.com/archestra-ai/archestra/issues/8880)) ([#8897](https://github.com/archestra-ai/archestra/issues/8897)) ([1000cd3](https://github.com/archestra-ai/archestra/commit/1000cd38def6bf56e424fcd532ddb2ce2581f6c3))
+
+
+### Dependencies
+
+* **rust:** update rustls to 0.23.46 and ignore its advisories on the dagger-sdk path (backport release/1.3) ([#8896](https://github.com/archestra-ai/archestra/issues/8896)) ([d15d3a2](https://github.com/archestra-ai/archestra/commit/d15d3a28f9515d700ecb2afecbe9b074cc4ef937))
+
 ## [1.3.72](https://github.com/archestra-ai/archestra/compare/platform-v1.3.71...platform-v1.3.72) (2026-10-13)
 
 

@@ -235,12 +235,11 @@ describe("LlmProxyPage connect steps", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "New virtual key for Jev",
     });
-    expect(
-      await within(dialog).findByText("Jev · TypeSafe"),
-    ).toBeInTheDocument();
-    // Both keys are offered, but a virtual key maps only one per provider.
-    await user.click(within(dialog).getByRole("button", { name: "Change" }));
-    await user.click(within(dialog).getByRole("combobox", { name: "Jev key" }));
+    // The provider picker is already expanded; both keys are offered, but a
+    // virtual key maps only one per provider.
+    await user.click(
+      await within(dialog).findByRole("combobox", { name: "Jev key" }),
+    );
     expect(
       await screen.findByRole("option", { name: /^TypeSafe/ }),
     ).toHaveAttribute("aria-selected", "true");

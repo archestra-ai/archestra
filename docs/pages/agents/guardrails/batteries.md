@@ -3,8 +3,8 @@ title: Guardrail Batteries
 sidebarTitle: Batteries
 description: Cover an MCP server's tools with a ready-made policy package
 order: 2
-alpha: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-12
+beta: "Policy syntax and behavior may change as OpenAPPA evolves."
+lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

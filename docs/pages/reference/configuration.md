@@ -734,6 +734,11 @@ Chat streams and A2A task streams wake through PostgreSQL `LISTEN/NOTIFY` across
   - Raise it for slow tools, such as a scraper or a report builder, that fail with a request-timeout error.
   - A call from a client that supports MCP Tasks becomes a background task after half this value, capped at 10 seconds.
 
+- **`ARCHESTRA_MCP_GATEWAY_STDIO_MAX_MESSAGE_BYTES`** - Largest reply, in bytes, that Archestra accepts from a stdio MCP server that runs in Kubernetes.
+  - Default: `10485760` (10 MB)
+  - A larger reply fails only the tool call that it answers. The model gets an error that names the limit, and the next call to the server works.
+  - Raise it only if a tool must return more data. Each reply up to this size is held in backend memory until it is complete.
+
 - **`ARCHESTRA_MCP_GATEWAY_WAKE_WAIT_TIMEOUT_MS`** - How long a tool call waits for a hibernated MCP server to wake before it returns a retryable "still starting" result, in milliseconds.
   - Default: `30000` (30 seconds)
   - Keep it below your clients' own request timeouts. Otherwise the client aborts first and sees a transport error.

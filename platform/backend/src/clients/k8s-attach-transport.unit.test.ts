@@ -23,6 +23,7 @@ describe("K8sAttachTransport", () => {
       podName: "pod",
       containerName: "container",
       startTimeoutMs: 5_000,
+      maxMessageBytes: TEN_MB,
     });
 
     const startPromise = transport.start();
@@ -64,6 +65,7 @@ describe("K8sAttachTransport", () => {
       podName: "pod",
       containerName: "container",
       startTimeoutMs: 5_000,
+      maxMessageBytes: TEN_MB,
     });
 
     await transport.start();
@@ -90,6 +92,7 @@ describe("K8sAttachTransport", () => {
       podName: "pod",
       containerName: "container",
       startTimeoutMs: 20,
+      maxMessageBytes: TEN_MB,
     });
 
     await expect(transport.start()).rejects.toThrow("Timed out");
@@ -98,7 +101,14 @@ describe("K8sAttachTransport", () => {
     expect(fakeWs.close).toHaveBeenCalled();
   });
 
-  test("a closed attach fails the pending request at once", async () => {
+  test.each([
+    ["a closed attach", (ws: EventEmitter) => ws.emit("close")],
+    [
+      "an attach error",
+      (ws: EventEmitter) => ws.emit("error", new Error("socket reset")),
+    ],
+    ["the end of stdout", (_ws: EventEmitter, out: Writable) => out.end()],
+  ])("%s fails the pending request at once", async (_case, breakAttach) => {
     const ws = new EventEmitter() as EventEmitter & { close: () => void };
     ws.close = vi.fn();
     let stdout!: Writable;
@@ -136,6 +146,7 @@ describe("K8sAttachTransport", () => {
       podName: "pod",
       containerName: "container",
       startTimeoutMs: 5_000,
+      maxMessageBytes: TEN_MB,
     });
     const client = new Client({ name: "test", version: "1" });
     await client.connect(transport);
@@ -143,7 +154,7 @@ describe("K8sAttachTransport", () => {
     const call = client.callTool({ name: "slow" }, undefined, {
       timeout: 60_000,
     });
-    ws.emit("close");
+    breakAttach(ws, stdout);
 
     await expect(call).rejects.toThrow("Connection closed");
   });
@@ -281,6 +292,101 @@ describe("K8sAttachTransport", () => {
       expect.objectContaining({ id: 9, error: expect.anything() }),
     ]);
   });
+
+  test("a large reply in small chunks is read in linear time", async () => {
+    const pod = fakePod();
+    const conn = await pod.connect();
+    const wireId = await conn.request(10);
+    const line = `${JSON.stringify({
+      jsonrpc: "2.0",
+      id: wireId,
+      result: { content: "z".repeat(9 * 1024 * 1024) },
+    })}\n`;
+
+    // Joining the partial line on every 4 KB chunk took about 7 s here and
+    // blocked the event loop for all of it.
+    const started = performance.now();
+    for (let i = 0; i < line.length; i += 4096) {
+      pod.stdout(line.slice(i, i + 4096));
+    }
+    const elapsedMs = performance.now() - started;
+
+    expect(conn.received).toEqual([
+      expect.objectContaining({ id: 10, result: expect.anything() }),
+    ]);
+    expect(elapsedMs).toBeLessThan(2_000);
+  });
+
+  test("an oversized reply in small chunks, with its id last, is still answered", async () => {
+    const pod = fakePod();
+    const conn = await pod.connect();
+    const wireId = await conn.request(14);
+    const line = `{"result":{"content":"${"w".repeat(11 * 1024 * 1024)}"},"jsonrpc":"2.0","id":"${wireId}"}\n`;
+
+    // 1000-byte chunks, so the id is split across chunk boundaries.
+    for (let i = 0; i < line.length; i += 1000) {
+      pod.stdout(line.slice(i, i + 1000));
+    }
+
+    expect(conn.received).toEqual([
+      expect.objectContaining({ id: 14, error: expect.anything() }),
+    ]);
+  });
+
+  test("the size cap is configurable", async () => {
+    const pod = fakePod({ maxMessageBytes: 1024 });
+    const conn = await pod.connect();
+    const bigWire = await conn.request(11);
+    const smallWire = await conn.request(12);
+
+    pod.stdout(
+      `${JSON.stringify({ jsonrpc: "2.0", id: bigWire, result: { content: "b".repeat(2048) } })}\n${reply(smallWire)}\n`,
+    );
+
+    expect(conn.received).toEqual([
+      {
+        jsonrpc: "2.0",
+        id: 11,
+        error: expect.objectContaining({
+          message: expect.stringContaining("larger than 1 KB"),
+        }),
+      },
+      { jsonrpc: "2.0", id: 12, result: {} },
+    ]);
+  });
+
+  test("a reply that is not valid JSON-RPC fails only its own request", async () => {
+    const pod = fakePod();
+    const conn = await pod.connect();
+    const other = await pod.connect();
+    const wireId = await conn.request(13);
+
+    // Valid JSON with this connection's id, but no "jsonrpc" member.
+    pod.stdout(`${JSON.stringify({ id: wireId, result: {} })}\n`);
+
+    expect(conn.received).toEqual([
+      {
+        jsonrpc: "2.0",
+        id: 13,
+        error: expect.objectContaining({
+          message: expect.stringContaining("not valid JSON-RPC"),
+        }),
+      },
+    ]);
+    expect(other.received).toEqual([]);
+  });
+
+  test("nothing is delivered after close", async () => {
+    const pod = fakePod();
+    const conn = await pod.connect();
+    await conn.transport.close();
+
+    pod.stdout(
+      `${JSON.stringify({ jsonrpc: "2.0", method: "notifications/message", params: { level: "info", data: "late" } })}\n`,
+    );
+
+    expect(conn.received).toEqual([]);
+  });
 });
 
 // =============================================================================
@@ -291,7 +397,7 @@ describe("K8sAttachTransport", () => {
  * A stdio pod with any number of attaches: like the container runtime, it
  * copies stdout to every attach.
  */
-function fakePod() {
+function fakePod(options: { maxMessageBytes?: number } = {}) {
   const stdouts: Writable[] = [];
   const sent = new Map<K8sAttachTransport, JSONRPCMessage[]>();
   return {
@@ -325,6 +431,7 @@ function fakePod() {
         podName: "pod",
         containerName: "container",
         startTimeoutMs: 5_000,
+        maxMessageBytes: options.maxMessageBytes ?? TEN_MB,
       });
       sent.set(transport, messages);
       const received: JSONRPCMessage[] = [];
@@ -349,6 +456,8 @@ function fakePod() {
     },
   };
 }
+
+const TEN_MB = 10 * 1024 * 1024;
 
 function reply(id: string | number, tag?: string) {
   return JSON.stringify({

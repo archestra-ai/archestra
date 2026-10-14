@@ -39,9 +39,9 @@ export function openCodePrimaryConfig(
       ];
     }),
   );
-  // Lets the script and the plugin carry a pinned native model (openai/x,
-  // kimi-code-plan-global/k3) over to its Archestra twin (archestra-openai/x,
-  // archestra-kimi/k3) instead of dropping the pin.
+  // Lets the script and the plugin carry a pinned native model over to its
+  // Archestra twin instead of dropping the pin. Twins follow the catalog, not
+  // only the passthrough route list.
   const nativeProviders = openCodeProviderTwins(providers);
   // The user's own sign-ins route through the proxy too, with their own
   // credential; the passthrough key attributes those requests to the user.
@@ -73,25 +73,115 @@ export function openCodePrimaryConfig(
   };
 }
 
+export interface ManagedRuntimeCatalog {
+  providers: Record<
+    string,
+    {
+      name: string;
+      npm: "@ai-sdk/openai" | "@ai-sdk/openai-compatible";
+      options: { baseURL: string };
+      models: Record<
+        string,
+        {
+          name: string;
+          id: string;
+          limit?: { context: number; output: number };
+        }
+      >;
+    }
+  >;
+  routes: Record<string, string>;
+  twins: Record<string, string>;
+}
+
+/**
+ * Credential-free catalog for a managed runtime artifact. Routes are ordinary
+ * proxy URLs for the installation's selected agent, never a setup-context path
+ * and never the deployment default.
+ */
+export function publicManagedCatalog(params: {
+  primaryProviders?: SetupScriptProxySection["primaryProviders"];
+  passthroughProviders?: SupportedProvider[];
+  ordinaryBaseUrl: string;
+  routingAgentId: string;
+}): ManagedRuntimeCatalog {
+  const base = params.ordinaryBaseUrl.replace(/\/$/, "");
+  const agentId = params.routingAgentId;
+  const routes: Record<string, string> = {};
+  const providers = Object.fromEntries(
+    (params.primaryProviders ?? []).map((entry) => {
+      const id = `archestra-${entry.provider}`;
+      const routed = (
+        MODEL_ROUTER_SUPPORTED_PROVIDERS as readonly SupportedProvider[]
+      ).includes(entry.provider);
+      const baseURL = `${base}/${routed ? "model-router" : entry.provider}/${agentId}`;
+      routes[id] = baseURL;
+      return [
+        id,
+        {
+          name: entry.name,
+          npm: routed
+            ? ("@ai-sdk/openai" as const)
+            : ("@ai-sdk/openai-compatible" as const),
+          options: { baseURL },
+          models: Object.fromEntries(
+            entry.models.map((model) => {
+              const context = positiveLimit(model.context);
+              const output = positiveLimit(model.output);
+              return [
+                model.id,
+                {
+                  name: model.name,
+                  id: routed ? `${entry.provider}:${model.id}` : model.id,
+                  ...(context || output ? { limit: { context, output } } : {}),
+                },
+              ];
+            }),
+          ),
+        },
+      ];
+    }),
+  );
+  for (const route of OPENCODE_PASSTHROUGH_PROVIDER_ROUTES) {
+    if (!params.passthroughProviders?.includes(route.provider)) continue;
+    routes[route.openCodeProviderId] = openCodePassthroughBaseUrl(base, {
+      ...route,
+      pathSuffix: `/${agentId}${route.pathSuffix}`,
+    });
+  }
+  return {
+    providers,
+    routes,
+    twins: openCodeProviderTwins(providers),
+  };
+}
+
 /**
  * Native provider id → the Archestra catalog provider that serves the same
- * models, for every catalog provider present: OpenCode's own id for the
- * vendor and the models.dev aliases that share its models.
+ * models. Catalog providers are independent of native passthrough support;
+ * add OpenCode's differing vendor ids and plan aliases on top.
  */
 function openCodeProviderTwins(
   providers: Record<string, unknown>,
 ): Record<string, string> {
   const routes: readonly OpenCodeProviderRoute[] =
     OPENCODE_PASSTHROUGH_PROVIDER_ROUTES;
-  return Object.fromEntries(
-    routes.flatMap((route) => {
+  return Object.fromEntries([
+    ...Object.keys(providers).map(
+      (id) => [id.slice("archestra-".length), id] as const,
+    ),
+    ...routes.flatMap((route) => {
       const twin = `archestra-${route.provider}`;
       if (!(twin in providers)) return [];
       return [route.openCodeProviderId, ...(route.pinAliases ?? [])].map(
         (id) => [id, twin] as const,
       );
     }),
-  );
+  ]);
+}
+
+function positiveLimit(value: number | null | undefined): number {
+  return typeof value === "number" && value > 0 ? value : 0;
 }
 
 /** Runs in Node on both platforms; restores only the fields this mode owns. */

@@ -295,7 +295,9 @@ mkdir -p "$(dirname "$ARCHESTRA_OC_PLUGIN_STATE")"
 ${
   runtime
     ? `command -v node >/dev/null 2>&1 || { err "Node.js is required for managed launcher updates"; exit 1; }
-ARCHESTRA_OC_RUNTIME_API_MAJOR="$ARCHESTRA_OPENCODE_MAJOR" node -e ${sh(runtime.script)}`
+ARCHESTRA_OC_RUNTIME_API_MAJOR="$ARCHESTRA_OPENCODE_MAJOR" node - <<'ARCHESTRA_RUNTIME_INSTALL'
+${runtime.script}
+ARCHESTRA_RUNTIME_INSTALL`
     : ""
 }
 # OpenCode 2 loads only its own plugin API, so install the variant that matches.

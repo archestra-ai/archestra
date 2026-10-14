@@ -47,8 +47,15 @@ export const SUPERYELL_DISABLED_MESSAGE =
  * an administrator has not turned superyell off in Guardrails settings.
  */
 export async function isSuperyellAvailable(): Promise<boolean> {
-  const { active, superyellEnabled } = await getGuardrailsDeployment();
-  return active && superyellEnabled;
+  return superyellAvailableIn(await getGuardrailsDeployment());
+}
+
+/** isSuperyellAvailable for a caller that already read the deployment. */
+export function superyellAvailableIn(deployment: {
+  active: boolean;
+  superyellEnabled: boolean;
+}): boolean {
+  return deployment.active && deployment.superyellEnabled;
 }
 
 /**

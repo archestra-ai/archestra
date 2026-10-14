@@ -37,8 +37,8 @@ import {
 } from "@/services/apps/app-run-link";
 import { filterToolsByCallerCatalogAccess } from "@/services/caller-catalog-access";
 import {
-  isGuardrailsV2Active,
-  isSuperyellAvailable,
+  getGuardrailsDeployment,
+  superyellAvailableIn,
 } from "@/services/guardrails-deployment";
 import { buildKnowledgeSourcesDescription } from "@/services/knowledge-sources-description";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
@@ -352,8 +352,9 @@ async function openappaSearchTools(
   }>
 > {
   if (!openappaEnabled()) return [];
-  const remediesActive = await isGuardrailsV2Active();
-  const superyellAvailable = await isSuperyellAvailable();
+  const deployment = await getGuardrailsDeployment();
+  const remediesActive = deployment.active;
+  const superyellAvailable = superyellAvailableIn(deployment);
   return openappaMcpTools.flatMap((tool) => {
     const shortName = archestraMcpBranding.getToolShortName(tool.name);
     if (

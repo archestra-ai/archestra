@@ -440,7 +440,9 @@ type StdoutLine =
 class StdoutLineReader {
   private pieces: Buffer[] = [];
   private size = 0;
-  private oversized?: { head: Buffer; tail: Buffer };
+  // `tail` holds the last pieces of a dropped line, at least ID_PROBE_BYTES
+  // of them when the line is that long; they are joined once, at its end.
+  private oversized?: { head: Buffer; tail: Buffer[]; tailSize: number };
 
   constructor(private readonly maxBytes: number) {}
 
@@ -467,17 +469,17 @@ class StdoutLineReader {
 
   private collect(piece: Buffer, held: boolean): void {
     if (this.oversized) {
-      this.oversized.tail = keepTail(
-        Buffer.concat([this.oversized.tail, keepTail(piece)]),
-      );
+      keepTailPiece(this.oversized, piece);
       return;
     }
     if (this.size + piece.length > this.maxBytes) {
       // Joined once, when the line passes the cap.
       const line = Buffer.concat([...this.pieces, piece]);
+      const tail = Buffer.from(keepTail(line));
       this.oversized = {
         head: Buffer.from(line.subarray(0, ID_PROBE_BYTES)),
-        tail: Buffer.from(keepTail(line)),
+        tail: [tail],
+        tailSize: tail.length,
       };
       this.pieces = [];
       this.size = 0;
@@ -490,7 +492,10 @@ class StdoutLineReader {
 
   private finishLine(): StdoutLine | undefined {
     if (this.oversized) {
-      const id = findMessageId(this.oversized);
+      const id = findMessageId({
+        head: this.oversized.head,
+        tail: keepTail(Buffer.concat(this.oversized.tail)),
+      });
       this.oversized = undefined;
       return { kind: "oversized", id };
     }
@@ -507,6 +512,25 @@ const ID_PROBE_BYTES = 4096;
 const HEAD_ID =
   /^\s*\{\s*(?:"jsonrpc"\s*:\s*"2\.0"\s*,\s*)?"id"\s*:\s*(-?\d+|"(?:[^"\\]|\\.)*")/;
 const TAIL_ID = /[{,]\s*"id"\s*:\s*(-?\d+|"(?:[^"\\]|\\.)*")\s*\}\s*$/;
+
+/**
+ * Add a piece of a dropped line to its tail, and forget the oldest pieces once
+ * the rest still cover ID_PROBE_BYTES. Each piece is copied once, at most
+ * ID_PROBE_BYTES of it, so a long line in small chunks is not rejoined per
+ * chunk.
+ */
+function keepTailPiece(
+  oversized: { tail: Buffer[]; tailSize: number },
+  piece: Buffer,
+): void {
+  const kept = Buffer.from(keepTail(piece));
+  oversized.tail.push(kept);
+  oversized.tailSize += kept.length;
+  while (oversized.tailSize - oversized.tail[0].length >= ID_PROBE_BYTES) {
+    oversized.tailSize -= oversized.tail[0].length;
+    oversized.tail.shift();
+  }
+}
 
 function formatBytes(bytes: number): string {
   const megabyte = 1024 * 1024;

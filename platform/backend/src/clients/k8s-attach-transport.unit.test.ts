@@ -317,6 +317,22 @@ describe("K8sAttachTransport", () => {
     expect(elapsedMs).toBeLessThan(2_000);
   });
 
+  test("an oversized reply in small chunks, with its id last, is still answered", async () => {
+    const pod = fakePod();
+    const conn = await pod.connect();
+    const wireId = await conn.request(14);
+    const line = `{"result":{"content":"${"w".repeat(11 * 1024 * 1024)}"},"jsonrpc":"2.0","id":"${wireId}"}\n`;
+
+    // 1000-byte chunks, so the id is split across chunk boundaries.
+    for (let i = 0; i < line.length; i += 1000) {
+      pod.stdout(line.slice(i, i + 1000));
+    }
+
+    expect(conn.received).toEqual([
+      expect.objectContaining({ id: 14, error: expect.anything() }),
+    ]);
+  });
+
   test("the size cap is configurable", async () => {
     const pod = fakePod({ maxMessageBytes: 1024 });
     const conn = await pod.connect();

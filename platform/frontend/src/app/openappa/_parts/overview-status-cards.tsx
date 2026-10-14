@@ -6,6 +6,7 @@ import {
   CircleDashed,
   CircleX,
   ClipboardCheck,
+  ExternalLink,
   Github,
   LoaderCircle,
   RefreshCw,
@@ -120,8 +121,16 @@ function GithubSyncCard() {
           ) : connected && source?.repo ? (
             <span>
               {appName} pulls the policy from{" "}
-              <span className="font-mono text-foreground">{source.repo}</span>.
-              Every change is a reviewed pull request.
+              <a
+                href={`${sync.data?.githubWebUrl}/${source.repo}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 font-mono text-foreground underline underline-offset-4"
+              >
+                <span>{source.repo}</span>
+                <ExternalLink className="size-3.5" />
+              </a>
+              . Every change is a reviewed pull request.
             </span>
           ) : sync.data && !sync.data.enabled ? (
             "GitHub sync is turned off on this server."

@@ -321,6 +321,7 @@ export function CreateOAuthClientDialog({
 
           {step === "access" && !isAuthorizationCode && (
             <OAuthServiceAccountField
+              clientType={isMcp ? "mcp" : "llm"}
               value={serviceAccountId}
               onChange={setServiceAccountId}
             />

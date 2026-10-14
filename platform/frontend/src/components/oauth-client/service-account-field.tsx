@@ -11,7 +11,9 @@ import { useServiceAccounts } from "@/lib/service-account.query";
 export function OAuthServiceAccountField({
   value,
   onChange,
+  clientType,
 }: {
+  clientType: "mcp" | "llm";
   value: string | null;
   onChange: (id: string | null) => void;
 }) {
@@ -27,9 +29,9 @@ export function OAuthServiceAccountField({
     <div className="space-y-2">
       <Label htmlFor={id}>Service account (optional)</Label>
       <p id={`${id}-description`} className="text-xs text-muted-foreground">
-        Choose the account whose permissions this client uses. Its runs and LLM
-        spend are recorded under that account. Leave unset to keep runs separate
-        for this OAuth client.
+        {clientType === "mcp"
+          ? "Choose the account whose permissions this client uses to call agents and MCP gateways. A2A runs belong to that account. Leave unset for runs owned only by this OAuth client."
+          : "Choose the account whose permissions this client uses for LLM Proxy requests. LLM spend is attributed to that account. Leave unset to attribute spend only to this OAuth client."}
       </p>
       <SearchableSelect
         id={id}
@@ -70,7 +72,10 @@ export function OAuthServiceAccountField({
           {
             value: "none",
             label: "No service account",
-            description: "A2A runs belong only to this OAuth client.",
+            description:
+              clientType === "mcp"
+                ? "A2A runs belong only to this OAuth client."
+                : "LLM spend is attributed to this OAuth client.",
             content: (
               <span className="flex items-center gap-2">
                 <CircleSlash className="size-4 shrink-0 text-muted-foreground" />

@@ -253,6 +253,7 @@ export function EditOAuthClientDialog({
         <FormAdvancedSection>
           {!isAuthorizationCode && (
             <OAuthServiceAccountField
+              clientType="llm"
               value={serviceAccountId}
               onChange={setServiceAccountId}
             />

@@ -219,6 +219,7 @@ export function EditOAuthClientDialog({
         <FormAdvancedSection>
           {!isAuthorizationCode && (
             <OAuthServiceAccountField
+              clientType="mcp"
               value={serviceAccountId}
               onChange={setServiceAccountId}
             />

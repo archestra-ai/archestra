@@ -905,6 +905,12 @@ function tomlBasicString(value: string): string {
   return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
+// Codex inserts this table among existing MCP entries, not at the end of TOML.
+export function codexMcpServerHeader(serverName: string): string {
+  const bare = /^[A-Za-z0-9_-]+$/.test(serverName);
+  return `[mcp_servers.${bare ? serverName : tomlBasicString(serverName)}]`;
+}
+
 /**
  * Attribution headers Codex sends on every proxied request, emitted as a
  * `[model_providers.<name>.http_headers]` TOML table (Codex's equivalent of
@@ -948,7 +954,21 @@ fi`);
   if (ctx.mcp) {
     sections.push(`say ${sh(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
 cli codex mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
-cli codex mcp add ${sh(ctx.mcp.serverName)} --url ${sh(ctx.mcp.url)}`);
+cli codex mcp add ${sh(ctx.mcp.serverName)} --url ${sh(ctx.mcp.url)}
+umask 077
+arch_header=${sh(codexMcpServerHeader(ctx.mcp.serverName))}
+awk -v header="$arch_header" '
+  $0 == header { found++; print; if (found == 1) pending=1; next }
+  pending && $0 == "required = true" { pending=0 }
+  pending { print "required = true"; pending=0 }
+  { print }
+  END { if (pending) print "required = true"; if (found != 1) exit 1 }
+' "$CONFIG" > "$CONFIG.archestra-required" || {
+  rm -f "$CONFIG.archestra-required"
+  err "Could not mark the gateway required. Codex did not write the expected gateway entry."
+  exit 1
+}
+mv -f "$CONFIG.archestra-required" "$CONFIG"`);
   }
 
   if (ctx.proxy) {

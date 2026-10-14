@@ -1,6 +1,6 @@
 // biome-ignore-all lint/suspicious/noTemplateCurlyInString: asserts on emitted shell source, where `${VAR}` is shell parameter expansion
 
-import { execFile } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import {
   chmod,
   mkdir,
@@ -27,6 +27,161 @@ import {
 } from "@/services/connection-setup-script";
 
 const execFileAsync = promisify(execFile);
+
+const powershellAvailable =
+  process.platform !== "win32" &&
+  spawnSync("pwsh", ["-NoProfile", "-Command", "exit 0"]).status === 0;
+
+describe.each([
+  "linux",
+  "windows",
+] as const)("Codex required gateway (%s)", (platform) => {
+  const run = platform === "windows" ? test.skipIf(!powershellAvailable) : test;
+
+  run.each(["my-gateway", "gw.with.dots"])(
+    "preserves trailing tables on rerun and removal for %s",
+    async (serverName) => {
+      await withCodexConfig(
+        { platform, serverName },
+        async ({ configPath, install, remove }) => {
+          for (let attempt = 0; attempt < 2; attempt++) await install();
+          const raw = await readFile(configPath, "utf8");
+          expect(raw.match(/^required = true\r?$/gm)).toHaveLength(1);
+          const { stdout } = await execFileAsync("python3", [
+            "-c",
+            "import json,sys,tomllib; print(json.dumps(tomllib.load(open(sys.argv[1], 'rb'))))",
+            configPath,
+          ]);
+          expect(JSON.parse(stdout)).toEqual({
+            model: "gpt-5",
+            mcp_servers: {
+              docs: { url: "https://docs.example.com/mcp" },
+              "MY-GATEWAY": { url: "https://other.example.com/mcp" },
+              [serverName]: { url: MCP.url, required: true },
+            },
+            model_providers: { custom: { name: "custom" } },
+            features: { shell_tool: true },
+          });
+          if (platform === "linux")
+            expect((await stat(configPath)).mode & 0o777).toBe(0o600);
+          await remove();
+          const removed = await readFile(configPath, "utf8");
+          expect(removed).not.toContain("required = true");
+          expect(removed).toContain("[mcp_servers.docs]");
+          expect(removed).toContain("[model_providers.custom]");
+        },
+      );
+    },
+  );
+
+  run.each(["missing", "duplicate", "failed-add"] as const)(
+    "aborts without rewriting config after %s",
+    async (mode) => {
+      await withCodexConfig(
+        { platform, serverName: "my-gateway", mode },
+        async ({ configPath, install }) => {
+          await expect(install()).rejects.toThrow();
+          const raw = await readFile(configPath, "utf8");
+          expect(raw).not.toContain("required = true");
+          expect(raw).toContain("[model_providers.custom]");
+        },
+      );
+    },
+  );
+});
+
+async function withCodexConfig(
+  options: {
+    platform: "linux" | "windows";
+    serverName: string;
+    mode?: "missing" | "duplicate" | "failed-add";
+  },
+  check: (fixture: {
+    configPath: string;
+    install: () => Promise<unknown>;
+    remove: () => Promise<unknown>;
+  }) => Promise<void>,
+): Promise<void> {
+  const root = await mkdtemp(path.join(tmpdir(), "archestra-codex-required-"));
+  const home = path.join(root, "home");
+  const bin = path.join(root, "bin");
+  const codexHome = path.join(root, "custom-codex-home");
+  const configPath = path.join(codexHome, "config.toml");
+  const windows = options.platform === "windows";
+  try {
+    await Promise.all([home, bin, codexHome].map((dir) => mkdir(dir)));
+    await writeFile(
+      configPath,
+      'model = "gpt-5"\n\n[mcp_servers.docs]\nurl = "https://docs.example.com/mcp"\n\n[mcp_servers.MY-GATEWAY]\nurl = "https://other.example.com/mcp"\n\n[model_providers.custom]\nname = "custom"\n\n[features]\nshell_tool = true\n',
+      { mode: 0o600 },
+    );
+    const cliPath = path.join(bin, "codex");
+    // Model the real CLI's insertion among MCP tables, not an append at EOF.
+    await writeFile(
+      cliPath,
+      `#!/usr/bin/env node
+const fs = require('node:fs');
+const path = require('node:path');
+const [command, action, name, , url] = process.argv.slice(2);
+const file = path.join(process.env.CODEX_HOME, 'config.toml');
+const header = '[mcp_servers.' + (/^[A-Za-z0-9_-]+$/.test(name) ? name : JSON.stringify(name)) + ']';
+let lines = fs.readFileSync(file, 'utf8').split(/\\r?\\n/);
+if (command === 'mcp' && action === 'remove') {
+  let skip = false;
+  lines = lines.filter(line => {
+    if (line.startsWith('[')) skip = line === header;
+    return !skip;
+  });
+} else if (command === 'mcp' && action === 'add') {
+  const mode = process.env.ARCHESTRA_TEST_MODE;
+  if (mode === 'failed-add') process.exit(42);
+  const inserted = mode === 'missing' ? '[mcp_servers.unexpected]' : header;
+  const index = lines.indexOf('[model_providers.custom]');
+  lines.splice(index, 0, inserted, 'url = ' + JSON.stringify(url));
+  if (mode === 'duplicate') lines.push(header);
+}
+fs.writeFileSync(file, lines.join('\\n'));
+`,
+    );
+    await chmod(cliPath, 0o755);
+    const scriptPath = path.join(root, windows ? "setup.ps1" : "setup.sh");
+    await writeFile(
+      scriptPath,
+      renderSetupScript({
+        clientId: "codex",
+        platform: options.platform,
+        appName: "Archestra",
+        mcp: { ...MCP, serverName: options.serverName },
+        proxy: null,
+        skills: null,
+      }),
+    );
+    const env = {
+      HOME: home,
+      USERPROFILE: home,
+      CODEX_HOME: codexHome,
+      PATH: `${bin}:${process.env.PATH}`,
+      SHELL: "/bin/bash",
+      NO_COLOR: "1",
+      ARCHESTRA_TEST_MODE: options.mode ?? "",
+    };
+    await check({
+      configPath,
+      install: () =>
+        execFileAsync(
+          windows ? "pwsh" : "bash",
+          windows
+            ? ["-NoLogo", "-NoProfile", "-NonInteractive", "-File", scriptPath]
+            : ["-c", 'umask 022; bash "$1"', "bash", scriptPath],
+          { cwd: home, env, timeout: 30_000 },
+        ),
+      remove: () =>
+        execFileAsync(cliPath, ["mcp", "remove", options.serverName], { env }),
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
 
 /** The client-attribution header line the Claude Code setup script emits. */
 const AGENT_ID_HEADER_LINE = `${EXTERNAL_AGENT_ID_HEADER}: ${CLAUDE_CODE_CLIENT_ID}`;

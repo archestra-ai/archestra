@@ -13,6 +13,7 @@ import { archestraMarkWithText } from "./archestra-mark";
 import {
   claudeCodeOAuthNextStep,
   codexAttributionHeaderLines,
+  codexMcpServerHeader,
   copilotAttributionHeadersValue,
   type SetupScriptContext,
   type SetupScriptProxySection,
@@ -729,7 +730,27 @@ if ((Test-Path $arch_config) -and -not (Test-Path ($arch_config + '.archestra-ba
   if (ctx.mcp) {
     sections.push(`Say ${psq(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
 try { codex mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }
-codex mcp add ${psq(ctx.mcp.serverName)} --url ${psq(ctx.mcp.url)}`);
+codex mcp add ${psq(ctx.mcp.serverName)} --url ${psq(ctx.mcp.url)}
+if ($LASTEXITCODE -ne 0) { throw 'Could not register the MCP gateway. Fix the error above and re-run setup.' }
+$arch_header = ${psq(codexMcpServerHeader(ctx.mcp.serverName))}
+$arch_lines = @(Get-Content -Path $arch_config)
+$arch_found = 0
+$arch_next = New-Object System.Collections.Generic.List[string]
+$arch_insert = $false
+foreach ($arch_line in $arch_lines) {
+  if ($arch_insert) {
+    if ($arch_line -ne 'required = true') { $arch_next.Add('required = true') }
+    $arch_insert = $false
+  }
+  $arch_next.Add($arch_line)
+  if ($arch_line -ceq $arch_header) {
+    $arch_found++
+    if ($arch_found -eq 1) { $arch_insert = $true }
+  }
+}
+if ($arch_insert) { $arch_next.Add('required = true') }
+if ($arch_found -ne 1) { throw 'Could not mark the gateway required. Codex did not write the expected gateway entry.' }
+Set-Content -Path $arch_config -Encoding utf8 -Value $arch_next`);
   }
 
   if (ctx.proxy) {

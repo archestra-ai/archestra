@@ -3,7 +3,7 @@ title: Connect Your Agents
 category: Archestra Platform
 order: 8
 description: How the one-command setup script connects your AI tools, and how to audit or undo it
-lastUpdated: 2026-09-07
+lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -109,6 +109,7 @@ The `claude` CLI must be on your `PATH`.
 The `codex` CLI must be on your `PATH`.
 
 - **MCP gateway** — runs `codex mcp add <name> --url <url>`. Run `codex` once to finish the browser sign-in.
+- **Required gateway** - Codex 0.99 or newer waits for the gateway before sending the first `codex exec` request. If sign-in is missing or the gateway is down, that command stops. Sign in with `codex mcp login <name>`, then retry. Older Codex ignores this setting. To allow startup without the gateway, delete `required = true` from its entry in `~/.codex/config.toml` (or `$CODEX_HOME/config.toml` if set).
 - **LLM proxy** — adds a marker-delimited `[model_providers.<name>]` block to `~/.codex/config.toml`. Virtual-key mode signs in with `codex login --with-api-key`. Start Codex through the proxy with `codex -c model_provider=<name>`.
 - **Skills** — runs `codex plugin marketplace add`.
 - **Plugins** — runs `codex plugin add` for each plugin. Codex delivers the plugin but does not execute its hooks until you open `/hooks` and approve that content hash.

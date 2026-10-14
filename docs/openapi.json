@@ -332728,6 +332728,13 @@
                                 "active"
                               ]
                             },
+                            "target": {
+                              "nullable": true,
+                              "type": "string",
+                              "enum": [
+                                "multi-user"
+                              ]
+                            },
                             "packageHash": {
                               "nullable": true,
                               "type": "string"
@@ -332760,6 +332767,7 @@
                             "catalogId",
                             "enabled",
                             "status",
+                            "target",
                             "packageHash",
                             "lastError",
                             "credentialBindings",
@@ -334202,6 +334210,13 @@
                                   "active"
                                 ]
                               },
+                              "target": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "multi-user"
+                                ]
+                              },
                               "packageHash": {
                                 "nullable": true,
                                 "type": "string"
@@ -334234,6 +334249,7 @@
                               "catalogId",
                               "enabled",
                               "status",
+                              "target",
                               "packageHash",
                               "lastError",
                               "credentialBindings",

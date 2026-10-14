@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import { USAGE_TIMEFRAME } from "./determinism";
 import type { Shot } from "./shot";
 
@@ -86,6 +86,10 @@ export const SHOTS: Shot[] = [
       const { verificationPath } = await response.json();
       await page.goto(verificationPath);
       await page.waitForLoadState("networkidle");
+      // Setup generation can start after networkidle and light the sidebar spinner.
+      await expect(page.getByTestId("connect-command-status")).toHaveText(
+        "Setup command ready",
+      );
       const code = page.getByText(/^[A-F0-9]{4}-[A-F0-9]{4}$/);
       await code.waitFor();
       await code.evaluate((element) => {

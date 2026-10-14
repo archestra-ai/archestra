@@ -60,7 +60,8 @@ describe("a deployed battery's composition reaches enforcement", () => {
       const organizationId = (await makeOrganization()).id;
       const admin = await makeAdmin();
       await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
-      const rules = deployedPolicies(battery, mode).flatMap((policy) =>
+      const policies = deployedPolicies(battery, mode);
+      const rules = policies.flatMap((policy) =>
         toolEntries(policy).map(({ name }) => name),
       );
       const servers = new Map(
@@ -118,7 +119,7 @@ ${CATCH_ALL_RULES}`,
       }));
       const decided = await decide(organizationId, [...controls, ...calls]);
       const [control, ...governed] = decided;
-      const builtins = deployedPolicies(battery, mode).flatMap(modelBuiltins);
+      const builtins = policies.flatMap(modelBuiltins);
       const unopened = decided.flatMap((decision, index) =>
         decision.refusal === undefined
           ? []
@@ -154,10 +155,20 @@ ${CATCH_ALL_RULES}`,
         ],
         catchAllMismatches: calls
           .filter(
-            ({ leftToRoot }, index) =>
-              (governed[index]?.actual === CATCH_ALL_MARK) !== leftToRoot,
+            ({ rule }, index) =>
+              (governed[index].actual === CATCH_ALL_MARK) !== (rule === null),
           )
           .map(({ label }) => label),
+        undecided: calls.flatMap(({ label, rule }, index) => {
+          const { actual, refusal, error } = governed[index];
+          const helper = rule === null ? null : ruleHelper(policies, rule);
+          return actual !== null ||
+            refusal !== undefined ||
+            (helper !== null &&
+              UNANSWERED_ANNOTATOR.exec(error ?? "")?.[1] === helper)
+            ? []
+            : [`${label}: ${error}`];
+        }),
       };
     }
 
@@ -180,6 +191,7 @@ ${CATCH_ALL_RULES}`,
               control: governs ? (refused ? UNOPENED : CATCH_ALL) : null,
               targets: [mode === "multi-user" ? "multi-user" : null],
               catchAllMismatches: [],
+              undecided: [],
             },
           ];
         }),
@@ -346,19 +358,34 @@ type DeploymentOutcome = {
    * leaves to the root that something else decided.
    */
   catchAllMismatches: string[];
+  /**
+   * Calls that reached no decision, other than those whose rule asks a battery
+   * helper that left the consult unanswered.
+   */
+  undecided: string[];
 };
 
 type Decision = {
   status: string;
   actual: string | null;
+  /** Why the step decided nothing, or the feedback of its decision. */
+  error?: string;
   /** Why the replay ran no step for the call; absent when it ran one. */
   refusal?: string;
 };
 /** The catch-all routes to the no-op annotator, answered here with a review requirement. */
 const CATCH_ALL_MARK = "authority hitl";
-const CATCH_ALL: Decision = { status: "failed", actual: CATCH_ALL_MARK };
+const CATCH_ALL: Decision = {
+  status: "failed",
+  actual: CATCH_ALL_MARK,
+  error: expect.any(String),
+};
 /** A rule that asks a battery helper, which offline replay leaves unanswered. */
-const UNANSWERED_HELPER: Decision = { status: "cannot_run", actual: null };
+const UNANSWERED_HELPER = {
+  status: "cannot_run",
+  actual: null,
+  error: expect.stringMatching(/annotator=github\.repository-visibility /),
+};
 /** A call the replay ran no step for. */
 const UNOPENED = {
   status: "cannot_run",
@@ -477,6 +504,27 @@ function modelBuiltins(policy: string): string[] {
 }
 
 /**
+ * The battery helper a rule's annotator runs, which offline replay leaves
+ * unanswered; null for a rule decided without one.
+ */
+function ruleHelper(policies: string[], rule: string): string | null {
+  const annotator = policies
+    .flatMap(toolEntries)
+    .find(({ name }) => name === rule)?.annotator;
+  if (typeof annotator !== "string") return null;
+  const helper = policies.some((policy) => {
+    const externals = parsePolicyToml(policy)?.externals as
+      | { annotators?: Record<string, { command?: unknown }> }
+      | undefined;
+    return Array.isArray(externals?.annotators?.[annotator]?.command);
+  });
+  return helper ? annotator : null;
+}
+
+/** The annotator a step's error names when its consult went unanswered. */
+const UNANSWERED_ANNOTATOR = /annotator=(\S+) error=/;
+
+/**
  * Each call alone on a fresh trajectory, decided by the runtime's replay over
  * the policy a live dispatch reads.
  */
@@ -518,16 +566,22 @@ async function decide(
         path: string;
         status: string;
         error?: string;
-        steps: Decision[];
+        steps: { status: string; actual: string | null; error?: string }[];
       }[];
     };
     for (const file of response.files) {
+      expect(file.steps.length).toBeLessThanOrEqual(1);
       const [step] = file.steps;
       decisions[start + Number.parseInt(file.path, 10)] = step
-        ? { status: step.status, actual: step.actual }
+        ? {
+            status: step.status,
+            actual: step.actual,
+            ...(step.error === undefined ? {} : { error: step.error }),
+          }
         : { status: file.status, actual: null, refusal: file.error ?? "" };
     }
   }
+  expect(Object.keys(decisions)).toHaveLength(calls.length);
   return decisions;
 }
 
@@ -570,10 +624,12 @@ function governedCalls(rules: string[]) {
   const unpatterned = new Set(
     parsed
       .filter(({ pattern }) => pattern.length === 0)
-      .map(({ namespace, tool }) => `${namespace}/${tool}`),
+      .map(({ rule }) => rule),
   );
-  const leftToRoot = (call: { namespace: string; tool: string }) =>
-    !unpatterned.has(`${call.namespace}/${call.tool}`);
+  const toolRule = (call: { namespace: string; tool: string }) => {
+    const rule = `mcp/${call.namespace}/${call.tool}`;
+    return unpatterned.has(rule) ? rule : null;
+  };
   const matching = parsed.map((call) => ({
     label: `${call.rule} [matching]`,
     namespace: call.namespace,
@@ -587,7 +643,7 @@ function governedCalls(rules: string[]) {
         ]),
       ),
     },
-    leftToRoot: false,
+    rule: call.rule as string | null,
   }));
   const bare = [
     ...new Map(
@@ -598,7 +654,7 @@ function governedCalls(rules: string[]) {
     namespace: call.namespace,
     tool: call.tool,
     arguments: {},
-    leftToRoot: leftToRoot(call),
+    rule: toolRule(call),
   }));
   const nonmatching = parsed
     .filter(({ pattern }) => pattern.length > 0)
@@ -614,7 +670,7 @@ function governedCalls(rules: string[]) {
             .map(([key]) => [key, "matches-no-pattern"]),
         ),
       },
-      leftToRoot: leftToRoot(call),
+      rule: toolRule(call),
     }));
   return [...matching, ...bare, ...nonmatching];
 }

@@ -492,9 +492,17 @@ jobs:
   # tasks in Platform Lint and Unit Tests retain only NAPI build/load smokes;
   # sandbox-rs's workspace suite previously repeated app-runtime and image
   # core tests after this job had already covered them.
+  dagger-sdk-integration:
+    name: Dagger SDK Integration
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/on-pull-requests-dagger-sdk.yml
+
   platform-rust-checks:
     name: Platform Rust Checks
-    if: github.event_name == 'merge_group'
+    needs: dagger-sdk-integration
+    if: always() && github.event_name == 'merge_group'
     runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubuntu-latest' }}
     timeout-minutes: 15
     permissions:
@@ -503,6 +511,13 @@ jobs:
       run:
         working-directory: ./platform
     steps:
+      - name: Require Dagger SDK integration
+        if: needs.dagger-sdk-integration.result != 'success'
+        working-directory: .
+        run: |
+          echo "::error::Dagger SDK integration did not succeed."
+          exit 1
+
       - name: Checkout project
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

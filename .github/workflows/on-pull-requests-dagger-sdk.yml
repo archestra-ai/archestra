@@ -1,9 +1,7 @@
 name: Dagger SDK Integration
 
 on:
-  pull_request:
-  merge_group:
-    types: [checks_requested]
+  workflow_call:
 
 permissions:
   contents: read
@@ -43,6 +41,7 @@ jobs:
             archestra-rs/sandbox-core archestra-rs/sandbox-rs archestra-rs/vendor \
             archestra-rs/Cargo.toml archestra-rs/Cargo.lock rust-toolchain.toml Dockerfile \
             archestra-rs/.cargo \
+            ../.github/workflows/on-pull-requests.yml \
             ../.github/workflows/on-pull-requests-dagger-sdk.yml \
             ../.github/actions/setup-rust-build ../.github/bench/dagger-job.yaml)
           if [[ -n "$changed" ]]; then

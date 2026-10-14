@@ -2,7 +2,7 @@
 title: Sharing Skills
 description: Install Archestra skills in your coding agents from one shared marketplace
 order: 3
-lastUpdated: 2026-10-08
+lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -16,7 +16,7 @@ To install skills, Archestra serves them from one git repository, the shared mar
 
 ## Installing from the Connect Page
 
-Shared skills install when you [connect your agent](/docs/get-started/connect). Go to **Connect** and choose your client. The card below it lists the shared skills the setup installs. Run the setup command in a terminal and approve the setup in your browser. Skills are all or nothing: you can turn **Install shared skills** off under **Customize setup**, but not pick single skills.
+Shared skills install when you [connect your agent](/docs/get-started/connect). Go to **Connect** and choose your client. The card below it lists the shared skills the setup installs. Run the setup command in a terminal and approve the setup in your browser. Skills are all or nothing: you can turn **Skills** off under **Setup options** on the approval page, but not pick single skills.
 
 ![The Connect page with Claude Code selected and its card listing the shared skills to install](/docs/automated_screenshots/platform-agent-skills-sharing_connection-setup.webp)
 
@@ -55,6 +55,10 @@ Use this to add shared skills to a client by hand. Every deployment has one URL:
 
    ```bash tab="OpenCode"
    git clone <marketplace-url> "$HOME/.config/opencode/skills/<marketplace-name>"
+   ```
+
+   ```bash tab="Kilo Code"
+   git clone <marketplace-url> "$HOME/.config/kilo/skills/<marketplace-name>"
    ```
 
 3. When `git` asks you to sign in, enter any username. The password is your personal token from **Personal Settings**. If your client never shows a sign-in prompt, expand **Set up credentials manually** and run the command there.

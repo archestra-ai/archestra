@@ -708,6 +708,136 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
+  for (const current of ["no plan", "offered", "pending review", "unknown"]) {
+    test(`current denial overrides historical offer before inference: ${current}`, async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const context = requestContext({
+        sessionId: "user:user|current-denial",
+        organizationId: org.id,
+      });
+      context.headers = { originator: "codex_cli_rs" };
+      trustedOf(context).request = {
+        tools: stubRequestTools(),
+        session: {},
+        customTools: new Set(),
+        declaredTools: [],
+      };
+      await db.insert(schema.openappaSessionsTable).values({
+        organizationId: org.id,
+        callerId: "user:user",
+        sessionId: context.requestId,
+        actor: openappaActor(context.requestId),
+        root: openappaActor(context.requestId),
+        startDecision: { decision: "ack" },
+      });
+      await db.insert(schema.openappaOperationsTable).values({
+        organizationId: org.id,
+        callerId: "user:user",
+        sessionId: context.requestId,
+        root: openappaActor(context.requestId),
+        operationId: "call:historically-offered",
+        status: "complete",
+        input: { semantic: { event: "tool_call" } },
+        decision: {
+          decision: "deny_call",
+          feedback: "[appa] Blocked: original offered ruling",
+          offers: [{ offer_id: "old-offer" }],
+        },
+      });
+      // Keep the real journal lookup and result processing. Only the native
+      // process boundary is stubbed, returning the current authoritative ruling.
+      const native = await import("@archestra/openappa-rs");
+      const initialize = vi
+        .spyOn(native, "initializeOpenappa")
+        .mockResolvedValue(undefined);
+      const connection = vi
+        .spyOn(database, "getDatabaseConnectionString")
+        .mockReturnValue("postgresql://unused:unused@127.0.0.1:1/unused");
+      const feedback =
+        "[appa] Blocked: current ruling. The unexecuted-call hint names execute_remedy_plan and offer_id.";
+      const dispatch = vi
+        .spyOn(native, "dispatchHook")
+        .mockImplementation(async (raw) =>
+          JSON.stringify(
+            JSON.parse(raw).event === "tool_result"
+              ? {
+                  decision: "deny_call",
+                  feedback,
+                  approved_output: feedback,
+                  output_source: "runtime",
+                  ...(current === "unknown"
+                    ? {}
+                    : {
+                        offers:
+                          current === "offered"
+                            ? [{ offer_id: "current-offer" }]
+                            : [],
+                      }),
+                  ...(current === "pending review"
+                    ? {
+                        review: [
+                          { offer_id: "review-offer", text: "Await review" },
+                        ],
+                      }
+                    : {}),
+                }
+              : { decision: "ack" },
+          ),
+        );
+      const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+      try {
+        await plugin.onSessionInit(context);
+        for (let replay = 0; replay < 2; replay++) {
+          const result = await plugin.onToolResults({
+            ...context,
+            toolResults: [
+              {
+                id: "historically-offered",
+                name: "probe__echo",
+                content: "Client echo",
+                isError: false,
+              },
+            ],
+          });
+          const text = String(
+            result?.toolResultUpdates?.["historically-offered"],
+          );
+          expect(text.startsWith(feedback)).toBe(true);
+          expect(text.includes("STOP this blocked action")).toBe(
+            current === "no plan",
+          );
+          const request = {
+            input: [],
+            tool_choice: "auto",
+            parallel_tool_calls: true,
+          };
+          await plugin.onBeforeModel({
+            ...context,
+            interactionType: "openai:responses",
+            request,
+          });
+          const continuation = current !== "no plan";
+          expect(request).toMatchObject({
+            tool_choice: continuation ? "required" : "auto",
+            parallel_tool_calls: !continuation,
+          });
+          expect(
+            JSON.stringify(request.input).includes(
+              "The ruling above offers a remedy plan",
+            ),
+          ).toBe(continuation);
+        }
+      } finally {
+        dispatch.mockRestore();
+        connection.mockRestore();
+        initialize.mockRestore();
+        await plugin.onCleanup(context);
+      }
+    });
+  }
+
   test("does not turn quoted foreign tool output into a required remedy turn", async () => {
     const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
     const context = requestContext({ sessionId: "quoted-remedy" });
@@ -847,6 +977,13 @@ describe("asking through the client's own question tool", () => {
           askUser: undefined,
           platformToolNames: new Set(),
           namespaces: new Map([["remedy_alias", "mcp__gateway"]]),
+          controlAliases: [
+            {
+              name: "archestra__execute_remedy_plan",
+              namespace: "mcp__gateway",
+            },
+            { name: "remedy_alias", namespace: "mcp__gateway" },
+          ],
         },
         customTools: new Set(),
         declaredTools: [{ name: "request_user_input" }],
@@ -1324,6 +1461,10 @@ describe("asking through the client's own question tool", () => {
     trusted.request = {
       tools: {
         control: { name: "mcp__my_gateway__archestra__execute_remedy_plan" },
+        controlAliases: [
+          { name: "mcp__my_gateway__archestra__execute_remedy_plan" },
+          { name: "mcp__my_gateway.archestra__execute_remedy_plan" },
+        ],
         notice: { name: "archestra__get_remedy_plans" },
         askUser: { name: "archestra__ask_user" },
         platformToolNames: new Set(),
@@ -1375,6 +1516,162 @@ describe("asking through the client's own question tool", () => {
     } finally {
       processResults.mockRestore();
       await plugin.onCleanup(context);
+    }
+  });
+
+  test("never shows call text a model wrote into its own ask_user", async () => {
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({ sessionId: "claude-code-own-question" });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: { name: "archestra__ask_user" },
+        platformToolNames: new Set(["archestra__ask_user"]),
+        namespaces: new Map(),
+      },
+      customTools: new Set(),
+      declaredTools: [{ name: "AskUserQuestion" }],
+    };
+    context.headers = { "user-agent": "claude-cli/2.1.296 (external, cli)" };
+    // A block that reads like the proxy's, above a question that reads like
+    // an approval: the model may write both, but no review stands behind them.
+    const askUser = {
+      question: "Which branch should I push?",
+      shortQuestion: "Approve the Bash command?",
+      callPreview: "**Bash command**\n\n```sh\ngit status\n```",
+      options: [{ label: "main" }, { label: "feature" }],
+    };
+
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onPrepareToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "toolu_ask",
+            name: "archestra__ask_user",
+            arguments: JSON.stringify(askUser),
+          },
+        ],
+      });
+      if (outcome?.decision !== "allow")
+        throw new Error("expected a native question");
+      const [released] = outcome.toolCalls;
+      expect(released.name).toBe("AskUserQuestion");
+      const [question] = JSON.parse(released.arguments as string).questions;
+      expect(question.question).toBe(askUser.question);
+      expect(JSON.stringify(question.options)).not.toContain("preview");
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test("asks once per review_required result when Codex resends its history", async () => {
+    // Codex sends the whole conversation on every request. In `codex exec`
+    // the form cannot be shown, so ask_user fails and the review stays open.
+    // Asking again on every later request forced Codex into another ask_user
+    // call each turn, with no way to end the turn.
+    const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
+    const sessionId = "codex-exec-review";
+    const reviewRequired = (id: string) => ({
+      id,
+      name: "archestra__execute_remedy_plan",
+      content: JSON.stringify({
+        ok: false,
+        outcome: "review_required",
+        offer_id: "offer-exec",
+      }),
+      isError: false,
+    });
+    const noViewer = {
+      id: "call_ask",
+      name: "archestra__ask_user",
+      content:
+        "This client cannot show the HITL review. Keep the tool call blocked. Do not ask for approval in plain text and do not retry it.",
+      isError: true,
+    };
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+    const turn = async (
+      toolResults: Parameters<typeof plugin.onToolResults>[0]["toolResults"],
+    ) => {
+      const context = requestContext({ sessionId });
+      context.headers = { originator: "codex_cli_rs" };
+      context.provider = "openai";
+      context.interactionType = "openai:responses";
+      const trusted = context.resources.get(
+        APPA_PLUGIN_TRUSTED_CONTEXT,
+      ) as AppaTrustedContext;
+      trusted.request = {
+        tools: {
+          control: { name: "archestra__execute_remedy_plan" },
+          notice: { name: "archestra__get_remedy_plans" },
+          askUser: { name: "archestra__ask_user" },
+          platformToolNames: new Set(),
+          namespaces: new Map(),
+        },
+        customTools: new Set(),
+        declaredTools: [],
+        session: {},
+      };
+      const request = {
+        instructions: "Base",
+        input: [] as unknown[],
+        tool_choice: "auto",
+        parallel_tool_calls: true,
+      };
+      try {
+        await plugin.onSessionInit(context);
+        await plugin.onToolResults({ ...context, toolResults });
+        await plugin.onBeforeModel({ ...context, request });
+      } finally {
+        await plugin.onCleanup(context);
+      }
+      return {
+        asked: JSON.stringify(request).includes(
+          "The policy needs the user's approval for the last execute_remedy_plan result.",
+        ),
+        toolChoice: request.tool_choice,
+      };
+    };
+    await stageHitlReview({
+      session: (
+        requestContext({ sessionId }).resources.get(
+          APPA_PLUGIN_TRUSTED_CONTEXT,
+        ) as AppaTrustedContext
+      ).session,
+      review: { offerId: "offer-exec", text: "Canonical HITL review." },
+    });
+
+    try {
+      // The result comes back: the model is told to ask, and must call a tool.
+      await expect(turn([reviewRequired("call_execute")])).resolves.toEqual({
+        asked: true,
+        toolChoice: "required",
+      });
+      // ask_user could not show the form. The same result, resent, asks
+      // nothing, so the model can explain that the call stays blocked.
+      await expect(
+        turn([reviewRequired("call_execute"), noViewer]),
+      ).resolves.toEqual({ asked: false, toolChoice: "auto" });
+      await expect(
+        turn([reviewRequired("call_execute"), noViewer]),
+      ).resolves.toEqual({ asked: false, toolChoice: "auto" });
+      // A new execute_remedy_plan call for the review is asked about once more.
+      await expect(
+        turn([
+          reviewRequired("call_execute"),
+          noViewer,
+          reviewRequired("call_execute_again"),
+        ]),
+      ).resolves.toEqual({ asked: true, toolChoice: "required" });
+    } finally {
+      processResults.mockRestore();
     }
   });
 
@@ -1910,7 +2207,7 @@ describe("asking through the client's own question tool", () => {
       headers: { "user-agent": "claude-code/1" },
       nativeName: "AskUserQuestion",
       answer: JSON.stringify(
-        'Your questions have been answered: "Canonical HITL review."="Approve". You can now continue with these answers in mind.',
+        'Your questions have been answered: "Approve the archestra__whoami call?"="Approve". You can now continue with these answers in mind.',
       ),
       interactionType: "anthropic:messages" as const,
       provider: "anthropic" as const,
@@ -1922,7 +2219,7 @@ describe("asking through the client's own question tool", () => {
       headers: { "user-agent": "claude-code/1" },
       nativeName: "AskUserQuestion",
       answer: JSON.stringify(
-        'Your questions have been answered: "Canonical HITL review."="Deny". You can now continue with these answers in mind.',
+        'Your questions have been answered: "Approve the archestra__whoami call?"="Deny". You can now continue with these answers in mind.',
       ),
       interactionType: "anthropic:messages" as const,
       provider: "anthropic" as const,
@@ -2074,20 +2371,25 @@ describe("asking through the client's own question tool", () => {
       expect(question.name).toBe(nativeName);
       expect(question.namespace).toBe("");
       if (client === "Claude Code") {
-        // Claude Code does not depend on a preview that it may withhold.
+        // Claude Code asks one line and previews the reviewed call in full
+        // in each option.
         expect(JSON.parse(question.arguments as string)).toEqual({
           questions: [
             {
-              question: "Canonical HITL review.",
+              question: "Approve the archestra__whoami call?",
               header: "Approval",
               options: [
                 {
                   label: "Approve",
                   description: "Allow this exact tool call.",
+                  preview:
+                    "**archestra\\_\\_whoami call**\n\nThis call has no arguments.",
                 },
                 {
                   label: "Deny",
                   description: "Keep this tool call blocked.",
+                  preview:
+                    "**archestra\\_\\_whoami call**\n\nThis call has no arguments.",
                 },
               ],
               multiSelect: false,
@@ -2448,7 +2750,7 @@ describe("asking through the client's own question tool", () => {
       // An answer with the user's note. The selection it repeats is not a
       // submitted choice, and the wording is not one the adapter reads.
       answer: JSON.stringify(
-        'The user answered: "Canonical HITL review."="Approve" notes: only once. Read the answers carefully and follow what they actually say.',
+        'The user answered: "Approve the archestra__whoami call?"="Approve" notes: only once. Read the answers carefully and follow what they actually say.',
       ),
       interactionType: "anthropic:messages" as const,
       provider: "anthropic" as const,
@@ -3461,7 +3763,8 @@ describe("rendering runtime text for this client", () => {
       }
       expect(JSON.stringify(outcome.toolCalls)).toContain("finished subagent");
       expect(JSON.stringify(outcome.toolCalls)).not.toContain("[appa]");
-      expect(outcome.blocked).toEqual([
+      expect(outcome.blocked).toBeUndefined();
+      expect(outcome.rewritten).toEqual([
         expect.objectContaining({ id: "handback" }),
       ]);
 
@@ -3769,13 +4072,58 @@ describe("rendering runtime text for this client", () => {
       expect(JSON.parse(String(outcome.toolCalls[0].arguments))).toMatchObject({
         tool: "archestra__run_tool",
         notice: { call_id: "c2" },
+        ruling: "[appa] Blocked",
       });
     } finally {
       evaluateToolCalls.mockRestore();
     }
   });
 
-  test("presents a denied run_tool dispatch as the target tool it named", async () => {
+  test.each<{
+    name: string;
+    recorded?: true;
+    offers?: string[];
+    review?: Array<{ offer_id: string; text: string }>;
+    stop: boolean;
+    direct?: boolean;
+    namespace?: string;
+  }>([
+    {
+      name: "recorded no-plan dispatch",
+      recorded: true,
+      offers: [],
+      stop: true,
+    },
+    {
+      name: "offered remedy dispatch",
+      recorded: true,
+      offers: ["offer-1"],
+      stop: false,
+    },
+    { name: "unrecorded local dispatch", offers: [], stop: false },
+    { name: "recorded offers unknown", recorded: true, stop: false },
+    {
+      name: "pending review dispatch",
+      recorded: true,
+      offers: [],
+      review: [{ offer_id: "review-1", text: "Await review" }],
+      stop: false,
+    },
+    {
+      name: "direct recorded no-plan call",
+      recorded: true,
+      offers: [],
+      direct: true,
+      stop: true,
+    },
+    {
+      name: "namespaced recorded no-plan dispatch",
+      recorded: true,
+      offers: [],
+      namespace: "mcp__gw",
+      stop: true,
+    },
+  ])("presents a denied run_tool dispatch without suggesting a routing retry: $name", async (scenario) => {
     // Static rules, annotator bindings, and the wildcard catch-all all evaluate
     // the dispatch's target, so the denial the model reads names that target —
     // its name and its own arguments — exactly as if the client had called it
@@ -3783,6 +4131,10 @@ describe("rendering runtime text for this client", () => {
     const plugin = new AppaPluginArchestra([]);
     const context = requestContext({
       sessionId: "dispatch-session",
+      toolIdentity: identityStub({
+        canonicalize: (name, namespace) =>
+          namespace && namespace !== "mcp__gw" ? `${namespace}__${name}` : name,
+      }),
     });
     await plugin.onSessionInit(context);
     const trusted = context.resources.get(
@@ -3805,6 +4157,9 @@ describe("rendering runtime text for this client", () => {
           kind: "deny" as const,
           feedback:
             "[appa] Refused: grain__list_meetings needs the internal audience",
+          recorded: scenario.recorded,
+          offers: scenario.offers,
+          review: scenario.review,
         },
       ]);
     try {
@@ -3814,11 +4169,16 @@ describe("rendering runtime text for this client", () => {
         toolCalls: [
           {
             id: "dispatch-1",
-            name: "archestra__run_tool",
-            arguments: {
-              tool_name: "grain__list_meetings",
-              tool_args: { limit: 5 },
-            },
+            name: scenario.direct
+              ? "grain__list_meetings"
+              : "archestra__run_tool",
+            namespace: scenario.namespace,
+            arguments: scenario.direct
+              ? { limit: 5 }
+              : {
+                  tool_name: "grain__list_meetings",
+                  tool_args: { limit: 5 },
+                },
           },
         ],
       });
@@ -3828,27 +4188,382 @@ describe("rendering runtime text for this client", () => {
       // Same position, same provider call id — only the identity changed hands.
       expect(noticeCall.name).toBe("archestra__get_remedy_plans");
       expect(noticeCall.id).toBe("dispatch-1");
-      expect(JSON.parse(String(noticeCall.arguments))).toEqual({
+      const notice = JSON.parse(String(noticeCall.arguments));
+      expect(notice).toMatchObject({
         tool: "grain__list_meetings",
-        arguments: JSON.stringify({ limit: 5 }),
-        ruling:
-          "[appa] Refused: grain__list_meetings needs the internal audience",
+        arguments: scenario.direct
+          ? { limit: 5 }
+          : JSON.stringify({ limit: 5 }),
         notice: { v: 1, call_id: "dispatch-1" },
       });
+      expect(notice.ruling).toMatch(
+        /^\[appa\] Refused: grain__list_meetings needs the internal audience/,
+      );
+      expect(
+        notice.ruling.includes("already went through the run_tool wrapper"),
+      ).toBe(!scenario.direct);
+      if (!scenario.direct) {
+        expect(notice.ruling).toContain('"archestra__run_tool"');
+        expect(notice.ruling).toContain(
+          'tool_name targeting "grain__list_meetings"',
+        );
+        expect(notice.ruling).toContain(
+          "the same blocked call, not a routing correction",
+        );
+      }
+      if (scenario.namespace) {
+        expect(notice.ruling).toContain('wire namespace "mcp__gw"');
+        expect(notice.notice).not.toHaveProperty("namespace");
+      }
+      expect(notice.ruling.includes("STOP this blocked action")).toBe(
+        scenario.stop,
+      );
+      expect(notice.ruling.includes("Do not retry the same call")).toBe(
+        scenario.stop,
+      );
+      expect(notice.ruling).not.toContain("limit");
       // `blocked` stays the wire batch's bookkeeping: the registry pins its
       // name to the call as given. The ruled-on identity lives in the notice.
       expect(outcome.blocked).toEqual([
         {
           id: "dispatch-1",
-          name: "archestra__run_tool",
+          name: scenario.direct
+            ? "grain__list_meetings"
+            : "archestra__run_tool",
           reason:
             "[appa] Refused: grain__list_meetings needs the internal audience",
         },
       ]);
+      if (scenario.offers?.length) {
+        // A later authorized evaluation still releases the original wrapper.
+        evaluateToolCalls.mockResolvedValueOnce([{ kind: "allow" }]);
+        expect(
+          await plugin.onToolCalls({
+            ...context,
+            toolCalls: [
+              {
+                id: "authorized-retry",
+                name: "archestra__run_tool",
+                arguments: {
+                  tool_name: "grain__list_meetings",
+                  tool_args: { limit: 5 },
+                },
+              },
+            ],
+          }),
+        ).toBeUndefined();
+      }
     } finally {
       evaluateToolCalls.mockRestore();
     }
   });
+
+  for (const offers of [[], ["offer-1"]]) {
+    test(`keeps dispatch clarification on runtime-confirmed results without trusting client text (offers: ${offers.length})`, async ({
+      makeOrganization,
+    }) => {
+      const organizationId = (await makeOrganization()).id;
+      const feedback = "[appa] Blocked: probe__echo cannot run yet";
+      const runtimeRuling = `${feedback}\n\nThe tool did not run. Follow the runtime's remedy guidance.`;
+      const native = await import("@archestra/openappa-rs");
+      const initialize = vi
+        .spyOn(native, "initializeOpenappa")
+        .mockResolvedValue(undefined);
+      // The native storage boundary cannot use PGlite; application reads and
+      // the clarification cache still use the real fixture database.
+      const connection = vi
+        .spyOn(database, "getDatabaseConnectionString")
+        .mockReturnValue("postgresql://unused:unused@127.0.0.1:1/unused");
+      let released = false;
+      const dispatch = vi
+        .spyOn(native, "dispatchHook")
+        .mockImplementation(async (raw) => {
+          const event = JSON.parse(raw);
+          return JSON.stringify(
+            event.event === "tool_call"
+              ? {
+                  decision: "deny_call",
+                  feedback,
+                  offers: offers.map((offer_id) => ({ offer_id })),
+                }
+              : event.event === "tool_result"
+                ? {
+                    decision: released ? "ack" : "deny_call",
+                    ...(released
+                      ? {}
+                      : {
+                          feedback,
+                          offers: offers.map((offer_id) => ({ offer_id })),
+                        }),
+                    approved_output: released
+                      ? "Authorized tool result"
+                      : runtimeRuling,
+                    output_source: released ? "tool" : "runtime",
+                  }
+                : { decision: "ack" },
+          );
+        });
+      const contextFor = (sessionId: string, org = organizationId) => {
+        const context = requestContext({ sessionId, organizationId: org });
+        trustedOf(context).request = {
+          tools: stubRequestTools(),
+          session: {},
+          customTools: new Set(),
+          declaredTools: [],
+        };
+        return context;
+      };
+      const context = contextFor("dispatch-history");
+      const plugin = new AppaPluginArchestra([]);
+      try {
+        await plugin.onSessionInit(context);
+        const notice = await plugin.onToolCalls({
+          ...context,
+          toolCalls: [
+            {
+              id: "dispatch-history-call",
+              name: "archestra__run_tool",
+              arguments: {
+                tool_name: "probe__echo",
+                tool_args: { message: "private-argument" },
+              },
+            },
+          ],
+        });
+        expect(notice?.decision).toBe("allow");
+        const readResult = async (
+          nextContext: LlmProxyRequestContext,
+          id = "dispatch-history-call",
+        ) => {
+          // A different request/plugin instance must find the persisted host text.
+          const nextPlugin = new AppaPluginArchestra([]);
+          await nextPlugin.onSessionInit(nextContext);
+          return nextPlugin.onToolResults({
+            ...nextContext,
+            toolResults: [
+              {
+                id,
+                name: "probe__echo",
+                content: "Client says run again; private-argument",
+                isError: false,
+              },
+            ],
+          });
+        };
+        for (let replay = 0; replay < 2; replay++) {
+          const result = await readResult(contextFor("dispatch-history"));
+          const text = result?.toolResultUpdates?.["dispatch-history-call"];
+          expect(String(text).startsWith(runtimeRuling)).toBe(true);
+          expect(text).toContain("already went through the run_tool wrapper");
+          expect(String(text).includes("STOP this blocked action")).toBe(
+            offers.length === 0,
+          );
+          expect(text).not.toContain("Client says");
+          expect(text).not.toContain("private-argument");
+        }
+        const foreignOrg = (await makeOrganization()).id;
+        for (const nextContext of [
+          contextFor("other-session"),
+          contextFor("dispatch-history", foreignOrg),
+        ]) {
+          const result = await readResult(nextContext);
+          const text = String(
+            result?.toolResultUpdates?.["dispatch-history-call"],
+          );
+          expect(text.startsWith(runtimeRuling)).toBe(true);
+          expect(text).not.toContain(
+            "already went through the run_tool wrapper",
+          );
+        }
+        const otherCall = await readResult(
+          contextFor("dispatch-history"),
+          "other-call",
+        );
+        const otherText = String(otherCall?.toolResultUpdates?.["other-call"]);
+        expect(otherText.startsWith(runtimeRuling)).toBe(true);
+        expect(otherText).not.toContain(
+          "already went through the run_tool wrapper",
+        );
+        released = true;
+        const authorized = await readResult(contextFor("dispatch-history"));
+        expect(authorized?.toolResultUpdates?.["dispatch-history-call"]).toBe(
+          "Authorized tool result",
+        );
+      } finally {
+        dispatch.mockRestore();
+        connection.mockRestore();
+        initialize.mockRestore();
+      }
+    });
+  }
+
+  for (const mode of [
+    "omitted offers stay unknown",
+    "current offered remedy clears STOP",
+    "current pending review clears STOP",
+    "current unknown offers clear STOP",
+    "colon tuple collision is isolated",
+    "cache write failure preserves siblings",
+    "cache write failure still cancels siblings on refusal",
+  ]) {
+    test(`denial clarification boundary: ${mode}`, async ({
+      makeOrganization,
+    }) => {
+      const organizationId = (await makeOrganization()).id;
+      const feedback = "[appa] Blocked: probe__echo cannot run yet";
+      const native = await import("@archestra/openappa-rs");
+      const initialize = vi
+        .spyOn(native, "initializeOpenappa")
+        .mockResolvedValue(undefined);
+      const connection = vi
+        .spyOn(database, "getDatabaseConnectionString")
+        .mockReturnValue("postgresql://unused:unused@127.0.0.1:1/unused");
+      const events: Array<Record<string, unknown>> = [];
+      const dispatch = vi
+        .spyOn(native, "dispatchHook")
+        .mockImplementation(async (raw) => {
+          const event = JSON.parse(raw);
+          events.push(event);
+          return JSON.stringify(
+            event.event === "tool_call"
+              ? event.tool === "probe__allowed"
+                ? { decision: "allow_call" }
+                : {
+                    decision: "deny_call",
+                    feedback,
+                    ...(mode === "omitted offers stay unknown"
+                      ? {}
+                      : { offers: [] }),
+                  }
+              : event.event === "tool_result"
+                ? {
+                    decision: "deny_call",
+                    feedback,
+                    approved_output: feedback,
+                    output_source: "runtime",
+                    ...(mode === "current offered remedy clears STOP"
+                      ? { offers: [{ offer_id: "later-offer" }] }
+                      : mode === "current unknown offers clear STOP"
+                        ? {}
+                        : { offers: [] }),
+                    ...(mode === "current pending review clears STOP"
+                      ? {
+                          review: [
+                            { offer_id: "pending", text: "Await review" },
+                          ],
+                        }
+                      : {}),
+                  }
+                : { decision: "ack" },
+          );
+        });
+      const contextFor = (sessionId: string) => {
+        const context = requestContext({ sessionId, organizationId });
+        trustedOf(context).request = {
+          tools: mode.endsWith("on refusal") ? undefined : stubRequestTools(),
+          session: {},
+          customTools: new Set(),
+          declaredTools: [],
+        };
+        return context;
+      };
+      const context = contextFor("caller|session:child");
+      const plugin = new AppaPluginArchestra([]);
+      const realSet = cacheManager.set.bind(cacheManager);
+      const cacheSet = mode.startsWith("cache write failure")
+        ? vi
+            .spyOn(cacheManager, "set")
+            .mockImplementation(async (key, value, ttl) => {
+              if (
+                key.startsWith(`${CacheKey.OpenAppaDeniedCallClarification}-`)
+              )
+                throw new Error("Clarification cache unavailable");
+              return realSet(key, value, ttl);
+            })
+        : undefined;
+      try {
+        await plugin.onSessionInit(context);
+        const outcome = await plugin.onToolCalls({
+          ...context,
+          toolCalls: [
+            {
+              id: "call",
+              name: "archestra__run_tool",
+              arguments: { tool_name: "probe__echo", tool_args: {} },
+            },
+            ...(cacheSet
+              ? [{ id: "allowed", name: "probe__allowed", arguments: {} }]
+              : []),
+          ],
+        });
+        if (mode.endsWith("on refusal")) {
+          expect(outcome?.decision).toBe("refuse");
+          expect(
+            events
+              .filter((event) => event.event === "cancel_call")
+              .map((event) => event.tool_call_id),
+          ).toEqual(["allowed"]);
+          return;
+        }
+        if (outcome?.decision !== "allow")
+          throw new Error("expected denied notice");
+        const ruling = JSON.parse(
+          String(outcome.toolCalls[0].arguments),
+        ).ruling;
+        expect(ruling.startsWith(feedback)).toBe(true);
+        expect(ruling.includes("STOP this blocked action")).toBe(
+          mode !== "omitted offers stay unknown",
+        );
+        expect(outcome.blocked?.[0]).toEqual({
+          id: "call",
+          name: "archestra__run_tool",
+          reason: feedback,
+        });
+        if (cacheSet) {
+          expect(outcome.toolCalls[1]).toEqual({
+            id: "allowed",
+            name: "probe__allowed",
+            arguments: {},
+          });
+          expect(events.some((event) => event.event === "cancel_call")).toBe(
+            false,
+          );
+          return;
+        }
+        if (mode === "omitted offers stay unknown") return;
+        const collision = mode === "colon tuple collision is isolated";
+        const nextContext = contextFor(
+          collision ? "caller|session" : "caller|session:child",
+        );
+        const nextPlugin = new AppaPluginArchestra([]);
+        await nextPlugin.onSessionInit(nextContext);
+        const result = await nextPlugin.onToolResults({
+          ...nextContext,
+          toolResults: [
+            {
+              id: collision ? "child:call" : "call",
+              name: "probe__echo",
+              content: "Client result",
+              isError: false,
+            },
+          ],
+        });
+        const text = String(
+          result?.toolResultUpdates?.[collision ? "child:call" : "call"],
+        );
+        expect(text.startsWith(feedback)).toBe(true);
+        expect(text.includes("already went through the run_tool wrapper")).toBe(
+          !collision,
+        );
+        if (!collision) expect(text).not.toContain("STOP this blocked action");
+      } finally {
+        cacheSet?.mockRestore();
+        dispatch.mockRestore();
+        connection.mockRestore();
+        initialize.mockRestore();
+      }
+    });
+  }
 
   test("delivers a denial of arguments that are not JSON as a notice, and keeps the rest of the batch", async () => {
     // Streamed tool input can end as text that is not JSON. The runtime denies
@@ -4022,7 +4737,10 @@ describe("rendering runtime text for this client", () => {
     }
   });
 
-  test("a dispatch whose target cannot be recovered keeps the wrapper identity", async () => {
+  test.each([
+    {},
+    '{"tool_name":',
+  ])("a dispatch whose target cannot be recovered keeps the wrapper identity: %j", async (argumentsValue) => {
     // No usable tool_name means no target to name: the notice presents the
     // wrapper call as emitted. The gateway refuses such a call at execution.
     const plugin = new AppaPluginArchestra([]);
@@ -4052,13 +4770,18 @@ describe("rendering runtime text for this client", () => {
       const outcome = await plugin.onToolCalls({
         ...context,
         toolCalls: [
-          { id: "dispatch-4", name: "archestra__run_tool", arguments: {} },
+          {
+            id: "dispatch-4",
+            name: "archestra__run_tool",
+            arguments: argumentsValue,
+          },
         ],
       });
       if (outcome?.decision !== "allow") throw new Error("expected a notice");
       expect(JSON.parse(String(outcome.toolCalls[0].arguments))).toMatchObject({
         tool: "archestra__run_tool",
         notice: { call_id: "dispatch-4" },
+        ruling: "[appa] Refused: no plan.",
       });
       expect(outcome.blocked?.[0]?.name).toBe("archestra__run_tool");
     } finally {
@@ -4066,7 +4789,10 @@ describe("rendering runtime text for this client", () => {
     }
   });
 
-  test("refuses a denied dispatch with the target's identity when no notice tool can carry it", async () => {
+  test.each([
+    true,
+    false,
+  ])("refuses a denied dispatch with the target's identity when no notice tool can carry it (recorded: %s)", async (recorded) => {
     const plugin = new AppaPluginArchestra([]);
     const context = requestContext({
       sessionId: "toolless-dispatch",
@@ -4082,7 +4808,12 @@ describe("rendering runtime text for this client", () => {
     const evaluateToolCalls = vi
       .spyOn(appaService, "evaluateToolCalls")
       .mockImplementation(async () => [
-        { kind: "deny" as const, feedback: "[appa] Refused: no plan." },
+        {
+          kind: "deny" as const,
+          feedback: "[appa] Refused: no plan.",
+          ...(recorded ? { recorded: true as const } : {}),
+          offers: [],
+        },
       ]);
     const cancelCalls = vi
       .spyOn(appaService, "cancelCalls")
@@ -4102,6 +4833,21 @@ describe("rendering runtime text for this client", () => {
           },
         ],
       });
+      if (outcome?.decision !== "refuse") throw new Error("expected refusal");
+      expect(outcome.refusal.contentMessage).toContain(
+        "already went through the run_tool wrapper",
+      );
+      expect(
+        outcome.refusal.contentMessage.includes("STOP this blocked action"),
+      ).toBe(recorded);
+      if (recorded) {
+        expect(outcome.refusal.contentMessage).not.toContain(
+          "Send your message again",
+        );
+        expect(outcome.refusal.contentMessage).not.toContain(
+          "Connect the gateway",
+        );
+      }
       expect(outcome).toMatchObject({
         decision: "refuse",
         refusal: {
@@ -4332,6 +5078,7 @@ describe("rendering runtime text for this client", () => {
         }),
       ).toBeUndefined();
       for (const outcome of [
+        "review_declined",
         "review_unanswered",
         "review_cancelled",
         "review_unavailable",

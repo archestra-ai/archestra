@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { ThreadToolSchema } from "@/types/openappa-thread-state";
 import {
   clientKeepsThreadPairing,
   echoedCallsMessage,
@@ -57,6 +58,60 @@ describe("thread state rules", () => {
     types: [undefined, "custom"],
   });
   const call = { id: "toolu_1", name: "Read", input: { path: "a" } };
+
+  test("retains original contracts through JSON storage and continuation hydration", async () => {
+    const tools = threadToolsOf({
+      declarations: [
+        {
+          name: "gateway_a_control",
+          marker: "marker",
+          contract: "original-structured-contract",
+        },
+        {
+          name: "gateway_b_control",
+          marker: "marker",
+          contract: "different-structured-contract",
+        },
+      ],
+      types: [undefined, undefined],
+    }).map((tool) => ThreadToolSchema.parse(JSON.parse(JSON.stringify(tool))));
+    await threadStates.record({
+      record: {
+        organizationId: "contract-org",
+        sessionId: "contract-session",
+        tools,
+      },
+      messageId: "contract-root",
+      calls: [],
+      diverged: false,
+    });
+    const hydrated = await threadStates.forContinue({
+      organizationId: "contract-org",
+      sessionId: "contract-session",
+      previousMessageId: "contract-root",
+    });
+    if (!hydrated.ok) throw new Error("expected retained thread evidence");
+    expect(hydrated.tools.map((tool) => tool.contract)).toEqual([
+      "original-structured-contract",
+      "different-structured-contract",
+    ]);
+    // Generic hydration must not overwrite the evidence with equal schemas.
+    expect(toolSkeletonOf(hydrated.tools)).toEqual([
+      {
+        name: "gateway_a_control",
+        description: "",
+        input_schema: { type: "object" },
+      },
+      {
+        name: "gateway_b_control",
+        description: "",
+        input_schema: { type: "object" },
+      },
+    ]);
+    expect(threadToolsOf({ declarations: hydrated.tools, types: [] })).toEqual(
+      tools,
+    );
+  });
 
   test("a continue follows the root's tools and the calls the client holds, once", async () => {
     await threadStates.record({

@@ -10,7 +10,11 @@ use appa_runtime::{
     api::Runtime,
     config::{ArchestraEndpoint, Config, HostDefaults, HostedBattery, IncludeResolution},
 };
-use std::{collections::BTreeMap, sync::Arc, time::Duration};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+    time::Duration,
+};
 
 /// The consult budget every external of a hosted policy gets. Fixed for v0: the
 /// helper bridge derives its own deadline from it.
@@ -88,6 +92,17 @@ pub(crate) fn validate(content: &str) -> Result<(), String> {
     compose(content, &[]).map(|_| ())
 }
 
+/// Check a host-composed document, including the helper bindings the host added.
+/// Unlike authored root validation, this admits the host's own token variables.
+/// Keys stay deferred: validation reads no secret and opens no store or connection.
+pub(crate) fn validate_hosted(content: &str) -> Result<(), String> {
+    let config =
+        Config::hosted_included_deferred(content, defaults(), |_| Err(IncludeResolution::Unknown))
+            .map_err(|error| error.to_string())?;
+    Runtime::check_hosted(config, None, crate::adapter::adapter())
+        .map_err(|error| error.to_string())
+}
+
 /// Where a battery's `command` helpers are served from once the host runs them:
 /// every binding becomes `url = "<url_base>/<external name>"` authenticated by
 /// `token_env`, the runtime's own variable, never the provider's.
@@ -97,12 +112,14 @@ pub(crate) struct HelperBinding {
 }
 
 /// One battery the host resolved for an include entry of the root document: the
-/// entry as authored, the name the battery composes under, its `appa.toml` text and
-/// the endpoint its `command` helpers are served from, if the host serves them.
+/// entry as authored, the name the battery composes under, its base policy text, the
+/// target policy text the host deploys before it, if any, and the endpoint its
+/// `command` helpers are served from, if the host serves them.
 pub(crate) struct ResolvedBattery {
     pub entry: String,
     pub name: String,
     pub policy: String,
+    pub target: Option<String>,
     pub helpers: Option<HelperBinding>,
 }
 
@@ -120,6 +137,18 @@ pub(crate) struct Composed {
 /// unresolved, which the runtime refuses naming the entry. The composed document is
 /// checked as an open checks it, so a composition that returns is also a validation.
 pub(crate) fn compose(root: &str, batteries: &[ResolvedBattery]) -> Result<Composed, String> {
+    compose_with_rosters(root, batteries, &MemberRosters::new())
+}
+
+/// The readers of each member roster the host keeps, by roster name: principal → email.
+pub(crate) type MemberRosters = BTreeMap<String, BTreeMap<String, String>>;
+
+/// `compose`, with the readers the host knows for the member rosters it declares.
+pub(crate) fn compose_with_rosters(
+    root: &str,
+    batteries: &[ResolvedBattery],
+    rosters: &MemberRosters,
+) -> Result<Composed, String> {
     let document: toml::Table =
         toml::from_str(root).map_err(|error| format!("root policy: {error}"))?;
     refuse_host_variables(&document)?;
@@ -127,11 +156,12 @@ pub(crate) fn compose(root: &str, batteries: &[ResolvedBattery]) -> Result<Compo
         .iter()
         .map(|battery| Ok((battery, bind_helpers(battery)?)))
         .collect::<Result<Vec<_>, String>>()?;
-    let hosted: Vec<(&ResolvedBattery, &str, Vec<&str>)> = bound
+    let root = &with_member_rosters(root, &document, &bound, rosters)?;
+    let hosted: Vec<(&ResolvedBattery, &BoundBattery, Vec<&str>)> = bound
         .iter()
         .map(|(battery, bound)| {
             let token_env = bound.token_env.iter().map(String::as_str).collect();
-            (*battery, bound.policy.as_str(), token_env)
+            (*battery, bound, token_env)
         })
         .collect();
     // No organization's values reach a composition: it is checked, stored and later
@@ -140,9 +170,10 @@ pub(crate) fn compose(root: &str, batteries: &[ResolvedBattery]) -> Result<Compo
         hosted
             .iter()
             .find(|(battery, _, _)| battery.entry == entry)
-            .map(|(battery, policy, token_env)| HostedBattery {
+            .map(|(battery, bound, token_env)| HostedBattery {
                 name: &battery.name,
-                policy,
+                base: &bound.base,
+                target: bound.target.as_deref(),
                 token_env,
             })
             .ok_or(IncludeResolution::Unknown)
@@ -158,6 +189,84 @@ pub(crate) fn compose(root: &str, batteries: &[ResolvedBattery]) -> Result<Compo
         content,
         credentials,
     })
+}
+
+/// The root with a readers table for every member roster a deployed target sends its
+/// audience lookups to and nothing composed declares. The host owns these rosters;
+/// one it supplies no readers for is empty, so every lookup through it denies.
+fn with_member_rosters(
+    root: &str,
+    document: &toml::Table,
+    bound: &[(&ResolvedBattery, BoundBattery)],
+    readers: &MemberRosters,
+) -> Result<String, String> {
+    let mut declared: BTreeSet<String> = audience_entries(document)
+        .map(|(name, _)| name.to_owned())
+        .collect();
+    let mut looked_up = BTreeSet::new();
+    for (_, battery) in bound {
+        let base: toml::Table = toml::from_str(&battery.base).map_err(|error| error.to_string())?;
+        declared.extend(audience_entries(&base).map(|(name, _)| name.to_owned()));
+        if let Some(target) = &battery.target {
+            let target: toml::Table = toml::from_str(target).map_err(|error| error.to_string())?;
+            for (name, entry) in audience_entries(&target) {
+                declared.insert(name.to_owned());
+                if let Some(roster) = entry.get("lookup").and_then(toml::Value::as_str) {
+                    looked_up.insert(roster.to_owned());
+                }
+            }
+        }
+    }
+    let rosters: Vec<&String> = looked_up.difference(&declared).collect();
+    if rosters.is_empty() {
+        return Ok(root.to_owned());
+    }
+    let mut edited = root
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(|error| format!("root policy: {error}"))?;
+    // A root whose `externals` or `externals.audience` is not a table is
+    // malformed; it is left as written for the policy check to name.
+    let Some(audience) = child_table(edited.as_table_mut(), "externals")
+        .and_then(|externals| child_table(externals, "audience"))
+    else {
+        return Ok(root.to_owned());
+    };
+    for roster in rosters {
+        let known: toml_edit::InlineTable = readers
+            .get(roster)
+            .into_iter()
+            .flatten()
+            .map(|(principal, email)| (principal.as_str(), email.as_str()))
+            .collect();
+        let mut entry = toml_edit::InlineTable::new();
+        entry.insert("readers", known.into());
+        audience.insert(roster, toml_edit::value(entry));
+    }
+    Ok(edited.to_string())
+}
+
+/// The table under `key`, created when absent; `None` when `key` holds anything else.
+fn child_table<'a>(
+    parent: &'a mut dyn toml_edit::TableLike,
+    key: &str,
+) -> Option<&'a mut dyn toml_edit::TableLike> {
+    if !parent.contains_key(key) {
+        let mut table = toml_edit::Table::new();
+        table.set_implicit(true);
+        parent.insert(key, toml_edit::Item::Table(table));
+    }
+    parent.get_mut(key)?.as_table_like_mut()
+}
+
+/// Every `[externals.audience.<name>]` entry a document declares.
+fn audience_entries(document: &toml::Table) -> impl Iterator<Item = (&str, &toml::Table)> {
+    document
+        .get("externals")
+        .and_then(|externals| externals.get("audience"))
+        .and_then(toml::Value::as_table)
+        .into_iter()
+        .flatten()
+        .filter_map(|(name, entry)| Some((name.as_str(), entry.as_table()?)))
 }
 
 /// The composed text is stored and compiled again at every dispatch, and that compile
@@ -184,9 +293,10 @@ fn strip_default_result_cap(root: &toml::Table, content: String) -> Result<Strin
     Ok(document.to_string())
 }
 
-/// A battery's policy as the host serves it, and the credential variables it reads.
+/// A battery's policies as the host serves them, and the credential variables they read.
 struct BoundBattery {
-    policy: String,
+    base: String,
+    target: Option<String>,
     token_env: Vec<String>,
 }
 
@@ -197,20 +307,52 @@ struct BoundBattery {
 /// `[externals.jev]` profile names inside the battery's own credential prefix: the
 /// runtime sends that key to the jev endpoint alone.
 fn bind_helpers(battery: &ResolvedBattery) -> Result<BoundBattery, String> {
-    let mut document: toml::Table = toml::from_str(&battery.policy)
-        .map_err(|error| format!("battery {}: {error}", battery.name))?;
-    refuse_host_variables(&document)
-        .and_then(|()| refuse_url_externals(&document))
-        .map_err(|error| format!("battery {}: {error}", battery.name))?;
-    let jev_key = jev_profile_variable(&document).filter(|variable| {
-        PackageName::parse(&battery.name).is_ok_and(|name| name.credential_prefix().owns(variable))
-    });
+    let base = battery_document(battery, &battery.policy)?;
+    let target = battery
+        .target
+        .as_deref()
+        .map(|target| battery_document(battery, target))
+        .transpose()?;
+    let jev_key = target
+        .iter()
+        .chain([&base])
+        .find_map(jev_profile_variable)
+        .filter(|variable| {
+            PackageName::parse(&battery.name)
+                .is_ok_and(|name| name.credential_prefix().owns(variable))
+        });
     let Some(binding) = &battery.helpers else {
         return Ok(BoundBattery {
-            policy: battery.policy.clone(),
+            base: battery.policy.clone(),
+            target: battery.target.clone(),
             token_env: jev_key.into_iter().collect(),
         });
     };
+    Ok(BoundBattery {
+        base: bind_document(battery, base, binding)?,
+        target: target
+            .map(|target| bind_document(battery, target, binding))
+            .transpose()?,
+        token_env: std::iter::once(binding.token_env.clone())
+            .chain(jev_key)
+            .collect(),
+    })
+}
+
+fn battery_document(battery: &ResolvedBattery, text: &str) -> Result<toml::Table, String> {
+    let document: toml::Table =
+        toml::from_str(text).map_err(|error| format!("battery {}: {error}", battery.name))?;
+    refuse_host_variables(&document)
+        .and_then(|()| refuse_url_externals(&document))
+        .map_err(|error| format!("battery {}: {error}", battery.name))?;
+    Ok(document)
+}
+
+fn bind_document(
+    battery: &ResolvedBattery,
+    mut document: toml::Table,
+    binding: &HelperBinding,
+) -> Result<String, String> {
     if let Some(toml::Value::Table(externals)) = document.get_mut("externals") {
         for (_, section) in externals.iter_mut() {
             let Some(section) = section.as_table_mut() else {
@@ -240,12 +382,7 @@ fn bind_helpers(battery: &ResolvedBattery) -> Result<BoundBattery, String> {
             }
         }
     }
-    Ok(BoundBattery {
-        policy: toml::to_string(&document).map_err(|error| error.to_string())?,
-        token_env: std::iter::once(binding.token_env.clone())
-            .chain(jev_key)
-            .collect(),
-    })
+    toml::to_string(&document).map_err(|error| error.to_string())
 }
 
 /// A battery reaches out only through the host's helper bridge: a url external
@@ -373,6 +510,7 @@ mod tests {
             entry: GITHUB_ENTRY.into(),
             name: "github".into(),
             policy: "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/github/get_file_contents\"\ndelta = {}\n".into(),
+            target: None,
             helpers: None,
         }
     }
@@ -493,7 +631,6 @@ version = 2
 [[policy.tool]]
 name = "read_internal"
 delta = { audience = ["internal"] }
-requires = { audience = { within = ["internal"] } }
 "#,
         );
         let actor = started(&runtime, "symbolic-approval").await;
@@ -716,6 +853,7 @@ delta = {{}}
             entry: LINEAR_ENTRY.into(),
             name: "linear".into(),
             policy: "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/linear/create_issue\"\ndelta = {}\n".into(),
+            target: None,
             helpers: None,
         }
         };
@@ -792,6 +930,7 @@ command = ["python3", "repository-visibility.py"]
 token_env = "APPA_PROVIDER_GITHUB_TOKEN"
 "#
             .into(),
+            target: None,
             helpers: Some(HelperBinding {
                 url_base: "http://127.0.0.1:9000/api/openappa/helpers/install-1".into(),
                 token_env: BRIDGE_TOKEN_ENV.into(),
@@ -829,6 +968,142 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
         assert!(compose(&root, &[unbound]).is_err());
     }
 
+    #[test]
+    fn the_host_declares_the_member_roster_a_deployed_target_looks_people_up_in() {
+        // SAFETY: as above.
+        unsafe { std::env::set_var(BRIDGE_TOKEN_ENV, "bridge-token") };
+        let github = crate::batteries::bundled()
+            .unwrap()
+            .iter()
+            .find(|battery| battery.name == "github")
+            .unwrap();
+        let target = github.multi_user.as_ref().unwrap();
+        let battery = |target: Option<String>| ResolvedBattery {
+            entry: GITHUB_ENTRY.into(),
+            name: "github".into(),
+            policy: github.base.clone(),
+            target,
+            helpers: Some(HelperBinding {
+                url_base: "http://127.0.0.1:9000/api/openappa/helpers/install-1".into(),
+                token_env: BRIDGE_TOKEN_ENV.into(),
+            }),
+        };
+        let root = format!(
+            "include = [\"{GITHUB_ENTRY}\"]\n[server_aliases]\ngithub = [\"github_prod\"]\n[policy]\nversion = 2\n"
+        );
+        let roster = |content: &str| {
+            let document: toml::Table = toml::from_str(content).unwrap();
+            audience_entries(&document)
+                .find(|(name, _)| *name == "host-members")
+                .map(|(_, entry)| entry.clone())
+        };
+        let multi_user = compose(&root, &[battery(Some(target.policy.clone()))]).unwrap();
+        assert_eq!(
+            roster(&multi_user.content).and_then(|entry| entry.get("readers").cloned()),
+            Some(toml::Value::Table(toml::Table::new()))
+        );
+        // A roster the root declares is its own.
+        let declared = format!(
+            "{root}[externals.audience.host-members]\nreaders = {{ \"github:1\" = \"ana@corp.example\" }}\n"
+        );
+        let kept = compose(&declared, &[battery(Some(target.policy.clone()))]).unwrap();
+        assert_eq!(
+            roster(&kept.content).and_then(|entry| entry.get("readers")?.get("github:1").cloned()),
+            Some(toml::Value::String("ana@corp.example".into()))
+        );
+        // A roster the host supplies fills the readers it declares.
+        let rosters = MemberRosters::from([(
+            "host-members".to_owned(),
+            BTreeMap::from([("github:7".to_owned(), "ana@corp.example".to_owned())]),
+        )]);
+        let filled =
+            compose_with_rosters(&root, &[battery(Some(target.policy.clone()))], &rosters).unwrap();
+        assert_eq!(
+            roster(&filled.content).and_then(|entry| entry.get("readers").cloned()),
+            Some(toml::Value::Table(toml::Table::from_iter([(
+                "github:7".to_owned(),
+                toml::Value::String("ana@corp.example".into())
+            )])))
+        );
+        // The root's own roster wins over the host's.
+        let kept =
+            compose_with_rosters(&declared, &[battery(Some(target.policy.clone()))], &rosters)
+                .unwrap();
+        assert_eq!(
+            roster(&kept.content).and_then(|entry| entry.get("readers")?.get("github:7").cloned()),
+            None
+        );
+        // The base alone looks nobody up, so no roster is written.
+        let base_only = compose(&root, &[battery(None)]).unwrap();
+        assert_eq!(roster(&base_only.content), None);
+        // An inline parent takes the roster too.
+        let inline = compose(
+            &format!("externals = {{ audience = {{}} }}\n{root}"),
+            &[battery(Some(target.policy.clone()))],
+        )
+        .unwrap();
+        assert!(roster(&inline.content).is_some());
+        // A malformed parent is refused by the policy check, not a panic in the roster.
+        for text in [
+            format!("externals = 1\n{root}"),
+            format!("{root}[externals]\naudience = 1\n"),
+        ] {
+            assert!(compose(&text, &[battery(Some(target.policy.clone()))]).is_err());
+        }
+    }
+
+    #[test]
+    fn a_target_composes_before_its_base_with_the_helpers_of_both_bound() {
+        // SAFETY: as above.
+        unsafe { std::env::set_var(BRIDGE_TOKEN_ENV, "bridge-token") };
+        let url_base = "http://127.0.0.1:9000/api/openappa/helpers/install-1";
+        let battery = || {
+            ResolvedBattery {
+            entry: GITHUB_ENTRY.into(),
+            name: "github".into(),
+            policy: "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/github/get_file_contents\"\ndelta = {}\n[externals.context.github]\ncommand = [\"python3\", \"context.py\"]\n".into(),
+            target: Some("[policy]\nversion = 2\n[[policy.annotator]]\nname = \"github.visibility\"\nranks = [\"suspicious\"]\naudiences = [\"internal\"]\nmarks = []\n[[policy.tool]]\nname = \"mcp/github/list_issues\"\nannotator = \"github.visibility\"\n[externals.annotators.\"github.visibility\"]\ncommand = [\"python3\", \"visibility.py\"]\ntoken_env = \"APPA_PROVIDER_GITHUB_TOKEN\"\n".into()),
+            helpers: Some(HelperBinding {
+                url_base: url_base.into(),
+                token_env: BRIDGE_TOKEN_ENV.into(),
+            }),
+        }
+        };
+        let root = format!(
+            "include = [\"{GITHUB_ENTRY}\"]\n[server_aliases]\ngithub = [\"github_prod\"]\n[policy]\nversion = 2\n"
+        );
+        let composed = compose(&root, &[battery()]).unwrap().content;
+        let document: toml::Table = toml::from_str(&composed).unwrap();
+        for (section, name) in [("annotators", "github.visibility"), ("context", "github")] {
+            let binding = &document["externals"][section][name];
+            assert_eq!(
+                binding["url"].as_str(),
+                Some(format!("{url_base}/{name}").as_str())
+            );
+            assert_eq!(binding["token_env"].as_str(), Some(BRIDGE_TOKEN_ENV));
+        }
+        let rules: Vec<&str> = policy_entries(&document, "tool")
+            .iter()
+            .filter_map(|rule| rule.get("name")?.as_str())
+            .collect();
+        assert_eq!(
+            rules,
+            ["mcp/github/list_issues", "mcp/github/get_file_contents"]
+        );
+        // The base alone composes without the target's annotator.
+        let base_only = compose(
+            &root,
+            &[ResolvedBattery {
+                target: None,
+                ..battery()
+            }],
+        )
+        .unwrap()
+        .content;
+        let base_only: toml::Table = toml::from_str(&base_only).unwrap();
+        assert!(policy_entries(&base_only, "annotator").is_empty());
+    }
+
     /// The alias table is the root's own declaration now, not the host's insertion.
     #[test]
     fn a_helper_named_after_a_path_step_is_not_addressable() {
@@ -844,6 +1119,7 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
                 policy: format!(
                     "[policy]\nversion = 2\n[[policy.annotator]]\nname = \"{name}\"\nranks = [\"suspicious\"]\naudiences = [\"internal\"]\nmarks = []\n[[policy.tool]]\nname = \"mcp/github/get_file_contents\"\nannotator = \"{name}\"\n[externals.annotators.\"{name}\"]\ncommand = [\"python3\", \"helper.py\"]\n"
                 ),
+                target: None,
                 helpers: Some(HelperBinding {
                     url_base: "http://127.0.0.1:9000/api/openappa/helpers/install-1".into(),
                     token_env: BRIDGE_TOKEN_ENV.into(),
@@ -912,6 +1188,7 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
                 entry: "batteries/acme/appa.toml".to_owned(),
                 name: "acme".to_owned(),
                 policy: policy.to_owned(),
+                target: None,
                 helpers: None,
             };
             assert!(
@@ -921,6 +1198,63 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
                 )
                 .is_err()
             );
+        }
+    }
+
+    #[test]
+    fn validates_host_composed_helpers_but_refuses_them_as_authored_roots() {
+        let entry = "batteries/old/appa.toml";
+        let root = format!("include = [\"{entry}\"]\n[policy]\nversion = 2\n");
+        let battery = ResolvedBattery {
+            entry: entry.into(),
+            name: "old".into(),
+            target: None,
+            policy: r#"[policy]
+version = 2
+[[policy.annotator]]
+name = "old.judge"
+ranks = ["suspicious", "trusted"]
+[[policy.tool]]
+name = "mcp/old/read"
+annotator = "old.judge"
+[externals.annotators."old.judge"]
+command = ["python3", "judge.py"]
+"#
+            .into(),
+            helpers: Some(HelperBinding {
+                url_base: "http://127.0.0.1:9/api/openappa/helpers/install-1".into(),
+                token_env: super::BRIDGE_TOKEN_ENV.into(),
+            }),
+        };
+        let composed = compose(&root, &[battery]).unwrap().content;
+        let document: toml::Table = toml::from_str(&composed).unwrap();
+        assert_eq!(
+            document["externals"]["annotators"]["old.judge"]["token_env"].as_str(),
+            Some(super::BRIDGE_TOKEN_ENV)
+        );
+        validate_hosted(&composed).expect("host-owned helper bindings validate");
+        let error = validate(&composed).unwrap_err();
+        assert!(error.contains(HOST_VARIABLE_PREFIX), "{error}");
+        assert!(compose(&composed, &[]).is_err());
+
+        // No value is needed, even for a variable the host has never published.
+        validate_hosted(&composed.replace(
+            super::BRIDGE_TOKEN_ENV,
+            "APPA_ARCHESTRA_UNSET_HOSTED_POLICY_TEST_TOKEN",
+        ))
+        .expect("hosted validation defers token lookup");
+    }
+
+    #[test]
+    fn hosted_validation_still_checks_runtime_semantics_and_container_access() {
+        for invalid in [
+            "[policy]\nversion = 999\n",
+            "include = ['batteries/unknown/appa.toml']\n[policy]\nversion = 2\n",
+            "[policy]\nversion = 2\n[[policy.annotator]]\nname = 'old.judge'\nbuiltin = 'no-such-builtin'\n",
+            "[policy]\nversion = 2\n[externals.annotators.old]\ncommand = ['sh']\n",
+            "[policy]\nversion = 2\n[externals]\ntiemout_ms = 10\n",
+        ] {
+            assert!(validate_hosted(invalid).is_err(), "{invalid}");
         }
     }
 
@@ -937,6 +1271,7 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
             .find(|battery| battery.name == "jev")
             .expect("the jev battery is bundled");
         let github = ResolvedBattery {
+            target: None,
             helpers: Some(HelperBinding {
                 url_base: "http://127.0.0.1:9000/api/openappa/helpers/install-1".into(),
                 token_env: BRIDGE_TOKEN_ENV.into(),
@@ -950,7 +1285,8 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
         let jev_battery = || ResolvedBattery {
             entry: "batteries/jev/appa.toml".into(),
             name: jev.name.clone(),
-            policy: jev.policy.clone(),
+            policy: jev.base.clone(),
+            target: None,
             helpers: None,
         };
         let composed = compose(&root, &[jev_battery(), github]).unwrap();
@@ -963,7 +1299,7 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
         // A profile naming another battery's credential is not granted it.
         let foreign = ResolvedBattery {
             policy: jev
-                .policy
+                .base
                 .replace("APPA_PROVIDER_JEV_API_KEY", "APPA_PROVIDER_GITHUB_TOKEN"),
             ..jev_battery()
         };

@@ -26,7 +26,7 @@ import {
 } from "@/test";
 
 beforeEach(() => {
-  config.plugins.enabled = true;
+  config.beta = false;
 });
 
 async function seedSkill(params: {
@@ -516,6 +516,93 @@ describe.skipIf(!GIT_HTTP_BACKEND_AVAILABLE)(
         path.join(target, "plugins", pluginName, "scripts/run.sh"),
       );
       expect(scriptStat.mode & 0o111).not.toBe(0);
+    }, 30_000);
+
+    test("a Claude Desktop link serves its plugins in the Claude marketplace, and not Claude Code's", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id);
+      const seed = async (clientType: "claude-code" | "claude-desktop") => {
+        const plugin = await PluginModel.create({
+          organizationId: org.id,
+          userId: user.id,
+          input: {
+            displayName: `${clientType} only`,
+            description: `For ${clientType}`,
+            clientType,
+            supportedPlatforms: ["posix"],
+            files: [
+              {
+                path: "skills/brief/SKILL.md",
+                content: "---\nname: brief\ndescription: Brief.\n---\nBrief.\n",
+                encoding: "utf8",
+                mode: "100644",
+              },
+            ],
+          },
+        });
+        if (!plugin) throw new Error("failed to seed plugin");
+        return plugin;
+      };
+      const desktopPlugin = await seed("claude-desktop");
+      const codePlugin = await seed("claude-code");
+
+      const { rawToken } = await SkillShareLinkModel.create({
+        organizationId: org.id,
+        createdByUserId: user.id,
+        skillIds: [],
+        pluginIds: [desktopPlugin.id],
+        pluginClientType: "claude-desktop",
+        pluginPlatform: "posix",
+        marketplaceName: "org-desktop-plugins",
+        expiresAt: new Date(Date.now() + 86_400_000),
+      });
+
+      const target = path.join(cloneDir, "desktop-plugin-out");
+      const result = await runGitClone(
+        `${baseUrl}/skills/m/${rawToken}/repo.git`,
+        target,
+      );
+      if (result.code !== 0) throw new Error(result.stderr);
+
+      const marketplace = JSON.parse(
+        await fs.readFile(
+          path.join(target, ".claude-plugin/marketplace.json"),
+          "utf8",
+        ),
+      );
+      const listed = marketplace.plugins.map(
+        (plugin: { name: string }) => plugin.name,
+      );
+      expect(listed).toContain(desktopPlugin.pluginSlug);
+      expect(listed).not.toContain(codePlugin.pluginSlug);
+      const manifest = JSON.parse(
+        await fs.readFile(
+          path.join(
+            target,
+            "plugins",
+            desktopPlugin.pluginSlug,
+            ".claude-plugin/plugin.json",
+          ),
+          "utf8",
+        ),
+      );
+      expect(manifest.name).toBe(desktopPlugin.pluginSlug);
+      expect(
+        await fs.readFile(
+          path.join(
+            target,
+            "plugins",
+            desktopPlugin.pluginSlug,
+            "skills/brief/SKILL.md",
+          ),
+          "utf8",
+        ),
+      ).toContain("name: brief");
     }, 30_000);
 
     test("public materialization rejects a plugin outside the link platform", async ({

@@ -45,7 +45,7 @@ vi.mock("@/components/chat/chat-messages", () => ({
 }));
 
 const agent = makeAgent({
-  name: "APPAdvisor",
+  name: "APPA Keeper",
   scope: "org",
   builtIn: true,
   builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
@@ -222,7 +222,7 @@ test("a configuration agent launch uses ordinary creation and chat controls", as
   ).toBeInTheDocument();
   expect(
     screen.getByRole("combobox", {
-      name: "APPAdvisor",
+      name: "APPA Keeper",
     }),
   ).toBeEnabled();
 
@@ -256,11 +256,12 @@ test.each([
 
   await user.click(
     await screen.findByRole("combobox", {
-      name: launch === "configuration launch" ? "APPAdvisor" : "Research Agent",
+      name:
+        launch === "configuration launch" ? "APPA Keeper" : "Research Agent",
     }),
   );
   expect(
-    screen.queryByRole("option", { name: /APPAdvisor/ }),
+    screen.queryByRole("option", { name: /APPA Keeper/ }),
   ).not.toBeInTheDocument();
   await user.click(
     await screen.findByRole("option", { name: /Research Agent/ }),
@@ -271,7 +272,7 @@ test.each([
   expect(createBodies).toHaveLength(0);
 });
 
-test("a fresh stack selects My Assistant while hiding APPAdvisor from the picker", async () => {
+test("a fresh stack selects My Assistant while hiding APPA Keeper from the picker", async () => {
   const user = userEvent.setup();
   const personal = makeAgent({
     id: "personal-assistant",
@@ -295,7 +296,7 @@ test("a fresh stack selects My Assistant while hiding APPAdvisor from the picker
     await screen.findByRole("combobox", { name: "My Assistant" }),
   );
   expect(
-    screen.queryByRole("option", { name: /APPAdvisor/ }),
+    screen.queryByRole("option", { name: /APPA Keeper/ }),
   ).not.toBeInTheDocument();
   expect(
     screen.getByRole("option", { name: /My Assistant/ }),
@@ -374,7 +375,7 @@ test("a saved configuration-agent conversation accepts a normal follow-up withou
   expect(sent[0]).toMatchObject({
     parts: [{ type: "text", text: "Now tighten it" }],
   });
-  await user.click(screen.getByRole("combobox", { name: "APPAdvisor" }));
+  await user.click(screen.getByRole("combobox", { name: "APPA Keeper" }));
   await user.click(
     await screen.findByRole("option", { name: /Research Agent/ }),
   );

@@ -27,6 +27,10 @@ import type {
 } from "@/types/openappa-batteries";
 import { mapWithConcurrency } from "@/utils/concurrency";
 import { archestraAudience } from "./archestra-audience";
+import { type DeployedBattery, declaredCredentials } from "./battery-target";
+
+/** How each resolved entry deploys here, by its `include` spelling. */
+export type DeployedEntries = ReadonlyMap<string, DeployedBattery>;
 
 /** One `include` entry, classified by its spelling and resolved to its bytes. */
 export type EntryResolution = {
@@ -255,7 +259,9 @@ class OpenAppaDeclarations {
         ]),
       );
     const read = new Set(
-      resolution.entries.flatMap((entry) => entry.battery?.credentials ?? []),
+      resolution.entries.flatMap((entry) =>
+        entry.battery ? declaredCredentials(entry.battery) : [],
+      ),
     );
     const filling = bindings.filter(
       (binding) =>
@@ -362,17 +368,25 @@ class OpenAppaDeclarations {
    */
   composeInputs(params: {
     entries: readonly EntryResolution[];
-    /** The helper endpoint for a battery, or null to compose it as the stub. */
-    helpers: (entry: EntryResolution) => HelperBindingInput | null | "stub";
+    deployed: DeployedEntries;
+    /** The helper endpoint for a battery, null when it runs none, or the stub. */
+    helpers: (
+      entry: EntryResolution,
+      deployed: DeployedBattery,
+    ) => HelperBindingInput | null | "stub";
   }): ComposeBatteryInput[] {
     return params.entries.map((entry) => {
-      const helpers = entry.battery ? params.helpers(entry) : "stub";
-      return helpers === "stub" || !entry.battery
+      const deployed = params.deployed.get(entry.entry);
+      const helpers = deployed ? params.helpers(entry, deployed) : "stub";
+      return helpers === "stub" || !deployed
         ? { entry: entry.entry, name: entry.name, policy: STUB_POLICY }
         : {
             entry: entry.entry,
             name: entry.name,
-            policy: entry.battery.policy,
+            policy: deployed.basePolicy,
+            ...(deployed.target
+              ? { targetPolicy: deployed.target.policy }
+              : {}),
             ...(helpers === null ? {} : { helpers }),
           };
     });
@@ -389,17 +403,21 @@ class OpenAppaDeclarations {
   async composeForCheck(params: {
     root: string;
     resolution: PolicyResolution;
+    deployed: DeployedEntries;
     held?: ReadonlySet<string>;
+    memberRosters?: Record<string, Record<string, string>>;
   }): Promise<ComposedPolicy> {
     const native = await loadNative();
     const tokenEnv = this.publishBridgeToken();
     return native.composeOpenappaPolicy({
       root: params.root,
+      memberRosters: params.memberRosters,
       batteries: this.composeInputs({
         entries: params.resolution.entries,
-        helpers: (entry) => {
+        deployed: params.deployed,
+        helpers: (entry, deployed) => {
           if (params.held?.has(entry.name)) return "stub";
-          return entry.battery && entry.battery.externals.length > 0
+          return deployed.externals.length > 0
             ? { urlBase: helperUrlBase(CHECKED_HELPER_OWNER), tokenEnv }
             : null;
         },
@@ -466,13 +484,14 @@ class OpenAppaDeclarations {
 
   /**
    * Every grant a resolution holds: resolved batteries × declared variables × the
-   * table, and the root's own readers.
+   * table, and the root's own readers. A battery is granted what any target it
+   * may deploy as reads, since which one it takes moves without a policy write.
    */
   grants(resolution: PolicyResolution): Grant[] {
     const grants: Grant[] = [];
     for (const entry of resolution.entries) {
       if (!entry.battery) continue;
-      for (const variable of entry.battery.credentials) {
+      for (const variable of declaredCredentials(entry.battery)) {
         const key = resolution.credentials[variable];
         if (key) grants.push({ battery: entry.name, variable, key });
       }

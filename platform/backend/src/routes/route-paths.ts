@@ -36,6 +36,8 @@ export const SKILL_MARKETPLACE_STATIC_PATH = "/skills/marketplace.git";
  * logging, in the same shape as SKILL_MARKETPLACE_PREFIX.
  */
 export const CONNECTION_SETUP_SCRIPT_PREFIX = "/api/connection-setups/script";
+/** Executable managed artifacts; authenticates a purpose-scoped installation bearer. */
+export const CONNECTION_RUNTIME_PATH = "/api/connection-setups/runtime";
 
 /**
  * VAF Add On install bootstrap — the parameterless script the connector

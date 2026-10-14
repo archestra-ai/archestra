@@ -4,6 +4,7 @@ import {
   count,
   eq,
   exists,
+  gte,
   inArray,
   notExists,
   or,
@@ -51,6 +52,22 @@ class MemberModel {
       .selectDistinct({ organizationId: schema.membersTable.organizationId })
       .from(schema.membersTable)
       .where(eq(schema.membersTable.userId, userId));
+    return rows.map((row) => row.organizationId);
+  }
+
+  static async findOrganizationIdsJoinedSince(params: {
+    userId: string;
+    since: Date;
+  }): Promise<string[]> {
+    const rows = await db
+      .selectDistinct({ organizationId: schema.membersTable.organizationId })
+      .from(schema.membersTable)
+      .where(
+        and(
+          eq(schema.membersTable.userId, params.userId),
+          gte(schema.membersTable.createdAt, params.since),
+        ),
+      );
     return rows.map((row) => row.organizationId);
   }
 

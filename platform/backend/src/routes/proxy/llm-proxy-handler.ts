@@ -17,7 +17,7 @@ import {
   isCodexOriginator,
   isProviderApiKeyOptional,
   OPENCODE_AGENT_HEADER,
-  OPENCODE_CLIENT_ID,
+  openCodeFamilySource,
   PROVIDER_BASE_URL_HEADER,
   providerDisplayNames,
   providerRequiresPerUserCredential,
@@ -25,6 +25,7 @@ import {
   stripClaudeContextVariantSuffix,
 } from "@archestra/shared";
 import { ARCHESTRA_CODEX_CONNECTION_ORIGINATOR } from "@archestra/shared/interactions/client";
+import { isOpenCodeFamilyClient } from "@archestra/shared/opencode-family";
 import {
   type Context,
   context as otelContext,
@@ -167,6 +168,7 @@ import {
   type LlmProxyRequestContext,
   type LlmProxyToolCallRefusal,
 } from "@/proxy/plugins/registry";
+import { collectedDelegationMarkers } from "@/routes/proxy/utils/delegation-markers";
 import {
   RUNTIME_BINDING_HEADER,
   resolveRuntimeIdentityByVirtualKeys,
@@ -177,8 +179,9 @@ import {
 import {
   carriesConnectionSetupReference,
   connectionProxySetupContext,
-  verifyConnectionProxySetupContext,
+  readVerifiedConnectionProxySetup,
 } from "@/services/connection-proxy-setup-context";
+import { claimConnectionSetupConversation } from "@/services/connection-setup-conversation-claim";
 import { nativeSetupClientFromProvenance } from "@/services/connection-setup-scope";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
@@ -223,16 +226,24 @@ import {
   calculateInteractionCosts,
   calculateUsageCost,
   handleError,
+  isRetryableUpstreamConnectionFailure,
   planDispatchModeToolCallRewrites,
   recordBlockedToolCallMetrics,
   shouldForwardAnthropicBeta,
   toSpanUserInfo,
   toToolCallBlock,
+  upstreamErrorMessage,
   withProviderToolCallIds,
   withSessionContext,
 } from "./llm-proxy-helpers";
 import { StreamKeepAlive } from "./stream-keepalive";
+import {
+  openUpstreamWithRetry,
+  withFirstChunk,
+} from "./upstream-connection-retry";
 import * as utils from "./utils";
+import { resolveClientGatewayBindings } from "./utils/client-gateway-bindings";
+import { consumeClientRuntimeEvidence } from "./utils/client-runtime-evidence";
 import {
   type EncryptedChatAuditDisposition,
   redactEncryptedChatInteraction,
@@ -657,6 +668,7 @@ export async function handleLLMProxy<
   provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>,
 ): Promise<FastifyReply> {
   const streamTiming: StreamTiming = { requestReceivedAt: Date.now() };
+  const clientRuntimeEvidence = consumeClientRuntimeEvidence(request);
   const internalCall = takeInternalCall(request.headers);
   const headers = request.headers as unknown as THeaders;
   const agentId = (request.params as { agentId?: string }).agentId;
@@ -706,10 +718,14 @@ export async function handleLLMProxy<
         (proof) => stripChildTrajectoryReceipts(proof).receipts,
       ),
     );
-    delegationMarkers = collectDelegationMarkers({
-      family: requestWireFamily,
-      body,
-    });
+    // A route that translated the wire first collected the markers from the
+    // client's own wire; the translated text may no longer end with them.
+    delegationMarkers =
+      collectedDelegationMarkers(request) ??
+      collectDelegationMarkers({
+        family: requestWireFamily,
+        body,
+      });
     stripDelegationMarkers({ family: requestWireFamily, body });
     const nativeClient = APPA_CLIENT_ADAPTERS.find((adapter) =>
       adapter.matches({
@@ -718,7 +734,9 @@ export async function handleLLMProxy<
       }),
     )?.id;
     childReturns = collectAndStripChildReturns(body, {
-      openCodeBackgroundReturns: nativeClient === "opencode",
+      // Kilo Code frames its background tasks as OpenCode does.
+      openCodeBackgroundReturns:
+        !!nativeClient && isOpenCodeFamilyClient(nativeClient),
       codexMailboxReturns: nativeClient === "codex",
       onRefusal: (refusal) => {
         childReturnRefusal ??= refusal;
@@ -748,7 +766,8 @@ export async function handleLLMProxy<
   // from the request body; Codex clients → "openai_codex" from the
   // client_metadata body shape or the originator/User-Agent headers the Codex
   // CLI stamps on every request; OpenCode → "opencode" from its equivalent
-  // identity headers; Cursor → "cursor" from its User-Agent).
+  // identity headers; Kilo Code → "kilo" and Cursor → "cursor" from their
+  // User-Agents).
   const externalAgentId =
     utils.headers.externalAgentId.getExternalAgentId(headersForExtraction) ??
     utils.headers.clientApp.detectClaudeClientId(bodyForExtraction) ??
@@ -757,6 +776,7 @@ export async function handleLLMProxy<
       bodyForExtraction,
     ) ??
     utils.headers.clientApp.detectOpenCodeClientId(headersForExtraction) ??
+    utils.headers.clientApp.detectKiloClientId(headersForExtraction) ??
     utils.headers.clientApp.detectCursorClientId(headersForExtraction);
   const runId = utils.headers.runId.getRunId(headersForExtraction);
   const authOverride = (
@@ -797,15 +817,20 @@ export async function handleLLMProxy<
     headersForExtraction,
     "x-parent-session-id",
   );
+  // OpenCode and Kilo Code frame their turns the same way; each gets its own
+  // source prefix (opencode:main, kilo:main, ...).
   const openCodeSource: InteractionSource | undefined =
-    externalAgentId === OPENCODE_CLIENT_ID
-      ? openCodeParentSession
-        ? "opencode:subagent"
-        : openCodeAgent === "title"
-          ? "opencode:title"
-          : openCodeAgent === "compaction"
-            ? "opencode:compaction"
-            : "opencode:main"
+    externalAgentId && isOpenCodeFamilyClient(externalAgentId)
+      ? openCodeFamilySource(
+          externalAgentId,
+          openCodeParentSession
+            ? "subagent"
+            : openCodeAgent === "title"
+              ? "title"
+              : openCodeAgent === "compaction"
+                ? "compaction"
+                : "main",
+        )
       : undefined;
   const untrustedAppaChatSource =
     isAppaChatSource(parsedSource) && !isLoopbackRequest(request);
@@ -1287,8 +1312,9 @@ export async function handleLLMProxy<
   // turns on: the sessions that start now, and the calls governed sessions make.
   // The records hold ids only, so they cover encrypted chats too.
   const appaObserving = appaFeatureEnabled && !appaActive;
-  // An encrypted chat that started while enforcement was off stays out of
-  // OpenAPPA, so the encrypted storage OpenAPPA lacks does not matter to it.
+  // An encrypted chat that started while enforcement was off, or that a
+  // person superyelled, stays out of OpenAPPA, so the encrypted storage
+  // OpenAPPA lacks does not matter to it.
   if (
     appaActive &&
     isEncryptedChatSession &&
@@ -1370,11 +1396,17 @@ export async function handleLLMProxy<
 
     // Identifies which declared tools the platform gateway served after
     // verifying attestations with the organization key.
+    const clientBindings = await resolveClientGatewayBindings({
+      evidence: clientRuntimeEvidence,
+      organizationId: resolvedAgent.organizationId,
+      llmProxyId: resolvedAgent.id,
+    });
     const toolIdentity =
       await utils.gatewayToolNames.resolveGatewayToolIdentity({
         organizationId: resolvedAgent.organizationId,
         declarations: gatewayToolDeclarations,
         internalChat: isInternalChat,
+        clientBindings,
       });
 
     // Persist tools declared by client (only for llm_proxy agents)
@@ -1527,23 +1559,26 @@ export async function handleLLMProxy<
     let appaIdentity: AppaSessionIdentity = {};
     let hasNativeClientSession = false;
     const approvedProxySetupContext = connectionProxySetupContext(request.raw);
-    const approvedProxySetup =
-      !!approvedProxySetupContext &&
-      [virtualKeyId, passthroughVirtualKeyId].some(
-        (keyId) =>
-          !!keyId &&
-          verifyConnectionProxySetupContext({
-            token: approvedProxySetupContext,
-            organizationId: resolvedAgent.organizationId,
-            virtualApiKeyId: keyId,
-            proxyAgentId: resolvedAgent.id,
-            secret: config.auth.secret,
-          }),
-      );
+    let verifiedProxySetup: ReturnType<typeof readVerifiedConnectionProxySetup>;
+    if (approvedProxySetupContext) {
+      for (const keyId of [virtualKeyId, passthroughVirtualKeyId]) {
+        if (!keyId) continue;
+        verifiedProxySetup = readVerifiedConnectionProxySetup({
+          token: approvedProxySetupContext,
+          organizationId: resolvedAgent.organizationId,
+          virtualApiKeyId: keyId,
+          proxyAgentId: resolvedAgent.id,
+          secret: config.auth.secret,
+        });
+        if (verifiedProxySetup) break;
+      }
+    }
+    const approvedProxySetup = verifiedProxySetup !== undefined;
     // The setup URL stays in the client's settings for the whole window, so
-    // sessions started after the setup send it too. Only the conversation
-    // that ran the installer holds the setup reference the installer printed.
-    const installerConversation =
+    // sessions started after the setup send it too. The reference must be in
+    // this request, and the first well-formed native conversation to present
+    // it owns the exemption until the token expires.
+    const carriesReference =
       approvedProxySetup &&
       !!approvedProxySetupContext &&
       carriesConnectionSetupReference({
@@ -1551,6 +1586,16 @@ export async function handleLLMProxy<
         requestBody: body,
         secret: config.auth.secret,
       });
+    const installerConversation =
+      carriesReference &&
+      verifiedProxySetup !== undefined &&
+      (await claimConnectionSetupConversation({
+        organizationId: verifiedProxySetup.organizationId,
+        setupId: verifiedProxySetup.setupId,
+        expiresAt: verifiedProxySetup.expiresAt,
+        headers: headersForExtraction,
+        requestBody: body,
+      }));
     const installerSetupBypass = appaActive && installerConversation;
     if (installerSetupBypass) {
       logger.info(
@@ -1984,11 +2029,12 @@ export async function handleLLMProxy<
           }).session,
         ))
       ) {
-        // The session started while enforcement was off. OpenAPPA never
-        // governs it: the request goes on as if enforcement were off.
+        // The session started while enforcement was off, or a person
+        // superyelled it. OpenAPPA never governs it: the request goes on as
+        // if enforcement were off.
         logger.info(
           { sessionId: openappaSession.session_id },
-          "OpenAPPA ignores a session that started while Guardrails enforcement was off",
+          "OpenAPPA ignores a session that started while Guardrails enforcement was off or was superyelled",
         );
         openappaSession = undefined;
       }
@@ -2112,6 +2158,7 @@ export async function handleLLMProxy<
                 organizationId: resolvedAgent.organizationId,
                 declarations: state.tools,
                 internalChat: isInternalChat,
+                clientBindings,
               });
             threadRecord = {
               organizationId: resolvedAgent.organizationId,
@@ -2346,12 +2393,13 @@ export async function handleLLMProxy<
 
     // Start with the credential-derived billing mode. Anthropic OAuth requests
     // can refine this after the upstream response identifies paid overage.
-    let billingMode = utils.resolveInteractionBillingMode({
+    const credentialBillingMode = utils.resolveInteractionBillingMode({
       isSubscriptionCredential:
         openAiCodexPassthrough !== undefined ||
         provider.isSubscriptionCredential?.(apiKey) === true,
       autodetectEnabled: config.llmCost.subscriptionAutodetect,
     });
+    let billingMode = credentialBillingMode;
 
     // Create client with observability (each provider handles metrics internally)
     const abortSignal =
@@ -2371,7 +2419,8 @@ export async function handleLLMProxy<
       onResponseHeaders: (responseHeaders) => {
         if (providerName === "anthropic") {
           billingMode = utils.refineAnthropicBillingModeFromHeaders({
-            billingMode,
+            // A retry's response must not inherit a failed attempt's overage.
+            billingMode: credentialBillingMode,
             headers: responseHeaders,
           });
         }
@@ -2544,7 +2593,10 @@ export async function handleLLMProxy<
     }
     // Persist failed interactions so they appear in LLM logs
     try {
-      const errorMessage = provider.extractErrorMessage(lifecycleError);
+      const errorMessage = upstreamErrorMessage(
+        lifecycleError,
+        provider.extractErrorMessage,
+      );
       // Provider errors routinely echo the prompt back.
       logger.info(
         {
@@ -2870,6 +2922,7 @@ async function handleStreaming<
         model: actualModel,
         inputTokens: 0,
         outputTokens: 0,
+        toolCallBlock,
       };
       await persistProxyInteraction(record, encryptedChat);
     } catch (interactionError) {
@@ -2920,7 +2973,22 @@ async function handleStreaming<
         if (pluginRegistry && pluginContext) {
           await pluginRegistry.onBeforeModel({ ...pluginContext, request });
         }
-        const stream = await provider.executeStream(client, request);
+        const stream = await openUpstreamWithRetry({
+          open: async () =>
+            withFirstChunk(await provider.executeStream(client, request)),
+          // Gemini's SDK loses the HTTP status when an error body is cut off;
+          // that is indistinguishable from a transport failure, so don't retry.
+          isRetryable: (error) =>
+            providerName !== "gemini" &&
+            isRetryableUpstreamConnectionFailure(error),
+          shouldContinue: () => !reply.raw.destroyed,
+          onRetry: (event) =>
+            logUpstreamRetry({
+              ...event,
+              provider: providerName,
+              model: actualModel,
+            }),
+        });
         billingMode = getBillingMode();
 
         // Record request duration at stream establishment for providers whose
@@ -3122,6 +3190,7 @@ async function handleStreaming<
           source,
         });
       }
+      toolCallBlock = toToolCallBlock(null, hostedHold.blocked);
       const heldEvents = streamAdapter.formatHeldHostedToolCallsSSE(
         hostedHold.notices,
       );
@@ -3187,7 +3256,10 @@ async function handleStreaming<
         "Proxy plugin tool-call ruling",
       );
 
-      toolCallBlock = toToolCallBlock(toolInvocationRefusal);
+      toolCallBlock = toToolCallBlock(
+        toolInvocationRefusal,
+        policyOutcome.blocked,
+      );
     }
 
     await recordGovernedThreadResponse({
@@ -3339,6 +3411,19 @@ async function handleStreaming<
     const codexError =
       error instanceof CodexResponsesGenerationError ? error : undefined;
     if (codexError) {
+      // The terminal status and its reason are not on the chat completion type.
+      const outcome = asRecord(codexError.completion);
+      logger.warn(
+        {
+          status: outcome?.status,
+          incompleteReason: asRecord(outcome?.incomplete_details)?.reason,
+          errorCode: asRecord(outcome?.error)?.code,
+          errorMessage: asRecord(outcome?.error)?.message,
+          usagePresent: codexError.completion.usage !== undefined,
+          usage: codexError.completion.usage,
+        },
+        "Codex subscription response ended without completing",
+      );
       // Translation keeps partial text and usage, but is not a successful turn.
       failedStreamResponse = codexError.completion;
       streamAdapter.state.usage = provider
@@ -3448,7 +3533,10 @@ async function handleStreaming<
     // rejecting the request, or a mid-stream failure once SSE headers and
     // content are already on the wire) still has to reach interaction history.
     if (!streamAdapter.state.usage) {
-      const errorMessage = provider.extractErrorMessage(lifecycleError);
+      const errorMessage = upstreamErrorMessage(
+        lifecycleError,
+        provider.extractErrorMessage,
+      );
       // Provider errors routinely echo the prompt back.
       logger.info(
         { profileId: agent.id, ...(suppressContent ? {} : { errorMessage }) },
@@ -3705,7 +3793,20 @@ async function handleNonStreaming<
         if (pluginRegistry && pluginContext) {
           await pluginRegistry.onBeforeModel({ ...pluginContext, request });
         }
-        result = await provider.execute(client, request);
+        result = await openUpstreamWithRetry({
+          open: () => provider.execute(client, request),
+          // See the streaming path: Gemini cannot safely classify this boundary.
+          isRetryable: (error) =>
+            providerName !== "gemini" &&
+            isRetryableUpstreamConnectionFailure(error),
+          shouldContinue: () => !reply.raw.destroyed,
+          onRetry: (event) =>
+            logUpstreamRetry({
+              ...event,
+              provider: providerName,
+              model: actualModel,
+            }),
+        });
         if (ctx.connectionVerification) assertVerificationResponse(result);
         billingMode = getBillingMode();
       } catch (error) {
@@ -3860,6 +3961,8 @@ async function handleNonStreaming<
 
   // Let the proxy plugins rule on the response's tool calls
   let rewrittenToolCalls: AccumulatedToolCall[] | null = null;
+  let blockedToolCalls: readonly { reason: string }[] =
+    hostedHold?.blocked ?? [];
   if (toolCalls.length === 0) {
     await recordGovernedThreadResponse({
       context: ctx.pluginContext,
@@ -3906,6 +4009,7 @@ async function handleNonStreaming<
       held: !!hostedHold,
     });
     // Record metrics for tool calls substituted with denial notices.
+    blockedToolCalls = policyOutcome.blocked;
     for (const blocked of policyOutcome.blocked) {
       recordBlockedToolCallMetrics({
         allToolCallNames: [blocked.name],
@@ -4022,7 +4126,7 @@ async function handleNonStreaming<
         actualModel,
         usage,
         costs,
-        toolCallBlock: toToolCallBlock(toolInvocationRefusal),
+        toolCallBlock: toToolCallBlock(toolInvocationRefusal, []),
       });
       await persistProxyInteraction(refusalRecord, encryptedChat);
 
@@ -4178,6 +4282,7 @@ async function handleNonStreaming<
       actualModel,
       usage,
       costs,
+      toolCallBlock: toToolCallBlock(null, blockedToolCalls),
     });
     await persistProxyInteraction(record, encryptedChat);
     responsePersisted = true;
@@ -4660,6 +4765,19 @@ function firstHeaderValue(
   value: string | string[] | undefined,
 ): string | undefined {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function logUpstreamRetry(params: {
+  attempt: number;
+  delayMs: number;
+  provider: string;
+  model: string;
+}): void {
+  const { attempt, delayMs, provider, model } = params;
+  logger.warn(
+    { attempt, delayMs, provider, model },
+    "Retrying upstream connection before receiving model output",
+  );
 }
 
 function normalizeVirtualKeyCandidate(

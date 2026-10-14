@@ -56,6 +56,12 @@ export function useNavOnboarding() {
           return permissionMap["/llm/model-providers"] ?? true;
         case "nav:mcp-registry":
           return permissionMap["/mcp/registry"] ?? true;
+        case "nav:guardrails":
+          // Same gate as the sidebar row: either page is enough.
+          return (
+            permissionMap["/openappa"] === true ||
+            permissionMap["/openappa/yells"] === true
+          );
       }
     };
     return new Set(

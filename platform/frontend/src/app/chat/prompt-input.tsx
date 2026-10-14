@@ -14,7 +14,7 @@ import {
   parseSandboxCommand,
 } from "@archestra/shared";
 import type { ChatStatus } from "ai";
-import { TerminalSquare, XIcon } from "lucide-react";
+import { PaperclipIcon, TerminalSquare, XIcon } from "lucide-react";
 import type { FormEvent, KeyboardEvent } from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -48,10 +48,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useProfile } from "@/lib/agent.query";
+import { dataUrlToBlob } from "@/lib/app-session-recording/app-recording-binary";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConversation, useToggleHooksDebug } from "@/lib/chat/chat.query";
 import {
   chatMessageQueue,
+  type QueuedChatFile,
   useConversationMessageQueue,
 } from "@/lib/chat/chat-message-queue";
 import { useChatPlaceholder } from "@/lib/chat/chat-placeholder.hook";
@@ -221,6 +223,12 @@ export interface ArchestraPromptInputProps
   /** Render the new-chat composer as a dedicated runtime launcher. */
   runtimeMode?: boolean;
   runtimeAgentName?: string;
+  /**
+   * Open the encrypted-chat/runtime drawer under the composer as an overlay
+   * instead of above it in the flow — for the new-chat screen, where the
+   * composer is vertically centered and would otherwise jump when it opens.
+   */
+  drawerBelow?: boolean;
 }
 
 type SlashCommand = {
@@ -287,6 +295,7 @@ const PromptInputContent = ({
   placeholderPreview,
   runtimeMode = false,
   runtimeAgentName,
+  drawerBelow = false,
 }: Omit<ArchestraPromptInputProps, "onSubmit"> & {
   onSubmit: ArchestraPromptInputProps["onSubmit"];
   sandboxAvailable: boolean;
@@ -828,7 +837,8 @@ const PromptInputContent = ({
   // Composer keyboard shortcuts layered on top of the primitive textarea:
   //   • Esc — stop the in-flight response (mirrors the Stop button).
   //   • ArrowUp on an empty composer — pop the most recently queued message
-  //     back into the input to edit / resend (like shell history recall).
+  //     (text and attachments) back into the input to edit / resend (like
+  //     shell history recall).
   // Both defer to the slash-command menu when it is open: Esc dismisses that
   // menu and ArrowUp navigates it (handled further down).
   const handleTextareaKeyDown = useCallback(
@@ -849,6 +859,7 @@ const PromptInputContent = ({
         !isSlashCommandOpen &&
         conversationId &&
         controller.textInput.value === "" &&
+        controller.attachments.files.length === 0 &&
         queuedMessages.length > 0
       ) {
         event.preventDefault();
@@ -868,6 +879,18 @@ const PromptInputContent = ({
             .filter(Boolean)
             .join(" ");
           controller.textInput.setInput(restored);
+          if (mostRecent.files?.length) {
+            controller.attachments.add(
+              mostRecent.files.map(
+                (file) =>
+                  new File(
+                    [dataUrlToBlob(file.url)],
+                    file.filename ?? "attachment",
+                    { type: file.mediaType },
+                  ),
+              ),
+            );
+          }
           // Caret to the end so the user can append / edit immediately.
           requestAnimationFrame(() => {
             const element = textareaRef.current;
@@ -916,6 +939,7 @@ const PromptInputContent = ({
     },
     [
       conversationId,
+      controller.attachments,
       controller.textInput,
       isResponseInFlight,
       isSlashCommandOpen,
@@ -928,6 +952,49 @@ const PromptInputContent = ({
       visibleSlashCommands,
     ],
   );
+
+  // EncryptedChat/runtime "drawer": a slim strip tucked against the composer,
+  // carrying the explanation that used to live in the toggle's tooltip.
+  // Paired with the dashed composer border so an encrypted chat is
+  // unmistakable while composing. With drawerBelow it overlays the space under
+  // the composer rather than taking layout room above it.
+  const drawerPlacement = drawerBelow
+    ? "absolute inset-x-3 top-full z-10 -mt-px rounded-b-lg border-t-0 slide-in-from-top-2"
+    : "mx-3 -mb-px rounded-t-lg border-b-0 slide-in-from-bottom-2";
+  const drawer = runtimeMode ? (
+    <div
+      className={cn(
+        "flex items-center gap-2 border border-primary/50 bg-primary/5 px-3 py-1.5 text-xs text-muted-foreground animate-in fade-in",
+        drawerPlacement,
+      )}
+    >
+      <TerminalSquare className="size-3.5 text-primary" />
+      <span>
+        Starts {runtimeAgentName ?? "this Agent"} in its dedicated runtime. This
+        becomes its live terminal when ready.
+      </span>
+    </div>
+  ) : encryptedChatActive ? (
+    <div
+      data-testid={E2eTestId.EncryptedChatNotice}
+      className={cn(
+        "flex items-center gap-2 border border-dashed border-muted-foreground/60 bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground animate-in fade-in",
+        drawerPlacement,
+      )}
+    >
+      <EncryptedChatIcon className="size-3.5" />
+      <span>
+        Use this mode for highly sensitive work. This chat is private from the
+        team running {appName}: your messages are encrypted with a key stored in
+        this browser, so you can't open the chat anywhere else. A backup key is
+        held in escrow in case it's ever needed. Keep in mind that{" "}
+        {currentProvider
+          ? `${providerCatalog.label(currentProvider)}, your LLM provider,`
+          : "your LLM provider"}{" "}
+        still sees the conversation.
+      </span>
+    </div>
+  ) : null;
 
   return (
     <div className="relative">
@@ -948,12 +1015,18 @@ const PromptInputContent = ({
               className="group flex items-center gap-2 rounded-md bg-muted/50 py-1 pr-1 pl-3 text-muted-foreground text-sm transition-colors hover:bg-muted"
               data-testid={E2eTestId.ChatMessageQueueItem}
             >
+              {queued.files && queued.files.length > 0 && (
+                <QueuedMessageAttachments files={queued.files} />
+              )}
               <span className="min-w-0 grow truncate">
                 {queued.skill ? `/${queued.skill.name} ` : ""}
                 {queued.externalMcpSkill
                   ? `${queued.externalMcpSkill.commandValue} `
                   : ""}
-                {queued.text}
+                {queued.text ||
+                  (queued.files?.length
+                    ? formatAttachmentCount(queued.files.length)
+                    : "")}
               </span>
               <Button
                 aria-label="Remove queued message"
@@ -1027,38 +1100,7 @@ const PromptInputContent = ({
           </PromptInputCommand>
         </div>
       )}
-      {/* EncryptedChat "drawer": a slim strip tucked against the composer's top
-          edge, carrying the explanation that used to live in the toggle's
-          tooltip. Paired with the dashed composer border below so an
-          encrypted chat is unmistakable while composing. */}
-      {runtimeMode && (
-        <div className="mx-3 -mb-px flex items-center gap-2 rounded-t-lg border border-b-0 border-primary/50 bg-primary/5 px-3 py-1.5 text-xs text-muted-foreground animate-in fade-in slide-in-from-bottom-2">
-          <TerminalSquare className="size-3.5 text-primary" />
-          <span>
-            Starts {runtimeAgentName ?? "this Agent"} in its dedicated runtime.
-            This becomes its live terminal when ready.
-          </span>
-        </div>
-      )}
-      {encryptedChatActive && !runtimeMode && (
-        <div
-          data-testid={E2eTestId.EncryptedChatNotice}
-          className="mx-3 -mb-px flex items-center gap-2 rounded-t-lg border border-b-0 border-dashed border-muted-foreground/60 bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground animate-in fade-in slide-in-from-bottom-2"
-        >
-          <EncryptedChatIcon className="size-3.5" />
-          <span>
-            Use this mode for highly sensitive work. This chat is private from
-            the team running {appName}: your messages are encrypted with a key
-            stored in this browser, so you can't open the chat anywhere else. A
-            backup key is held in escrow in case it's ever needed. Keep in mind
-            that{" "}
-            {currentProvider
-              ? `${providerCatalog.label(currentProvider)}, your LLM provider,`
-              : "your LLM provider"}{" "}
-            still sees the conversation.
-          </span>
-        </div>
-      )}
+      {!drawerBelow && drawer}
       {conversationId && !runtimeMode && (
         <OpenappaSessionStatus
           key={conversationId}
@@ -1219,6 +1261,7 @@ const PromptInputContent = ({
           </div>
         </PromptInputFooter>
       </PromptInput>
+      {drawerBelow && drawer}
       <SensitiveDataConfirmDialog
         open={sensitiveDataDialogOpen}
         onConfirm={handleSensitiveDataConfirm}
@@ -1277,6 +1320,7 @@ const ArchestraPromptInput = ({
   placeholderPreview,
   runtimeMode,
   runtimeAgentName,
+  drawerBelow,
 }: ArchestraPromptInputProps) => {
   const { data: activeAgent } = useProfile(agentId ?? undefined);
   const sandboxAvailable = activeAgent?.sandboxAvailable ?? false;
@@ -1389,6 +1433,7 @@ const ArchestraPromptInput = ({
           placeholderPreview={placeholderPreview}
           runtimeMode={runtimeMode}
           runtimeAgentName={runtimeAgentName}
+          drawerBelow={drawerBelow}
           prefillText={prefillText}
           onPrefillApplied={onPrefillApplied}
           externalMcpSkillAttachment={externalMcpSkillAttachment}
@@ -1424,3 +1469,45 @@ function getRestorableDraft(storage: Storage, key: string): string | null {
 
   return draft;
 }
+
+// Compact attachment preview on a queued-message row: image thumbnails, a
+// paperclip for anything else. The row stays one line, so only the first few
+// render and the rest collapse into a count.
+function QueuedMessageAttachments({ files }: { files: QueuedChatFile[] }) {
+  const shown = files.slice(0, MAX_QUEUED_ATTACHMENT_PREVIEWS);
+  const hidden = files.length - shown.length;
+  return (
+    <span
+      className="flex shrink-0 items-center gap-1"
+      role="img"
+      aria-label={formatAttachmentCount(files.length)}
+    >
+      {shown.map((file, index) => (
+        <span
+          // biome-ignore lint/suspicious/noArrayIndexKey: a queued message's files never change or reorder
+          key={index}
+          className="flex size-5 items-center justify-center overflow-hidden rounded bg-background"
+        >
+          {file.mediaType.startsWith("image/") ? (
+            <img
+              alt=""
+              className="size-5 object-cover"
+              height={20}
+              src={file.url}
+              width={20}
+            />
+          ) : (
+            <PaperclipIcon className="size-3" />
+          )}
+        </span>
+      ))}
+      {hidden > 0 && <span className="text-xs">+{hidden}</span>}
+    </span>
+  );
+}
+
+function formatAttachmentCount(count: number): string {
+  return count === 1 ? "1 attachment" : `${count} attachments`;
+}
+
+const MAX_QUEUED_ATTACHMENT_PREVIEWS = 3;

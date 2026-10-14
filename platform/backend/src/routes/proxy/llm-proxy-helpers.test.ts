@@ -12,6 +12,7 @@ import { describe, expect, test, vi } from "vitest";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import { SESSION_ID_KEY } from "@/observability/request-context";
 import type { Agent } from "@/types";
+import { formatResponsesStreamErrorFrame } from "./adapters/responses-stream-error-frame";
 
 // Mock prom-client (required by metrics)
 vi.mock("prom-client", () => ({
@@ -84,11 +85,13 @@ import {
   buildInteractionRecord,
   calculateInteractionCosts,
   handleError,
+  isRetryableUpstreamConnectionFailure,
   normalizeToolCallsForPolicy,
   planDispatchModeToolCallRewrites,
   recordBlockedToolCallMetrics,
   shouldForwardAnthropicBeta,
   toSpanUserInfo,
+  upstreamErrorMessage,
   withSessionContext,
 } from "./llm-proxy-helpers";
 import type { GatewayToolDeclaration } from "./utils/gateway-tool-declarations";
@@ -988,6 +991,126 @@ describe("shouldForwardAnthropicBeta", () => {
   });
 });
 
+describe("isRetryableUpstreamConnectionFailure", () => {
+  test.each([
+    ["SDK connection message", new Error("Connection error.")],
+    [
+      "SDK connection error name",
+      Object.assign(new Error("upstream unavailable"), {
+        name: "APIConnectionError",
+        status: undefined,
+        error: undefined,
+      }),
+    ],
+    ["closed connection", new Error("connection closed")],
+    ["refused connection", new Error("connection refused")],
+    [
+      "undici socket cause",
+      new TypeError("terminated", {
+        cause: Object.assign(new Error("other side closed"), {
+          code: "UND_ERR_SOCKET",
+        }),
+      }),
+    ],
+    [
+      "nested errno cause",
+      new Error("fetch failed", {
+        cause: new Error("transport failed", {
+          cause: Object.assign(new Error("read failed"), {
+            code: "ECONNRESET",
+          }),
+        }),
+      }),
+    ],
+    [
+      "refused errno without connection wording",
+      Object.assign(new Error("connect failed"), { code: "ECONNREFUSED" }),
+    ],
+  ])("accepts %s without a provider response", (_label, error) => {
+    expect(isRetryableUpstreamConnectionFailure(error)).toBe(true);
+  });
+
+  test.each([
+    ["Archestra ApiError", new ApiError(502, "Connection error.")],
+    [
+      "HTTP status",
+      Object.assign(new Error("Connection error."), { status: 503 }),
+    ],
+    [
+      "HTTP statusCode",
+      Object.assign(new Error("connection reset"), { statusCode: 429 }),
+    ],
+    [
+      "AWS HTTP response metadata",
+      Object.assign(new Error("connection refused"), {
+        $metadata: { httpStatusCode: 500 },
+      }),
+    ],
+    ["fetch client abort", new DOMException("fetch failed", "AbortError")],
+    [
+      "SDK client abort",
+      Object.assign(new Error("Connection error."), {
+        name: "APIUserAbortError",
+      }),
+    ],
+    [
+      "provider error object",
+      Object.assign(new Error("Connection error."), {
+        error: { type: "api_error", message: "provider failed" },
+      }),
+    ],
+    [
+      "provider error envelope",
+      Object.assign(new Error("connection reset"), {
+        error: {
+          type: "error",
+          error: { type: "overloaded_error", message: "Overloaded" },
+        },
+      }),
+    ],
+    [
+      "provider error string",
+      Object.assign(new Error("Connection error."), {
+        error: "provider rejected the request",
+      }),
+    ],
+    ["SDK timeout message", new Error("Request timed out.")],
+    [
+      "SDK timeout overrides connection wording",
+      Object.assign(new Error("Connection error."), {
+        name: "APIConnectionTimeoutError",
+      }),
+    ],
+    [
+      "timeout errno overrides fetch failure",
+      new Error("fetch failed", {
+        cause: Object.assign(new Error("connect failed"), {
+          code: "ETIMEDOUT",
+        }),
+      }),
+    ],
+    [
+      "undici headers timeout",
+      new Error("fetch failed", {
+        cause: Object.assign(new Error("headers failed"), {
+          code: "UND_ERR_HEADERS_TIMEOUT",
+        }),
+      }),
+    ],
+    [
+      "abort caused by timeout",
+      new DOMException(
+        "The operation was aborted due to timeout",
+        "TimeoutError",
+      ),
+    ],
+    ["internal error", new TypeError("cannot read x of undefined")],
+    ["non-Error rejection", { code: "ECONNRESET" }],
+  ])("rejects %s even if transport wording is present", (_label, error) => {
+    expect(isRetryableUpstreamConnectionFailure(error)).toBe(false);
+  });
+});
+
 describe("handleError", () => {
   function makeReply(headersSent: boolean) {
     const writes: string[] = [];
@@ -1129,6 +1252,73 @@ describe("handleError", () => {
       }),
     });
     expect(throwStatusFor(timedOut)).toBe(504);
+  });
+
+  // An upstream that closes its socket mid-stream surfaces from undici as a
+  // bare TypeError("terminated") with the reason on `cause`. The proxy names
+  // what happened, keeps the reason, and frames it as a retryable server
+  // error — not as a final "api_error" called "terminated".
+  function upstreamClosedSocket() {
+    return Object.assign(new TypeError("terminated"), {
+      cause: Object.assign(new Error("other side closed"), {
+        code: "UND_ERR_SOCKET",
+      }),
+    });
+  }
+  const CLOSED_MESSAGE =
+    "The model provider closed the connection before the response finished (other side closed). Retry the request.";
+
+  test("names a connection the upstream closed before headers commit", () => {
+    const { reply } = makeReply(false);
+    let thrown: unknown;
+    try {
+      handleError(
+        upstreamClosedSocket(),
+        reply,
+        extractMessage,
+        true,
+        () => undefined,
+      );
+    } catch (error) {
+      thrown = error;
+    }
+    expect((thrown as ApiError).statusCode).toBe(502);
+    expect((thrown as ApiError).message).toBe(CLOSED_MESSAGE);
+  });
+
+  test("frames a connection the upstream closed mid-stream as a retryable server error", () => {
+    const { reply, writes } = makeReply(true);
+
+    handleError(
+      upstreamClosedSocket(),
+      reply,
+      extractMessage,
+      true,
+      () => undefined,
+      formatResponsesStreamErrorFrame,
+    );
+
+    expect(writes).toHaveLength(1);
+    const payload = JSON.parse(writes[0].replace(/^data: /, ""));
+    expect(payload.error).toEqual({
+      type: "server_error",
+      code: "upstream_connection_closed",
+      message: CLOSED_MESSAGE,
+      param: null,
+    });
+  });
+
+  test("records the same description for the failed interaction", () => {
+    expect(upstreamErrorMessage(upstreamClosedSocket(), extractMessage)).toBe(
+      CLOSED_MESSAGE,
+    );
+    // A provider error with an HTTP status keeps the adapter's own message.
+    const providerError = Object.assign(new Error("terminated"), {
+      status: 500,
+    });
+    expect(upstreamErrorMessage(providerError, extractMessage)).toBe(
+      "terminated",
+    );
   });
 
   test("leaves an error that carries an explicit HTTP status untouched", () => {

@@ -149,6 +149,14 @@ export async function updateRuntimeCredentialDefinition(params: {
   });
   const updated = await RuntimeCredentialDefinitionModel.update(params);
   if (!updated) throw new ApiError(404, "Credential not found");
+  // Which GitHub a definition answers for decides who the member roster knows.
+  if (
+    updated.githubUrl !== current.githubUrl ||
+    updated.githubAppCredentialKey !== current.githubAppCredentialKey
+  )
+    await openappaBatteriesService.recompileOrganizations([
+      params.organizationId,
+    ]);
   return updated;
 }
 
@@ -215,7 +223,13 @@ export async function deleteRuntimeCredentialConnection(params: {
   const definition = await requireRuntimeCredentialDefinition(params);
   if (definition.kind === "github_app_user") {
     assertScopeAllowed({ definition, scope: params.scope });
-    return githubUserConnectionManager.disconnect(params);
+    const disconnected = await githubUserConnectionManager.disconnect(params);
+    // The account left the organization's member roster.
+    if (disconnected)
+      await openappaBatteriesService.recompileOrganizations([
+        params.organizationId,
+      ]);
+    return disconnected;
   }
   const deleted = await RuntimeCredentialConnectionModel.delete({
     organizationId: params.organizationId,

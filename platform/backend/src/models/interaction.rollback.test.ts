@@ -1972,6 +1972,45 @@ describe("InteractionModel", () => {
         ]),
       );
 
+      // Kilo Code frames its turns as OpenCode does, under its own sources.
+      const kiloSessionId = `${sessionId}-kilo`;
+      for (const source of ["kilo:main", "kilo:title"] as const) {
+        await InteractionModel.create({
+          profileId: agent.id,
+          sessionId: kiloSessionId,
+          sessionSource: "kilo_session",
+          source,
+          type: "openai:responses",
+          request: {
+            model: "responses-model",
+            instructions: "You are a coding agent.",
+            input: [{ role: "user", content: "Do the work" }],
+            tools: [{ type: "function", name: "task" }],
+          } as unknown as InsertInteraction["request"],
+          response: responsesResponse,
+        });
+      }
+      const kiloResult = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        admin.id,
+        true,
+        { sessionId: kiloSessionId },
+      );
+      expect(
+        new Map(
+          kiloResult.data.map((interaction) => [
+            interaction.source,
+            (interaction as unknown as { requestType: string }).requestType,
+          ]),
+        ),
+      ).toEqual(
+        new Map([
+          ["kilo:main", "main"],
+          ["kilo:title", "subagent"],
+        ]),
+      );
+
       const summaries = await InteractionModel.findSummariesPaginated({
         pagination: { limit: 100, offset: 0 },
         filters: { sessionId },

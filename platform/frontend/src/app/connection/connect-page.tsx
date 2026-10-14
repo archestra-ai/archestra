@@ -34,7 +34,6 @@ import {
   ShieldCheck,
   ShieldOff,
   SlidersHorizontal,
-  TriangleAlert,
   Wrench,
 } from "lucide-react";
 import dynamic from "next/dynamic";
@@ -85,6 +84,7 @@ import {
   type ConnectPageSkill,
   type ConnectPlugin,
   type ConnectServer,
+  gatewayServerName,
   useConnectPageData,
   welcomePrompt,
 } from "./connect-page-data";
@@ -93,7 +93,6 @@ import {
   approxTokens,
   BrowseDialog,
   fmt,
-  InfoDialog,
   nameOf,
   PromptRow,
   plural,
@@ -124,7 +123,7 @@ const ConnectCommandPanel = dynamic(
   { ssr: false },
 );
 
-type DialogKind = "servers" | "skills" | "plugins" | "cursor" | "include";
+type DialogKind = "servers" | "skills" | "plugins" | "include";
 
 const MOTION_CSS = `
 @keyframes connect-icon {
@@ -305,7 +304,6 @@ export function ConnectPage() {
             choices={choices}
             picks={picks}
             prompt={prompt}
-            onCursorNote={() => setDialog("cursor")}
           />
         </div>
       </div>
@@ -332,27 +330,6 @@ export function ConnectPage() {
         picks={picks}
         onChange={update}
       />
-      <InfoDialog
-        open={dialog === "cursor"}
-        onOpenChange={(v) => !v && setDialog(null)}
-        title="Cursor keeps its own models"
-      >
-        <div className="space-y-2">
-          <p>
-            Connecting Cursor adds {data.appName}'s tools and skills. Cursor
-            keeps using its current models.
-          </p>
-          <p>
-            To send Cursor's OpenAI requests through {data.appName} too, keep
-            the LLM proxy on in the browser approval. After setup, find "Cursor
-            model settings (manual step)" in the installer output: it shows the
-            proxy URL and, if chosen, a virtual key. In Cursor Settings, Models,
-            API Keys, enter those values and turn on Use OpenAI API Key and
-            Override OpenAI Base URL. A Cursor subscription can't be used as a
-            key.
-          </p>
-        </div>
-      </InfoDialog>
     </div>
   );
 }
@@ -578,7 +555,7 @@ function Tile({
         active
           ? // The muted tint is layered over the card fill, so the page's
             // dots never show through a selected tile.
-            "border-primary bg-linear-to-b from-muted/40 to-muted/40 font-semibold text-foreground ring-1 ring-primary"
+            "border-primary bg-linear-to-b from-muted/40 to-muted/40 font-semibold text-foreground ring-1 ring-inset ring-primary"
           : "text-muted-foreground hover:bg-linear-to-b hover:from-muted/50 hover:to-muted/50 hover:text-foreground",
       )}
     >
@@ -653,7 +630,6 @@ function ConnectArea({
   choices,
   picks,
   prompt,
-  onCursorNote,
 }: {
   data: ConnectPageData;
   client: ConnectClient;
@@ -663,7 +639,6 @@ function ConnectArea({
   picks: ConnectPicks;
   /** The generic prompt; null when every part is left out. */
   prompt: string | null;
-  onCursorNote: () => void;
 }) {
   const { copied, copy: copyText } = useCopy();
   const [origin, setOrigin] = useState("");
@@ -690,6 +665,12 @@ function ConnectArea({
         keptPlugins.length === 0),
   );
 
+  const serverName = gatewayServerName({
+    client,
+    gateway: data.gateway,
+    appName: data.appName,
+    tools: choices.tools && data.partsFor(client).tools,
+  });
   // After copying: the status card under the band. A changed pick or choice
   // sends it back to idle, except once connected.
   const setupKey = [
@@ -699,6 +680,7 @@ function ConnectArea({
     download,
     ...leftOutParts,
     data.gateway?.id,
+    serverName,
     ...keptPlugins.map((p) => p.id),
   ].join();
   const [run, setRun] = useState<AfterConnectRun>({
@@ -706,11 +688,12 @@ function ConnectArea({
     key: setupKey,
     client,
     script,
+    serverName,
   });
   const phase =
     run.phase === "connected" || run.key === setupKey ? run.phase : "idle";
   const setPhase = (next: AfterConnectPhase) =>
-    setRun({ phase: next, key: setupKey, client, script });
+    setRun({ phase: next, key: setupKey, client, script, serverName });
   // Only a copied prompt or command starts it: Manual setup and Claude
   // Desktop's download have nothing to copy.
   const startWaiting = () => {
@@ -781,14 +764,6 @@ function ConnectArea({
                 </>
               )}
             </p>
-            {client.id === "cursor" && (
-              <p className="flex items-center gap-1.5">
-                <TriangleAlert className="size-3.5 shrink-0 text-amber-500" />
-                Cursor keeps its own models. Routing them through {data.appName}{" "}
-                takes one manual step after setup.
-                <TextButton onClick={onCursorNote}>How</TextButton>
-              </p>
-            )}
           </div>
 
           {script && command ? (
@@ -849,7 +824,15 @@ function ConnectArea({
         phase={phase}
         client={run.client}
         script={run.script}
-        welcome={origin ? welcomePrompt(origin, data.appName) : null}
+        welcome={
+          origin
+            ? welcomePrompt({
+                origin,
+                appName: data.appName,
+                serverName: run.serverName,
+              })
+            : null
+        }
         // n8n has no agent to follow up with; "everything left out" has
         // nothing to follow up on.
         showLink={
@@ -919,7 +902,7 @@ function scriptNextSteps(client: ConnectClient): string[] {
       return [
         "Reload Cursor.",
         "Open Customize > MCPs and sign in to the gateway.",
-        'If the output shows "Cursor model settings", enter them under Settings > Models > API Keys.',
+        "Quit and reopen Cursor to load its model settings.",
       ];
     case "codex":
       return [
@@ -936,6 +919,11 @@ function scriptNextSteps(client: ConnectClient): string[] {
       return [
         "Say yes when the terminal offers to sign you in to the gateway.",
         "Close OpenCode if it's open, then run the opencode command it prints in a new terminal.",
+      ];
+    case "kilo":
+      return [
+        "Say yes when the terminal offers to sign you in to the gateway.",
+        "Close Kilo Code if it's open, then run the kilo command it prints in a new terminal.",
       ];
     default:
       return [`Restart ${nameOf(client)}.`];
@@ -1046,8 +1034,8 @@ function ManualSteps({
 // === Guardrails status ===
 
 /**
- * Agents OpenAPPA follows natively (the Claude Code, Codex and OpenCode
- * adapters in backend/src/proxy/plugins/appa-plugin-archestra/
+ * Agents OpenAPPA follows natively (the Claude Code, Codex, OpenCode and
+ * Kilo Code adapters in backend/src/proxy/plugins/appa-plugin-archestra/
  * session-identity.ts). Others count as unsupported unless they send OpenAPPA
  * session headers, which the agents on this page don't.
  */

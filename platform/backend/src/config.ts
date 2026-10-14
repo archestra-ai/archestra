@@ -210,26 +210,16 @@ const getPortFromUrl = (): number => {
  * Networking & Origin Validation Strategy
  * ========================================
  *
- * Development mode:
- *   - Backend and frontend bind to 127.0.0.1 (loopback only).
- *   - Only local processes can reach the server, so CORS and origin
- *     checks are unnecessary. All origins are accepted.
+ * Unconfigured (dev, quickstart, any deployment without the variables below):
+ *   - Only the request's own origin is allowed, so the app works on whatever
+ *     hostname it is reached by (LAN IP, phone, tunnel) while foreign sites
+ *     cannot make credentialed requests. See resolveAllowedOrigins.
  *
- * Quickstart mode (Docker):
- *   - Inside the container the app binds to 0.0.0.0.
- *   - Quickstart examples bind host ports to 127.0.0.1 by default.
- *     Users can opt into LAN access with explicit `0.0.0.0` port bindings.
- *   - Quickstart is designed for quick evaluation, so all origins are
- *     accepted without checks. It's ok if someone will decide to
- *     access Archestra from the mobile phone.
- *
- * Production mode:
- *   - Origin validation is OFF by default. All origins are accepted.
- *   - Origin checks are only enforced when explicitly configured via:
+ * Configured:
+ *   - Origin checks are enforced against:
  *       ARCHESTRA_FRONTEND_URL              — primary frontend origin
  *       ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS — comma-separated extra origins
- *   - Setting either variable signals that origin validation should be
- *     performed. Only the configured origins will be allowed.
+ *   - Only the configured origins will be allowed.
  */
 
 /**
@@ -346,35 +336,42 @@ const hackathonRecorderRenderBaseUrl = resolveRenderBaseUrl({
 });
 
 /**
- * Get CORS origin configuration for Fastify.
- * When no origin env vars are set, accepts all origins.
- * When configured, only allows the specified origins.
+ * Explicitly configured origins for CORS and better-auth, with loopback
+ * equivalents. Empty when none are configured; see resolveAllowedOrigins.
  * @public — exported for testability
  */
-export const getCorsOrigins = (): (string | RegExp)[] => {
-  const origins = getConfiguredOrigins();
-
-  if (origins.length === 0) {
-    return [/.*/];
-  }
-
-  return addLoopbackEquivalents(origins);
-};
+export const getCorsOrigins = (): string[] =>
+  addLoopbackEquivalents(getConfiguredOrigins());
 
 /**
- * Get trusted origins for better-auth.
- * When no origin env vars are set, accepts all origins.
- * When configured, only allows the specified origins.
  * @public — exported for testability
  */
-export const getTrustedOrigins = (): string[] => {
-  const origins = getConfiguredOrigins();
+export const getTrustedOrigins = (): string[] =>
+  addLoopbackEquivalents(getConfiguredOrigins());
 
-  if (origins.length === 0) {
-    return ["http://*:*", "https://*:*", "http://*", "https://*"];
+/**
+ * Origins allowed for one request: the configured ones, or — when none are
+ * configured — only the origin the request was addressed to. The frontend
+ * proxy sets X-Forwarded-Host to the browser-facing host; a cross-origin page
+ * cannot set it without a preflight, which this same policy rejects.
+ */
+export const resolveAllowedOrigins = (params: {
+  configuredOrigins: string[];
+  forwardedHost: string | null | undefined;
+  host: string | null | undefined;
+}): string[] => {
+  if (params.configuredOrigins.length > 0) {
+    return params.configuredOrigins;
   }
-
-  return addLoopbackEquivalents(origins);
+  const requestHost =
+    params.forwardedHost?.split(",")[0]?.trim() || params.host?.trim();
+  if (!requestHost) {
+    return [];
+  }
+  return addLoopbackEquivalents([
+    `http://${requestHost}`,
+    `https://${requestHost}`,
+  ]);
 };
 
 /**
@@ -1058,6 +1055,23 @@ const parsePositiveInt = (
   if (!envValue) return defaultValue;
   const parsed = Number.parseInt(envValue, 10);
   return !Number.isNaN(parsed) && parsed > 0 ? parsed : defaultValue;
+};
+
+/**
+ * A whole number of milliseconds that `setTimeout` can schedule, or 0 to
+ * disable the timer. Delays above 2^31-1 collapse to 1ms, so invalid and
+ * oversized values use the default instead.
+ */
+const parseBoundedTimeoutMs = (
+  envValue: string | undefined,
+  defaultValue: number,
+): number => {
+  if (!envValue || !/^[0-9]+$/.test(envValue)) return defaultValue;
+  const parsed = Number(envValue);
+  if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > 2_147_483_647) {
+    return defaultValue;
+  }
+  return parsed;
 };
 
 /**
@@ -2365,6 +2379,15 @@ const config = {
       process.env.ARCHESTRA_MCP_GATEWAY_TOOL_CALL_TIMEOUT_MS,
       60000,
     ),
+    /**
+     * Largest single JSON-RPC message (bytes) accepted from a stdio MCP server
+     * running in Kubernetes. A larger reply fails only the tool call it
+     * answers. The default matches the MCP SDK's stdio buffer limit.
+     */
+    stdioMaxMessageBytes: parsePositiveInt(
+      process.env.ARCHESTRA_MCP_GATEWAY_STDIO_MAX_MESSAGE_BYTES,
+      10 * 1024 * 1024,
+    ),
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -2383,6 +2406,20 @@ const config = {
       30_000,
     ),
     // SPDX-SnippetEnd
+    /**
+     * How long (ms) one `subscriptions/listen` stream stays open before the
+     * gateway ends it with a complete result. 0, the default, leaves the
+     * stream open until the client disconnects. A positive value is a limited
+     * mitigation for a proxy hard cap, not a universal fix: a client may open
+     * another listen, but the protocol does not require it, and a client can
+     * stop after repeated ends. This process does not know the proxy maximum.
+     * Keep a positive value strictly below that cap. Invalid and oversized
+     * values fall back to 0 rather than collapsing to 1ms.
+     */
+    subscriptionMaxDurationMs: parseBoundedTimeoutMs(
+      process.env.ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS,
+      0,
+    ),
     /**
      * Both directions of the draft MCP Skills extension: publishing local
      * Skills through gateways and projecting external Skills from installed
@@ -2547,14 +2584,6 @@ const config = {
       process.env.ARCHESTRA_AGENT_RUNTIME_TRANSCRIPT_MAX_BYTES,
       250 * 1024 * 1024,
     ),
-  },
-  plugins: {
-    /**
-     * Opaque plugins execute on connected developer machines, so authoring
-     * and automatic connection delivery ship off by default. Plugins have no
-     * flag of their own: the ARCHESTRA_BETA master switch turns them on.
-     */
-    enabled: process.env.ARCHESTRA_BETA === "true",
   },
   git: {
     binaryPath: process.env.ARCHESTRA_GIT_BINARY_PATH?.trim() || "git",

@@ -25,7 +25,6 @@ import { Separator } from "@/components/ui/separator";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { WizardFooter } from "@/components/wizard-footer";
 import { WizardStepper } from "@/components/wizard-stepper";
-import { useFeature } from "@/lib/config/config.query";
 import { useCreatePlugin } from "@/lib/plugins/plugin.query";
 import { ImportMarketplaceDialog } from "../_parts/import-marketplace-dialog";
 import {
@@ -55,32 +54,10 @@ export default function NewPluginPage() {
   return (
     <div className="h-full w-full">
       <ErrorBoundary>
-        <NewPluginGate />
+        <NewPluginWizard />
       </ErrorBoundary>
     </div>
   );
-}
-
-function NewPluginGate() {
-  const enabled = useFeature("plugins");
-
-  if (enabled === undefined) {
-    return null;
-  }
-
-  if (!enabled) {
-    return (
-      <PageLayout
-        title="Plugins"
-        description="Plugins are disabled for this deployment."
-        maxWidth="wizard"
-      >
-        <div />
-      </PageLayout>
-    );
-  }
-
-  return <NewPluginWizard />;
 }
 
 function NewPluginWizard() {

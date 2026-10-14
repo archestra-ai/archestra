@@ -94,6 +94,7 @@ export { default as appRenderScreenshotTable } from "./app-render-screenshot";
 export { default as appToolsTable } from "./app-tool";
 export { default as appVersionsTable } from "./app-version";
 export { default as auditLogsTable } from "./audit-log";
+export { default as browserStorageStatesTable } from "./browser-storage-state";
 export { default as browserTabStatesTable } from "./browser-tab-state";
 export {
   chatActiveRunEventsTable,
@@ -102,6 +103,7 @@ export {
 export { default as chatopsChannelBindingsTable } from "./chatops-channel-binding";
 export { default as chatopsProcessedMessagesTable } from "./chatops-processed-message";
 export { default as chatopsThreadContextsTable } from "./chatops-thread-context";
+export { default as chatopsUserAdmissionsTable } from "./chatops-user-admission";
 export {
   connectionSetupPluginsTable,
   connectionSetupSkillsTable,

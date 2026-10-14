@@ -52,7 +52,9 @@ import {
   getHitlReviewResult,
   type HitlReviewOutcome,
   hitlReviewAskedInForm,
+  isHitlReviewOutcome,
   recordHitlRuling,
+  sealHitlClosure,
 } from "@/openappa/hitl-review";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
 import {
@@ -60,7 +62,6 @@ import {
   signPeerProof,
   stripPeerProofs,
 } from "@/openappa/peer-claims";
-import { underscoreLabeledPlatformToolName } from "@/openappa/request";
 import {
   RUNTIME_TOOL_PROOF_ARGUMENT,
   signRuntimeToolProof,
@@ -126,7 +127,7 @@ import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import { collectDeclaredToolNames } from "@/routes/proxy/utils/declared-tool-names";
 import type { ToolNameResolution } from "@/routes/proxy/utils/gateway-tool-names";
 import { readGuardrailsV2Activation } from "@/services/guardrails-deployment";
-import { ApiError } from "@/types";
+import { ApiError, type CommonToolResult } from "@/types";
 import type {
   RuntimeLaunchFailureReason,
   RuntimeLaunchOutcome,
@@ -147,6 +148,8 @@ import {
   type AppaRelayMessage,
   type AppaTrustedContext,
   type AskUserArguments,
+  type NativeQuestionNoAnswer,
+  type NativeQuestionReading,
 } from "./types";
 import { withCallerScope, withoutCallerScope } from "./utils";
 
@@ -418,7 +421,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         (result) =>
           !binding.adapter?.isChildHandbackTool?.(result.name) &&
           !binding.adapter?.isRelayTool?.(result.name) &&
-          !isPeerInboxResult(binding, result.name) &&
+          !isPeerInboxResult(binding, result.name, result.namespace) &&
           !childReturns.ignored.has(result.id),
       )
       // An answer to an issued question is recognized as the very result the
@@ -493,6 +496,19 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           denied: true,
         };
       }
+      const approved = result.toolResultUpdates[answer.id];
+      if (approved?.denied) {
+        const clarification = await cacheManager.get<string>(
+          deniedCallClarificationKey({
+            session: this.governedSession(binding),
+            callId: answer.id,
+          }),
+        );
+        if (clarification) approved.content += clarification;
+        if (approved.offers?.length === 0 && !approved.review?.length) {
+          approved.content += NO_REMEDY_PLAN_HINT;
+        }
+      }
     }
     binding.requiresRemedyContinuation = await hasRemedyOfferResult({
       binding,
@@ -507,25 +523,28 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const waitTool = binding.adapter?.pendingServersTool;
     // A ruling in the result of the client's wait tool is a denial that tool
     // carried: the model made another call there, and has to be told so.
-    const carriedDenials = new Set(
+    const carriedDenials = new Map(
       toolResults.flatMap((answer) =>
         answer.name === waitTool &&
         !answer.namespace &&
         result.toolResultUpdates[answer.id]?.denied &&
         !binding.request.restoredNoticeCallIds?.has(answer.id)
-          ? [answer.id]
+          ? [[answer.id, answer] as const]
           : [],
       ),
     );
     const toolResultUpdates = {
       ...childResultUpdates,
       ...Object.fromEntries(
-        Object.entries(result.toolResultUpdates).map(([id, result]) => [
-          id,
-          carriedDenials.has(id)
-            ? `[appa] OpenAPPA sent this ${waitTool} call in place of the tool call you made. Your call did not run. The remedy tools were still loading, so the client waited for them. The ruling on your call follows.\n\n${result.content}`
-            : result.content,
-        ]),
+        Object.entries(result.toolResultUpdates).map(([id, result]) => {
+          const wait = carriedDenials.get(id);
+          return [
+            id,
+            wait
+              ? `[appa] OpenAPPA sent this ${waitTool} call in place of the tool call you made. Your call did not run. The remedy tools were still loading, so the client waited for them.${waitFailure(wait)} The ruling on your call follows.\n\n${result.content}`
+              : result.content,
+          ];
+        }),
       ),
       ...failedLaunchResults,
     };
@@ -730,8 +749,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         );
         return rejected.some((entry) => {
           if (
-            call.name === tools.control.name &&
-            call.namespace === tools.control.namespace &&
+            isSpecialToolMember(binding, call, "control") &&
             toolInputOf(call.arguments).offer_id === entry.offerId
           )
             return true;
@@ -830,10 +848,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // The declared control tool itself, in its own namespace: a same-named
       // tool of another server gets no receipt. The acting run always comes
       // from this request, never from an offer in replayed history.
-      if (
-        call.name === tools.control.name &&
-        call.namespace === tools.control.namespace
-      ) {
+      if (isSpecialToolMember(binding, call, "control")) {
         const stamped = stampControlExecution(call, binding.session);
         changed ||= stamped !== call;
         toolCalls.push(stamped);
@@ -842,8 +857,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       let prepared = call;
       let offerIds: string[] = [];
       if (
-        call.name === tools.askUser?.name &&
-        call.namespace === tools.askUser.namespace &&
+        isSpecialToolMember(binding, call, "askUser") &&
         archestraMcpBranding.getToolShortName(
           this.canonicalize(binding, call),
         ) === TOOL_ASK_USER_SHORT_NAME
@@ -887,7 +901,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         offerIds.length > 0 &&
         (await hitlReviewAskedInForm({ session: binding.session, offerIds }))
           ? prepared
-          : this.asNativeQuestion(binding, prepared);
+          : this.asNativeQuestion(binding, prepared, offerIds.length > 0);
       changed ||= nativeQuestion !== prepared;
       prepared = nativeQuestion;
       const issued =
@@ -1041,7 +1055,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       isUserQuestion: (name: string, namespace?: string) => {
         const tools = binding.request.tools;
         if (tools?.platformToolNames?.has(name)) {
-          return namespace === tools.askUser?.namespace;
+          return isSpecialToolMember(binding, { name, namespace }, "askUser");
         }
         if (
           namespace !== undefined &&
@@ -1061,6 +1075,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         ? {
             control: binding.request.tools.control,
             notice: binding.request.tools.notice,
+            controlAliases: binding.request.tools.controlAliases,
+            noticeAliases: binding.request.tools.noticeAliases,
           }
         : {}),
     };
@@ -1113,7 +1129,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         blockedTranscriptCalls.has(call.id) ||
         reusedNames.has(call.id) ||
         relays.has(call.id) ||
-        !isPeerInboxCall(binding, call.name)
+        !isPeerInboxCall(binding, call.name, call.namespace)
       ) {
         continue;
       }
@@ -1169,6 +1185,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // Resolved once for the batch, by the first denial that has no notice tool.
     let pendingServersTool: Promise<string | undefined> | undefined;
     const blocked: { id: string; name: string; reason: string }[] = [];
+    const rewritten: { id: string; name: string }[] = [];
     const annotated: LlmProxyToolCallAnnotation[] = [];
     const runtimeProofs: LlmProxyRuntimeToolProof[] = [];
     const mint = this.delegationMinter(
@@ -1180,11 +1197,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     for (const call of calls) {
       if (handbackIds.has(call.id)) {
         const handback = await admitChildHandback({ binding, call });
-        blocked.push({
-          id: call.id,
-          name: call.name,
-          reason: "OpenAPPA replaced the child return with admitted bytes",
-        });
+        rewritten.push({ id: call.id, name: call.name });
         released.push(handback.call);
         if (calls.length === 1) {
           binding.completedHandbackReturn = handback.returnText;
@@ -1194,12 +1207,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       const inbox = peerInbox.get(call.id);
       if (inbox?.kind === "release") {
         if (inbox.call !== call) {
-          blocked.push({
-            id: call.id,
-            name: call.name,
-            reason:
-              "OpenAPPA bound this peer-message call to the authenticated session",
-          });
+          rewritten.push({ id: call.id, name: call.name });
         }
         released.push(inbox.call);
         continue;
@@ -1210,12 +1218,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       const relay = relays.get(call.id);
       if (relay?.kind === "release") {
         if (relay.call !== call) {
-          blocked.push({
-            id: call.id,
-            name: call.name,
-            reason:
-              "OpenAPPA replaced the message with the text the return check admitted",
-          });
+          rewritten.push({ id: call.id, name: call.name });
         }
         released.push(relay.call);
         continue;
@@ -1307,6 +1310,35 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // call as given. The identity the runtime ruled on — the dispatch's
       // target — is what the notice and the refusal describe.
       const identity = this.policyIdentity(binding, call);
+      let clarification = "";
+      if (identity.dispatch) {
+        const namespace = call.namespace
+          ? ` in wire namespace ${JSON.stringify(call.namespace)}`
+          : "";
+        clarification = `\n\n[appa] This call already went through the run_tool wrapper ${JSON.stringify(identity.dispatch)}${namespace}, with tool_name targeting ${JSON.stringify(identity.name)}. Calling the target directly or retrying the same wrapper call is the same blocked call, not a routing correction.`;
+      }
+      // Only a recorded policy denial can establish that no remedy is offered.
+      // Local failures and pending reviews retain their own recovery guidance.
+      const noPlan =
+        decision.recorded === true &&
+        decision.offers?.length === 0 &&
+        !decision.review?.length;
+      const ruling =
+        decision.feedback + clarification + (noPlan ? NO_REMEDY_PLAN_HINT : "");
+      if (decision.recorded && clarification) {
+        // The next request restores the runtime's ruling, not the client's
+        // notice result. Retain only our addition; never replace that ruling.
+        try {
+          await cacheManager.set(
+            deniedCallClarificationKey({ session, callId: call.id }),
+            clarification,
+            TimeInMs.Day,
+          );
+        } catch {
+          // Ancillary prose must not interrupt a ruled batch or its cancellation.
+          logger.warn("OpenAPPA could not retain denial clarification");
+        }
+      }
       if (!notice) {
         // The client's own wait tool stands in for the notice tool. The call
         // keeps its id, the client waits for its MCP servers instead of
@@ -1357,13 +1389,15 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         // A call that only needs loading gets that one instruction.
         const contentMessage = notLoaded.has(call.id)
           ? decision.feedback
-          : transient
-            ? `${decision.feedback}\n\n[appa] This request did not include the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the ruling could not be offered as a remedy and the call is refused. The gateway tools usually finish loading a moment after the session starts. Send your message again.`
-            : binding.request.defersTools
-              ? `${decision.feedback}\n\n[appa] This client defers tools it has not loaded, and the ${archestraMcpBranding.serverName} MCP gateway remedy tools are not loaded in this session, so the ruling could not be offered as a remedy and the call is refused. Search for ${TOOL_GET_REMEDY_PLANS_SHORT_NAME} and ${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME} with your tool search, then call the denied tool again to receive the remedy.`
-              : binding.request.declaredTools.length === 0
-                ? `${decision.feedback}\n\n[appa] This request listed no tools, so the ruling could not be offered as a remedy and the call is refused. Remedies need the ${archestraMcpBranding.serverName} MCP gateway tools in the request. Connect the gateway, then start a new session. In Codex, also set code_mode_host = false: code mode keeps its tools out of the request.`
-                : `${decision.feedback}\n\n[appa] This client did not declare the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the call is refused. Connect the MCP gateway and allow both remedy tools to use approval plans.`;
+          : noPlan
+            ? ruling
+            : transient
+              ? `${ruling}\n\n[appa] This request did not include the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the ruling could not be offered as a remedy and the call is refused. The gateway tools usually finish loading a moment after the session starts. Send your message again.`
+              : binding.request.defersTools
+                ? `${ruling}\n\n[appa] This client defers tools it has not loaded, and the ${archestraMcpBranding.serverName} MCP gateway remedy tools are not loaded in this session, so the ruling could not be offered as a remedy and the call is refused. Search for ${TOOL_GET_REMEDY_PLANS_SHORT_NAME} and ${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME} with your tool search, then call the denied tool again to receive the remedy.`
+                : binding.request.declaredTools.length === 0
+                  ? `${ruling}\n\n[appa] This request listed no tools, so the ruling could not be offered as a remedy and the call is refused. Remedies need the ${archestraMcpBranding.serverName} MCP gateway tools in the request. Connect the gateway, then start a new session. In Codex, also set code_mode_host = false: code mode keeps its tools out of the request.`
+                  : `${ruling}\n\n[appa] This client did not declare the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the call is refused. Connect the MCP gateway and allow both remedy tools to use approval plans.`;
         return {
           decision: "refuse",
           refusal: {
@@ -1389,7 +1423,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             id: call.id,
             tool: identity.name,
             arguments: identity.arguments,
-            result: decision.feedback,
+            result: ruling,
             custom: identity.custom,
             namespace: identity.namespace,
           }),
@@ -1402,6 +1436,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const stamp = trajectoryStamper(binding, context);
     if (
       blocked.length === 0 &&
+      rewritten.length === 0 &&
       annotated.length === 0 &&
       !stamp &&
       handbackIds.size === 0 &&
@@ -1413,6 +1448,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       decision: "allow",
       toolCalls: stamp ? released.map(stamp) : released,
       ...(blocked.length > 0 ? { blocked } : {}),
+      ...(rewritten.length > 0 ? { rewritten } : {}),
       ...(annotated.length > 0 ? { annotated } : {}),
       ...(runtimeProofs.length > 0 ? { runtimeProofs } : {}),
     };
@@ -1676,14 +1712,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   private asNativeQuestion(
     binding: AppaPluginBinding,
     call: LlmProxyToolCallsContext["toolCalls"][number],
+    /** The call carries a server-held review, not arguments the model wrote. */
+    review: boolean,
   ): LlmProxyToolCallsContext["toolCalls"][number] {
     if (binding.runtimeSessionId) return call;
     const native = binding.adapter?.nativeQuestion;
-    const askUser = binding.request.tools?.askUser;
     if (
       !native?.fromAskUser ||
-      call.name !== askUser?.name ||
-      call.namespace !== askUser.namespace ||
+      !isSpecialToolMember(binding, call, "askUser") ||
       native.isAvailable?.(binding.requestHeaders) === false ||
       !declaresNativeQuestion(binding, native.toolName) ||
       archestraMcpBranding.getToolShortName(
@@ -1692,9 +1728,17 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     ) {
       return call;
     }
-    const args = parseAskUserArguments(call.arguments);
-    if (!args) return call;
-    if (args.allowMultiple && native.supportsMultiple === false) return call;
+    const parsed = parseAskUserArguments(call.arguments);
+    if (!parsed) return call;
+    if (parsed.allowMultiple && native.supportsMultiple === false) return call;
+    // A preview shows only a call this server holds. Text a model put in
+    // these fields of its own question could pass for a review's call.
+    const {
+      callPreview: _callPreview,
+      shortQuestion: _shortQuestion,
+      ...asked
+    } = parsed;
+    const args = review ? parsed : asked;
     return {
       id: call.id,
       name: native.toolName,
@@ -1813,6 +1857,32 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       ? undefined
       : name;
   }
+}
+
+const NO_REMEDY_PLAN_HINT =
+  "\n\n[appa] This ruling offers no remedy plan. Explain the ruling to the user and STOP this blocked action. Do not retry the same call, directly or through a wrapper.";
+
+function deniedCallClarificationKey(params: {
+  session: OpenAppaSession;
+  callId: string;
+}): AllowedCacheKey {
+  return `${CacheKey.OpenAppaDeniedCallClarification}-${Buffer.from(
+    JSON.stringify([
+      params.session.organization_id,
+      params.session.session_id,
+      withoutTrajectoryStamp(params.callId),
+    ]),
+  ).toString("base64url")}`;
+}
+
+/** The client's own report of a failed wait, so the model sees the real error. */
+function waitFailure(wait: CommonToolResult): string {
+  if (!wait.isError) return "";
+  const reported =
+    typeof wait.content === "string"
+      ? wait.content
+      : JSON.stringify(wait.content);
+  return ` The wait itself failed, and the client reported:\n${reported}\n`;
 }
 
 function notLoadedRulingKey(params: {
@@ -2127,7 +2197,7 @@ function runtimeLaunchResult(
   }
   const text = RUNTIME_LAUNCH_FAILURE_TEXT[outcome.reason];
   return outcome.reason === "credentials_needed" && outcome.setup_url
-    ? `${text} Ask the user to add them here, then start the run again: ${outcome.setup_url}`
+    ? `${text} Put this link in your reply text, never inside a question form, so the user can add them, then start the run again: ${outcome.setup_url}`
     : text;
 }
 
@@ -3356,24 +3426,33 @@ function peerShortName(
   name: string,
   namespace?: string,
 ): string | null {
-  const spelled = namespace ? `${namespace}__${name}` : name;
-  const canonical = binding.identity.canonicalize(spelled);
-  return (
-    archestraMcpBranding.getToolShortName(canonical) ??
-    archestraMcpBranding.getToolShortName(binding.identity.canonicalize(name))
+  return archestraMcpBranding.getToolShortName(
+    binding.identity.canonicalize(name, namespace),
   );
 }
 
-function isPeerInboxCall(binding: AppaPluginBinding, name: string): boolean {
-  const short = peerShortName(binding, name);
+function isPeerInboxCall(
+  binding: AppaPluginBinding,
+  name: string,
+  namespace?: string,
+): boolean {
+  const short = peerShortName(binding, name, namespace);
   return (
     short === TOOL_LIST_PEER_MESSAGES_SHORT_NAME ||
     short === TOOL_READ_PEER_MESSAGE_SHORT_NAME
   );
 }
 
-function isPeerInboxResult(binding: AppaPluginBinding, name: string): boolean {
-  return isPeerInboxCall(binding, name);
+function isPeerInboxResult(
+  binding: AppaPluginBinding,
+  name: string,
+  namespace?: string,
+): boolean {
+  return isPeerInboxCall(
+    binding,
+    name,
+    namespace ?? binding.request.tools?.namespaces?.get(name),
+  );
 }
 
 function stampPeerInboxCall(params: {
@@ -3381,7 +3460,11 @@ function stampPeerInboxCall(params: {
   call: ToolCall;
   session: OpenAppaSession;
 }): RelayOutcome {
-  const short = peerShortName(params.binding, params.call.name);
+  const short = peerShortName(
+    params.binding,
+    params.call.name,
+    params.call.namespace,
+  );
   const secret = config.openappa.offerSigningSecret;
   if (
     !secret ||
@@ -3432,8 +3515,9 @@ async function withholdUnrecordedPeerReads(params: {
   updates: Record<string, string>;
 }): Promise<void> {
   for (const result of params.results) {
-    if (!isPeerInboxResult(params.binding, result.name)) continue;
-    if (isPeerReadResult(params.binding, result.name)) {
+    if (!isPeerInboxResult(params.binding, result.name, result.namespace))
+      continue;
+    if (isPeerReadResult(params.binding, result.name, result.namespace)) {
       const receipt = await OpenAppaSessionModel.retainedPeerReadReceipt({
         organizationId: params.session.organization_id,
         sessionId: params.session.session_id,
@@ -3472,8 +3556,18 @@ function restoredPeerRead(
   });
 }
 
-function isPeerReadResult(binding: AppaPluginBinding, name: string): boolean {
-  return peerShortName(binding, name) === TOOL_READ_PEER_MESSAGE_SHORT_NAME;
+function isPeerReadResult(
+  binding: AppaPluginBinding,
+  name: string,
+  namespace?: string,
+): boolean {
+  return (
+    peerShortName(
+      binding,
+      name,
+      namespace ?? binding.request.tools?.namespaces?.get(name),
+    ) === TOOL_READ_PEER_MESSAGE_SHORT_NAME
+  );
 }
 
 function stringArgument(value: unknown): string | undefined {
@@ -4350,39 +4444,25 @@ const EXTERNAL_REMEDY_WORKFLOW_GUIDANCE = [
 const LEGACY_NATIVE_QUESTION_ID_PATTERN =
   /^(toolu|call|aq)_aq1_([A-Za-z0-9_-]{16})_([A-Za-z0-9_-]{22})$/;
 
-function isGatewayAskUser(binding: AppaPluginBinding, name: string): boolean {
-  const namespace = binding.request.tools?.namespaces?.get(name);
-  if (namespace) {
-    const namespaced = `${namespace}__${name}`;
-    const canonical = binding.identity.canonicalize(namespaced);
-    return (
-      canonical !== namespaced &&
-      archestraMcpBranding.getToolShortName(canonical) ===
-        TOOL_ASK_USER_SHORT_NAME
-    );
-  }
-  const labeled = underscoreLabeledPlatformToolName(name, (toolName) =>
-    binding.identity.canonicalize(toolName),
-  );
-  if (labeled) {
-    return (
-      archestraMcpBranding.getToolShortName(labeled) ===
-      TOOL_ASK_USER_SHORT_NAME
-    );
-  }
-  const canonical = binding.identity.canonicalize(name);
-  return (
-    canonical !== name &&
-    archestraMcpBranding.getToolShortName(canonical) ===
-      TOOL_ASK_USER_SHORT_NAME
+function isSpecialToolMember(
+  binding: AppaPluginBinding,
+  call: { name: string; namespace?: string },
+  role: "control" | "notice" | "askUser",
+): boolean {
+  const tools = binding.request.tools;
+  if (!tools) return false;
+  const selected = tools[role];
+  const members = tools[`${role}Aliases`] ?? (selected ? [selected] : []);
+  return members.some(
+    (member) =>
+      member.name === call.name && member.namespace === call.namespace,
   );
 }
 
 function isUserQuestionCall(binding: AppaPluginBinding, name: string): boolean {
   return (
-    binding.request.tools?.platformToolNames?.has(name) === true ||
     nativeQuestionName(binding, name) !== undefined ||
-    isGatewayAskUser(binding, name)
+    isSpecialToolMember(binding, { name }, "askUser")
   );
 }
 
@@ -4397,7 +4477,7 @@ function releasesUserQuestion(
 ): boolean {
   const tools = binding.request.tools;
   if (tools?.platformToolNames?.has(call.name)) {
-    return call.namespace === tools.askUser?.namespace;
+    return isSpecialToolMember(binding, call, "askUser");
   }
   if (
     call.namespace !== undefined &&
@@ -4457,7 +4537,6 @@ function isUserQuestionResult(params: {
     true
   )
     return true;
-  if (isGatewayAskUser(params.binding, params.answer.name)) return true;
   // Adapters pair answers with real client tool-call frames, not tool text.
   // Approval recording still requires the separate, one-use cache binding.
   return nativeQuestionName(params.binding, params.answer.name) !== undefined;
@@ -4550,7 +4629,8 @@ async function recordNativeHitlRulings(params: {
       : "none";
     if (reading === "unrecognized") {
       // A client version may word its answer differently. Nothing is read
-      // from it; a client with forms is asked again there.
+      // from it; a client with forms is asked again there. A known no-answer
+      // does not take this path.
       logger.warn(
         {
           client: params.binding.adapter?.id,
@@ -4571,7 +4651,33 @@ async function recordNativeHitlRulings(params: {
         continue;
       }
     }
-    const ruling = reading === "unrecognized" ? "none" : reading;
+    if (
+      isNativeNoAnswer(reading) ||
+      reading === "unrecognized" ||
+      reading === "none"
+    ) {
+      for (const offerId of claim.offerIds) {
+        const review = await getHitlReview({
+          session: params.binding.session,
+          offerId,
+        });
+        const sealed = await sealHitlClosure({
+          session: params.binding.session,
+          offerId,
+          ...(isNativeNoAnswer(reading) ? { closure: reading } : {}),
+        });
+        const ruling =
+          sealed === "approve" || sealed === "deny" ? sealed : "none";
+        recorded.push({
+          offerId,
+          ruling,
+          ...(review?.tool ? { reviewedTool: review.tool } : {}),
+          ...(review?.arguments ? { reviewedArguments: review.arguments } : {}),
+        });
+      }
+      continue;
+    }
+    const ruling = reading;
     logger.debug(
       {
         ruling,
@@ -4725,14 +4831,10 @@ function isOwnControlResult(
   binding: AppaPluginBinding,
   result: { name: string; namespace?: string; content: unknown },
 ): boolean {
-  const control = binding.request.tools?.control;
-  if (!control) return false;
   const namespace =
     result.namespace ?? binding.request.tools?.namespaces?.get(result.name);
-  if (namespace !== control.namespace) return false;
   if (
-    binding.identity.canonicalize(result.name, namespace) !==
-    binding.identity.canonicalize(control.name, control.namespace)
+    !isSpecialToolMember(binding, { name: result.name, namespace }, "control")
   )
     return false;
   return reviewResultStatus(result.content, 0) === null;
@@ -4742,15 +4844,11 @@ async function pendingReviewResult(
   binding: AppaPluginBinding,
   result: LlmProxyToolResultsContext["toolResults"][number],
 ): Promise<string | undefined> {
-  const control = binding.request.tools?.control;
   const namespace =
     result.namespace ?? binding.request.tools?.namespaces?.get(result.name);
   if (
-    !control ||
     result.isError ||
-    namespace !== control.namespace ||
-    binding.identity.canonicalize(result.name, namespace) !==
-      binding.identity.canonicalize(control.name, control.namespace)
+    !isSpecialToolMember(binding, { name: result.name, namespace }, "control")
   )
     return undefined;
   const status = reviewResultStatus(result.content, 0);
@@ -4773,18 +4871,7 @@ async function pendingReviewResult(
     ok: false,
     outcome,
     offer_id: offerId,
-    instruction: {
-      review_required:
-        "Ask the user with the declared ask_user tool and this offer ID in remedy_offer_ids. The platform shows the exact review with Approve and Deny choices. Call execute_remedy_plan again only after the user approves.",
-      review_unanswered:
-        "The approval review expired without an answer. The protected call remains blocked; no ruling was granted. Do not retry this expired review.",
-      review_cancelled:
-        "The user cancelled the approval review. The protected call remains blocked; no ruling was granted. Do not reopen this review.",
-      review_unavailable:
-        "The approval review could not be delivered in this session. The protected call remains blocked; no ruling was granted.",
-      review_invalid:
-        "The approval review did not receive a valid decision. The protected call remains blocked; no ruling was granted.",
-    }[outcome],
+    instruction: reviewStatusInstruction(outcome),
   });
 }
 
@@ -4821,40 +4908,76 @@ async function pendingNativeHitlOfferIds(params: {
 }): Promise<string[]> {
   const control = params.binding.request.tools?.control;
   if (!control) return [];
-  const offerIds = new Set<string>();
+  // The newest result that asked for this review, per offer: the history is
+  // in order, so a later execute_remedy_plan call replaces an earlier one.
+  const offerIds = new Map<string, string>();
   for (const result of params.results) {
     if (result.isError) continue;
-    const canonicalResult = params.binding.identity.canonicalize(
-      result.name,
-      params.binding.request.tools?.namespaces?.get(result.name),
-    );
-    const canonicalControl = params.binding.identity.canonicalize(
-      control.name,
-      control.namespace,
-    );
-    const resultShortName = archestraMcpBranding.getToolShortName(result.name);
     if (
-      result.name !== control.name &&
-      canonicalResult !== canonicalControl &&
-      resultShortName !== TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME &&
-      !result.name.endsWith(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME)
+      !isSpecialToolMember(
+        params.binding,
+        {
+          name: result.name,
+          namespace:
+            result.namespace ??
+            params.binding.request.tools?.namespaces?.get(result.name),
+        },
+        "control",
+      )
     )
       continue;
     const offerId = reviewRequiredOfferId(result, 0);
-    if (offerId && !params.resolvedOfferIds.has(offerId)) offerIds.add(offerId);
+    if (offerId && !params.resolvedOfferIds.has(offerId)) {
+      offerIds.set(offerId, result.id);
+    }
   }
   const pending = await Promise.all(
-    [...offerIds].map(async (offerId) => ({
+    [...offerIds].map(async ([offerId, resultId]) => ({
       offerId,
+      resultId,
       review: await getHitlReview({
         session: params.binding.session,
         offerId,
       }),
     })),
   );
-  return pending
-    .filter((entry) => entry.review !== undefined)
-    .map((entry) => entry.offerId);
+  const asked: string[] = [];
+  for (const entry of pending) {
+    if (entry.review === undefined) continue;
+    // A client that resends the whole conversation (Codex) carries this
+    // result in every later request. The question is asked once per result:
+    // asking again for a review the client cannot show forces Codex into
+    // another ask_user call on every turn, with no way to end its turn.
+    if (
+      await reviewQuestionAskedBefore({
+        session: params.binding.session,
+        resultId: entry.resultId,
+      })
+    ) {
+      continue;
+    }
+    asked.push(entry.offerId);
+  }
+  return asked;
+}
+
+/**
+ * Whether the proxy already asked for the user's approval after this
+ * review_required result. Records the current ask so the next one counts.
+ * Not atomic: a client sends a session's requests one after another, and two
+ * parallel requests could at worst ask once more, never skip the question.
+ */
+async function reviewQuestionAskedBefore(params: {
+  session: OpenAppaSession;
+  resultId: string;
+}): Promise<boolean> {
+  const key: AllowedCacheKey = `${CacheKey.OpenAppaHitlQuestionAsked}-${Buffer.from(
+    `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.resultId)}`,
+  ).toString("base64url")}`;
+  if (await cacheManager.get<boolean>(key)) return true;
+  // Outlives the review it asked about, which expires after ten minutes.
+  await cacheManager.set(key, true, TimeInMs.Hour);
+  return false;
 }
 
 async function hasRemedyOfferResult(params: {
@@ -4912,6 +5035,14 @@ async function hasRemedyOfferResult(params: {
     )
       return [];
     if (
+      approved.denied &&
+      (approved.offers !== undefined || approved.review?.length)
+    ) {
+      // Current denial metadata outranks both the original journal offer and
+      // generic remedy hints. Unknown metadata still uses the scoped fallback.
+      return approved.offers?.length || approved.review?.length ? [index] : [];
+    }
+    if (
       offeredRuling === undefined &&
       (!approved.content.includes("[appa] Blocked") ||
         !approved.content.includes("execute_remedy_plan") ||
@@ -4936,21 +5067,51 @@ async function hasRemedyOfferResult(params: {
     )
       return false;
     if (!control) continue;
-    const namespace = result.namespace;
-    if (namespace !== control.namespace) continue;
-    const canonicalResult = params.binding.identity.canonicalize(
-      result.name,
-      namespace,
-    );
-    const canonicalControl = params.binding.identity.canonicalize(
-      control.name,
-      control.namespace,
-    );
-    if (canonicalResult === canonicalControl) {
+    if (
+      isSpecialToolMember(
+        params.binding,
+        {
+          name: result.name,
+          namespace:
+            result.namespace ??
+            params.binding.request.tools?.namespaces?.get(result.name),
+        },
+        "control",
+      )
+    ) {
       return false;
     }
   }
   return true;
+}
+
+function reviewStatusInstruction(outcome: HitlReviewOutcome): string {
+  const instructions = {
+    review_required:
+      "Ask the user with the declared ask_user tool and this offer ID in remedy_offer_ids. The platform shows the exact review with Approve and Deny choices. Call execute_remedy_plan again only after the user approves.",
+    review_declined:
+      "The client declined the approval review. That is not a human denial. The protected call remains blocked; no ruling was granted. Do not reopen this review.",
+    review_unanswered:
+      "The approval review expired without an answer. The protected call remains blocked; no ruling was granted. Do not retry this expired review.",
+    review_cancelled:
+      "The client canceled the approval review. That does not show a person saw it. The protected call remains blocked; no ruling was granted. Do not reopen this review.",
+    review_unavailable:
+      "The approval review could not be delivered in this session. The protected call remains blocked; no ruling was granted.",
+    review_invalid:
+      "The approval review did not receive a valid decision. The protected call remains blocked; no ruling was granted.",
+  } satisfies Record<HitlReviewOutcome, string>;
+  return instructions[outcome];
+}
+
+function isNativeNoAnswer(
+  reading: NativeQuestionReading,
+): reading is NativeQuestionNoAnswer {
+  return (
+    reading === "declined" ||
+    reading === "cancelled" ||
+    reading === "unanswered" ||
+    reading === "unavailable"
+  );
 }
 
 function reviewRequiredOfferId(value: unknown, depth: number): string | null {
@@ -4989,11 +5150,7 @@ function reviewResultStatus(
   }
   if (!isRecord(value)) return null;
   if (
-    (value.outcome === "review_required" ||
-      value.outcome === "review_unanswered" ||
-      value.outcome === "review_cancelled" ||
-      value.outcome === "review_unavailable" ||
-      value.outcome === "review_invalid") &&
+    isHitlReviewOutcome(value.outcome) &&
     typeof value.offer_id === "string" &&
     value.offer_id.length > 0
   ) {

@@ -26,6 +26,7 @@ import type React from "react";
 import { McpRegistryAttentionBadge } from "@/components/mcp-registry-attention-badge";
 import { OpenAppaIcon } from "@/components/openappa-icon";
 import type { NavDotKey } from "@/lib/onboarding/nav-onboarding";
+import { GUARDRAILS_BETA_TOOLTIP } from "@/lib/openappa-maturity";
 
 /**
  * What the product's navigation is, separately from any one thing that draws
@@ -60,6 +61,8 @@ export interface NavItem {
   dotKey?: NavDotKey;
   /** Chip label shown when `beta` is set; defaults to "New". */
   badgeLabel?: string;
+  /** Hover text for the `beta` chip, e.g. what is still unfinished. */
+  badgeTooltip?: string;
   /**
    * Trailing live count, e.g. MCP servers needing attention. Rendered as a
    * sibling of the nav link rather than inside it: the badge is itself a link
@@ -165,7 +168,9 @@ export const contentNavGroups: NavGroup[] = [
         icon: OpenAppaIcon,
         customIsActive: (pathname: string) => pathname.startsWith("/openappa"),
         beta: true,
-        badgeLabel: "Alpha",
+        badgeLabel: "Beta",
+        badgeTooltip: GUARDRAILS_BETA_TOOLTIP,
+        dotKey: "nav:guardrails",
       },
       {
         title: "Skills",
@@ -174,8 +179,6 @@ export const contentNavGroups: NavGroup[] = [
         customIsActive: (pathname: string) => pathname.startsWith("/skills"),
       },
       {
-        // Dropped entirely when the deployment has plugins turned off — see
-        // the `pluginsEnabled` filter in `AppSidebar`.
         title: "Plugins",
         url: "/plugins",
         icon: Puzzle,

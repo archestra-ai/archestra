@@ -1,0 +1,4 @@
+-- drizzle-migration-linter: allow-breaking
+-- drizzle-migration-linter: reason=The index gains client_type, so it is strictly looser than the one it replaces: every existing row already satisfies it and older writers never produce a second client type for one marketplace entry. plugins is a small, admin-written table.
+DROP INDEX "plugins_org_marketplace_entry_uidx";--> statement-breakpoint
+CREATE UNIQUE INDEX "plugins_org_marketplace_entry_uidx" ON "plugins" USING btree ("organization_id",lower("source_marketplace_repo"),"source_marketplace_path",lower("source_marketplace_plugin_name"),"client_type") WHERE "plugins"."source_marketplace_repo" IS NOT NULL AND "plugins"."source_marketplace_path" IS NOT NULL AND "plugins"."source_marketplace_plugin_name" IS NOT NULL AND "plugins"."deleted_at" IS NULL;

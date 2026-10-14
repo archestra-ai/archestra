@@ -3,8 +3,8 @@ title: Guardrail Clients
 sidebarTitle: Clients
 description: Make Guardrails check your client, with built-in support or session headers
 order: 3
-alpha: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-13
+beta: "Policy syntax and behavior may change as OpenAPPA evolves."
+lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -19,6 +19,7 @@ These clients identify themselves to the proxy and work without extra configurat
 - **Claude Code**: terminal coding agent. Passes session identifiers through request headers.
 - **Codex CLI**: terminal coding agent. Sends conversation identifiers in request metadata.
 - **OpenCode**: terminal coding agent. Sends its session headers automatically.
+- **Kilo Code**: terminal coding agent built on OpenCode. Sends the same session headers automatically.
 
 All other clients, including workflow automations like [n8n](/docs/integrations/web-ui-and-automation#n8n) and custom API integrations, require [session headers](#session-headers).
 

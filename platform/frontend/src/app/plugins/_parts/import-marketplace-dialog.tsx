@@ -21,7 +21,7 @@ import {
   type ConnectPlatformOption,
 } from "@/app/connection/platform.utils";
 import { ConnectionPlatformMultiSelect } from "@/app/connection/platform-select";
-import { RepositoryBar, SetupStepper } from "@/components/git/git-setup-chrome";
+import { RepositoryBar } from "@/components/git/git-setup-chrome";
 import {
   gitAuthFields,
   resolveGitRepository,
@@ -30,13 +30,16 @@ import {
   GitSourceStepBody,
   GitSourceStepFooter,
   gitSourceStepDescription,
-  gitSourceStepLabels,
   useGitSourceSteps,
 } from "@/components/git/git-source-steps";
+import {
+  ImportSelectionDialog,
+  ImportSelectionList,
+  ImportSettings,
+} from "@/components/git/import-selection";
 import type { InitialPermissionGrant } from "@/components/initial-resource-permissions";
 import { ResourceAccessSection } from "@/components/resource-access-section";
 import { SearchInput } from "@/components/search-input";
-import { StandardDialog } from "@/components/standard-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -71,11 +74,14 @@ import { PluginClientIcon } from "./plugin-client-icon";
 import { PluginPreviewDialog } from "./plugin-preview-dialog";
 
 type MarketplaceEntry = GithubPluginMarketplace["entries"][number];
+/** One importable row: a marketplace entry for one client. */
+type ImportRow = MarketplaceEntry & { key: string };
 type ImportMarketplaceBody =
   archestraApiTypes.ImportGithubPluginMarketplaceData["body"];
 
 const CLIENT_LABELS: Record<string, string> = {
   "claude-code": "Claude Code",
+  "claude-desktop": "Claude Desktop",
   "copilot-cli": "Copilot CLI",
   codex: "Codex",
   cursor: "Cursor",
@@ -109,8 +115,9 @@ export function ImportMarketplaceDialog({
   const [marketplace, setMarketplace] =
     useState<GithubPluginMarketplace | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const rangeSelection = useRef(new BulkRangeSelectionController()).current;
+  const rangeSelection = useRef(new BulkRangeSelectionController());
   const [search, setSearch] = useState("");
+  const [selectedOnly, setSelectedOnly] = useState(false);
   const [previewEntry, setPreviewEntry] = useState<MarketplaceEntry | null>(
     null,
   );
@@ -147,9 +154,12 @@ export function ImportMarketplaceDialog({
               plugin.sourceMarketplaceRepo &&
               plugin.sourceMarketplacePluginName,
           )
-          .map(
-            (plugin) =>
-              `${normalizeRepository(plugin.sourceMarketplaceRepo as string)}::${plugin.sourceMarketplacePluginName?.toLowerCase()}`,
+          .map((plugin) =>
+            marketplaceEntryKey(
+              plugin.sourceMarketplaceRepo as string,
+              plugin.sourceMarketplacePluginName as string,
+              plugin.clientType,
+            ),
           ),
       ),
     [existingPlugins],
@@ -159,7 +169,9 @@ export function ImportMarketplaceDialog({
     source.reset();
     setMarketplace(null);
     setSelected(new Set());
+    rangeSelection.current = new BulkRangeSelectionController();
     setSearch("");
+    setSelectedOnly(false);
     setPreviewEntry(null);
     previewPlugin.reset();
     setDiscoverError(null);
@@ -172,6 +184,7 @@ export function ImportMarketplaceDialog({
   const backToDiscover = () => {
     setMarketplace(null);
     setSearch("");
+    setSelectedOnly(false);
     setPreviewEntry(null);
     previewPlugin.reset();
   };
@@ -189,19 +202,25 @@ export function ImportMarketplaceDialog({
     if (data && !data.reason) {
       setMarketplace(data);
       setPlatforms([...CONNECT_PLATFORM_OPTIONS]);
-      setClients(marketplaceClientOptions(data.entries));
+      // Only the clients the marketplace targets start selected; a Claude
+      // Desktop copy of a Claude Code plugin is opt-in.
+      const detectedClients = marketplaceClientOptions(data.entries);
+      setClients(detectedClients);
       setSelected(
         new Set(
-          data.entries
+          importRows(data.entries)
             .filter(
-              (entry) =>
-                entry.supported &&
+              (row) =>
+                row.supported &&
+                detectedClients.some(
+                  (client) => client.id === row.clientType,
+                ) &&
                 !importedMarketplacePlugins.has(
-                  marketplaceEntryKey(data.repoUrl, entry.name),
+                  marketplaceEntryKey(data.repoUrl, row.name, row.clientType),
                 ),
             )
             .slice(0, PLUGIN_MARKETPLACE_IMPORT_LIMIT)
-            .map((entry) => entry.name),
+            .map((row) => row.key),
         ),
       );
     } else {
@@ -230,8 +249,8 @@ export function ImportMarketplaceDialog({
 
   const handleImport = async () => {
     if (!marketplace || !repositoryFields) return;
-    const entries = marketplace.entries.filter(
-      (entry) => selected.has(entry.name) && entry.supported,
+    const entries = rows.filter(
+      (row) => selected.has(row.key) && row.supported,
     );
     const result = await importMarketplace.mutateAsync({
       ...repositoryFields,
@@ -276,10 +295,10 @@ export function ImportMarketplaceDialog({
       const orderedIds = selectableFiltered
         .filter(
           (entry) =>
-            prev.has(entry.name) || prev.size < PLUGIN_MARKETPLACE_IMPORT_LIMIT,
+            prev.has(entry.key) || prev.size < PLUGIN_MARKETPLACE_IMPORT_LIMIT,
         )
-        .map((entry) => entry.name);
-      const next = rangeSelection.update({
+        .map((entry) => entry.key);
+      const next = rangeSelection.current.update({
         current,
         orderedIds,
         targetId: name,
@@ -303,15 +322,13 @@ export function ImportMarketplaceDialog({
   const handleClientsChange = (nextClients: ConnectClient[]) => {
     setClients(nextClients);
     const allowedClientIds = new Set(nextClients.map((client) => client.id));
-    const entriesByName = new Map(
-      (marketplace?.entries ?? []).map((entry) => [entry.name, entry]),
-    );
+    const rowsByKey = new Map(rows.map((row) => [row.key, row]));
     setSelected(
       (current) =>
         new Set(
-          [...current].filter((name) => {
-            const entry = entriesByName.get(name);
-            return entry && allowedClientIds.has(entry.clientType);
+          [...current].filter((key) => {
+            const row = rowsByKey.get(key);
+            return row && allowedClientIds.has(row.clientType);
           }),
         ),
     );
@@ -330,21 +347,26 @@ export function ImportMarketplaceDialog({
     });
   };
 
+  const rows = useMemo(
+    () => importRows(marketplace?.entries ?? []),
+    [marketplace],
+  );
+
   const filteredEntries = useMemo(() => {
-    if (!marketplace) return [];
     const q = search.trim().toLowerCase();
-    return marketplace.entries.filter(
+    return rows.filter(
       (entry) =>
+        (!selectedOnly || selected.has(entry.key)) &&
         clients.some((client) => client.id === entry.clientType) &&
         (!q ||
           entry.name.toLowerCase().includes(q) ||
           entry.description?.toLowerCase().includes(q)),
     );
-  }, [clients, marketplace, search]);
+  }, [clients, rows, search, selectedOnly, selected]);
 
   const availableClients = useMemo(
-    () => marketplaceClientOptions(marketplace?.entries ?? []),
-    [marketplace],
+    () => marketplaceClientOptions(rows),
+    [rows],
   );
 
   const selectableFiltered = useMemo(
@@ -356,6 +378,7 @@ export function ImportMarketplaceDialog({
             marketplaceEntryKey(
               marketplace?.repoUrl ?? source.repository.input,
               entry.name,
+              entry.clientType,
             ),
           ),
       ),
@@ -369,14 +392,14 @@ export function ImportMarketplaceDialog({
 
   const allFilteredSelected =
     selectableFiltered.length > 0 &&
-    selectableFiltered.every((entry) => selected.has(entry.name));
+    selectableFiltered.every((entry) => selected.has(entry.key));
 
   const someFilteredSelected =
     !allFilteredSelected &&
-    selectableFiltered.some((entry) => selected.has(entry.name));
+    selectableFiltered.some((entry) => selected.has(entry.key));
 
   const selectedFilteredCount = selectableFiltered.filter((entry) =>
-    selected.has(entry.name),
+    selected.has(entry.key),
   ).length;
   const selectionLimitReached =
     selected.size >= PLUGIN_MARKETPLACE_IMPORT_LIMIT;
@@ -389,11 +412,11 @@ export function ImportMarketplaceDialog({
         (next.size >= PLUGIN_MARKETPLACE_IMPORT_LIMIT &&
           selectedFilteredCount > 0)
       ) {
-        for (const entry of selectableFiltered) next.delete(entry.name);
+        for (const entry of selectableFiltered) next.delete(entry.key);
       } else {
         for (const entry of selectableFiltered) {
           if (next.size >= PLUGIN_MARKETPLACE_IMPORT_LIMIT) break;
-          next.add(entry.name);
+          next.add(entry.key);
         }
       }
       return next;
@@ -411,25 +434,21 @@ export function ImportMarketplaceDialog({
     />
   );
 
-  const totalImportable =
-    marketplace?.entries.filter(
-      (entry) =>
-        entry.supported &&
-        !importedMarketplacePlugins.has(
-          marketplaceEntryKey(marketplace.repoUrl, entry.name),
-        ),
-    ).length ?? 0;
-  const totalImported =
-    marketplace?.entries.filter((entry) =>
-      importedMarketplacePlugins.has(
-        marketplaceEntryKey(marketplace.repoUrl, entry.name),
-      ),
-    ).length ?? 0;
-  const totalUnsupported =
-    marketplace?.entries.filter((entry) => !entry.supported).length ?? 0;
+  // Counted over the clients in view: hidden clients' plugins are not part of
+  // this batch, and a Claude Code entry's Desktop copy is a row of its own.
+  const countedRows = filteredByClient(rows, clients);
+  const isImported = (row: ImportRow) =>
+    importedMarketplacePlugins.has(
+      marketplaceEntryKey(marketplace?.repoUrl ?? "", row.name, row.clientType),
+    );
+  const totalImportable = countedRows.filter(
+    (row) => row.supported && !isImported(row),
+  ).length;
+  const totalImported = countedRows.filter(isImported).length;
+  const totalUnsupported = countedRows.filter((row) => !row.supported).length;
 
   return (
-    <StandardDialog
+    <ImportSelectionDialog
       open={open}
       onOpenChange={handleClose}
       title={
@@ -452,7 +471,7 @@ export function ImportMarketplaceDialog({
               })
       }
       size="medium"
-      bodyClassName={isSelectStep ? "p-0" : undefined}
+      selecting={isSelectStep}
       footer={
         isAutoDiscovering ? (
           <Button variant="outline" onClick={() => handleClose(false)}>
@@ -521,18 +540,7 @@ export function ImportMarketplaceDialog({
           </div>
         </div>
       ) : isSelectStep ? (
-        <div className="flex flex-col">
-          {autoDiscover ? null : (
-            <div className="px-4 pt-4 pb-3">
-              <SetupStepper
-                steps={gitSourceStepLabels({
-                  provider: source.provider,
-                  last: "Plugins",
-                })}
-                current={3}
-              />
-            </div>
-          )}
+        <div className="flex min-h-0 flex-1 flex-col">
           {marketplace.entries.length === 0 ? (
             <>
               {repositoryBar}
@@ -553,45 +561,24 @@ export function ImportMarketplaceDialog({
             </>
           ) : (
             <>
-              <div className="sticky top-0 z-10 border-b bg-background">
+              <div className="shrink-0 border-b bg-background">
                 {repositoryBar}
                 <div className="space-y-3 px-4 py-3">
-                  {totalImportable > 0 && (
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label htmlFor="marketplace-clients">Clients</Label>
-                        <ConnectionClientMultiSelect
-                          id="marketplace-clients"
-                          ariaLabel="Filter marketplace clients"
-                          value={clients}
-                          onValueChange={handleClientsChange}
-                          options={availableClients}
-                          renderIcon={(client) => (
-                            <PluginClientIcon
-                              clientType={client.id}
-                              size={18}
-                            />
-                          )}
-                        />
-                        <FieldDescription>
-                          All detected clients are selected by default. Hiding a
-                          client removes its plugins from this batch.
-                        </FieldDescription>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="marketplace-platforms">Platforms</Label>
-                        <ConnectionPlatformMultiSelect
-                          id="marketplace-platforms"
-                          value={platforms}
-                          onValueChange={setPlatforms}
-                        />
-                        <FieldDescription>
-                          Applies to every selected plugin. Only supported setup
-                          platforms are available.
-                        </FieldDescription>
-                      </div>
-                    </div>
-                  )}
+                  <div className="space-y-2">
+                    <Label htmlFor="marketplace-clients" className="sr-only">
+                      Clients
+                    </Label>
+                    <ConnectionClientMultiSelect
+                      id="marketplace-clients"
+                      ariaLabel="Filter marketplace clients"
+                      value={clients}
+                      onValueChange={handleClientsChange}
+                      options={availableClients}
+                      renderIcon={(client) => (
+                        <PluginClientIcon clientType={client.id} size={18} />
+                      )}
+                    />
+                  </div>
                   <SearchInput
                     value={search}
                     onSearchChange={setSearch}
@@ -599,24 +586,8 @@ export function ImportMarketplaceDialog({
                     placeholder="Search by name or description"
                     className="relative w-full"
                   />
-                  {selectionLimitReached &&
-                    totalImportable > PLUGIN_MARKETPLACE_IMPORT_LIMIT && (
-                      <InlineNotice>
-                        <AlertTriangle />
-                        <span className="font-medium">
-                          {PLUGIN_MARKETPLACE_IMPORT_LIMIT}-plugin import limit
-                        </span>
-                        <InlineNoticeText>
-                          For this beta, import up to{" "}
-                          {PLUGIN_MARKETPLACE_IMPORT_LIMIT} plugins at a time.
-                          Finish this import, reopen the marketplace, and select
-                          the next batch. Imported plugins will be marked and
-                          excluded from the next batch.
-                        </InlineNoticeText>
-                      </InlineNotice>
-                    )}
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <div className="flex shrink-0 items-center gap-2">
                       <Checkbox
                         id="import-plugins-select-all"
                         checked={
@@ -637,15 +608,41 @@ export function ImportMarketplaceDialog({
                         className="cursor-pointer text-xs font-medium text-muted-foreground select-none hover:text-foreground peer-disabled:cursor-not-allowed peer-disabled:opacity-50 peer-disabled:hover:text-muted-foreground"
                       >
                         {allFilteredSelected
-                          ? "Deselect all"
+                          ? search.trim() || selectedOnly
+                            ? "Deselect visible"
+                            : "Deselect all"
                           : selectionLimitReached && selectedFilteredCount > 0
-                            ? "Clear selected batch"
+                            ? search.trim() || selectedOnly
+                              ? "Deselect visible"
+                              : "Clear batch"
                             : search.trim()
                               ? `Select visible (up to ${PLUGIN_MARKETPLACE_IMPORT_LIMIT})`
                               : `Select up to ${PLUGIN_MARKETPLACE_IMPORT_LIMIT}`}
                       </label>
                     </div>
-                    <span className="text-xs tabular-nums text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant={selectedOnly ? "secondary" : "ghost"}
+                        size="xs"
+                        aria-pressed={selectedOnly}
+                        onClick={() => setSelectedOnly((value) => !value)}
+                      >
+                        <span>Selected ({selected.size})</span>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        disabled={selected.size === 0}
+                        onClick={() => {
+                          setSelected(new Set());
+                          rangeSelection.current =
+                            new BulkRangeSelectionController();
+                        }}
+                      >
+                        <span>Clear selection</span>
+                      </Button>
+                    </div>
+                    <span className="ml-auto text-xs tabular-nums text-muted-foreground">
                       {selected.size} of {totalImportable} selected
                       {totalImportable > PLUGIN_MARKETPLACE_IMPORT_LIMIT &&
                         ` · ${PLUGIN_MARKETPLACE_IMPORT_LIMIT} max per import`}
@@ -656,43 +653,75 @@ export function ImportMarketplaceDialog({
                   </div>
                 </div>
               </div>
-              {filteredEntries.length === 0 ? (
-                <div className="px-4 py-8">
-                  <Empty>
-                    <EmptyHeader>
-                      <EmptyMedia variant="icon">
-                        <SearchX />
-                      </EmptyMedia>
-                      <EmptyTitle>No matches</EmptyTitle>
-                      <EmptyDescription>
-                        No plugins match “{search}”.
-                      </EmptyDescription>
-                    </EmptyHeader>
-                  </Empty>
-                </div>
-              ) : (
-                <ul className="divide-y">
-                  {filteredEntries.map((entry) => (
-                    <MarketplaceEntryRow
-                      key={`${entry.marketplacePath}:${entry.name}:${entry.sourceRepoUrl}:${entry.sourceSubdir}`}
-                      entry={entry}
-                      exists={importedMarketplacePlugins.has(
-                        marketplaceEntryKey(marketplace.repoUrl, entry.name),
-                      )}
-                      checked={selected.has(entry.name)}
-                      selectionDisabled={
-                        selectionLimitReached && !selected.has(entry.name)
-                      }
-                      onToggle={(range) => toggle(entry.name, range)}
-                      onPreview={() => handlePreview(entry)}
-                    />
-                  ))}
-                </ul>
-              )}
+              <ImportSelectionList label="Plugins to import">
+                {filteredEntries.length === 0 ? (
+                  <div className="px-4 py-8">
+                    <Empty>
+                      <EmptyHeader>
+                        <EmptyMedia variant="icon">
+                          <SearchX />
+                        </EmptyMedia>
+                        <EmptyTitle>No matches</EmptyTitle>
+                        <EmptyDescription>
+                          {selectedOnly
+                            ? "No selected plugins match your search."
+                            : `No plugins match “${search}”.`}
+                        </EmptyDescription>
+                      </EmptyHeader>
+                    </Empty>
+                  </div>
+                ) : (
+                  <ul className="divide-y">
+                    {filteredEntries.map((entry) => (
+                      <MarketplaceEntryRow
+                        key={`${entry.key}:${entry.marketplacePath}:${entry.sourceRepoUrl}:${entry.sourceSubdir}`}
+                        entry={entry}
+                        exists={importedMarketplacePlugins.has(
+                          marketplaceEntryKey(
+                            marketplace.repoUrl,
+                            entry.name,
+                            entry.clientType,
+                          ),
+                        )}
+                        checked={selected.has(entry.key)}
+                        selectionDisabled={
+                          selectionLimitReached && !selected.has(entry.key)
+                        }
+                        onToggle={(range) => toggle(entry.key, range)}
+                        onPreview={() => handlePreview(entry)}
+                      />
+                    ))}
+                  </ul>
+                )}
+              </ImportSelectionList>
             </>
           )}
           {marketplace.entries.length > 0 ? (
-            <div className="space-y-5 border-t px-4 py-4">
+            <ImportSettings>
+              {selectionLimitReached &&
+                totalImportable > PLUGIN_MARKETPLACE_IMPORT_LIMIT && (
+                  <InlineNotice>
+                    <AlertTriangle />
+                    <span className="font-medium">
+                      {PLUGIN_MARKETPLACE_IMPORT_LIMIT}-plugin import limit
+                    </span>
+                    <InlineNoticeText>
+                      Import this batch, then reopen for the next.
+                    </InlineNoticeText>
+                  </InlineNotice>
+                )}
+
+              <div className="space-y-2">
+                <Label htmlFor="marketplace-platforms">Platforms</Label>
+                <ConnectionPlatformMultiSelect
+                  id="marketplace-platforms"
+                  value={platforms}
+                  onValueChange={setPlatforms}
+                />
+                <FieldDescription>
+                  Applies to every selected plugin.
+                </FieldDescription>
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="marketplace-sync-interval">Keep in sync</Label>
                 <FieldDescription>
@@ -722,7 +751,7 @@ export function ImportMarketplaceDialog({
                 grants={initialGrants}
                 onGrantsChange={setInitialGrants}
               />
-            </div>
+            </ImportSettings>
           ) : null}
         </div>
       ) : (
@@ -755,7 +784,7 @@ export function ImportMarketplaceDialog({
           }
         }}
       />
-    </StandardDialog>
+    </ImportSelectionDialog>
   );
 }
 
@@ -767,7 +796,7 @@ function MarketplaceEntryRow({
   onToggle,
   onPreview,
 }: {
-  entry: MarketplaceEntry;
+  entry: ImportRow;
   exists: boolean;
   checked: boolean;
   selectionDisabled: boolean;
@@ -791,7 +820,7 @@ function MarketplaceEntryRow({
       )}
     >
       <label
-        htmlFor={exists ? undefined : `import-plugin-${entry.name}`}
+        htmlFor={exists ? undefined : `import-plugin-${entry.key}`}
         className={cn(
           "flex min-w-0 flex-1 items-center gap-3 text-left",
           entry.supported && !exists && !selectionDisabled
@@ -806,7 +835,7 @@ function MarketplaceEntryRow({
           />
         ) : entry.supported ? (
           <Checkbox
-            id={`import-plugin-${entry.name}`}
+            id={`import-plugin-${entry.key}`}
             checked={checked}
             disabled={selectionDisabled}
             onClick={(event) => {
@@ -829,10 +858,10 @@ function MarketplaceEntryRow({
           />
         )}
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 sm:flex-nowrap">
             <span
               className={cn(
-                "truncate text-sm font-medium",
+                "basis-full truncate text-sm font-medium sm:basis-auto",
                 !entry.supported && "text-muted-foreground",
               )}
             >
@@ -872,7 +901,7 @@ function MarketplaceEntryRow({
         </div>
       </label>
       <div className="flex shrink-0 items-center gap-3">
-        <span className="text-xs tabular-nums text-muted-foreground">
+        <span className="hidden text-xs tabular-nums text-muted-foreground sm:inline">
           {entry.supported && entry.fileCount === 0
             ? "Files checked on import"
             : `${entry.fileCount} ${entry.fileCount === 1 ? "file" : "files"}`}
@@ -887,7 +916,7 @@ function MarketplaceEntryRow({
             aria-label={`Preview ${entry.name}`}
           >
             <Eye className="size-3.5" />
-            Preview
+            <span className="sr-only sm:not-sr-only">Preview</span>
           </Button>
         )}
       </div>
@@ -895,8 +924,47 @@ function MarketplaceEntryRow({
   );
 }
 
-function marketplaceEntryKey(repo: string, pluginName: string): string {
-  return `${normalizeRepository(repo)}::${pluginName.toLowerCase()}`;
+function marketplaceEntryKey(
+  repo: string,
+  pluginName: string,
+  clientType: string | null,
+): string {
+  return `${normalizeRepository(repo)}::${pluginName.toLowerCase()}::${clientType}`;
+}
+
+/**
+ * Every importable row. Claude Desktop installs Claude Code's plugin format,
+ * so each Claude Code entry also gets a Claude Desktop row.
+ */
+function importRows(entries: readonly MarketplaceEntry[]): ImportRow[] {
+  const desktopNames = new Set(
+    entries
+      .filter((entry) => entry.clientType === "claude-desktop")
+      .map((entry) => entry.name),
+  );
+  return entries.flatMap((entry) => {
+    const row = { ...entry, key: `${entry.clientType}:${entry.name}` };
+    // A marketplace's own Desktop entry wins over the copy made from Claude Code.
+    return entry.clientType === "claude-code" && !desktopNames.has(entry.name)
+      ? [
+          row,
+          {
+            ...entry,
+            clientType: "claude-desktop" as const,
+            key: `claude-desktop:${entry.name}`,
+          },
+        ]
+      : [row];
+  });
+}
+
+function filteredByClient(
+  rows: readonly ImportRow[],
+  clients: readonly ConnectClient[],
+): ImportRow[] {
+  return rows.filter((row) =>
+    clients.some((client) => client.id === row.clientType),
+  );
 }
 
 function marketplaceClientOptions(

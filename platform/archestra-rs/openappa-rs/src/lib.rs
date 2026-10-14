@@ -43,7 +43,7 @@ use std::{
     sync::{Arc, OnceLock},
     time::{Duration, SystemTime},
 };
-use tokio::sync::{Mutex, OwnedMutexGuard, OwnedSemaphorePermit, Semaphore};
+use tokio::sync::{Mutex, Semaphore};
 
 #[napi(object)]
 #[derive(Clone)]
@@ -56,40 +56,53 @@ pub struct ReportingOptions {
 /// runs through a view pinned to its organization's deployment (see
 /// [`deployments`]), so dispatches run concurrently and none changes what another
 /// serves. A root keeps its opening policy revision, and a fork its parent's.
-/// Same-trajectory exclusion uses an in-process root lock and an advisory session
-/// lock. Ledger writes use short self-committing transactions.
+/// No dispatch holds a database connection or a lock while it works: the event
+/// log serializes each read-decide-append step of a family on the family's row,
+/// receipts carry a lease per operation (see [`lease`]), and every write is one
+/// short transaction.
 static STATE: OnceLock<Mutex<Option<State>>> = OnceLock::new();
 
 #[derive(Clone)]
 struct State {
     runtime: Arc<Runtime>,
     store: Arc<LogStore>,
-    /// One permit per pooled connection, so a dispatch waits for a connection
-    /// here, asynchronously, and never inside the store.
-    connections: Arc<Semaphore>,
     deployments: Arc<deployments::Deployments>,
     reporting: Option<ReportingOptions>,
 }
 
-/// Field order is drop order: the connection goes back before its permit does.
+/// A state whose store is one pooled connection of its own, for a short read.
 struct Leased {
     state: State,
-    _permit: OwnedSemaphorePermit,
 }
 
-/// A dispatch holds its connection across its consults, so slow authorities
-/// can keep every connection busy. Waiting dispatches then fail closed rather
-/// than hang; the bound matches the ledger's own `lock_timeout`.
-const CONNECTION_WAIT: Duration = Duration::from_secs(30);
+/// Host SQL beside the ledger. A store that is not leased checks a pooled
+/// connection out for each query alone, so a dispatch holds no connection while
+/// it waits on a consult.
+pub(crate) struct Sql<'a>(&'a LogStore);
 
-async fn connection_permit(
-    connections: &Arc<Semaphore>,
-    wait: Duration,
-) -> napi::Result<OwnedSemaphorePermit> {
-    tokio::time::timeout(wait, connections.clone().acquire_owned())
-        .await
-        .map_err(|_| error("OpenAPPA had no free PostgreSQL connection in time; retry later"))?
-        .map_err(error)
+impl Sql<'_> {
+    pub(crate) fn with_client<T: Send + 'static>(
+        &self,
+        operation: impl FnOnce(&mut postgres::Client) -> Result<T, PostgresError> + Send + 'static,
+    ) -> Result<T, PostgresError> {
+        if let Some(pg) = self.0.postgres() {
+            return pg.with_client(operation);
+        }
+        let leased = self.0.lease().map_err(no_free_connection)?;
+        postgres_store(&leased)
+            .map_err(|error| PostgresError(error.reason.clone()))?
+            .with_client(operation)
+    }
+}
+
+/// The pool's refusal when every connection stayed busy for its whole checkout wait.
+fn no_free_connection(error: appa_eventlog::postgres::LeaseError) -> PostgresError {
+    match error {
+        appa_eventlog::postgres::LeaseError::Exhausted(_) => {
+            PostgresError("OpenAPPA had no free PostgreSQL connection in time; retry later".into())
+        }
+        other => PostgresError::from(other),
+    }
 }
 
 fn state_mutex() -> &'static Mutex<Option<State>> {
@@ -324,9 +337,23 @@ fn error(message: impl ToString) -> napi::Error {
     napi::Error::from_reason(message.to_string())
 }
 
-/// The host retries: the dispatch that took the family over answers it.
+/// The host retries: the dispatch that took the operation over answers it.
 fn lease_lost() -> napi::Error {
     error("OpenAPPA lost its lease on this operation; retry the request")
+}
+
+/// Another dispatch holds a live lease on this operation. The host retries: that
+/// dispatch answers it, or its lease expires and the retry takes the work over.
+fn held_elsewhere() -> napi::Error {
+    error("OpenAPPA is processing this operation in another request; retry the request")
+}
+
+/// A completion this dispatch may no longer write, as the host sees it.
+fn completion_error(reason: ReceiptError) -> napi::Error {
+    match reason {
+        ReceiptError::LeaseLost => lease_lost(),
+        reason => error(reason),
+    }
 }
 
 /// The upstream pin and host replay boundary version stored with each run.
@@ -415,39 +442,6 @@ fn processed_result_key(input: &Input, tool_call_id: String) -> ProcessedResultK
     }
 }
 
-/// The receipts this event's dispatch may claim, for the lease's settle: its
-/// operation receipt, and the processed-result receipt of the call it answers.
-/// The call's own operation receipt is never listed: an earlier dispatch
-/// claimed it, and releasing it here on an unrelated failure could strand a
-/// committed decision behind a terminal unreleased-call answer. It recovers
-/// when the call is resubmitted, or when a later report re-drives it.
-fn own_receipts(input: &Input) -> lease::OwnReceipts {
-    let mut operations = Vec::new();
-    let mut results = Vec::new();
-    match input.event {
-        HookEventKind::SessionStart => {}
-        HookEventKind::ToolResult => {
-            results.extend(input.tool_call_id.clone());
-        }
-        HookEventKind::CancelCall => {
-            if let Some(id) = &input.tool_call_id {
-                operations.push(cancellation_operation(id));
-                results.push(id.clone());
-            }
-        }
-        HookEventKind::Remedy => {
-            operations.extend(remedy_operation(input).ok());
-            results.extend(input.tool_call_id.clone());
-        }
-        _ => operations.extend(input.operation_id.clone()),
-    }
-    lease::OwnReceipts {
-        session_id: input.session_id.clone(),
-        operations,
-        results,
-    }
-}
-
 fn presentation_options(input: &Input) -> EmbeddedPresentationOptions {
     input
         .presentation
@@ -482,6 +476,27 @@ fn native_presentation_options() -> EmbeddedPresentationOptions {
         include_display_plan: true,
         ..EmbeddedPresentationOptions::default()
     }
+}
+
+/// A session's stored identity — root, parent and forked-from session — must be the
+/// one this event names.
+fn check_session_identity(
+    saved: &(String, Option<String>, Option<String>),
+    root: &str,
+    input: &Input,
+) -> napi::Result<()> {
+    let (saved_root, saved_parent, saved_fork) = saved;
+    if saved_root != root || *saved_parent != input.parent_id {
+        return Err(error("session identity changed"));
+    }
+    // A fork retains its parent session. A session with its own root cannot move
+    // to a different history.
+    if input.fork_of.is_some() && *saved_fork != input.fork_of {
+        return Err(error(
+            "OpenAPPA cannot continue another session's history in a session that governs its own trajectory",
+        ));
+    }
+    Ok(())
 }
 
 fn postgres_store(store: &LogStore) -> napi::Result<&LeasedPostgres> {
@@ -585,7 +600,6 @@ pub async fn initialize_openappa(
         Ok(State {
             runtime: Arc::new(runtime),
             store,
-            connections: Arc::new(Semaphore::new(max_connections.get())),
             deployments: Arc::default(),
             reporting,
         })
@@ -611,6 +625,21 @@ pub async fn validate_openappa_policy(content: String) -> napi::Result<Vec<Strin
     .map_err(error)?
 }
 
+/// Validates a document already composed by the host, including host-owned helper
+/// token bindings. Never use this for authored root or battery text: those must
+/// pass their existing input checks before the host adds its bindings.
+/// Validation defers secret lookup and opens no store or network connection.
+#[napi(js_name = "validateHostedOpenappaPolicy")]
+pub async fn validate_hosted_openappa_policy(content: String) -> napi::Result<Vec<String>> {
+    tokio::task::spawn_blocking(move || {
+        std::panic::catch_unwind(|| policy::validate_hosted(&content))
+            .map(|result| result.err().into_iter().collect())
+            .map_err(|_| error("OpenAPPA hosted policy validation failed"))
+    })
+    .await
+    .map_err(error)?
+}
+
 #[napi(object)]
 pub struct HelperBindingInput {
     /// The endpoint every `command` external of the battery is served under; the
@@ -625,7 +654,10 @@ pub struct ComposeBatteryInput {
     /// The include entry this battery answers, as the root document spells it.
     pub entry: String,
     pub name: String,
+    /// The base policy text.
     pub policy: String,
+    /// The target policy text deployed before the base; absent deploys the base alone.
+    pub target_policy: Option<String>,
     pub helpers: Option<HelperBindingInput>,
 }
 
@@ -633,6 +665,9 @@ pub struct ComposeBatteryInput {
 pub struct ComposePolicyInput {
     pub root: String,
     pub batteries: Vec<ComposeBatteryInput>,
+    /// The readers of each member roster the host keeps, by roster name:
+    /// principal → email. A roster absent here is declared empty.
+    pub member_rosters: Option<HashMap<String, HashMap<String, String>>>,
 }
 
 #[napi(object)]
@@ -660,13 +695,20 @@ pub async fn compose_openappa_policy(input: ComposePolicyInput) -> napi::Result<
                 entry: battery.entry,
                 name: battery.name,
                 policy: battery.policy,
+                target: battery.target_policy,
                 helpers: battery.helpers.map(|helpers| policy::HelperBinding {
                     url_base: helpers.url_base,
                     token_env: helpers.token_env,
                 }),
             })
             .collect();
-        std::panic::catch_unwind(|| policy::compose(&input.root, &batteries))
+        let rosters: policy::MemberRosters = input
+            .member_rosters
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(name, readers)| (name, readers.into_iter().collect()))
+            .collect();
+        std::panic::catch_unwind(|| policy::compose_with_rosters(&input.root, &batteries, &rosters))
             .map(|result| match result {
                 Ok(composed) => ComposedPolicy {
                     content: Some(composed.content),
@@ -868,13 +910,43 @@ pub struct BatteryPackage {
     pub annotators: Vec<String>,
     /// The annotators the battery's own `[[policy.tool]]` rules route calls to.
     pub routed_annotators: Vec<String>,
-    pub policy: String,
+    /// The base policy text: all a deployment without a target composes.
+    pub base: String,
     pub helpers: Vec<String>,
     pub credentials: Vec<String>,
     pub externals: Vec<BatteryExternal>,
     pub benefit: Option<String>,
     pub setup: Option<String>,
     pub files: Vec<BatteryFileInput>,
+    /// What a multi-user deployment composes, when the battery declares targets.
+    pub multi_user: Option<BatteryTargetView>,
+}
+
+/// A battery deployed for one target: the target policy, composed before the base,
+/// and what the two declare and read together.
+#[napi(object)]
+pub struct BatteryTargetView {
+    pub policy: String,
+    /// Every variable the target and its base read.
+    pub credentials: Vec<String>,
+    /// The variables the target policy itself reads, without the base's.
+    pub target_credentials: Vec<String>,
+    pub externals: Vec<BatteryExternal>,
+    pub annotators: Vec<String>,
+    pub routed_annotators: Vec<String>,
+    pub setup: Option<String>,
+}
+
+fn battery_externals(externals: &[batteries::HelperExternal]) -> Vec<BatteryExternal> {
+    externals
+        .iter()
+        .map(|external| BatteryExternal {
+            kind: external.kind.clone(),
+            name: external.name.clone(),
+            command: external.command.clone(),
+            token_env: external.token_env.clone(),
+        })
+        .collect()
 }
 
 impl From<&batteries::BatteryInfo> for BatteryPackage {
@@ -885,19 +957,10 @@ impl From<&batteries::BatteryInfo> for BatteryPackage {
             namespaces: info.namespaces.clone(),
             annotators: info.annotators.clone(),
             routed_annotators: info.routed_annotators.clone(),
-            policy: info.policy.clone(),
+            base: info.base.clone(),
             helpers: info.helpers.clone(),
             credentials: info.credentials.clone(),
-            externals: info
-                .externals
-                .iter()
-                .map(|external| BatteryExternal {
-                    kind: external.kind.clone(),
-                    name: external.name.clone(),
-                    command: external.command.clone(),
-                    token_env: external.token_env.clone(),
-                })
-                .collect(),
+            externals: battery_externals(&info.externals),
             benefit: info.benefit.clone(),
             setup: info.setup.clone(),
             files: info
@@ -908,6 +971,15 @@ impl From<&batteries::BatteryInfo> for BatteryPackage {
                     text: file.text.clone(),
                 })
                 .collect(),
+            multi_user: info.multi_user.as_ref().map(|target| BatteryTargetView {
+                policy: target.policy.clone(),
+                credentials: target.credentials.clone(),
+                target_credentials: target.target_credentials.clone(),
+                externals: battery_externals(&target.externals),
+                annotators: target.annotators.clone(),
+                routed_annotators: target.routed_annotators.clone(),
+                setup: target.setup.clone(),
+            }),
         }
     }
 }
@@ -957,6 +1029,26 @@ pub async fn dispatch_hook(input: String, policy: DispatchPolicy) -> napi::Resul
     run(input, policy.into()).await
 }
 
+/// The policy text the runtime stored when `root` opened. Absent when the root
+/// has no log. This is the opening document, not an error message.
+#[napi(js_name = "readOpenappaOpeningPolicy")]
+pub async fn read_openappa_opening_policy(root: String) -> napi::Result<Option<String>> {
+    if root.is_empty() || root.len() > 1024 || root.chars().any(char::is_control) {
+        return Err(error("invalid root identity"));
+    }
+    let state = initialized().await?;
+    let leased = state.lease().await?;
+    tokio::task::spawn_blocking(move || match leased.state.store.log(&TrajectoryId(root)) {
+        Ok(log) => String::from_utf8(log.policy_file().to_vec())
+            .map(Some)
+            .map_err(|_| error("OpenAPPA opening policy is not UTF-8")),
+        Err(appa_eventlog::ReadError::UnknownRoot { .. }) => Ok(None),
+        Err(read) => Err(error(read)),
+    })
+    .await
+    .map_err(error)?
+}
+
 /// Read the current label of a started session without mutating its trajectory.
 #[napi(js_name = "getOpenappaStatus")]
 pub async fn get_openappa_status(
@@ -978,7 +1070,7 @@ pub async fn get_openappa_status(
         let leased = state.lease().await?;
         tokio::task::spawn_blocking(move || {
             let key = SessionKey::new(&organization_id, &session_id);
-            let root = postgres_store(&leased.state.store)?
+            let root = Sql(&leased.state.store)
                 .with_client(move |client| {
                     Ok(client
                         .query_opt(
@@ -1182,7 +1274,7 @@ pub async fn execute_remedy_by_offer(
     let state = initialized().await?;
     let owner = {
         let leased = state.lease().await?;
-        routing_owner(postgres_store(&leased.state.store)?, &input)?
+        routing_owner(&Sql(&leased.state.store), &input)?
     };
     let Some(owner) = owner else {
         return Ok(
@@ -1252,7 +1344,7 @@ pub async fn load_offer_review(
     // dispatches on the runtime state mutex.
     let state = initialized().await?;
     let leased = state.lease().await?;
-    let pg = postgres_store(&leased.state.store)?;
+    let pg = &Sql(&leased.state.store);
     // The SQL closure needs its own offer id copy because it must be 'static.
     let target_offer_id = offer_id.clone();
     let review = pg
@@ -1343,7 +1435,7 @@ pub async fn load_child_returns(
             .clone()
     };
     let leased = state.lease().await?;
-    let pg = postgres_store(&leased.state.store)?;
+    let pg = &Sql(&leased.state.store);
     pg.with_client(move |client| {
         // session_id is the leading PK column of openappa_operations, and
         // organization_id is an additional tenancy guard. ChildEnd keeps its
@@ -1449,7 +1541,7 @@ pub async fn load_child_addresses(
             .clone()
     };
     let leased = state.lease().await?;
-    let pg = postgres_store(&leased.state.store)?;
+    let pg = &Sql(&leased.state.store);
     pg.with_client(move |client| {
         // Only the child's own parent addresses it, and only an address the
         // runtime acknowledged carried the parent's label into the child.
@@ -1487,7 +1579,7 @@ pub async fn load_child_addresses(
 }
 
 /// Whether this child's parent addressed it before the child's first event.
-fn addressed_before_start(pg: &LeasedPostgres, input: &Input) -> napi::Result<bool> {
+fn addressed_before_start(pg: &Sql<'_>, input: &Input) -> napi::Result<bool> {
     let Some(parent) = input.parent_id.clone() else {
         return Ok(false);
     };
@@ -1594,7 +1686,7 @@ fn spawn_ref_from_receipt(
 /// allow-call receipt. `None` when that receipt is absent, incomplete, or not a
 /// spawn release.
 fn released_spawn_binding(
-    pg: &LeasedPostgres,
+    pg: &Sql<'_>,
     organization_id: &str,
     parent_session_id: &str,
     spawn_call_id: &str,
@@ -1669,71 +1761,13 @@ fn rebind_child(root: &TrajectoryId, stored_actor: String) -> HookEvent {
     }
 }
 
-struct SessionLock<'a> {
-    pg: &'a LeasedPostgres,
-    root: String,
-}
-impl<'a> SessionLock<'a> {
-    fn acquire(pg: &'a LeasedPostgres, root: String) -> napi::Result<Self> {
-        let key = root.clone();
-        pg.with_client(move |client| {
-            client.query_one("SELECT pg_advisory_lock(hashtextextended($1, 0))", &[&key])?;
-            Ok(())
-        })
-        .map_err(error)?;
-        Ok(Self { pg, root })
-    }
-}
-impl Drop for SessionLock<'_> {
-    fn drop(&mut self) {
-        let key = self.root.clone();
-        let _ = self.pg.with_client(move |client| {
-            client.query_one(
-                "SELECT pg_advisory_unlock(hashtextextended($1, 0))",
-                &[&key],
-            )?;
-            Ok(())
-        });
-    }
-}
-
-/// In-process per-trajectory exclusion. The advisory session lock only
-/// excludes other connections: on this process's one ledger connection it is
-/// reentrant, so it cannot order this process's own dispatches. Unrelated
-/// roots overlap freely; dispatches for one root queue here. One root is one
-/// chat session, so the registry grows with the distinct sessions this
-/// process has served, a few hundred bytes each — the same lifetime the
-/// sandbox handle slots keep. Removing an entry is not safe while a later
-/// dispatch could already be queued on it, so entries stay for the process's
-/// life; revisit only if distinct-root counts grow unbounded in production.
-static ROOT_LOCKS: OnceLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> = OnceLock::new();
-
-struct RootLock {
-    _guard: OwnedMutexGuard<()>,
-}
-
-impl RootLock {
-    async fn acquire(root: String) -> Self {
-        let lock = {
-            let mut registry = root_locks().lock().await;
-            registry.entry(root).or_default().clone()
-        };
-        let _guard = lock.lock_owned().await;
-        Self { _guard }
-    }
-}
-
-fn root_locks() -> &'static Mutex<HashMap<String, Arc<Mutex<()>>>> {
-    ROOT_LOCKS.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
 impl State {
     /// Opens this session's root as a fork of `fork_of`.
     /// Freezes the parent session's policy revision, labels, effects, and
     /// denials into the new root. Returns the parent watermark bounding inherited results.
     fn open_fork(
         &self,
-        pg: &LeasedPostgres,
+        pg: &Sql<'_>,
         input: &Input,
         fork_of: &str,
         root: &str,
@@ -1788,9 +1822,18 @@ impl State {
             return Ok(None);
         }
 
-        // This dispatch already holds the child lock. It then takes the parent
-        // lock, while a parent never takes a child lock, so this order has no cycle.
-        let _parent_lock = SessionLock::acquire(pg, parent_root.clone())?;
+        // Taken before the fork reads the parent's log. A parent result completes
+        // only after its admission is in that log, so every result completed
+        // before this moment is part of the history the fork copies. A result
+        // still being processed while the fork opens is not inherited: the fork
+        // answers it as unknown, which withholds it.
+        let forked_at = pg
+            .with_client(|client| {
+                Ok(client
+                    .query_one("SELECT clock_timestamp()", &[])?
+                    .get::<_, SystemTime>(0))
+            })
+            .map_err(error)?;
         self.runtime
             .open_root_fork(
                 &TrajectoryId(parent_root),
@@ -1798,15 +1841,7 @@ impl State {
                 &TrajectoryId(root.to_owned()),
             )
             .map_err(error)?;
-        // A parent result claims `created_at` under this same parent lock. The
-        // database clock taken before releasing it is therefore an exact cutoff.
-        pg.with_client(|client| {
-            Ok(client
-                .query_one("SELECT clock_timestamp()", &[])?
-                .get::<_, SystemTime>(0))
-        })
-        .map(Some)
-        .map_err(error)
+        Ok(Some(forked_at))
     }
 
     /// This state with its runtime pinned to `deployment`: every lease of it, and
@@ -1818,68 +1853,67 @@ impl State {
         }
     }
 
-    /// This state over one pooled connection: the store is a lease of it and
-    /// the runtime records through that lease.
+    /// This state over one pooled connection, for a short read: the store is a
+    /// lease of it and the runtime reads through that lease.
     async fn lease(&self) -> napi::Result<Leased> {
-        let permit = connection_permit(&self.connections, CONNECTION_WAIT).await?;
-        let store = Arc::new(self.store.lease().map_err(error)?);
+        let store = Arc::new(
+            self.store
+                .lease()
+                .map_err(no_free_connection)
+                .map_err(error)?,
+        );
         Ok(Leased {
             state: State {
                 runtime: Arc::new(self.runtime.on(store.clone())),
                 store,
                 ..self.clone()
             },
-            _permit: permit,
         })
     }
 
     async fn dispatch(&self, input: Input) -> napi::Result<Value> {
         let key = SessionKey::of(&input);
+        let sql = Sql(&self.store);
         let root = if let Some(root) = input.owner_root.clone() {
             root
         } else if let Some(parent_id) = &input.parent_id {
             // A parent is only ever looked up in the child's own organization.
             let parent = SessionKey::new(&input.organization_id, parent_id);
-            let leased = self.lease().await?;
-            postgres_store(&leased.state.store)?
-                .with_client(move |client| {
-                    client
-                        .query_opt(
-                            "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
-                            &[&parent.organization_id, &parent.actor],
-                        )?
-                        .map(|row| row.get::<_, String>(0))
-                        .ok_or_else(|| PostgresError("parent session has not started".into()))
-                })
-                .map_err(error)?
+            sql.with_client(move |client| {
+                client
+                    .query_opt(
+                        "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
+                        &[&parent.organization_id, &parent.actor],
+                    )?
+                    .map(|row| row.get::<_, String>(0))
+                    .ok_or_else(|| PostgresError("parent session has not started".into()))
+            })
+            .map_err(error)?
         } else {
-            self.session_root(&input, &key).await?
+            self.session_root(&input, &key)?
         };
-        let _root = RootLock::acquire(root.clone()).await;
-        let mut leased = self.lease().await?;
         let consults = Arc::new(consults::ConsultBuffer::default());
-        leased.state.runtime = Arc::new(leased.state.runtime.recording(consults.clone()));
+        let recording = State {
+            runtime: Arc::new(self.runtime.recording(consults.clone())),
+            ..self.clone()
+        };
         let attribution = consults::Attribution {
             organization_id: input.organization_id.clone(),
             session_id: input.session_id.clone(),
             caller_id: input.caller_id.clone(),
             withhold_content: input.withhold_consult_content,
         };
-        let result = leased.state.dispatch_on_lease(input, root, key).await;
-        // On the dispatch's own connection, after its session lock is released.
-        if let Ok(pg) = postgres_store(&leased.state.store) {
-            consults::store(pg, attribution, &consults);
-        }
+        let result = recording.dispatch_in_family(input, root, key).await;
+        consults::store(&sql, attribution, &consults);
         result
     }
 
     /// The root a top-level session governs: the one its row records once it has
     /// started, [`root_id`] before. A session that started while roots were named by
     /// the session id alone keeps that root, so its history carries on.
-    async fn session_root(&self, input: &Input, key: &SessionKey) -> napi::Result<String> {
+    fn session_root(&self, input: &Input, key: &SessionKey) -> napi::Result<String> {
         let lookup = key.clone();
-        let leased = self.lease().await?;
-        let recorded = postgres_store(&leased.state.store)?
+        let recorded = Sql(&self.store)
             .with_client(move |client| {
                 Ok(client
                     .query_opt(
@@ -1892,20 +1926,17 @@ impl State {
         Ok(recorded.unwrap_or_else(|| root_id(&input.organization_id, &input.session_id)))
     }
 
-    /// The session lock and the runtime's appends lock the same key, which
-    /// only one connection can hold twice, so both run on this state's lease.
-    async fn dispatch_on_lease(
+    /// One event of a session family. Dispatches of one family run side by side:
+    /// the event log takes their steps in turn, and each operation's receipt
+    /// lets one of them work on it at a time.
+    async fn dispatch_in_family(
         &self,
         input: Input,
         root: String,
         key: SessionKey,
     ) -> napi::Result<Value> {
-        let pg = postgres_store(&self.store)?;
-        let _lock = SessionLock::acquire(pg, root.clone())?;
-        // Holding the family's lock, this dispatch knows no other one is still
-        // working on a receipt it finds pending: the lock ends with its owner's
-        // connection. A pending receipt is recovered when its operation is
-        // resubmitted (`claim_operation`), never by closing the family.
+        let sql = Sql(&self.store);
+        let pg = &sql;
 
         let actor = expected_actor(&root, &input.session_id, input.parent_id.as_deref());
         let lookup = key.clone();
@@ -1925,17 +1956,8 @@ impl State {
                     }))
             })
             .map_err(error)?;
-        if let Some((saved_root, saved_parent, saved_fork)) = &existing {
-            if *saved_root != root || *saved_parent != input.parent_id {
-                return Err(error("session identity changed"));
-            }
-            // A fork retains its parent session. A session with its own root cannot move
-            // to a different history.
-            if input.fork_of.is_some() && *saved_fork != input.fork_of {
-                return Err(error(
-                    "OpenAPPA cannot continue another session's history in a session that governs its own trajectory",
-                ));
-            }
+        if let Some(saved) = &existing {
+            check_session_identity(saved, &root, &input)?;
         } else {
             let forked_at = input
                 .fork_of
@@ -1986,36 +2008,44 @@ impl State {
             // A return contract must be delivered before the child starts work.
             // Keep it in the start receipt so repeat SessionStart can deliver it.
             let start_decision = wire(&decision)?;
-            let (id, root, input) = (key.actor.clone(), root.clone(), input.clone());
-            pg.with_client(move |client| {
-                client.execute("INSERT INTO openappa_sessions (actor, root, organization_id, caller_id, session_id, parent_id, forked_from, forked_at, start_decision) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
-                    &[&id, &root, &input.organization_id, &input.caller_id, &input.session_id, &input.parent_id, &input.fork_of, &forked_at, &start_decision])?;
-                Ok(())
-            }).map_err(error)?;
+            let (id, saved_root, row) = (key.actor.clone(), root.clone(), input.clone());
+            // Two first events of one session can both get here; the runtime opened the
+            // session once, and the first row stands. The other must describe the same
+            // session.
+            let stored = pg
+                .with_client(move |client| {
+                    client.execute("INSERT INTO openappa_sessions (actor, root, organization_id, caller_id, session_id, parent_id, forked_from, forked_at, start_decision) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (organization_id, actor) DO NOTHING",
+                        &[&id, &saved_root, &row.organization_id, &row.caller_id, &row.session_id, &row.parent_id, &row.fork_of, &forked_at, &start_decision])?;
+                    Ok(client
+                        .query_one(
+                            "SELECT root, parent_id, forked_from FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
+                            &[&row.organization_id, &id],
+                        )
+                        .map(|row| (row.get(0), row.get(1), row.get(2)))?)
+                })
+                .map_err(error)?;
+            check_session_identity(&stored, &root, &input)?;
         }
 
-        // Taken after the session's own start events, so the lease records
-        // where the log ends before this dispatch claims anything. A remedy
-        // takes it too: its receipts recover like any operation's.
-        let own = own_receipts(&input);
-        let lease = lease::DispatchLease::take(pg, &root).map_err(error)?;
-        let work = self.handle_event(pg, input, root, key, actor);
-        match lease.hold(pg, work).await {
-            lease::Guarded::Finished(result) => {
-                // A lease that cannot be settled stays for the next dispatch,
-                // which recovers what this one left.
-                let _ = lease.settle(pg, result.is_ok(), &own);
-                result
-            }
-            lease::Guarded::Lost => Err(lease_lost()),
-        }
+        let receipts = lease::Receipts::new(self.store.clone());
+        let began = lease::log_end(pg, &root).map_err(error)?;
+        let work = self.handle_event(pg, &receipts, input, root.clone(), key, actor);
+        let failure = match receipts.hold(work).await {
+            lease::Guarded::Finished(Ok(value)) => return Ok(value),
+            lease::Guarded::Finished(Err(failure)) => failure,
+            lease::Guarded::Lost => lease_lost(),
+        };
+        // The host's retry takes these receipts over at once.
+        receipts.release(lease::log_end(pg, &root).ok() == Some(began));
+        Err(failure)
     }
 
     /// The part of a dispatch that claims and completes receipts. It runs under
     /// the family's lock and lease.
     async fn handle_event(
         &self,
-        pg: &LeasedPostgres,
+        pg: &Sql<'_>,
+        receipts: &lease::Receipts,
         input: Input,
         root: String,
         key: SessionKey,
@@ -2037,7 +2067,7 @@ impl State {
             input.event,
             HookEventKind::ToolResult | HookEventKind::CancelCall
         ) {
-            return self.result(pg, &input, &actor).await;
+            return self.result(pg, receipts, &input, &actor).await;
         }
         if input.event == HookEventKind::Remedy {
             let operation = remedy_operation(&input)?;
@@ -2049,38 +2079,44 @@ impl State {
                 .map(|tool_call_id| processed_result_key(&input, tool_call_id));
             if let Some(decision) = claim_operation(
                 &self.store,
+                receipts,
                 &input,
                 &root,
                 &operation,
                 &request,
                 binding.clone(),
                 None,
-            )? {
+            )
+            .await?
+            {
                 // The remedy's answer is saved. A dispatch stopped between its
                 // two completions leaves the tracked result pending; it takes
-                // exactly this answer, so finish that receipt from it now. An
-                // absent or identical result receipt is no repair at all.
+                // exactly this answer, so finish that receipt from it now. A
+                // result another live request is finishing is left to it.
                 if let Some(result_key) = result_key {
-                    let approved = decision_text(&decision)?;
-                    match self.store.complete_processed_result(
-                        result_key,
-                        approved,
-                        decision.clone(),
-                    ) {
-                        Ok(()) | Err(ReceiptError::NotPending) => {}
-                        Err(reason) => return Err(error(reason)),
+                    let root = TrajectoryId::new(root.as_str());
+                    if let ResultClaim::Work =
+                        claim_result(&self.store, receipts, &result_key, &root).await?
+                    {
+                        let approved = decision_text(&decision)?;
+                        self.store
+                            .complete_processed_result(
+                                result_key,
+                                approved,
+                                decision.clone(),
+                                receipts.owner(),
+                            )
+                            .map_err(completion_error)?;
                     }
                 }
                 return Ok(decision);
             }
             if let Some(result_key) = &result_key {
-                match self.store.claim_processed_result(ProcessedResultRequest {
-                    key: result_key.clone(),
-                    root: TrajectoryId::new(root.as_str()),
-                }) {
-                    Ok(ProcessedResultClaim::Claimed) | Err(ReceiptError::Pending) => {}
-                    Ok(ProcessedResultClaim::Complete { decision, .. }) => return Ok(decision),
-                    Err(reason) => return Err(error(reason)),
+                let root = TrajectoryId::new(root.as_str());
+                if let ResultClaim::Complete(decision) =
+                    claim_result(&self.store, receipts, result_key, &root).await?
+                {
+                    return Ok(decision);
                 }
             }
             if let Some(refusal) = &input.precheck_refusal {
@@ -2091,6 +2127,7 @@ impl State {
                 let response = runtime_refusal(refusal.clone())?;
                 return finish_remedy(
                     &self.store,
+                    receipts,
                     &input,
                     &operation,
                     binding,
@@ -2136,6 +2173,7 @@ impl State {
                 let response = runtime_refusal(text)?;
                 return finish_remedy(
                     &self.store,
+                    receipts,
                     &input,
                     &operation,
                     binding,
@@ -2174,6 +2212,7 @@ impl State {
             )?;
             return finish_remedy(
                 &self.store,
+                receipts,
                 &input,
                 &operation,
                 binding,
@@ -2225,13 +2264,16 @@ impl State {
         };
         if let Some(decision) = claim_operation(
             &self.store,
+            receipts,
             &input,
             &root,
             &operation,
             &request,
             session_binding(&input),
             context,
-        )? {
+        )
+        .await?
+        {
             return Ok(decision);
         }
         let decision = if let Some((reporting, args, endpoint)) = report {
@@ -2310,6 +2352,7 @@ impl State {
         };
         finish_operation(
             &self.store,
+            receipts,
             &input,
             &operation,
             &decision,
@@ -2322,7 +2365,7 @@ impl State {
     /// family's in-flight fork when the host named no spawn call. A supplied call id
     /// never falls back to in-flight: the engine has no call-id spawn reference, and
     /// the receipt's `spawn_binding` is the reference it minted.
-    fn child_spawn_ref(&self, pg: &LeasedPostgres, input: &Input) -> napi::Result<SpawnRef> {
+    fn child_spawn_ref(&self, pg: &Sql<'_>, input: &Input) -> napi::Result<SpawnRef> {
         let binding = match input.spawn_call_id.as_deref() {
             Some(spawn_call_id) => {
                 let parent = required(&input.parent_id, "parent_id")?;
@@ -2349,7 +2392,7 @@ impl State {
     /// dispatcher's own child trajectory. The dispatch already holds the family lock.
     async fn address_child(
         &self,
-        pg: &LeasedPostgres,
+        pg: &Sql<'_>,
         input: &Input,
         actor: &Actor,
     ) -> napi::Result<Value> {
@@ -2392,7 +2435,8 @@ impl State {
 
     async fn result(
         &self,
-        pg: &LeasedPostgres,
+        pg: &Sql<'_>,
+        receipts: &lease::Receipts,
         input: &Input,
         actor: &Actor,
     ) -> napi::Result<Value> {
@@ -2401,15 +2445,12 @@ impl State {
             return Ok(withheld);
         }
         let key = processed_result_key(input, call_id.clone());
-        match self.store.claim_processed_result(ProcessedResultRequest {
-            key: key.clone(),
-            root: actor.root.clone(),
-        }) {
-            // A pending receipt is this same result, claimed by a dispatch
-            // that stopped mid-processing. Drive it again and complete it.
-            Ok(ProcessedResultClaim::Claimed) | Err(ReceiptError::Pending) => {}
-            Ok(ProcessedResultClaim::Complete { decision, .. }) => return Ok(decision),
-            Err(reason) => return Err(error(reason)),
+        // A recovered receipt is this same result, claimed by a dispatch that
+        // stopped mid-processing. It is driven again and completed.
+        if let ResultClaim::Complete(decision) =
+            claim_result(&self.store, receipts, &key, &actor.root).await?
+        {
+            return Ok(decision);
         }
         let operation = operation_key(input, session_binding(input), format!("call:{call_id}"));
         let released = match read_operation_state(pg, &operation)? {
@@ -2418,13 +2459,33 @@ impl State {
                 input: recorded,
                 context,
             } => {
-                // The call's own dispatch was interrupted after its claim.
-                // Re-drive the recorded call — the runtime replays a committed
-                // decision and decides one it never recorded — and complete
-                // its receipt, so this result is processed against exactly the
-                // answer the host was owed.
-                self.recover_call(input, actor, &operation, recorded, context)
-                    .await?
+                // The call's own dispatch stopped after its claim: take its
+                // receipt over once that dispatch's lease has expired. Re-drive
+                // the recorded call — the runtime replays a committed decision
+                // and decides one it never recorded — and complete its receipt,
+                // so this result is processed against exactly the answer the
+                // host was owed.
+                if let Some(completed) = claim_operation(
+                    &self.store,
+                    receipts,
+                    input,
+                    &actor.root.0,
+                    &operation.operation_id,
+                    &recorded,
+                    session_binding(input),
+                    context.clone(),
+                )
+                .await?
+                {
+                    CompletedOperation {
+                        input: recorded,
+                        context,
+                        decision: completed,
+                    }
+                } else {
+                    self.recover_call(input, actor, receipts, &operation, recorded, context)
+                        .await?
+                }
             }
             OperationState::Absent => {
                 // A fork replays the history of the session it forks: a result from before the
@@ -2433,8 +2494,8 @@ impl State {
                     inherited_result(pg, input, &call_id)?.unwrap_or_else(unknown_result_response);
                 let approved = decision_text(&response)?;
                 self.store
-                    .complete_processed_result(key, approved, response.clone())
-                    .map_err(error)?;
+                    .complete_processed_result(key, approved, response.clone(), receipts.owner())
+                    .map_err(completion_error)?;
                 return Ok(response);
             }
         };
@@ -2446,8 +2507,8 @@ impl State {
             let response = authoritative_unexecuted_response(released.decision)?;
             let approved = decision_text(&response)?;
             self.store
-                .complete_processed_result(key, approved, response.clone())
-                .map_err(error)?;
+                .complete_processed_result(key, approved, response.clone(), receipts.owner())
+                .map_err(completion_error)?;
             return Ok(response);
         }
         let call = recorded_call(released.context, released.input)?;
@@ -2552,17 +2613,21 @@ impl State {
             let request = json!({ "event": "cancel_call", "tool_call_id": call_id });
             if let Some(saved) = claim_operation(
                 &self.store,
+                receipts,
                 input,
                 &actor.root.0,
                 &operation,
                 &request,
                 session_binding(input),
                 None,
-            )? {
+            )
+            .await?
+            {
                 response = saved;
             } else {
                 finish_operation(
                     &self.store,
+                    receipts,
                     input,
                     &operation,
                     &response,
@@ -2572,8 +2637,8 @@ impl State {
         }
         let approved = stored_approved_output(&decision_text(&response)?, &response);
         self.store
-            .complete_processed_result(key, approved, response.clone())
-            .map_err(error)?;
+            .complete_processed_result(key, approved, response.clone(), receipts.owner())
+            .map_err(completion_error)?;
         Ok(response)
     }
 
@@ -2585,6 +2650,7 @@ impl State {
         &self,
         input: &Input,
         actor: &Actor,
+        receipts: &lease::Receipts,
         operation: &OperationKey,
         recorded: Value,
         context: Option<Value>,
@@ -2606,8 +2672,8 @@ impl State {
         .await;
         let decision = wire(&outcome.decision)?;
         self.store
-            .complete_operation(operation.clone(), decision.clone())
-            .map_err(error)?;
+            .complete_operation(operation.clone(), decision.clone(), receipts.owner())
+            .map_err(completion_error)?;
         Ok(CompletedOperation {
             input: recorded,
             context,
@@ -2994,13 +3060,10 @@ fn raw_object_value(arguments: Option<&RawValue>, name: &str) -> napi::Result<Va
 const MAX_FORK_DEPTH: usize = 32;
 
 /// The decision the session this one forks from processed for `call_id`, looked up the fork
-/// line. A child accepts only results claimed before its parent-lock-protected watermark, so it
-/// replays the history it started with rather than later parent activity.
-fn inherited_result(
-    pg: &LeasedPostgres,
-    input: &Input,
-    call_id: &str,
-) -> napi::Result<Option<Value>> {
+/// line. A fork accepts only results completed before it opened (see `open_fork`), so it
+/// replays the history it started with rather than later parent activity. A result completed
+/// before completion times were recorded falls back to its claim time.
+fn inherited_result(pg: &Sql<'_>, input: &Input, call_id: &str) -> napi::Result<Option<Value>> {
     let (organization_id, mut session, call_id) = (
         input.organization_id.clone(),
         input.session_id.clone(),
@@ -3021,7 +3084,7 @@ fn inherited_result(
                 return Ok(None);
             };
             if let Some(row) = client.query_opt(
-                "SELECT decision FROM openappa_processed_results WHERE session_id = $1 AND tool_call_id = $2 AND organization_id = $3 AND status = 'complete' AND created_at < $4",
+                "SELECT decision FROM openappa_processed_results WHERE session_id = $1 AND tool_call_id = $2 AND organization_id = $3 AND status = 'complete' AND COALESCE(completed_at, created_at) < $4",
                 &[&parent, &call_id, &organization_id, &forked_at],
             )? {
                 return Ok(row.get::<_, Option<Value>>(0));
@@ -3082,7 +3145,7 @@ fn authoritative_unexecuted_response(decision: Value) -> napi::Result<Value> {
 /// redispatch plan names another tool to run first). The hint says what to do
 /// and who decides; provider safety classifiers refused requests that told the
 /// model to skip the user.
-const UNEXECUTED_CALL_HINT: &str = "The tool did not run. A plan fits unless the narrower session could no longer do what the user asked for or will clearly ask next. Apply a fitting plan with the exact call that the ruling shows for it. If no plan fits, ask the user with a question tool, not in plain text: the client's own question tool if it has one, otherwise ask_user, and say which part of their request the plan would prevent. In questions and replies, describe the block and any plan in the ruling's own words, and do not guess who the readers are beyond the audiences the ruling names. If the ruling offers no plan, explain the ruling to the user.";
+const UNEXECUTED_CALL_HINT: &str = "The tool did not run. A plan fits unless the narrower session could no longer do what the user asked for or will clearly ask next. Apply a fitting plan with the exact call that the ruling shows for it. When the policy requires approval, that call asks the user itself, so do not ask first. If no plan fits, ask the user with a question tool, not in plain text: the client's own question tool if it has one, otherwise ask_user, and say which part of their request the plan would prevent. In questions and replies, describe the block and any plan in the ruling's own words, and do not guess who the readers are beyond the audiences the ruling names. If the ruling offers no plan, explain the ruling to the user.";
 
 /// A result for a call this session never released. The code tells the proxy
 /// that nothing ran on the runtime's side: a remedy the gateway never ran
@@ -3124,7 +3187,7 @@ enum OperationState {
     Complete(CompletedOperation),
 }
 
-fn read_operation_state(pg: &LeasedPostgres, key: &OperationKey) -> napi::Result<OperationState> {
+fn read_operation_state(pg: &Sql<'_>, key: &OperationKey) -> napi::Result<OperationState> {
     let session_id = key.session.session_id.clone();
     let operation_id = key.operation_id.clone();
     let organization_id = key.session.organization_id.clone();
@@ -3169,7 +3232,7 @@ fn read_operation_state(pg: &LeasedPostgres, key: &OperationKey) -> napi::Result
 }
 
 fn read_completed_operation(
-    pg: &LeasedPostgres,
+    pg: &Sql<'_>,
     key: &OperationKey,
 ) -> napi::Result<Option<CompletedOperation>> {
     Ok(match read_operation_state(pg, key)? {
@@ -3178,11 +3241,7 @@ fn read_completed_operation(
     })
 }
 
-fn cancelled_call(
-    pg: &LeasedPostgres,
-    input: &Input,
-    call_id: &str,
-) -> napi::Result<Option<Value>> {
+fn cancelled_call(pg: &Sql<'_>, input: &Input, call_id: &str) -> napi::Result<Option<Value>> {
     let key = operation_key(
         input,
         session_binding(input),
@@ -3351,7 +3410,7 @@ fn present(value: Option<String>) -> Option<String> {
 /// presentation, not a refusal: the runtime still decides whether the offer is
 /// live, and old rows fall back to the canonical tool spelling.
 fn recorded_call_presentation(
-    pg: &LeasedPostgres,
+    pg: &Sql<'_>,
     organization_id: &str,
     session_id: &str,
     offer_id: &str,
@@ -3397,7 +3456,7 @@ fn recorded_call_presentation(
     })
 }
 
-fn routing_owner(pg: &LeasedPostgres, input: &OfferInput) -> napi::Result<Option<OfferOwner>> {
+fn routing_owner(pg: &Sql<'_>, input: &OfferInput) -> napi::Result<Option<OfferOwner>> {
     let key = SessionKey::new(&input.organization_id, &input.trajectory.session_id);
     let stamped_parent = input.trajectory.parent_id.clone();
     let row = pg
@@ -3427,15 +3486,19 @@ fn routing_owner(pg: &LeasedPostgres, input: &OfferInput) -> napi::Result<Option
     }))
 }
 
-/// Claims the operation's receipt. `None` means the dispatch does the work:
-/// the receipt was just claimed, or it was left pending by a dispatch that
-/// stopped mid-operation. The store answers `Pending` only for the identical
-/// input of the same scope, so proceeding re-drives exactly this operation:
-/// the runtime answers from its committed facts where it kept them and runs
-/// the operation afresh where it kept nothing, and the finish completes the
-/// pending receipt with that answer. A mismatched retry still fails closed.
-fn claim_operation(
+/// Claims the operation's receipt under this dispatch's lease. `None` means the
+/// dispatch does the work: the receipt was just claimed, or it was left pending
+/// by a dispatch that stopped and whose lease expired. The store recovers a
+/// receipt only for the identical input of the same scope, so proceeding
+/// re-drives exactly this operation: the runtime answers from its committed
+/// facts where it kept them and runs the operation afresh where it kept
+/// nothing, and the finish completes the receipt with that answer. A receipt
+/// another live request is working on refuses as retryable; a mismatched retry
+/// fails closed.
+#[allow(clippy::too_many_arguments)]
+async fn claim_operation(
     store: &LogStore,
+    receipts: &lease::Receipts,
     input: &Input,
     root: &str,
     operation: &str,
@@ -3443,15 +3506,72 @@ fn claim_operation(
     binding: ReceiptBinding,
     context: Option<Value>,
 ) -> napi::Result<Option<Value>> {
-    match store.claim_operation(OperationRequest {
-        key: operation_key(input, binding, operation.to_owned()),
+    let key = operation_key(input, binding, operation.to_owned());
+    let request = OperationRequest {
+        key: key.clone(),
         root: TrajectoryId::new(root),
         input: request.clone(),
         context,
-    }) {
-        Ok(OperationClaim::Claimed) | Err(ReceiptError::Pending) => Ok(None),
-        Ok(OperationClaim::Complete { decision }) => Ok(Some(decision)),
-        Err(reason) => Err(error(reason)),
+    };
+    let mut held = lease::HeldWait::new();
+    loop {
+        match store.claim_operation(request.clone(), receipts.lease()) {
+            Ok(OperationClaim::Claimed) => {
+                receipts.hold_operation(key, lease::Holding::Created);
+                return Ok(None);
+            }
+            Ok(OperationClaim::Recovered) => {
+                receipts.hold_operation(key, lease::Holding::Recovered);
+                return Ok(None);
+            }
+            Ok(OperationClaim::Complete { decision }) => return Ok(Some(decision)),
+            // Another request works on this operation: its answer is this one's.
+            Ok(OperationClaim::Held) if held.again().await => {}
+            Ok(OperationClaim::Held) => return Err(held_elsewhere()),
+            Err(reason) => return Err(error(reason)),
+        }
+    }
+}
+
+/// What claiming a processed result's receipt left this dispatch to do.
+enum ResultClaim {
+    /// This dispatch holds the receipt and processes the result.
+    Work,
+    /// The result was processed before; this is its saved decision.
+    Complete(Value),
+}
+
+/// Claims a processed result's receipt under this dispatch's lease, as
+/// [`claim_operation`] claims an operation's.
+async fn claim_result(
+    store: &LogStore,
+    receipts: &lease::Receipts,
+    key: &ProcessedResultKey,
+    root: &TrajectoryId,
+) -> napi::Result<ResultClaim> {
+    let request = ProcessedResultRequest {
+        key: key.clone(),
+        root: root.clone(),
+    };
+    let mut held = lease::HeldWait::new();
+    loop {
+        match store.claim_processed_result(request.clone(), receipts.lease()) {
+            Ok(ProcessedResultClaim::Claimed) => {
+                receipts.hold_result(key.clone(), lease::Holding::Created);
+                return Ok(ResultClaim::Work);
+            }
+            Ok(ProcessedResultClaim::Recovered) => {
+                receipts.hold_result(key.clone(), lease::Holding::Recovered);
+                return Ok(ResultClaim::Work);
+            }
+            Ok(ProcessedResultClaim::Complete { decision, .. }) => {
+                return Ok(ResultClaim::Complete(decision));
+            }
+            // Another request processes this result: its answer is this one's.
+            Ok(ProcessedResultClaim::Held) if held.again().await => {}
+            Ok(ProcessedResultClaim::Held) => return Err(held_elsewhere()),
+            Err(reason) => return Err(error(reason)),
+        }
     }
 }
 
@@ -3459,24 +3579,26 @@ fn claim_operation(
 /// processed result, so a retry of either replays this response.
 fn finish_remedy(
     store: &LogStore,
+    receipts: &lease::Receipts,
     input: &Input,
     operation: &str,
     binding: ReceiptBinding,
     result_key: Option<ProcessedResultKey>,
     response: Value,
 ) -> napi::Result<Value> {
-    finish_operation(store, input, operation, &response, binding)?;
+    finish_operation(store, receipts, input, operation, &response, binding)?;
     if let Some(result_key) = result_key {
         let approved = decision_text(&response)?;
         store
-            .complete_processed_result(result_key, approved, response.clone())
-            .map_err(error)?;
+            .complete_processed_result(result_key, approved, response.clone(), receipts.owner())
+            .map_err(completion_error)?;
     }
     Ok(response)
 }
 
 fn finish_operation(
     store: &LogStore,
+    receipts: &lease::Receipts,
     input: &Input,
     operation: &str,
     decision: &Value,
@@ -3486,8 +3608,9 @@ fn finish_operation(
         .complete_operation(
             operation_key(input, binding, operation.to_owned()),
             decision.clone(),
+            receipts.owner(),
         )
-        .map_err(error)
+        .map_err(completion_error)
 }
 
 #[derive(Deserialize)]
@@ -3495,67 +3618,6 @@ fn finish_operation(
 struct YellArguments {
     message: String,
     with_trajectory: bool,
-}
-
-#[cfg(test)]
-mod connection_permit_tests {
-    use super::connection_permit;
-    use std::{sync::Arc, time::Duration};
-    use tokio::sync::Semaphore;
-
-    #[test]
-    fn a_busy_pool_refuses_within_its_wait_and_serves_once_freed() {
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_time()
-            .start_paused(true)
-            .build()
-            .expect("a test runtime builds");
-        runtime.block_on(async {
-            let connections = Arc::new(Semaphore::new(1));
-            let wait = Duration::from_secs(30);
-            let held = connection_permit(&connections, wait)
-                .await
-                .expect("a free connection is granted");
-            assert!(connection_permit(&connections, wait).await.is_err());
-            drop(held);
-            assert!(connection_permit(&connections, wait).await.is_ok());
-        });
-    }
-}
-
-#[cfg(test)]
-mod root_lock_tests {
-    use super::RootLock;
-    use futures_util::FutureExt;
-
-    // One test function: the registry is process-global, so parallel test
-    // bodies would contend for it and a single `now_or_never` poll could
-    // observe a momentarily held registry instead of the root under test.
-    #[test]
-    fn same_roots_serialize_while_other_roots_overlap() {
-        // An uncontended acquire settles without an executor; a contended one
-        // stays pending, so `now_or_never` observes exclusion directly.
-        let held = RootLock::acquire("held-root".to_owned())
-            .now_or_never()
-            .expect("an uncontended root acquires immediately");
-        assert!(
-            RootLock::acquire("held-root".to_owned())
-                .now_or_never()
-                .is_none(),
-            "a second dispatch for the same root must wait"
-        );
-        let other = RootLock::acquire("other-root".to_owned())
-            .now_or_never()
-            .expect("a different root acquires while another is held");
-        drop(other);
-        drop(held);
-        assert!(
-            RootLock::acquire("held-root".to_owned())
-                .now_or_never()
-                .is_some(),
-            "a released root can be acquired again"
-        );
-    }
 }
 
 #[cfg(test)]

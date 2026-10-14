@@ -79,6 +79,7 @@ import {
 } from "@/services/mcp-install-policy";
 import {
   autoReinstallServer,
+  clearSatisfiedNewInputFlags,
   manualReinstallReason,
   multitenantSharedPodChanged,
   onlyForwardCompatibleEnvDiff,
@@ -2103,6 +2104,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         transportType: catalogItem.localConfig?.transportType,
         httpPort: catalogItem.localConfig?.httpPort,
         imagePullSecrets: imagePullSecretsForYaml,
+        imagePullPolicy: catalogItem.localConfig?.imagePullPolicy,
       });
 
       return reply.send({ yaml: yamlTemplate });
@@ -2214,6 +2216,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         transportType: catalogItem.localConfig?.transportType,
         httpPort: catalogItem.localConfig?.httpPort,
         imagePullSecrets: imagePullSecretsForYaml,
+        imagePullPolicy: catalogItem.localConfig?.imagePullPolicy,
       });
 
       return reply.send({ yaml: yamlTemplate });
@@ -2413,6 +2416,10 @@ async function cascadeReinstallForCatalog(
     }
     return;
   }
+
+  // This edit asks for nothing new, but it may have dropped what an earlier
+  // edit asked for — clear flags whose installs now hold every required value.
+  await clearSatisfiedNewInputFlags(catalogItem, installedServers);
 
   // Execution-only drift on a shared deployment. The admin who saved the
   // edit is the sole owner of that pod and no tenant owes new input, so the

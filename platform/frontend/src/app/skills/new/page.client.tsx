@@ -134,7 +134,10 @@ function NewSkillWizard() {
         fileCount: skill.fileCount,
       },
     });
-  const goToSkills = () => router.push("/skills");
+  const goToSkills = (skillIds: string[]) => {
+    const params = new URLSearchParams({ imported: skillIds.join(",") });
+    router.push(`/skills?${params.toString()}`);
+  };
   const goToConfigureStep = () => setStep("configure");
 
   const catalogSearch = useSearchSkillCatalog(search);

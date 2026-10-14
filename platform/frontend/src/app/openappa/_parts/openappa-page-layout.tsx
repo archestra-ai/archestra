@@ -6,10 +6,16 @@ import { type ReactNode, useState } from "react";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { BatteriesUploadAction } from "./batteries-panel";
+import { GUARDRAILS_BETA_TOOLTIP } from "@/lib/openappa-maturity";
 import { OpenAppaPageActionSlotContext } from "./openappa-page-action";
+import { OverviewHeaderActions } from "./overview-header-actions";
 import { openAppaUrl } from "./overview-setup-cards";
 import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 
@@ -95,9 +101,14 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
       title={
         <span>
           {page.title}{" "}
-          <Badge variant="secondary" className="align-middle">
-            Alpha
-          </Badge>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge variant="secondary" className="align-middle">
+                Beta
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>{GUARDRAILS_BETA_TOOLTIP}</TooltipContent>
+          </Tooltip>
         </span>
       }
       documentTitle={page.title}
@@ -126,9 +137,9 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
           pathname === "/openappa/yells" ||
           pathname === "/openappa/tests" ||
           pathname.startsWith("/openappa/validation") ||
-          pathname === "/openappa/policy" ? null : (
-          <BatteriesUploadAction />
-        )
+          pathname === "/openappa/policy" ? null : pathname === "/openappa" ? (
+          <OverviewHeaderActions />
+        ) : null
       }
     >
       <OpenAppaPageActionSlotContext.Provider value={pageActionSlot}>

@@ -96,7 +96,7 @@ describe("websocket browser-stream screenshot handling", () => {
     service.browserStreamContext.unsubscribeBrowserStream(ws);
   });
 
-  test("click sends an immediate screenshot update", async ({
+  test("click streams a quick frame, then a settled one", async ({
     makeAgent,
     makeConversation,
     makeOrganization,
@@ -125,10 +125,13 @@ describe("websocket browser-stream screenshot handling", () => {
       success: true,
       tabIndex: 0,
     });
-    vi.spyOn(browserStreamFeature, "takeScreenshot").mockResolvedValue({
-      screenshot: "img",
-      url: "http://example.com",
-    });
+    const takeScreenshot = vi
+      .spyOn(browserStreamFeature, "takeScreenshot")
+      .mockImplementation(async (_agentId, _conversationId, _user, options) =>
+        options?.fast
+          ? { screenshot: "quick" }
+          : { screenshot: "img", url: "http://example.com" },
+      );
     vi.spyOn(browserStreamFeature, "click").mockResolvedValue({
       success: true,
     });
@@ -163,17 +166,28 @@ describe("websocket browser-stream screenshot handling", () => {
         },
       }),
     );
-    expect(ws.send).toHaveBeenCalledWith(
-      JSON.stringify({
-        type: "browser_screenshot",
-        payload: {
-          conversationId: conversation.id,
-          screenshot: "img",
-          url: "http://example.com",
-          canGoBack: true,
-        },
-      }),
-    );
+    takeScreenshot.mockClear();
+    // Quick frame shortly after the click, settled frame once input pauses
+    await new Promise((resolve) => setTimeout(resolve, 600));
+
+    expect(
+      takeScreenshot.mock.calls.map(([, , , options]) => !!options?.fast),
+    ).toEqual([true, false]);
+    const frames = (
+      ws.send as unknown as { mock: { calls: string[][] } }
+    ).mock.calls
+      .map(([raw]) => JSON.parse(raw))
+      .filter((m) => m.type === "browser_screenshot")
+      .map((m) => m.payload);
+    expect(frames).toEqual([
+      { conversationId: conversation.id, screenshot: "quick" },
+      {
+        conversationId: conversation.id,
+        screenshot: "img",
+        url: "http://example.com",
+        canGoBack: true,
+      },
+    ]);
 
     service.browserStreamContext.unsubscribeBrowserStream(ws);
   });

@@ -1,7 +1,7 @@
 import { getMcpCatalogPermissionChecker } from "@/auth/mcp-catalog-permissions";
+import type { RequestLookups } from "@/auth/request-lookups";
 import config from "@/config";
 import { AgentModel } from "@/models";
-import type { PrincipalSource } from "@/models/resource-permission-subject";
 import { listPluginSkills } from "@/plugins/plugin-skills";
 import { listExternalMcpSkills } from "@/services/external-mcp-skills";
 import { listAccessibleCatalogSkills } from "@/skills/skill-catalog-prompt";
@@ -18,7 +18,7 @@ export interface SkillAvailabilityContext {
   agentId?: string;
   /** Draft or pending-edit environment override; takes precedence over agentId. */
   environmentId?: string | null;
-  lookups?: PrincipalSource;
+  lookups?: RequestLookups;
 }
 
 export type PolicyIndependentAvailableAgentSkill =
@@ -76,12 +76,11 @@ export async function listPolicyIndependentAvailableAgentSkills(
           environmentId,
         })
       : [],
-    config.plugins.enabled
-      ? listPluginSkills({
-          organizationId: params.organizationId,
-          userId: params.userId,
-        })
-      : [],
+    listPluginSkills({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      lookups: params.lookups,
+    }),
   ]);
   return [
     ...nativeSkills.map((skill) => ({ source: "native" as const, skill })),

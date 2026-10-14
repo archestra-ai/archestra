@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation");
-vi.mock("@/lib/config/config.query", () => ({ useFeature: () => true }));
+vi.mock("@/lib/config/config.query", () => ({ useFeature: () => false }));
 vi.mock("@/lib/hooks/use-app-name", () => ({
   useAppName: () => "Northstar",
 }));

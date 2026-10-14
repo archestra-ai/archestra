@@ -1,10 +1,22 @@
 import { STARTUP_GUARD_INSTALL } from "./consts";
+import {
+  MODEL_ROUTER_SUPPORTED_PROVIDERS,
+  type SupportedProvider,
+} from "./model-constants";
+import { OPENCODE_FAMILY, openCodeFamilyRecord } from "./opencode-family";
+import { OPENCODE_PRIMARY_PROVIDERS } from "./opencode-provider-routes";
+
+export {
+  isOpenCodeFamilyClient,
+  type OpenCodeFamilyClientId,
+} from "./opencode-family";
 
 /** Clients whose proxy requests carry a native conversation identity. */
 export const NATIVE_SESSION_CLIENT_LABELS = {
   "claude-code": "Claude Code",
   codex: "Codex",
-  opencode: "OpenCode",
+  opencode: OPENCODE_FAMILY.opencode.label,
+  kilo: OPENCODE_FAMILY.kilo.label,
 } as const;
 
 export type NativeSessionClientId = keyof typeof NATIVE_SESSION_CLIENT_LABELS;
@@ -41,6 +53,7 @@ export const INSTALLER_CLIENT_IDS = [
   "claude-desktop",
   "copilot-cli",
   "opencode",
+  "kilo",
 ] as const;
 
 export type InstallerClientId = (typeof INSTALLER_CLIENT_IDS)[number];
@@ -51,11 +64,49 @@ export const INSTALLER_CLIENT_LABELS: Record<InstallerClientId, string> = {
   cursor: "Cursor",
   codex: "Codex",
   "copilot-cli": "Copilot CLI",
-  opencode: "OpenCode",
+  ...openCodeFamilyRecord((client) => client.label),
+};
+
+/**
+ * Providers whose keys an admin can map to the virtual key a client's setup
+ * mints. Cursor sends every model through the Model Router, so any of its
+ * providers can back the key; OpenCode and Kilo Code can also take every
+ * primary provider.
+ */
+export const INSTALLER_CLIENT_KEY_PROVIDERS: Record<
+  InstallerClientId,
+  readonly SupportedProvider[]
+> = {
+  "claude-code": ["anthropic", "bedrock"],
+  "claude-desktop": ["anthropic"],
+  cursor: MODEL_ROUTER_SUPPORTED_PROVIDERS,
+  codex: ["openai"],
+  "copilot-cli": [
+    "openai",
+    "azure",
+    "openrouter",
+    "vllm",
+    "ollama",
+    "groq",
+    "mistral",
+    "deepseek",
+    "xai",
+    "cerebras",
+  ],
+  ...openCodeFamilyRecord(() => OPENCODE_PRIMARY_PROVIDERS),
 };
 
 export function isInstallerClientId(id: string): id is InstallerClientId {
   return (INSTALLER_CLIENT_IDS as readonly string[]).includes(id);
+}
+
+/**
+ * A client's MCP server name that is safe to quote in a prompt or pass in a
+ * link: letters, digits, `_`, `.` and `-`. Names with anything else (quotes,
+ * spaces, text a crafted link adds) are left out of prompts.
+ */
+export function isPlainMcpClientServerName(name: string): boolean {
+  return /^[A-Za-z0-9_.-]{1,64}$/.test(name);
 }
 
 /**
@@ -95,13 +146,13 @@ export const INSTALLER_CLIENT_FOOTPRINT: Record<InstallerClientId, string[]> = {
     "Provider and model settings in ~/.copilot/providers.json and settings.json",
     "Startup check in your shell profile",
   ],
-  opencode: [
-    "opencode.json (gateway and model routing)",
-    "Skills folder in ~/.config/opencode/skills/",
+  ...openCodeFamilyRecord((client) => [
+    `${client.configFile} (gateway and model routing)`,
+    `Skills folder in ~/.config/${client.dir}/skills/`,
     "Routing plugin archestra-llm-proxy.js",
     "~/.archestra state file",
     "Startup check in your shell profile",
-  ],
+  ]),
 };
 
 /**
@@ -181,15 +232,15 @@ export const OAUTH_AGENTS = {
       { clientId: "https://github.com/copilot/cli/client-metadata.json" },
     ],
   },
-  // CIMD at opencode.ai (captured 2026-10-08), or DCR as "OpenCode" on a
-  // configurable redirect port (sst/opencode, mcp/oauth-provider.ts).
-  opencode: {
-    label: "OpenCode",
+  // OpenCode and Kilo Code: a CIMD document, or DCR under the product name
+  // on a configured redirect port (see the family descriptor).
+  ...openCodeFamilyRecord((client) => ({
+    label: client.label,
     identities: [
-      { clientId: "https://opencode.ai/oauth/opencode/client.json" },
-      { clientNamePattern: "^OpenCode$" },
+      { clientId: client.oauth.clientId },
+      { clientNamePattern: client.oauth.clientNamePattern },
     ],
-  },
+  })),
   // Registers each install as "Amp MCP Client (<server name>)" with this
   // redirect (captured from amp 0.0.1791201662).
   amp: {

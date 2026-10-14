@@ -65,11 +65,18 @@ describe("useCanReauthenticate", () => {
     );
   });
 
-  it("permits an installation admin across ownership and scope boundaries", () => {
-    const canReauth = setup({ create: false, update: false, admin: true });
+  it("keeps another user's personal connection from an installation admin", () => {
+    // Re-authenticating signs in with the caller's account, which would
+    // replace the owner's sign-in with the admin's.
+    const canReauth = setup({ create: true, update: true, admin: true });
     expect(canReauth({ scope: "personal", ownerId: "someone-else" })).toBe(
-      true,
+      false,
     );
+    expect(canReauth({ scope: "personal", ownerId: CURRENT_USER })).toBe(true);
+  });
+
+  it("permits an installation admin across team and org connections", () => {
+    const canReauth = setup({ create: false, update: false, admin: true });
     expect(canReauth({ scope: "team", teamId: "another-team" })).toBe(true);
     expect(canReauth({ scope: "org" })).toBe(true);
   });

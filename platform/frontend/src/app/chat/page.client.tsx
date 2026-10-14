@@ -32,7 +32,6 @@ import {
   useSyncExternalStore,
 } from "react";
 import { toast } from "sonner";
-import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
 import { scheduledRunContext } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { AgentRuntimeCredentialPrompt } from "@/components/agent-run-credential-prompt";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
@@ -57,6 +56,7 @@ import {
   openedAppMetadataFromApps,
 } from "@/components/chat/chat-messages.utils";
 import { ChatStatusAnnouncer } from "@/components/chat/chat-status-announcer";
+import { useConversationActions } from "@/components/chat/conversation-actions";
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
 import { ConversationHeader } from "@/components/chat/conversation-header";
 import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
@@ -69,7 +69,6 @@ import {
   type RightPanelTab,
   RightSidePanel,
 } from "@/components/chat/right-side-panel";
-import { ShareConversationDialog } from "@/components/chat/share-conversation-dialog";
 import { StreamTimeoutWarning } from "@/components/chat/stream-timeout-warning";
 import { useChatApps } from "@/components/chat/use-chat-apps";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
@@ -164,7 +163,6 @@ import {
   generateEncryptedChatKey,
   isActionAvailableForConversation,
 } from "@/lib/chat/encrypted-chat";
-import { downloadConversationMarkdown } from "@/lib/chat/export-markdown";
 import { useChatSession, useGlobalChat } from "@/lib/chat/global-chat.context";
 import { createLatestWriteQueue } from "@/lib/chat/latest-write-queue";
 import {
@@ -206,7 +204,6 @@ import {
 } from "@/lib/llm-provider-api-keys.query";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { useOrganization } from "@/lib/organization.query";
-import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
 import { useProject, useProjectFiles } from "@/lib/projects/projects.query";
 import { useResourcePermissions } from "@/lib/resource-permissions.query";
 import { useScheduleTriggerRun } from "@/lib/schedule-trigger.query";
@@ -336,8 +333,6 @@ export function ChatPageContent({
     string | undefined
   >(undefined);
 
-  const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
-  const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
   const [isForkDialogOpen, setIsForkDialogOpen] = useState(false);
   const [forkAgentId, setForkAgentId] = useState<string | null>(null);
   const [manualCompactionFeedback, setManualCompactionFeedback] = useState<{
@@ -363,9 +358,6 @@ export function ChatPageContent({
     useHasPermissions({
       chat: ["full-view"],
     });
-  const { data: canCreateProjectPerm } = useHasPermissions({
-    project: ["create"],
-  });
 
   const isMobile = useIsMobile();
 
@@ -847,16 +839,6 @@ export function ChatPageContent({
     // Encrypted chats cannot be shared (the backend rejects it).
     isActionAvailableForConversation(conversation, "share");
 
-  // Turning this chat into a project is owner-only (same as sharing) and
-  // restricted to a user chat not already in a project.
-  const canCreateProjectFromThisChat =
-    canManageShare &&
-    !!conversation &&
-    conversation.userId === session?.user.id &&
-    canCreateProjectFromChat({
-      hasCreatePermission: canCreateProjectPerm === true,
-      conversation,
-    });
   const sharingPolicy = useResourcePermissions(
     "conversation",
     conversationId ?? "",
@@ -1612,6 +1594,13 @@ export function ChatPageContent({
     ],
     [mcpApps],
   );
+  // The same actions as the chat's sidebar row menu.
+  const conversationActions = useConversationActions({
+    conversation,
+    canShare: canManageShare,
+    isShared,
+    appIds: conversationOwnedAppIds,
+  });
   // The app currently open in the chat, reported to the backend on each user
   // message so it can restate that app's context in the turn's system prompt.
   // The backend re-resolves the id under the caller's own access, so this is a
@@ -2215,25 +2204,29 @@ export function ChatPageContent({
   >(async (message, e, options) => {
     e.preventDefault();
 
-    // Enqueue this submission instead of sending it now (throws on inputs that
-    // can't be queued, keeping the composer intact per the onSubmit contract).
-    // Only reached when queueing is on and a conversation exists.
+    // Enqueue this submission instead of sending it now (throws on an empty
+    // submit, keeping the composer intact per the onSubmit contract). Only
+    // reached when queueing is on and a conversation exists.
     const enqueueSubmission = () => {
       if (!conversationId) return;
-      if (message.files && message.files.length > 0) {
-        toast.error(
-          "Attachments can't be queued. Wait for the current response to finish, then send.",
-        );
-        // Keep the typed text, draft, and attachments for a later submit.
-        throw new Error("attachments-not-queueable");
-      }
       const queueText = message.text?.trim();
-      if (!queueText && !options?.skill && !options?.externalMcpSkill) {
+      const queueFiles = (message.files ?? []).map((file) => ({
+        url: file.url,
+        mediaType: file.mediaType,
+        ...(file.filename ? { filename: file.filename } : {}),
+      }));
+      if (
+        !queueText &&
+        queueFiles.length === 0 &&
+        !options?.skill &&
+        !options?.externalMcpSkill
+      ) {
         // Nothing to queue (Enter on an empty composer while streaming).
         throw new Error("empty-queue-submit");
       }
       chatMessageQueue.enqueue(conversationId, {
         text: message.text ?? "",
+        ...(queueFiles.length > 0 ? { files: queueFiles } : {}),
         ...(options?.skill ? { skill: options.skill } : {}),
         ...(options?.externalMcpSkill
           ? { externalMcpSkill: options.externalMcpSkill }
@@ -2244,6 +2237,7 @@ export function ChatPageContent({
         conversationId,
         agentId: conversation?.agentId ?? undefined,
         messageLength: message.text?.length ?? 0,
+        fileCount: queueFiles.length,
       });
     };
 
@@ -2722,21 +2716,6 @@ export function ChatPageContent({
       router.push(`/chat/${result.id}`);
     }
   }, [conversationId, effectiveForkAgentId, forkConversationMutation, router]);
-
-  const handleExportMarkdown = useCallback(() => {
-    if (!conversationId || messages.length === 0) return;
-    downloadConversationMarkdown({
-      messages,
-      conversationId,
-      title: conversation?.title,
-      agentName: conversation?.agent?.name,
-    });
-  }, [
-    conversationId,
-    messages,
-    conversation?.title,
-    conversation?.agent?.name,
-  ]);
 
   // Core logic for starting a new conversation with a message
   const submitInitialMessage = useCallback(
@@ -3282,13 +3261,8 @@ export function ChatPageContent({
           }
           isAppOversight={isAppOversight}
           oversightOwnerName={oversightApp.data?.authorName ?? null}
-          canManageShare={canManageShare}
-          isShared={isShared}
-          canCreateProject={canCreateProjectFromThisChat}
           scheduleTriggerId={scheduledRunTriggerId}
-          onShare={() => setIsShareDialogOpen(true)}
-          onExportMarkdown={handleExportMarkdown}
-          onCreateProject={() => setIsCreateProjectOpen(true)}
+          actionItems={conversationActions.items}
           panel={{
             isOpen: isRightPanelOpen,
             activeTab: activeRightTab,
@@ -3432,6 +3406,11 @@ export function ChatPageContent({
                             isReadOnlyConversation
                               ? undefined
                               : handleChatErrorRetry
+                          }
+                          onTypeAnswer={
+                            isReadOnlyConversation
+                              ? undefined
+                              : () => textareaRef.current?.focus()
                           }
                           error={error}
                           onToolApprovalResponse={
@@ -3758,6 +3737,7 @@ export function ChatPageContent({
                                   </div>
                                 )}
                                 <ArchestraPromptInput
+                                  drawerBelow
                                   onSubmit={handleInitialSubmit}
                                   placeholderPreview={suggestionPreview}
                                   toolsUnavailable={initialToolsUnavailable}
@@ -3919,28 +3899,7 @@ export function ChatPageContent({
           )}
         </div>
 
-        {canManageShare && conversationId && (
-          <ShareConversationDialog
-            conversationId={conversationId}
-            appIds={conversationOwnedAppIds}
-            open={isShareDialogOpen}
-            onOpenChange={setIsShareDialogOpen}
-          />
-        )}
-
-        <CreateProjectFromChatDialog
-          conversationId={conversationId ?? null}
-          defaultName={
-            conversation
-              ? getConversationDisplayTitle(
-                  conversation.title,
-                  conversation.messages,
-                )
-              : ""
-          }
-          open={isCreateProjectOpen}
-          onOpenChange={setIsCreateProjectOpen}
-        />
+        {conversationActions.dialogs}
 
         <StandardDialog
           open={isForkDialogOpen}
@@ -4150,7 +4109,7 @@ function subscriptionDebug(event: string, data: Record<string, unknown>) {
   console.info(`[subscription-debug] ${event}`, data);
 }
 
-// Messages scroll under the composer; a short fade above it keeps a line
-// from being sliced in half by the opaque band.
+// No top padding, so messages run right down to the input's border; a short
+// fade just above it keeps a line from being sliced in half there.
 const COMPOSER_DOCK_CLASS =
-  "sticky bottom-0 bg-background p-4 before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-6 before:bg-gradient-to-t before:from-background before:to-transparent";
+  "sticky bottom-0 bg-background px-4 pb-4 before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-6 before:bg-gradient-to-t before:from-background before:to-transparent";

@@ -1,3 +1,4 @@
+import { resolveVirtualKeyProviderMappings } from "@/services/virtual-key-providers";
 /**
  * Authentication and API key resolution for the LLM proxy handler.
  *
@@ -187,7 +188,7 @@ export async function validateVirtualApiKey(params: {
   }
   const mappedProviderKey = isSupportedProvider(expectedProvider)
     ? await selectMappedProviderKey({
-        mappings: await VirtualApiKeyModel.getProviderApiKeysForRouting(
+        mappings: await resolveVirtualKeyProviderMappings(
           resolved.virtualKey.id,
         ),
         provider: expectedProvider,

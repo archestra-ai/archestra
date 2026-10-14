@@ -2,7 +2,7 @@
 title: "Permissions"
 description: "Built-in role grants, available permissions, and LLM API access requirements"
 order: 6
-lastUpdated: 2026-10-13
+lastUpdated: 2026-10-14
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -84,7 +84,6 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | MCP Server Installations | `read`, `create`, `delete` |
 | Environments | `read` |
 | Credentials | `read` |
-| OpenAPPA Policy | `read` |
 | Knowledge Sources | `read`, `query` |
 | Chats | `read`, `create`, `update`, `delete`, `full-view` |
 | Projects | `read`, `create`, `update`, `delete` |
@@ -209,6 +208,7 @@ These permissions can be selected in custom roles. Per-resource actions and scop
 | User cost statistics for all users | `llmCost:read` and `member:read` | Identified users in the active organization |
 | App cost statistics | `llmCost:read` and `app:read` | Apps allowed by the caller’s read grants |
 | Skill cost statistics | `llmCost:read` and `skill:read` | Skills allowed by the caller’s read grants |
+| Tool-call, app, and skill usage (`/api/statistics/mcp-tool-calls`, `app-usage`, `skill-usage`) | `llmCost:read`, plus `app:read` or `skill:read` for apps and skills | The caller's usage; add `member:read` for everyone's |
 | LLM and MCP logs for the caller | `log:read` | Records attributed to the caller |
 | All LLM and MCP logs | `log:read` and `log:admin` | All records in the active organization, including unattributed traffic |
 

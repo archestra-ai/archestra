@@ -281,7 +281,7 @@ describe("NewPluginPage", () => {
         "No marketplace file. These are its plugin folders.",
       ),
     ).toBeVisible();
-    await user.click(screen.getByRole("button", { name: /^Import/ }));
+    await user.click(screen.getByRole("button", { name: /^Import(?: \(|$)/ }));
 
     expect(importMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -320,6 +320,7 @@ describe("NewPluginPage", () => {
         {
           sourceMarketplaceRepo: "anthropics/claude-plugins-official",
           sourceMarketplacePluginName: "policy-runtime",
+          clientType: "claude-code",
         },
       ],
     } as unknown as ReturnType<typeof usePlugins>);
@@ -361,7 +362,9 @@ describe("NewPluginPage", () => {
     expect(await screen.findByText("Imported")).toBeVisible();
     expect(screen.getByText(/0 of 0 selected/)).toBeVisible();
     expect(screen.getByText(/1 imported/)).toBeVisible();
-    expect(screen.getByRole("button", { name: /^Import/ })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /^Import(?: \(|$)/ }),
+    ).toBeDisabled();
     expect(
       screen.queryByRole("combobox", { name: "Select platforms" }),
     ).not.toBeInTheDocument();
@@ -403,6 +406,8 @@ describe("NewPluginPage", () => {
       }),
     );
 
+    await screen.findByText("hook-plugin");
+    await user.click(screen.getByRole("button", { name: "Import settings" }));
     expect(
       await screen.findByRole("combobox", { name: "Select platforms" }),
     ).toBeVisible();
@@ -410,11 +415,6 @@ describe("NewPluginPage", () => {
     const platforms = screen.getByRole("combobox", {
       name: "Select platforms",
     });
-    const search = screen.getByPlaceholderText("Search by name or description");
-    expect(
-      platforms.compareDocumentPosition(search) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
     expect(screen.getByText("1 file")).toBeVisible();
     expect(screen.queryByText("plugins/hook-plugin")).not.toBeInTheDocument();
     expect(
@@ -445,7 +445,7 @@ describe("NewPluginPage", () => {
     expect(screen.queryByLabelText("Relative path")).not.toBeInTheDocument();
   });
 
-  it("limits each marketplace import to one beta-sized batch", async () => {
+  it("limits each marketplace import to one bounded batch", async () => {
     discoverMock.mockResolvedValue({
       data: {
         repoUrl: "github/awesome-copilot",
@@ -482,11 +482,11 @@ describe("NewPluginPage", () => {
         `${PLUGIN_MARKETPLACE_IMPORT_LIMIT} of 101 selected · ${PLUGIN_MARKETPLACE_IMPORT_LIMIT} max per import`,
       ),
     ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Import settings" }));
     expect(
-      screen.getByText(
-        `For this beta, import up to ${PLUGIN_MARKETPLACE_IMPORT_LIMIT} plugins at a time. Finish this import, reopen the marketplace, and select the next batch. Imported plugins will be marked and excluded from the next batch.`,
-      ),
+      screen.getByText("Import this batch, then reopen for the next."),
     ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Import settings" }));
 
     const first = screen.getByRole("checkbox", { name: "Deselect plugin-0" });
     const next = screen.getByRole("checkbox", {
@@ -503,16 +503,22 @@ describe("NewPluginPage", () => {
     const clientFilter = screen.getByRole("combobox", {
       name: "Filter marketplace clients",
     });
-    expect(clientFilter).toHaveTextContent("All clients");
+    // The marketplace's clients start selected; a Claude Desktop copy of
+    // its Claude Code plugins is offered but opt-in.
+    expect(clientFilter).toHaveTextContent("Select clients");
     await user.click(clientFilter);
     const claudeClient = screen.getByRole("menuitemcheckbox", {
       name: "Claude Code",
     });
     expect(claudeClient).toBeChecked();
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: "Claude Desktop" }),
+    ).not.toBeChecked();
     await user.click(claudeClient);
     expect(screen.queryByText("plugin-0")).not.toBeInTheDocument();
     expect(screen.getByText("plugin-1")).toBeVisible();
-    expect(screen.getByText(/5 of 101 selected/)).toBeVisible();
+    // The totals follow the clients in view.
+    expect(screen.getByText(/5 of 50 selected/)).toBeVisible();
   });
 
   it("submits selected permissions with a new plugin instead of legacy visibility", async () => {

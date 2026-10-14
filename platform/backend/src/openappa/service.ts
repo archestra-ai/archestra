@@ -22,6 +22,7 @@ import { enterpriseTier } from "@/enterprise-tier";
 import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
 import MemberModel from "@/models/member";
+import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import {
@@ -34,7 +35,11 @@ import {
   declareExistingInstalls,
   seedCredentialBindings,
 } from "@/openappa/declare-installs";
-import { openappaFailure } from "@/openappa/failure";
+import {
+  OpenappaRetiredAnnotatorError,
+  openappaFailure,
+} from "@/openappa/failure";
+import { unservedAnnotator } from "@/openappa/retired-annotators";
 import { captureYellReport } from "@/openappa/yell-receiver";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import type { ToolNameCanonicalizer } from "@/routes/proxy/utils/gateway-tool-names";
@@ -194,6 +199,9 @@ type ProcessedToolResult = {
   code?: string;
   /** The runtime denied this call, so `content` is its ruling, not an output. */
   denied?: true;
+  /** Current denial metadata; omitted offers are unknown, not an empty list. */
+  offers?: string[];
+  review?: Array<{ offer_id: string; text: string }>;
 };
 type ChildEndOutcome =
   | { decision: "release"; crossed: true }
@@ -275,6 +283,20 @@ export async function declareOpenappaInstalls(): Promise<void> {
       { err: error },
       "Seeding the OpenAPPA credential bindings from the policy text failed; the text still binds its own variables",
     );
+  }
+}
+
+/**
+ * Recompose every organization once the declarations are carried over, so a
+ * composition an earlier build stored takes in what this build composes, such
+ * as the member roster. Never rejects: a server starts whatever it finds.
+ */
+export async function recompileAllOnStart(): Promise<void> {
+  if (!openappaEnabled()) return;
+  try {
+    await openappaBatteriesService.recompileAll();
+  } catch (error) {
+    logger.error({ err: error }, "Recomposing the OpenAPPA policies failed");
   }
 }
 
@@ -432,6 +454,7 @@ async function dispatchWithPrincipal(params: {
         policy,
       ),
     policy,
+    session,
   );
 }
 
@@ -497,6 +520,7 @@ async function withRuntime(
     policy: DispatchPolicy,
   ) => Promise<string>,
   batchPolicy?: DispatchPolicy,
+  session?: OpenAppaSession,
 ) {
   const policy = batchPolicy ?? (await effectivePolicy(organizationId));
   try {
@@ -504,7 +528,42 @@ async function withRuntime(
     const rawResult = await call(module, policy);
     return NativeDecisionSchema.parse(JSON.parse(rawResult));
   } catch (error) {
-    throw openappaFailure(error);
+    throw await dispatchFailure({ session, served: policy.content, error });
+  }
+}
+
+async function dispatchFailure(params: {
+  session?: OpenAppaSession;
+  served: string;
+  error: unknown;
+}): Promise<ApiError> {
+  const missing = await missingOpeningAnnotator(params.session, params.served);
+  return openappaFailure(
+    missing === null
+      ? params.error
+      : new OpenappaRetiredAnnotatorError(missing),
+  );
+}
+
+async function missingOpeningAnnotator(
+  session: OpenAppaSession | undefined,
+  served: string,
+): Promise<string | null> {
+  if (!session) return null;
+  try {
+    const root = await OpenAppaSessionModel.root({
+      organizationId: session.organization_id,
+      sessionId: session.session_id,
+    });
+    if (!root) return null;
+    const opening = await (await binding()).readOpenappaOpeningPolicy(root);
+    return opening === null ? null : unservedAnnotator({ opening, served });
+  } catch (error) {
+    logger.warn(
+      { err: error },
+      "OpenAPPA could not compare the opening policy with the served policy",
+    );
+    return null;
   }
 }
 
@@ -757,7 +816,13 @@ async function approveToolResult(params: {
     outputSource,
     ...(reason ? { reason } : {}),
     ...(code ? { code } : {}),
-    ...(decision.decision === "deny_call" ? { denied: true as const } : {}),
+    ...(decision.decision === "deny_call"
+      ? {
+          denied: true as const,
+          offers: decision.offers?.map((offer) => offer.offer_id),
+          review: decision.review,
+        }
+      : {}),
   };
 }
 // SPDX-SnippetEnd
@@ -854,7 +919,7 @@ function isOutputDecision(
 export async function processProxyResults(params: {
   session: OpenAppaSession;
   results: CommonToolResult[];
-  canonicalize: (name: string) => string;
+  canonicalize: ToolNameCanonicalizer;
   /** The proxy verifies that this exact result belongs to an issued question. */
   isUserQuestion?: (result: CommonToolResult) => boolean;
   controlToolName?: string;
@@ -965,8 +1030,10 @@ export async function evaluateToolCalls(
     looseRunToolDispatch?: boolean;
     /** This session's control tool declaration, as the client spells it. */
     control?: DeclaredToolSpelling;
+    controlAliases?: readonly DeclaredToolSpelling[];
     /** This session's notice tool declaration, as the client spells it. */
     notice?: DeclaredToolSpelling;
+    noticeAliases?: readonly DeclaredToolSpelling[];
     /** True for a call that names a child trajectory (Task, spawn_agent, task). */
     isSpawn?: (name: string, namespace?: string) => boolean;
     /** Runtime launches are resolved per call, including run_tool targets. */
@@ -1020,16 +1087,22 @@ export async function evaluateToolCalls(
       // Only the declared control tool itself, in its own namespace: a
       // same-named tool elsewhere is someone else's and is evaluated.
       if (
-        options.control &&
-        call.name === options.control.name &&
-        call.namespace === options.control.namespace
+        (
+          options.controlAliases ?? (options.control ? [options.control] : [])
+        ).some(
+          (member) =>
+            call.name === member.name && call.namespace === member.namespace,
+        )
       ) {
         return { kind: "control" as const };
       }
       if (
-        options.notice &&
-        call.name === options.notice.name &&
-        call.namespace === options.notice.namespace
+        (
+          options.noticeAliases ?? (options.notice ? [options.notice] : [])
+        ).some(
+          (member) =>
+            call.name === member.name && call.namespace === member.namespace,
+        )
       ) {
         return { kind: "allow" as const };
       }
@@ -1109,6 +1182,8 @@ export async function evaluateToolCalls(
         decision.decision === "pass_control"
       ) {
         admitted.push(call.id);
+        if (shortName === "superyell" && decision.decision === "allow_call")
+          await releaseSuperyellReport({ dispatchCall, session, call, event });
         return { kind: "allow" as const };
       }
       // Denied calls return as notices; other calls in the batch stand.
@@ -1117,8 +1192,8 @@ export async function evaluateToolCalls(
         feedback: decisionMessage(decision),
         offers:
           decision.decision === "deny_call"
-            ? (decision.offers ?? [])
-                .map((offer) => offer.offer_id)
+            ? decision.offers
+                ?.map((offer) => offer.offer_id)
                 .filter((id) => id.length > 0)
             : [],
         review:
@@ -1165,6 +1240,42 @@ export async function evaluateToolCalls(
     (result) => (result as PromiseFulfilledResult<AppaCallDecision>).value,
   );
 }
+
+/**
+ * The runtime sends a yell report only for a call it released as its own
+ * yell. A superyell is ruled on under its own name, so the approval its policy
+ * rule asks for stays its own. Once the runtime allows it, the runtime also
+ * rules on the yell the superyell carries, under its own call id, and the
+ * report the superyell sends takes that release. A yell the policy refuses
+ * leaves the report unsent; the superyell itself still runs.
+ */
+async function releaseSuperyellReport(params: {
+  dispatchCall: ReturnType<typeof sessionDispatch>;
+  session: OpenAppaSession;
+  call: { id: string };
+  event: Record<string, unknown>;
+}): Promise<void> {
+  const decision = await params.dispatchCall({
+    event: "tool_call",
+    operation_id: `call:${params.call.id}${SUPERYELL_REPORT_CALL_SUFFIX}`,
+    tool: "yell",
+    presentation: params.event.presentation,
+    arguments: params.event.arguments,
+    spawn: false,
+  });
+  if (decision.decision !== "allow_call")
+    logger.warn(
+      {
+        sessionId: params.session.session_id,
+        toolCallId: params.call.id,
+        decision: decision.decision,
+      },
+      "OpenAPPA did not release the report a superyell carries; the superyell runs without it",
+    );
+}
+
+/** Names the yell a superyell carries apart from the superyell's own call. */
+const SUPERYELL_REPORT_CALL_SUFFIX = "~yell";
 
 function isJson(text: string): boolean {
   try {

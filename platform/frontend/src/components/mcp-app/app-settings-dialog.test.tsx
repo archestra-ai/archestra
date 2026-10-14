@@ -6,6 +6,7 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -104,7 +105,15 @@ beforeEach(() => {
   );
 });
 
-afterEach(() => server.resetHandlers());
+afterEach(async () => {
+  cleanup();
+  // Radix schedules focus restoration after unmount. Let it finish before
+  // Vitest replaces this file's JSDOM Event constructors for the next file.
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  server.resetHandlers();
+});
 
 afterAll(() => {
   server.close();

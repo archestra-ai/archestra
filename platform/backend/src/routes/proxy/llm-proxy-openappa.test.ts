@@ -14,6 +14,7 @@ import {
 import { HttpResponse } from "msw";
 import OpenAIProvider from "openai";
 import { vi } from "vitest";
+import { cacheManager } from "@/cache-manager";
 import { createChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import {
   buildMcpGatewayTool,
@@ -46,7 +47,10 @@ import {
 import { mintDelegationMarker } from "@/openappa/delegation";
 import {
   consumeHitlRuling,
+  getHitlAskUserArguments,
+  getHitlReview,
   getHitlReviewResult,
+  peekHitlDecision,
   stageHitlReview,
 } from "@/openappa/hitl-review";
 import { buildNoticeArguments } from "@/openappa/notice";
@@ -512,9 +516,35 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         offerId,
       }),
     ).toBeUndefined();
+    const closure =
+      outcome === "review_unanswered" ? "unanswered" : "cancelled";
+    expect(await consumeHitlRuling({ session: runtimeSession, offerId })).toBe(
+      "none",
+    );
     expect(
-      await consumeHitlRuling({ session: runtimeSession, offerId }),
+      await peekHitlDecision({ session: runtimeSession, offerId }),
+    ).toEqual({ ruling: "none", closure });
+    expect(
+      await getHitlReview({ session: runtimeSession, offerId }),
     ).toBeUndefined();
+    expect(await consumeHitlRuling({ session: runtimeSession, offerId })).toBe(
+      "none",
+    );
+    expect(
+      await stageHitlReview({
+        session: runtimeSession,
+        review: { offerId, text: "Review this call" },
+        callId: "late-restage",
+      }),
+    ).toEqual({ status: "none", closure });
+    expect(
+      await getHitlAskUserArguments({
+        session: runtimeSession,
+        offerIds: [offerId],
+      }),
+    ).toBeUndefined();
+    expect(executeNative).not.toHaveBeenCalled();
+    expect(extractMcpHumanRuling(rawResult)).toBeNull();
     providerCalls = [];
     const nextBody = {
       ...body,
@@ -535,8 +565,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(visible.instruction).toContain(
       outcome === "review_unanswered"
         ? "expired without an answer"
-        : "cancelled the approval review",
+        : "canceled the approval review",
     );
+    expect(visible.instruction).toContain("no ruling was granted");
     expect(String(resultMessage?.content)).not.toMatch(
       /withheld|cannot be reached|Authorized|Denied:/,
     );
@@ -727,13 +758,20 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     ]);
     const notice = noticeFrom(response.body, stream);
     expect(notice.name).toBe("archestra__get_remedy_plans");
-    // The model reads the ruling against the tool it asked for, not the
-    // wrapper the call was transported in.
+    // The notice names the policy target; its ruling explains that the
+    // dispatch already used the wrapper, so another route is not a remedy.
     expect(notice.input.tool).toBe("grain__list_meetings");
     expect(notice.input.arguments).toBe(JSON.stringify({ limit: 5 }));
-    expect(notice.input.ruling).toBe(
-      "[appa] NATIVE REFUSAL: execute_remedy_plan(offer_id: test-offer)",
+    expect(notice.input.ruling).toMatch(
+      /^\[appa\] NATIVE REFUSAL: execute_remedy_plan\(offer_id: test-offer\)/,
     );
+    expect(notice.input.ruling).toContain(
+      'already went through the run_tool wrapper "archestra__run_tool"',
+    );
+    expect(notice.input.ruling).toContain(
+      'tool_name targeting "grain__list_meetings"',
+    );
+    expect(notice.input.ruling).not.toContain("STOP this blocked action");
     expect(notice.input.notice).toEqual({
       v: 1,
       call_id: notice.id,
@@ -784,8 +822,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     const sent = providerRequests.at(-1) as {
       messages: { role: string; content: Record<string, unknown>[] }[];
     };
-    // History shows a direct call to the target with APPA's ruling as its
-    // result — the wrapper never enters the transcript the model reads.
+    // History still records the policy target, while the authoritative ruling
+    // retains the explanation that the wrapper was already checked.
     expect(sent.messages[1].content[0]).toEqual({
       type: "tool_use",
       id: notice.id,
@@ -796,9 +834,16 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       type: "tool_result",
       tool_use_id: notice.id,
       is_error: true,
-      content:
-        "[appa] NATIVE REFUSAL: execute_remedy_plan(offer_id: test-offer)",
+      content: expect.stringMatching(
+        /^\[appa\] NATIVE REFUSAL: execute_remedy_plan\(offer_id: test-offer\)/,
+      ),
     });
+    expect(sent.messages[2].content[0].content).toContain(
+      'already went through the run_tool wrapper "archestra__run_tool"',
+    );
+    expect(sent.messages[2].content[0].content).not.toContain(
+      "STOP this blocked action",
+    );
   });
 
   test("releases the retried dispatch as the wrapper after the remedy, still ruled on as the target", async () => {
@@ -1310,6 +1355,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         id: "deployment",
         enabled: false,
         unsupportedClientAction: "bypass",
+        superyellEnabled: true,
       });
 
       const response = await post(continuation("msg_made_elsewhere"));
@@ -1861,6 +1907,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             id: "global",
             enabled: false,
             unsupportedClientAction: "bypass",
+            superyellEnabled: true,
           };
         }
         return realGet();
@@ -4395,6 +4442,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           {
             sessionId: mode === "valid" ? workload : credential,
             parentId: null,
+            reason: "enforcement_off",
           },
         ]);
       });
@@ -5496,12 +5544,32 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(starts[0].parent_id).toBeUndefined();
   });
 
-  test("has Claude Code wait for the gateway when its first request has no remedy tools, then delivers the ruling", async () => {
+  test.each([
+    {
+      outcome: "succeeds",
+      waitResult: {
+        content:
+          "ready: true Connected (their tools are now available — call them directly): archestra",
+      },
+      failure: undefined,
+    },
+    {
+      outcome: "fails",
+      waitResult: {
+        content: "ready: false\nFailed to connect: plugin:appa-runtime:appa",
+        is_error: true,
+      },
+      failure: "Failed to connect: plugin:appa-runtime:appa",
+    },
+  ])("has Claude Code wait for the gateway when its first request has no remedy tools, then delivers the ruling when the wait $outcome", async ({
+    waitResult,
+    failure,
+  }) => {
     // Claude Code sends its first request while the gateway is still
     // connecting: no remedy tools yet, but its own WaitForMcpServers. The
     // denied call goes back as that wait, so the turn continues. The next
     // request declares the remedy tools and reads the runtime's ruling where
-    // the wait's output was.
+    // the wait's output was, with the client's error when the wait failed.
     block = true;
     options.nonStreamingToolUse = {
       name: "Read",
@@ -5555,8 +5623,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             {
               type: "tool_result",
               tool_use_id: wait.id,
-              content:
-                "ready: true Connected (their tools are now available — call them directly): archestra",
+              ...waitResult,
             },
           ],
         },
@@ -5571,6 +5638,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     );
     expect(forwarded).toContain("[appa] NATIVE REFUSAL");
     expect(forwarded).not.toContain("ready: true");
+    if (failure) expect(forwarded).toContain(failure);
     expect(
       second
         .json()
@@ -11685,6 +11753,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       knownClient?: boolean;
       malformedSession?: boolean;
       omitSession?: boolean;
+      sessionId?: string;
+      extraBody?: Record<string, unknown>;
       /** The earlier tool output; by default the installer's, for `token`. */
       toolOutput?: string;
       headers?: Record<string, string>;
@@ -11712,7 +11782,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         if (!params.omitSession) {
           headers["x-claude-code-session-id"] = params.malformedSession
             ? "x".repeat(513)
-            : crypto.randomUUID();
+            : (params.sessionId ?? crypto.randomUUID());
         }
       }
       const history = historyBody(
@@ -11731,8 +11801,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             : `/v1/connection-setup/${params.token}/${route}`),
         remoteAddress,
         headers,
-        payload:
-          params.thread?.type === "continue"
+        payload: {
+          ...(params.thread?.type === "continue"
             ? {
                 model: history.model,
                 max_tokens: history.max_tokens,
@@ -11742,7 +11812,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
               }
             : params.thread
               ? { ...history, thread: params.thread }
-              : history,
+              : history),
+          ...params.extraBody,
+        },
       });
     };
 
@@ -11816,7 +11888,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       ["virtual-key", "openai-chat", true],
       ["virtual-key", "openai-responses", false],
       ["virtual-key", "openai-responses", true],
-    ] as const)("signed setup URL bypasses APPA for a %s unknown client with no session id (%s, stream=%s)", async (auth, family, stream) => {
+    ] as const)("signed setup URL does not bypass APPA for a %s unknown client with no session id (%s, stream=%s)", async (auth, family, stream) => {
       const token = issueFor(
         auth === "passthrough" ? passthroughKeyId : virtualKeyId,
       );
@@ -11827,10 +11899,10 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         token,
         deferred: true,
       });
-      expectBypassed(response, token);
+      expectAdmissionBlocked(response);
     });
 
-    test("signed setup URL bypasses a malformed session id and a known client that sends no session id", async () => {
+    test("signed setup URL does not bypass a malformed session id or a known client that sends no session id", async () => {
       const token = issueFor(passthroughKeyId);
       const malformed = await postSetup({
         family: "anthropic",
@@ -11841,7 +11913,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         malformedSession: true,
         deferred: true,
       });
-      expectBypassed(malformed, token);
+      expect(malformed.statusCode, malformed.body).toBe(400);
+      expect(malformed.body).toContain("valid client-native session ID");
+      expect(providerRequests).toHaveLength(0);
 
       const streamedMalformed = await postSetup({
         family: "anthropic",
@@ -11852,7 +11926,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         malformedSession: true,
         deferred: true,
       });
-      expectBypassed(streamedMalformed, token);
+      expect(streamedMalformed.statusCode, streamedMalformed.body).toBe(400);
+      expect(streamedMalformed.body).toContain(
+        "valid client-native session ID",
+      );
+      expect(providerRequests).toHaveLength(0);
 
       const noSession = await postSetup({
         family: "anthropic",
@@ -11863,7 +11941,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         omitSession: true,
         deferred: true,
       });
-      expectBypassed(noSession, token);
+      expectStillGoverned(noSession);
 
       const rejected = await postSetup({
         family: "anthropic",
@@ -12027,6 +12105,99 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           deferred: true,
         }),
       );
+    });
+
+    test("a copied setup reference does not exempt a second native conversation", async () => {
+      const token = issueFor(passthroughKeyId);
+      const owner = "11111111-1111-4111-8111-111111111111";
+      const copier = "22222222-2222-4222-8222-222222222222";
+      expectBypassed(
+        await postSetup({
+          family: "anthropic",
+          stream: false,
+          auth: "passthrough",
+          token,
+          knownClient: true,
+          sessionId: owner,
+          deferred: true,
+        }),
+        token,
+      );
+      expectStillGoverned(
+        await postSetup({
+          family: "anthropic",
+          stream: false,
+          auth: "passthrough",
+          token,
+          knownClient: true,
+          sessionId: copier,
+          deferred: true,
+        }),
+      );
+      expectBypassed(
+        await postSetup({
+          family: "anthropic",
+          stream: false,
+          auth: "passthrough",
+          token,
+          knownClient: true,
+          sessionId: owner,
+          deferred: true,
+        }),
+        token,
+      );
+      expectStillGoverned(
+        await postSetup({
+          family: "anthropic",
+          stream: false,
+          auth: "passthrough",
+          token,
+          knownClient: true,
+          sessionId: owner,
+          toolOutput: secret,
+          deferred: true,
+        }),
+      );
+    });
+
+    test("a parent session id or a cache error does not claim the setup reference", async () => {
+      const token = issueFor(passthroughKeyId);
+      const parentOnly = await postSetup({
+        family: "anthropic",
+        stream: false,
+        auth: "passthrough",
+        token,
+        knownClient: true,
+        omitSession: true,
+        deferred: true,
+        extraBody: {
+          metadata: {
+            user_id: JSON.stringify({
+              parent_session_id: "33333333-3333-4333-8333-333333333333",
+            }),
+          },
+        },
+      });
+      expectStillGoverned(parentOnly);
+
+      vi.spyOn(cacheManager, "withLock").mockRejectedValueOnce(
+        new Error("cache down"),
+      );
+      try {
+        expectStillGoverned(
+          await postSetup({
+            family: "anthropic",
+            stream: false,
+            auth: "passthrough",
+            token,
+            knownClient: true,
+            sessionId: "44444444-4444-4444-8444-444444444444",
+            deferred: true,
+          }),
+        );
+      } finally {
+        vi.mocked(cacheManager.withLock).mockRestore();
+      }
     });
 
     test("a provider-thread continue in the installer's conversation replays, and the replay stays exempt", async () => {
@@ -12211,6 +12382,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           stream: false,
           auth: "passthrough",
           token: passthroughCap,
+          knownClient: true,
+          sessionId: "11111111-1111-4111-8111-111111111111",
           deferred: true,
         });
         expectBypassed(stillValid, passthroughCap);
@@ -12219,6 +12392,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           stream: true,
           auth: "virtual-key",
           token: virtualCap,
+          knownClient: true,
+          sessionId: "22222222-2222-4222-8222-222222222222",
           deferred: true,
         });
         expectBypassed(virtualStillValid, virtualCap);

@@ -6,17 +6,19 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   type archestraApiTypes,
+  resolveMcpClientServerName,
   type SupportedProvider,
 } from "@archestra/shared";
 import {
   CONNECT_SETUP_PARTS,
   INSTALLER_CLIENT_IDS,
+  isInstallerClientId,
+  isPlainMcpClientServerName,
 } from "@archestra/shared/connection-setup";
 import { useEffect, useMemo, useState } from "react";
 import type { AgentSelectorAgent } from "@/components/agent-selector";
 import { useDefaultMcpGateway, useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useConfig } from "@/lib/config/config.query";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useLlmProxy } from "@/lib/llm-proxy.query";
@@ -163,10 +165,43 @@ const GENERIC_PARTS = ["tools", "skills", "proxy"] as const;
 
 /**
  * The prompt for after connecting: the agent reads welcome.md, explores what
- * it was given and suggests what to ask next.
+ * it was given and suggests what to ask next. With the gateway's server name
+ * it stays on that server instead of trying every MCP server it has. The rule
+ * limits only the other MCP servers: "use only the gateway" made agents drop
+ * their own fetch tools and open the page through a gateway browser tool.
  */
-export function welcomePrompt(origin: string, appName: string): string {
-  return `Read ${origin}/welcome.md and show me what I can do with ${appName}.`;
+export function welcomePrompt(params: {
+  origin: string;
+  appName: string;
+  serverName: string | null;
+}): string {
+  const { origin, appName, serverName } = params;
+  if (!serverName) {
+    return `Read ${origin}/welcome.md and show me what I can do with ${appName}.`;
+  }
+  return `Read ${origin}/welcome.md?server=${serverName} and show me what I can do with ${appName}. Do not call, test, reconnect or sign in to my other MCP servers. Leave them out of your answer.`;
+}
+
+/**
+ * The name the setup registers the gateway under in the client, when the
+ * page knows it: apps with an installer (Claude Desktop's download included)
+ * use resolveMcpClientServerName. Agents set up from a prompt or by hand pick
+ * their own name. null without tools, or for a name a prompt can't carry.
+ */
+export function gatewayServerName(params: {
+  client: ConnectClient;
+  gateway: ConnectGateway | null;
+  appName: string;
+  tools: boolean;
+}): string | null {
+  const { client, gateway, appName, tools } = params;
+  if (!tools || !gateway || !isInstallerClientId(client.id)) return null;
+  const name = resolveMcpClientServerName({
+    gatewayName: gateway.name,
+    appName,
+    isPersonalGateway: gateway.isPersonalGateway,
+  });
+  return isPlainMcpClientServerName(name) ? name : null;
 }
 
 /** A gateway pick that is no longer visible falls back to the default. */
@@ -198,7 +233,6 @@ export function useConnectPageData(
     { plugin: ["read", "update"] },
     "*",
   );
-  const { data: appConfig } = useConfig();
 
   const { data: defaultGateway, isLoading: defaultGatewayLoading } =
     useDefaultMcpGateway();
@@ -246,9 +280,7 @@ export function useConnectPageData(
   const pluginsEnabled = org?.connectionPluginsEnabled === true;
   // Same eligibility and filter the setup uses to bundle plugins.
   const { data: allPlugins } = usePlugins(
-    pluginsEnabled &&
-      appConfig?.features.plugins === true &&
-      canDeliverPlugins === true,
+    pluginsEnabled && canDeliverPlugins === true,
   );
   // The setup only bundles plugins built for the computer's OS.
   const [pluginPlatform, setPluginPlatform] = useState<"posix" | "windows">(

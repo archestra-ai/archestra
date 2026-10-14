@@ -283,6 +283,32 @@ describe("validateVirtualApiKey", () => {
     });
   });
 
+  test("an automatic virtual key routes a provider added after issuance", async ({
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const { value } = await VirtualApiKeyModel.create({
+      name: "Automatic providers",
+      organizationId: org.id,
+      ...accessGrants("org"),
+      includeFutureProviders: true,
+      providerApiKeys: [],
+    });
+    const secret = await makeSecret({ secret: { apiKey: "sk-added-later" } });
+    await makeLlmProviderApiKey(org.id, secret.id, {
+      provider: "openai",
+      isPrimary: true,
+    });
+    const result = await validateVirtualApiKey({
+      tokenValue: value,
+      expectedProvider: "openai",
+      expectedOrganizationId: org.id,
+    });
+    expect(result.apiKey).toBe("sk-added-later");
+  });
+
   test("returns resolved API key and baseUrl on success", async ({
     makeOrganization,
     makeSecret,

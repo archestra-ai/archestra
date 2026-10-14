@@ -9,6 +9,7 @@ import type {
   ChatMessage,
   ChatMessageAttachment,
 } from "@microsoft/msgraph-sdk/models";
+import { resolveMSTeamsUserEmail } from "./ms-teams-user";
 // Register the chats, teams, and users fluent API extensions
 import "@microsoft/msgraph-sdk-chats";
 import "@microsoft/msgraph-sdk-teams";
@@ -757,7 +758,12 @@ class MSTeamsProvider implements ChatOpsProvider {
 
     try {
       const user = await this.graphClient.users.byUserId(aadObjectId).get();
-      return user?.mail || user?.userPrincipalName || null;
+      return user
+        ? await resolveMSTeamsUserEmail({
+            email: user.mail,
+            userPrincipalName: user.userPrincipalName,
+          })
+        : null;
     } catch (error) {
       logger.error(
         { error: errorMessage(error), aadObjectId },
@@ -1030,7 +1036,7 @@ class MSTeamsProvider implements ChatOpsProvider {
         context.activity.from?.id || senderId,
       );
       if (member?.email || member?.userPrincipalName) {
-        senderEmail = member.email ?? member.userPrincipalName ?? null;
+        senderEmail = await resolveMSTeamsUserEmail(member);
       }
     } catch (error) {
       logger.debug(

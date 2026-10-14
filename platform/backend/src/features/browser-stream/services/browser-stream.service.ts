@@ -22,6 +22,7 @@ import {
   type ConversationStateKey,
   toConversationStateKey,
 } from "./browser-stream.state-manager";
+import { extractRunCodeResult } from "./run-code-result";
 
 /**
  * User context required for MCP client authentication
@@ -65,19 +66,28 @@ type BrowserTabsListData = {
 
 type BrowserTabsAction = "list" | "new" | "close" | "select";
 
+/** Frame captured in the same browser call as an input action. */
+interface InputActionFrame {
+  screenshot: string;
+  url: string;
+}
+
 interface ClickResult {
   success: boolean;
   error?: string;
+  frame?: InputActionFrame;
 }
 
 interface TypeResult {
   success: boolean;
   error?: string;
+  frame?: InputActionFrame;
 }
 
 interface ScrollResult {
   success: boolean;
   error?: string;
+  frame?: InputActionFrame;
 }
 
 interface SnapshotResult {
@@ -123,6 +133,11 @@ export class BrowserStreamService {
     ConversationStateKey,
     Promise<TabResult>
   >();
+  // Last input order sent per conversation (see buildInputActionCode)
+  private readonly inputSequence = new LRUCacheManager<InputOrder>({
+    maxSize: 10_000,
+    defaultTtl: 60 * TimeInMs.Minute,
+  });
 
   /**
    * Execute a Playwright MCP tool directly via mcpClient, bypassing the MCP Gateway.
@@ -1256,10 +1271,31 @@ export class BrowserStreamService {
     agentId: string,
     conversationId: string,
     userContext: BrowserUserContext,
+    options?: {
+      /**
+       * A quick frame while the user types or clicks: one screenshot call that
+       * Playwright MCP answers at once, without the URL, viewport check or
+       * caret. A settled frame instead runs through browser_run_code, which
+       * MCP holds for a second or more after it runs.
+       */
+      fast?: boolean;
+    },
   ): Promise<ScreenshotResult> {
     // NOTE: We do NOT call selectOrCreateTab here.
     // Tab is selected once on subscription. After that, we just capture
     // whatever is current, so LLM navigation works correctly.
+
+    if (!options?.fast) {
+      const runCodeTool = await this.findRunCodeTool(agentId);
+      if (runCodeTool) {
+        return this.takeSettledScreenshot({
+          runCodeTool,
+          agentId,
+          conversationId,
+          userContext,
+        });
+      }
+    }
 
     const toolName = await this.findScreenshotTool(agentId);
     if (!toolName) {
@@ -1269,8 +1305,11 @@ export class BrowserStreamService {
       );
     }
 
-    // Always use fixed viewport dimensions for consistent page rendering
-    await this.resizeBrowser(agentId, conversationId, userContext);
+    // Fixed viewport dimensions for consistent page rendering; a quick frame
+    // trusts the viewport the last settled frame set
+    if (!options?.fast) {
+      await this.resizeBrowser(agentId, conversationId, userContext);
+    }
 
     logScreenshotInfo(
       { agentId, conversationId, toolName },
@@ -1341,7 +1380,9 @@ export class BrowserStreamService {
 
     // Get URL reliably using browser_evaluate instead of extracting from screenshot response
     // This ensures the URL matches the page content shown in the screenshot
-    const url = await this.getCurrentUrl(agentId, conversationId, userContext);
+    const url = options?.fast
+      ? undefined
+      : await this.getCurrentUrl(agentId, conversationId, userContext);
 
     // NOTE: URL sync moved to websocket handler (sendScreenshot) to prevent race conditions
     // when user switches conversations while screenshot is in-flight.
@@ -1349,6 +1390,41 @@ export class BrowserStreamService {
     return {
       screenshot,
       url,
+      viewportWidth: DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH,
+      viewportHeight: DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT,
+    };
+  }
+
+  /**
+   * One browser call for a settled frame: set the viewport if it drifted, then
+   * capture with the caret visible, plus the URL. Replaces the separate
+   * resize, screenshot and URL calls.
+   */
+  private async takeSettledScreenshot(params: {
+    runCodeTool: string;
+    agentId: string;
+    conversationId: string;
+    userContext: BrowserUserContext;
+  }): Promise<ScreenshotResult> {
+    const { runCodeTool, agentId, conversationId, userContext } = params;
+    const result = await this.executeTool({
+      toolName: runCodeTool,
+      args: { code: SETTLED_FRAME_CODE },
+      agentId,
+      conversationId,
+      userContext,
+    });
+    if (result.isError) {
+      const errorText = this.extractTextContent(result.content);
+      throw new ApiError(500, errorText || "Screenshot failed");
+    }
+    const frame = this.parseInputActionFrame(result.content);
+    if (!frame) {
+      return { error: "No screenshot returned from browser tool" };
+    }
+    return {
+      screenshot: frame.screenshot,
+      url: frame.url || undefined,
       viewportWidth: DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH,
       viewportHeight: DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT,
     };
@@ -1577,6 +1653,27 @@ export class BrowserStreamService {
     }
   }
 
+  /** Read the frame that buildInputActionCode returns, if present. */
+  private parseInputActionFrame(
+    content: unknown,
+  ): InputActionFrame | undefined {
+    const value = extractRunCodeResult(this.extractTextContent(content));
+    if (!value) return undefined;
+    try {
+      const parsed = JSON.parse(value) as {
+        screenshot?: unknown;
+        url?: unknown;
+      };
+      if (typeof parsed.screenshot !== "string") return undefined;
+      return {
+        screenshot: `data:image/jpeg;base64,${parsed.screenshot}`,
+        url: typeof parsed.url === "string" ? parsed.url : "",
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
   /**
    * Find the Playwright browser run_code tool for an agent
    * This tool allows running arbitrary Playwright code including mouse operations
@@ -1585,6 +1682,17 @@ export class BrowserStreamService {
     return this.findToolName(agentId, (toolName) =>
       toolName.includes("browser_run_code"),
     );
+  }
+
+  private nextInputOrder(conversationId: string): InputOrder {
+    // A fresh token whenever the sequence restarts, so the page's gate resets
+    // with it instead of comparing against an old, higher count
+    const last = this.inputSequence.get(conversationId);
+    const order = last
+      ? { token: last.token, seq: last.seq + 1 }
+      : { token: randomUUID(), seq: 1 };
+    this.inputSequence.set(conversationId, order);
+    return order;
   }
 
   /**
@@ -1605,23 +1713,12 @@ export class BrowserStreamService {
     x?: number,
     y?: number,
   ): Promise<ClickResult> {
-    const tabResult = await this.selectOrCreateTab(
-      agentId,
-      conversationId,
-      userContext,
-    );
-    if (!tabResult.success) {
-      throw new ApiError(
-        500,
-        tabResult.error ?? "Failed to select browser tab",
-      );
-    }
+    // No tab selection: input goes to the current tab, the one every frame
+    // shows (each conversation has its own browser; the tab was selected on
+    // subscribe). Selecting it again cost two browser calls per keystroke.
 
-    // Ensure viewport matches screenshot dimensions for accurate coordinate clicks
-    if (x !== undefined && y !== undefined) {
-      await this.resizeBrowser(agentId, conversationId, userContext);
-    }
-
+    // No resize here: takeScreenshot resizes before every frame, so the frame
+    // the user clicked on already matches the viewport coordinates.
     if (x !== undefined && y !== undefined) {
       // Use browser_run_code for native Playwright mouse click
       const runCodeTool = await this.findRunCodeTool(agentId);
@@ -1648,8 +1745,11 @@ export class BrowserStreamService {
           "Clicking at coordinates via browser_run_code (Playwright mouse.click)",
         );
 
-        // Native Playwright mouse click - async function with page argument
-        const code = `async (page) => { await page.mouse.click(${safeX}, ${safeY}); }`;
+        // Native Playwright mouse click, plus a frame in the same call
+        const code = buildInputActionCode(
+          `await page.mouse.click(${safeX}, ${safeY});`,
+          this.nextInputOrder(conversationId),
+        );
 
         try {
           const result = await this.executeTool({
@@ -1661,7 +1761,10 @@ export class BrowserStreamService {
           });
 
           if (!result.isError) {
-            return { success: true };
+            return {
+              success: true,
+              frame: this.parseInputActionFrame(result.content),
+            };
           }
 
           const errorText = this.extractTextContent(result.content);
@@ -1738,17 +1841,9 @@ export class BrowserStreamService {
     text: string,
     element?: string,
   ): Promise<TypeResult> {
-    const tabResult = await this.selectOrCreateTab(
-      agentId,
-      conversationId,
-      userContext,
-    );
-    if (!tabResult.success) {
-      throw new ApiError(
-        500,
-        tabResult.error ?? "Failed to select browser tab",
-      );
-    }
+    // No tab selection: input goes to the current tab, the one every frame
+    // shows (each conversation has its own browser; the tab was selected on
+    // subscribe). Selecting it again cost two browser calls per keystroke.
 
     // If no element specified, use page.keyboard.type() to type into focused element
     if (!element) {
@@ -1761,8 +1856,11 @@ export class BrowserStreamService {
 
         // Use JSON.stringify for safe escaping of all special characters
         const safeText = JSON.stringify(text);
-        // Native Playwright keyboard type - async function with page argument
-        const playwrightCode = `async (page) => { await page.keyboard.type(${safeText}); }`;
+        // Native Playwright keyboard type, plus a frame in the same call
+        const playwrightCode = buildInputActionCode(
+          `await page.keyboard.type(${safeText});`,
+          this.nextInputOrder(conversationId),
+        );
 
         const result = await this.executeTool({
           toolName: runCodeTool,
@@ -1773,14 +1871,15 @@ export class BrowserStreamService {
         });
 
         if (!result.isError) {
-          return { success: true };
+          return {
+            success: true,
+            frame: this.parseInputActionFrame(result.content),
+          };
         }
 
+        // browser_type needs an element ref, so it cannot stand in here
         const errorText = this.extractTextContent(result.content);
-        logger.warn(
-          { agentId, error: errorText },
-          "browser_run_code type failed, trying browser_type",
-        );
+        throw new ApiError(500, errorText || "Type failed");
       }
     }
 
@@ -1830,16 +1929,34 @@ export class BrowserStreamService {
     userContext: BrowserUserContext,
     key: string,
   ): Promise<ScrollResult> {
-    const tabResult = await this.selectOrCreateTab(
-      agentId,
-      conversationId,
-      userContext,
-    );
-    if (!tabResult.success) {
-      throw new ApiError(
-        500,
-        tabResult.error ?? "Failed to select browser tab",
-      );
+    // No tab selection: input goes to the current tab, the one every frame
+    // shows (each conversation has its own browser; the tab was selected on
+    // subscribe). Selecting it again cost two browser calls per keystroke.
+
+    // Prefer run_code: it returns a frame in the same call
+    const runCodeTool = await this.findRunCodeTool(agentId);
+    if (runCodeTool) {
+      const result = await this.executeTool({
+        toolName: runCodeTool,
+        // JSON.stringify escapes the client-supplied key name safely
+        args: {
+          code: buildInputActionCode(
+            `await page.keyboard.press(${JSON.stringify(key)});`,
+            this.nextInputOrder(conversationId),
+          ),
+        },
+        agentId,
+        conversationId,
+        userContext,
+      });
+      if (result.isError) {
+        const errorText = this.extractTextContent(result.content);
+        throw new ApiError(500, errorText || "Key press failed");
+      }
+      return {
+        success: true,
+        frame: this.parseInputActionFrame(result.content),
+      };
     }
 
     const toolName = await this.findPressKeyTool(agentId);
@@ -1866,6 +1983,58 @@ export class BrowserStreamService {
     }
 
     return { success: true };
+  }
+
+  /**
+   * Scroll with the mouse wheel at a viewport position, so the scrollable
+   * element under the pointer moves (not only the document)
+   */
+  async scroll(
+    agentId: string,
+    conversationId: string,
+    userContext: BrowserUserContext,
+    params: { x: number; y: number; deltaX: number; deltaY: number },
+  ): Promise<ScrollResult> {
+    // No tab selection: input goes to the current tab, the one every frame
+    // shows (each conversation has its own browser; the tab was selected on
+    // subscribe). Selecting it again cost two browser calls per keystroke.
+
+    const runCodeTool = await this.findRunCodeTool(agentId);
+    if (!runCodeTool) {
+      throw new ApiError(
+        400,
+        "No browser run code tool available for this agent",
+      );
+    }
+
+    // Values are schema-validated finite numbers; rounding keeps the
+    // generated code to plain integer literals
+    const x = Math.round(params.x);
+    const y = Math.round(params.y);
+    const deltaX = Math.round(params.deltaX);
+    const deltaY = Math.round(params.deltaY);
+    const code = buildInputActionCode(
+      `await page.mouse.move(${x}, ${y}); await page.mouse.wheel(${deltaX}, ${deltaY});`,
+      this.nextInputOrder(conversationId),
+    );
+
+    const result = await this.executeTool({
+      toolName: runCodeTool,
+      args: { code },
+      agentId,
+      conversationId,
+      userContext,
+    });
+
+    if (result.isError) {
+      const errorText = this.extractTextContent(result.content);
+      throw new ApiError(500, errorText || "Scroll failed");
+    }
+
+    return {
+      success: true,
+      frame: this.parseInputActionFrame(result.content),
+    };
   }
 
   /**
@@ -1921,3 +2090,40 @@ export class BrowserStreamService {
     return { snapshot };
   }
 }
+
+/**
+ * Wrap an input action so the same browser call also returns a frame and the
+ * URL, captured with the text caret visible (Playwright hides it by default).
+ *
+ * Inputs are sent without waiting for the previous one: Playwright MCP holds
+ * every action call for at least a second after it runs (and longer while the
+ * page has requests in flight), so serial input meant ~3 s per keystroke. The
+ * calls run concurrently, so each waits in the page for its predecessor by
+ * sequence number to keep keystrokes in order. A new token starts a new
+ * sequence; a missing predecessor (lost call) stops blocking after 5 s.
+ *
+ * browser_run_code evaluates this in a bare vm context holding only `page`:
+ * JS built-ins exist, Node globals such as setTimeout do not.
+ */
+function buildInputActionCode(action: string, order: InputOrder): string {
+  const token = JSON.stringify(order.token);
+  // The capture is best-effort: a slow frame must not turn a completed action
+  // into a reported failure.
+  return `async (page) => {
+  let gate = page.__archestraInputGate;
+  if (!gate || gate.token !== ${token}) gate = page.__archestraInputGate = { token: ${token}, done: 0 };
+  const deadline = Date.now() + 5000;
+  while (gate.done < ${order.seq - 1} && Date.now() < deadline) await page.waitForTimeout(5);
+  try { ${action} } finally { gate.done = Math.max(gate.done, ${order.seq}); }
+  try { const shot = await page.screenshot({ type: "jpeg", quality: 70, caret: "initial", timeout: 1500 }); return { url: page.url(), screenshot: shot.toString("base64") }; } catch { return { url: page.url() }; }
+}`;
+}
+
+type InputOrder = { token: string; seq: number };
+
+const SETTLED_FRAME_CODE = `async (page) => {
+  const size = page.viewportSize();
+  if (!size || size.width !== ${DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH} || size.height !== ${DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT}) await page.setViewportSize({ width: ${DEFAULT_BROWSER_PREVIEW_VIEWPORT_WIDTH}, height: ${DEFAULT_BROWSER_PREVIEW_VIEWPORT_HEIGHT} });
+  const shot = await page.screenshot({ type: "jpeg", quality: 70, caret: "initial", timeout: 5000 });
+  return { url: page.url(), screenshot: shot.toString("base64") };
+}`;

@@ -181,8 +181,9 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // or changes is decided by grants on each one.
   credential: ["read"],
 
-  // OpenAPPA
-  openappaPolicy: ["read"],
+  // OpenAPPA. Members do not see the Guardrails pages or read the policy.
+  // Enforcement, yells, and remedies do not depend on these permissions.
+  openappaPolicy: [],
   openappaDiagnostics: [],
 
   // Knowledge
@@ -601,6 +602,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetConnectionHealth]: {},
   // Installation credential and live access are checked by the refresh handler.
   [RouteId.GetConnectionInstructions]: {},
+  [RouteId.GetConnectionRuntime]: {},
 
   // Generic agent CRUD routes - enforcement is handled dynamically in route handlers
   // based on agentType (agent, mcp_gateway, llm_proxy map to agent, mcpGateway, llmProxy resources)
@@ -1371,6 +1373,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeletePendingSignupMember]: { member: ["delete"] }, // Delete auto-provisioned member who hasn't signed up
   [RouteId.GetUserPermissionSources]: {},
   [RouteId.GetUserPermissions]: {}, // User permissions route - available to all authenticated users (no specific permissions required)
+  // Other members' saved browser logins: managing someone else's sessions is a
+  // member-management action, so admins only
+  [RouteId.GetBrowserStorageStates]: { member: ["update"] },
+  [RouteId.DeleteBrowserStorageState]: { member: ["update"] },
   [RouteId.GetImpersonableUsers]: { member: ["impersonate"] }, // Role debugger picker (the impersonate-user call itself is also gated on member:impersonate in the auth before-hook)
 
   // Member default routes - available to all authenticated users (manages their own defaults)
@@ -1424,6 +1430,20 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   [RouteId.GetCostSavingsStatistics]: {
     llmCost: ["read"],
+  },
+  // Grouped usage reporting. Like GetUserStatistics, the routes additionally
+  // require member:read before returning anyone else's usage, and app/skill
+  // usage narrow to the apps and skills the caller can see.
+  [RouteId.GetMcpToolCallUsage]: {
+    llmCost: ["read"],
+  },
+  [RouteId.GetAppUsage]: {
+    llmCost: ["read"],
+    app: ["read"],
+  },
+  [RouteId.GetSkillUsage]: {
+    llmCost: ["read"],
+    skill: ["read"],
   },
   // Secrets Routes
   [RouteId.GetSecretsType]: {

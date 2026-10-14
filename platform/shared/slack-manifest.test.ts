@@ -98,7 +98,11 @@ describe("buildSlackManifest", () => {
     expect(manifest.features.agent_view).toBeDefined();
     expect(manifest.features.assistant_view).toBeUndefined();
     expect(manifest.settings.event_subscriptions.bot_events).toEqual(
-      expect.arrayContaining(["agent_session_stopped", "app_home_opened"]),
+      expect.arrayContaining([
+        "agent_session_stopped",
+        "app_home_opened",
+        "reaction_added",
+      ]),
     );
   });
 });
@@ -134,10 +138,11 @@ describe("migrateSlackManifest", () => {
       agent_description: "Helps the Acme team",
     });
     expect(migrated.settings.event_subscriptions.bot_events).toEqual(
-      expect.arrayContaining(["agent_session_stopped", "app_home_opened"]),
-    );
-    expect(migrated.settings.event_subscriptions.bot_events).not.toContain(
-      "reaction_added",
+      expect.arrayContaining([
+        "agent_session_stopped",
+        "app_home_opened",
+        "reaction_added",
+      ]),
     );
     expect(migrated.oauth_config.scopes.bot).toEqual([
       ...SLACK_REQUIRED_BOT_SCOPES,

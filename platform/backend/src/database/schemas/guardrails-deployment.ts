@@ -9,5 +9,6 @@ const guardrailsDeploymentTable = pgTable("guardrails_deployment", {
     .$type<UnsupportedAppaClientAction>()
     .notNull()
     .default("bypass"),
+  superyellEnabled: boolean("superyell_enabled").notNull().default(true),
 });
 export default guardrailsDeploymentTable;

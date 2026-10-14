@@ -11,6 +11,7 @@ import {
   mayHoldOpenAppaPayload,
   sanitizeForwardedRequest,
 } from "@/openappa/request";
+import { captureClientRuntimeEvidence } from "../utils/client-runtime-evidence";
 import { removeMarkersFromBody } from "../utils/gateway-tool-declarations";
 
 const UUID_REGEX =
@@ -54,6 +55,7 @@ export function createProxyPreHandler(params: {
     reply: FastifyReply,
     next: HookHandlerDoneFunction,
   ) => {
+    captureClientRuntimeEvidence(request);
     const urlPath = request.url.split("?")[0];
     const endpointSuffixes =
       typeof endpointSuffix === "string" ? [endpointSuffix] : endpointSuffix;

@@ -40,6 +40,13 @@ export type ToolNameResolution = {
 /** A declaration whose attestation marker verified, with what it attests. */
 export type VerifiedToolDeclaration = DeclaredToolSpelling & ToolAttestation;
 
+/** Installed-client provenance, authenticated separately from copyable tool markers. */
+export type GatewayClientBindings = {
+  gatewayId: string;
+  /** Actual configured gateway aliases, in active-client preference order. */
+  serverNames: readonly string[];
+};
+
 /**
  * Identifies which tools in a request originate from the platform MCP gateway.
  *
@@ -77,6 +84,10 @@ export type GatewayToolIdentity = ToolNameResolution & {
   ) => VerifiedToolDeclaration | undefined;
   /** The declaration that canonicalizes to `canonicalName`, when exactly one does. */
   spellingOf: (canonicalName: string) => DeclaredToolSpelling | undefined;
+  /** Exact equivalent members backed by authenticated client configuration. */
+  aliasesOf?: (
+    canonicalName: string,
+  ) => readonly DeclaredToolSpelling[] | undefined;
   /** Every declaration whose marker verified, before demotion. */
   verified: readonly VerifiedToolDeclaration[];
   /** Declarations whose marker did not verify. */
@@ -102,15 +113,21 @@ export async function resolveGatewayToolIdentity(params: {
   organizationId: string;
   declarations: readonly GatewayToolDeclaration[];
   internalChat: boolean;
+  clientBindings?: GatewayClientBindings;
 }): Promise<GatewayToolIdentity> {
   const { organizationId, internalChat } = params;
   const declarations = dedupeDeclarations(params.declarations);
   const verified: VerifiedToolDeclaration[] = [];
   let unverifiedMarkerCount = 0;
-  for (const { marker, ...spelling } of declarations) {
+  for (const { marker, name, namespace } of declarations) {
     if (!marker) continue;
     const attestation = verifyToolAttestation({ organizationId, marker });
-    if (attestation) verified.push({ ...spelling, ...attestation });
+    if (attestation)
+      verified.push({
+        name,
+        ...(namespace ? { namespace } : {}),
+        ...attestation,
+      });
     else unverifiedMarkerCount++;
   }
 
@@ -121,6 +138,8 @@ export async function resolveGatewayToolIdentity(params: {
       verified,
       unverifiedMarkerCount,
       internalChat,
+      clientBindings: params.clientBindings,
+      conflictingKeys: conflictingDeclarationKeys(params.declarations),
     });
   }
   if (internalChat) {
@@ -157,6 +176,8 @@ async function attestedIdentity(params: {
   verified: readonly VerifiedToolDeclaration[];
   unverifiedMarkerCount: number;
   internalChat: boolean;
+  clientBindings?: GatewayClientBindings;
+  conflictingKeys: ReadonlySet<string>;
 }): Promise<GatewayToolIdentity> {
   const effective = new Map(
     params.verified.map((declaration) => [
@@ -164,7 +185,12 @@ async function attestedIdentity(params: {
       declaration,
     ]),
   );
-  const demoted = demoteAttestations(effective);
+  const { demoted, aliases } = demoteAttestations({
+    effective,
+    declarations: params.declarations,
+    clientBindings: params.clientBindings,
+    conflictingKeys: params.conflictingKeys,
+  });
 
   // Every declaration left without an effective attestation, as spelled.
   const unattested = params.declarations
@@ -240,6 +266,7 @@ async function attestedIdentity(params: {
     declarations: params.declarations,
     verified: params.verified,
     unverifiedMarkerCount: params.unverifiedMarkerCount,
+    aliases,
   });
 }
 
@@ -255,9 +282,20 @@ async function attestedIdentity(params: {
  *   notice operations route through a single gateway. If multiple gateways
  *   attest the remedy tools, all built-ins remain active.
  */
-function demoteAttestations(
-  effective: Map<string, VerifiedToolDeclaration>,
-): Array<{ declaration: VerifiedToolDeclaration; reason: DemotionReason }> {
+function demoteAttestations(params: {
+  effective: Map<string, VerifiedToolDeclaration>;
+  declarations: readonly GatewayToolDeclaration[];
+  clientBindings?: GatewayClientBindings;
+  conflictingKeys: ReadonlySet<string>;
+}): {
+  demoted: Array<{
+    declaration: VerifiedToolDeclaration;
+    reason: DemotionReason;
+  }>;
+  aliases: ReadonlyMap<string, readonly DeclaredToolSpelling[]>;
+} {
+  const { effective, clientBindings } = params;
+  const aliases = new Map<string, readonly DeclaredToolSpelling[]>();
   const demoted: Array<{
     declaration: VerifiedToolDeclaration;
     reason: DemotionReason;
@@ -269,6 +307,28 @@ function demoteAttestations(
     demoted.push({ declaration, reason });
   };
 
+  for (const key of params.conflictingKeys)
+    demote(key, "conflicting_declaration");
+  const contracts = new Map(
+    params.declarations.map((declaration) => [
+      declarationKey(declaration.name, declaration.namespace),
+      declaration.contract,
+    ]),
+  );
+  const bindingRank = (declaration: VerifiedToolDeclaration) =>
+    clientBindings?.gatewayId === declaration.gatewayId
+      ? clientBindings.serverNames.findIndex(
+          (serverName) =>
+            (declaration.namespace === `mcp__${serverName}` &&
+              declaration.name === declaration.advertisedName) ||
+            (declaration.namespace === undefined &&
+              (declaration.name ===
+                `${serverName}_${declaration.advertisedName}` ||
+                declaration.name ===
+                  `mcp__${serverName}__${declaration.advertisedName}`)),
+        )
+      : -1;
+
   const spellingsByServedTool = new Map<string, string[]>();
   for (const [key, declaration] of effective) {
     const servedTool = `${declaration.gatewayId}\u0000${declaration.advertisedName}`;
@@ -279,7 +339,47 @@ function demoteAttestations(
   }
   for (const keys of spellingsByServedTool.values()) {
     if (keys.length < 2) continue;
-    for (const key of keys) demote(key, "replayed");
+    const bound = keys.filter((key) => {
+      const declaration = effective.get(key);
+      return declaration !== undefined && bindingRank(declaration) >= 0;
+    });
+    const contract = contracts.get(bound[0]);
+    const first = effective.get(bound[0]);
+    // A marker alone is replayable. Only the installed client's separately
+    // authenticated endpoint bindings can make these spellings equivalent.
+    const equivalent =
+      first &&
+      contract &&
+      /^[a-f0-9]{64}$/.test(contract) &&
+      bound.every(
+        (key) =>
+          contracts.get(key) === contract &&
+          effective.get(key)?.kind === first.kind,
+      );
+    if (!equivalent) {
+      for (const key of keys) demote(key, "replayed");
+      continue;
+    }
+    const members = bound
+      .flatMap((key) => {
+        const declaration = effective.get(key);
+        return declaration ? [declaration] : [];
+      })
+      .sort((a, b) => {
+        const rank = bindingRank(a) - bindingRank(b);
+        if (rank) return rank;
+        const left = declarationKey(a.name, a.namespace),
+          right = declarationKey(b.name, b.namespace);
+        return left < right ? -1 : left > right ? 1 : 0;
+      });
+    aliases.set(
+      first.advertisedName,
+      members.map(({ name, namespace }) => ({
+        name,
+        ...(namespace ? { namespace } : {}),
+      })),
+    );
+    for (const key of keys) if (!bound.includes(key)) demote(key, "replayed");
   }
 
   for (const [key, declaration] of effective) {
@@ -322,10 +422,33 @@ function demoteAttestations(
     }
   }
 
-  return demoted;
+  for (const [advertisedName, members] of aliases) {
+    const retained = members.filter((member) =>
+      effective.has(declarationKey(member.name, member.namespace)),
+    );
+    const gatewayId = retained.length
+      ? effective.get(declarationKey(retained[0].name, retained[0].namespace))
+          ?.gatewayId
+      : undefined;
+    if (
+      !retained.length ||
+      [...effective.values()].some(
+        (declaration) =>
+          declaration.advertisedName === advertisedName &&
+          declaration.gatewayId !== gatewayId,
+      )
+    )
+      aliases.delete(advertisedName);
+    else aliases.set(advertisedName, retained);
+  }
+  return { demoted, aliases };
 }
 
-type DemotionReason = "replayed" | "branded_third_party" | "non_owner_built_in";
+type DemotionReason =
+  | "replayed"
+  | "branded_third_party"
+  | "non_owner_built_in"
+  | "conflicting_declaration";
 
 // Compat: delete next release (no valid attestation in the request).
 async function compatIdentity(params: {
@@ -546,6 +669,7 @@ function identityOf(params: {
   declarations: readonly DeclaredToolSpelling[];
   verified: readonly VerifiedToolDeclaration[];
   unverifiedMarkerCount: number;
+  aliases?: ReadonlyMap<string, readonly DeclaredToolSpelling[]>;
 }): GatewayToolIdentity {
   // Canonical name → the one declaration spelling it, or null once a second
   // declaration spells it too.
@@ -566,10 +690,40 @@ function identityOf(params: {
     looseRunToolDispatch: params.mode === "compat",
     attestationOf: (name, namespace) =>
       params.effective.get(declarationKey(name, namespace)),
-    spellingOf: (canonicalName) => spellings.get(canonicalName) ?? undefined,
+    spellingOf: (canonicalName) =>
+      params.aliases?.get(canonicalName)?.[0] ??
+      spellings.get(canonicalName) ??
+      undefined,
+    aliasesOf: (canonicalName) => params.aliases?.get(canonicalName),
     verified: params.verified,
     unverifiedMarkerCount: params.unverifiedMarkerCount,
   };
+}
+
+function conflictingDeclarationKeys(
+  declarations: readonly GatewayToolDeclaration[],
+): ReadonlySet<string> {
+  const previous = new Map<string, GatewayToolDeclaration>();
+  const conflicting = new Set<string>();
+  for (const declaration of declarations) {
+    const key = declarationKey(declaration.name, declaration.namespace);
+    const kept = previous.get(key);
+    if (!kept) {
+      previous.set(key, declaration);
+      continue;
+    }
+    if (
+      !kept.contract ||
+      !/^[a-f0-9]{64}$/.test(kept.contract) ||
+      kept.contract !== declaration.contract ||
+      (kept.marker && declaration.marker && kept.marker !== declaration.marker)
+    )
+      conflicting.add(key);
+    // A markerless intermediary must not hide disagreement with a later marker.
+    if (!kept.marker && declaration.marker)
+      previous.set(key, { ...kept, marker: declaration.marker });
+  }
+  return conflicting;
 }
 
 /**

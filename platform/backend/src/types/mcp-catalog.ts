@@ -2,6 +2,7 @@ import {
   CreatedByNullableSchema,
   EnvFromSchema,
   HttpUrlSchema,
+  ImagePullPolicySchema,
   ImagePullSecretConfigSchema,
   LocalConfigEnvironmentDefaultSchema,
   LocalConfigSchema,
@@ -118,6 +119,7 @@ const LocalConfigSelectSchema = z.object({
       ]),
     )
     .optional(),
+  imagePullPolicy: ImagePullPolicySchema.optional(),
 });
 
 const CatalogLabelSchema = z.object({

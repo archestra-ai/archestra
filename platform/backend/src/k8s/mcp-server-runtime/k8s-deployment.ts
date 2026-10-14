@@ -1,6 +1,8 @@
 import { PassThrough } from "node:stream";
 import {
+  type ImagePullPolicy,
   type ImagePullSecretConfig,
+  isPlaywrightCatalogItem,
   type LocalConfigSchema,
   MCP_ORCHESTRATOR_DEFAULTS,
   type McpDeploymentState,
@@ -2226,6 +2228,7 @@ export default class K8sDeployment {
           name: "mcp-server",
           image: dockerImage,
           imagePullPolicy: getMcpImagePullPolicy(dockerImage, {
+            configured: localConfig.imagePullPolicy,
             forceFreshPull: this.consumeFreshImagePullRequest(),
           }),
           env: envVars,
@@ -2285,14 +2288,18 @@ export default class K8sDeployment {
           // prevents DiskPressure eviction cascades on over-packed nodes.
           resources: {
             requests: {
-              memory: config.orchestrator.mcpServerResources.requests.memory,
+              memory: isPlaywrightCatalogItem(this.catalogItem?.id ?? "")
+                ? PLAYWRIGHT_MEMORY_REQUEST
+                : config.orchestrator.mcpServerResources.requests.memory,
               cpu: config.orchestrator.mcpServerResources.requests.cpu,
               "ephemeral-storage":
                 config.orchestrator.mcpServerResources.requests
                   .ephemeralStorage,
             },
             limits: {
-              memory: config.orchestrator.mcpServerResources.limits.memory,
+              memory: isPlaywrightCatalogItem(this.catalogItem?.id ?? "")
+                ? PLAYWRIGHT_MEMORY_LIMIT
+                : config.orchestrator.mcpServerResources.limits.memory,
               "ephemeral-storage":
                 config.orchestrator.mcpServerResources.limits.ephemeralStorage,
             },
@@ -2673,27 +2680,27 @@ export default class K8sDeployment {
       }
     }
 
-    // 9. imagePullPolicy: an explicit YAML value wins, like every other field
-    // in this merge — advanced YAML exists so an operator can pin a pod spec we
-    // would not generate, and which registry round-trips a pod makes is theirs
-    // to decide. The system only fills the field in when the YAML leaves it
-    // unset, which is also what keeps the `Never` guard on bare local images.
-    // The one exception is a refresh-image request: that is an explicit admin
-    // action asking for the current image right now, and on a YAML frozen at
-    // `IfNotPresent` it is the only route to one. It applies to that single
-    // rollout, then the author's value governs again. On a bare local image
-    // that rollout writes `Never` rather than `Always`, because there is no
-    // registry to fetch a fresher image from; the request is still consumed so
-    // it cannot leak into a later rollout.
+    // 9. imagePullPolicy: the catalog's pull policy setting wins over the
+    // YAML. The YAML editor is seeded from a generated template that always
+    // spells out a policy, so a saved YAML carries one whether or not its
+    // author meant to pin it; the dedicated setting is the deliberate choice.
+    // Without that setting an explicit YAML value wins, like every other field
+    // in this merge, and the system fills the field in only when the YAML
+    // leaves it unset. A refresh-image request is an explicit admin action
+    // asking for the current image right now, so it pulls with `Always` for
+    // that single rollout (unless the policy is `Never`, which has no registry
+    // to fetch from); the request is still consumed so it cannot leak into a
+    // later rollout.
     if (deployment.spec?.template?.spec?.containers?.[0]) {
       const container = deployment.spec.template.spec.containers[0];
       const forceFreshPull = this.consumeFreshImagePullRequest();
-      if (forceFreshPull || !container.imagePullPolicy) {
-        container.imagePullPolicy = getMcpImagePullPolicy(
-          container.image || dockerImage,
-          { forceFreshPull },
-        );
-      }
+      const configured =
+        localConfig.imagePullPolicy ??
+        (container.imagePullPolicy as ImagePullPolicy | undefined);
+      container.imagePullPolicy = getMcpImagePullPolicy(
+        container.image || dockerImage,
+        { configured, forceFreshPull },
+      );
     }
 
     logger.info(
@@ -5825,3 +5832,12 @@ const CREDENTIAL_EXPIRY_ANNOTATION = "archestra.ai/credential-expires-at";
 const CREDENTIAL_REFRESH_ANNOTATION = "archestra.ai/credential-refresh-at";
 
 const CREDENTIALS_RESOLVED_ANNOTATION = "archestra.ai/credentials-resolved";
+
+/**
+ * The built-in Playwright server runs one Chromium shared by every browser
+ * session in its Environment, with a context per conversation. The generic MCP
+ * server default (sized for small tool servers) starves it: pages slow to a
+ * crawl and screenshots time out long before the pod is OOM-killed.
+ */
+const PLAYWRIGHT_MEMORY_REQUEST = "512Mi";
+const PLAYWRIGHT_MEMORY_LIMIT = "2Gi";

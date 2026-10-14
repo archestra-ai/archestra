@@ -34,6 +34,27 @@ describe("log redaction", () => {
     expect(records[0].workspaceId).toBe("workspace");
   });
 
+  test("censors installed-client capabilities before HTTP handler evidence consumption", () => {
+    const { logger, records } = createCapturingLogger();
+    logger.info({
+      request: {
+        headers: {
+          "x-archestra-client-runtime-token":
+            "example-private-runtime-capability",
+        },
+      },
+    });
+    logger.info({
+      headers: {
+        "X-Archestra-Client-Runtime-Token":
+          "example-private-runtime-capability",
+      },
+    });
+    expect(JSON.stringify(records)).not.toContain(
+      "example-private-runtime-capability",
+    );
+  });
+
   test("censors credential keys at the top level", () => {
     const { logger, records } = createCapturingLogger();
 

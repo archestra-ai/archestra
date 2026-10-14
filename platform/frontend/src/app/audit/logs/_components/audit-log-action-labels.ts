@@ -40,6 +40,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "agentRun.reviewDecided": "OpenAPPA review decided",
   "agentRun.shared": "Agent run shared",
   "agentRun.unshared": "Agent run unshared",
+  "browserStorageState.deleted": "Browser saved login removed",
   // Runtime credential
   "credential.created": "Credential created",
   "credential.updated": "Credential updated",

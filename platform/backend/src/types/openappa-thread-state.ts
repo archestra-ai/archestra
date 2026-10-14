@@ -8,6 +8,8 @@ export const ThreadToolSchema = z.object({
   type: z.string().optional(),
   /** The gateway attestation marker the tool's description led with. */
   marker: z.string().optional(),
+  /** Original full callable-contract fingerprint, not the hydrated skeleton. */
+  contract: z.string().optional(),
 });
 export type ThreadTool = z.infer<typeof ThreadToolSchema>;
 

@@ -6,6 +6,7 @@ import {
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
+  type YellToolShortName,
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -28,11 +29,16 @@ import {
 } from "@/openappa/current-trajectory";
 import {
   clearHitlReview,
+  closureFromReviewOutcome,
   consumeHitlRuling,
   getHitlReviewResult,
   type HitlReviewOutcome,
+  peekHitlDecision,
   recordHitlReviewResult,
+  recordHitlRuling,
+  reviewOutcomeFromClosure,
   reviewSessionFromTrajectory,
+  sealHitlClosure,
   stageHitlReview,
 } from "@/openappa/hitl-review";
 import { NoticeArguments, RemedyExecutionSchema } from "@/openappa/notice";
@@ -53,8 +59,10 @@ import {
   type OpenAppaSession,
   readPeerMessage,
 } from "@/openappa/service";
+import { superyellSession } from "@/openappa/unenforced";
 import {
   recallYellSession,
+  type YellArguments,
   YellArgumentsSchema,
 } from "@/openappa/yell-session";
 import {
@@ -66,6 +74,7 @@ import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import {
   firstPolicyRefusal,
   getGuardrailsDeployment,
+  SUPERYELL_DISABLED_MESSAGE,
   turnOnForFirstPolicy,
 } from "@/services/guardrails-deployment";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
@@ -132,6 +141,7 @@ import {
   defineArchestraTool,
   defineArchestraTools,
   errorResult,
+  successResult,
 } from "./helpers";
 import { filterToolNamesByPermission } from "./rbac";
 import type { ArchestraContext } from "./types";
@@ -450,13 +460,18 @@ const registry = defineArchestraTools([
     title: "Connect existing OpenAPPA policy repository",
     description:
       "Make a policy file in an existing GitHub repository or GitLab project the organization's OpenAPPA policy source, pull it now, and keep it in sync. The file replaces the current policy, so tell the user that and get their agreement first. List credentials first and pass either an organization GitHub App installed on the repository owner (githubAppConfigId) or a GitLab access token that can read the project (gitlabTokenId). Ask the user for the repository and, if it is not appa.toml at the repository root, the file path. Future policy edits open pull requests. A held pull is connected but waits for an operator to accept it in the guardrails panel; report `source.lastSyncError`. If the first pull fails, nothing is connected and the error says why.",
-    // `ref` and `path` stay plain strings here and are checked against the
-    // source schema in the handler: its `ref` pattern uses a Unicode property
-    // escape, which OpenAI refuses in a function schema.
+    // `repo`, `ref` and `path` stay plain strings here and are checked against
+    // the source schema in the handler. OpenAI refuses the source schema's
+    // patterns in a function schema: `ref` uses a Unicode property escape, and
+    // a model offered the `repo` pattern's repeated group ends its turn with
+    // no reply.
     schema: z.strictObject({
-      repo: AppaGithubSourceSchema.shape.repo.describe(
-        "The existing repository, as owner/name (GitLab: group/subgroup/project).",
-      ),
+      repo: z
+        .string()
+        .max(400)
+        .describe(
+          "The existing repository, as owner/name (GitLab: group/subgroup/project).",
+        ),
       path: z
         .string()
         .default("appa.toml")
@@ -520,41 +535,56 @@ const registry = defineArchestraTools([
       "Send feedback about OpenAPPA, such as a confusing block, remedy or ruling, or the user's complaint, with a diagnostic archive for review in the Guardrails Yells tab. When deployment analytics is enabled, also forwards the report to the shared OpenAPPA reporting service. with_trajectory includes this session's policy decisions, never raw prompts, tool arguments, or outputs. Your message is sent verbatim: say what about OpenAPPA was confusing or wrong. When a call was blocked, report the block; never put the blocked call's content (such as a task you could not file) in its place, and do not include secrets, personal data, or task content. This does not change policy or grant permission.",
     schema: YellArgumentsSchema,
     async handler({ args, context }) {
-      const id = context.sessionId ?? context.conversationId;
-      const known =
-        context.openappaSubagent?.session ??
-        context.openappaSession ??
-        (context.organizationId && context.userId && id
-          ? chatOpenAppaSession(context.organizationId, context.userId, id)
-          : undefined);
-      const identity =
-        known && context.currentToolCallId
-          ? { session: known, callId: context.currentToolCallId }
-          : context.organizationId
-            ? await recallYellSession({
-                organizationId: context.organizationId,
-                args,
-              })
-            : undefined;
-      if (!identity) {
-        logger.warn(
-          {
-            agentId: context.agentId,
-            hasSession: Boolean(known),
-            hasToolCallId: Boolean(context.currentToolCallId),
-          },
-          "OpenAPPA yell refused: no session or tool-call identity",
-        );
-        throw new ApiError(
-          400,
-          "OpenAPPA reporting requires an authenticated session and tool-call identity",
-        );
-      }
+      const identity = await yellIdentity({ shortName: "yell", args, context });
       return executeYell({
         session: identity.session,
         toolCallId: identity.callId,
         args,
       });
+    },
+  }),
+  defineArchestraTool({
+    shortName: "superyell",
+    title: "Report OpenAPPA feedback and turn it off for this session",
+    description:
+      "Do what yell does, then turn OpenAPPA off for this session, after the person running it approves. The report is sent first, the same way yell sends it. Then the session's label resets and OpenAPPA stops checking its calls, and the calls of the children it starts afterwards. Other sessions are not affected. Call it only when the user asks to turn OpenAPPA off for this session. Your message is sent verbatim and is what the person approving reads: say what about OpenAPPA was wrong and why it should be off. Do not include secrets, personal data, or task content.",
+    schema: YellArgumentsSchema,
+    async handler({ args, context }) {
+      const deployment = await getGuardrailsDeployment();
+      if (!deployment.active)
+        return errorResult("Guardrails enforcement is off");
+      if (!deployment.superyellEnabled)
+        return errorResult(SUPERYELL_DISABLED_MESSAGE);
+      const identity = await yellIdentity({
+        shortName: "superyell",
+        args,
+        context,
+      });
+      const report = await executeYell({
+        session: identity.session,
+        toolCallId: identity.callId,
+        args,
+      });
+      // The person approved turning OpenAPPA off, so a report that failed to
+      // send does not keep it on.
+      await superyellSession(identity.session);
+      logger.warn(
+        {
+          organizationId: identity.session.organization_id,
+          sessionId: identity.session.session_id,
+          userId: context.userId,
+          reported: !report.isError,
+        },
+        "OpenAPPA turned off for a session by an approved superyell",
+      );
+      return successResult(
+        [
+          ...report.content.flatMap((part) =>
+            part.type === "text" ? [part.text] : [],
+          ),
+          "OpenAPPA is off for this session. Its label is reset, and its calls are no longer checked.",
+        ].join("\n"),
+      );
     },
   }),
   defineArchestraTool({
@@ -1061,7 +1091,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
     title: "Execute OpenAPPA remedy plan",
     description:
-      "Apply a remedy plan that the organization's guardrails policy offers for a blocked call. Pass the offer_id and plan from the ruling. The policy decides when the user must approve a plan. In that case, the result is review_required. Ask the user with the declared ask_user tool and that offer ID. After the user approves, call execute_remedy_plan again with the same offer and plan. After the plan is authorized, retry the original call or use the admitted output. If the user denies the review, or the review is canceled, unavailable, or unanswered, tell the user that the action stays blocked.",
+      "Apply a remedy plan that the organization's guardrails policy offers for a blocked call. Pass the offer_id and plan from the ruling. The policy decides when the user must approve a plan. In that case, the result is review_required. Ask the user with the declared ask_user tool and that offer ID. After the user approves, call execute_remedy_plan again with the same offer and plan. After the plan is authorized, retry the original call or use the admitted output. If the user denies the review, or the review is declined, canceled, unavailable, or unanswered, tell the user that the action stays blocked. A client decline is not a human denial.",
     // The proxy alone writes these members. They have no `.describe()` text,
     // so no rendering of the full schema can show the model their prose:
     // - execution: retry identity and history restoration; it does not authorize.
@@ -1142,8 +1172,17 @@ const registry = defineArchestraTools([
           callId,
           offerId: remedy.offer_id,
         });
-        if (previousOutcome && previousOutcome !== "review_required")
-          return unansweredReviewResult(remedy.offer_id, previousOutcome);
+        if (previousOutcome && previousOutcome !== "review_required") {
+          const decided = await peekHitlDecision({
+            session: reviewSession,
+            offerId: remedy.offer_id,
+          });
+          // A human ruling that won the race is still spendable. A stored
+          // closure, including one with no closure metadata, is not.
+          if (decided?.ruling !== "approve" && decided?.ruling !== "deny") {
+            return unansweredReviewResult(remedy.offer_id, previousOutcome);
+          }
+        }
       }
       const review = await loadOfferReview({
         organizationId: context.organizationId,
@@ -1166,67 +1205,108 @@ const registry = defineArchestraTools([
             offerId: remedy.offer_id,
           });
         } else {
-          const cachedRuling = await consumeHitlRuling({
+          const cached = await peekHitlDecision({
             session: reviewSession,
             offerId: remedy.offer_id,
           });
-          if (cachedRuling === "approve" || cachedRuling === "deny") {
-            ruling = cachedRuling;
-          } else if (cachedRuling === "none") {
-            // Legacy native answers did not distinguish dismissal from other
-            // missing rulings. Do not invent a timeout or explicit denial.
-            reviewOutcome = "review_invalid";
-          } else if (context.mrtr) {
-            // External MCP clients reach their native question tool through ask_user.
-            // Stage the exact review first so the model cannot alter
-            // the question or bind an answer to a different offer.
+          if (cached?.ruling === "approve" || cached?.ruling === "deny") {
+            const spent = await consumeHitlRuling({
+              session: reviewSession,
+              offerId: remedy.offer_id,
+            });
+            if (spent === "approve" || spent === "deny") ruling = spent;
+            else reviewOutcome = reviewOutcomeFromClosure(cached.closure);
+          } else if (cached?.ruling === "none") {
+            // A none entry from before closures were stored has no reason.
+            // That is not a denial, and it must not open another question.
+            reviewOutcome = reviewOutcomeFromClosure(cached.closure);
+          } else if (context.mrtr || context.elicitation) {
             const stagedReview = {
               offerId: remedy.offer_id,
               text: review.text,
               ...(review.tool ? { tool: review.tool } : {}),
               ...(review.arguments ? { arguments: review.arguments } : {}),
             };
-            await stageHitlReview({
+            const staged = await stageHitlReview({
               session: reviewSession,
-              callId,
+              ...(context.mrtr && callId ? { callId } : {}),
               review: { ...stagedReview, remedyArguments: submittedArguments },
             });
-            try {
-              await bindRuntimeHitlReview({
+            if (staged.status === "approve" || staged.status === "deny") {
+              const spent = await consumeHitlRuling({
                 session: reviewSession,
-                review: stagedReview,
+                offerId: remedy.offer_id,
               });
-            } catch (error) {
-              logger.warn(
-                { error, offerId: remedy.offer_id },
-                "Could not index the runtime OpenAPPA review",
-              );
-            }
-            return nativeReviewRequiredResult(remedy.offer_id);
-          } else if (context.elicitation) {
-            // Archestra Chat keeps its inline approval card.
-            const outcome = await context.elicitation.elicit({
-              toolName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
-              message: review.text,
-              requestedSchema: HITL_RULING_SCHEMA,
-              kind: "openappa_review",
-              ...(review.tool ? { reviewedTool: review.tool } : {}),
-              ...(review.arguments
-                ? { reviewedArguments: review.arguments }
-                : {}),
-            });
-            ruling = parseHitlRuling(
-              outcome.status === "answered" ? outcome.result : undefined,
-            );
-            if (!ruling) {
-              reviewOutcome =
-                outcome.status === "unanswered"
-                  ? "review_unanswered"
-                  : outcome.status === "no_viewer"
-                    ? "review_unavailable"
-                    : outcome.result.action === "cancel"
-                      ? "review_cancelled"
+              if (spent === "approve" || spent === "deny") ruling = spent;
+              else reviewOutcome = "review_invalid";
+            } else if (staged.status === "none") {
+              reviewOutcome = reviewOutcomeFromClosure(staged.closure);
+            } else if (context.mrtr) {
+              // External MCP clients reach their native question tool through ask_user.
+              // Stage the exact review first so the model cannot alter
+              // the question or bind an answer to a different offer.
+              try {
+                await bindRuntimeHitlReview({
+                  session: reviewSession,
+                  review: stagedReview,
+                });
+              } catch (error) {
+                logger.warn(
+                  { error, offerId: remedy.offer_id },
+                  "Could not index the runtime OpenAPPA review",
+                );
+              }
+              return nativeReviewRequiredResult(remedy.offer_id);
+            } else if (context.elicitation) {
+              const outcome = await context.elicitation.elicit({
+                toolName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+                message: review.text,
+                requestedSchema: HITL_RULING_SCHEMA,
+                kind: "openappa_review",
+                ...(review.tool ? { reviewedTool: review.tool } : {}),
+                ...(review.arguments
+                  ? { reviewedArguments: review.arguments }
+                  : {}),
+              });
+              if (outcome.status === "answered") {
+                const parsed = parseHitlRuling(outcome.result);
+                if (!parsed) {
+                  reviewOutcome =
+                    outcome.result.action === "decline"
+                      ? "review_declined"
+                      : outcome.result.action === "cancel"
+                        ? "review_cancelled"
+                        : "review_invalid";
+                } else {
+                  const claimed = await claimStagedRuling({
+                    session: reviewSession,
+                    offerId: remedy.offer_id,
+                    ruling: parsed,
+                  });
+                  if (claimed.ok) {
+                    ruling = claimed.ruling;
+                  } else {
+                    if (callId)
+                      await recordHitlReviewResult({
+                        session: reviewSession,
+                        callId,
+                        offerId: remedy.offer_id,
+                        outcome: claimed.outcome,
+                      });
+                    return unansweredReviewResult(
+                      remedy.offer_id,
+                      claimed.outcome,
+                    );
+                  }
+                }
+              } else {
+                reviewOutcome =
+                  outcome.status === "unanswered"
+                    ? "review_unanswered"
+                    : outcome.status === "no_viewer"
+                      ? "review_unavailable"
                       : "review_invalid";
+              }
             }
           } else {
             reviewOutcome = "review_unavailable";
@@ -1237,18 +1317,44 @@ const registry = defineArchestraTools([
       if (reviewOutcome) {
         // No human ruling exists. Do not invoke the embedded HITL backend with
         // undefined: without its own elicitation it would record Unreachable.
-        await clearHitlReview({
+        // Seal the closure unless a human ruling won the lock.
+        const sealed = await sealHitlClosure({
           session: reviewSession,
           offerId: remedy.offer_id,
+          ...(reviewOutcome === "review_invalid"
+            ? {}
+            : { closure: closureFromReviewOutcome(reviewOutcome) }),
         });
-        if (callId)
-          await recordHitlReviewResult({
+        if (sealed === "approve" || sealed === "deny") {
+          // The closure lost to a stored ruling. Claim it before execution so
+          // a concurrent retry cannot spend the same approval.
+          const spent = await consumeHitlRuling({
             session: reviewSession,
-            callId,
             offerId: remedy.offer_id,
-            outcome: reviewOutcome,
           });
-        return unansweredReviewResult(remedy.offer_id, reviewOutcome);
+          if (spent === "approve" || spent === "deny") {
+            ruling = spent;
+            reviewOutcome = undefined;
+          } else {
+            if (callId)
+              await recordHitlReviewResult({
+                session: reviewSession,
+                callId,
+                offerId: remedy.offer_id,
+                outcome: reviewOutcome,
+              });
+            return unansweredReviewResult(remedy.offer_id, reviewOutcome);
+          }
+        } else {
+          if (callId)
+            await recordHitlReviewResult({
+              session: reviewSession,
+              callId,
+              offerId: remedy.offer_id,
+              outcome: reviewOutcome,
+            });
+          return unansweredReviewResult(remedy.offer_id, reviewOutcome);
+        }
       }
 
       const byOffer = await executeRemedyByOffer({
@@ -1565,13 +1671,56 @@ function nativeReviewRequiredResult(offerId: string): CallToolResult {
   });
 }
 
+async function claimStagedRuling(params: {
+  session: OpenAppaSession;
+  offerId: string;
+  ruling: "approve" | "deny";
+}): Promise<
+  | { ok: true; ruling: "approve" | "deny" }
+  | {
+      ok: false;
+      outcome: Exclude<HitlReviewOutcome, "review_required">;
+    }
+> {
+  const recorded = await recordHitlRuling({
+    session: params.session,
+    offerId: params.offerId,
+    ruling: params.ruling,
+  });
+  if (!recorded) {
+    const decided = await peekHitlDecision({
+      session: params.session,
+      offerId: params.offerId,
+    });
+    return {
+      ok: false,
+      outcome:
+        decided?.ruling === "none"
+          ? reviewOutcomeFromClosure(decided.closure)
+          : "review_invalid",
+    };
+  }
+  const spent = await consumeHitlRuling({
+    session: params.session,
+    offerId: params.offerId,
+  });
+  if (spent === "approve" || spent === "deny") {
+    return { ok: true, ruling: spent };
+  }
+  return { ok: false, outcome: "review_invalid" };
+}
+
 function unansweredReviewResult(
   offerId: string,
   outcome: Exclude<HitlReviewOutcome, "review_required">,
 ): CallToolResult {
   const reason = {
-    review_unanswered: "The human review timed out without an answer.",
-    review_cancelled: "The human canceled the review without giving a ruling.",
+    review_declined:
+      "The client declined the review form. That is not a human denial.",
+    review_unanswered:
+      "The review timed out without an answer. That does not show a person saw it.",
+    review_cancelled:
+      "The client canceled the review without a ruling. That does not show a person saw it.",
     review_unavailable:
       "No human review channel is available in this execution.",
     review_invalid:
@@ -1665,10 +1814,9 @@ function parseArgumentsRecord(
 /**
  * Parses the unified elicitation envelope into a remedy ruling.
  * An `accept` action must include an explicit `approve` or `deny` content action.
- * Malformed or missing actions yield no ruling. The handler records a failed
- * review as a history fact without invoking an authority or granting approval.
- * A `decline` action maps to `deny`.
- * A `cancel` action or unrecognized payload yields no ruling.
+ * A client `decline` or `cancel` is not a human ruling. Malformed or missing
+ * actions yield no ruling. The handler records that as a history fact without
+ * invoking an authority or granting approval.
  */
 function parseHitlRuling(envelope: unknown): "approve" | "deny" | undefined {
   if (typeof envelope !== "object" || envelope === null) return undefined;
@@ -1676,7 +1824,6 @@ function parseHitlRuling(envelope: unknown): "approve" | "deny" | undefined {
     action?: unknown;
     content?: unknown;
   };
-  if (action === "decline") return "deny";
   if (action !== "accept") return undefined;
   const contentAction =
     typeof content === "object" && content !== null
@@ -1770,4 +1917,50 @@ function peerExecution(params: {
     },
     toolCallId: proof.call_id,
   };
+}
+
+/**
+ * The session and call a yell or superyell reports under. A Chat or runtime
+ * call knows both; an external client's call through the MCP gateway does
+ * not, so the proxy left them when it allowed the call.
+ */
+async function yellIdentity(params: {
+  shortName: YellToolShortName;
+  args: YellArguments;
+  context: ArchestraContext;
+}): Promise<{ session: OpenAppaSession; callId: string }> {
+  const { context } = params;
+  const id = context.sessionId ?? context.conversationId;
+  const known =
+    context.openappaSubagent?.session ??
+    context.openappaSession ??
+    (context.organizationId && context.userId && id
+      ? chatOpenAppaSession(context.organizationId, context.userId, id)
+      : undefined);
+  const identity =
+    known && context.currentToolCallId
+      ? { session: known, callId: context.currentToolCallId }
+      : context.organizationId
+        ? await recallYellSession({
+            organizationId: context.organizationId,
+            shortName: params.shortName,
+            args: params.args,
+          })
+        : undefined;
+  if (!identity) {
+    logger.warn(
+      {
+        agentId: context.agentId,
+        tool: params.shortName,
+        hasSession: Boolean(known),
+        hasToolCallId: Boolean(context.currentToolCallId),
+      },
+      "OpenAPPA yell refused: no session or tool-call identity",
+    );
+    throw new ApiError(
+      400,
+      "OpenAPPA reporting requires an authenticated session and tool-call identity",
+    );
+  }
+  return identity;
 }

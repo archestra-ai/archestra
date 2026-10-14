@@ -21,11 +21,12 @@ max_body_bytes = 65536
 
 ## Tool contracts
 
-Each `[[policy.tool]]` entry is a tool contract. It answers three questions:
+Each `[[policy.tool]]` entry is a tool contract. It answers these questions:
 
 | Field | What to write | What OpenAPPA does |
 |---|---|---|
 | `delta` | Restrictions carried by the tool's result. | Applies those restrictions when the agent receives the result. |
+| `forwards` | Restrictions carried by content the tool sends beyond its arguments. | Adds them to the label that `requires` checks. |
 | `requires` | Conditions the call must satisfy. | Checks them before allowing the call. |
 | `effects` | Side effects of a successful call. | Records them in the trajectory's history. |
 
@@ -52,15 +53,26 @@ effects = ["egress"]
 | `parameters` | JSON Schema for the tool arguments. Some input mappings require it. |
 | `tags` | Names used to select applicable authorities and sanitizers. See [Tags](#tags). |
 | `delta` | Can restrict the audience or lower trust. It cannot make the trajectory less restricted. |
+| `forwards` | Same shape as `delta`, with literal entries only: no `$<argument_name>` placeholders. |
 | `requires` | Audience, trust, effects, or attention requirements for the call. |
 | `effects` | Effect names recorded after successful execution. Declare all relevant side effects. |
 | `annotator` | A registered component that supplies the complete annotation for each call. |
 
-An omitted `delta` adds no restriction. An omitted `requires` adds no requirement.
+An omitted `delta` or `forwards` adds no restriction. An omitted `requires` adds no requirement.
 
-Only one source of contract rules is allowed: static `delta`, `requires`, and `effects` fields, or an `annotator`. Combining them causes a load error.
+Only one source of contract rules is allowed: static `delta`, `forwards`, `requires`, and `effects` fields, or an `annotator`. Combining them causes a load error.
 
-OpenAPPA checks both `delta` and `requires` before allowing the tool call.
+OpenAPPA checks `requires` before the call runs. The check reads the label of what the call sends: the trajectory's current label, combined with the tool's `forwards` and with the file content the call sends. The `delta` is not part of this label. It labels only the result, so it never makes a requirement fail.
+
+Use `forwards` when the tool itself sends content that its arguments do not carry. In the example below, `mail_report` reads a stored report on the server and mails it. The report is `internal`, so a mail to an external recipient fails `contains`, whatever the trajectory has read:
+
+```toml
+[[policy.tool]]
+name = "mail_report"
+parameters = { type = "object", properties = { to = { type = "string" } }, required = ["to"] }
+forwards = { audience = ["internal"] }
+requires = { audience = { contains = ["$to"] } }
+```
 
 ### Tool names
 

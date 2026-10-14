@@ -202,8 +202,13 @@ function AgentChannelsCard({
   const slackPerAgent =
     slackOffered && !!slackBots.data && slackBots.data.unassignedApp === null;
   const slackBot = slackBots.data?.bots.find((bot) => bot.agentId === agentId);
+  // Only a bot Archestra named follows the default handle; guessing one for
+  // a converted app shows a name nobody can @mention.
   const slackHandle = slackBot
-    ? (slackBot.handle ?? slackHandleFor(appName, slackBot.agentName))
+    ? (slackBot.handle ??
+      (slackBot.createdByArchestra
+        ? slackHandleFor(appName, slackBot.agentName)
+        : null))
     : null;
   const botChannels = useSlackAgentBotChannels(
     slackBot?.installed ? agentId : undefined,
@@ -332,12 +337,12 @@ function AgentChannelsCard({
           {slackWithoutBot && <SlackWithoutBotNotice href={addBotHref} />}
         </span>
       )}
-      {slackBot && slackHandle && (
+      {slackBot && (
         <SlackBotEditDialog
           open={editingBot}
           onOpenChange={setEditingBot}
           agentId={agentId}
-          handle={slackHandle}
+          handle={slackHandle ?? slackBot.agentName}
           appId={slackBot.appId}
           installed={slackBot.installed}
           reinstallUrl={slackBot.reinstallUrl}

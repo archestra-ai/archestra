@@ -78,6 +78,12 @@ type AgentSelectorProps =
        */
       compactTrigger?: boolean;
       /**
+       * Render the trigger as a small text button with this label (e.g.
+       * "Change") instead of a field showing the selection. For rows that
+       * already show the selected agent's name beside it.
+       */
+      triggerLabel?: string;
+      /**
        * An extra choice rendered above the agent list whose value is not an
        * agent id — e.g. "All agents" in a log filter, or "Each user personal"
        * in a default picker. Hidden while a search excludes its label.
@@ -142,6 +148,7 @@ function SingleAgentSelector({
   hint,
   flat,
   compactTrigger,
+  triggerLabel,
   sentinelOption,
 }: Extract<AgentSelectorProps, { mode: "single" }>) {
   const [open, setOpen] = useState(false);
@@ -169,36 +176,51 @@ function SingleAgentSelector({
       }}
     >
       <PopoverTrigger asChild>
-        <Button
-          ref={triggerRef}
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          disabled={disabled}
-          className={cn(
-            // h-auto + min-h-9 so a two-line row (name + owner email) isn't
-            // vertically smushed, while single-line values keep the 9-height.
-            "h-auto min-h-9 justify-between bg-transparent py-1.5 font-normal shadow-xs hover:bg-transparent hover:text-foreground",
-            !value && "text-muted-foreground",
-            className,
-          )}
-        >
-          <span className="min-w-0 flex-1 truncate text-left">
-            {selectedAgent ? (
-              <AgentSelectorRow
-                agent={selectedAgent}
-                variant={compactTrigger ? "compact" : "trigger"}
-              />
-            ) : isSentinelSelected ? (
-              <span>{sentinelOption.label}</span>
-            ) : (
-              <span>{placeholder}</span>
+        {triggerLabel ? (
+          <Button
+            ref={triggerRef}
+            variant="ghost"
+            size="xs"
+            role="combobox"
+            aria-expanded={open}
+            disabled={disabled}
+            className={cn("text-muted-foreground", className)}
+          >
+            {triggerLabel}
+          </Button>
+        ) : (
+          <Button
+            ref={triggerRef}
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            disabled={disabled}
+            className={cn(
+              // h-auto + min-h-9 so a two-line row (name + owner email) isn't
+              // vertically smushed, while single-line values keep the 9-height.
+              "h-auto min-h-9 justify-between bg-transparent py-1.5 font-normal shadow-xs hover:bg-transparent hover:text-foreground",
+              !value && "text-muted-foreground",
+              className,
             )}
-          </span>
-          <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </Button>
+          >
+            <span className="min-w-0 flex-1 truncate text-left">
+              {selectedAgent ? (
+                <AgentSelectorRow
+                  agent={selectedAgent}
+                  variant={compactTrigger ? "compact" : "trigger"}
+                />
+              ) : isSentinelSelected ? (
+                <span>{sentinelOption.label}</span>
+              ) : (
+                <span>{placeholder}</span>
+              )}
+            </span>
+            <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        )}
       </PopoverTrigger>
       <PopoverContent
+        align={triggerLabel ? "end" : undefined}
         // Rows carry a description and an owner email, so the
         // list keeps a readable floor even when the trigger is a narrow filter
         // control — capped to the viewport so it can't overflow a phone.

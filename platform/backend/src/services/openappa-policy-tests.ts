@@ -6,7 +6,7 @@ import { LRUCacheManager } from "@/in-memory-lru-cache";
 import logger from "@/logging";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
-import { openappaBatteriesService } from "@/openappa/batteries";
+import { memberRosters, openappaBatteriesService } from "@/openappa/batteries";
 import { openappaDeclarations } from "@/openappa/declarations";
 import {
   githubPolicyTestVersion,
@@ -190,12 +190,27 @@ async function evaluateOpenAppaPolicyTests(
           content: policyContent,
         })
       : null;
-    const composed = bound
-      ? await openappaDeclarations.composeForCheck({
-          root: bound.content,
-          resolution: bound.resolution,
-        })
-      : null;
+    const deployed =
+      bound &&
+      (await openappaBatteriesService.deployedBatteries({
+        organizationId: params.organizationId,
+        resolution: bound.resolution,
+      }));
+    const composed =
+      bound && deployed
+        ? await openappaDeclarations.composeForCheck({
+            root: bound.content,
+            resolution: bound.resolution,
+            deployed,
+            memberRosters: memberRosters(
+              await openappaBatteriesService.hostMemberRoster({
+                organizationId: params.organizationId,
+                resolution: bound.resolution,
+                deployed,
+              }),
+            ),
+          })
+        : null;
     const content = composed?.content ?? policyContent;
     effective = {
       content,

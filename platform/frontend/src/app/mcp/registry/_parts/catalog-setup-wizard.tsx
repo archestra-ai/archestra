@@ -62,7 +62,6 @@ import {
   type ToolWithAssignmentsData,
   useToolsWithAssignments,
 } from "@/lib/tools/tool.query";
-import { CatalogBatteryToggles } from "./catalog-battery-toggles";
 import { InstallationProgress } from "./installation-progress";
 import {
   LocalServerInstallDialog,
@@ -462,7 +461,6 @@ export function ToolsAndGuardrailsStep({ item }: { item: CatalogItem }) {
         </p>
         {refreshToolsButton}
       </div>
-      <CatalogBatteryToggles catalogId={item.id} />
       {tools.length > 5 && (
         <SearchInput
           placeholder="Filter tools by name"
@@ -538,12 +536,6 @@ function ToolReviewCard({ tool }: { tool: ToolWithAssignmentsData }) {
               {label}
             </Badge>
           ))}
-          {tool.assignmentCount > 0 && (
-            <Badge variant="secondary" className="font-normal">
-              {tool.assignmentCount}{" "}
-              {tool.assignmentCount === 1 ? "assignment" : "assignments"}
-            </Badge>
-          )}
         </div>
         {tool.description && (
           <p className="text-sm text-muted-foreground">{tool.description}</p>

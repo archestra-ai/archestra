@@ -171,6 +171,11 @@ export const auth = betterAuth({
       // better-auth defaults this to "owner", which is not one of our
       // predefined roles and left creators with an empty permission map.
       creatorRole: ADMIN_ROLE_NAME,
+      // The member roster follows who belongs to an organization.
+      organizationHooks: {
+        afterAddMember: recomposeOrganizationOf,
+        afterAcceptInvitation: recomposeOrganizationOf,
+      },
       ac,
       dynamicAccessControl: {
         enabled: true,
@@ -1989,6 +1994,9 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         );
       }
       await cleanupAfterMembershipRemoval(stash);
+      await openappaBatteriesService.recompileOrganizations([
+        stash.organizationId,
+      ]);
     }
   }
 
@@ -2045,6 +2053,9 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
         );
       }
       await cleanupAfterMembershipRemoval(stash);
+      await openappaBatteriesService.recompileOrganizations([
+        stash.organizationId,
+      ]);
     }
   }
 
@@ -2074,9 +2085,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
     typeof body.userId === "string" &&
     typeof body.data?.email === "string"
   )
-    await openappaBatteriesService.recompileOrganizations(
-      await MemberModel.findOrganizationIdsByUserId(body.userId),
-    );
+    await recomposeOrganizationsOf(body.userId);
 
   // NOTE: User deletion on member removal is handled in routes/auth.ts
   // Better-auth handles member deletion, we just clean up orphaned users
@@ -2271,6 +2280,7 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
             `🔗 Auto-accepting pending invitation ${pendingInvitation.id} for user ${user.email}`,
           );
           await InvitationModel.accept(session, user, pendingInvitation.id);
+          await recomposeOrganizationsOf(user.id);
           return;
         }
         logger.debug(
@@ -2358,10 +2368,27 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
 
         // Then sync teams (based on SSO groups)
         await syncSsoTeams(userId, user.email, providerIdHint);
+
+        // SSO provisioning may have just made the user a member.
+        await recomposeOrganizationsOf(userId);
       }
       // SPDX-SnippetEnd
     }
   }
+}
+
+async function recomposeOrganizationsOf(userId: string): Promise<void> {
+  await openappaBatteriesService.recompileOrganizations(
+    await MemberModel.findOrganizationIdsByUserId(userId),
+  );
+}
+
+async function recomposeOrganizationOf(params: {
+  member: { organizationId: string };
+}): Promise<void> {
+  await openappaBatteriesService.recompileOrganizations([
+    params.member.organizationId,
+  ]);
 }
 
 // SPDX-SnippetBegin

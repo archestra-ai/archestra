@@ -4,7 +4,6 @@ import { and, eq } from "drizzle-orm";
 import config from "@/config";
 import db, { schema } from "@/database";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
-import MemberModel from "@/models/member";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
@@ -16,7 +15,6 @@ import {
   updateRuntimeCredentialDefinition,
 } from "@/services/agent-runtime/runtime-credentials";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
-import { removeMemberTarget } from "@/services/member-removal";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { bindOrganizationCredential } from "@/test/openappa-credentials";
 import {
@@ -1282,35 +1280,6 @@ readers = { "github:7" = "zoe@corp.example" }
         key: "repository-app",
         definition: { githubUrl: "https://github.example.com/api/v3" },
       });
-      expect(await storedHostMembers(organizationId)).toEqual({});
-    });
-
-    test("a member's removal", async ({
-      makeOrganization,
-      makeUser,
-      makeMember,
-      makeInternalMcpCatalog,
-      makeTool,
-      makeAccount,
-    }) => {
-      const { organizationId, member } = await setUp({
-        makeOrganization,
-        makeUser,
-        makeMember,
-        makeInternalMcpCatalog,
-        makeTool,
-      });
-      const ana = await member("ana@corp.example", ANA);
-      await makeAccount(ana);
-      await openappaBatteriesService.recompile(organizationId);
-
-      const membership = await MemberModel.getByUserId(ana, organizationId);
-      expect(
-        await removeMemberTarget({
-          organizationId,
-          target: { kind: "member", id: membership?.id ?? "" },
-        }),
-      ).toEqual({ status: "removed" });
       expect(await storedHostMembers(organizationId)).toEqual({});
     });
 

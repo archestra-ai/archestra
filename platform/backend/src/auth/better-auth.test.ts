@@ -8,6 +8,7 @@ import {
 import { allAvailableActions } from "@archestra/shared/access-control";
 import type { HookEndpointContext } from "@better-auth/core";
 import { APIError } from "better-auth";
+import { makeSignature } from "better-auth/crypto";
 import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
@@ -1409,6 +1410,98 @@ describe("handleAfterHook", () => {
     } finally {
       config.openappa = openappa;
       config.daggerRuntime.enabled = sandbox;
+    }
+  });
+
+  test("a member who leaves and rejoins with the same GitHub account leaves the roster and returns to it", async ({
+    makeOrganization,
+    makeAdmin,
+    makeUser,
+    makeMember,
+    makeAccount,
+    makeSession,
+    makeInvitation,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const openappa = { ...config.openappa };
+    const sandbox = config.daggerRuntime.enabled;
+    try {
+      const organizationId = (await makeOrganization()).id;
+      const admin = await makeAdmin();
+      await makeMember(admin.id, organizationId, { role: "admin" });
+      await deployGithubWithRoster({
+        organizationId,
+        userId: admin.id,
+        makeInternalMcpCatalog,
+        makeTool,
+      });
+      const connected = async (email: string) => {
+        const user = await makeUser({ email });
+        await makeAccount(user.id);
+        await makeMember(user.id, organizationId);
+        await RuntimeCredentialConnectionModel.upsert({
+          organizationId,
+          scope: "personal",
+          userId: user.id,
+          credentialId: "github-user",
+          value: "token",
+          githubId: GitHubUserIdSchema.parse(1001),
+        });
+        return user;
+      };
+      const ana = await connected("ana@corp.example");
+      await connected("bob@corp.example");
+      // Ana stays a member elsewhere, so she and her connection outlive the removal.
+      await makeMember(ana.id, (await makeOrganization()).id);
+      await openappaBatteriesService.recompile(organizationId);
+      expect(await storedHostMembers(organizationId)).toEqual({});
+
+      const removed = await post({
+        path: "/organization/remove-member",
+        session: await makeSession(admin.id, {
+          activeOrganizationId: organizationId,
+        }),
+        body: { memberIdOrEmail: ana.email, organizationId },
+      });
+      expect(removed.status).toBe(200);
+      expect(await storedHostMembers(organizationId)).toEqual({
+        "github:1001": "bob@corp.example",
+      });
+
+      const invitation = await makeInvitation(organizationId, admin.id, {
+        email: ana.email,
+      });
+      const accepted = await post({
+        path: "/organization/accept-invitation",
+        session: await makeSession(ana.id),
+        body: { invitationId: invitation.id },
+      });
+      expect(accepted.status).toBe(200);
+      expect(await storedHostMembers(organizationId)).toEqual({});
+    } finally {
+      config.openappa = openappa;
+      config.daggerRuntime.enabled = sandbox;
+    }
+
+    async function post(params: {
+      path: string;
+      session: { token: string };
+      body: Record<string, unknown>;
+    }) {
+      const secret = process.env.ARCHESTRA_AUTH_SECRET as string;
+      const signature = await makeSignature(params.session.token, secret);
+      return auth.handler(
+        new Request(`http://localhost:3000/api/auth${params.path}`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            origin: "http://localhost:3000",
+            cookie: `archestra.session_token=${encodeURIComponent(`${params.session.token}.${signature}`)}`,
+          },
+          body: JSON.stringify(params.body),
+        }),
+      );
     }
   });
 

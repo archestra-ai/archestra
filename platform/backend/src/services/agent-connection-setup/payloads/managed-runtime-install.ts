@@ -25,6 +25,7 @@ export function managedRuntimeInstall(params: {
     installation: source.installation,
     source,
     origin: new URL(source.url).origin,
+    appName: params.context.appName,
     routes: params.routes,
     headers: params.headers,
     routeHeaders: params.routeHeaders,

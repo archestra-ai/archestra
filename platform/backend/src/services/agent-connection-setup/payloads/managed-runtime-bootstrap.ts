@@ -1,3 +1,8 @@
+import {
+  OPENCODE_V1_OAUTH_EXPORT,
+  OPENCODE_V1_PROXY_EXPORT,
+} from "./opencode-routing-plugin";
+
 /** Stable trust boundary. Downloaded code is never evaluated until every hash passes. */
 export const MANAGED_RUNTIME_BOOTSTRAP = `const fs = require("node:fs");
 const path = require("node:path");
@@ -173,9 +178,9 @@ const load = () => loading ??= (async () => {
 `;
   return major === 1
     ? `${prelude}
-export const ArchestraLlmProxy = async (...args) => {
+export const ${OPENCODE_V1_PROXY_EXPORT} = async (...args) => {
   let { runtime, impl } = await load();
-  let delegate = impl ? await impl.ArchestraLlmProxy(...args) : {};
+  let delegate = impl ? await impl.${OPENCODE_V1_PROXY_EXPORT}(...args) : {};
   const hooks = { ...delegate };
   let bindingProof = {};
   const boundSessions = new Set();
@@ -185,7 +190,7 @@ export const ArchestraLlmProxy = async (...args) => {
     const refreshed = await load();
     if (refreshed.runtime.revision !== runtime.revision) {
       ({ runtime, impl } = refreshed);
-      delegate = impl ? await impl.ArchestraLlmProxy(...args) : {};
+      delegate = impl ? await impl.${OPENCODE_V1_PROXY_EXPORT}(...args) : {};
       for (const name of Object.keys(hooks)) {
         if (!["config", "chat.params", "chat.headers"].includes(name) && !Object.hasOwn(delegate, name)) delete hooks[name];
       }
@@ -214,7 +219,7 @@ export const ArchestraLlmProxy = async (...args) => {
   }
   return hooks;
 };
-export const ArchestraOpenAiOAuth = async (...args) => (await load()).impl?.ArchestraOpenAiOAuth(...args) ?? {};
+export const ${OPENCODE_V1_OAUTH_EXPORT} = async (...args) => (await load()).impl?.${OPENCODE_V1_OAUTH_EXPORT}(...args) ?? {};
 `
     : `${prelude}
 export default {

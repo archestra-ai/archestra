@@ -1,9 +1,16 @@
-import { OPENCODE_AGENT_HEADER } from "@archestra/shared";
+import { DEFAULT_APP_NAME, OPENCODE_AGENT_HEADER } from "@archestra/shared";
 import { OPENCODE_CLIENT, type OpenCodeFamilyClient } from "../opencode-family";
+
+// white-label-ok: stable OpenCode V1 plugin export, not display copy
+export const OPENCODE_V1_PROXY_EXPORT = "ArchestraLlmProxy";
+// white-label-ok: stable OpenCode V1 OAuth plugin export, not display copy
+export const OPENCODE_V1_OAUTH_EXPORT = "ArchestraOpenAiOAuth";
 
 interface RenderOpenCodeRoutingPluginParams {
   /** Managed implementations read credentials from the private installation file. */
   runtime?: boolean;
+  /** Deployment name for user-facing errors. Runtime copies read it from params. */
+  appName?: string;
   routes: Record<string, string>;
   headers: Record<string, string>;
   /**
@@ -28,6 +35,11 @@ interface RenderOpenCodeRoutingPluginParams {
  * Inject values only with JSON.stringify. The return value is JavaScript source.
  * Unescaped template interpolation can inject code into the generated plugin.
  */
+function renderedAppName(params: RenderOpenCodeRoutingPluginParams): string {
+  const fallback = JSON.stringify(params.appName ?? DEFAULT_APP_NAME);
+  return params.runtime ? `runtimeParams.appName || ${fallback}` : fallback;
+}
+
 export function renderOpenCodeRoutingPlugin(
   params: RenderOpenCodeRoutingPluginParams,
 ): string {
@@ -86,6 +98,7 @@ const openAiOAuthBridgeHeader = "x-archestra-opencode-oauth-bridge";
 const openAiApiBaseUrl = "https://api.openai.com/v1";
 const clientLabel = ${JSON.stringify(label)};
 const clientDir = ${JSON.stringify(dir)};
+const appName = ${renderedAppName(params)};
 // white-label-ok: This constant is a stable wire header identifier.
 const openCodeAgentHeader = ${JSON.stringify(OPENCODE_AGENT_HEADER)};
 const chatGptResponsesUrl = "https://chatgpt.com/backend-api/codex/responses";
@@ -145,7 +158,7 @@ if (${params.runtime ? "true" : "!globalThis[fetchGuardSymbol]"}) {
     const chatGptAuth = url.href === chatGptResponsesUrl ? openAiOAuth ?? currentOpenAiOAuth() : null;
     if (chatGptAuth) {
       const target = routes.openai;
-      if (!target) throw new Error("OpenAI OAuth is not supported by the connected Archestra LLM proxy.");
+      if (!target) throw new Error("OpenAI OAuth is not supported by the connected " + appName + " LLM proxy.");
       const headers = new Headers(request.headers);
       for (const [name, value] of Object.entries(headersFor("openai"))) headers.set(name, value);
       if (!headers.has("Authorization")) throw new Error("OpenAI OAuth request is missing its current bearer token. Refresh the " + clientLabel + " OpenAI connection and try again.");
@@ -155,7 +168,7 @@ if (${params.runtime ? "true" : "!globalThis[fetchGuardSymbol]"}) {
     }
     if (!proxyOrigins.has(url.origin) && directInferencePath.test(url.pathname)) {
       throw new Error(
-        'Blocked a direct provider inference request to "' + url.origin + '" while ' + clientLabel + ' is connected to the Archestra LLM proxy.',
+        'Blocked a direct provider inference request to "' + url.origin + '" while ' + clientLabel + ' is connected to the ' + appName + ' LLM proxy.',
       );
     }
     return directFetch(request);
@@ -163,7 +176,7 @@ if (${params.runtime ? "true" : "!globalThis[fetchGuardSymbol]"}) {
   globalThis[fetchGuardSymbol] = true;
 }
 
-export const ArchestraLlmProxy = async () => ({
+export const ${OPENCODE_V1_PROXY_EXPORT} = async () => ({
   async config(config) {
     config.provider ??= {};
     const localAuth = readLocalAuth();
@@ -223,14 +236,14 @@ export const ArchestraLlmProxy = async () => ({
     const expected = activeRoutes[providerId];
     if (!expected) {
       throw new Error(
-        clientLabel + ' provider "' + providerId + '" is not supported by the connected Archestra LLM proxy. Disconnect or reconfigure the proxy before using it.',
+        clientLabel + ' provider "' + providerId + '" is not supported by the connected ' + appName + ' LLM proxy. Disconnect or reconfigure the proxy before using it.',
       );
     }
     const actual = input.provider.options?.baseURL;
     const expectedResolved = providerId === "openai" && currentOpenAiOAuth() ? openAiApiBaseUrl : expected;
     if (normalizeUrl(actual) !== normalizeUrl(expectedResolved)) {
       throw new Error(
-        clientLabel + ' provider "' + providerId + '" resolved to "' + (actual ?? 'no base URL') + '" instead of the connected Archestra endpoint. Re-run the connection setup.',
+        clientLabel + ' provider "' + providerId + '" resolved to "' + (actual ?? 'no base URL') + '" instead of the connected ' + appName + ' endpoint. Re-run the connection setup.',
       );
     }
   },
@@ -268,7 +281,7 @@ export const ArchestraLlmProxy = async () => ({
   } : {}),
 });
 
-export const ArchestraOpenAiOAuth = async () => ({
+export const ${OPENCODE_V1_OAUTH_EXPORT} = async () => ({
   ...(openAiOAuth ? {
     auth: {
       provider: "openai",
@@ -291,7 +304,7 @@ export const ArchestraOpenAiOAuth = async () => ({
             headers.set(openAiOAuthBridgeHeader, "true");
             for (const [name, value] of Object.entries(headersFor("openai"))) headers.set(name, value);
             const target = routes.openai;
-            if (!target) throw new Error("OpenAI OAuth is not supported by the connected Archestra LLM proxy.");
+            if (!target) throw new Error("OpenAI OAuth is not supported by the connected " + appName + " LLM proxy.");
             return directFetch(new Request(target + "/responses", { method: request.method, headers, body: request.body, signal: request.signal, duplex: request.body ? "half" : undefined }));
           },
         };
@@ -326,7 +339,8 @@ export const ArchestraOpenAiOAuth = async () => ({
 export function renderOpenCodeRoutingPluginV2(
   params: RenderOpenCodeRoutingPluginParams,
 ): string {
-  return `${params.runtime ? 'import { readFileSync } from "node:fs";\nconst runtimeParams = JSON.parse(readFileSync(new URL("../params.json", import.meta.url), "utf8"));\n' : ""}const routes = ${params.runtime ? "runtimeParams.routes" : JSON.stringify(params.routes)};
+  return `${params.runtime ? 'import { readFileSync } from "node:fs";\nconst runtimeParams = JSON.parse(readFileSync(new URL("../params.json", import.meta.url), "utf8"));\n' : ""}const appName = ${renderedAppName(params)};
+const routes = ${params.runtime ? "runtimeParams.routes" : JSON.stringify(params.routes)};
 const managedHeaders = ${params.runtime ? "runtimeParams.headers" : JSON.stringify(params.headers)};
 const routeHeaders = ${params.runtime ? "runtimeParams.routeHeaders ?? {}" : JSON.stringify(params.routeHeaders ?? {})};
 ${
@@ -365,7 +379,7 @@ export default {
       const route = Object.hasOwn(routes, providerId) ? routes[providerId] : undefined;
       if (!route) {
         throw new Error(
-          'OpenCode provider "' + providerId + '" is not supported by the connected Archestra LLM proxy. Disconnect or reconfigure the proxy before using it.',
+          'OpenCode provider "' + providerId + '" is not supported by the connected ' + appName + ' LLM proxy. Disconnect or reconfigure the proxy before using it.',
         );
       }
       const chatGptSignIn = providerId === "openai" && normalizeUrl(event.baseURL) === chatGptBaseUrl;

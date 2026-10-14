@@ -263,11 +263,19 @@ function opencodeRoutingPluginBash(params: {
     ? managedRuntimeInstall({ ...params, context: params.context })
     : null;
   const encoded = Buffer.from(
-    runtime?.v1 ?? renderOpenCodeRoutingPlugin(params),
+    runtime?.v1 ??
+      renderOpenCodeRoutingPlugin({
+        ...params,
+        appName: params.context?.appName,
+      }),
     "utf8",
   ).toString("base64");
   const encodedV2 = Buffer.from(
-    runtime?.v2 ?? renderOpenCodeRoutingPluginV2(params),
+    runtime?.v2 ??
+      renderOpenCodeRoutingPluginV2({
+        ...params,
+        appName: params.context?.appName,
+      }),
     "utf8",
   ).toString("base64");
   const python = `import base64, json, pathlib, sys
@@ -319,11 +327,19 @@ function opencodeRoutingPluginPowerShell(params: {
     ? managedRuntimeInstall({ ...params, context: params.context })
     : null;
   const encoded = Buffer.from(
-    runtime?.v1 ?? renderOpenCodeRoutingPlugin(params),
+    runtime?.v1 ??
+      renderOpenCodeRoutingPlugin({
+        ...params,
+        appName: params.context?.appName,
+      }),
     "utf8",
   ).toString("base64");
   const encodedV2 = Buffer.from(
-    runtime?.v2 ?? renderOpenCodeRoutingPluginV2(params),
+    runtime?.v2 ??
+      renderOpenCodeRoutingPluginV2({
+        ...params,
+        appName: params.context?.appName,
+      }),
     "utf8",
   ).toString("base64");
   return `$archPluginDir = Join-Path $archOcDir 'plugins'

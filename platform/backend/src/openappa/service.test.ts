@@ -1690,7 +1690,13 @@ describe("APPA feature boundary", () => {
       { kind: "control" },
       { kind: "allow" },
       { kind: "allow" },
-      { kind: "deny", feedback: "Foreign", offers: [], recorded: true },
+      {
+        kind: "deny",
+        feedback: "Foreign",
+        offers: undefined,
+        recorded: true,
+        review: undefined,
+      },
     ]);
     expect(native.dispatchHook).toHaveBeenCalledTimes(1);
   });

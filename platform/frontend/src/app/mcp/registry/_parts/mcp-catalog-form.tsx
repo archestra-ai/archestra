@@ -1283,9 +1283,9 @@ export function McpCatalogForm({
                               </Select>
                             </FormControl>
                             <FieldDescription>
-                              Always picks up a new image behind the same tag
-                              on restart. IfNotPresent reuses the node&apos;s
-                              copy, so pods start while the registry is down.
+                              Always picks up a new image behind the same tag on
+                              restart. IfNotPresent reuses the node&apos;s copy,
+                              so pods start while the registry is down.
                             </FieldDescription>
                             <FormMessage />
                           </FormItem>

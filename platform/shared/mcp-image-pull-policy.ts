@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-export const ImagePullPolicySchema = z.enum(["Always", "IfNotPresent", "Never"]);
+export const ImagePullPolicySchema = z.enum([
+  "Always",
+  "IfNotPresent",
+  "Never",
+]);
 
 export type ImagePullPolicy = z.infer<typeof ImagePullPolicySchema>;
 

@@ -70,7 +70,11 @@ const mockSetNotificationHandler = vi.fn();
 vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
   // biome-ignore lint/suspicious/noExplicitAny: test..
   Client: vi.fn(function (this: any) {
-    this.connect = mockConnect;
+    // Like the SDK, a connected client exposes its transport.
+    this.connect = vi.fn((transport: unknown) => {
+      this.transport = transport;
+      return mockConnect(transport);
+    });
     this.callTool = mockCallTool;
     this.close = mockClose;
     this.listTools = mockListTools;
@@ -2324,6 +2328,54 @@ describe("McpClient", () => {
       expect(secondResult.isError).toBe(false);
       expect(mockConnect).toHaveBeenCalledTimes(1);
       expect(mockPing).not.toHaveBeenCalled();
+    });
+
+    test("replaces a recently used client whose transport has closed", async () => {
+      const tool = await ToolModel.createToolIfNotExists({
+        name: "github-mcp-server__closed_transport",
+        description: "Closed transport replacement",
+        parameters: {},
+        catalogId,
+      });
+
+      await AgentToolModel.create(agentId, tool.id, {
+        mcpServerId,
+        credentialResolutionMode: "static",
+      });
+
+      mockConnect.mockResolvedValue(undefined);
+      mockCallTool.mockResolvedValue({
+        content: [{ type: "text", text: "ok" }],
+        isError: false,
+      });
+
+      const toolCall = {
+        id: "call_closed_transport",
+        name: tool.name,
+        arguments: {},
+      };
+
+      const firstResult = await mcpClient.executeToolCallForOwner(
+        toolCall,
+        agentOwner(agentId),
+      );
+      expect(firstResult.isError).toBe(false);
+      expect(mockConnect).toHaveBeenCalledTimes(1);
+
+      // The SDK clears `transport` when the transport closes, for example
+      // after a stdio attach errored or its output ended.
+      const cachedClient = mockCallTool.mock.contexts.at(-1) as {
+        transport?: unknown;
+      };
+      cachedClient.transport = undefined;
+      mockPing.mockRejectedValue(new Error("Not connected"));
+
+      const secondResult = await mcpClient.executeToolCallForOwner(
+        toolCall,
+        agentOwner(agentId),
+      );
+      expect(secondResult.isError).toBe(false);
+      expect(mockConnect).toHaveBeenCalledTimes(2);
     });
 
     describe("Concurrency limiter", () => {

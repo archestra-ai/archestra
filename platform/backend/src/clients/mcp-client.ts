@@ -1633,8 +1633,13 @@ class McpClient {
     if (reusableClient) {
       // Health check idle clients to verify the connection is still alive.
       // Recently-used clients skip the ping and recover on actual call failure.
+      // A client whose transport already closed (the SDK clears it on close)
+      // cannot answer; its ping fails at once, so the catch replaces it.
       try {
-        if (this.shouldValidateActiveConnection(connectionKey)) {
+        if (
+          !reusableClient.transport ||
+          this.shouldValidateActiveConnection(connectionKey)
+        ) {
           await reusableClient.ping();
           this.activeConnectionLastValidatedAt.set(connectionKey, Date.now());
         }
@@ -2720,6 +2725,7 @@ class McpClient {
         podName: podName,
         containerName: "mcp-server",
         startTimeoutMs: config.mcpGateway.toolCallTimeoutMs,
+        maxMessageBytes: config.mcpGateway.stdioMaxMessageBytes,
       });
     }
 

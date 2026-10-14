@@ -1531,6 +1531,10 @@ A2A task streams work across replicas. A client can subscribe on one replica whi
   - Default: `60000` (60 seconds)
   - Raise it for tools that take a long time to run — a slow scraper or report builder, for example — that otherwise fail with a request-timeout error.
 - The MCP Tasks threshold — how long a call from a Tasks-capable client runs synchronously before becoming a background task — derives from this value: half of it, capped at 10 seconds. Task executions themselves are bounded by the 30-minute task retention window, not this timeout.
+- **`ARCHESTRA_MCP_GATEWAY_STDIO_MAX_MESSAGE_BYTES`** - Largest reply, in bytes, that Archestra accepts from a stdio MCP server that runs in Kubernetes.
+  - Default: `10485760` (10 MB)
+  - A larger reply fails only the tool call that it answers. The model gets an error that names the limit, and the next call to the server works.
+  - Raise it only if a tool must return more data. Each reply up to this size is held in backend memory until it is complete.
 - **`ARCHESTRA_MCP_GATEWAY_WAKE_WAIT_TIMEOUT_MS`** - How long, in milliseconds, a tool call is held open while the MCP server behind it wakes from idle hibernation, before being answered with a retryable "still starting, retry shortly" result.
   - Default: `30000` (30 seconds)
   - Independent of the tool-call timeout above: that timeout governs the dispatched call and only starts counting once the woken server has accepted it. Keep this value below your clients' own request timeouts, or a client aborts the call first and sees a transport error instead of the retryable answer.

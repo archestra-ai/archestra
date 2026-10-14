@@ -1679,6 +1679,12 @@ const startWebServer = async () => {
 
     await fastify.listen({ port, host });
     fastify.log.info(`${name} started on port ${port}`);
+    // Lets operators confirm an override without waiting for a reply to hit
+    // the limit.
+    logger.info(
+      { stdioMaxMessageBytes: config.mcpGateway.stdioMaxMessageBytes },
+      "Stdio MCP server replies larger than this are dropped (ARCHESTRA_MCP_GATEWAY_STDIO_MAX_MESSAGE_BYTES)",
+    );
 
     // If the previous container instance died abnormally (e.g. OOMKilled),
     // it could not report its own death — surface it now. Fire-and-forget.

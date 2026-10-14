@@ -31,7 +31,7 @@ import { and, eq, ne } from "drizzle-orm";
 import { z } from "zod";
 import { withInheritedRoleAuthorization } from "@/auth/role-composition";
 import { syncSystemRoleWithOrgPermissions } from "@/auth/system-role-sync";
-import config from "@/config";
+import config, { resolveAllowedOrigins } from "@/config";
 import db, { schema, withDbTransaction } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
@@ -1069,7 +1069,11 @@ export type BetterAuth = typeof auth;
  * needs the same treatment during provider creation.
  */
 async function getTrustedOriginsForAuthRequest(request?: Request) {
-  const trustedOrigins = [...staticTrustedOrigins];
+  const trustedOrigins = resolveAllowedOrigins({
+    configuredOrigins: staticTrustedOrigins,
+    forwardedHost: request?.headers.get("x-forwarded-host"),
+    host: request ? new URL(request.url).host : undefined,
+  });
 
   if (!shouldTrustAllOriginsForIdentityProviderRegistration(request)) {
     return trustedOrigins;

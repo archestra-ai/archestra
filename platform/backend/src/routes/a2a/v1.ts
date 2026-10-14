@@ -130,7 +130,7 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      const tokenAuth = await validateMCPGatewayToken(agent.id, token);
+      const tokenAuth = await validateMCPGatewayToken(agent.id, token, "a2a");
       if (!tokenAuth) {
         throw new ApiError(401, "Invalid or unauthorized token");
       }
@@ -241,7 +241,7 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      const tokenAuth = await validateMCPGatewayToken(agent.id, token);
+      const tokenAuth = await validateMCPGatewayToken(agent.id, token, "a2a");
       if (!tokenAuth) {
         return reply.send({
           jsonrpc: "2.0" as const,

@@ -3830,6 +3830,13 @@
       "when": 1792010730416,
       "tag": "0546_fair_forgotten_one",
       "breakpoints": true
+    },
+    {
+      "idx": 547,
+      "version": "7",
+      "when": 1792014647920,
+      "tag": "0547_unify-oauth-client-scopes",
+      "breakpoints": true
     }
   ]
 }

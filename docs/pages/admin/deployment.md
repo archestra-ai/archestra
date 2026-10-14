@@ -298,3 +298,12 @@ Claude Code, Codex, Copilot CLI, OpenCode, and Kilo Code refresh these instructi
 - **Other clients:** Cursor’s User Rules and Claude Desktop’s organization instructions still need a setup update.
 
 Setup reads `/connect.md`, `/llms.txt`, and the setup endpoints under `/api/client-connections` and `/api/connection-setups/script` without a session. A proxy in front of Archestra that requires login for every URL must let these through. It must also allow `/v1/connection-instructions`; this endpoint checks the installation’s read-only credential and current access.
+
+
+## Upgrade OAuth Clients
+
+Deploy the unified OAuth Clients release to all replicas together, with the older replicas stopped before the updated application starts. Mixed versions and rolling back to the older authorization model are unsupported. Back up the database before the upgrade.
+
+Existing client IDs, secrets, provider keys, gateway assignments, and issued tokens carry over. MCP clients retain MCP Gateway and A2A access; LLM clients retain LLM Proxy access. The upgrade combines each custom role action and wildcard grant across the two former client resources. A read grant never becomes edit or delete, and grants on individual clients keep their scope. See [OAuth client access control](/docs/admin/access-control#oauth-clients).
+
+After the upgrade, open **Settings → OAuth Clients** and check the clients' capabilities and permissions. Request tokens with the scopes the application needs. Repeat startups preserve permission changes made after the upgrade.

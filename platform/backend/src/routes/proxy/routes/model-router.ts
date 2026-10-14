@@ -19,7 +19,7 @@ import { isAzureOpenAiFirstPartyModelName } from "@/clients/azure-url";
 import { getProviderConfiguredBaseUrl } from "@/config";
 import logger from "@/logging";
 import {
-  LlmOauthClientModel,
+  ManagedOauthClientModel as LlmOauthClientModel,
   LlmProviderApiKeyModel,
   MemberModel,
   OAuthAccessTokenModel,
@@ -1120,6 +1120,16 @@ async function getModelRouterOAuthClientAuth(
   }
   if (!accessToken.scopes?.some((scope) => scope === LLM_PROXY_OAUTH_SCOPE)) {
     throw new ApiError(403, "Access token is missing Model Router scope.");
+  }
+  const managedClient = await LlmOauthClientModel.findByClientId(
+    accessToken.clientId,
+  );
+  if (
+    managedClient &&
+    (managedClient.disabled ||
+      !managedClient.scopes.includes(LLM_PROXY_OAUTH_SCOPE))
+  ) {
+    throw new ApiError(403, "OAuth client no longer grants LLM proxy access.");
   }
   if (accessToken.userId) {
     return getModelRouterUserOAuthAuth({ accessToken });

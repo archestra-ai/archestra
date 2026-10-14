@@ -69,6 +69,7 @@ export * from "./llm-oauth-client";
 export * from "./llm-provider";
 export * from "./llm-provider-api-key";
 export * from "./llm-providers";
+export * from "./managed-oauth-client";
 export * from "./mcp-catalog";
 export * from "./mcp-catalog-skill";
 export * from "./mcp-oauth-client";

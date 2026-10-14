@@ -51,7 +51,7 @@ const memberId = "test-member";
 const permissions = {
   llmProviderApiKey: ["read"],
   llmVirtualKey: ["read"],
-  llmOauthClient: ["read"],
+  oauthClient: ["read"],
 };
 let queryClient: QueryClient;
 

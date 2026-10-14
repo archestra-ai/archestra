@@ -942,7 +942,11 @@ export function actionDetail(
 }
 
 export function presetDescription(preset: string, resource: ScopedResource) {
-  if (resource === "mcpOauthClient" || resource === "llmOauthClient") {
+  if (
+    resource === "oauthClient" ||
+    resource === "mcpOauthClient" ||
+    resource === "llmOauthClient"
+  ) {
     // Nothing is used "through" a registration, so the edit level has no use.
     if (preset === "edit")
       return "Read and update the client, including rotating its secret";
@@ -980,6 +984,7 @@ export const scopedResourceNouns: Record<ScopedResource, string> = {
   llmVirtualKey: "virtual key",
   llmProviderApiKey: "provider key",
   externalAgent: "external agent",
+  oauthClient: "OAuth client",
   mcpOauthClient: "OAuth client",
   llmOauthClient: "OAuth client",
   environment: "environment",
@@ -1032,8 +1037,9 @@ export const resourcePluralNames: Record<ScopedResource, string> = {
   llmVirtualKey: "virtual keys",
   llmProviderApiKey: "provider keys",
   externalAgent: "external agents",
-  mcpOauthClient: "MCP OAuth clients",
-  llmOauthClient: "LLM OAuth clients",
+  oauthClient: "OAuth clients",
+  mcpOauthClient: "OAuth clients",
+  llmOauthClient: "OAuth clients",
   environment: "environments",
   scheduledTask: "scheduled tasks",
   log: "LLM and MCP logs",

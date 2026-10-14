@@ -222,7 +222,7 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await ResourcePermissions.validateInitialGrants({
           organizationId,
           userId: user.id,
-          resource: "llmOauthClient",
+          resource: "oauthClient",
           grants: body.initialGrants,
           target: {
             id: randomUUID(),
@@ -301,7 +301,7 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await requireOauthClientAccess({
         organizationId,
         userId: user.id,
-        resource: "llmOauthClient",
+        resource: "oauthClient",
         id: params.id,
         action: "update",
       });
@@ -391,7 +391,7 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await requireOauthClientAccess({
         organizationId,
         userId: user.id,
-        resource: "llmOauthClient",
+        resource: "oauthClient",
         id: params.id,
         action: "update",
       });
@@ -424,7 +424,7 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await requireOauthClientAccess({
         organizationId,
         userId: user.id,
-        resource: "llmOauthClient",
+        resource: "oauthClient",
         id: params.id,
         action: "delete",
       });
@@ -489,7 +489,7 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           await requireOauthClientAccess({
             organizationId,
             userId: user.id,
-            resource: "llmOauthClient",
+            resource: "oauthClient",
             id: client.id,
             action: "delete",
           });

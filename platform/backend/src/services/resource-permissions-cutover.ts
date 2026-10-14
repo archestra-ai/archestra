@@ -8,6 +8,7 @@ import {
 import { sql } from "drizzle-orm";
 import db, { type Transaction } from "@/database";
 import logger from "@/logging";
+import OAuthClientUpgradeModel from "@/models/oauth-client-upgrade";
 
 /**
  * Convert the retired visibility fields into grants, and retire the role
@@ -39,6 +40,7 @@ export async function runScopedResourcePermissionCutover(
     ])
       await tx.execute(statement);
     await widenGrantsToPresets(tx);
+    await OAuthClientUpgradeModel.run(tx);
   };
   if (transaction) await run(transaction);
   else await db.transaction(run);
@@ -390,7 +392,7 @@ WITH RECURSIVE effective_teams(organization_id, user_id, team_id) AS (
     EXISTS (SELECT 1 FROM resource_permission_policies p
       WHERE p.organization_id = o.id AND p.resource = r.resource AND p.scope = 'teams:*')
     OR NOT EXISTS (SELECT 1 FROM resource_permission_policies p
-      WHERE p.organization_id = o.id AND p.resource = r.resource AND p.scope = '*' AND p.legacy_sharing_migrated)
+      WHERE p.organization_id = o.id AND (p.resource = r.resource OR (r.resource IN ('mcpOauthClient','llmOauthClient') AND p.resource = 'oauthClient')) AND p.scope = '*' AND p.legacy_sharing_migrated)
   )
 ), relative_entries AS (
   SELECT p.organization_id, p.resource, g->'subject'->>'type' AS subject_type,
@@ -803,7 +805,7 @@ WITH holders AS (
   ) mapped
   WHERE NOT EXISTS (
     SELECT 1 FROM resource_permission_policies p
-    WHERE p.organization_id = h.organization_id AND p.resource = mapped.resource
+    WHERE p.organization_id = h.organization_id AND (p.resource = mapped.resource OR (mapped.resource IN ('mcpOauthClient','llmOauthClient') AND p.resource = 'oauthClient'))
       AND p.scope = '*' AND p.legacy_sharing_migrated
   ) OR EXISTS (
     -- A custom role's old admin flag still needs converting on this first

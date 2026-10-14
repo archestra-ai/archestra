@@ -23,6 +23,7 @@
     "./mcp-image-pull-policy": "./mcp-image-pull-policy.ts",
     "./model-constants": "./model-constants.ts",
     "./opencode-family": "./opencode-family.ts",
+    "./oauth": "./oauth.ts",
     "./opencode-provider-routes": "./opencode-provider-routes.ts",
     "./permission.types": "./permission.types.ts",
     "./roles": "./roles.ts",

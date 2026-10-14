@@ -9,7 +9,7 @@ import {
   useOrganization,
 } from "@/lib/organization.query";
 import { useMyTeams, useTeams } from "@/lib/teams/team.query";
-import { CreateOAuthClientDialog } from "./create-oauth-client-dialog";
+import { CreateManagedOAuthClientDialog } from "./create-managed-oauth-client-dialog";
 
 vi.mock("@/lib/auth/auth.query");
 // The permissions section reads the organization policy over the network;
@@ -49,12 +49,12 @@ const PROVIDER_KEYS = [
 ] as never[];
 
 function renderDialog(
-  overrides: Partial<Parameters<typeof CreateOAuthClientDialog>[0]> = {},
+  overrides: Partial<Parameters<typeof CreateManagedOAuthClientDialog>[0]> = {},
 ) {
   const onSubmit = vi.fn().mockResolvedValue(undefined);
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <CreateOAuthClientDialog
+      <CreateManagedOAuthClientDialog
         open
         onOpenChange={vi.fn()}
         gateways={GATEWAYS}
@@ -98,38 +98,7 @@ beforeEach(() => {
   } as unknown as ReturnType<typeof useTeams>);
 });
 
-describe("CreateOAuthClientDialog", () => {
-  it("blocks keyless client credentials at the type choice and links to model provider setup", async () => {
-    const user = userEvent.setup();
-    renderDialog({ providerApiKeys: [] });
-    await user.type(screen.getByLabelText("Name"), "worker");
-    const llmChoice = screen.getByRole("radio", { name: /LLM Proxy/ });
-    expect(llmChoice).toBeDisabled();
-    expect(
-      screen.getByRole("link", { name: "Go to Model Providers" }),
-    ).toHaveAttribute("href", "/llm/model-providers");
-    await user.click(screen.getByRole("radio", { name: /For its users/ }));
-    expect(llmChoice).toBeEnabled();
-    await user.click(llmChoice);
-    await continueStep(user);
-    expect(screen.getByLabelText("Redirect URIs")).toBeVisible();
-  });
-
-  it("does not offer personal subscription credentials to application clients", async () => {
-    renderDialog({
-      providerApiKeys: [
-        {
-          id: "subscription-key",
-          name: "Personal subscription",
-          provider: "openai",
-          scope: "personal",
-          subscriptionKind: "openai-codex",
-        },
-      ] as never,
-    });
-    expect(screen.getByRole("radio", { name: /LLM Proxy/ })).toBeDisabled();
-  });
-
+describe("CreateManagedOAuthClientDialog", () => {
   it("carries a deep-linked agent through to the submitted client", async () => {
     const user = userEvent.setup();
     const { onSubmit } = renderDialog({
@@ -137,15 +106,12 @@ describe("CreateOAuthClientDialog", () => {
       defaultAllowedGatewayIds: ["ag-1"],
     });
 
-    expect(
-      screen.getByRole("radio", { name: /Agents & MCP gateways/ }),
-    ).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /MCP Gateway/ })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /A2A/ })).toBeChecked();
     await user.type(screen.getByLabelText("Name"), "marketing-bot");
     await continueStep(user);
 
-    expect(screen.getByRole("combobox", { name: "" })).toHaveTextContent(
-      "Marketing Agent",
-    );
+    expect(screen.getByRole("combobox")).toHaveTextContent("Marketing Agent");
     expect(screen.getByText("1 of 2 selected")).toBeVisible();
     await continueStep(user);
     expect(screen.queryByLabelText("Label key")).not.toBeInTheDocument();
@@ -153,16 +119,16 @@ describe("CreateOAuthClientDialog", () => {
     await user.click(screen.getByRole("button", { name: "Create client" }));
 
     await waitFor(() =>
-      expect(onSubmit).toHaveBeenCalledWith({
-        kind: "mcp",
-        body: {
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
           name: "marketing-bot",
           grantType: "client_credentials",
           allowedGatewayIds: ["ag-1"],
           initialGrants: [],
           labels: [],
-        },
-      }),
+          scopes: ["mcp", "a2a"],
+        }),
+      ),
     );
   });
 
@@ -180,34 +146,37 @@ describe("CreateOAuthClientDialog", () => {
     await continueStep(user);
 
     expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
-    await user.click(screen.getByRole("combobox", { name: "" }));
+    await user.click(screen.getByRole("combobox"));
     await user.click(screen.getByRole("option", { name: /Prod Gateway/ }));
     expect(screen.getByRole("button", { name: "Continue" })).toBeEnabled();
   });
 
-  it("locks a resource-scoped dialog to its own client kind", () => {
-    renderDialog({ fixedClientType: "mcp", defaultClientType: "llm" });
+  it("requires at least one capability", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+    await user.type(screen.getByLabelText("Name"), "bot");
+    await user.click(screen.getByRole("checkbox", { name: /MCP Gateway/ }));
+    await user.click(screen.getByRole("checkbox", { name: /A2A/ }));
+    expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
+  });
 
-    expect(
-      screen.queryByRole("radiogroup", { name: "What will it reach?" }),
-    ).not.toBeInTheDocument();
+  it("clears an incompatible gateway when MCP access is removed", async () => {
+    const user = userEvent.setup();
+    renderDialog({ defaultAllowedGatewayIds: ["gw-1"] });
+    await user.type(screen.getByLabelText("Name"), "Agent only");
+    await user.click(screen.getByRole("checkbox", { name: /MCP Gateway/ }));
+    await continueStep(user);
+    expect(screen.getByText("0 of 1 selected")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
   });
 
   it("bills an LLM client to a team and caps it", async () => {
     const user = userEvent.setup();
-    const { onSubmit } = renderDialog({ fixedClientType: "llm" });
+    const { onSubmit } = renderDialog({ defaultClientType: "llm" });
 
     await user.type(screen.getByLabelText("Name"), "ci-runner");
-    expect(
-      screen.queryByRole("combobox", { name: "Service account" }),
-    ).not.toBeInTheDocument();
     await continueStep(user);
-    expect(
-      screen.queryByRole("combobox", { name: "Service account" }),
-    ).not.toBeInTheDocument();
-    expect(screen.getByText("2. Access")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Add OpenAI" }));
-    await continueStep(user);
     await user.click(screen.getByLabelText("Who pays for this client?"));
     await user.click(await screen.findByRole("option", { name: /^Platform/ }));
     await user.type(screen.getByLabelText("Spend cap in dollars"), "200");
@@ -217,21 +186,20 @@ describe("CreateOAuthClientDialog", () => {
     await user.click(screen.getByRole("button", { name: "Create client" }));
 
     await waitFor(() =>
-      expect(onSubmit).toHaveBeenCalledWith({
-        kind: "llm",
-        body: expect.objectContaining({
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
           grantType: "client_credentials",
           providerApiKeys: [{ provider: "openai", providerApiKeyId: "pk-1" }],
           billingTeamId: "team-platform",
           spendCap: { limitValue: 200, cleanupInterval: "calendar_month" },
         }),
-      }),
+      ),
     );
   });
 
   it("lets each signed-in user pay for an LLM client that acts for users", async () => {
     const user = userEvent.setup();
-    const { onSubmit } = renderDialog({ fixedClientType: "llm" });
+    const { onSubmit } = renderDialog({ defaultClientType: "llm" });
 
     await user.type(screen.getByLabelText("Name"), "chat-app");
     await user.click(screen.getByRole("radio", { name: /For its users/ }));
@@ -240,7 +208,6 @@ describe("CreateOAuthClientDialog", () => {
       screen.getByLabelText("Redirect URIs"),
       "https://app.example.com/cb",
     );
-    await continueStep(user);
 
     expect(screen.getByText("Each signed-in user pays")).toBeVisible();
     expect(
@@ -252,10 +219,9 @@ describe("CreateOAuthClientDialog", () => {
     await user.click(screen.getByRole("button", { name: "Create client" }));
 
     await waitFor(() =>
-      expect(onSubmit).toHaveBeenCalledWith({
-        kind: "llm",
-        body: expect.not.objectContaining({ billingTeamId: expect.anything() }),
-      }),
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.not.objectContaining({ billingTeamId: expect.anything() }),
+      ),
     );
   });
 });

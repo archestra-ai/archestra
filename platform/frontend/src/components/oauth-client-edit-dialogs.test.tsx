@@ -18,11 +18,7 @@ import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useModelsWithApiKeys } from "@/lib/llm-models.query";
 import { useOrganization } from "@/lib/organization.query";
 import { useMyTeams, useTeams } from "@/lib/teams/team.query";
-import { EditOAuthClientDialog as EditLlmOAuthClientDialog } from "./llm-oauth-client-dialogs";
-import {
-  EditOAuthClientDialog as EditMcpOAuthClientDialog,
-  type McpOauthClient,
-} from "./mcp-oauth-client-dialogs";
+import { EditManagedOAuthClientDialog } from "./edit-managed-oauth-client-dialog";
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
@@ -50,6 +46,8 @@ const base = {
   clientId: "oc_123",
   organizationId: "org-1",
   labels: [],
+  scopes: ["llm:proxy"],
+  allowedGatewayIds: [],
   redirectUris: [],
   createdBy: null,
   createdAt: "2026-10-01T00:00:00.000Z",
@@ -82,7 +80,7 @@ describe("LLM OAuth client edit", () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     renderWithQuery(
-      <EditLlmOAuthClientDialog
+      <EditManagedOAuthClientDialog
         oauthClient={
           {
             ...base,
@@ -105,23 +103,24 @@ describe("LLM OAuth client edit", () => {
           } as never
         }
         onOpenChange={vi.fn()}
+        gateways={[]}
         providerApiKeys={[]}
         onSubmit={onSubmit}
         isSubmitting={false}
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Budget" })).toHaveAttribute(
-      "aria-description",
-      "Platform · $500/month",
-    );
+    expect(screen.getByRole("button", { name: "Budget" })).toBeVisible();
     await user.clear(screen.getByLabelText("Name"));
     await user.type(screen.getByLabelText("Name"), "ci-runner-2");
+    await user.type(screen.getByLabelText("Label key"), "env");
+    await user.type(screen.getByLabelText("Label value"), "staging");
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
     const body = onSubmit.mock.calls[0]?.[1];
     expect(body.name).toBe("ci-runner-2");
+    expect(body.labels).toEqual([{ key: "env", value: "staging" }]);
     expect(body).not.toHaveProperty("billingTeamId");
     expect(body).not.toHaveProperty("spendCap");
   });
@@ -129,7 +128,7 @@ describe("LLM OAuth client edit", () => {
   it("offers only a whole-client cap when each signed-in user pays", async () => {
     const user = userEvent.setup();
     renderWithQuery(
-      <EditLlmOAuthClientDialog
+      <EditManagedOAuthClientDialog
         oauthClient={
           {
             ...base,
@@ -142,6 +141,7 @@ describe("LLM OAuth client edit", () => {
           } as never
         }
         onOpenChange={vi.fn()}
+        gateways={[]}
         providerApiKeys={[]}
         onSubmit={vi.fn()}
         isSubmitting={false}
@@ -177,26 +177,30 @@ describe("MCP OAuth client edit", () => {
       }),
     );
     renderWithQuery(
-      <EditMcpOAuthClientDialog
+      <EditManagedOAuthClientDialog
         oauthClient={
           {
             ...base,
             name: "Worker",
+            scopes: ["mcp", "a2a"],
+            providerApiKeys: [],
             grantType: "client_credentials",
             allowedGatewayIds: ["gw-1"],
             serviceAccountId: "a1111111-1111-4111-8111-111111111111",
-          } as unknown as McpOauthClient
+          } as never
         }
         onOpenChange={vi.fn()}
         gateways={[{ id: "gw-1", name: "Gateway", agentType: "mcp_gateway" }]}
+        providerApiKeys={[]}
         onSubmit={onSubmit}
         isSubmitting={false}
       />,
     );
-    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    await user.click(screen.getByRole("button", { name: "Access" }));
     expect(
       screen.queryByRole("combobox", { name: "Service account" }),
     ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "General" }));
     await user.type(screen.getByRole("textbox", { name: "Name" }), " renamed");
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
     await waitFor(() => expect(onSubmit).toHaveBeenCalled());
@@ -223,18 +227,21 @@ describe("MCP OAuth client edit", () => {
     );
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     renderWithQuery(
-      <EditMcpOAuthClientDialog
+      <EditManagedOAuthClientDialog
         oauthClient={
           {
             ...base,
             name: "Worker",
+            scopes: ["mcp", "a2a"],
+            providerApiKeys: [],
             grantType: "client_credentials",
             allowedGatewayIds: ["gw-1"],
             serviceAccountId: null,
-          } as unknown as McpOauthClient
+          } as never
         }
         onOpenChange={vi.fn()}
         gateways={[{ id: "gw-1", name: "Gateway", agentType: "mcp_gateway" }]}
+        providerApiKeys={[]}
         onSubmit={onSubmit}
         isSubmitting={false}
       />,
@@ -242,7 +249,7 @@ describe("MCP OAuth client edit", () => {
     expect(
       screen.queryByRole("combobox", { name: "Service account" }),
     ).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    await user.click(screen.getByRole("button", { name: "Access" }));
     const picker = await screen.findByRole("combobox", {
       name: "Service account",
     });
@@ -251,6 +258,7 @@ describe("MCP OAuth client edit", () => {
     await user.click(
       await screen.findByRole("option", { name: /Worker account/ }),
     );
+    await user.click(screen.getByRole("button", { name: "General" }));
     await user.type(
       screen.getByRole("textbox", { name: "Label key" }),
       "environment",
@@ -259,7 +267,7 @@ describe("MCP OAuth client edit", () => {
       screen.getByRole("textbox", { name: "Label value" }),
       "demo",
     );
-    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    await user.click(screen.getByRole("button", { name: "General" }));
     expect(
       screen.queryByRole("combobox", { name: "Service account" }),
     ).not.toBeInTheDocument();
@@ -280,42 +288,32 @@ describe("MCP OAuth client edit", () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     renderWithQuery(
-      <EditMcpOAuthClientDialog
+      <EditManagedOAuthClientDialog
         oauthClient={
           {
             ...base,
             name: "portal",
+            scopes: ["mcp", "a2a"],
+            providerApiKeys: [],
             grantType: "authorization_code",
             redirectUris: ["https://portal.example.com/cb"],
             allowedGatewayIds: [],
-          } as unknown as McpOauthClient
+          } as never
         }
         onOpenChange={vi.fn()}
         gateways={[
           { id: "gw-1", name: "Prod Gateway", agentType: "mcp_gateway" },
         ]}
+        providerApiKeys={[]}
         onSubmit={onSubmit}
         isSubmitting={false}
       />,
     );
 
-    expect(
-      screen.queryByRole("button", { name: "Access" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Sign-in" }),
-    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Access" }));
     expect(screen.getByLabelText("Redirect URIs")).toBeVisible();
-    expect(
-      screen.getByRole("radio", {
-        name: /Only what each user can already reach/,
-      }),
-    ).toBeChecked();
-    await user.click(
-      screen.getByRole("radio", { name: /Also these gateways/ }),
-    );
-    expect(screen.getByRole("button", { name: "Save Changes" })).toBeDisabled();
-    await user.click(screen.getByRole("combobox"));
+    expect(screen.getByRole("button", { name: "Save Changes" })).toBeEnabled();
+    await user.click(screen.getByRole("combobox", { name: "" }));
     await user.click(screen.getByRole("option", { name: /Prod Gateway/ }));
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
 

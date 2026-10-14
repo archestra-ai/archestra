@@ -23,7 +23,7 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
   "/settings/oauth-clients": {
     title: "OAuth Clients",
     description:
-      "Applications that authenticate with OAuth rather than a person signing in — to the LLM Proxy, or to your MCP gateways and agents. Each client is scoped to the resources it may reach.",
+      "Register applications for MCP Gateway, A2A, and LLM Proxy. One client can access several APIs, as itself or for signed-in users.",
   },
   "/settings/agents": {
     title: "Agents",

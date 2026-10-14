@@ -38,7 +38,6 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   llmProxy: ["read", "update"],
   llmProviderApiKey: ["read", "create"],
   llmVirtualKey: ["read", "create"],
-  llmOauthClient: ["read", "create"],
   // "update" covers the whole model row, generation parameters included. An
   // extra "admin" action once gated `configuredParameters` on the grounds that
   // model rows are global, but pricing and `ignored` are equally global and
@@ -51,7 +50,6 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // MCP
   mcpGateway: ["read", "create", "delete"],
-  mcpOauthClient: ["read", "create"],
   mcpRegistry: ["read", "create"],
   mcpServerInstallation: ["read", "create", "update", "delete"],
   environment: ["read", "create", "update", "delete"],
@@ -71,6 +69,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
+  oauthClient: ["read", "create"],
   serviceAccount: ["read", "create"],
   auditLog: ["read", "admin"],
   accessPolicies: ["read", "update"],
@@ -103,14 +102,12 @@ export const editorPermissions: Record<Resource, Action[]> = {
   llmProxy: ["read", "update"],
   llmProviderApiKey: ["read", "create"],
   llmVirtualKey: ["read", "create"],
-  llmOauthClient: ["read", "create"],
   llmModel: ["read", "update"],
   llmLimit: ["read", "create", "update", "delete"],
   llmCost: ["read"],
 
   // MCP
   mcpGateway: ["read", "create", "delete"],
-  mcpOauthClient: ["read", "create"],
   mcpRegistry: ["read", "create"],
   mcpServerInstallation: ["read", "create", "update", "delete"],
   environment: ["read", "create", "update", "delete"],
@@ -132,6 +129,7 @@ export const editorPermissions: Record<Resource, Action[]> = {
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
+  oauthClient: ["read", "create"],
   serviceAccount: [],
   auditLog: [],
   accessPolicies: [],
@@ -166,14 +164,12 @@ export const memberPermissions: Record<Resource, Action[]> = {
   // personal-scope keys; org-scoped keys still require llmVirtualKey:admin
   // (enforced in the virtual-api-key create route).
   llmVirtualKey: ["read", "create"],
-  llmOauthClient: ["read"],
   llmModel: ["read"],
   llmLimit: [],
   llmCost: [],
 
   // MCP
   mcpGateway: ["read", "create", "delete"],
-  mcpOauthClient: ["read"],
   mcpRegistry: ["read"],
   mcpServerInstallation: ["read", "create", "delete"],
   environment: ["read"],
@@ -198,6 +194,7 @@ export const memberPermissions: Record<Resource, Action[]> = {
 
   // Administration (overrides better-auth defaults to add "read" where needed)
   apiKey: ["read", "create", "delete"],
+  oauthClient: ["read"],
   serviceAccount: [],
   auditLog: [],
   accessPolicies: [],
@@ -318,6 +315,8 @@ export function roleActionResourceFor(
 
 const SCOPED_RESOURCE_ROLE_ACTIONS: Partial<Record<ScopedResource, Resource>> =
   {
+    mcpOauthClient: "oauthClient",
+    llmOauthClient: "oauthClient",
     conversation: "chat",
     agentRun: "agent",
     knowledgeBase: "knowledgeSource",
@@ -371,11 +370,11 @@ export const permissionDescriptions: Record<string, string> = {
   "scheduledTask:delete": "Delete scheduled tasks",
 
   // MCP
+  "oauthClient:read": "Open OAuth client registrations",
+  "oauthClient:create": "Create OAuth client registrations",
   "mcpGateway:read": "Open MCP Gateways",
   "mcpGateway:create": "Create new MCP gateways",
   "mcpGateway:delete": "Open the trash of deleted MCP gateways",
-  "mcpOauthClient:read": "Open MCP OAuth client registrations",
-  "mcpOauthClient:create": "Create MCP OAuth client registrations",
   "mcpRegistry:read": "Open the MCP registry and use its built-in servers",
   "mcpRegistry:create": "Add servers to the MCP registry",
   "mcpServerInstallation:read": "View installed MCP servers and their status",
@@ -398,8 +397,6 @@ export const permissionDescriptions: Record<string, string> = {
   "llmProviderApiKey:create": "Add new LLM provider API keys",
   "llmVirtualKey:read": "Open LLM virtual keys",
   "llmVirtualKey:create": "Create LLM virtual keys",
-  "llmOauthClient:read": "Open LLM OAuth client registrations",
-  "llmOauthClient:create": "Create LLM OAuth client registrations",
   "llmModel:read": "View synced LLM models and capabilities",
   "llmModel:update":
     "Sync the model catalog and see every model, including ones not shared with you",
@@ -1128,21 +1125,29 @@ export const requiredEndpointPermissionsMap: Partial<
   // Which OAuth clients a caller reaches, and what they may do to each, is a
   // grant on the client. Creating one still takes the role action: there is
   // no client to hold a grant yet.
+  [RouteId.GetOauthClients]: {},
+  [RouteId.GetOauthClientLabelKeys]: { oauthClient: ["read"] },
+  [RouteId.GetOauthClientLabelValues]: { oauthClient: ["read"] },
+  [RouteId.CreateOauthClient]: { oauthClient: ["create"] },
+  [RouteId.UpdateOauthClient]: {},
+  [RouteId.RotateOauthClientSecret]: {},
+  [RouteId.DeleteOauthClient]: {},
+  [RouteId.BulkDeleteOauthClients]: {},
   [RouteId.GetLlmOauthClients]: {},
-  [RouteId.GetLlmOauthClientLabelKeys]: { llmOauthClient: ["read"] },
-  [RouteId.GetLlmOauthClientLabelValues]: { llmOauthClient: ["read"] },
+  [RouteId.GetLlmOauthClientLabelKeys]: { oauthClient: ["read"] },
+  [RouteId.GetLlmOauthClientLabelValues]: { oauthClient: ["read"] },
   [RouteId.CreateLlmOauthClient]: {
-    llmOauthClient: ["create"],
+    oauthClient: ["create"],
   },
   [RouteId.UpdateLlmOauthClient]: {},
   [RouteId.RotateLlmOauthClientSecret]: {},
   [RouteId.DeleteLlmOauthClient]: {},
   [RouteId.BulkDeleteLlmOauthClients]: {},
   [RouteId.GetMcpOauthClients]: {},
-  [RouteId.GetMcpOauthClientLabelKeys]: { mcpOauthClient: ["read"] },
-  [RouteId.GetMcpOauthClientLabelValues]: { mcpOauthClient: ["read"] },
+  [RouteId.GetMcpOauthClientLabelKeys]: { oauthClient: ["read"] },
+  [RouteId.GetMcpOauthClientLabelValues]: { oauthClient: ["read"] },
   [RouteId.CreateMcpOauthClient]: {
-    mcpOauthClient: ["create"],
+    oauthClient: ["create"],
   },
   [RouteId.UpdateMcpOauthClient]: {},
   [RouteId.RotateMcpOauthClientSecret]: {},
@@ -2059,11 +2064,8 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   // alike — so the reader is not asked which product a credential belongs to
   // before they can find it.
   //
-  // Gated on the LLM half alone: this map AND-s the resources it lists and
-  // the guard has no "any of", so naming both would hide the page from a
-  // custom role holding only one. The MCP half is gated inside the page
-  // instead. Every predefined role grants the two together.
-  "/settings/oauth-clients": { llmOauthClient: ["read"] },
+  // One page and role resource covers every managed OAuth capability.
+  "/settings/oauth-clients": { oauthClient: ["read"] },
   "/settings/llm": { organizationSettings: ["read"] },
   "/settings/mcp": { organizationSettings: ["read"] },
   "/settings/skills": { organizationSettings: ["read"] },

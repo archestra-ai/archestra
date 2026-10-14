@@ -1,16 +1,19 @@
+import { z } from "zod";
+
 /**
  * Scopes supported by the OAuth 2.1 authorization server.
  * Used by better-auth oauthProvider config, well-known endpoints, and consent UI.
  */
 export const LLM_PROXY_OAUTH_SCOPE = "llm:proxy";
 
-/**
- * Scope requested by MCP OAuth clients (machine-to-machine / service-account
- * access to MCP gateways — and to A2A agents, which are validated by the same
- * gateway path — via the `client_credentials` grant). Matches the scope
- * advertised in the protected-resource-metadata document.
- */
+/** Scope for MCP endpoints; A2A endpoints require their own scope. */
 export const MCP_GATEWAY_OAUTH_SCOPE = "mcp";
+export const A2A_OAUTH_SCOPE = "a2a";
+
+/** API capabilities of a managed OAuth client; OIDC scopes are separate. */
+export const OAuthClientScopeSchema = z.enum(["mcp", "a2a", "llm:proxy"]);
+export type OAuthClientScope = z.infer<typeof OAuthClientScopeSchema>;
+export const OAUTH_CLIENT_REFERENCE_PREFIX = "oauth-client:";
 
 /**
  * Standard OIDC offline-access scope. Requested by authorization_code MCP OAuth
@@ -20,6 +23,7 @@ export const OFFLINE_ACCESS_OAUTH_SCOPE = "offline_access";
 
 export const OAUTH_SCOPES = [
   MCP_GATEWAY_OAUTH_SCOPE,
+  A2A_OAUTH_SCOPE,
   LLM_PROXY_OAUTH_SCOPE,
   "openid",
   "profile",
@@ -33,7 +37,8 @@ export type OAuthScope = (typeof OAUTH_SCOPES)[number];
  * Used by the consent page to explain what each scope grants.
  */
 export const OAUTH_SCOPE_DESCRIPTIONS: Record<OAuthScope, string> = {
-  mcp: "Access MCP gateways and A2A agents",
+  mcp: "Access MCP gateways",
+  a2a: "Access A2A agents",
   "llm:proxy": "Access LLM proxy endpoints",
   openid: "Verify your identity",
   profile: "Access your profile information",

@@ -236,7 +236,7 @@ describe("auth routes", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json()).toEqual({
       error: "invalid_scope",
-      error_description: `${LLM_PROXY_OAUTH_SCOPE} scope is required`,
+      error_description: "Request only scopes granted to this OAuth client",
     });
   });
 
@@ -282,7 +282,7 @@ describe("auth routes", () => {
     expect(storedToken?.clientId).toBe(oauthClient.clientId);
     expect(storedToken?.userId).toBeNull();
     expect(storedToken?.scopes).toEqual([MCP_GATEWAY_OAUTH_SCOPE]);
-    expect(storedToken?.referenceId).toBe(`mcp-oauth-client:${oauthClient.id}`);
+    expect(storedToken?.referenceId).toBe(`oauth-client:${oauthClient.id}`);
   });
 
   test("forwards client_secret_basic credentials to better-auth as client_secret_post on the authorization_code grant", async ({
@@ -408,7 +408,7 @@ describe("auth routes", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json()).toEqual({
       error: "invalid_scope",
-      error_description: `${MCP_GATEWAY_OAUTH_SCOPE} scope is required`,
+      error_description: "Request only scopes granted to this OAuth client",
     });
   });
 

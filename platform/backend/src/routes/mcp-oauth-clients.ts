@@ -181,7 +181,7 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         await ResourcePermissions.validateInitialGrants({
           organizationId,
           userId: user.id,
-          resource: "mcpOauthClient",
+          resource: "oauthClient",
           grants: body.initialGrants,
           target: {
             id: randomUUID(),
@@ -241,7 +241,7 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await requireOauthClientAccess({
         organizationId,
         userId: user.id,
-        resource: "mcpOauthClient",
+        resource: "oauthClient",
         id: params.id,
         action: "update",
       });
@@ -302,7 +302,7 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await requireOauthClientAccess({
         organizationId,
         userId: user.id,
-        resource: "mcpOauthClient",
+        resource: "oauthClient",
         id: params.id,
         action: "update",
       });
@@ -335,7 +335,7 @@ const mcpOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await requireOauthClientAccess({
         organizationId,
         userId: user.id,
-        resource: "mcpOauthClient",
+        resource: "oauthClient",
         id: params.id,
         action: "delete",
       });

@@ -1773,6 +1773,7 @@ async function validateOAuthTokenByHash(params: {
   oauthTokenHash: string;
   agentAccessContext?: AgentAccessContext | null;
   lookups?: RequestLookups;
+  requiredOAuthScope?: "mcp" | "a2a";
 }): Promise<TokenAuthResult | null> {
   try {
     const agent =
@@ -1839,15 +1840,30 @@ async function validateOAuthTokenByHash(params: {
     // carry no acting user. Authorize them against the client's allowed gateways
     // instead of a user's team membership.
     if (
-      accessToken.referenceId?.startsWith(MCP_OAUTH_CLIENT_REFERENCE_PREFIX)
+      accessToken.referenceId?.startsWith(MCP_OAUTH_CLIENT_REFERENCE_PREFIX) ||
+      accessToken.referenceId?.startsWith(OAUTH_CLIENT_REFERENCE_PREFIX)
     ) {
       return await validateMcpClientAccessToken({
         accessToken,
         profileId: params.profileId,
         organizationId: agent.organizationId,
+        requiredScope: params.requiredOAuthScope ?? MCP_GATEWAY_OAUTH_SCOPE,
       });
     }
 
+    const managedClient = await ManagedOauthClientModel.findByClientId(
+      accessToken.clientId,
+    );
+    const requiredScope = params.requiredOAuthScope ?? MCP_GATEWAY_OAUTH_SCOPE;
+    if (
+      managedClient &&
+      (managedClient.disabled ||
+        !managedClient.scopes.includes(requiredScope) ||
+        !accessToken.scopes?.includes(requiredScope))
+    )
+      return null;
+    if (!managedClient && !accessToken.scopes?.includes(requiredScope))
+      return null;
     const userId = accessToken.userId;
     if (!userId) {
       return null;
@@ -1967,11 +1983,16 @@ async function validateMcpClientAccessToken(params: {
   };
   profileId: string;
   organizationId: string;
+  requiredScope: "mcp" | "a2a";
 }): Promise<TokenAuthResult | null> {
-  const { accessToken, profileId, organizationId } = params;
+  const { accessToken, profileId, organizationId, requiredScope } = params;
 
   // Require the mcp scope (parallels the llm:proxy scope check on the LLM path).
-  if (!accessToken.scopes?.includes(MCP_GATEWAY_OAUTH_SCOPE)) {
+  const legacyA2a =
+    requiredScope === A2A_OAUTH_SCOPE &&
+    accessToken.referenceId?.startsWith(MCP_OAUTH_CLIENT_REFERENCE_PREFIX) &&
+    accessToken.scopes?.includes(MCP_GATEWAY_OAUTH_SCOPE);
+  if (!accessToken.scopes?.includes(requiredScope) && !legacyA2a) {
     return null;
   }
   if (!accessToken.clientId) {
@@ -1979,17 +2000,23 @@ async function validateMcpClientAccessToken(params: {
   }
 
   // findByClientId returns null when the client was deleted or disabled.
-  const oauthClient = await McpOauthClientModel.findByClientId(
+  const oauthClient = await ManagedOauthClientModel.findByClientId(
     accessToken.clientId,
   );
-  if (!oauthClient) {
+  if (
+    !oauthClient ||
+    oauthClient.disabled ||
+    !oauthClient.scopes.includes(requiredScope)
+  ) {
     return null;
   }
 
   // Defense in depth: the token's referenceId must point at this exact client.
   if (
     accessToken.referenceId !==
-    `${MCP_OAUTH_CLIENT_REFERENCE_PREFIX}${oauthClient.id}`
+      `${MCP_OAUTH_CLIENT_REFERENCE_PREFIX}${oauthClient.id}` &&
+    accessToken.referenceId !==
+      `${OAUTH_CLIENT_REFERENCE_PREFIX}${oauthClient.id}`
   ) {
     return null;
   }
@@ -2065,8 +2092,16 @@ async function mcpOauthClientGrantsGatewayAccess(params: {
 export async function validateMCPGatewayToken(
   profileId: string,
   tokenValue: string,
+  requiredOAuthScope: "mcp" | "a2a" = MCP_GATEWAY_OAUTH_SCOPE,
 ): Promise<TokenAuthResult | null> {
-  return (await authenticateMCPGatewayRequest(profileId, tokenValue)).result;
+  return (
+    await authenticateMCPGatewayRequest(
+      profileId,
+      tokenValue,
+      undefined,
+      requiredOAuthScope,
+    )
+  ).result;
 }
 
 /**
@@ -2107,9 +2142,11 @@ export async function authenticateMCPGatewayRequest(
   profileId: string,
   tokenValue: string,
   lookups?: RequestLookups,
+  requiredOAuthScope: "mcp" | "a2a" = MCP_GATEWAY_OAUTH_SCOPE,
 ): Promise<GatewayAuthOutcome> {
   const tokenHashes = buildTokenHashes(profileId, tokenValue);
-  const cachedResult = getCachedTokenAuthResult(tokenHashes.cacheKey);
+  const authCacheKey = `${tokenHashes.cacheKey}:${requiredOAuthScope}`;
+  const cachedResult = getCachedTokenAuthResult(authCacheKey);
   if (cachedResult) {
     return { result: cachedResult, reason: null };
   }
@@ -2131,7 +2168,7 @@ export async function authenticateMCPGatewayRequest(
       tokenValue,
     );
     if (externalIdp.result) {
-      cacheTokenAuthResult(tokenHashes.cacheKey, externalIdp.result);
+      cacheTokenAuthResult(authCacheKey, externalIdp.result);
       return externalIdp;
     }
     externalIdpReason = externalIdp.reason;
@@ -2162,7 +2199,7 @@ export async function authenticateMCPGatewayRequest(
           : await getAgentAccessContext(),
       });
       if (teamTokenResult) {
-        cacheTokenAuthResult(tokenHashes.cacheKey, teamTokenResult);
+        cacheTokenAuthResult(authCacheKey, teamTokenResult);
         return { result: teamTokenResult, reason: null };
       }
     }
@@ -2175,7 +2212,7 @@ export async function authenticateMCPGatewayRequest(
         lookups,
       });
       if (userTokenResult) {
-        cacheTokenAuthResult(tokenHashes.cacheKey, userTokenResult);
+        cacheTokenAuthResult(authCacheKey, userTokenResult);
         return { result: userTokenResult, reason: null };
       }
     }
@@ -2184,7 +2221,7 @@ export async function authenticateMCPGatewayRequest(
       { profileId, tokenPrefix: tokenValue.substring(0, 14) },
       "validateMCPGatewayToken: token validation failed - not found in any token table or access denied",
     );
-    cacheTokenAuthResult(tokenHashes.cacheKey, null);
+    cacheTokenAuthResult(authCacheKey, null);
     return { result: null, reason: "invalid_token" };
   }
 
@@ -2194,11 +2231,11 @@ export async function authenticateMCPGatewayRequest(
     oauthTokenHash: tokenHashes.oauthTokenHash,
     agentAccessContext: await getAgentAccessContext(),
     lookups,
+    requiredOAuthScope,
   });
   if (accessTokenResult) {
-    // This cache is intentionally short-lived and process-local. Revocations
-    // may take up to TOKEN_AUTH_CACHE_TTL_MS to fully age out across requests.
-    cacheTokenAuthResult(tokenHashes.cacheKey, accessTokenResult);
+    // OAuth scopes and target grants are live configuration. Recheck them on
+    // every call so a capability removal cannot leave a cached authorization.
     return { result: accessTokenResult, reason: null };
   }
 
@@ -2206,7 +2243,7 @@ export async function authenticateMCPGatewayRequest(
     { profileId, tokenPrefix: tokenValue.substring(0, 14) },
     "validateMCPGatewayToken: token validation failed - not found in any token table or access denied",
   );
-  cacheTokenAuthResult(tokenHashes.cacheKey, null);
+  cacheTokenAuthResult(authCacheKey, null);
 
   // A non-JWT that failed here was never a JWKS candidate, so an IdP-specific
   // reason would be misleading — it most likely meant to be an OAuth token.
@@ -3042,3 +3079,9 @@ function isUnavailableResourceError(error: unknown): boolean {
   }
   return false;
 }
+
+import {
+  A2A_OAUTH_SCOPE,
+  OAUTH_CLIENT_REFERENCE_PREFIX,
+} from "@archestra/shared/oauth";
+import ManagedOauthClientModel from "@/models/managed-oauth-client";

@@ -24,7 +24,7 @@ import logger from "@/logging";
 import {
   AgentModel,
   AgentTeamModel,
-  LlmOauthClientModel,
+  ManagedOauthClientModel as LlmOauthClientModel,
   LlmProviderApiKeyModel,
   MemberModel,
   OAuthAccessTokenModel,
@@ -436,6 +436,16 @@ export async function validateLlmOAuthAccessToken(params: {
   }
   if (!hasLlmProxyScope(accessToken.scopes)) {
     throw new ApiError(403, "Access token is missing LLM proxy scope.");
+  }
+  const managedClient = await LlmOauthClientModel.findByClientId(
+    accessToken.clientId,
+  );
+  if (
+    managedClient &&
+    (managedClient.disabled ||
+      !managedClient.scopes.includes(LLM_PROXY_OAUTH_SCOPE))
+  ) {
+    throw new ApiError(403, "OAuth client no longer grants LLM proxy access.");
   }
   if (accessToken.userId) {
     return validateUserLlmOAuthAccessToken({

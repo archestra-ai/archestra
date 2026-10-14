@@ -23,6 +23,8 @@ export const ScopedResourceSchema = z.enum([
   "externalAgent",
   // An OAuth client registration. Its tokens never consult these grants: they
   // decide who can see and manage the registration, not what it reaches.
+  "oauthClient",
+  // Retained only for decoding old policies during the startup conversion.
   "mcpOauthClient",
   "llmOauthClient",
   // Deploying into an environment is `use` on that environment.
@@ -50,6 +52,8 @@ export const ScopedResourceSchema = z.enum([
 export const ManagedResourceSchema = ScopedResourceSchema.exclude([
   "log",
   "auditLog",
+  "mcpOauthClient",
+  "llmOauthClient",
 ]);
 
 /** Resources with no individual object policy. Logs use role actions instead. */
@@ -275,7 +279,11 @@ export function resourcePermissionPresetsFor(
   // Nothing is done "with" an OAuth client registration: its tokens are
   // checked against the client's own configuration, never against a grant.
   // So there is no `use` to offer, only seeing, editing, and the rest.
-  if (resource === "mcpOauthClient" || resource === "llmOauthClient") {
+  if (
+    resource === "oauthClient" ||
+    resource === "mcpOauthClient" ||
+    resource === "llmOauthClient"
+  ) {
     return {
       view: resourcePermissionPresets.view,
       edit: { label: "Can update", actions: ["read", "update"] },

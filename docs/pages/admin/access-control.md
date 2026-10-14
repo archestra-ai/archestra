@@ -148,7 +148,9 @@ Deploying into an [environment](/docs/admin/environments#deploy-permissions) req
 
 ### OAuth Clients
 
-Open **Settings → OAuth Clients → Permissions**, then select **MCP clients** or **LLM clients**. The two client types have separate grants. **Can update** permits reconfiguration and secret rotation. **Full access** also permits deletion and sharing. These grants govern client management. Tokens reach only what the client configuration allows.
+One **OAuth Clients** resource governs clients with any combination of MCP Gateway, A2A, and LLM Proxy capabilities. Role permissions [`oauthClient:read`](/docs/reference/permissions#oauthClient:read) and [`oauthClient:create`](/docs/reference/permissions#oauthClient:create) control listing and creation. **Can update** permits reconfiguration and secret rotation. **Full access** also permits deletion and sharing. These grants govern client management. Tokens reach only the enabled capabilities and configured resources; management grants do not themselves authorize API calls.
+
+During an upgrade, each action from the former MCP and LLM client permissions carries over to OAuth Clients. A role with MCP client **read** and LLM client **create** gets OAuth Client **read** and **create**, not edit or delete. A wildcard **Can update** grant reaches all OAuth clients; a grant on one client stays on that client.
 
 ### Visibility-Scoped Credentials
 

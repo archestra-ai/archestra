@@ -139,9 +139,6 @@ it("steps through batteries and sends the picked key, or skipped for one left un
   await user.click(screen.getByRole("combobox"));
   expect(screen.queryByRole("option", { name: "My token" })).toBeNull();
   await user.click(screen.getByRole("option", { name: "Slack token" }));
-  expect(
-    screen.getByRole("img", { name: "Slack token connected" }),
-  ).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Next" }));
 
   expect(card).toHaveTextContent("2 of 2");
@@ -177,10 +174,8 @@ it("creates and connects a new token through the credential dialogs, then select
   expect(connected).toEqual([
     { key: "credential-github-token", value: "ghp_secret" },
   ]);
-  // The card's check reports the connection; no toast repeats it.
-  expect(
-    screen.getByRole("img", { name: "GitHub token connected" }),
-  ).toBeInTheDocument();
+  // The dropdown shows the new token; no toast repeats it.
+  expect(screen.getByRole("combobox")).toHaveTextContent("GitHub token");
   expect(toast.success).not.toHaveBeenCalledWith("GitHub token connected");
   expect(onSendMessage).toHaveBeenCalledExactlyOnceWith(
     "Battery credentials: GitHub APPA_PROVIDER_GITHUB_TOKEN → credential-github-token.",
@@ -212,6 +207,33 @@ it("connects the secret an earlier attempt made instead of creating another", as
   ]);
   expect(onSendMessage).toHaveBeenCalledExactlyOnceWith(
     "Battery credentials: GitHub APPA_PROVIDER_GITHUB_TOKEN → credential-github-token.",
+  );
+});
+
+it("adds another numbered token when the variable's token is already connected", async () => {
+  const user = userEvent.setup();
+  definitions = [
+    ...definitions,
+    definition({
+      id: "connected",
+      key: "credential-github-token",
+      name: "GitHub token",
+    }),
+  ];
+  const onSendMessage = vi.fn();
+  renderCard({ request: { batteries: [request.batteries[1]] }, onSendMessage });
+
+  await addToken(user, "Add new token", "ghp_second");
+  await user.click(screen.getByRole("button", { name: "Done" }));
+
+  expect(definitions.map((entry) => entry.name)).toEqual(
+    expect.arrayContaining(["GitHub token", "GitHub token 2"]),
+  );
+  expect(connected).toEqual([
+    { key: "credential-github-token-2", value: "ghp_second" },
+  ]);
+  expect(onSendMessage).toHaveBeenCalledExactlyOnceWith(
+    "Battery credentials: GitHub APPA_PROVIDER_GITHUB_TOKEN → credential-github-token-2.",
   );
 });
 

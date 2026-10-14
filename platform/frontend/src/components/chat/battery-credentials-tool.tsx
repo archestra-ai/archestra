@@ -43,7 +43,7 @@ import { cn } from "@/lib/utils/tailwind";
 type Battery = BatteryCredentialRequest["batteries"][number];
 type Choice = { key: string };
 type Adding =
-  | { battery: Battery; variable: string; step: "define" }
+  | { battery: Battery; variable: string; step: "define"; name: string }
   | { battery: Battery; variable: string; step: "connect"; id: string };
 
 /**
@@ -86,8 +86,6 @@ export function BatteryCredentialsTool({
   const answered = battery.credentials.every(
     (variable) => choices[choiceId(battery, variable)],
   );
-  const choiceName = (key: string) =>
-    all.find((entry) => entry.key === key)?.name ?? key;
   const choose = (battery: Battery, variable: string, choice: Choice) =>
     setChoices((current) => ({
       ...current,
@@ -142,7 +140,7 @@ export function BatteryCredentialsTool({
         {battery.credentials.map((variable) => {
           const choice = choices[choiceId(battery, variable)];
           const id = `battery-credential-${toolCallId}-${choiceId(battery, variable)}`;
-          const existing = existingDefinition({
+          const unconnected = unconnectedDefinition({
             battery,
             variable,
             credentials: all,
@@ -159,14 +157,23 @@ export function BatteryCredentialsTool({
                   onValueChange={(key) =>
                     key === ADD_TOKEN
                       ? setAdding(
-                          existing
+                          unconnected
                             ? {
                                 battery,
                                 variable,
                                 step: "connect",
-                                id: existing.id,
+                                id: unconnected.id,
                               }
-                            : { battery, variable, step: "define" },
+                            : {
+                                battery,
+                                variable,
+                                step: "define",
+                                name: freeTokenName({
+                                  battery,
+                                  variable,
+                                  credentials: all,
+                                }),
+                              },
                         )
                       : choose(battery, variable, { key })
                   }
@@ -186,23 +193,13 @@ export function BatteryCredentialsTool({
                       icon={<PlusIcon className="size-4" aria-hidden />}
                     >
                       <span>
-                        {existing && !existing.organizationConfigured
-                          ? `Connect ${existing.name}`
+                        {unconnected
+                          ? `Connect ${unconnected.name}`
                           : "Add new token"}
                       </span>
                     </SelectItem>
                   </SelectContent>
                 </Select>
-                {choice ? (
-                  <span
-                    role="img"
-                    aria-label={`${choiceName(choice.key)} connected`}
-                    title={`${choiceName(choice.key)} connected`}
-                    className="flex size-8 shrink-0 items-center justify-center rounded-md border border-green-600/30 bg-green-600/10 text-green-600 dark:text-green-400"
-                  >
-                    <CheckIcon className="size-4" aria-hidden />
-                  </span>
-                ) : null}
               </div>
             </div>
           );
@@ -256,7 +253,7 @@ export function BatteryCredentialsTool({
           initialKind="secret"
           initialScope="organization"
           initialValues={{
-            name: tokenName(adding.battery, adding.variable),
+            name: adding.name,
             description: `Read by the ${adding.battery.title} battery's helpers.`,
             icon: null,
           }}
@@ -355,21 +352,55 @@ function StepText({ text }: { text: string }) {
 }
 
 /**
- * The organization secret an earlier "Add new token" made for this variable,
- * so a second attempt connects it instead of making a duplicate.
+ * A secret an earlier "Add new token" made for this variable but never
+ * connected, so the next attempt connects it instead of leaving it behind.
  */
-function existingDefinition(params: {
+function unconnectedDefinition(params: {
   battery: Battery;
   variable: string;
   credentials: RuntimeCredentialDefinition[];
 }) {
-  const name = tokenName(params.battery, params.variable);
-  const key = slugifyCredentialKey(name);
+  const base = tokenName(params.battery, params.variable);
   return params.credentials.find(
     (entry) =>
       entry.kind === "secret" &&
       entry.allowOrganization &&
-      (entry.key === key || entry.name === name),
+      !entry.organizationConfigured &&
+      isTokenName(entry, base),
+  );
+}
+
+/**
+ * The name for another token: the variable's token name, numbered from 2 once
+ * a credential holds it, so each "Add new token" makes a new one.
+ */
+function freeTokenName(params: {
+  battery: Battery;
+  variable: string;
+  credentials: RuntimeCredentialDefinition[];
+}) {
+  const base = tokenName(params.battery, params.variable);
+  for (let n = 1; ; n++) {
+    const name = n === 1 ? base : `${base} ${n}`;
+    const key = slugifyCredentialKey(name);
+    if (
+      !params.credentials.some(
+        (entry) => entry.name === name || entry.key === key,
+      )
+    )
+      return name;
+  }
+}
+
+/** The token name itself, or it numbered by `freeTokenName`. */
+function isTokenName(entry: RuntimeCredentialDefinition, base: string) {
+  const suffix = entry.name.startsWith(`${base} `)
+    ? entry.name.slice(base.length + 1)
+    : null;
+  return (
+    entry.name === base ||
+    entry.key === slugifyCredentialKey(base) ||
+    (suffix !== null && /^\d+$/.test(suffix))
   );
 }
 

@@ -119,12 +119,12 @@ for (const width of [320, 390]) {
       name: `Permission for ${team}`,
     });
     await permission.click();
-    await page.getByRole("option", { name: "Can edit", exact: true }).click();
+    await page.getByRole("option", { name: "Can update", exact: true }).click();
     await settings.press("Space");
     await expect(settings).toHaveAttribute("aria-expanded", "false");
     await settings.press("Enter");
     await expect(sync).toHaveText("Every hour");
-    await expect(permission).toHaveText("Can edit");
+    await expect(permission).toHaveText("Can update");
     await permission.scrollIntoViewIfNeeded();
     await expectInsideViewport(page, permission);
     await expectInsideViewport(

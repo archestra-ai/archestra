@@ -587,18 +587,24 @@ export function withProviderToolCallIds<T>(
  * already carry the event, but neither can be joined to a session's rows after
  * the fact, which is what triaging one of these actually requires.
  *
- * Returns undefined when nothing was blocked, so the column stays NULL on the
- * overwhelming majority of rows.
+ * A turn that still runs can have calls replaced by denial notices; those
+ * count too. Returns undefined when nothing was blocked, so the column stays
+ * NULL on the overwhelming majority of rows.
  */
 export function toToolCallBlock(
   refusal: LlmProxyToolCallRefusal | null,
+  blocked: readonly { reason: string }[],
 ): ToolCallBlock | undefined {
-  if (!refusal) {
-    return undefined;
+  if (refusal) {
+    return {
+      reason: refusal.reason,
+      blockedToolCallCount: refusal.allToolCallNames.length,
+    };
   }
+  if (blocked.length === 0) return undefined;
   return {
-    reason: refusal.reason,
-    blockedToolCallCount: refusal.allToolCallNames.length,
+    reason: [...new Set(blocked.map((call) => call.reason))].join("\n"),
+    blockedToolCallCount: blocked.length,
   };
 }
 

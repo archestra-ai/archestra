@@ -1,8 +1,8 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import {
-  filterAndSortInitialAgents,
   groupInitialAgents,
+  matchesAgentSearch,
 } from "./initial-agent-selector.utils";
 
 const userId = "user-1";
@@ -32,167 +32,22 @@ function makeAgent(
   };
 }
 
-describe("filterAndSortInitialAgents", () => {
-  it("hides built-ins even when selected or matched by search", () => {
-    const agents = [
-      makeAgent({ id: "builtin", name: "APPA Keeper", builtIn: true }),
-      makeAgent({
-        id: "personal",
-        name: "My Assistant",
-        scope: "personal",
-        authorId: userId,
-      }),
-    ];
-    expect(
-      filterAndSortInitialAgents({
-        allAgents: agents,
-        currentAgentId: "builtin",
-        search: "",
-        userId,
-      }).map((agent) => agent.id),
-    ).toEqual(["personal"]);
-    expect(
-      filterAndSortInitialAgents({
-        allAgents: agents,
-        currentAgentId: "builtin",
-        search: "APPA Keeper",
-        userId,
-      }),
-    ).toEqual([]);
-  });
-  it("shows only the current user's personal agents", () => {
-    const agents = [
-      makeAgent({
-        id: "mine",
-        name: "My Personal Agent",
-        scope: "personal",
-        authorId: userId,
-      }),
-      makeAgent({
-        id: "other",
-        name: "Other Personal Agent",
-        scope: "personal",
-        authorId: "user-2",
-      }),
-      makeAgent({ id: "shared", name: "Shared Agent", scope: "org" }),
-    ];
-
-    const result = filterAndSortInitialAgents({
-      allAgents: agents,
-      currentAgentId: null,
-      search: "",
-      userId,
+describe("matchesAgentSearch", () => {
+  it("matches the name or the description, ignoring case and edges", () => {
+    const agent = makeAgent({
+      id: "a",
+      name: "Alpha Agent",
+      description: "Handles Billing questions",
     });
-
-    expect(result.map((agent) => agent.id)).toEqual(["mine", "shared"]);
+    expect(matchesAgentSearch(agent, "alpha")).toBe(true);
+    expect(matchesAgentSearch(agent, "  BILLING ")).toBe(true);
+    expect(matchesAgentSearch(agent, "gamma")).toBe(false);
   });
 
-  it("puts the current agent first even if it is a shared agent", () => {
-    const agents = [
-      makeAgent({
-        id: "shared",
-        name: "Alpha Shared Agent",
-        scope: "org",
-      }),
-      makeAgent({
-        id: "personal",
-        name: "Zulu Personal Agent",
-        scope: "personal",
-        authorId: userId,
-      }),
-    ];
-
-    const result = filterAndSortInitialAgents({
-      allAgents: agents,
-      currentAgentId: "shared",
-      search: "",
-      userId,
-    });
-
-    expect(result.map((agent) => agent.id)).toEqual(["shared", "personal"]);
-  });
-
-  it("keeps the selected non-personal agent first after the personal-agent priority", () => {
-    const agents = [
-      makeAgent({
-        id: "org-selected",
-        name: "Zulu Org Agent",
-        scope: "org",
-      }),
-      makeAgent({
-        id: "team",
-        name: "Alpha Team Agent",
-        scope: "team",
-      }),
-      makeAgent({
-        id: "org-other",
-        name: "Alpha Org Agent",
-        scope: "org",
-      }),
-    ];
-
-    const result = filterAndSortInitialAgents({
-      allAgents: agents,
-      currentAgentId: "org-selected",
-      search: "",
-      userId,
-    });
-
-    expect(result.map((agent) => agent.id)).toEqual([
-      "org-selected",
-      "team",
-      "org-other",
-    ]);
-  });
-
-  it("filters by name and description case-insensitively", () => {
-    const agents = [
-      makeAgent({
-        id: "name-match",
-        name: "Database Helper",
-        scope: "org",
-      }),
-      makeAgent({
-        id: "description-match",
-        name: "Support Agent",
-        description: "Finds DATABASE issues",
-        scope: "team",
-      }),
-      makeAgent({
-        id: "no-match",
-        name: "Calendar Agent",
-        scope: "org",
-      }),
-    ];
-
-    const result = filterAndSortInitialAgents({
-      allAgents: agents,
-      currentAgentId: null,
-      search: "database",
-      userId,
-    });
-
-    expect(result.map((agent) => agent.id)).toEqual([
-      "description-match",
-      "name-match",
-    ]);
-  });
-
-  it("falls back to alphabetical order inside the same scope", () => {
-    const agents = [
-      makeAgent({ id: "z", name: "Zulu Team Agent", scope: "team" }),
-      makeAgent({ id: "a", name: "Alpha Team Agent", scope: "team" }),
-      makeAgent({ id: "m", name: "Mike Team Agent", scope: "team" }),
-    ];
-
-    const result = filterAndSortInitialAgents({
-      allAgents: agents,
-      currentAgentId: null,
-      search: "",
-      userId,
-    });
-
-    expect(result.map((agent) => agent.id)).toEqual(["a", "m", "z"]);
+  it("matches everything when the search is blank", () => {
+    const agent = makeAgent({ id: "a", name: "Alpha", description: null });
+    expect(matchesAgentSearch(agent, "")).toBe(true);
+    expect(matchesAgentSearch(agent, "   ")).toBe(true);
   });
 });
 

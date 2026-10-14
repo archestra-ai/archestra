@@ -9,6 +9,7 @@ import {
   Check,
   Copy,
   ExternalLink,
+  Loader2,
   Plus,
   Search,
   SlidersHorizontal,
@@ -64,9 +65,10 @@ import {
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   useAgentCredentialReadiness,
-  useChatAgents,
+  useAgentPickerPages,
+  useAgentsByIds,
   useCreateProfile,
-  usePinnedAgentIds,
+  usePinnedAgents,
   useProfile,
   useUpdateProfile,
 } from "@/lib/agent.query";
@@ -85,6 +87,7 @@ import {
   resolveAgentConnectionGate,
 } from "@/lib/chat/agent-connection-gate";
 import { useFeature } from "@/lib/config/config.query";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useListboxNavigation } from "@/lib/hooks/use-listbox-navigation";
 import { useConnectors } from "@/lib/knowledge/connector.query";
 import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
@@ -106,8 +109,8 @@ import {
 } from "./agent-quick-edit/settings-view";
 import { SubagentsView } from "./agent-quick-edit/subagents-view";
 import {
-  filterAndSortInitialAgents,
   groupInitialAgents,
+  matchesAgentSearch,
 } from "./initial-agent-selector.utils";
 
 type CatalogItem =
@@ -131,7 +134,6 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   currentAgentId,
   onAgentChange,
 }: InitialAgentSelectorProps) {
-  const { data: allAgents = [] } = useChatAgents();
   const [open, setOpen] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -162,26 +164,67 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const createProfile = useCreateProfile();
   const cloningStartedForRef = useRef<string | null>(null);
 
-  const filteredAgents = useMemo(
-    () =>
-      filterAndSortInitialAgents({
-        allAgents,
-        currentAgentId,
-        search,
-        userId,
-      }),
-    [allAgents, search, currentAgentId, userId],
-  );
-  // Loaded after first paint, not on open, so the Pinned group is there the
+  // Loaded after first paint, not on open, so the first rows are there the
   // moment the picker opens instead of popping in once the request lands.
-  const { data: pinnedIds } = usePinnedAgentIds({
-    enabled: open || afterFirstPaint,
+  const listEnabled = open || afterFirstPaint;
+  const {
+    data: pinnedAgents,
+    automaticIds,
+    automaticIdsPending,
+  } = usePinnedAgents({ enabled: listEnabled });
+  const pinnedIds = useMemo(
+    () => pinnedAgents?.map((agent) => agent.id),
+    [pinnedAgents],
+  );
+  // The pinned rows are already here, so they filter as the user types; the
+  // paginated rows wait for the pause that ends a burst of keystrokes.
+  const debouncedSearch = useDebouncedValue(search.trim(), 150);
+  const pickerPages = useAgentPickerPages({
+    search: debouncedSearch,
+    excludeIds: automaticIds,
+    enabled: listEnabled && !automaticIdsPending,
   });
+  const pagedAgents = pickerPages.data?.agents;
+  const loadedAgents = useMemo(() => {
+    // A row pinned after its page was fetched would otherwise show twice.
+    const byId = new Map<string, PickerAgent>();
+    for (const agent of [...(pinnedAgents ?? []), ...(pagedAgents ?? [])]) {
+      if (!byId.has(agent.id)) byId.set(agent.id, agent);
+    }
+    return [...byId.values()];
+  }, [pinnedAgents, pagedAgents]);
   const groupIdPrefix = useId();
   const agentGroups = useMemo(
-    () => groupInitialAgents({ agents: filteredAgents, userId, pinnedIds }),
-    [filteredAgents, userId, pinnedIds],
+    () =>
+      groupInitialAgents({
+        agents: loadedAgents.filter(
+          (agent) =>
+            !pinnedIds?.includes(agent.id) || matchesAgentSearch(agent, search),
+        ),
+        userId,
+        pinnedIds,
+      }),
+    [loadedAgents, pinnedIds, search, userId],
   );
+  const listboxRef = useRef<HTMLDivElement>(null);
+  // Held in state, not a ref: the row mounts with the popover, after the
+  // render that opened it, and the observer must attach once it exists.
+  const [sentinel, setSentinel] = useState<HTMLOutputElement | null>(null);
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = pickerPages;
+  // The next page loads when the end of the list scrolls into view.
+  useEffect(() => {
+    if (!sentinel || !hasNextPage) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          void fetchNextPage();
+        }
+      },
+      { root: listboxRef.current, rootMargin: "80px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [sentinel, hasNextPage, fetchNextPage]);
   // Arrow keys walk the rows in the order they are drawn, group by group.
   const keyboardNavigableAgentIds = useMemo(
     () =>
@@ -196,22 +239,17 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
     [agentGroups, readinessByAgent],
   );
 
-  const currentAgentSummary = useMemo(
-    () =>
-      allAgents.find((a) => a.id === currentAgentId) ??
-      allAgents.find((a) => !a.builtIn && a.scope === "personal") ??
-      allAgents.find((a) => !a.builtIn) ??
-      null,
-    [allAgents, currentAgentId],
-  );
-  // The roster omits large embedded icons and editing-only fields. Hydrate one
-  // record after the composer's first paint, so the response never competes
-  // with the first useful render; the trigger holds placeholders until then.
-  const { data: currentAgentDetail } = useProfile(
-    currentAgentSummary?.id ?? undefined,
-    { enabled: open || afterFirstPaint },
-  );
-  const currentAgent = currentAgentDetail ?? currentAgentSummary;
+  // The picker's rows carry no tools or editing-only fields. Hydrate the
+  // current agent after the composer's first paint, so the response never
+  // competes with the first useful render; the trigger holds placeholders
+  // until then.
+  const { data: currentAgentDetail } = useProfile(currentAgentId ?? undefined, {
+    enabled: open || afterFirstPaint,
+  });
+  const currentAgent =
+    currentAgentDetail ??
+    loadedAgents.find((agent) => agent.id === currentAgentId) ??
+    null;
   const displayAgentName = currentAgent?.name ?? "Select agent";
   const effectiveAgentId = currentAgent?.id ?? currentAgentId;
   const shouldLoadAgentManagementDetails =
@@ -272,10 +310,15 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   // shows these icons from the start, and a short id list is cheap.
   const { data: triggerDelegations = [], isSuccess: delegationsLoaded } =
     useAgentDelegations(effectiveAgentId ?? undefined);
-  const triggerSubagents = useMemo(() => {
-    const targetIds = new Set(triggerDelegations.map((d) => d.id));
-    return allAgents.filter((a) => targetIds.has(a.id));
-  }, [allAgents, triggerDelegations]);
+  // The delegations name their targets but carry no icon; the rows come from
+  // a lookup by id, capped at what one request may ask for.
+  const triggerSubagentIds = useMemo(
+    () => triggerDelegations.slice(0, 20).map((delegation) => delegation.id),
+    [triggerDelegations],
+  );
+  const { data: triggerSubagents = [] } = useAgentsByIds(triggerSubagentIds, {
+    enabled: delegationsLoaded,
+  });
 
   const { data: knowledgeBasesData, isSuccess: knowledgeBasesLoaded } =
     useKnowledgeBases({
@@ -375,7 +418,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   });
   useAgentDelegations(quickEditAgentId);
   const { data: cloningAgent } = useProfile(cloningAgentId ?? undefined);
-  const editingSummary = allAgents.find((a) => a.id === editingAgentId);
+  const editingSummary = loadedAgents.find((a) => a.id === editingAgentId);
 
   const savedInstructions = editingAgent?.systemPrompt ?? null;
   const instructionsDirty =
@@ -473,7 +516,10 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
 
   return (
     <>
-      <div className="flex min-w-0 max-w-[340px] items-center">
+      {/* The server pills beside the name are their own controls, so they
+          cannot live inside the button; the row carries the hover instead,
+          so name and pills light up as one. */}
+      <div className="flex min-w-0 max-w-[340px] items-center rounded-md transition-colors hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50">
         <Popover
           open={open}
           onOpenChange={(newOpen) => {
@@ -531,14 +577,24 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
             </div>
             <div
               {...navigation.listboxProps}
+              ref={listboxRef}
               role="listbox"
               aria-label="Agents"
               className="max-h-[320px] overflow-y-auto px-1.5 pb-1.5"
             >
-              {filteredAgents.length === 0 ? (
+              {agentGroups.length === 0 && pickerPages.isPending ? (
+                <output className="flex items-center justify-center gap-2 px-4 py-6 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  <span>Loading agents…</span>
+                </output>
+              ) : agentGroups.length === 0 ? (
                 <div className="flex flex-col items-center gap-2.5 px-4 py-6 text-center">
                   <p className="text-sm text-muted-foreground">
-                    No agents match "{search}"
+                    {search ? (
+                      <span>No agents match "{search}"</span>
+                    ) : (
+                      <span>No agents yet</span>
+                    )}
                   </p>
                   <div className="flex gap-2">
                     <Button
@@ -596,6 +652,21 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                   </div>
                 ))
               )}
+              {hasNextPage && (
+                <output
+                  ref={setSentinel}
+                  className="flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground"
+                  data-testid="agent-picker-load-more"
+                >
+                  {isFetchingNextPage ? (
+                    <Loader2
+                      className="size-3.5 animate-spin"
+                      aria-hidden="true"
+                    />
+                  ) : null}
+                  <span>{isFetchingNextPage ? "Loading more…" : "More…"}</span>
+                </output>
+              )}
             </div>
             <div className="flex items-center justify-between border-t px-1.5 py-1.5">
               <Button asChild variant="ghost" size="sm">
@@ -621,7 +692,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
 
         {currentAgent?.accessAllTools ? null : !triggerIconsLoaded ? (
           <span
-            className="ml-1 flex min-w-14 items-center"
+            className="-ml-1 mr-1 flex min-w-14 items-center"
             aria-hidden="true"
             data-testid="agent-tools-placeholder"
           >
@@ -830,7 +901,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
 // Internal: picker row
 // ============================================================================
 
-type PickerAgent = archestraApiTypes.GetAllAgentsResponses["200"][number];
+type PickerAgent = archestraApiTypes.GetAgentsResponses["200"]["data"][number];
 
 function AgentPickerRow({
   agent,
@@ -1091,7 +1162,7 @@ function AgentToolSummary({
   );
 
   if (icons.length === 0) {
-    return addButton ? <span className="ml-1 flex">{addButton}</span> : null;
+    return addButton ? <span className="mr-1 flex">{addButton}</span> : null;
   }
 
   const summaryLabel = [
@@ -1103,8 +1174,10 @@ function AgentToolSummary({
     .filter(Boolean)
     .join(", ");
 
+  // The trigger button keeps its own right padding, so the pills tuck into
+  // it to sit as close to the name as the icon does on the left.
   return (
-    <span className="ml-1 flex items-center">
+    <span className="-ml-2 mr-1 flex items-center">
       <HoverCard openDelay={300} closeDelay={100} onOpenChange={onOpenChange}>
         <HoverCardTrigger asChild>
           <UnstyledButton

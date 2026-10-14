@@ -1,6 +1,7 @@
 import type { archestraApiTypes } from "@archestra/shared";
 
-type InternalAgent = archestraApiTypes.GetAllAgentsResponses["200"][number];
+type InternalAgent =
+  archestraApiTypes.GetAgentsResponses["200"]["data"][number];
 
 type InitialAgentListItem = Pick<
   InternalAgent,
@@ -15,51 +16,20 @@ type InitialAgentListItem = Pick<
   | "builtIn"
 >;
 
-export function filterAndSortInitialAgents<
-  T extends InitialAgentListItem,
->(params: {
-  allAgents: T[];
-  currentAgentId: string | null;
-  search: string;
-  userId?: string;
-}): T[] {
-  const { allAgents, currentAgentId, search, userId } = params;
-
-  let result = allAgents.filter((agent) => {
-    if (agent.builtIn) return false;
-    if (agent.scope === "personal") {
-      return agent.authorId === userId;
-    }
-    return true;
-  });
-
-  if (search) {
-    const lower = search.toLowerCase();
-    result = result.filter(
-      (agent) =>
-        agent.name.toLowerCase().includes(lower) ||
-        agent.description?.toLowerCase().includes(lower),
-    );
-  }
-
-  return [...result].sort((a, b) => {
-    if (a.id === currentAgentId) return -1;
-    if (b.id === currentAgentId) return 1;
-
-    const aIsMyPersonalAgent =
-      a.scope === "personal" && a.authorId === userId ? 1 : 0;
-    const bIsMyPersonalAgent =
-      b.scope === "personal" && b.authorId === userId ? 1 : 0;
-
-    if (aIsMyPersonalAgent !== bIsMyPersonalAgent) {
-      return bIsMyPersonalAgent - aIsMyPersonalAgent;
-    }
-    if (getScopeOrder(a.scope) !== getScopeOrder(b.scope)) {
-      return getScopeOrder(a.scope) - getScopeOrder(b.scope);
-    }
-
-    return a.name.localeCompare(b.name);
-  });
+/**
+ * The client-side half of the picker's search, for the pinned rows it already
+ * holds; the paginated rows are matched the same way on the server.
+ */
+export function matchesAgentSearch(
+  agent: Pick<InitialAgentListItem, "name" | "description">,
+  search: string,
+): boolean {
+  const lower = search.trim().toLowerCase();
+  if (!lower) return true;
+  return (
+    agent.name.toLowerCase().includes(lower) ||
+    (agent.description?.toLowerCase().includes(lower) ?? false)
+  );
 }
 
 /**
@@ -88,17 +58,4 @@ export function groupInitialAgents<T extends InitialAgentListItem>(params: {
     { label: "Yours", agents: yours },
     { label: "Shared with you", agents: shared },
   ].filter((group) => group.agents.length > 0);
-}
-
-function getScopeOrder(scope: InitialAgentListItem["scope"]) {
-  switch (scope) {
-    case "personal":
-      return 0;
-    case "team":
-      return 1;
-    case "org":
-      return 2;
-    default:
-      return 3;
-  }
 }

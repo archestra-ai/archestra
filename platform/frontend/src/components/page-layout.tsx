@@ -288,9 +288,7 @@ export function PageLayout({
                     "row-start-1 flex min-w-0 items-center gap-2",
                     HEADER_SPACING.titleRow,
                     icon ? "col-start-2" : "col-start-1",
-                    maxWidthKey === "wizard"
-                      ? "flex-nowrap overflow-hidden"
-                      : "flex-wrap",
+                    maxWidthKey === "wizard" ? "flex-nowrap" : "flex-wrap",
                   )}
                 >
                   {/* Without an icon the back link leads the title itself;

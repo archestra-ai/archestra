@@ -49933,6 +49933,15 @@
           },
           {
             "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "description": "Case-insensitive match on the name or the description, as a picker's search box filters."
+          },
+          {
+            "schema": {
               "type": "string",
               "enum": [
                 "profile",

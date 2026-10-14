@@ -106,6 +106,8 @@ type AgentListFilters = {
   /** Rows the list shows elsewhere, such as the viewer's automatic pins. */
   excludeIds?: string[];
   name?: string;
+  /** Case-insensitive substring match on the name or the description. */
+  search?: string;
   agentType?: AgentType;
   agentTypes?: AgentType[];
   scope?: AgentScopeFilter;
@@ -2102,6 +2104,15 @@ class AgentModel {
     if (filters?.name) {
       whereConditions.push(
         ilike(schema.agentsTable.name, `%${escapeLikePattern(filters.name)}%`),
+      );
+    }
+    if (filters?.search) {
+      const pattern = `%${escapeLikePattern(filters.search)}%`;
+      whereConditions.push(
+        or(
+          ilike(schema.agentsTable.name, pattern),
+          ilike(schema.agentsTable.description, pattern),
+        ) as SQL,
       );
     }
     if (filters?.providerApiKeyId === "organization-default") {

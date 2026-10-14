@@ -5,7 +5,9 @@ import {
   type ResourceAccessRelation,
 } from "@archestra/shared";
 import {
+  keepPreviousData,
   type QueryClient,
+  useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
@@ -334,44 +336,154 @@ export function usePinAgent() {
  * first the ones pinned automatically (their default, their personal chat
  * agent, the organization's default), then the ones they pinned, newest first.
  */
-export function usePinnedAgentIds(params?: { enabled?: boolean }) {
-  const { data: pinned } = useQuery({
-    queryKey: ["agents", "pinned-ids"],
+/**
+ * The agents the composer's picker shows under Pinned: the caller's default
+ * agents as automatic pins, then the ones pinned by hand, newest pin first.
+ * `automaticIds` are the defaults the paginated list must leave out as well,
+ * since the server only drops hand-made pins from it.
+ */
+export function usePinnedAgents(params?: { enabled?: boolean }) {
+  const { ids: automaticIds, isPending: automaticIdsPending } =
+    useAutomaticPinIds();
+  const { data: pinnedRows } = useQuery({
+    queryKey: ["agents", "pinned"],
     queryFn: async () => {
       const { data, error } = await getAgents({
         query: { pinned: true, agentTypes: ["agent"], limit: 100, offset: 0 },
       });
       throwOnApiError(error, { toastOnError: false });
-      return (data?.data ?? []).map((agent) => agent.id);
+      return data?.data ?? [];
     },
     enabled: params?.enabled,
-    // A short id list; kept across reloads so pins show without a wait.
-    meta: PERSISTED_QUERY_META,
   });
-  const { data: personalDefaultAgentId } = useDefaultAgentId();
-  const { data: personalChatAgentId } = usePersonalChatAgentId();
-  const { data: organization } = useOrganization();
-  const organizationDefaultAgentId = organization?.defaultAgentId;
-  const data = useMemo(
+  // A default the user has not also pinned by hand is not in the pinned page;
+  // its row comes from a lookup by id once that page says which are missing.
+  const missingAutomaticIds = useMemo(
     () =>
-      pinned && [
+      pinnedRows
+        ? automaticIds.filter((id) => !pinnedRows.some((row) => row.id === id))
+        : [],
+    [automaticIds, pinnedRows],
+  );
+  const { data: automaticRows } = useAgentsByIds(missingAutomaticIds, {
+    enabled: params?.enabled,
+  });
+  const data = useMemo(() => {
+    if (!pinnedRows) return undefined;
+    const byId = new Map(
+      [...pinnedRows, ...(automaticRows ?? [])].map((row) => [row.id, row]),
+    );
+    const ids = [...new Set([...automaticIds, ...pinnedRows.map((r) => r.id)])];
+    return ids.flatMap((id) => {
+      const row = byId.get(id);
+      return row ? [row] : [];
+    });
+  }, [automaticIds, pinnedRows, automaticRows]);
+  // The paginated list keys on the automatic pins it must leave out, so it
+  // waits for them rather than fetching its first page twice.
+  return { data, automaticIds, automaticIdsPending };
+}
+
+/** The caller's default agents, in the order the picker pins them. */
+function useAutomaticPinIds(): { ids: string[]; isPending: boolean } {
+  const personalDefault = useDefaultAgentId();
+  const personalChat = usePersonalChatAgentId();
+  const organization = useOrganization();
+  const personalDefaultAgentId = personalDefault.data;
+  const personalChatAgentId = personalChat.data;
+  const organizationDefaultAgentId = organization.data?.defaultAgentId;
+  const isPending =
+    personalDefault.isPending ||
+    personalChat.isPending ||
+    organization.isPending;
+  return useMemo(
+    () => ({
+      ids: [
         ...new Set(
           [
             personalDefaultAgentId,
             personalChatAgentId,
             organizationDefaultAgentId,
-            ...pinned,
           ].filter((id): id is string => !!id),
         ),
       ],
+      isPending,
+    }),
     [
-      pinned,
       personalDefaultAgentId,
       personalChatAgentId,
       organizationDefaultAgentId,
+      isPending,
     ],
   );
-  return { data };
+}
+
+/** Up to twenty agents by id (the API's cap), in the order asked for. */
+export function useAgentsByIds(ids: string[], params?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ["agents", "by-ids", ids],
+    queryFn: async () => {
+      const { data, error } = await getAgents({
+        query: { ids, limit: 20, offset: 0 },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      const rows = data?.data ?? [];
+      return ids.flatMap((id) => {
+        const row = rows.find((candidate) => candidate.id === id);
+        return row ? [row] : [];
+      });
+    },
+    enabled: ids.length > 0 && (params?.enabled ?? true),
+  });
+}
+
+const AGENT_PICKER_PAGE_SIZE = 30;
+
+/**
+ * The composer's agent picker, a page at a time: the caller's own agents
+ * first, then the shared ones, by name. `search` matches the name or the
+ * description on the server, and pinned agents stay out because the picker
+ * lists them in their own group — so an organization with thousands of agents
+ * never sends its whole roster to the browser.
+ */
+export function useAgentPickerPages(params: {
+  search: string;
+  /** The automatic pins, which only the client knows about. */
+  excludeIds: string[];
+  enabled?: boolean;
+}) {
+  const { search, excludeIds, enabled } = params;
+  return useInfiniteQuery({
+    queryKey: ["agents", "picker", { search, excludeIds }],
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
+      const { data, error } = await getAgents({
+        query: {
+          agentTypes: ["agent"],
+          search: search || undefined,
+          pinned: false,
+          excludeIds: excludeIds.length > 0 ? excludeIds : undefined,
+          sortBy: "name",
+          sortDirection: "asc",
+          limit: AGENT_PICKER_PAGE_SIZE,
+          offset: pageParam,
+        },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data;
+    },
+    getNextPageParam: (lastPage, _pages, lastOffset) =>
+      lastPage?.pagination.hasNext
+        ? lastOffset + AGENT_PICKER_PAGE_SIZE
+        : undefined,
+    // A new search keeps the previous rows on screen until its page lands.
+    placeholderData: keepPreviousData,
+    select: (data) => ({
+      pages: data.pages,
+      agents: data.pages.flatMap((page) => page?.data ?? []),
+    }),
+    enabled,
+  });
 }
 
 /**

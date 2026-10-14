@@ -3,6 +3,7 @@
 import {
   type BatteryCredentialRequest,
   BatteryCredentialRequestSchema,
+  DEFAULT_CREDENTIAL_GRANTS,
 } from "@archestra/shared";
 import {
   BatteryCharging,
@@ -14,10 +15,7 @@ import {
 } from "lucide-react";
 import { Fragment, useEffect, useState } from "react";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
-import {
-  RuntimeCredentialDefinitionDialog,
-  slugifyCredentialKey,
-} from "@/components/settings/runtime-credential-definition-dialog";
+import { slugifyCredentialKey } from "@/components/settings/runtime-credential-definition-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -36,15 +34,14 @@ import {
 import { useFeature } from "@/lib/config/config.query";
 import {
   type RuntimeCredentialDefinition,
+  useCreateRuntimeCredential,
   useRuntimeCredentials,
 } from "@/lib/runtime-credentials.query";
 import { cn } from "@/lib/utils/tailwind";
 
 type Battery = BatteryCredentialRequest["batteries"][number];
 type Choice = { key: string };
-type Adding =
-  | { battery: Battery; variable: string; step: "define"; name: string }
-  | { battery: Battery; variable: string; step: "connect"; id: string };
+type Adding = { battery: Battery; variable: string; id: string };
 
 /**
  * One step per battery the configuration agent asked credentials for: each
@@ -67,16 +64,55 @@ export function BatteryCredentialsTool({
   const [choices, setChoices] = useState<Record<string, Choice>>({});
   const [adding, setAdding] = useState<Adding | null>(null);
   const credentials = useRuntimeCredentials();
+  // The dropdown shows the new token, so no toast repeats it.
+  const create = useCreateRuntimeCredential({ silent: true });
   const byosEnabled = useFeature("byosEnabled") === true;
   useEffect(() => setSent(sessionStorage.getItem(sentKey)), [sentKey]);
   const all = credentials.data ?? [];
   const options = all.filter(
     (entry) => entry.allowOrganization && entry.organizationConfigured,
   );
-  const connecting =
-    adding?.step === "connect"
-      ? all.find((entry) => entry.id === adding.id)
-      : undefined;
+  const connecting = adding
+    ? all.find((entry) => entry.id === adding.id)
+    : undefined;
+  // A new token is an organization secret named for its variable, shared as
+  // the Settings form would share it; only its value is asked for.
+  const addToken = (battery: Battery, variable: string) => {
+    const unconnected = unconnectedDefinition({
+      battery,
+      variable,
+      credentials: all,
+    });
+    if (unconnected) {
+      setAdding({ battery, variable, id: unconnected.id });
+      return;
+    }
+    const name = freeTokenName({ battery, variable, credentials: all });
+    create.mutate(
+      {
+        key: slugifyCredentialKey(name),
+        kind: "secret",
+        githubUrl: null,
+        appId: null,
+        installationId: null,
+        githubClientId: null,
+        githubAppCredentialKey: null,
+        name,
+        description: `Read by the ${battery.title} battery's helpers.`,
+        icon: null,
+        allowPersonal: false,
+        allowOrganization: true,
+        initialGrants: DEFAULT_CREDENTIAL_GRANTS.map(
+          ({ subject, actions }) => ({ subject, actions }),
+        ),
+      },
+      {
+        onSuccess: (created) => {
+          if (created?.id) setAdding({ battery, variable, id: created.id });
+        },
+      },
+    );
+  };
   const battery = request.batteries[index] ?? request.batteries[0];
   const total = request.batteries.length;
   const isLast = index === total - 1;
@@ -153,28 +189,10 @@ export function BatteryCredentialsTool({
               <div className="flex items-center gap-2">
                 <Select
                   value={choice?.key ?? ""}
-                  disabled={sent !== null}
+                  disabled={sent !== null || create.isPending}
                   onValueChange={(key) =>
                     key === ADD_TOKEN
-                      ? setAdding(
-                          unconnected
-                            ? {
-                                battery,
-                                variable,
-                                step: "connect",
-                                id: unconnected.id,
-                              }
-                            : {
-                                battery,
-                                variable,
-                                step: "define",
-                                name: freeTokenName({
-                                  battery,
-                                  variable,
-                                  credentials: all,
-                                }),
-                              },
-                        )
+                      ? addToken(battery, variable)
                       : choose(battery, variable, { key })
                   }
                 >
@@ -247,24 +265,7 @@ export function BatteryCredentialsTool({
           </Button>
         )}
       </div>
-      {adding?.step === "define" ? (
-        <RuntimeCredentialDefinitionDialog
-          definition={null}
-          initialKind="secret"
-          initialScope="organization"
-          initialValues={{
-            name: adding.name,
-            description: `Read by the ${adding.battery.title} battery's helpers.`,
-            icon: null,
-          }}
-          hideProvidedBy
-          // The dropdown shows the new token instead of a toast.
-          silent
-          onClose={() => setAdding(null)}
-          onCreated={(id) => setAdding({ ...adding, step: "connect", id })}
-        />
-      ) : null}
-      {adding?.step === "connect" && connecting ? (
+      {adding && connecting ? (
         <RuntimeCredentialConnectionDialog
           definition={connecting}
           scope="organization"

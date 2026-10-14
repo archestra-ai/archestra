@@ -380,12 +380,9 @@ async function addTokenFrom(
 ) {
   await user.click(combobox);
   await user.click(await screen.findByRole("option", { name: option }));
-  const define = screen.queryByRole("dialog", { name: /credential/i });
-  if (define)
-    await user.click(
-      within(define).getByRole("button", { name: /^(Create|Add|Save)/ }),
-    );
+  // Only the value is asked for: the card makes the credential itself.
   const dialog = await screen.findByRole("dialog", { name: /^Connect/ });
+  expect(screen.queryByRole("dialog", { name: /Add credential/ })).toBeNull();
   await user.type(within(dialog).getByLabelText(/Value/i), value);
   await user.click(within(dialog).getByRole("button", { name: "Connect" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());

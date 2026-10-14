@@ -50,7 +50,6 @@ export function RuntimeCredentialDefinitionDialog({
   onCreated,
   backLabel,
   size = "medium",
-  silent = false,
 }: {
   definition: RuntimeCredentialDefinition | null;
   onClose: () => void;
@@ -62,10 +61,8 @@ export function RuntimeCredentialDefinitionDialog({
   onCreated?: (id: string) => void;
   backLabel?: string;
   size?: "small" | "medium";
-  /** Skips the "added" toast, for a caller that shows the result itself. */
-  silent?: boolean;
 }) {
-  const create = useCreateRuntimeCredential({ silent });
+  const create = useCreateRuntimeCredential();
   const {
     data: credentials = [],
     isError: credentialsFailed,

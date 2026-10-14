@@ -21971,7 +21971,7 @@ export type GetAgentRunsResponses = {
         organizationId: string;
         taskId: string;
         agentId: string;
-        actorKind: 'user' | 'team' | 'organization' | 'system';
+        actorKind: 'user' | 'team' | 'organization' | 'oauthClient' | 'serviceAccount' | 'system';
         actorId: string;
         actorUserId: string | null;
         title: string;
@@ -21982,6 +21982,7 @@ export type GetAgentRunsResponses = {
         runtimeScope: string;
         attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;
+        gatewayTokenId: string | null;
         startedAt: string;
         endedAt: string | null;
         state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
@@ -22195,7 +22196,7 @@ export type GetMyAgentRunsResponses = {
             organizationId: string;
             taskId: string;
             agentId: string;
-            actorKind: 'user' | 'team' | 'organization' | 'system';
+            actorKind: 'user' | 'team' | 'organization' | 'oauthClient' | 'serviceAccount' | 'system';
             actorId: string;
             actorUserId: string | null;
             title: string;
@@ -22206,6 +22207,7 @@ export type GetMyAgentRunsResponses = {
             runtimeScope: string;
             attentionState: 'input_required' | 'auth_required' | null;
             virtualApiKeyId: string | null;
+            gatewayTokenId: string | null;
             startedAt: string;
             endedAt: string | null;
             state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
@@ -22411,7 +22413,7 @@ export type GetMyAgentRunResponses = {
         organizationId: string;
         taskId: string;
         agentId: string;
-        actorKind: 'user' | 'team' | 'organization' | 'system';
+        actorKind: 'user' | 'team' | 'organization' | 'oauthClient' | 'serviceAccount' | 'system';
         actorId: string;
         actorUserId: string | null;
         title: string;
@@ -22422,6 +22424,7 @@ export type GetMyAgentRunResponses = {
         runtimeScope: string;
         attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;
+        gatewayTokenId: string | null;
         startedAt: string;
         endedAt: string | null;
         state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
@@ -22551,7 +22554,7 @@ export type UpdateAgentRunResponses = {
         organizationId: string;
         taskId: string;
         agentId: string;
-        actorKind: 'user' | 'team' | 'organization' | 'system';
+        actorKind: 'user' | 'team' | 'organization' | 'oauthClient' | 'serviceAccount' | 'system';
         actorId: string;
         actorUserId: string | null;
         title: string;
@@ -22562,6 +22565,7 @@ export type UpdateAgentRunResponses = {
         runtimeScope: string;
         attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;
+        gatewayTokenId: string | null;
         startedAt: string;
         endedAt: string | null;
         state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
@@ -49962,6 +49966,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -50043,6 +50048,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -50272,6 +50278,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -50374,6 +50381,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -50476,6 +50484,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -50578,6 +50587,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -50680,6 +50690,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -50761,6 +50772,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -50842,6 +50854,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -51364,6 +51377,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -51985,6 +51999,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -52066,6 +52081,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -52147,6 +52163,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -52228,6 +52245,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -52309,6 +52327,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -52390,6 +52409,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -52471,6 +52491,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -52552,6 +52573,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -52633,6 +52655,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -52714,6 +52737,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -52795,6 +52819,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -52876,6 +52901,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -52957,6 +52983,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -53752,6 +53779,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -54547,6 +54575,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -55342,6 +55371,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -55423,6 +55453,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -55572,6 +55603,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -55760,6 +55792,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -55948,6 +55981,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -56136,6 +56170,7 @@ export type GetInteractionsResponses = {
             externalAgentId: string | null;
             runId: string | null;
             userId: string | null;
+            serviceAccountId: string | null;
             virtualKeyId: string | null;
             passthroughVirtualKeyId: string | null;
             environmentId: string | null;
@@ -56865,6 +56900,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -56946,6 +56982,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -57175,6 +57212,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -57277,6 +57315,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -57379,6 +57418,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -57481,6 +57521,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -57583,6 +57624,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -57664,6 +57706,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -57745,6 +57788,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -58267,6 +58311,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -58888,6 +58933,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -58969,6 +59015,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -59050,6 +59097,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -59131,6 +59179,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -59212,6 +59261,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -59293,6 +59343,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -59374,6 +59425,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -59455,6 +59507,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -59536,6 +59589,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -59617,6 +59671,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -59698,6 +59753,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -59779,6 +59835,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -59860,6 +59917,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -60655,6 +60713,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -61450,6 +61509,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -62245,6 +62305,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -62326,6 +62387,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -62475,6 +62537,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -62663,6 +62726,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -62851,6 +62915,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -63039,6 +63104,7 @@ export type GetInteractionResponses = {
         externalAgentId: string | null;
         runId: string | null;
         userId: string | null;
+        serviceAccountId: string | null;
         virtualKeyId: string | null;
         passthroughVirtualKeyId: string | null;
         environmentId: string | null;
@@ -76563,6 +76629,7 @@ export type GetLlmOauthClientsResponses = {
         data: Array<{
             id: string;
             clientId: string;
+            serviceAccountId: string | null;
             name: string;
             organizationId: string;
             grantType: 'client_credentials' | 'authorization_code';
@@ -76616,6 +76683,7 @@ export type GetLlmOauthClientsResponse = GetLlmOauthClientsResponses[keyof GetLl
 export type CreateLlmOauthClientData = {
     body: {
         name: string;
+        serviceAccountId?: string | null;
         grantType?: 'client_credentials' | 'authorization_code';
         providerApiKeys?: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -76745,6 +76813,7 @@ export type CreateLlmOauthClientResponses = {
     200: {
         id: string;
         clientId: string;
+        serviceAccountId: string | null;
         name: string;
         organizationId: string;
         grantType: 'client_credentials' | 'authorization_code';
@@ -76878,6 +76947,7 @@ export type DeleteLlmOauthClientResponse = DeleteLlmOauthClientResponses[keyof D
 export type UpdateLlmOauthClientData = {
     body: {
         name: string;
+        serviceAccountId?: string | null;
         grantType?: 'client_credentials' | 'authorization_code';
         providerApiKeys?: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -76987,6 +77057,7 @@ export type UpdateLlmOauthClientResponses = {
     200: {
         id: string;
         clientId: string;
+        serviceAccountId: string | null;
         name: string;
         organizationId: string;
         grantType: 'client_credentials' | 'authorization_code';
@@ -77112,6 +77183,7 @@ export type RotateLlmOauthClientSecretResponses = {
     200: {
         id: string;
         clientId: string;
+        serviceAccountId: string | null;
         name: string;
         organizationId: string;
         grantType: 'client_credentials' | 'authorization_code';
@@ -79107,6 +79179,7 @@ export type GetMcpOauthClientsResponses = {
     200: Array<{
         id: string;
         clientId: string;
+        serviceAccountId: string | null;
         name: string;
         organizationId: string;
         grantType: 'client_credentials' | 'authorization_code';
@@ -79137,6 +79210,10 @@ export type GetMcpOauthClientsResponse = GetMcpOauthClientsResponses[keyof GetMc
 export type CreateMcpOauthClientData = {
     body: {
         name: string;
+        /**
+         * Service account this client_credentials client acts as. Changing it revokes issued access tokens.
+         */
+        serviceAccountId?: string | null;
         grantType?: 'client_credentials' | 'authorization_code';
         allowedGatewayIds?: Array<string>;
         redirectUris?: Array<string>;
@@ -79252,6 +79329,7 @@ export type CreateMcpOauthClientResponses = {
     200: {
         id: string;
         clientId: string;
+        serviceAccountId: string | null;
         name: string;
         organizationId: string;
         grantType: 'client_credentials' | 'authorization_code';
@@ -79371,6 +79449,10 @@ export type DeleteMcpOauthClientResponse = DeleteMcpOauthClientResponses[keyof D
 export type UpdateMcpOauthClientData = {
     body: {
         name: string;
+        /**
+         * Service account this client_credentials client acts as. Changing it revokes issued access tokens.
+         */
+        serviceAccountId?: string | null;
         grantType?: 'client_credentials' | 'authorization_code';
         allowedGatewayIds?: Array<string>;
         redirectUris?: Array<string>;
@@ -79466,6 +79548,7 @@ export type UpdateMcpOauthClientResponses = {
     200: {
         id: string;
         clientId: string;
+        serviceAccountId: string | null;
         name: string;
         organizationId: string;
         grantType: 'client_credentials' | 'authorization_code';
@@ -79577,6 +79660,7 @@ export type RotateMcpOauthClientSecretResponses = {
     200: {
         id: string;
         clientId: string;
+        serviceAccountId: string | null;
         name: string;
         organizationId: string;
         grantType: 'client_credentials' | 'authorization_code';
@@ -101992,7 +102076,7 @@ export type GetProjectRunsResponses = {
         organizationId: string;
         taskId: string;
         agentId: string;
-        actorKind: 'user' | 'team' | 'organization' | 'system';
+        actorKind: 'user' | 'team' | 'organization' | 'oauthClient' | 'serviceAccount' | 'system';
         actorId: string;
         actorUserId: string | null;
         title: string;
@@ -102003,6 +102087,7 @@ export type GetProjectRunsResponses = {
         runtimeScope: string;
         attentionState: 'input_required' | 'auth_required' | null;
         virtualApiKeyId: string | null;
+        gatewayTokenId: string | null;
         startedAt: string;
         endedAt: string | null;
         state: 'TASK_STATE_UNSPECIFIED' | 'TASK_STATE_SUBMITTED' | 'TASK_STATE_WORKING' | 'TASK_STATE_COMPLETED' | 'TASK_STATE_FAILED' | 'TASK_STATE_CANCELED' | 'TASK_STATE_INPUT_REQUIRED' | 'TASK_STATE_REJECTED' | 'TASK_STATE_AUTH_REQUIRED';
@@ -110566,6 +110651,10 @@ export type GetProxyCostStatisticsData = {
     path?: never;
     query?: {
         timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+        /**
+         * Limit spend to this authenticated service-account principal across its OAuth clients and virtual keys.
+         */
+        serviceAccountId?: string;
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         credentialId?: string;
         limit?: number;

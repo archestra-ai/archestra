@@ -83,6 +83,7 @@ export function makeInteraction(
     externalAgentId: null,
     runId: null,
     userId: null,
+    serviceAccountId: null,
     virtualKeyId: null,
     passthroughVirtualKeyId: null,
     environmentId: null,

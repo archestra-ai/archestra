@@ -6,12 +6,21 @@ import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
+import { agentRuntimeManager } from "@/k8s/agent-runtime";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
-import { AgentModel, AuditLogModel } from "@/models";
+import {
+  A2AContextModel,
+  A2ATaskModel,
+  AgentModel,
+  AgentRunModel,
+  AgentWorkspaceModel,
+  AuditLogModel,
+} from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ServiceAccountModel from "@/models/service-account";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import agentRoutes from "./agent";
+import agentRuntimeRoutes from "./agent-runtime/agent-runtime.routes";
 import appRoutes from "./app/app.routes";
 import auditLogRoutes from "./audit-log/audit-log.routes";
 import internalMcpCatalogRoutes from "./internal-mcp-catalog";
@@ -72,6 +81,7 @@ describe("Resource creation with service-account authentication", () => {
     await app.register(authPlugin);
     registerAuditLogHook(app);
     await app.register(agentRoutes);
+    await app.register(agentRuntimeRoutes);
     await app.register(auditLogRoutes);
     await app.register(serviceAccountRoutes);
     await app.register(skillRoutes);
@@ -86,6 +96,7 @@ describe("Resource creation with service-account authentication", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await app.close();
   });
 
@@ -517,5 +528,100 @@ describe("Resource creation with service-account authentication", () => {
       subject: { type: "team", id: team.id },
       actions: ["read", "use"],
     });
+  });
+  test("real API-key authentication preserves account-owned run and workspace access", async ({
+    makeAgent,
+    makeServiceAccount,
+  }) => {
+    vi.spyOn(agentRuntimeManager, "isEnabled", "get").mockReturnValue(true);
+    const agent = await makeAgent({ organizationId });
+    const context = await A2AContextModel.create({
+      actorKind: "serviceAccount",
+      actorId: serviceAccountId,
+    });
+    const task = await A2ATaskModel.create({
+      contextId: context.id,
+      agentId: agent.id,
+      state: "TASK_STATE_COMPLETED",
+    });
+    const run = await AgentRunModel.create({
+      organizationId,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "serviceAccount",
+      actorId: serviceAccountId,
+      actorUserId: null,
+      workloadName: `account-run-${task.id}`,
+      backend: "kubernetes",
+      runtimeScope: "local",
+    });
+    await AgentRunModel.close({ id: run.id, logs: "retained transcript" });
+    const workspace = await AgentWorkspaceModel.create({
+      organizationId,
+      agentId: agent.id,
+      actorKind: "serviceAccount",
+      actorId: serviceAccountId,
+      backend: "kubernetes",
+      runtimeScope: "local",
+      workloadName: run.workloadName,
+      state: "suspended",
+      lastTaskId: task.id,
+      expiresAt: new Date(Date.now() + 3600000),
+    });
+    const outsider = await makeServiceAccount(organizationId, {
+      role: "admin",
+    });
+    const foreign = await ServiceAccountModel.createToken({
+      serviceAccountId: outsider.id,
+      organizationId,
+      name: "other account",
+    });
+    const url = `/api/agent-runs/${task.id}`;
+    for (const [method, path] of [
+      ["GET", url],
+      ["DELETE", `${url}/workspace`],
+    ] as const) {
+      const denied = await app.inject({
+        method,
+        url: path,
+        headers: { authorization: foreign.token },
+      });
+      expect(denied.statusCode, denied.body).toBe(404);
+    }
+    const detail = await app.inject({
+      method: "GET",
+      url,
+      headers: { authorization },
+    });
+    expect(detail.statusCode, detail.body).toBe(200);
+    expect(detail.json().actorKind).toBe("serviceAccount");
+    const renamed = await app.inject({
+      method: "PATCH",
+      url,
+      headers: { authorization },
+      payload: { title: "Updated automation run" },
+    });
+    expect(renamed.statusCode, renamed.body).toBe(200);
+    vi.spyOn(agentRuntimeManager, "deleteWorkspace").mockResolvedValue();
+    vi.spyOn(agentRuntimeManager, "releaseRun").mockResolvedValue();
+    const removed = await app.inject({
+      method: "DELETE",
+      url: `${url}/workspace`,
+      headers: { authorization },
+    });
+    expect(removed.statusCode, removed.body).toBe(200);
+    expect((await AgentWorkspaceModel.findById(workspace.id))?.state).toBe(
+      "deleted",
+    );
+    expect((await AgentRunModel.findByTaskId(task.id))?.logs).toBe(
+      "retained transcript",
+    );
+    await ServiceAccountModel.update(serviceAccountId, organizationId, {
+      disabled: true,
+    });
+    expect(
+      (await app.inject({ method: "GET", url, headers: { authorization } }))
+        .statusCode,
+    ).toBe(401);
   });
 });

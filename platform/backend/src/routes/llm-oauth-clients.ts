@@ -24,6 +24,7 @@ import {
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { credentialBilling } from "@/services/credential-billing";
+import { validateOauthServiceAccountBinding } from "@/services/oauth-service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
@@ -59,6 +60,7 @@ const LlmOauthClientProviderKeyBodySchema = z.object({
 const LlmOauthClientFields = z
   .object({
     name: z.string().min(1).max(256),
+    serviceAccountId: z.string().uuid().nullable().optional(),
     grantType: LlmOauthClientGrantTypeSchema.default("client_credentials"),
     providerApiKeys: z.array(LlmOauthClientProviderKeyBodySchema).optional(),
     redirectUris: z.array(z.string().url()).optional(),
@@ -92,6 +94,12 @@ const validateLlmOauthClientBody = (
   ctx: z.RefinementCtx,
 ) => {
   if (value.grantType === "authorization_code") {
+    if (value.serviceAccountId)
+      ctx.addIssue({
+        code: "custom",
+        path: ["serviceAccountId"],
+        message: "Only client_credentials clients can act as a service account",
+      });
     if (!value.redirectUris || value.redirectUris.length === 0) {
       ctx.addIssue({
         code: "custom",
@@ -238,10 +246,17 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         teamId: body.billingTeamId,
       });
+      const serviceAccountId = await validateOauthServiceAccountBinding({
+        ...body,
+        organizationId,
+        userId: user.id,
+        creating: true,
+      });
       const created = await LlmOauthClientModel.create({
         organizationId,
         name: body.name,
         grantType: body.grantType,
+        serviceAccountId,
         providerApiKeys: body.providerApiKeys,
         redirectUris: body.redirectUris,
         authorId: user.id,
@@ -318,10 +333,17 @@ const llmOauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         cap: body.spendCap,
         current: existing.spendCap,
       });
+      const serviceAccountId = await validateOauthServiceAccountBinding({
+        serviceAccountId: body.serviceAccountId,
+        grantType: existing.grantType,
+        organizationId,
+        userId: user.id,
+      });
       const updated = await LlmOauthClientModel.update({
         id: params.id,
         organizationId,
         name: body.name,
+        serviceAccountId,
         providerApiKeys: body.providerApiKeys,
         redirectUris: body.redirectUris,
         billingTeamId: body.billingTeamId,

@@ -17,6 +17,8 @@ import {
   VirtualApiKeyModel,
 } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import ServiceAccountModel from "@/models/service-account";
+import { validateMCPGatewayToken } from "@/routes/mcp-gateway/utils";
 import { resolveModelRoute } from "@/routes/proxy/model-router-resolver";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
@@ -58,6 +60,82 @@ describe("buildAgentRunLaunchSpec", () => {
   afterEach(() => {
     config.agentRuntime.platformBaseUrl = previousPlatformBaseUrl;
     vi.restoreAllMocks();
+  });
+
+  test("an account run receives its own expiring gateway and attributed virtual key", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+    makeServiceAccount,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "openai",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+    const account = await makeServiceAccount(setup.agent.organizationId);
+    const launchedAt = Date.now();
+    const launch = () =>
+      buildAgentRunLaunchSpec({
+        runtime: { ...runtime(setup.agent, "openai_chat"), ttlHours: 1 },
+        taskId: crypto.randomUUID(),
+        runId: crypto.randomUUID(),
+        agentId: setup.agent.id,
+        actor: {
+          kind: "serviceAccount",
+          id: account.id,
+          organizationId: setup.agent.organizationId,
+        },
+        organizationId: setup.agent.organizationId,
+        runtimeScope: "agent-tests",
+        effectiveNetworkPolicy: { source: "built_in", policy: null },
+        appName: "Archestra",
+        runMode: "one_shot",
+      });
+    const result = await launch();
+    const token = result.spec.secretEnv.ARCHESTRA_MCP_GATEWAY_TOKEN;
+    const verified = await ServiceAccountModel.verifyToken(token);
+    expect(verified).toMatchObject({
+      serviceAccount: { id: account.id },
+      token: { id: result.gatewayTokenId },
+    });
+    expect(verified?.token.expiresAt?.getTime()).toBeGreaterThanOrEqual(
+      launchedAt + 3600000,
+    );
+    expect(verified?.token.expiresAt?.getTime()).toBeLessThan(
+      Date.now() + 3600001,
+    );
+    expect(await validateMCPGatewayToken(setup.agent.id, token)).toMatchObject({
+      serviceAccountId: account.id,
+    });
+    const virtualKey = await VirtualApiKeyModel.findById(
+      result.virtualApiKeyId as string,
+    );
+    expect(virtualKey?.createdByServiceAccountId).toBe(account.id);
+    await ServiceAccountModel.updateToken({
+      serviceAccountId: account.id,
+      organizationId: setup.agent.organizationId,
+      tokenId: result.gatewayTokenId as string,
+      data: { expiresAt: new Date(Date.now() - 1) },
+    });
+    expect(await validateMCPGatewayToken(setup.agent.id, token)).toBeNull();
+    await ServiceAccountModel.deleteToken({
+      serviceAccountId: account.id,
+      organizationId: setup.agent.organizationId,
+      tokenId: result.gatewayTokenId as string,
+    });
+    expect(await validateMCPGatewayToken(setup.agent.id, token)).toBeNull();
+    await ServiceAccountModel.update(account.id, setup.agent.organizationId, {
+      disabled: true,
+    });
+    await expect(launch()).rejects.toMatchObject({ statusCode: 401 });
   });
 
   test("tells the client when Guardrails v2 governs the run", async ({

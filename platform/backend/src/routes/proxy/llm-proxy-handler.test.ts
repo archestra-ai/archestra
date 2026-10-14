@@ -1,4 +1,5 @@
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+
 /**
  * LLM Proxy Handler Tests
  *
@@ -25,6 +26,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import db, { schema } from "@/database";
 import {
   InteractionModel,
@@ -259,6 +261,51 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
       // returns data immediately (TTFT = 0, which is invalid).
     });
 
+    test("service-account virtual keys attribute both streaming and nonstreaming requests to the account", async ({
+      makeServiceAccount,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const account = await makeServiceAccount(testAgent.organizationId);
+      const secret = await makeSecret({ secret: { apiKey: "sk-test" } });
+      const providerKey = await makeLlmProviderApiKey(
+        testAgent.organizationId,
+        secret.id,
+        { provider: "openai" },
+      );
+      const { value, virtualKey } = await VirtualApiKeyModel.create({
+        organizationId: testAgent.organizationId,
+        name: "worker key",
+        authorId: serviceAccountUserId(account.id),
+        providerApiKeys: [
+          { provider: "openai", providerApiKeyId: providerKey.id },
+        ],
+      });
+      expect(virtualKey.createdByServiceAccountId).toBe(account.id);
+      for (const stream of [false, true]) {
+        const response = await app.inject({
+          method: "POST",
+          url: `/v1/openai/${testAgent.id}/chat/completions`,
+          headers: { authorization: `Bearer ${value}` },
+          payload: {
+            model: "gpt-4o",
+            messages: [{ role: "user", content: "Hello" }],
+            stream,
+          },
+        });
+        expect(response.statusCode, response.body).toBe(200);
+      }
+      const interactions = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.virtualKeyId, virtualKey.id));
+      expect(interactions).toHaveLength(2);
+      expect(
+        interactions.every(
+          (row) => row.serviceAccountId === account.id && row.userId === null,
+        ),
+      ).toBe(true);
+    });
     test("non-streaming request increments cost metrics", async () => {
       // Token metrics are NOT reported for these non-streaming stubbed requests
       // because the test clients don't use getObservableFetch(). In production,

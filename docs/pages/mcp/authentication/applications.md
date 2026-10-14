@@ -3,7 +3,7 @@ title: Gateway Access for Apps
 sidebarTitle: Apps and Services
 description: Let your own app or service call an MCP Gateway with an OAuth client
 order: 2
-lastUpdated: 2026-10-08
+lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -14,7 +14,7 @@ Pick how it signs in by who is behind each call:
 
 | How it signs in | Each call acts as | Example |
 | --- | --- | --- |
-| **[As itself](#oauth-client-credentials-applications)** (client credentials) | The app itself | A bot that triages tickets every night |
+| **[As itself](#oauth-client-credentials-applications)** (client credentials) | The app or a selected service account | A bot that triages tickets every night |
 | **[For its users](#oauth-authorization-code-on-behalf-of-users)** (authorization code) | The person signed in to your app | An internal portal where people ask an agent questions |
 
 Create either one under **Settings → OAuth Clients → Create OAuth Client**, or from a gateway's **Connect** tab.
@@ -23,9 +23,17 @@ Create either one under **Settings → OAuth Clients → Create OAuth Client**, 
 
 ## Call as the App
 
+Each application owns its A2A tasks and retained runtime workspaces. Use the same application's credentials to list, read, follow, or cancel its tasks; tokens renewed for that application retain access. A different application cannot access those tasks, even when both can call the same agent.
+
+Select **Service account (optional)** on the create dialog's **Access** step to give an automation one identity across OAuth and REST API keys. Its A2A tasks and runtime workspaces belong to that account: OAuth credentials and API keys for the same account can read, follow, or cancel those tasks. Other accounts cannot access them. Use the account's API key on the platform API to manage its runs and delete its own retained workspaces.
+
+The client's allowed agents and gateways still limit OAuth access, and the service account must also have permission to use each resource. Disabling the account stops its OAuth requests; changing the binding revokes issued OAuth tokens. In the edit dialog, the selector is under **Advanced**.
+
+For LLM Proxy access, create an LLM OAuth client bound to the same account. Spend from that client and runtime virtual keys is attributed to the account. Binding does not supply upstream credentials.
+
 No person signs in, so the app uses the gateway's shared accounts. Give its tools a shared service account in [Choose Its Tools](/docs/mcp/gateway#choose-its-tools).
 
-1. Create an OAuth client. Pick **As itself**, then check the gateways and agents it may reach.
+1. Create an OAuth client. Pick **As itself**, then on **Access** choose the agents and gateways it may reach and optionally select a service account.
 2. Save the client ID and secret in your secret store. The secret shows only once.
 3. Get a token:
 

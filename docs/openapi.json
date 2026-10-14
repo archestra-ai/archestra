@@ -77088,6 +77088,8 @@
                           "user",
                           "team",
                           "organization",
+                          "oauthClient",
+                          "serviceAccount",
                           "system"
                         ]
                       },
@@ -77143,6 +77145,12 @@
                         ]
                       },
                       "virtualApiKeyId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "gatewayTokenId": {
                         "nullable": true,
                         "type": "string",
                         "format": "uuid",
@@ -77245,6 +77253,7 @@
                       "runtimeScope",
                       "attentionState",
                       "virtualApiKeyId",
+                      "gatewayTokenId",
                       "startedAt",
                       "endedAt",
                       "state",
@@ -77949,6 +77958,8 @@
                               "user",
                               "team",
                               "organization",
+                              "oauthClient",
+                              "serviceAccount",
                               "system"
                             ]
                           },
@@ -78004,6 +78015,12 @@
                             ]
                           },
                           "virtualApiKeyId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "gatewayTokenId": {
                             "nullable": true,
                             "type": "string",
                             "format": "uuid",
@@ -78109,6 +78126,7 @@
                           "runtimeScope",
                           "attentionState",
                           "virtualApiKeyId",
+                          "gatewayTokenId",
                           "startedAt",
                           "endedAt",
                           "state",
@@ -78467,6 +78485,8 @@
                         "user",
                         "team",
                         "organization",
+                        "oauthClient",
+                        "serviceAccount",
                         "system"
                       ]
                     },
@@ -78522,6 +78542,12 @@
                       ]
                     },
                     "virtualApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "gatewayTokenId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
@@ -78723,6 +78749,7 @@
                     "runtimeScope",
                     "attentionState",
                     "virtualApiKeyId",
+                    "gatewayTokenId",
                     "startedAt",
                     "endedAt",
                     "state",
@@ -79061,6 +79088,8 @@
                         "user",
                         "team",
                         "organization",
+                        "oauthClient",
+                        "serviceAccount",
                         "system"
                       ]
                     },
@@ -79116,6 +79145,12 @@
                       ]
                     },
                     "virtualApiKeyId": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "gatewayTokenId": {
                       "nullable": true,
                       "type": "string",
                       "format": "uuid",
@@ -79218,6 +79253,7 @@
                     "runtimeScope",
                     "attentionState",
                     "virtualApiKeyId",
+                    "gatewayTokenId",
                     "startedAt",
                     "endedAt",
                     "state",
@@ -176975,6 +177011,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
                               "virtualKeyId": {
                                 "nullable": true,
                                 "type": "string",
@@ -177461,6 +177503,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -177516,6 +177559,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -178607,6 +178656,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -178662,6 +178712,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -179269,6 +179325,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -179324,6 +179381,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -179931,6 +179994,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -179986,6 +180050,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -180593,6 +180663,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -180648,6 +180719,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -181255,6 +181332,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -181310,6 +181388,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -181797,6 +181881,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -181852,6 +181937,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -182339,6 +182430,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -182394,6 +182486,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -184935,6 +185033,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -184990,6 +185089,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -188267,6 +188372,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -188322,6 +188428,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -188809,6 +188921,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -188864,6 +188977,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -189351,6 +189470,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -189406,6 +189526,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -189893,6 +190019,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -189948,6 +190075,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -190435,6 +190568,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -190490,6 +190624,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -190977,6 +191117,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -191032,6 +191173,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -191519,6 +191666,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -191574,6 +191722,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -192061,6 +192215,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -192116,6 +192271,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -192603,6 +192764,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -192658,6 +192820,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -193145,6 +193313,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -193200,6 +193369,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -193687,6 +193862,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -193742,6 +193918,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -194229,6 +194411,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -194284,6 +194467,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -194771,6 +194960,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -194826,6 +195016,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -197715,6 +197911,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -197770,6 +197967,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -200654,6 +200857,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -200709,6 +200913,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -203598,6 +203808,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -203653,6 +203864,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -204140,6 +204357,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -204195,6 +204413,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -204918,6 +205142,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -204973,6 +205198,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -205882,6 +206113,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -205937,6 +206169,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -206846,6 +207084,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -206901,6 +207140,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -207801,6 +208046,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -207856,6 +208102,12 @@
                               "userId": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "serviceAccountId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                               },
                               "virtualKeyId": {
                                 "nullable": true,
@@ -208336,6 +208588,7 @@
                               "externalAgentId",
                               "runId",
                               "userId",
+                              "serviceAccountId",
                               "virtualKeyId",
                               "passthroughVirtualKeyId",
                               "environmentId",
@@ -210870,6 +211123,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
                         "virtualKeyId": {
                           "nullable": true,
                           "type": "string",
@@ -211356,6 +211615,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -211411,6 +211671,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -212502,6 +212768,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -212557,6 +212824,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -213164,6 +213437,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -213219,6 +213493,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -213826,6 +214106,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -213881,6 +214162,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -214488,6 +214775,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -214543,6 +214831,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -215150,6 +215444,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -215205,6 +215500,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -215692,6 +215993,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -215747,6 +216049,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -216234,6 +216542,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -216289,6 +216598,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -218830,6 +219145,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -218885,6 +219201,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -222162,6 +222484,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -222217,6 +222540,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -222704,6 +223033,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -222759,6 +223089,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -223246,6 +223582,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -223301,6 +223638,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -223788,6 +224131,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -223843,6 +224187,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -224330,6 +224680,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -224385,6 +224736,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -224872,6 +225229,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -224927,6 +225285,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -225414,6 +225778,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -225469,6 +225834,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -225956,6 +226327,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -226011,6 +226383,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -226498,6 +226876,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -226553,6 +226932,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -227040,6 +227425,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -227095,6 +227481,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -227582,6 +227974,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -227637,6 +228030,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -228124,6 +228523,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -228179,6 +228579,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -228666,6 +229072,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -228721,6 +229128,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -231610,6 +232023,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -231665,6 +232079,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -234549,6 +234969,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -234604,6 +235025,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -237493,6 +237920,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -237548,6 +237976,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -238035,6 +238469,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -238090,6 +238525,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -238813,6 +239254,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -238868,6 +239310,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -239777,6 +240225,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -239832,6 +240281,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -240741,6 +241196,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -240796,6 +241252,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -241696,6 +242158,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -241751,6 +242214,12 @@
                         "userId": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "serviceAccountId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                         },
                         "virtualKeyId": {
                           "nullable": true,
@@ -242231,6 +242700,7 @@
                         "externalAgentId",
                         "runId",
                         "userId",
+                        "serviceAccountId",
                         "virtualKeyId",
                         "passthroughVirtualKeyId",
                         "environmentId",
@@ -293221,6 +293691,10 @@
                           "clientId": {
                             "type": "string"
                           },
+                          "serviceAccountId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "name": {
                             "type": "string"
                           },
@@ -293430,6 +293904,7 @@
                         "required": [
                           "id",
                           "clientId",
+                          "serviceAccountId",
                           "name",
                           "organizationId",
                           "grantType",
@@ -293755,6 +294230,12 @@
                     "minLength": 1,
                     "maxLength": 256
                   },
+                  "serviceAccountId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
                   "grantType": {
                     "default": "client_credentials",
                     "type": "string",
@@ -294037,6 +294518,10 @@
                     "clientId": {
                       "type": "string"
                     },
+                    "serviceAccountId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "name": {
                       "type": "string"
                     },
@@ -294249,6 +294734,7 @@
                   "required": [
                     "id",
                     "clientId",
+                    "serviceAccountId",
                     "name",
                     "organizationId",
                     "grantType",
@@ -294530,6 +295016,12 @@
                     "minLength": 1,
                     "maxLength": 256
                   },
+                  "serviceAccountId": {
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
                   "grantType": {
                     "default": "client_credentials",
                     "type": "string",
@@ -294688,6 +295180,10 @@
                       "type": "string"
                     },
                     "clientId": {
+                      "type": "string"
+                    },
+                    "serviceAccountId": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "name": {
@@ -294899,6 +295395,7 @@
                   "required": [
                     "id",
                     "clientId",
+                    "serviceAccountId",
                     "name",
                     "organizationId",
                     "grantType",
@@ -295465,6 +295962,10 @@
                     "clientId": {
                       "type": "string"
                     },
+                    "serviceAccountId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "name": {
                       "type": "string"
                     },
@@ -295677,6 +296178,7 @@
                   "required": [
                     "id",
                     "clientId",
+                    "serviceAccountId",
                     "name",
                     "organizationId",
                     "grantType",
@@ -302653,6 +303155,10 @@
                       "clientId": {
                         "type": "string"
                       },
+                      "serviceAccountId": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "name": {
                         "type": "string"
                       },
@@ -302762,6 +303268,7 @@
                     "required": [
                       "id",
                       "clientId",
+                      "serviceAccountId",
                       "name",
                       "organizationId",
                       "grantType",
@@ -303038,6 +303545,13 @@
                     "minLength": 1,
                     "maxLength": 256
                   },
+                  "serviceAccountId": {
+                    "description": "Service account this client_credentials client acts as. Changing it revokes issued access tokens.",
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
                   "grantType": {
                     "default": "client_credentials",
                     "type": "string",
@@ -303247,6 +303761,10 @@
                     "clientId": {
                       "type": "string"
                     },
+                    "serviceAccountId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "name": {
                       "type": "string"
                     },
@@ -303359,6 +303877,7 @@
                   "required": [
                     "id",
                     "clientId",
+                    "serviceAccountId",
                     "name",
                     "organizationId",
                     "grantType",
@@ -303638,6 +304157,13 @@
                     "minLength": 1,
                     "maxLength": 256
                   },
+                  "serviceAccountId": {
+                    "description": "Service account this client_credentials client acts as. Changing it revokes issued access tokens.",
+                    "nullable": true,
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
                   "grantType": {
                     "default": "client_credentials",
                     "type": "string",
@@ -303723,6 +304249,10 @@
                       "type": "string"
                     },
                     "clientId": {
+                      "type": "string"
+                    },
+                    "serviceAccountId": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "name": {
@@ -303834,6 +304364,7 @@
                   "required": [
                     "id",
                     "clientId",
+                    "serviceAccountId",
                     "name",
                     "organizationId",
                     "grantType",
@@ -304398,6 +304929,10 @@
                     "clientId": {
                       "type": "string"
                     },
+                    "serviceAccountId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "name": {
                       "type": "string"
                     },
@@ -304510,6 +305045,7 @@
                   "required": [
                     "id",
                     "clientId",
+                    "serviceAccountId",
                     "name",
                     "organizationId",
                     "grantType",
@@ -387654,6 +388190,8 @@
                           "user",
                           "team",
                           "organization",
+                          "oauthClient",
+                          "serviceAccount",
                           "system"
                         ]
                       },
@@ -387709,6 +388247,12 @@
                         ]
                       },
                       "virtualApiKeyId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "gatewayTokenId": {
                         "nullable": true,
                         "type": "string",
                         "format": "uuid",
@@ -387910,6 +388454,7 @@
                       "runtimeScope",
                       "attentionState",
                       "virtualApiKeyId",
+                      "gatewayTokenId",
                       "startedAt",
                       "endedAt",
                       "state",
@@ -418696,6 +419241,17 @@
             "in": "query",
             "name": "timeframe",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "query",
+            "name": "serviceAccountId",
+            "required": false,
+            "description": "Limit spend to this authenticated service-account principal across its OAuth clients and virtual keys."
           },
           {
             "schema": {

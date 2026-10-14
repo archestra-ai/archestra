@@ -252,7 +252,7 @@ foreach ($arch_line in $arch_lines) {
     $arch_insert = $false
   }
   $arch_next.Add($arch_line)
-  if ($arch_line -eq $arch_header) {
+  if ($arch_line -ceq $arch_header) {
     $arch_found++
     if ($arch_found -eq 1) { $arch_insert = $true }
   }

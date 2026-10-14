@@ -1,3 +1,4 @@
+import vm from "node:vm";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { BrowserStreamService } from "./browser-stream.service";
 import { Ok } from "./browser-stream.state.types";
@@ -300,10 +301,16 @@ describe("BrowserStreamService URL handling", () => {
       },
       screenshot: async () => Buffer.from(""),
       url: () => "https://example.com",
+      waitForTimeout: (ms: number) =>
+        new Promise((resolve) => setTimeout(resolve, ms)),
     };
+    // Like browser_run_code: a bare vm context with no Node globals
+    // (setTimeout and friends), so the code may only lean on `page`
     const run = (code: string) =>
       (
-        new Function(`return ${code}`)() as (p: typeof page) => Promise<unknown>
+        vm.runInNewContext(`(${code})`, {}) as (
+          p: typeof page,
+        ) => Promise<unknown>
       )(page);
     // The calls reach the browser in reverse order
     await Promise.all([...codes].reverse().map(run));

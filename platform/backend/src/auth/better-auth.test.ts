@@ -20,6 +20,7 @@ import { enterpriseTier } from "@/enterprise-tier";
 
 vi.mock("@/logging");
 
+import { syncSystemRoleWithOrgPermissions } from "@/auth/system-role-sync";
 import logger from "@/logging";
 import {
   AccountModel,
@@ -1385,55 +1386,6 @@ describe("handleAfterHook", () => {
     });
   });
 
-  test("an admin's change of a member's email reaches the member roster", async ({
-    makeOrganization,
-    makeAdmin,
-    makeUser,
-    makeMember,
-    makeInternalMcpCatalog,
-    makeTool,
-  }) => {
-    const openappa = { ...config.openappa };
-    const sandbox = config.daggerRuntime.enabled;
-    try {
-      const organizationId = (await makeOrganization()).id;
-      const admin = await makeAdmin();
-      await makeMember(admin.id, organizationId, { role: "admin" });
-      await deployGithubWithRoster({
-        organizationId,
-        userId: admin.id,
-        makeInternalMcpCatalog,
-        makeTool,
-      });
-      const ana = await makeUser({ email: "ana@corp.example" });
-      await makeMember(ana.id, organizationId);
-      await RuntimeCredentialConnectionModel.upsert({
-        organizationId,
-        scope: "personal",
-        userId: ana.id,
-        credentialId: "github-user",
-        value: "token",
-        githubId: GitHubUserIdSchema.parse(1001),
-      });
-      await openappaBatteriesService.recompile(organizationId);
-
-      await UserModel.patch(ana.id, { email: "ana@new.example" });
-      await handleAfterHook(
-        createMockContext({
-          path: "/admin/update-user",
-          method: "POST",
-          body: { userId: ana.id, data: { email: "ana@new.example" } },
-        }),
-      );
-      expect(await storedHostMembers(organizationId)).toEqual({
-        "github:1001": "ana@new.example",
-      });
-    } finally {
-      config.openappa = openappa;
-      config.daggerRuntime.enabled = sandbox;
-    }
-  });
-
   test("a member who leaves and rejoins with the same GitHub account leaves the roster and returns to it", async ({
     makeOrganization,
     makeAdmin,
@@ -1556,7 +1508,7 @@ describe("handleAfterHook", () => {
         });
         return user;
       };
-      return { organizationId, connected };
+      return { organizationId, admin, connected };
     };
 
     const ssoCallback = async (params: {
@@ -1649,6 +1601,81 @@ describe("handleAfterHook", () => {
       });
       expect(await storedHostMembers(organizationId)).toEqual({
         "github:1001": "ana@corp.example",
+      });
+    });
+
+    test("an admin's change of a member's email reaches it", async ({
+      makeOrganization,
+      makeAdmin,
+      makeUser,
+      makeMember,
+      makeSession,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const { organizationId, admin, connected } = await setUp({
+        makeOrganization,
+        makeAdmin,
+        makeUser,
+        makeMember,
+        makeInternalMcpCatalog,
+        makeTool,
+      });
+      const ana = await connected("ana@corp.example", 1001);
+      await makeMember(ana.id, organizationId);
+      // The system role better-auth's admin endpoints check follows org permissions.
+      await syncSystemRoleWithOrgPermissions(admin.id, organizationId);
+      await openappaBatteriesService.recompile(organizationId);
+
+      const updated = await postAsSession({
+        path: "/admin/update-user",
+        session: await makeSession(admin.id, {
+          activeOrganizationId: organizationId,
+        }),
+        body: { userId: ana.id, data: { email: "ana@new.example" } },
+      });
+      expect(updated.status, await updated.clone().text()).toBe(200);
+      expect(await storedHostMembers(organizationId)).toEqual({
+        "github:1001": "ana@new.example",
+      });
+    });
+
+    test("an SSO sign-in that overrides a member's email reaches it, and one that keeps it composes nothing", async ({
+      makeOrganization,
+      makeAdmin,
+      makeUser,
+      makeMember,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const { organizationId, connected } = await setUp({
+        makeOrganization,
+        makeAdmin,
+        makeUser,
+        makeMember,
+        makeInternalMcpCatalog,
+        makeTool,
+      });
+      const ana = await connected("ana@corp.example", 1001);
+      await makeMember(ana.id, organizationId);
+      await openappaBatteriesService.recompile(organizationId);
+      // Bob's membership lands without a recompose; only a recompose would show him.
+      const bob = await connected("bob@corp.example", 1002);
+      await makeMember(bob.id, organizationId);
+      // What overriding user info with the provider's writes on every SSO sign-in.
+      const { internalAdapter } = await auth.$context;
+      const override = (email: string) =>
+        internalAdapter.updateUser(ana.id, { name: "Ana", email });
+
+      await override("ana@corp.example");
+      expect(await storedHostMembers(organizationId)).toEqual({
+        "github:1001": "ana@corp.example",
+      });
+
+      await override("ana@new.example");
+      expect(await storedHostMembers(organizationId)).toEqual({
+        "github:1001": "ana@new.example",
+        "github:1002": "bob@corp.example",
       });
     });
 

@@ -404,6 +404,22 @@ export const auth = betterAuth({
 
   databaseHooks: {
     user: {
+      // The member roster maps GitHub accounts to each member's email. An
+      // update hook sees only the new values, so a change is an email no user
+      // holds yet; emails are unique.
+      update: {
+        before: async (data: { email?: unknown }) => {
+          if (
+            typeof data.email === "string" &&
+            !(await UserModel.findByEmail(data.email))
+          )
+            changingEmails.add(data.email);
+        },
+        after: async (user: { id: string; email: string }) => {
+          if (changingEmails.delete(user.email))
+            await recomposeOrganizationsOf(user.id);
+        },
+      },
       delete: {
         before: async (user: { id: string }) => {
           // The agents.author_id FK uses ON DELETE SET NULL so non-personal agents
@@ -638,6 +654,9 @@ const ssoCallbackStartedAt = new WeakMap<Request, Date>();
 
 /** Organizations of users being deleted, recomposed once the deletion commits. */
 const organizationsOfDeletedUser = new Map<string, string[]>();
+
+/** Emails users are moving to, recomposed once the update commits. */
+const changingEmails = new Set<string>();
 
 /**
  * Same shape for `/organization/leave` — the self-service twin of
@@ -2109,15 +2128,6 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
     }
   }
 
-  // The member roster maps GitHub accounts to the user's email.
-  if (
-    path === "/admin/update-user" &&
-    method === "POST" &&
-    typeof body.userId === "string" &&
-    typeof body.data?.email === "string"
-  )
-    await recomposeOrganizationsOf(body.userId);
-
   // NOTE: User deletion on member removal is handled in routes/auth.ts
   // Better-auth handles member deletion, we just clean up orphaned users
 
@@ -2311,7 +2321,9 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
             `🔗 Auto-accepting pending invitation ${pendingInvitation.id} for user ${user.email}`,
           );
           await InvitationModel.accept(session, user, pendingInvitation.id);
-          await recomposeOrganizationsOf(user.id);
+          await openappaBatteriesService.recompileOrganizations([
+            pendingInvitation.organizationId,
+          ]);
           return;
         }
         logger.debug(

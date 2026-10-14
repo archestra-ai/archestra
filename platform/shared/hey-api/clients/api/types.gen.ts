@@ -34381,6 +34381,9 @@ export type GetBootstrapResponses = {
                 isDefault: boolean;
                 visible: boolean;
             }> | null;
+            connectionClientFutureProviders: {
+                [key: string]: boolean;
+            } | null;
             connectionClientProviderKeys: {
                 [key: string]: Array<{
                     provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -34430,9 +34433,6 @@ export type GetBootstrapResponses = {
             appsHackathonRecorderEnabled: boolean;
             newAppsDisabledByDefault: boolean;
             newAppsLockedByDefault: boolean;
-            connectionClientFutureProviders: {
-                [key: string]: boolean;
-            } | null;
         } | null;
         config: {
             enterpriseFeatures: {
@@ -93170,6 +93170,9 @@ export type GetOrganizationResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -93219,9 +93222,6 @@ export type GetOrganizationResponses = {
         appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
-        connectionClientFutureProviders: {
-            [key: string]: boolean;
-        } | null;
     };
 };
 
@@ -93507,6 +93507,9 @@ export type UpdateAppearanceSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -93556,9 +93559,6 @@ export type UpdateAppearanceSettingsResponses = {
         appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
-        connectionClientFutureProviders: {
-            [key: string]: boolean;
-        } | null;
     };
 };
 
@@ -93722,6 +93722,9 @@ export type UpdateSecuritySettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -93771,9 +93774,6 @@ export type UpdateSecuritySettingsResponses = {
         appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
-        connectionClientFutureProviders: {
-            [key: string]: boolean;
-        } | null;
     };
 };
 
@@ -93934,6 +93934,9 @@ export type UpdateMcpSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -93983,9 +93986,6 @@ export type UpdateMcpSettingsResponses = {
         appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
-        connectionClientFutureProviders: {
-            [key: string]: boolean;
-        } | null;
     };
 };
 
@@ -94146,6 +94146,9 @@ export type UpdateSkillsSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -94195,9 +94198,6 @@ export type UpdateSkillsSettingsResponses = {
         appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
-        connectionClientFutureProviders: {
-            [key: string]: boolean;
-        } | null;
     };
 };
 
@@ -94359,6 +94359,9 @@ export type UpdateAgentSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -94408,9 +94411,6 @@ export type UpdateAgentSettingsResponses = {
         appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
-        connectionClientFutureProviders: {
-            [key: string]: boolean;
-        } | null;
     };
 };
 
@@ -94419,6 +94419,9 @@ export type UpdateAgentSettingsResponse = UpdateAgentSettingsResponses[keyof Upd
 export type UpdateConnectionSettingsData = {
     body: {
         connectionDefaultMcpGatewayId?: string | null;
+        connectionClientFutureProviders?: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys?: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -94440,9 +94443,6 @@ export type UpdateConnectionSettingsData = {
             isDefault?: boolean;
             visible?: boolean;
         }> | null;
-        connectionClientFutureProviders?: {
-            [key: string]: boolean;
-        } | null;
     };
     path?: never;
     query?: never;
@@ -94594,6 +94594,9 @@ export type UpdateConnectionSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -94643,9 +94646,6 @@ export type UpdateConnectionSettingsResponses = {
         appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
-        connectionClientFutureProviders: {
-            [key: string]: boolean;
-        } | null;
     };
 };
 
@@ -94842,6 +94842,9 @@ export type UpdateIntegrationSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -94891,9 +94894,6 @@ export type UpdateIntegrationSettingsResponses = {
         appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
-        connectionClientFutureProviders: {
-            [key: string]: boolean;
-        } | null;
     };
 };
 
@@ -95064,6 +95064,9 @@ export type UpdateDefaultEnvironmentResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -95113,9 +95116,6 @@ export type UpdateDefaultEnvironmentResponses = {
         appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
-        connectionClientFutureProviders: {
-            [key: string]: boolean;
-        } | null;
     };
 };
 
@@ -95281,6 +95281,9 @@ export type UpdateAuthSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -95330,9 +95333,6 @@ export type UpdateAuthSettingsResponses = {
         appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
-        connectionClientFutureProviders: {
-            [key: string]: boolean;
-        } | null;
     };
 };
 
@@ -95500,6 +95500,9 @@ export type UpdateKnowledgeSettingsResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -95549,9 +95552,6 @@ export type UpdateKnowledgeSettingsResponses = {
         appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
-        connectionClientFutureProviders: {
-            [key: string]: boolean;
-        } | null;
     };
 };
 
@@ -95709,6 +95709,9 @@ export type DropEmbeddingConfigResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -95758,9 +95761,6 @@ export type DropEmbeddingConfigResponses = {
         appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
-        connectionClientFutureProviders: {
-            [key: string]: boolean;
-        } | null;
     };
 };
 
@@ -96280,6 +96280,9 @@ export type CompleteOnboardingResponses = {
             isDefault: boolean;
             visible: boolean;
         }> | null;
+        connectionClientFutureProviders: {
+            [key: string]: boolean;
+        } | null;
         connectionClientProviderKeys: {
             [key: string]: Array<{
                 provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
@@ -96329,9 +96332,6 @@ export type CompleteOnboardingResponses = {
         appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
-        connectionClientFutureProviders: {
-            [key: string]: boolean;
-        } | null;
     };
 };
 
@@ -114914,6 +114914,7 @@ export type GetAllVirtualApiKeysResponses = {
             organizationId: string;
             name: string;
             keyType: 'standard' | 'passthrough';
+            includeFutureProviders: boolean;
             secretId: string;
             tokenStart: string;
             scope: 'personal' | 'team' | 'org';
@@ -114955,7 +114956,6 @@ export type GetAllVirtualApiKeysResponses = {
                 limitId: string;
                 currentUsage: number;
             } | null;
-            includeFutureProviders: boolean;
         }>;
         pagination: {
             currentPage: number;
@@ -114975,6 +114975,7 @@ export type CreateVirtualApiKeyData = {
         name: string;
         keyType?: 'standard' | 'passthrough';
         expiresAt?: unknown;
+        includeFutureProviders?: boolean;
         providerApiKeys?: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             providerApiKeyId: string;
@@ -115010,7 +115011,6 @@ export type CreateVirtualApiKeyData = {
             };
             actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
-        includeFutureProviders?: boolean;
     };
     path?: never;
     query?: never;
@@ -115094,6 +115094,7 @@ export type CreateVirtualApiKeyResponses = {
         organizationId: string;
         name: string;
         keyType: 'standard' | 'passthrough';
+        includeFutureProviders: boolean;
         secretId: string;
         tokenStart: string;
         scope: 'personal' | 'team' | 'org';
@@ -115136,7 +115137,6 @@ export type CreateVirtualApiKeyResponses = {
             limitId: string;
             currentUsage: number;
         } | null;
-        includeFutureProviders: boolean;
     };
 };
 
@@ -115316,6 +115316,7 @@ export type GetVirtualApiKeyResponses = {
         organizationId: string;
         name: string;
         keyType: 'standard' | 'passthrough';
+        includeFutureProviders: boolean;
         secretId: string;
         tokenStart: string;
         scope: 'personal' | 'team' | 'org';
@@ -115357,7 +115358,6 @@ export type GetVirtualApiKeyResponses = {
             limitId: string;
             currentUsage: number;
         } | null;
-        includeFutureProviders: boolean;
     };
 };
 
@@ -115368,6 +115368,7 @@ export type UpdateVirtualApiKeyData = {
         name: string;
         keyType?: 'standard' | 'passthrough';
         expiresAt?: unknown;
+        includeFutureProviders?: boolean;
         providerApiKeys?: Array<{
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             providerApiKeyId: string;
@@ -115383,7 +115384,6 @@ export type UpdateVirtualApiKeyData = {
             limitValue: number;
             cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
         } | null;
-        includeFutureProviders?: boolean;
     };
     path: {
         id: string;
@@ -115469,6 +115469,7 @@ export type UpdateVirtualApiKeyResponses = {
         organizationId: string;
         name: string;
         keyType: 'standard' | 'passthrough';
+        includeFutureProviders: boolean;
         secretId: string;
         tokenStart: string;
         scope: 'personal' | 'team' | 'org';
@@ -115510,7 +115511,6 @@ export type UpdateVirtualApiKeyResponses = {
             limitId: string;
             currentUsage: number;
         } | null;
-        includeFutureProviders: boolean;
     };
 };
 

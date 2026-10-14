@@ -5,6 +5,7 @@ import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import { openappaDeclarations } from "@/openappa/declarations";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { beforeEach, describe, expect, test } from "@/test";
@@ -132,11 +133,16 @@ describe("source-aware validation proposals", () => {
       changes: { upsert: [repository], delete: [] },
     });
     const declared = `${candidate}\n[credentials]\nAPPA_PROVIDER_GITHUB_TOKEN = "stored-github"\n`;
+    const resolution = await openappaDeclarations.resolve({
+      organizationId: ctx.organizationId,
+      content: declared,
+    });
     const composed = await openappaDeclarations.composeForCheck({
       root: declared,
-      resolution: await openappaDeclarations.resolve({
+      resolution,
+      deployed: await openappaBatteriesService.deployedBatteries({
         organizationId: ctx.organizationId,
-        content: declared,
+        resolution,
       }),
     });
     expect(composed.content).toBeTruthy();
@@ -145,15 +151,16 @@ describe("source-aware validation proposals", () => {
     );
     expect(preview.tests.policyHash).toBe(hash(candidate));
     expect(preview.tests.validation.valid).toBe(true);
-    // Offline, only the call routed to the battery's helper-backed annotator cannot run.
+    // The bound key holds no organization value, so the battery deploys its
+    // base alone, which consults no helper: every step runs offline.
     expect(preview.tests.files).toMatchObject([
       { path: existing.path, status: "passed" },
       {
         path: repository.path,
-        status: "cannot_run",
+        status: "passed",
         steps: [
           { line: 1, status: "passed" },
-          { line: 3, status: "cannot_run", error: expect.stringMatching(/\S/) },
+          { line: 3, status: "passed" },
         ],
       },
     ]);

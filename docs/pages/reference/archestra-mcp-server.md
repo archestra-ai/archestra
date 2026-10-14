@@ -2606,6 +2606,7 @@ Required RBAC permission: `update` on the MCP registry entry (granted per item)
 | `imagePullSecrets` | `object[]` | No | [Local] Image pull secrets for private registries. |
 | `imagePullSecrets[].source` | `"existing"` | Yes | Image pull secret source. |
 | `imagePullSecrets[].name` | `string` | Yes | Existing Kubernetes secret name. |
+| `imagePullPolicy` | `"Always" \| "IfNotPresent" \| "Never"` | No | [Local] Kubernetes imagePullPolicy for the server container. Unset uses Always for :latest or untagged images and IfNotPresent otherwise. |
 | `deploymentSpecYaml` | `string` | No | [Local] Custom Kubernetes deployment YAML override. |
 | `installationCommand` | `string` | No | [Local] Command to install the MCP server package. |
 | `userConfig` | `object` | No | User-configurable fields shown during installation. |
@@ -2669,6 +2670,7 @@ Required RBAC permission: [`mcpRegistry:create`](/docs/reference/permissions#mcp
 | `imagePullSecrets` | `object[]` | No | [Local] Image pull secrets for private registries. |
 | `imagePullSecrets[].source` | `"existing"` | Yes | Image pull secret source. |
 | `imagePullSecrets[].name` | `string` | Yes | Existing Kubernetes secret name. |
+| `imagePullPolicy` | `"Always" \| "IfNotPresent" \| "Never"` | No | [Local] Kubernetes imagePullPolicy for the server container. Unset uses Always for :latest or untagged images and IfNotPresent otherwise. |
 | `deploymentSpecYaml` | `string` | No | [Local] Custom Kubernetes deployment YAML override. |
 | `installationCommand` | `string` | No | [Local] Command to install the MCP server package. |
 | `userConfig` | `object` | No | User-configurable fields shown during installation. |

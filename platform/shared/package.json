@@ -20,6 +20,7 @@
     "./handlebars-expressions": "./handlebars-expressions.ts",
     "./interactions/client": "./interactions/client.ts",
     "./interactions/session-source": "./interactions/session-source.ts",
+    "./mcp-image-pull-policy": "./mcp-image-pull-policy.ts",
     "./model-constants": "./model-constants.ts",
     "./opencode-family": "./opencode-family.ts",
     "./opencode-provider-routes": "./opencode-provider-routes.ts",

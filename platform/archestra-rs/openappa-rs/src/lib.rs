@@ -654,7 +654,10 @@ pub struct ComposeBatteryInput {
     /// The include entry this battery answers, as the root document spells it.
     pub entry: String,
     pub name: String,
+    /// The base policy text.
     pub policy: String,
+    /// The target policy text deployed before the base; absent deploys the base alone.
+    pub target_policy: Option<String>,
     pub helpers: Option<HelperBindingInput>,
 }
 
@@ -689,6 +692,7 @@ pub async fn compose_openappa_policy(input: ComposePolicyInput) -> napi::Result<
                 entry: battery.entry,
                 name: battery.name,
                 policy: battery.policy,
+                target: battery.target_policy,
                 helpers: battery.helpers.map(|helpers| policy::HelperBinding {
                     url_base: helpers.url_base,
                     token_env: helpers.token_env,
@@ -897,13 +901,43 @@ pub struct BatteryPackage {
     pub annotators: Vec<String>,
     /// The annotators the battery's own `[[policy.tool]]` rules route calls to.
     pub routed_annotators: Vec<String>,
-    pub policy: String,
+    /// The base policy text: all a deployment without a target composes.
+    pub base: String,
     pub helpers: Vec<String>,
     pub credentials: Vec<String>,
     pub externals: Vec<BatteryExternal>,
     pub benefit: Option<String>,
     pub setup: Option<String>,
     pub files: Vec<BatteryFileInput>,
+    /// What a multi-user deployment composes, when the battery declares targets.
+    pub multi_user: Option<BatteryTargetView>,
+}
+
+/// A battery deployed for one target: the target policy, composed before the base,
+/// and what the two declare and read together.
+#[napi(object)]
+pub struct BatteryTargetView {
+    pub policy: String,
+    /// Every variable the target and its base read.
+    pub credentials: Vec<String>,
+    /// The variables the target policy itself reads, without the base's.
+    pub target_credentials: Vec<String>,
+    pub externals: Vec<BatteryExternal>,
+    pub annotators: Vec<String>,
+    pub routed_annotators: Vec<String>,
+    pub setup: Option<String>,
+}
+
+fn battery_externals(externals: &[batteries::HelperExternal]) -> Vec<BatteryExternal> {
+    externals
+        .iter()
+        .map(|external| BatteryExternal {
+            kind: external.kind.clone(),
+            name: external.name.clone(),
+            command: external.command.clone(),
+            token_env: external.token_env.clone(),
+        })
+        .collect()
 }
 
 impl From<&batteries::BatteryInfo> for BatteryPackage {
@@ -914,19 +948,10 @@ impl From<&batteries::BatteryInfo> for BatteryPackage {
             namespaces: info.namespaces.clone(),
             annotators: info.annotators.clone(),
             routed_annotators: info.routed_annotators.clone(),
-            policy: info.policy.clone(),
+            base: info.base.clone(),
             helpers: info.helpers.clone(),
             credentials: info.credentials.clone(),
-            externals: info
-                .externals
-                .iter()
-                .map(|external| BatteryExternal {
-                    kind: external.kind.clone(),
-                    name: external.name.clone(),
-                    command: external.command.clone(),
-                    token_env: external.token_env.clone(),
-                })
-                .collect(),
+            externals: battery_externals(&info.externals),
             benefit: info.benefit.clone(),
             setup: info.setup.clone(),
             files: info
@@ -937,6 +962,15 @@ impl From<&batteries::BatteryInfo> for BatteryPackage {
                     text: file.text.clone(),
                 })
                 .collect(),
+            multi_user: info.multi_user.as_ref().map(|target| BatteryTargetView {
+                policy: target.policy.clone(),
+                credentials: target.credentials.clone(),
+                target_credentials: target.target_credentials.clone(),
+                externals: battery_externals(&target.externals),
+                annotators: target.annotators.clone(),
+                routed_annotators: target.routed_annotators.clone(),
+                setup: target.setup.clone(),
+            }),
         }
     }
 }

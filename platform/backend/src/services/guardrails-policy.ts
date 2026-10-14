@@ -204,6 +204,10 @@ export const guardrailsPolicyService = {
       const composed = await openappaDeclarations.composeForCheck({
         root: content,
         resolution,
+        deployed: await openappaBatteriesService.deployedBatteries({
+          organizationId,
+          resolution,
+        }),
       });
       if ((composed.content ?? null) === null) errors.push(...composed.errors);
       else {

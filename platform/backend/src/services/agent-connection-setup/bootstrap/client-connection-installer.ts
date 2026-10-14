@@ -248,10 +248,10 @@ function finishSetup(ending, platform) {
   const terminal = openTerminal();
   try {
     if (ending.signIn) {
-      console.log('\n' + paint('1', 'Sign in to ' + ending.appName + ' tools'));
+      console.log('\n' + paint('1', 'Authorize ' + ending.label + ' for the "' + ending.signIn.gatewayName + '" MCP gateway'));
       const windowsLine = ending.signIn.command && platform === 'windows' ? windowsCommandLine(ending.signIn.command) : null;
       const runnable = ending.signIn.command && (platform !== 'windows' || windowsLine !== null);
-      if (runnable && terminal !== null && ask(terminal, '  Sign in now? This opens your browser. [Y/n] ')) {
+      if (runnable && terminal !== null && ask(terminal, '  Authorize now? This opens ' + ending.appName + ' in your browser. [Y/n] ')) {
         const child = windowsLine !== null
           ? spawnSync(windowsLine, { stdio: [terminal, 'inherit', 'inherit'], shell: true })
           : spawnSync(ending.signIn.command[0], ending.signIn.command.slice(1), { stdio: [terminal, 'inherit', 'inherit'] });

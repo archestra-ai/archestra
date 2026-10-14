@@ -376,6 +376,45 @@ describe("InitialAgentSelector quick-edit dialog", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows the agent's tools as part of its button, which opens the picker", async () => {
+    mockUseProfile.mockImplementation((id) => {
+      const agent = agents.find((a) => a.id === id);
+      return {
+        data: agent && {
+          ...agent,
+          accessAllTools: false,
+          tools: [{ catalogId: "catalog-1" }, { catalogId: "catalog-1" }],
+        },
+      };
+    });
+    const loaded = { data: [], isSuccess: true } as never;
+    mockUseInternalMcpCatalog.mockReturnValue({
+      data: [catalog],
+      isSuccess: true,
+    } as never);
+    mockUseKnowledgeBases.mockReturnValue(loaded);
+    mockUseConnectors.mockReturnValue(loaded);
+    const user = userEvent.setup();
+    renderSelector();
+
+    const trigger = screen.getByRole("combobox", { name: "Alpha Agent" });
+    await waitFor(() =>
+      expect(trigger).toHaveAccessibleDescription(
+        "Alpha Agent uses 1 tool server",
+      ),
+    );
+    // No second control beside it: the icons are the agent button's.
+    expect(
+      screen.queryByRole("button", { name: /uses 1 tool server/ }),
+    ).not.toBeInTheDocument();
+
+    await user.click(trigger);
+    expect(screen.getByRole("listbox", { name: "Agents" })).toBeVisible();
+    expect(
+      screen.queryByRole("dialog", { name: "Alpha Agent settings" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("starts loading the dialog's data when the edit button is hovered", async () => {
     const user = userEvent.setup();
     renderSelector();

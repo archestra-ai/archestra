@@ -36,6 +36,7 @@ class OpenAppaBatteryInstallModel {
                 ],
                 set: {
                   status: sql`excluded.status`,
+                  target: sql`excluded.target`,
                   packageHash: sql`excluded.package_hash`,
                   lastError: sql`excluded.last_error`,
                   credentialBindings: sql`excluded.credential_bindings`,

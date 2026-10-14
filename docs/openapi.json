@@ -242880,6 +242880,14 @@
                                 }
                               ]
                             }
+                          },
+                          "imagePullPolicy": {
+                            "type": "string",
+                            "enum": [
+                              "Always",
+                              "IfNotPresent",
+                              "Never"
+                            ]
                           }
                         },
                         "additionalProperties": false
@@ -243925,6 +243933,14 @@
                             }
                           ]
                         }
+                      },
+                      "imagePullPolicy": {
+                        "type": "string",
+                        "enum": [
+                          "Always",
+                          "IfNotPresent",
+                          "Never"
+                        ]
                       }
                     }
                   },
@@ -244635,6 +244651,14 @@
                               }
                             ]
                           }
+                        },
+                        "imagePullPolicy": {
+                          "type": "string",
+                          "enum": [
+                            "Always",
+                            "IfNotPresent",
+                            "Never"
+                          ]
                         }
                       },
                       "additionalProperties": false
@@ -246260,6 +246284,14 @@
                               }
                             ]
                           }
+                        },
+                        "imagePullPolicy": {
+                          "type": "string",
+                          "enum": [
+                            "Always",
+                            "IfNotPresent",
+                            "Never"
+                          ]
                         }
                       },
                       "additionalProperties": false
@@ -247209,6 +247241,14 @@
                             }
                           ]
                         }
+                      },
+                      "imagePullPolicy": {
+                        "type": "string",
+                        "enum": [
+                          "Always",
+                          "IfNotPresent",
+                          "Never"
+                        ]
                       }
                     }
                   },
@@ -247801,6 +247841,14 @@
                               }
                             ]
                           }
+                        },
+                        "imagePullPolicy": {
+                          "type": "string",
+                          "enum": [
+                            "Always",
+                            "IfNotPresent",
+                            "Never"
+                          ]
                         }
                       },
                       "additionalProperties": false
@@ -250534,6 +250582,14 @@
                                 }
                               ]
                             }
+                          },
+                          "imagePullPolicy": {
+                            "type": "string",
+                            "enum": [
+                              "Always",
+                              "IfNotPresent",
+                              "Never"
+                            ]
                           }
                         },
                         "additionalProperties": false
@@ -251514,6 +251570,14 @@
                               }
                             ]
                           }
+                        },
+                        "imagePullPolicy": {
+                          "type": "string",
+                          "enum": [
+                            "Always",
+                            "IfNotPresent",
+                            "Never"
+                          ]
                         }
                       },
                       "additionalProperties": false
@@ -332728,6 +332792,23 @@
                                 "active"
                               ]
                             },
+                            "target": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "multi-user"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "nullable": true,
+                                  "enum": [
+                                    null
+                                  ]
+                                }
+                              ]
+                            },
                             "packageHash": {
                               "nullable": true,
                               "type": "string"
@@ -332760,6 +332841,7 @@
                             "catalogId",
                             "enabled",
                             "status",
+                            "target",
                             "packageHash",
                             "lastError",
                             "credentialBindings",
@@ -334202,6 +334284,23 @@
                                   "active"
                                 ]
                               },
+                              "target": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": [
+                                      "multi-user"
+                                    ]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      null
+                                    ]
+                                  }
+                                ]
+                              },
                               "packageHash": {
                                 "nullable": true,
                                 "type": "string"
@@ -334234,6 +334333,7 @@
                               "catalogId",
                               "enabled",
                               "status",
+                              "target",
                               "packageHash",
                               "lastError",
                               "credentialBindings",

@@ -2019,8 +2019,10 @@ describe("OpenAPPA tool execution", () => {
 describe("list_guardrails_battery_fits", () => {
   const toolFullName = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}list_guardrails_battery_fits`;
   const originalOpenappaConfig = { ...config.openappa };
+  const sandbox = config.daggerRuntime.enabled;
   afterEach(() => {
     config.openappa = originalOpenappaConfig;
+    config.daggerRuntime.enabled = sandbox;
   });
 
   const setUp = async (fixtures: {
@@ -2095,6 +2097,8 @@ describe("list_guardrails_battery_fits", () => {
       makeAgentTool,
     });
 
+    // With the sandbox, linear deploys its multi-user target, whose rule shadows the base's.
+    config.daggerRuntime.enabled = true;
     // Docs and Acme already have their batteries declared, so only Linear fits.
     expect(await fits({ mcpServerId: null }, context)).toEqual([
       expect.objectContaining({

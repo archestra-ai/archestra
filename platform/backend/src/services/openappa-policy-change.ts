@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { userHasPermission } from "@/auth";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
+import { declaredCredentials } from "@/openappa/battery-target";
 import {
   addedGrants,
   openappaDeclarations,
@@ -746,7 +747,9 @@ function batteryLines(
   credentials: Record<string, string>,
 ): Map<string, string> {
   const read = new Set(
-    entries.flatMap((entry) => entry.battery?.credentials ?? []),
+    entries.flatMap((entry) =>
+      entry.battery ? declaredCredentials(entry.battery) : [],
+    ),
   );
   return new Map(
     Object.entries(credentials).filter(([variable]) => read.has(variable)),

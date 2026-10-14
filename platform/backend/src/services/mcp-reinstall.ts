@@ -303,6 +303,7 @@ export function onlyForwardCompatibleEnvDiff(
             nodePort: cat.localConfig.nodePort ?? null,
             serviceAccount: cat.localConfig.serviceAccount ?? "",
             imagePullSecrets: cat.localConfig.imagePullSecrets ?? [],
+            imagePullPolicy: cat.localConfig.imagePullPolicy ?? null,
           }
         : null,
     });
@@ -856,6 +857,7 @@ type ComparableLocalConfig = Pick<
   | "httpPort"
   | "httpPath"
   | "serviceAccount"
+  | "imagePullPolicy"
 >;
 
 /**
@@ -959,6 +961,7 @@ function getLocalExecutionConfig(
     httpPort: catalog.localConfig?.httpPort,
     httpPath: catalog.localConfig?.httpPath ?? "",
     serviceAccount: catalog.localConfig?.serviceAccount ?? "",
+    imagePullPolicy: catalog.localConfig?.imagePullPolicy,
   };
 }
 

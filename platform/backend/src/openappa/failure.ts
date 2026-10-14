@@ -50,6 +50,9 @@ export class OpenappaCredentialError extends Error {
 const FAILURE_PREFIX = "OpenAPPA could not safely complete this operation";
 const RETRY_AFTER = 5;
 const MAX_DETAIL = 240;
+const MAX_NAME = 80;
+/** The title the frontend gives the page an administrator edits the policy on. */
+const POLICY_PAGE = "Guardrails";
 
 /**
  * Opening refusals the runtime reports for the policy text itself (the
@@ -78,13 +81,13 @@ function classify(error: unknown): {
   if (error instanceof OpenappaCredentialError)
     return {
       statusCode: 500,
-      detail: `${error.message}. An administrator can rebind it on the OpenAPPA page.`,
+      detail: `${error.message}. An administrator can rebind it on the ${POLICY_PAGE} page.`,
     };
   const message = error instanceof Error ? error.message : "";
   if (POLICY_REFUSALS.some((pattern) => pattern.test(message)))
     return {
       statusCode: 500,
-      detail: `the organization's guardrails policy was refused (${summarize(message)}). An administrator can fix it on the OpenAPPA page.`,
+      detail: `the organization's guardrails policy was refused (${summarize(message)}). An administrator can fix it on the ${POLICY_PAGE} page.`,
     };
   if (message.startsWith("OpenAPPA had no free PostgreSQL connection"))
     return {
@@ -115,8 +118,23 @@ function classify(error: unknown): {
       detail:
         "this subagent did not start through a checked spawn. This can happen when it started while Guardrails enforcement was off. OpenAPPA refuses its requests. To continue its work, start a new subagent.",
     };
+  // The session opened under a policy whose annotator the served policy no
+  // longer declares. Every retry asks for the same name and fails the same way;
+  // an unreachable or slow annotator that is still declared can recover.
+  const retired = RETIRED_ANNOTATOR.exec(message);
+  if (retired) {
+    const name = summarize(retired[1], MAX_NAME);
+    return {
+      statusCode: 409,
+      detail: `this conversation started under a policy that no longer declares annotator "${name}". Start a new conversation, or an administrator can declare "${name}" again on the ${POLICY_PAGE} page.`,
+    };
+  }
   return { statusCode: 503, detail: "the policy runtime is unavailable." };
 }
+
+/** The runtime's refusal of a consult no annotator of the served policy answers. */
+const RETIRED_ANNOTATOR =
+  /^OpenAPPA processing interrupted: annotator=(\S+) error=unregistered\b/;
 
 /** The runtime's report of a dispatch that no longer owns its operation. */
 const LEASE_LOST =
@@ -131,10 +149,10 @@ const UNFORKED_CHILD = "no prepared fork to open this child";
 const UNSTARTED_PARENT = "parent session has not started";
 
 /** One line, bounded, with any URL credentials removed. */
-function summarize(message: string): string {
+function summarize(message: string, max = MAX_DETAIL): string {
   const line = message
     .replace(/\s+/g, " ")
     .replace(/\/\/[^/\s@]+@/g, "//")
     .trim();
-  return line.length > MAX_DETAIL ? `${line.slice(0, MAX_DETAIL - 1)}…` : line;
+  return line.length > max ? `${line.slice(0, max - 1)}…` : line;
 }

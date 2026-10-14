@@ -88,6 +88,17 @@ pub(crate) fn validate(content: &str) -> Result<(), String> {
     compose(content, &[]).map(|_| ())
 }
 
+/// Check a host-composed document, including the helper bindings the host added.
+/// Unlike authored root validation, this admits the host's own token variables.
+/// Keys stay deferred: validation reads no secret and opens no store or connection.
+pub(crate) fn validate_hosted(content: &str) -> Result<(), String> {
+    let config =
+        Config::hosted_included_deferred(content, defaults(), |_| Err(IncludeResolution::Unknown))
+            .map_err(|error| error.to_string())?;
+    Runtime::check_hosted(config, None, crate::adapter::adapter())
+        .map_err(|error| error.to_string())
+}
+
 /// Where a battery's `command` helpers are served from once the host runs them:
 /// every binding becomes `url = "<url_base>/<external name>"` authenticated by
 /// `token_env`, the runtime's own variable, never the provider's.
@@ -920,6 +931,62 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
                 )
                 .is_err()
             );
+        }
+    }
+
+    #[test]
+    fn validates_host_composed_helpers_but_refuses_them_as_authored_roots() {
+        let entry = "batteries/old/appa.toml";
+        let root = format!("include = [\"{entry}\"]\n[policy]\nversion = 2\n");
+        let battery = ResolvedBattery {
+            entry: entry.into(),
+            name: "old".into(),
+            policy: r#"[policy]
+version = 2
+[[policy.annotator]]
+name = "old.judge"
+ranks = ["suspicious", "trusted"]
+[[policy.tool]]
+name = "mcp/old/read"
+annotator = "old.judge"
+[externals.annotators."old.judge"]
+command = ["python3", "judge.py"]
+"#
+            .into(),
+            helpers: Some(HelperBinding {
+                url_base: "http://127.0.0.1:9/api/openappa/helpers/install-1".into(),
+                token_env: super::BRIDGE_TOKEN_ENV.into(),
+            }),
+        };
+        let composed = compose(&root, &[battery]).unwrap().content;
+        let document: toml::Table = toml::from_str(&composed).unwrap();
+        assert_eq!(
+            document["externals"]["annotators"]["old.judge"]["token_env"].as_str(),
+            Some(super::BRIDGE_TOKEN_ENV)
+        );
+        validate_hosted(&composed).expect("host-owned helper bindings validate");
+        let error = validate(&composed).unwrap_err();
+        assert!(error.contains(HOST_VARIABLE_PREFIX), "{error}");
+        assert!(compose(&composed, &[]).is_err());
+
+        // No value is needed, even for a variable the host has never published.
+        validate_hosted(&composed.replace(
+            super::BRIDGE_TOKEN_ENV,
+            "APPA_ARCHESTRA_UNSET_HOSTED_POLICY_TEST_TOKEN",
+        ))
+        .expect("hosted validation defers token lookup");
+    }
+
+    #[test]
+    fn hosted_validation_still_checks_runtime_semantics_and_container_access() {
+        for invalid in [
+            "[policy]\nversion = 999\n",
+            "include = ['batteries/unknown/appa.toml']\n[policy]\nversion = 2\n",
+            "[policy]\nversion = 2\n[[policy.annotator]]\nname = 'old.judge'\nbuiltin = 'no-such-builtin'\n",
+            "[policy]\nversion = 2\n[externals.annotators.old]\ncommand = ['sh']\n",
+            "[policy]\nversion = 2\n[externals]\ntiemout_ms = 10\n",
+        ] {
+            assert!(validate_hosted(invalid).is_err(), "{invalid}");
         }
     }
 

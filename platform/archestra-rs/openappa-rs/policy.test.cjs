@@ -17,6 +17,53 @@ test('validates policy semantics and refuses container access', async () => {
   }
 });
 
+test('validates host-composed helper bindings without admitting them in authored roots', async () => {
+  const entry = 'batteries/old/appa.toml';
+  const composed = await native.composeOpenappaPolicy({
+    root: `include = ["${entry}"]\n[policy]\nversion = 2\n`,
+    batteries: [{
+      entry,
+      name: 'old',
+      policy: `[policy]
+version = 2
+[[policy.annotator]]
+name = "old.judge"
+ranks = ["suspicious", "trusted"]
+[[policy.tool]]
+name = "mcp/old/read"
+annotator = "old.judge"
+[externals.annotators."old.judge"]
+command = ["python3", "judge.py"]
+`,
+      helpers: {
+        urlBase: 'http://127.0.0.1:9/api/openappa/helpers/install-1',
+        tokenEnv: 'APPA_ARCHESTRA_BRIDGE_TOKEN',
+      },
+    }],
+  });
+  assert.deepEqual(composed.errors, []);
+  assert.ok(composed.content.includes('APPA_ARCHESTRA_BRIDGE_TOKEN'));
+  assert.deepEqual(await native.validateHostedOpenappaPolicy(composed.content), []);
+  assert.match((await native.validateOpenappaPolicy(composed.content)).join('\n'), /APPA_ARCHESTRA_/);
+  const authored = await native.composeOpenappaPolicy({ root: composed.content, batteries: [] });
+  assert.equal(authored.content, undefined);
+  assert.match(authored.errors.join('\n'), /APPA_ARCHESTRA_/);
+  assert.deepEqual(await native.validateHostedOpenappaPolicy(
+    composed.content.replaceAll('APPA_ARCHESTRA_BRIDGE_TOKEN', 'APPA_ARCHESTRA_UNSET_HOSTED_POLICY_TEST_TOKEN'),
+  ), []);
+});
+
+test('hosted validation still rejects invalid semantics and command bindings', async () => {
+  for (const invalid of [
+    '[policy]\nversion = 999',
+    'include = ["batteries/unknown/appa.toml"]\n' + allow,
+    '[policy]\nversion = 2\n[[policy.annotator]]\nname = "old.judge"\nbuiltin = "no-such-builtin"\n',
+    allow + '[externals.annotators.x]\ncommand = ["sh"]',
+  ]) {
+    assert.ok((await native.validateHostedOpenappaPolicy(invalid)).length > 0);
+  }
+});
+
 test('derives external client local tools into governed Archestra host identities', { skip: !databaseUrl }, async () => {
   const policy = `[policy]
 version = 2

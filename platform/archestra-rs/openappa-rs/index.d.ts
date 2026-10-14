@@ -292,6 +292,14 @@ export interface TokenEnvReader {
 }
 
 /**
+ * Validates a document already composed by the host, including host-owned helper
+ * token bindings. Never use this for authored root or battery text: those must
+ * pass their existing input checks before the host adds its bindings.
+ * Validation defers secret lookup and opens no store or network connection.
+ */
+export declare function validateHostedOpenappaPolicy(content: string): Promise<Array<string>>
+
+/**
  * Validates a root document that declares no battery: [`compose_openappa_policy`]
  * with nothing to resolve. A root whose `include` list names a battery does not
  * validate this way — the entry resolves to nothing — so a caller holding

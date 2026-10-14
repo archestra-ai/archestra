@@ -625,6 +625,21 @@ pub async fn validate_openappa_policy(content: String) -> napi::Result<Vec<Strin
     .map_err(error)?
 }
 
+/// Validates a document already composed by the host, including host-owned helper
+/// token bindings. Never use this for authored root or battery text: those must
+/// pass their existing input checks before the host adds its bindings.
+/// Validation defers secret lookup and opens no store or network connection.
+#[napi(js_name = "validateHostedOpenappaPolicy")]
+pub async fn validate_hosted_openappa_policy(content: String) -> napi::Result<Vec<String>> {
+    tokio::task::spawn_blocking(move || {
+        std::panic::catch_unwind(|| policy::validate_hosted(&content))
+            .map(|result| result.err().into_iter().collect())
+            .map_err(|_| error("OpenAPPA hosted policy validation failed"))
+    })
+    .await
+    .map_err(error)?
+}
+
 #[napi(object)]
 pub struct HelperBindingInput {
     /// The endpoint every `command` external of the battery is served under; the

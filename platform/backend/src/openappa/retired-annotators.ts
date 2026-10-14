@@ -59,12 +59,28 @@ export function readOpeningPolicy(
 }
 
 /**
+ * A name the composition still declares that an earlier opening policy bound
+ * differently. The runtime answers consults by name from the served policy,
+ * so sessions opened under that earlier policy are answered by `current`.
+ */
+export type Rebinding = {
+  name: string;
+  /** What answers it now, as `KeptAnnotator.binding` spells it. */
+  current: string;
+  /** What answered it under earlier policies, distinct, in hash order. */
+  earlier: string[];
+};
+
+/**
  * An annotator the opening policy routes calls to that the served policy does
  * not still answer the same way. Unused retained declarations do not count.
+ * `helperBase` is this host's battery helper URL prefix: a helper served under
+ * a new install id, port or token variable still answers the same way.
  */
 export function unservedAnnotator(params: {
   opening: string;
   served: string;
+  helperBase: string;
 }): string | null {
   const opening = readOpeningPolicy("", params.opening);
   const served = readOpeningPolicy("", params.served);
@@ -82,10 +98,11 @@ export function unservedAnnotator(params: {
     const present = current.get(name);
     if (
       !present ||
-      !sameBinding(
-        required,
-        keptFrom({ opening: served, declaration: present, name }),
-      )
+      !sameBinding({
+        a: required,
+        b: keptFrom({ opening: served, declaration: present, name }),
+        helperBase: params.helperBase,
+      })
     )
       return name;
   }
@@ -98,6 +115,12 @@ export function unservedAnnotator(params: {
  * policies binding a name differently cannot be safely served by one binding.
  * A name is dropped, with the reason, when a credential it needs
  * is not readable now or its helper URL names an install that is gone.
+ *
+ * A name `composed` still declares is never kept, since one name has one
+ * binding: it is reported in `rebound` when an opening policy bound it
+ * differently. This host's own helper URLs compare by external name, so a
+ * battery helper served under a new install id, port or token variable is
+ * the same binding and not a rebinding.
  */
 export function retiredAnnotators(params: {
   openings: readonly OpeningPolicy[];
@@ -112,16 +135,16 @@ export function retiredAnnotators(params: {
   kept: KeptAnnotator[];
   dropped: { name: string; reason: string }[];
   conflicts: string[];
-  refusal: string[];
+  rebound: Rebinding[];
 } {
   const composed = readOpeningPolicy("", params.composed);
-  if (!composed) return { kept: [], dropped: [], conflicts: [], refusal: [] };
+  if (!composed) return { kept: [], dropped: [], conflicts: [], rebound: [] };
   const declared = new Map(
     composed.annotators.map((table) => [table.name, table]),
   );
   const winners = new Map<string, KeptAnnotator>();
   const conflicts = new Set<string>();
-  const refusal = new Set<string>();
+  const rebound = new Map<string, Rebinding>();
   const ordered = [...params.openings].sort((a, b) =>
     a.hash < b.hash ? -1 : a.hash > b.hash ? 1 : 0,
   );
@@ -132,19 +155,31 @@ export function retiredAnnotators(params: {
       const candidate = keptFrom({ opening, declaration, name });
       const current = declared.get(name);
       if (current) {
+        const now = keptFrom({ opening: composed, declaration: current, name });
         if (
-          !sameBinding(
-            candidate,
-            keptFrom({ opening: composed, declaration: current, name }),
-          )
-        )
-          refusal.add(
-            `annotator "${name}" is used by earlier sessions with a different binding. Use a new annotator name to keep their original binding.`,
-          );
+          !sameBinding({ a: candidate, b: now, helperBase: params.helperBase })
+        ) {
+          const entry = rebound.get(name) ?? {
+            name,
+            current: now.binding,
+            earlier: [],
+          };
+          if (!entry.earlier.includes(candidate.binding))
+            entry.earlier.push(candidate.binding);
+          rebound.set(name, entry);
+        }
         continue;
       }
       const earlier = winners.get(name);
-      if (earlier && !sameBinding(earlier, candidate)) conflicts.add(name);
+      if (
+        earlier &&
+        !sameBinding({
+          a: earlier,
+          b: candidate,
+          helperBase: params.helperBase,
+        })
+      )
+        conflicts.add(name);
       winners.set(name, candidate);
     }
   const kept: KeptAnnotator[] = [];
@@ -166,7 +201,12 @@ export function retiredAnnotators(params: {
         ) ?? composed;
     }
   }
-  return { kept, dropped, conflicts: [...conflicts], refusal: [...refusal] };
+  return {
+    kept,
+    dropped,
+    conflicts: [...conflicts],
+    rebound: [...rebound.values()],
+  };
 }
 
 /**
@@ -268,16 +308,44 @@ function unkeepable(params: {
   return null;
 }
 
-function sameBinding(a: KeptAnnotator, b: KeptAnnotator): boolean {
+/**
+ * Whether two annotators are answered the same way. Tables of this host's own
+ * helpers compare by the external they name: the install id, port and token
+ * variable in them are the host's to change and never redirect a session.
+ */
+function sameBinding(params: {
+  a: KeptAnnotator;
+  b: KeptAnnotator;
+  helperBase: string;
+}): boolean {
+  const { a, b, helperBase } = params;
+  const identity = (annotator: KeptAnnotator) =>
+    annotator.externals.map(({ path, table }) => {
+      const helper = hostHelper(table.url, helperBase);
+      return { path, table: helper ? { hostHelper: helper.external } : table };
+    });
   return (
     a.declaration.builtin === b.declaration.builtin &&
-    isDeepStrictEqual(a.externals, b.externals) &&
+    isDeepStrictEqual(identity(a), identity(b)) &&
     isDeepStrictEqual(a.credentials, b.credentials)
   );
 }
 
 /** The install id in a host helper URL, or null when the URL is not one. */
 function helperInstall(value: unknown, helperBase: string): string | null {
+  return hostHelper(value, helperBase)?.install ?? null;
+}
+
+/**
+ * The install id and external name a URL of this host's battery helpers
+ * names, or null when the URL is not one. The host serves its helpers on the
+ * loopback address `helperBase` names; the port is the deployment's and may
+ * differ between the snapshot and now.
+ */
+function hostHelper(
+  value: unknown,
+  helperBase: string,
+): { install: string; external: string } | null {
   if (typeof value !== "string") return null;
   let target: URL;
   let base: URL;
@@ -287,12 +355,16 @@ function helperInstall(value: unknown, helperBase: string): string | null {
   } catch {
     return null;
   }
-  if (target.origin !== base.origin) return null;
+  if (target.protocol !== base.protocol || target.hostname !== base.hostname)
+    return null;
   const prefix = base.pathname.split("/").filter(Boolean);
   const path = target.pathname.split("/").filter(Boolean);
-  if (path.length <= prefix.length) return null;
+  if (path.length < prefix.length + 2) return null;
   if (prefix.some((segment, index) => segment !== path[index])) return null;
-  return path[prefix.length] ?? null;
+  return {
+    install: path[prefix.length],
+    external: path.slice(prefix.length + 1).join("/"),
+  };
 }
 
 /** Every variable a table names through a `*_env` key, at any depth. */

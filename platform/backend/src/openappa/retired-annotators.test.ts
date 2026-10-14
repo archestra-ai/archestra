@@ -158,13 +158,11 @@ describe("annotators earlier opening policies declare", () => {
     });
     expect(preview.valid).toBe(false);
     expect(preview.errors).toEqual([
-      expect.stringContaining(
-        'annotator "a.tool-call" is used by earlier sessions with a different binding.',
-      ),
+      `in this deployment: annotator "a.tool-call" is bound to ${JUDGE_B} in this revision, but sessions opened under earlier policies were answered by ${JUDGE_A}. Declare the new binding under a new annotator name so those sessions keep theirs.`,
     ]);
     await expect(
       declare({ organizationId, userId, content: replacement }),
-    ).rejects.toThrow("different binding");
+    ).rejects.toThrow("Declare the new binding under a new annotator name");
     expect(
       (await openappaBatteriesService.getEffectivePolicy(organizationId))
         .content,
@@ -207,6 +205,144 @@ describe("annotators earlier opening policies declare", () => {
       { ...MANDATE, name: "archestra.tool-call", builtin: "archestra" },
       { ...MANDATE, name: "jev.tool-call", builtin: "archestra" },
     ]);
+  });
+
+  test("a rebinding the current revision already carries is served, logged and warned about, never refused", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const { organizationId, userId } = await admin({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    });
+    await declare({ organizationId, userId, content: urlJudged("a", JUDGE_A) });
+    await openedUnder(organizationId);
+    vi.mocked(logger.warn).mockClear();
+
+    // The root was rebound without this check, as earlier builds allowed.
+    await declare({
+      organizationId,
+      userId,
+      content: urlJudged("a", JUDGE_B),
+      checked: false,
+    });
+
+    const effective =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+    expect(effective.lastError).toBeNull();
+    expect(effective.content).toContain(JUDGE_B);
+    expect(effective.content).not.toContain(JUDGE_A);
+    expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
+      {
+        organizationId,
+        annotator: "a.tool-call",
+        current: JUDGE_B,
+        earlier: [JUDGE_A],
+      },
+      "OpenAPPA answers an annotator with a binding that differs from earlier opening policies; sessions opened under them are answered by the current binding",
+    );
+
+    // A later revision that keeps that binding is warned about, not refused,
+    // and takes effect: the stored snapshot does not pin the served policy.
+    const next = `${urlJudged("a", JUDGE_B)}\n[externals]\ntimeout_ms = 4000\n`;
+    const preview = await guardrailsPolicyService.validate(next, {
+      organizationId,
+    });
+    expect(preview.valid).toBe(true);
+    expect(preview.warnings).toEqual([
+      `in this deployment: annotator "a.tool-call" is bound to ${JUDGE_B} now, but sessions opened under earlier policies were answered by ${JUDGE_A}; those sessions are answered by the current binding.`,
+    ]);
+    await declare({ organizationId, userId, content: next });
+    const served =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+    expect(served.lastError).toBeNull();
+    expect(served.rootRevision).toBe(effective.rootRevision + 1);
+    expect(served.content).toContain("timeout_ms = 4000");
+  });
+
+  test("a battery helper answered under a previous install id is the same binding, so the policy is neither refused nor pinned", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const { organizationId, userId } = await admin({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    });
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    const uploaded = await openappaBatteriesService.uploadPackage({
+      userId,
+      organizationId,
+      name: "helper",
+      files: [
+        {
+          path: "appa-package.toml",
+          text: 'schema = 1\nname = "helper"\ndescription = "A judge run by the host"\n[battery]\npolicy = "appa.toml"\nhosts = []\nnamespaces = ["helper"]\nhelpers = ["judge.py"]\n',
+        },
+        {
+          path: "appa.toml",
+          text: '[policy]\nversion = 2\n[[policy.annotator]]\nname = "helper.judge"\nranks = ["suspicious", "trusted"]\naudiences = ["self"]\nmarks = []\n[externals.annotators."helper.judge"]\ncommand = ["python3", "judge.py"]\n[[policy.tool]]\nname = "mcp/helper/list_agents"\nannotator = "helper.judge"\n',
+        },
+        { path: "judge.py", text: "print('{}')\n" },
+      ],
+    });
+    await openappaBatteriesService.createInstall({
+      userId,
+      organizationId,
+      install: {
+        batteryName: "helper",
+        catalogId: ARCHESTRA_MCP_CATALOG_ID,
+        packageHash: uploaded.contentHash,
+      },
+    });
+    const install = (
+      await OpenAppaBatteryInstallModel.list(organizationId)
+    ).find((row) => row.batteryName === "helper");
+    expect(install).toBeDefined();
+    if (!install) throw new Error("no install");
+    const before =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+    const url = `${helperUrlBase(install.id)}/helper.judge`;
+    expect(before.content).toContain(`url = "${url}"`);
+
+    // A session opened while the same helper was served under an earlier
+    // install row, as a reinstall or a re-created catalog leaves behind.
+    const retired = "11111111-2222-4333-8444-555555555555";
+    await OpenAppaPolicyFileModel.store(
+      before.content.replaceAll(install.id, retired),
+    );
+    vi.mocked(logger.warn).mockClear();
+
+    const root = await guardrailsPolicyService.get(organizationId);
+    const document = parseToml(root.content);
+    const policy = document.policy as { annotator: unknown[]; tool: unknown[] };
+    policy.annotator = [
+      ...policy.annotator,
+      { ...MANDATE, name: "b.tool-call" },
+    ];
+    policy.tool = [{ name: "*", annotator: "b.tool-call" }];
+    const { stringify } = await import("smol-toml");
+    const current = `${stringify(document)}\n[externals.annotators."b.tool-call"]\nurl = "${JUDGE_B}"\n`;
+    const preview = await guardrailsPolicyService.validate(current, {
+      organizationId,
+    });
+    expect(preview).toEqual({ valid: true, errors: [], warnings: [] });
+    await declare({ organizationId, userId, content: current });
+
+    const served =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+    expect(served.lastError).toBeNull();
+    expect(served.rootRevision).toBe(before.rootRevision + 1);
+    expect(served.content).toContain(JUDGE_B);
+    expect(served.content).toContain(`url = "${url}"`);
+    expect(served.content).not.toContain(retired);
+    expect(vi.mocked(logger.warn)).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.stringContaining("differs from earlier opening policies"),
+    );
   });
 
   test("a host-bound helper keeps its bridge token without adding old tool rules", async ({

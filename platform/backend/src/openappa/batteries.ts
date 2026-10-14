@@ -74,6 +74,7 @@ import { asRecord, parsePolicyToml } from "./policy-text";
 import {
   type KeptAnnotator,
   type OpeningPolicy,
+  type Rebinding,
   readOpeningPolicy,
   retiredAnnotators,
   withKeptAnnotators,
@@ -357,7 +358,12 @@ class OpenAppaBatteriesService {
     organizationId: string;
     content: string;
     previous?: string;
-  }): Promise<{ refusal: string[]; heldBack: string[]; retiring: string[] }> {
+  }): Promise<{
+    refusal: string[];
+    heldBack: string[];
+    retiring: string[];
+    rebound: Rebinding[];
+  }> {
     const { organizationId, content } = params;
     const [root, installs, effective] = await Promise.all([
       guardrailsPolicyService.get(organizationId),
@@ -379,7 +385,7 @@ class OpenAppaBatteriesService {
     const draft = composed.content ?? null;
     const retiring =
       draft === null
-        ? { warnings: [], refusal: [] }
+        ? { warnings: [], rebound: [] }
         : await this.retiringWarnings({
             organizationId,
             current: params.previous ?? root.content,
@@ -388,9 +394,10 @@ class OpenAppaBatteriesService {
             installs,
           });
     return {
-      refusal: draft === null ? composed.errors : retiring.refusal,
+      refusal: draft === null ? composed.errors : [],
       heldBack: held.map(heldBackNote),
       retiring: retiring.warnings,
+      rebound: retiring.rebound,
     };
   }
 
@@ -1167,6 +1174,9 @@ class OpenAppaBatteriesService {
    * as that policy bound them (see `retired-annotators.ts`). The resulting
    * host-composed document is validated by the runtime. A kept
    * annotator the runtime refuses is left out rather than refusing the policy.
+   * A name this composition still declares is answered by its current binding;
+   * an earlier policy that bound it differently is logged, never refused, so
+   * stored snapshots cannot pin the served policy to an old composition.
    */
   private async compose(params: {
     organizationId: string;
@@ -1214,11 +1224,6 @@ class OpenAppaBatteriesService {
       composed: accepted,
       installs: params.installs,
     });
-    if (retired.refusal.length > 0)
-      return {
-        values: values(previousContent ?? accepted, retired.refusal.join("\n")),
-        retired,
-      };
     const keep = async (kept: readonly KeptAnnotator[]) => {
       // Opening snapshots contain host-bound helpers, not authored input. Keep
       // their bridge credentials intact without relaxing the root validator.
@@ -1369,7 +1374,7 @@ class OpenAppaBatteriesService {
     effective: string | null;
     draft: string;
     installs: readonly BatteryInstall[];
-  }): Promise<{ warnings: string[]; refusal: string[] }> {
+  }): Promise<{ warnings: string[]; rebound: Rebinding[] }> {
     const resolution = await openappaDeclarations.resolve({
       organizationId: params.organizationId,
       content: params.current,
@@ -1385,7 +1390,7 @@ class OpenAppaBatteriesService {
       extraOpening: params.effective ?? undefined,
     });
     return {
-      refusal: retired.refusal,
+      rebound: retired.rebound,
       warnings: [
         ...retired.kept.flatMap(({ name, binding }) =>
           declared.has(name)
@@ -2549,19 +2554,27 @@ type Retirement = {
   kept: KeptAnnotator[];
   dropped: { name: string; reason: string }[];
   conflicts: string[];
-  refusal: string[];
+  rebound: Rebinding[];
 };
 
 const NOTHING_RETIRED: Retirement = {
   kept: [],
   dropped: [],
   conflicts: [],
-  refusal: [],
+  rebound: [],
 };
 
-/** One warning per stored composition that keeps annotators, one per name it cannot keep. */
+/**
+ * One warning per stored composition that keeps annotators, one per name it
+ * cannot keep, and one per declared name an earlier policy bound differently.
+ */
 function logRetired(params: Retirement & { organizationId: string }): void {
-  const { organizationId, kept, dropped, conflicts } = params;
+  const { organizationId, kept, dropped, conflicts, rebound } = params;
+  for (const { name, current, earlier } of rebound)
+    logger.warn(
+      { organizationId, annotator: name, current, earlier },
+      "OpenAPPA answers an annotator with a binding that differs from earlier opening policies; sessions opened under them are answered by the current binding",
+    );
   if (kept.length > 0)
     logger.warn(
       {

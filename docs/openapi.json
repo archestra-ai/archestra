@@ -332728,6 +332728,23 @@
                                 "active"
                               ]
                             },
+                            "target": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "multi-user"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "nullable": true,
+                                  "enum": [
+                                    null
+                                  ]
+                                }
+                              ]
+                            },
                             "packageHash": {
                               "nullable": true,
                               "type": "string"
@@ -332760,6 +332777,7 @@
                             "catalogId",
                             "enabled",
                             "status",
+                            "target",
                             "packageHash",
                             "lastError",
                             "credentialBindings",
@@ -334202,6 +334220,23 @@
                                   "active"
                                 ]
                               },
+                              "target": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": [
+                                      "multi-user"
+                                    ]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      null
+                                    ]
+                                  }
+                                ]
+                              },
                               "packageHash": {
                                 "nullable": true,
                                 "type": "string"
@@ -334234,6 +334269,7 @@
                               "catalogId",
                               "enabled",
                               "status",
+                              "target",
                               "packageHash",
                               "lastError",
                               "credentialBindings",

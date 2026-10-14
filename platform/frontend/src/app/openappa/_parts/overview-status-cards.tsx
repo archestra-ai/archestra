@@ -6,7 +6,6 @@ import {
   CircleDashed,
   CircleX,
   ClipboardCheck,
-  ExternalLink,
   Github,
   LoaderCircle,
   RefreshCw,
@@ -27,6 +26,7 @@ import {
 import { InlineNotice } from "@/components/ui/inline-notice";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   useAppaGithubSync,
@@ -119,18 +119,20 @@ function GithubSyncCard() {
               </span>
             </span>
           ) : connected && source?.repo ? (
-            <span>
-              {appName} pulls the policy from{" "}
+            <span className="flex flex-col gap-3">
+              <span>
+                {appName} pulls the policy from this repository. Every change is
+                a reviewed pull request.
+              </span>
               <a
                 href={`${sync.data?.githubWebUrl}/${source.repo}`}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1 font-mono text-foreground underline underline-offset-4"
+                title={source.repo}
+                className="block truncate rounded-md border bg-background px-3 py-2 font-mono text-xs text-foreground hover:underline underline-offset-4"
               >
-                <span>{source.repo}</span>
-                <ExternalLink className="size-3.5" />
+                <RepoName repo={source.repo} />
               </a>
-              . Every change is a reviewed pull request.
             </span>
           ) : sync.data && !sync.data.enabled ? (
             "GitHub sync is turned off on this server."
@@ -274,6 +276,7 @@ function ValidationCard() {
 
 function YellsCard() {
   const summary = useOpenAppaYellsSummary();
+  const deployment = useGuardrailsDeployment();
   return (
     <StatusCard
       icon={
@@ -296,12 +299,22 @@ function YellsCard() {
           Could not load yells. Retry
         </Button>
       ) : (
-        <p className="flex items-baseline gap-2">
-          <span className="text-3xl font-semibold tabular-nums">
-            {summary.data?.unresolved ?? "—"}
-          </span>
-          <span className="text-sm text-muted-foreground">unresolved</span>
-        </p>
+        <div className="space-y-1">
+          <p className="flex items-baseline gap-2">
+            <span className="text-3xl font-semibold tabular-nums">
+              {summary.data?.unresolved ?? "—"}
+            </span>
+            <span className="text-sm text-muted-foreground">unresolved</span>
+          </p>
+          {deployment.data?.superyellEnabled && summary.data && (
+            <p className="flex items-baseline gap-1.5">
+              <span className="text-lg font-semibold tabular-nums">
+                {summary.data.superyells}
+              </span>
+              <span className="text-sm text-muted-foreground">superyells</span>
+            </p>
+          )}
+        </div>
       )}
     </StatusCard>
   );
@@ -372,5 +385,17 @@ function Status({
       )}
       <span>{children}</span>
     </Badge>
+  );
+}
+
+/** `owner/name` with the owner dimmed, so the repository name stands out. */
+function RepoName({ repo }: { repo: string }) {
+  const slash = repo.indexOf("/");
+  if (slash === -1) return repo;
+  return (
+    <>
+      <span className="text-muted-foreground">{repo.slice(0, slash + 1)}</span>
+      {repo.slice(slash + 1)}
+    </>
   );
 }

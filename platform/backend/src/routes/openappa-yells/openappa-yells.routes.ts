@@ -45,7 +45,9 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.GetOpenAppaYellsSummary,
         tags: ["OpenAPPA"],
-        response: constructResponseSchema(z.object({ unresolved: z.number() })),
+        response: constructResponseSchema(
+          z.object({ unresolved: z.number(), superyells: z.number() }),
+        ),
       },
     },
     async (request, reply) =>

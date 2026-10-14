@@ -3830,6 +3830,13 @@
       "when": 1792010730416,
       "tag": "0546_fair_forgotten_one",
       "breakpoints": true
+    },
+    {
+      "idx": 547,
+      "version": "7",
+      "when": 1792016335848,
+      "tag": "0547_slim_otto_octavius",
+      "breakpoints": true
     }
   ]
 }

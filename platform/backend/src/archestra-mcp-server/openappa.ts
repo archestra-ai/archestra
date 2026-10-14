@@ -564,6 +564,7 @@ const registry = defineArchestraTools([
         session: identity.session,
         toolCallId: identity.callId,
         args,
+        superyell: true,
       });
       // The person approved turning OpenAPPA off, so a report that failed to
       // send does not keep it on.

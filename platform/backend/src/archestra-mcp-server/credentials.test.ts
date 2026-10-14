@@ -127,6 +127,14 @@ test("declares a credential without a value and returns a paste link", async ({
   // The section parameter would be rewritten away by agentDetailHref, taking
   // `setup` with it, so the link must not carry one.
   expect(url).not.toContain("section=");
+  // The paste link is handed over in the reply, where it opens; a question
+  // form would show it as dead text. Both renderings say so.
+  expect(textOf(result)).toContain(
+    `Put this link in your reply text, never inside a question form, so the person can paste it: ${url}`,
+  );
+  expect(result.structuredContent).toMatchObject({
+    next_step: expect.stringContaining("never inside a question form"),
+  });
 
   const stored = await AgentModel.findById(target.id);
   expect(stored?.runtime?.credentials).toEqual([

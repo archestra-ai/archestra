@@ -225,7 +225,7 @@ test("Copilot prints saved credentials once in the final instructions, after the
   const credentials = result.output.indexOf(
     "export COPILOT_PROVIDER_API_KEY='test-key'",
   );
-  const signIn = result.output.indexOf("Sign in to Test tools");
+  const signIn = result.output.indexOf("Authorize Copilot CLI for the");
   expect(summary).toBeGreaterThan(-1);
   expect(optional).toBeGreaterThan(summary);
   expect(credentials).toBeGreaterThan(optional);
@@ -452,7 +452,12 @@ test.each([
     label: "OpenCode",
     appName: "Test",
     parts: [],
-    signIn: { command, text: command.join(" "), howTo: "Sign in later." },
+    signIn: {
+      command,
+      text: command.join(" "),
+      howTo: "Sign in later.",
+      gatewayName: "test",
+    },
     launch: null,
     notes: [],
   };

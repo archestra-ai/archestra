@@ -276,7 +276,7 @@ function KnowledgeOption({
     <Label
       className={cn(
         "flex cursor-pointer items-center gap-3 rounded-lg border bg-background py-2 pr-3 pl-3 font-normal",
-        checked && "border-primary ring-1 ring-primary",
+        checked && "border-primary ring-1 ring-inset ring-primary",
       )}
     >
       <Checkbox

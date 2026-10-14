@@ -228,6 +228,10 @@ describe("AgentSettingsPage", () => {
     const { rerender } = renderPage();
 
     expect(
+      screen.getByRole("heading", { name: "Agent Runtime Beta" }),
+    ).toBeVisible();
+
+    expect(
       screen.queryByRole("heading", { name: "Runtime backend" }),
     ).not.toBeInTheDocument();
 

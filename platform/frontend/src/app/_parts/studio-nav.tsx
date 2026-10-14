@@ -26,6 +26,7 @@ import type React from "react";
 import { McpRegistryAttentionBadge } from "@/components/mcp-registry-attention-badge";
 import { OpenAppaIcon } from "@/components/openappa-icon";
 import type { NavDotKey } from "@/lib/onboarding/nav-onboarding";
+import { GUARDRAILS_BETA_TOOLTIP } from "@/lib/openappa-maturity";
 
 /**
  * What the product's navigation is, separately from any one thing that draws
@@ -168,7 +169,7 @@ export const contentNavGroups: NavGroup[] = [
         customIsActive: (pathname: string) => pathname.startsWith("/openappa"),
         beta: true,
         badgeLabel: "Beta",
-        badgeTooltip: "Guardrails is still undergoing some UX polishing.",
+        badgeTooltip: GUARDRAILS_BETA_TOOLTIP,
         dotKey: "nav:guardrails",
       },
       {

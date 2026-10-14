@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ImagePullPolicySchema } from "./mcp-image-pull-policy";
 
 export const OAuthConfigSchema = z
   .object({
@@ -150,6 +151,7 @@ export const LocalConfigSchema = z
     nodePort: z.number().optional(),
     serviceAccount: z.string().optional(),
     imagePullSecrets: z.array(ImagePullSecretConfigSchema).optional(),
+    imagePullPolicy: ImagePullPolicySchema.optional(),
   })
   .refine((data) => data.command || data.dockerImage, {
     message:
@@ -168,4 +170,5 @@ export const LocalConfigFormSchema = z.object({
   httpPath: z.string().optional(),
   serviceAccount: z.string().optional(),
   imagePullSecrets: z.array(ImagePullSecretConfigSchema).optional(),
+  imagePullPolicy: ImagePullPolicySchema.optional(),
 });

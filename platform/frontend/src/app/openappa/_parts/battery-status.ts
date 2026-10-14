@@ -7,7 +7,7 @@ export const BATTERY_STATUS = {
   active: { label: "Enforced", severity: "ok" },
   missing_credentials: { label: "Needs a credential", severity: "critical" },
   naming_conflict: { label: "Tool name conflict", severity: "critical" },
-  server_missing: { label: "No server bound", severity: "warning" },
+  server_missing: { label: "No server set", severity: "warning" },
   unrouted: { label: "Not used by any rule", severity: "warning" },
   refused: { label: "Refused by policy", severity: "critical" },
   unavailable: { label: "Package missing", severity: "critical" },

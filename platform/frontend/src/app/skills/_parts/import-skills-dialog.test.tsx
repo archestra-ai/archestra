@@ -143,7 +143,7 @@ describe("ImportSkillsDialog", () => {
     await user.click(screen.getByRole("button", { name: "Find skills" }));
 
     await screen.findByText("PDF reader");
-    await user.click(screen.getByRole("button", { name: /^Import/ }));
+    await user.click(screen.getByRole("button", { name: /^Import(?: \(|$)/ }));
     await waitFor(() =>
       expect(requests.map((entry) => entry.path)).toContain("import"),
     );

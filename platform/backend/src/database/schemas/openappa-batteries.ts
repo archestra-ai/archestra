@@ -15,6 +15,7 @@ import type {
   BatteryCredentialBindings,
   BatteryInstallStatus,
   BatteryPackageFile,
+  BatteryTargetName,
 } from "@/types/openappa-batteries";
 import internalMcpCatalogTable from "./internal-mcp-catalog";
 import organizationsTable from "./organization";
@@ -71,6 +72,8 @@ export const openappaBatteryInstallsTable = pgTable(
       .$type<BatteryInstallStatus>()
       .notNull()
       .default("active" satisfies BatteryInstallStatus),
+    // The target the battery deploys as; null for its base alone.
+    target: text().$type<BatteryTargetName>(),
     // The package version the declaration spells; null for a bundled battery.
     packageHash: text("package_hash"),
     lastError: text("last_error"),

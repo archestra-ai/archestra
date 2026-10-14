@@ -9,13 +9,17 @@ import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import ToolModel from "@/models/tool";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
-import { beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { bindOrganizationCredential } from "@/test/openappa-credentials";
 import { openappaBatteriesService } from "./batteries";
 import {
   helperUrlBase,
   openappaDeclarations,
   packageContentHash,
 } from "./declarations";
+import { parsePolicyToml } from "./policy-text";
+import { openappaRemediesService } from "./remedies";
+import { openappaTrustAudienceService } from "./trust-audience";
 
 const BRIDGE_TOKEN_ENV = "APPA_ARCHESTRA_BRIDGE_TOKEN";
 
@@ -41,7 +45,7 @@ describe("bundled batteries", () => {
     const input = (battery: (typeof bundled)[number]) => ({
       entry: `batteries/${battery.name}/appa.toml`,
       name: battery.name,
-      policy: battery.policy,
+      policy: battery.base,
       helpers:
         battery.externals.length > 0
           ? { urlBase: "http://127.0.0.1:9000/helpers/install", tokenEnv }
@@ -657,11 +661,16 @@ describe("validating against this deployment", () => {
 
     // On its own the starter composes: the archestra battery declares the
     // audience source its `internal` audience reads.
+    const resolution = await openappaDeclarations.resolve({
+      organizationId,
+      content: starter,
+    });
     const standalone = await openappaDeclarations.composeForCheck({
       root: starter,
-      resolution: await openappaDeclarations.resolve({
+      resolution,
+      deployed: await openappaBatteriesService.deployedBatteries({
         organizationId,
-        content: starter,
+        resolution,
       }),
     });
     expect(standalone.errors).toEqual([]);
@@ -767,6 +776,314 @@ describe("validating against this deployment", () => {
   });
 });
 
+describe("a battery with targets", () => {
+  const sandbox = config.daggerRuntime.enabled;
+  beforeEach(() => {
+    config.openappa.enabled = true;
+  });
+  afterEach(() => {
+    config.daggerRuntime.enabled = sandbox;
+  });
+
+  test("waits for its multi-user credentials, then deploys that target only while the sandbox runs", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Acme prod",
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "acme_prod__list",
+      rawName: "list",
+    });
+    config.daggerRuntime.enabled = true;
+    const { entry } = await uploadTargetedAcme({ organizationId, userId });
+    await declare({
+      organizationId,
+      userId,
+      content: root(entry, ["acme_prod"]),
+    });
+    const acme = async () => {
+      const { batteries } =
+        await openappaBatteriesService.policyDeclarations(organizationId);
+      const policy = await openappaBatteriesService.recompile(organizationId);
+      expect(policy.lastError).toBeNull();
+      const composed = parsePolicyToml(policy.content)?.policy as
+        | {
+            annotator?: Array<{ name: string }>;
+            tool?: Array<{ requires?: { attention?: string[] } }>;
+          }
+        | undefined;
+      const annotators = composed?.annotator?.map(
+        (annotator) => annotator.name,
+      );
+      return {
+        status: batteries.find((battery) => battery.name === "acme")?.status,
+        deploysTarget: annotators?.includes("acme.visibility") ?? false,
+        composesBaseRule:
+          composed?.tool?.some((tool) =>
+            tool.requires?.attention?.includes("acme-review"),
+          ) ?? false,
+      };
+    };
+    // Only the target's credential is unbound: its base still composes.
+    expect(await acme()).toEqual({
+      status: "missing_credentials",
+      deploysTarget: false,
+      composesBaseRule: true,
+    });
+
+    await bindOrganizationCredential({
+      organizationId,
+      userId,
+      variable: ACME_TOKEN,
+      key: "acme-token",
+    });
+    expect(await acme()).toEqual({
+      status: "active",
+      deploysTarget: true,
+      // Still composed after the target, whose rule matches first.
+      composesBaseRule: true,
+    });
+
+    config.daggerRuntime.enabled = false;
+    expect(await acme()).toEqual({
+      status: "active",
+      deploysTarget: false,
+      composesBaseRule: true,
+    });
+  });
+
+  test("the remedies and audience views read a deployed target's rule in place of the base rule it shadows", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Acme prod",
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "acme_prod__list",
+      rawName: "list",
+    });
+    config.daggerRuntime.enabled = true;
+    const { entry } = await uploadTargetedAcme({ organizationId, userId });
+    await declare({
+      organizationId,
+      userId,
+      content: root(entry, ["acme_prod"]),
+    });
+    await bindOrganizationCredential({
+      organizationId,
+      userId,
+      variable: ACME_TOKEN,
+      key: "acme-token",
+    });
+    const views = async () => {
+      const remedies = await openappaRemediesService.view({
+        organizationId,
+        userId,
+      });
+      const audience = await openappaTrustAudienceService.view({
+        organizationId,
+        userId,
+      });
+      return {
+        blocks: remedies.blocks
+          .filter((block) => block.kind === "approvals")
+          .map((block) => ({
+            kind: block.kind,
+            unservedMarks: block.unservedMarks,
+          })),
+        self: audience.audiences.find((level) => level.name === "self")?.kind,
+      };
+    };
+    expect(await views()).toEqual({ blocks: [], self: "builtin" });
+
+    config.daggerRuntime.enabled = false;
+    expect(await views()).toEqual({
+      blocks: [{ kind: "approvals", unservedMarks: ["acme-review"] }],
+      self: "unmapped",
+    });
+  });
+
+  test("a battery whose annotator only its target declares governs the organization", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    config.daggerRuntime.enabled = true;
+    const { entry } = await uploadTargetedNotary({ organizationId, userId });
+    await bindOrganizationCredential({
+      organizationId,
+      userId,
+      variable: NOTARY_TOKEN,
+      key: "notary-token",
+    });
+    await declare({
+      organizationId,
+      userId,
+      content: root(entry, [], { route: "notary.check" }),
+    });
+
+    const policy = await openappaBatteriesService.recompile(organizationId);
+    expect(policy.lastError).toBeNull();
+    const composed = parsePolicyToml(policy.content)?.policy as
+      | { annotator?: Array<{ name: string }> }
+      | undefined;
+    expect(composed?.annotator?.map(({ name }) => name)).toContain(
+      "notary.check",
+    );
+    const { batteries } =
+      await openappaBatteriesService.policyDeclarations(organizationId);
+    expect(batteries.find(({ name }) => name === "notary")).toMatchObject({
+      scope: "organization",
+      status: "active",
+    });
+    expect(
+      (await OpenAppaBatteryInstallModel.list(organizationId)).map(
+        ({ batteryName, catalogId, target }) => ({
+          batteryName,
+          catalogId,
+          target,
+        }),
+      ),
+    ).toEqual([
+      { batteryName: "notary", catalogId: null, target: "multi-user" },
+    ]);
+  });
+
+  test("a deployed target's member roster is declared by the host until the root declares its own", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "GitHub prod",
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "github_prod__get_issue",
+      rawName: "get_issue",
+    });
+    config.daggerRuntime.enabled = true;
+    const content = `include = ["batteries/github/appa.toml"]
+
+[server_aliases]
+github = ["github_prod"]
+
+[policy]
+version = 2
+`;
+    await declare({ organizationId, userId, content });
+    const roster = async () => {
+      const policy = await openappaBatteriesService.recompile(organizationId);
+      expect(policy.lastError).toBeNull();
+      const externals = parsePolicyToml(policy.content)?.externals as
+        | { audience?: Record<string, { readers?: unknown }> }
+        | undefined;
+      return externals?.audience?.["host-members"]?.readers;
+    };
+    // Held back for its token, github composes nothing that looks a member up.
+    expect(await roster()).toBeUndefined();
+
+    await bindOrganizationCredential({
+      organizationId,
+      userId,
+      variable: "APPA_PROVIDER_GITHUB_TOKEN",
+      key: "github-token",
+    });
+    expect(await roster()).toEqual({});
+
+    await declare({
+      organizationId,
+      userId,
+      content: `${content}
+[externals.audience.host-members]
+readers = { "github:1" = "ana@corp.example" }
+`,
+    });
+    expect(await roster()).toEqual({ "github:1": "ana@corp.example" });
+  });
+});
+
+const ACME_TOKEN = "APPA_PROVIDER_ACME_TOKEN";
+const NOTARY_TOKEN = "APPA_PROVIDER_NOTARY_TOKEN";
+
+/** A battery with an empty base whose multi-user target declares one credentialed annotator. */
+async function uploadTargetedNotary(params: {
+  organizationId: string;
+  userId: string;
+}) {
+  const empty = "[policy]\nversion = 2\n";
+  return openappaBatteriesService.uploadPackage({
+    userId: params.userId,
+    organizationId: params.organizationId,
+    name: "notary",
+    files: [
+      {
+        path: "appa-package.toml",
+        text: `schema = 1
+name = "notary"
+description = "Checks every call"
+
+[battery]
+policy = "appa.toml"
+hosts = ["claude-code"]
+helpers = ["check.py"]
+
+[battery.targets.single-user]
+policy = "single-user.toml"
+
+[battery.targets.multi-user]
+policy = "multi-user.toml"
+`,
+      },
+      { path: "appa.toml", text: empty },
+      { path: "single-user.toml", text: empty },
+      {
+        path: "multi-user.toml",
+        text: `${empty}
+[[policy.annotator]]
+name = "notary.check"
+ranks = ["suspicious", "trusted"]
+audiences = ["self"]
+marks = []
+
+[externals.annotators."notary.check"]
+command = ["python3", "check.py"]
+token_env = "${NOTARY_TOKEN}"
+`,
+      },
+      { path: "check.py", text: "print('{}')\n" },
+    ],
+  });
+}
+
 const BATTERY_MANIFEST = `schema = 1
 name = "acme"
 description = "Acme battery under test"
@@ -857,6 +1174,63 @@ command = ["python3", "check.py"]
         path: "check.py",
         text: `print('{}')\n${params.note ? `# ${params.note}\n` : ""}`,
       },
+    ],
+  });
+}
+
+/** The acme battery with targets: its multi-user target routes to a credentialed helper. */
+async function uploadTargetedAcme(params: {
+  organizationId: string;
+  userId: string;
+}) {
+  const empty = "[policy]\nversion = 2\n";
+  return openappaBatteriesService.uploadPackage({
+    userId: params.userId,
+    organizationId: params.organizationId,
+    name: "acme",
+    files: [
+      {
+        path: "appa-package.toml",
+        text: `${BATTERY_MANIFEST}
+[battery.targets.single-user]
+policy = "single-user.toml"
+
+[battery.targets.multi-user]
+policy = "multi-user.toml"
+`,
+      },
+      {
+        path: "appa.toml",
+        text: `${empty}
+[[policy.tool]]
+name = "mcp/acme/list"
+requires = { attention = ["acme-review"], audience = { contains = ["self"] } }
+`,
+      },
+      { path: "single-user.toml", text: empty },
+      {
+        path: "multi-user.toml",
+        text: `${empty}
+[[policy.annotator]]
+name = "acme.visibility"
+ranks = ["suspicious", "trusted"]
+audiences = ["self"]
+marks = []
+
+[[policy.tool]]
+name = "mcp/acme/get"
+annotator = "acme.visibility"
+
+[[policy.tool]]
+name = "mcp/acme/list"
+delta = {}
+
+[externals.annotators."acme.visibility"]
+command = ["python3", "check.py"]
+token_env = "${ACME_TOKEN}"
+`,
+      },
+      { path: "check.py", text: "print('{}')\n" },
     ],
   });
 }

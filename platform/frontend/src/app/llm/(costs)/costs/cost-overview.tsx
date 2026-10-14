@@ -148,7 +148,7 @@ export function KpiTile({
     "relative flex min-w-0 flex-col gap-1 rounded-xl border bg-card p-4 text-left transition-colors",
     estimate && "border-dashed bg-transparent",
     onClick && "hover:bg-muted/40",
-    active && "ring-2 ring-primary/60",
+    active && "ring-2 ring-inset ring-primary/60",
   );
   return onClick ? (
     <UnstyledButton type="button" onClick={onClick} className={cls}>

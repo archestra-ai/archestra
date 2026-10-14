@@ -6031,7 +6031,7 @@ function formatActionableAuthError(params: {
     params.detail,
     `To ${params.actionLabel}, visit this URL: ${params.url}`,
     "",
-    "IMPORTANT: You MUST display the URL above to the user exactly as shown. Do NOT omit it or paraphrase it.",
+    "IMPORTANT: You MUST display the URL above to the user exactly as shown, in your reply text, never inside a question form. Do NOT omit it or paraphrase it.",
     "",
     params.postAction,
   ].join("\n");

@@ -80,6 +80,7 @@ export type CascadeSnapshot = {
     httpPath?: string;
     serviceAccount?: string;
     imagePullSecrets?: unknown[];
+    imagePullPolicy?: string;
   } | null;
   userConfig?: Record<string, unknown> | null;
   labels?: Array<{ key: string; value: string }>;
@@ -232,6 +233,7 @@ function localExecutionConfigChanged(
     httpPort: s.localConfig?.httpPort,
     httpPath: s.localConfig?.httpPath ?? "",
     serviceAccount: s.localConfig?.serviceAccount ?? "",
+    imagePullPolicy: s.localConfig?.imagePullPolicy,
   });
   return JSON.stringify(shape(prev)) !== JSON.stringify(shape(next));
 }

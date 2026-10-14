@@ -63272,6 +63272,7 @@ export type GetInternalMcpCatalogResponses = {
                 password?: string;
                 email?: string;
             }>;
+            imagePullPolicy?: 'Always' | 'IfNotPresent' | 'Never';
         } | null;
         deploymentSpecYaml: string | null;
         userConfig: {
@@ -63436,6 +63437,7 @@ export type CreateInternalMcpCatalogItemData = {
                 password?: string;
                 email?: string;
             }>;
+            imagePullPolicy?: 'Always' | 'IfNotPresent' | 'Never';
         } | null;
         deploymentSpecYaml?: string | null;
         userConfig?: {
@@ -63659,6 +63661,7 @@ export type CreateInternalMcpCatalogItemResponses = {
                 password?: string;
                 email?: string;
             }>;
+            imagePullPolicy?: 'Always' | 'IfNotPresent' | 'Never';
         } | null;
         deploymentSpecYaml: string | null;
         userConfig: {
@@ -64164,6 +64167,7 @@ export type GetInternalMcpCatalogItemResponses = {
                 password?: string;
                 email?: string;
             }>;
+            imagePullPolicy?: 'Always' | 'IfNotPresent' | 'Never';
         } | null;
         deploymentSpecYaml: string | null;
         userConfig: {
@@ -64310,6 +64314,7 @@ export type UpdateInternalMcpCatalogItemData = {
                 password?: string;
                 email?: string;
             }>;
+            imagePullPolicy?: 'Always' | 'IfNotPresent' | 'Never';
         } | null;
         deploymentSpecYaml?: string | null;
         userConfig?: {
@@ -64517,6 +64522,7 @@ export type UpdateInternalMcpCatalogItemResponses = {
                 password?: string;
                 email?: string;
             }>;
+            imagePullPolicy?: 'Always' | 'IfNotPresent' | 'Never';
         } | null;
         deploymentSpecYaml: string | null;
         userConfig: {
@@ -65203,6 +65209,7 @@ export type ListPendingImageApprovalCatalogItemsResponses = {
                 password?: string;
                 email?: string;
             }>;
+            imagePullPolicy?: 'Always' | 'IfNotPresent' | 'Never';
         } | null;
         deploymentSpecYaml: string | null;
         userConfig: {
@@ -65432,6 +65439,7 @@ export type ApproveCatalogItemImageResponses = {
                 password?: string;
                 email?: string;
             }>;
+            imagePullPolicy?: 'Always' | 'IfNotPresent' | 'Never';
         } | null;
         deploymentSpecYaml: string | null;
         userConfig: {
@@ -87899,6 +87907,7 @@ export type GetOpenappaBatteriesResponses = {
             catalogId: string | null;
             enabled: boolean;
             status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
+            target: 'multi-user' | null;
             packageHash: string | null;
             lastError: string | null;
             credentialBindings: {
@@ -88312,6 +88321,7 @@ export type GetOpenappaBatteryMatchesResponses = {
                 catalogId: string | null;
                 enabled: boolean;
                 status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
+                target: 'multi-user' | null;
                 packageHash: string | null;
                 lastError: string | null;
                 credentialBindings: {
@@ -107165,6 +107175,10 @@ export type GetSkillsData = {
         offset?: number;
         search?: string;
         sourceRepo?: string;
+        /**
+         * Restrict results to these skill IDs (comma-separated).
+         */
+        skillIds?: Array<string>;
         /**
          * Restrict results to native skills available through this internal agent or eligible for publication by this saved MCP gateway.
          */

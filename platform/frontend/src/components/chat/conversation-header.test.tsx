@@ -50,12 +50,6 @@ function renderHeader(panelOverrides: Partial<Panel> = {}) {
       conversation={makeConversation()}
       messageCount={2}
       isTitleAnimating={false}
-      canManageShare={false}
-      isShared={false}
-      canCreateProject={false}
-      onShare={vi.fn()}
-      onExportMarkdown={vi.fn()}
-      onCreateProject={vi.fn()}
       panel={panel}
     />,
   );
@@ -82,12 +76,6 @@ describe("ConversationHeader — top-bar tab strip", () => {
         scheduleTriggerId="trigger-1"
         messageCount={2}
         isTitleAnimating={false}
-        canManageShare={false}
-        isShared={false}
-        canCreateProject={false}
-        onShare={vi.fn()}
-        onExportMarkdown={vi.fn()}
-        onCreateProject={vi.fn()}
         panel={makePanel()}
       />,
     );

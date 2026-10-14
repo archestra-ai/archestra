@@ -731,8 +731,10 @@ export function LlmProviderApiKeyForm({
           const subtext = isEmbeddingUnsupported
             ? "Not supported for embeddings"
             : isGeminiDisabledByVertexAi
-              ? `${name} uses Vertex AI credentials configured for this deployment. An API key cannot be added here.`
-              : config.optionSubtext;
+              ? "Uses Vertex AI. No API key needed."
+              : isBedrockDisabledByIamAuth
+                ? "Uses AWS IAM. No API key needed."
+                : config.optionSubtext;
 
           return {
             value: providerKey,

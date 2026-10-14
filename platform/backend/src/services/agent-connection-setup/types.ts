@@ -173,7 +173,13 @@ export interface SetupEnding {
    * is null, how to sign in by hand. `howTo` is the fallback when the command
    * fails.
    */
-  signIn: { command: string[] | null; text: string; howTo: string } | null;
+  signIn: {
+    command: string[] | null;
+    text: string;
+    howTo: string;
+    /** The gateway as the client lists it, e.g. in Claude Code's /mcp. */
+    gatewayName: string;
+  } | null;
   /** `text` is `command` quoted for the person's shell. */
   launch: { command: string[]; text: string } | null;
   notes: string[];

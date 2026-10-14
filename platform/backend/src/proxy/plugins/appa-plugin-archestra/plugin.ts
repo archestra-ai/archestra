@@ -2143,7 +2143,7 @@ function runtimeLaunchResult(
   }
   const text = RUNTIME_LAUNCH_FAILURE_TEXT[outcome.reason];
   return outcome.reason === "credentials_needed" && outcome.setup_url
-    ? `${text} Ask the user to add them here, then start the run again: ${outcome.setup_url}`
+    ? `${text} Put this link in your reply text, never inside a question form, so the user can add them, then start the run again: ${outcome.setup_url}`
     : text;
 }
 

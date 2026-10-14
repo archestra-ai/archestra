@@ -3781,6 +3781,13 @@
       "when": 1791928838634,
       "tag": "0539_unenforced-session-reason",
       "breakpoints": true
+    },
+    {
+      "idx": 540,
+      "version": "7",
+      "when": 1791935405141,
+      "tag": "0540_stale_omega_sentinel",
+      "breakpoints": true
     }
   ]
 }

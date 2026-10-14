@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 2
-lastUpdated: 2026-10-13
+lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -740,10 +740,9 @@ Chat streams and A2A task streams wake through PostgreSQL `LISTEN/NOTIFY` across
 
 - **`ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS`** - Optional limit, in milliseconds, on how long one notification stream stays open before the gateway ends it with a complete result.
   - Default: `0` (no expiry). The stream stays open until the client disconnects.
-  - This is not a universal fix. Enable it only when the proxy's maximum request duration is known and the client's behavior has been checked, and only if that tradeoff is acceptable.
-  - An abrupt proxy close can fail a form that is still open. A clean end does not guarantee tool-list change notifications continue. A client may open another listen, but current clients can stop after repeated ends.
-  - Set a positive value below the proxy maximum. Heartbeats do not extend that maximum, and Archestra does not read the live proxy timeout. A GKE Ingress backend with no `timeoutSec` uses 30 seconds.
-  - `0` disables expiry. Values above `2147483647`, and values that are not a whole number from 0 up, stay disabled. A larger delay cannot be scheduled and would otherwise fire immediately.
+  - An abrupt proxy close can fail an open form. This setting is a partial mitigation, not a guarantee: clients can stop reconnecting after repeated clean ends, which stops tool-list change notifications. Enable it only after checking your client's behavior and accepting that limitation.
+  - Set a positive value below your proxy's maximum request duration. Heartbeats do not extend that maximum, and Archestra does not detect it. A GKE Ingress backend with no `timeoutSec` uses 30 seconds.
+  - Accepts whole numbers from `0` through `2147483647`. Invalid or larger values disable expiry, avoiding timer overflow.
 
 ## MCP Servers
 

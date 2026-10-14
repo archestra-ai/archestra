@@ -2,22 +2,17 @@
 
 import {
   BUILT_IN_IDENTITY_PROVIDER_IDS,
-  E2eTestId,
   IDENTITY_PROVIDER_ID,
   type IdentityProviderId,
 } from "@archestra/shared";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
-import { IdentityProviderIcon } from "@/components/identity-provider-icons.ee";
-import { TableCardGrid } from "@/components/table-card-view";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useIdentityProviders } from "@/lib/auth/identity-provider.query.ee";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import { CreateIdentityProviderDialog } from "./create-identity-provider-dialog.ee";
 import { EditIdentityProviderDialog } from "./edit-identity-provider-dialog.ee";
 import type { IdentityProviderDialogSection } from "./identity-provider-dialog-shell.ee";
+import { IdentityProviderList } from "./identity-provider-list.ee";
 
 /** Configuration for a predefined identity provider card */
 interface IdpConfig {
@@ -339,52 +334,24 @@ export function IdentityProvidersSettingsContent() {
 
   return (
     <div>
-      <TableCardGrid>
-        {IDP_CONFIGS.map((config) => {
-          const existingProvider = getProviderStatus(config);
-
-          return (
-            <Card
-              key={config.id}
-              className="h-full cursor-pointer gap-3 py-4 shadow-none transition-colors hover:bg-muted/30"
-              onClick={() => handleProviderClick(config)}
-              data-testid={`${E2eTestId.IdentityProviderCard}-${config.id}`}
-            >
-              <CardHeader className="px-4 pb-0">
-                <div className="flex items-center justify-between">
-                  <div
-                    className={`p-2 rounded-lg ${config.bgColor} text-gray-900`}
-                  >
-                    <IdentityProviderIcon
-                      providerId={config.providerId || config.id}
-                      size={24}
-                    />
-                  </div>
-                  <Badge variant={existingProvider ? "default" : "secondary"}>
-                    {existingProvider ? "Enabled" : "Not enabled"}
-                  </Badge>
-                </div>
-                <CardTitle className="text-base">{config.name}</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-1 flex-col px-4">
-                <div className="mb-4 flex min-h-[2.5rem] flex-1 flex-col justify-end">
-                  <p className="text-sm text-muted-foreground">
-                    {config.description}
-                  </p>
-                </div>
-                <Button
-                  variant={existingProvider ? "outline" : "default"}
-                  size="sm"
-                  className="w-full"
-                  data-testid={`${E2eTestId.IdentityProviderOpenDialogButton}-${config.id}`}
-                >
-                  {existingProvider ? "Edit" : "Enable"}
-                </Button>
-              </CardContent>
-            </Card>
-          );
+      <IdentityProviderList
+        providers={IDP_CONFIGS.map((config) => {
+          const existing = getProviderStatus(config);
+          return {
+            id: config.id,
+            providerId: config.providerId,
+            name: config.name,
+            description: config.description,
+            protocol: config.providerType,
+            configured: !!existing,
+            signInEnabled: existing?.ssoLoginEnabled ?? false,
+          };
         })}
-      </TableCardGrid>
+        onSelect={(id) => {
+          const config = IDP_CONFIGS.find((item) => item.id === id);
+          if (config) handleProviderClick(config);
+        }}
+      />
 
       {/* Create Dialog */}
       {createConfig && (
@@ -467,5 +434,7 @@ export function IdentityProvidersSettingsContent() {
 function getDeepLinkedSection(
   section: string | null,
 ): IdentityProviderDialogSection | undefined {
-  return section === "team-sync" ? "team-sync" : undefined;
+  return section === "team-sync" || section === "role-mapping"
+    ? section
+    : undefined;
 }

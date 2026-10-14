@@ -32,6 +32,7 @@ import {
   SLACK_DEFAULT_CONNECTION_MODE,
   TELEGRAM_LINK_CODE_TTL_MS,
 } from "@/agents/chatops/constants";
+import { resolveMSTeamsUserEmail } from "@/agents/chatops/ms-teams-user";
 import { slackAppFactory } from "@/agents/chatops/slack-app-factory";
 import {
   buildAgentFooter,
@@ -3459,7 +3460,8 @@ async function resolveAndVerifySenderForMSTeams(params: {
   try {
     const member = await TeamsInfo.getMember(context, context.activity.from.id);
     if (member?.email || member?.userPrincipalName) {
-      message.senderEmail = member.email || member.userPrincipalName;
+      message.senderEmail =
+        (await resolveMSTeamsUserEmail(member)) ?? undefined;
     }
   } catch (error) {
     logger.debug(

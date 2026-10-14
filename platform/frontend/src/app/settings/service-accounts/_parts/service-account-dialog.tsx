@@ -431,7 +431,6 @@ export function ServiceAccountDialog({
       sidebarLabel={editForm.watch("name") || account.name}
       sidebarDescription="Service account"
       sidebarIcon={<AgentIcon icon={editForm.watch("icon")} />}
-      responsive
       activeSection={activeTab}
       navItems={NAV_ITEMS.map((item) => ({
         ...item,

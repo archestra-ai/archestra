@@ -53,6 +53,7 @@ import type {
   SkippedAttachment,
 } from "@/types";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
+import { autoProvisionUser } from "./auto-provision";
 import {
   buildChatOpsSessionId,
   ChatOpsManager,
@@ -2137,6 +2138,59 @@ describe("ChatOpsManager security validation", () => {
     );
   });
 
+  for (const fails of [false, true]) {
+    test(`pending Teams execution keeps an admission until completion (failure=${fails})`, async ({
+      makeOrganization,
+      makeInternalAgent,
+    }) => {
+      const org = await makeOrganization();
+      const pending = await autoProvisionUser({
+        email: "pending@example.com",
+        name: "Pending User",
+        provider: "ms-teams",
+      });
+      const agent = await makeInternalAgent({ organizationId: org.id });
+      await ChatOpsChannelBindingModel.create({
+        organizationId: org.id,
+        provider: "ms-teams",
+        channelId: "test-channel-id",
+        workspaceId: "test-workspace-id",
+        agentId: agent.id,
+      });
+      let executionObserved = false;
+      mockA2AExecutor().mockImplementation(async () => {
+        executionObserved = true;
+        const admissions = await db
+          .select()
+          .from(schema.chatopsUserAdmissionsTable)
+          .where(eq(schema.chatopsUserAdmissionsTable.userId, pending.userId));
+        expect(admissions).toHaveLength(1);
+        if (fails) throw new Error("Execution failed");
+        return {
+          text: "Response",
+          messageId: "test-message-id",
+          finishReason: "stop",
+          responseUiMessage: {
+            id: "test-message-id",
+            role: "assistant",
+            parts: [{ type: "text", text: "Response" }],
+          },
+        };
+      });
+      const provider = createMockProvider({
+        getUserEmail: async () => "pending@example.com",
+      });
+      const result = await makeManagerWith(provider).processMessage({
+        message: createMockMessage(),
+        provider,
+      });
+      expect(executionObserved).toBe(true);
+      expect(result.success).toBe(!fails);
+      expect(
+        await db.select().from(schema.chatopsUserAdmissionsTable),
+      ).toHaveLength(0);
+    });
+  }
   test("uses verified user ID for agent run (not synthetic ID)", async ({
     makeUser,
     makeOrganization,
@@ -2241,12 +2295,13 @@ describe("ChatOpsManager security validation", () => {
     }
   });
 
-  test("resuming after an approval decision keeps the ChatOps route category", async ({
+  test("approval after an email change uses stable reviewer identity and rejects bystanders", async ({
     makeUser,
     makeOrganization,
     makeTeam,
     makeTeamMember,
     makeInternalAgent,
+    makeMember,
   }) => {
     const sendMessageSpy = vi
       .spyOn(A2AManager.prototype, "sendMessage")
@@ -2288,6 +2343,21 @@ describe("ChatOpsManager security validation", () => {
       }),
     };
 
+    await A2ATaskApprovalRequestModel.attachChatReviewer({
+      taskId: decision.taskId,
+      approvalId: decision.approvalId,
+      userId: user.id,
+      channelId: decision.channelId,
+    });
+    await UserModel.patch(user.id, { email: "updated@example.com" });
+    const bystander = await makeUser({ email: "bystander@example.com" });
+    await makeMember(bystander.id, org.id);
+    await manager.handleInteractiveApprovalDecision(mockProvider, {
+      ...decision,
+      approverEmail: bystander.email,
+    });
+    expect(sendMessageSpy).not.toHaveBeenCalled();
+    decision.approverEmail = "updated@example.com";
     try {
       await manager.handleInteractiveApprovalDecision(mockProvider, decision);
 

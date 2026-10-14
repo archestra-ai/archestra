@@ -65,6 +65,8 @@ import { devAutoLoginPlugin } from "./dev-auto-login";
 import { ssoConfig, syncSsoRole, syncSsoTeams } from "./idp.ee";
 import { linkedIdentityProviderPlugin } from "./linked-idp";
 import { hashOauthClientSecret } from "./oauth-client-secret";
+// biome-ignore lint/style/noRestrictedImports: runtime-gated EE callback adapter
+import { withSsoEmailReconciliation } from "./sso-email-reconciliation.ee";
 
 // SPDX-SnippetEnd
 
@@ -609,7 +611,17 @@ export const auth = betterAuth({
           return session?.user.id;
         },
       });
-      if (adapter) return { context: { context: { ...ctx.context, adapter } } };
+      const internalAdapter = withSsoEmailReconciliation(ctx);
+      if (adapter || internalAdapter)
+        return {
+          context: {
+            context: {
+              ...ctx.context,
+              ...(adapter ? { adapter } : {}),
+              ...(internalAdapter ? { internalAdapter } : {}),
+            },
+          },
+        };
     }),
     after: createAuthMiddleware(async (ctx) => handleAfterHook(ctx)),
   },

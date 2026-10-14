@@ -97,6 +97,25 @@ class A2ATaskApprovalRequestModel {
     return req ?? null;
   }
 
+  static async attachChatReviewer(params: {
+    taskId: string;
+    approvalId: string;
+    userId: string;
+    channelId: string;
+  }) {
+    const table = schema.a2aTaskApprovalRequestsTable;
+    await db
+      .update(table)
+      .set({ reviewerUserId: params.userId, chatChannelId: params.channelId })
+      .where(
+        and(
+          eq(table.taskId, params.taskId),
+          eq(table.approvalId, params.approvalId),
+          eq(table.resolved, false),
+        ),
+      );
+  }
+
   /**
    * Links a paused `execute_remedy_plan` call to its OpenAPPA review. Without
    * a reviewer, whoever can answer the task's approvals over A2A decides.

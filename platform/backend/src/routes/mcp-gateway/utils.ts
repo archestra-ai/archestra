@@ -8,6 +8,7 @@ import {
   isAlwaysExposedArchestraToolShortName,
   isImplicitOpenAppaReadToolShortName,
   isSkillTool,
+  isYellToolShortName,
   MCP_EXECUTED_AS_META_KEY,
   MCP_GATEWAY_OAUTH_SCOPE,
   MCP_OAUTH_CLIENT_REFERENCE_PREFIX,
@@ -30,6 +31,7 @@ import {
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_START_RUN_SHORT_NAME,
   TOOL_STEER_RUN_SHORT_NAME,
+  YELL_TOOL_SHORT_NAMES,
 } from "@archestra/shared";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -304,7 +306,7 @@ const ANTHROPIC_ALWAYS_LOAD_META_KEY = "anthropic/alwaysLoad";
 
 /**
  * OpenAPPA's session tools: the notice and control tools of a remedy, ask_user
- * for a remedy that needs a person, the peer inbox, and yell. A tool the
+ * for a remedy that needs a person, the peer inbox, yell and superyell. A tool the
  * request does not declare is one the proxy cannot verify, and a session must
  * not have to search for the tools that explain a block, so these are declared
  * from the first request. The policy tools stay behind the search: only a
@@ -313,7 +315,7 @@ const ANTHROPIC_ALWAYS_LOAD_META_KEY = "anthropic/alwaysLoad";
 const ALWAYS_LOADED_SHORT_NAMES: ReadonlySet<string> = new Set([
   ...APPA_IMPLICIT_TOOL_SHORT_NAMES,
   TOOL_ASK_USER_SHORT_NAME,
-  "yell",
+  ...YELL_TOOL_SHORT_NAMES,
 ]);
 
 /** Build the exact caller-scoped gateway tools/list surface without logging a request. */
@@ -448,7 +450,7 @@ export async function buildAgentMcpToolList(params: {
     if (APPA_IMPLICIT_TOOL_SHORT_NAMES.has(shortName ?? "")) {
       return remediesActive;
     }
-    return shortName === "yell" && openappaYellEnabled();
+    return isYellToolShortName(shortName) && openappaYellEnabled();
   });
   const implicitPolicyTools = openappaEnabled()
     ? getArchestraMcpTools().filter(
@@ -2658,10 +2660,12 @@ function createGatewayUserElicit(params: {
 }
 
 /**
- * A form answer no person gave is no answer. Codex declares forms but declines
- * each one itself when no person drives the turn (`codex exec`) and under its
- * automatic reviewer. Read as a refusal, that decline would record a denial
- * nobody made.
+ * A form answer that no person gave is not an answer. Codex declares forms but
+ * answers each one itself when no person drives the turn (`codex exec`) and
+ * under its automatic reviewer. Any of those results, including an accept,
+ * means no person saw the form.
+ * Read as a refusal, a decline would record a denial nobody made; read as an
+ * accept, it would record an approval nobody made.
  */
 function formAnswer(params: {
   result: ElicitResult;
@@ -2669,9 +2673,8 @@ function formAnswer(params: {
 }): ArchestraElicitationOutcome {
   const { result, requestMeta } = params;
   if (
-    result.action === "decline" &&
-    (result._meta?.approvals_reviewer === "auto_review" ||
-      codexTurnTrigger(requestMeta) === "exec")
+    result._meta?.approvals_reviewer === "auto_review" ||
+    codexTurnTrigger(requestMeta) === "exec"
   ) {
     return { status: "no_viewer" };
   }

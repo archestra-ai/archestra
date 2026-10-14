@@ -1002,6 +1002,14 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "native dispatch ownership markers; no user-facing state",
   },
+  openappaRootsTable: {
+    audited: false,
+    reason: "native lock rows for each trajectory family; no user-facing state",
+  },
+  openappaPeerInboxesTable: {
+    audited: false,
+    reason: "native lock rows for each peer inbox; no user-facing state",
+  },
   openappaEmbeddedPeerMessagesTable: {
     audited: false,
     reason: "runtime-owned peer inbox; admissions belong to OpenAPPA history",
@@ -1017,7 +1025,8 @@ export const AUDIT_DECISIONS = {
   },
   openappaUnenforcedSessionsTable: {
     audited: false,
-    reason: "proxy record of sessions that started while enforcement was off",
+    reason:
+      "proxy record of sessions that started while enforcement was off or were superyelled",
   },
   openappaThreadStatesTable: {
     audited: false,

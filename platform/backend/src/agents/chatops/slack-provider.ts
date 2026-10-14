@@ -47,7 +47,13 @@ import {
   ensureProvisionedUser,
   resolveSignupWelcomeMode,
 } from "./auto-provision";
-import { applyChannelGate, muteChannelThread } from "./channel-activation";
+import {
+  applyChannelGate,
+  isChannelThreadActive,
+  isChannelThreadMuted,
+  isMuteReaction,
+  muteChannelThread,
+} from "./channel-activation";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_THREAD_HISTORY,
@@ -373,6 +379,9 @@ class SlackProvider implements ChatOpsProvider {
     // prompts).
     const workspaceId = body.team_id ?? this.teamId;
     switch (event.type) {
+      case "reaction_added":
+        await this.handleMuteReaction(event);
+        return null;
       case "agent_session_stopped":
         await this.handleSessionStopped(event);
         return null;
@@ -441,9 +450,8 @@ class SlackProvider implements ChatOpsProvider {
     // then keeps replying to that thread without further mentions until the
     // activation TTL lapses. DMs are always processed without a mention.
     //
-    // A user ends the sticky behavior early with the agent session's Stop
-    // button (see handleSessionStopped), after which the bot stays quiet until
-    // @mentioned again. A "mute" message is ordinary text here.
+    // Stop, mute commands, and mute reactions end sticky replies until the
+    // bot is @mentioned again. Commands are handled before reaching the agent.
     //
     // A channel can also opt into answering EVERY message (a per-channel
     // "answer all messages" binding setting): a message the gate would normally
@@ -458,7 +466,6 @@ class SlackProvider implements ChatOpsProvider {
         botMentioned: hasBotMention,
         text: cleanedText,
         botDisplayName: this.botDisplayName,
-        muteCommandsEnabled: false,
         ...(this.pinnedAgentId && { pinnedAgentId: this.pinnedAgentId }),
         postMutedNotice: async () => {},
         resolveAnswerAllWorkspaceId: async () => body.team_id || null,
@@ -889,7 +896,7 @@ class SlackProvider implements ChatOpsProvider {
                 `\`${SLACK_SLASH_COMMANDS.SELECT_AGENT}\` — Change the default agent handling requests in the channel\n` +
                 `\`${SLACK_SLASH_COMMANDS.STATUS}\` — Check the current agent handling requests in the channel\n` +
                 `\`${SLACK_SLASH_COMMANDS.HELP}\` — Show available commands\n\n` +
-                "Press *Stop* while I'm working to stop me and end auto-replies in that thread; @mention me to resume.",
+                "Reply `mute` or react :mute: to stop auto-replies in a thread. Press *Stop* while I'm working to cancel the answer; @mention me to resume.",
             },
           },
           { type: "divider" },
@@ -1454,7 +1461,7 @@ class SlackProvider implements ChatOpsProvider {
             `\`${slashCommands.SELECT_AGENT}\` — Change the default agent\n` +
             `\`${slashCommands.STATUS}\` — Show current agent binding\n` +
             `\`${slashCommands.HELP}\` — Show this help message\n\n` +
-            "Press *Stop* while I'm working to stop me and end auto-replies in that thread; @mention me to resume.\n\n" +
+            "Reply `mute` or react :mute: to stop auto-replies in a thread. Press *Stop* while I'm working to cancel the answer; @mention me to resume.\n\n" +
             "Or just send a message to interact with the assigned agent.",
         };
 
@@ -1760,6 +1767,71 @@ class SlackProvider implements ChatOpsProvider {
   // ===========================================================================
   // Private Methods
   // ===========================================================================
+
+  /** Mute reactions are control events, never messages for the agent. */
+  private async handleMuteReaction(event: SlackEvent): Promise<void> {
+    if (
+      event.item?.type !== "message" ||
+      !isMuteReaction(event.reaction ?? "") ||
+      event.user === this.botUserId ||
+      isSlackDmChannel(event.item.channel)
+    )
+      return;
+
+    const channelId = event.item.channel;
+    const threadTs = await this.resolveMuteThreadRoot(channelId, event.item.ts);
+    if (!threadTs) return;
+    await muteChannelThread({
+      provider: this.providerId,
+      channelId,
+      threadId: threadTs,
+      scope: this.stateScope,
+    });
+    await this.setSessionStatus(channelId, threadTs, "active");
+  }
+
+  /** Reaction events carry the reacted message's ts, rather than its thread root. */
+  private async resolveMuteThreadRoot(
+    channelId: string,
+    ts: string,
+  ): Promise<string | null> {
+    const activation = {
+      provider: this.providerId,
+      channelId,
+      threadId: ts,
+      scope: this.stateScope,
+    };
+    try {
+      if (
+        (await isChannelThreadActive(activation)) ||
+        (await isChannelThreadMuted(activation))
+      )
+        return ts;
+    } catch {
+      // A cache failure falls through to Slack's lookup.
+    }
+    if (!this.client) return null;
+    try {
+      // conversations.replies requires a parent ts; reactions.get returns the
+      // actual reacted message, including thread_ts when it is a reply.
+      const result = await this.client.reactions.get({
+        channel: channelId,
+        timestamp: ts,
+      });
+      // Slack returns a message object, but this SDK's reaction-specific type
+      // omits the thread timestamp field.
+      const message = result.message as
+        | (typeof result.message & { thread_ts?: string })
+        | undefined;
+      return message?.thread_ts || message?.ts || null;
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error), channelId, ts },
+        "[SlackProvider] Failed to resolve mute reaction thread",
+      );
+      return null;
+    }
+  }
 
   /**
    * The Stop button on an agent session: stop the work and end sticky
@@ -2969,6 +3041,8 @@ interface SlackEventPayload {
     ts: string;
     thread_ts?: string;
     files?: SlackFile[];
+    reaction?: string;
+    item?: { type?: string; channel: string; ts: string };
     // app_home_opened: which tab of the app's DM was opened
     tab?: string;
     // assistant_thread_started (legacy assistant experience)

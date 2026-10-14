@@ -318,6 +318,7 @@ describe("Claude Code APPA permission installation", () => {
     "list_peer_messages",
     "read_peer_message",
     "yell",
+    "superyell",
     "ask_user",
   ].map((name) => `mcp__prod_gateway__archestra__${name}`);
 
@@ -392,6 +393,7 @@ describe("Claude Code APPA permission installation", () => {
       "list_peer_messages",
       "read_peer_message",
       "yell",
+      "superyell",
       "ask_user",
     ].map((name) => `mcp__company_gateway__company__${name}`);
     expect(result.settings.permissions.allow).toEqual([
@@ -502,6 +504,7 @@ describe("Claude Code APPA permission installation", () => {
       "list_peer_messages",
       "read_peer_message",
       "yell",
+      "superyell",
       "ask_user",
     ].map((name) => `mcp__prod_gateway__archestra__${name}`);
     const original = JSON.stringify({
@@ -2509,6 +2512,7 @@ if (command === "mcp" && action === "remove") {
             "list_peer_messages",
             "read_peer_message",
             "yell",
+            "superyell",
             "ask_user",
           ].map((name) => [
             `${MCP.toolPrefix}${name}`,

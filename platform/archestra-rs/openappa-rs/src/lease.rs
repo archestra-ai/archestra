@@ -1,99 +1,127 @@
-//! The lease one dispatch holds on its trajectory family while it claims and
-//! completes receipts.
+//! The receipts one dispatch works on, and the leases it holds on them.
 //!
-//! A receipt stays `pending` from its claim to its completion, and a process
-//! that stops in between leaves it pending. A later dispatch of the family
-//! finds it while holding the family's advisory lock, so it knows the
-//! receipt's owner is gone: PostgreSQL drops that lock when the owner's
-//! connection ends, and no sooner. No clock is compared.
+//! A receipt stays `pending` from its claim to its completion. The dispatch that
+//! claimed it holds a lease on it: an owner id and an expiry the database clock
+//! judges. The dispatch renews its leases while it works, so a lease outlives
+//! any consult it waits on. A process that stops renews nothing, its leases
+//! expire, and the next dispatch of the same operation takes the receipt over:
 //!
-//! What the stopped dispatch kept is then answered per operation, never
-//! guessed from the family's log position:
+//! - A resubmitted operation whose receipt is pending under an expired lease is
+//!   driven again through the runtime. Work the event log never kept runs as a
+//!   first run; work it kept is answered from the committed facts, without
+//!   re-execution. Either way the receipt completes with exactly the decision
+//!   the host was owed.
+//! - A receipt pending under a live lease belongs to a dispatch still at work.
+//!   A second request for the same operation waits for that dispatch's answer
+//!   for a bounded time, holding no connection, and is then refused as
+//!   retryable.
+//! - A dispatch whose work failed while the family's log stood still committed
+//!   nothing, so it removes the receipts it created and the host's retry runs
+//!   them as first runs. Any other receipt it holds keeps its recorded input and
+//!   only its lease ends, so the retry takes it over at once.
 //!
-//! - A resubmitted operation whose receipt is pending is driven again through
-//!   the runtime. Work the event log never kept runs as a first run; work it
-//!   kept is answered from the committed facts, without re-execution. Either
-//!   way the pending receipt completes with exactly the decision the host was
-//!   owed, and no family is closed for an ordinary interruption.
-//! - A dispatch whose own work failed while it committed nothing to the log
-//!   releases the receipts it claimed at once, so the host's retry runs them
-//!   again without waiting for the recovery above.
+//! Only the owner of a pending receipt completes it, so a dispatch that lost a
+//! lease to a takeover can never overwrite what the new owner decides.
 //!
-//! Every function here runs on the dispatch's own connection, which holds the
-//! family's advisory lock for the whole dispatch.
-use appa_eventlog::postgres::{LeasedPostgres, PostgresError};
-use postgres::GenericClient;
-use std::{future::Future, time::Duration};
+//! No dispatch holds a database connection or a lock while it works: every
+//! claim, renewal and completion is one short transaction.
+use crate::Sql;
+use appa_eventlog::{
+    LeaseOwner, LogStore, OperationKey, ProcessedResultKey, ReceiptLease, Renewal,
+};
+use std::{
+    future::Future,
+    sync::{Arc, Mutex, PoisonError},
+    time::{Duration, Instant},
+};
 use tokio::time::MissedTickBehavior;
 
-/// How often a working dispatch checks that it still owns its lease.
-const PROBE_INTERVAL: Duration = Duration::from_secs(5);
+/// How often a working dispatch renews its leases.
+const RENEW_INTERVAL: Duration = Duration::from_secs(5);
 
-/// The receipts one dispatch may have claimed, all in one session of its
-/// family: operation ids and the tool-call ids of processed results.
-pub(crate) struct OwnReceipts {
-    pub session_id: String,
-    pub operations: Vec<String>,
-    pub results: Vec<String>,
-}
+/// How long a lease stands without renewal. Several renewals can fail before
+/// it ends, so only a stopped process lets one expire.
+const LEASE_TTL: Duration = Duration::from_secs(30);
 
-/// What became of the work a lease guarded.
+/// How long a request waits for another request working on the same operation
+/// before it is refused as retryable. Longer than a lease outlives its last
+/// renewal, so the retry of a stopped dispatch's operation takes it over
+/// rather than failing.
+const HELD_WAIT: Duration = Duration::from_secs(45);
+
+/// What became of the work a dispatch's leases guarded.
 pub(crate) enum Guarded<T> {
     Finished(T),
-    /// This dispatch no longer owns its family: its connection ended, or
-    /// another dispatch took the lease.
+    /// Another dispatch took over a receipt this one claimed: its lease
+    /// expired before a renewal reached the database.
     Lost,
 }
 
-/// One dispatch's lease on its family.
-pub(crate) struct DispatchLease {
-    root: String,
-    owner: String,
+/// How this dispatch came to hold a receipt.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Holding {
+    /// This dispatch wrote the receipt.
+    Created,
+    /// An earlier dispatch wrote it and stopped; this one took it over.
+    Recovered,
 }
 
-impl DispatchLease {
-    /// Takes the lease of a family. The event log's end is read here, so take
-    /// it after the dispatch's last write that precedes its first claim.
-    /// `attempt` counts the family's lease generations: a family whose
-    /// dispatches keep stopping shows a growing number, which is telemetry for
-    /// diagnostics, never a reason to refuse the family.
-    pub(crate) fn take(pg: &LeasedPostgres, root: &str) -> Result<Self, PostgresError> {
-        let key = root.to_owned();
-        let owner = pg.with_client(move |client| {
-            let seq = head(client, &key)?;
-            Ok(client
-                .query_one(
-                    "INSERT INTO openappa_dispatch_leases (root, owner, event_seq, attempt) \
-                     VALUES ($1, gen_random_uuid()::text, $2, 1) \
-                     ON CONFLICT (root) DO UPDATE SET owner = EXCLUDED.owner, \
-                         event_seq = EXCLUDED.event_seq, \
-                     attempt = LEAST(openappa_dispatch_leases.attempt, 2147483646) + 1 \
-                     RETURNING owner",
-                    &[&key, &seq],
-                )?
-                .get(0))
-        })?;
-        Ok(Self {
-            root: root.to_owned(),
-            owner,
-        })
+/// The receipts one dispatch claimed, under the one owner id it claims them as.
+pub(crate) struct Receipts {
+    store: Arc<LogStore>,
+    lease: ReceiptLease,
+    claimed: Mutex<Claimed>,
+}
+
+#[derive(Default)]
+struct Claimed {
+    operations: Vec<(OperationKey, Holding)>,
+    results: Vec<(ProcessedResultKey, Holding)>,
+}
+
+impl Receipts {
+    pub(crate) fn new(store: Arc<LogStore>) -> Self {
+        let owner = LeaseOwner::parse(&uuid::Uuid::now_v7().to_string())
+            .expect("a UUID is a valid lease owner");
+        Self {
+            store,
+            lease: ReceiptLease::new(owner, LEASE_TTL).expect("the lease TTL is positive"),
+            claimed: Mutex::default(),
+        }
     }
 
-    /// Runs `work`, checking the lease while it runs. A dispatch that lost its
-    /// lease stops where it is: nothing it would still write could be kept, and
-    /// the dispatch that took the family over answers the host's retry.
-    pub(crate) async fn hold<F: Future>(&self, pg: &LeasedPostgres, work: F) -> Guarded<F::Output> {
+    pub(crate) fn lease(&self) -> &ReceiptLease {
+        &self.lease
+    }
+
+    pub(crate) fn owner(&self) -> &LeaseOwner {
+        self.lease.owner()
+    }
+
+    /// Records a receipt this dispatch now holds, so its lease is renewed.
+    pub(crate) fn hold_operation(&self, key: OperationKey, holding: Holding) {
+        self.claimed().operations.push((key, holding));
+    }
+
+    pub(crate) fn hold_result(&self, key: ProcessedResultKey, holding: Holding) {
+        self.claimed().results.push((key, holding));
+    }
+
+    /// Runs `work`, renewing this dispatch's leases while it runs. A dispatch
+    /// that lost a lease stops where it is: what it would still write could not
+    /// complete a receipt it no longer owns.
+    pub(crate) async fn hold<F: Future>(&self, work: F) -> Guarded<F::Output> {
         tokio::pin!(work);
-        let mut probes = tokio::time::interval(PROBE_INTERVAL);
-        probes.set_missed_tick_behavior(MissedTickBehavior::Delay);
-        // An interval's first tick is immediate, and the lease is new.
-        probes.tick().await;
+        let mut renewals = tokio::time::interval(RENEW_INTERVAL);
+        renewals.set_missed_tick_behavior(MissedTickBehavior::Delay);
+        // An interval's first tick is immediate, and nothing is claimed yet.
+        renewals.tick().await;
         loop {
             tokio::select! {
                 biased;
                 output = &mut work => return Guarded::Finished(output),
-                _ = probes.tick() => {
-                    if !matches!(self.owned(pg), Ok(true)) {
+                _ = renewals.tick() => {
+                    if self.renew_lost() {
                         return Guarded::Lost;
                     }
                 }
@@ -101,109 +129,161 @@ impl DispatchLease {
         }
     }
 
-    /// Ends a lease this dispatch still holds. `finished` is whether its work
-    /// returned a decision. Work that failed and left the event log where the
-    /// lease found it kept nothing, so the receipts it claimed are released at
-    /// once and the host's retry runs them again. Any other pending receipt is
-    /// recovered when its own operation is resubmitted, and keeps the lease
-    /// row as the sign that recovery is owed.
-    pub(crate) fn settle(
-        &self,
-        pg: &LeasedPostgres,
-        finished: bool,
-        own: &OwnReceipts,
-    ) -> Result<(), PostgresError> {
-        let (root, owner) = (self.root.clone(), self.owner.clone());
-        let (session_id, operations, results) = (
-            own.session_id.clone(),
-            own.operations.clone(),
-            own.results.clone(),
-        );
-        pg.with_client(move |client| {
-            let mut transaction = client.transaction()?;
-            let held = transaction
-                .query_opt(
-                    "SELECT event_seq FROM openappa_dispatch_leases \
-                     WHERE root = $1 AND owner = $2 FOR UPDATE",
-                    &[&root, &owner],
-                )?
-                .map(|row| row.get::<_, i64>(0));
-            let Some(event_seq) = held else {
-                return Ok(());
+    /// Leaves the receipts of a dispatch that did not finish for the host's
+    /// retry. `committed_nothing`: the family's log stood still for the whole
+    /// dispatch, so the receipts this dispatch created guard no work and are
+    /// removed. Every other pending receipt keeps its recorded input, and its
+    /// lease ends so the retry takes it over at once.
+    pub(crate) fn release(&self, committed_nothing: bool) {
+        let (operations, results) = self.held();
+        if operations.is_empty() && results.is_empty() {
+            return;
+        }
+        if committed_nothing {
+            let created = |holding: &Holding| *holding == Holding::Created;
+            let (operations, results) = {
+                let claimed = self.claimed();
+                (
+                    keys(&claimed.operations, created),
+                    keys(&claimed.results, created),
+                )
             };
-            if !finished && head(&mut transaction, &root)? == event_seq {
-                release_own(&mut transaction, &root, &session_id, &operations, &results)?;
+            if let Err(error) = remove_pending(&Sql(&self.store), self.owner(), operations, results)
+            {
+                // Their leases still end below; the retry recovers them instead.
+                eprintln!("OpenAPPA could not remove its unused receipts: {error}");
             }
-            if !has_pending(&mut transaction, &root)? {
-                transaction.execute(
-                    "DELETE FROM openappa_dispatch_leases WHERE root = $1 AND owner = $2",
-                    &[&root, &owner],
-                )?;
-            }
-            transaction.commit()?;
-            Ok(())
-        })
+        }
+        if let Err(error) = self
+            .store
+            .release_receipts(self.owner(), &operations, &results)
+        {
+            // The leases then expire on their own.
+            eprintln!("OpenAPPA could not end its receipt leases: {error}");
+        }
     }
 
-    fn owned(&self, pg: &LeasedPostgres) -> Result<bool, PostgresError> {
-        let (root, owner) = (self.root.clone(), self.owner.clone());
-        pg.with_client(move |client| {
-            Ok(client
-                .query_opt(
-                    "SELECT 1 FROM openappa_dispatch_leases WHERE root = $1 AND owner = $2",
-                    &[&root, &owner],
-                )?
-                .is_some())
-        })
+    /// Whether a renewal found a held receipt taken over. A renewal that cannot
+    /// reach the database loses nothing yet: the lease stands until it expires,
+    /// and the next renewal tries again.
+    fn renew_lost(&self) -> bool {
+        let (operations, results) = self.held();
+        if operations.is_empty() && results.is_empty() {
+            return false;
+        }
+        match self
+            .store
+            .renew_receipts(&self.lease, &operations, &results)
+        {
+            Ok(renewal) => renewal == Renewal::Lost,
+            Err(error) => {
+                eprintln!("OpenAPPA could not renew its receipt leases: {error}");
+                false
+            }
+        }
+    }
+
+    fn held(&self) -> (Vec<OperationKey>, Vec<ProcessedResultKey>) {
+        let claimed = self.claimed();
+        (
+            keys(&claimed.operations, |_| true),
+            keys(&claimed.results, |_| true),
+        )
+    }
+
+    fn claimed(&self) -> std::sync::MutexGuard<'_, Claimed> {
+        self.claimed.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
-fn has_pending(client: &mut impl GenericClient, root: &str) -> Result<bool, PostgresError> {
-    Ok(client
-        .query_opt(
-            "SELECT 1 FROM openappa_operations WHERE root = $1 AND status = 'pending' \
-             UNION ALL \
-             SELECT 1 FROM openappa_processed_results WHERE root = $1 AND status = 'pending' \
-             LIMIT 1",
-            &[&root],
-        )?
-        .is_some())
+/// The wait of a request for another request that works on the same operation.
+pub(crate) struct HeldWait {
+    since: Instant,
+    delay: Duration,
 }
 
-/// The last event sequence of `root`, or -1 for an empty log.
-fn head(client: &mut impl GenericClient, root: &str) -> Result<i64, PostgresError> {
-    Ok(client
-        .query_one(
-            "SELECT COALESCE(max(seq), -1) FROM openappa_events WHERE root = $1",
-            &[&root],
-        )?
-        .get(0))
+impl HeldWait {
+    pub(crate) fn new() -> Self {
+        Self {
+            since: Instant::now(),
+            delay: Duration::from_millis(50),
+        }
+    }
+
+    /// Waits before the next claim attempt, holding no connection. `false`
+    /// once the request has waited long enough and should be refused instead.
+    pub(crate) async fn again(&mut self) -> bool {
+        if self.since.elapsed() >= HELD_WAIT {
+            return false;
+        }
+        tokio::time::sleep(self.delay).await;
+        self.delay = (self.delay * 2).min(Duration::from_secs(1));
+        true
+    }
 }
 
-/// Releases the pending rows one dispatch claimed itself: its session's rows
-/// for exactly the operation and tool-call ids it worked on. Another
-/// dispatch's receipts, including recovered ones still awaiting their own
-/// resubmission, are never touched.
-fn release_own(
-    client: &mut impl GenericClient,
+fn keys<K: Clone>(held: &[(K, Holding)], keep: impl Fn(&Holding) -> bool) -> Vec<K> {
+    held.iter()
+        .filter(|(_, holding)| keep(holding))
+        .map(|(key, _)| key.clone())
+        .collect()
+}
+
+/// Removes the listed receipts that are still pending under `owner`.
+fn remove_pending(
+    sql: &Sql<'_>,
+    owner: &LeaseOwner,
+    operations: Vec<OperationKey>,
+    results: Vec<ProcessedResultKey>,
+) -> Result<(), appa_eventlog::postgres::PostgresError> {
+    if operations.is_empty() && results.is_empty() {
+        return Ok(());
+    }
+    let owner = owner.as_str().to_owned();
+    sql.with_client(move |client| {
+        for key in &operations {
+            client.execute(
+                "DELETE FROM openappa_operations \
+                 WHERE organization_id = $1 AND session_id = $2 AND operation_id = $3 \
+                   AND status = 'pending' AND lease_owner = $4",
+                &[
+                    &key.session.organization_id,
+                    &key.session.session_id,
+                    &key.operation_id,
+                    &owner,
+                ],
+            )?;
+        }
+        for key in &results {
+            client.execute(
+                "DELETE FROM openappa_processed_results \
+                 WHERE organization_id = $1 AND session_id = $2 AND tool_call_id = $3 \
+                   AND status = 'pending' AND lease_owner = $4",
+                &[
+                    &key.session.organization_id,
+                    &key.session.session_id,
+                    &key.tool_call_id,
+                    &owner,
+                ],
+            )?;
+        }
+        Ok(())
+    })
+}
+
+/// Where `root`'s event log ends now, or -1 for an empty log. A failed dispatch
+/// compares it with where the log ended when it began.
+pub(crate) fn log_end(
+    sql: &Sql<'_>,
     root: &str,
-    session_id: &str,
-    operations: &[String],
-    results: &[String],
-) -> Result<(), PostgresError> {
-    if !operations.is_empty() {
-        client.execute(
-            "DELETE FROM openappa_operations \
-             WHERE root = $1 AND session_id = $2 AND operation_id = ANY($3) AND status = 'pending'",
-            &[&root, &session_id, &operations],
-        )?;
-    }
-    if !results.is_empty() {
-        client.execute(
-            "DELETE FROM openappa_processed_results \
-             WHERE root = $1 AND session_id = $2 AND tool_call_id = ANY($3) AND status = 'pending'",
-            &[&root, &session_id, &results],
-        )?;
-    }
-    Ok(())
+) -> Result<i64, appa_eventlog::postgres::PostgresError> {
+    let root = root.to_owned();
+    sql.with_client(move |client| {
+        Ok(client
+            .query_one(
+                "SELECT COALESCE(max(seq), -1) FROM openappa_events WHERE root = $1",
+                &[&root],
+            )?
+            .get(0))
+    })
 }

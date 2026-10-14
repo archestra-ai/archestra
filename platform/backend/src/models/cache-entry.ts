@@ -24,6 +24,21 @@ class CacheEntryModel {
     return result.rows[0]?.value;
   }
 
+  /** One statement, so an empty poll does not read each key on its own. */
+  static async getMany(
+    keys: string[],
+  ): Promise<Array<{ key: string; value: string }>> {
+    if (keys.length === 0) return [];
+    const result = await db.execute<{ key: string; value: string }>(sql`
+      SELECT key, value FROM keyv_cache
+      WHERE key IN (${sql.join(
+        keys.map((key) => sql`${key}`),
+        sql`, `,
+      )})
+    `);
+    return result.rows;
+  }
+
   async set(key: string, value: string): Promise<void> {
     await this.tx.execute(sql`
       INSERT INTO keyv_cache (key, value) VALUES (${key}, ${value})

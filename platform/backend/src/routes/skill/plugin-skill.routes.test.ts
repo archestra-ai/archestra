@@ -1,7 +1,9 @@
 import { memberPermissions } from "@archestra/shared/access-control";
 import { vi } from "vitest";
+import { RequestLookups } from "@/auth/request-lookups";
 import config from "@/config";
 import { PluginModel, PluginSkillUsageEventModel } from "@/models";
+import { listPluginSkills } from "@/plugins/plugin-skills";
 import {
   accessGrants,
   afterEach,
@@ -128,6 +130,38 @@ describe("plugin Skill routes", () => {
       url: "/api/skills/plugins/00000000-0000-4000-8000-000000000000",
     });
     expect(detail.statusCode).toBe(404);
+  });
+
+  test("request lookups preserve plugin grants and caller-specific permissions", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const visible = await seedPlugin(stePlugin(), "org");
+    const other = await makeUser();
+    await makeMember(other.id, ctx.organizationId, { role: "member" });
+    const hidden = await PluginModel.create({
+      organizationId: ctx.organizationId,
+      userId: other.id,
+      input: stePlugin({ displayName: "Private plugin" }),
+      ...accessGrants("personal"),
+    });
+    if (!hidden) throw new Error("seed plugin creation failed");
+    const lookups = new RequestLookups();
+    const readable = await listPluginSkills({
+      organizationId: ctx.organizationId,
+      userId: ctx.user.id,
+      lookups,
+    });
+    expect(readable.map((skill) => skill.pluginId)).toEqual([visible.id]);
+    // A caller without plugin:read cannot borrow the previous caller's cache,
+    // even for a plugin they own or one shared with the organization.
+    expect(
+      await listPluginSkills({
+        organizationId: ctx.organizationId,
+        userId: other.id,
+        lookups,
+      }),
+    ).toEqual([]);
   });
 
   test("lists portable skills across plugins, skipping invalid manifests", async () => {

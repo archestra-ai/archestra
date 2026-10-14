@@ -43,6 +43,7 @@ import {
 import { RouteCategory } from "@/observability/tracing";
 import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import type {
   ChatOpsApprovalDecision,
   ChatOpsProvider,
@@ -67,6 +68,7 @@ import {
   THREAD_MUTE_HINT,
 } from "./constants";
 import MSTeamsProvider from "./ms-teams-provider";
+import SlackProvider from "./slack-provider";
 import { buildHistorySkippedAttachmentsNote } from "./utils";
 
 describe("matchesAgentName", () => {
@@ -2722,6 +2724,160 @@ describe("ChatOpsManager.getAccessibleChatopsAgents personal agent filtering", (
     });
 
     expect(agents.some((a) => a.id === otherPersonalAgent.id)).toBe(false);
+  });
+});
+
+describe("ChatOpsManager Slack quoted report replay", () => {
+  setupTestCacheManager();
+  test("delivers a rich-text quote to the executor on the root turn and its follow-up", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const user = await makeUser({ email: "quoted-report@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Support Agent",
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "slack",
+      channelId: "CQUOTE",
+      workspaceId: "TQUOTE",
+      agentId: agent.id,
+    });
+    const report = "A user outside the support team is routed to its server.";
+    const blocks = [
+      {
+        type: "rich_text",
+        elements: [
+          {
+            type: "rich_text_quote",
+            elements: [{ type: "text", text: report }],
+          },
+          {
+            type: "rich_text_section",
+            elements: [
+              { type: "user", user_id: "UBOT123" },
+              { type: "text", text: " create a task from the report above" },
+            ],
+          },
+        ],
+      },
+    ];
+    const provider = new SlackProvider({
+      enabled: true,
+      botToken: "xoxb-test",
+      signingSecret: "test-secret",
+      appId: "AQUOTE",
+    });
+    // biome-ignore lint/suspicious/noExplicitAny: establish the test bot identity
+    (provider as any).botUserId = "UBOT123";
+    // Only Slack API calls are stubbed; parsing, routing and history replay are real.
+    // biome-ignore lint/suspicious/noExplicitAny: inject the external Slack boundary
+    (provider as any).client = {
+      users: {
+        info: vi.fn().mockResolvedValue({
+          user: {
+            id: "UQUOTE",
+            real_name: "Test User",
+            profile: { email: user.email },
+          },
+        }),
+      },
+      conversations: {
+        info: vi.fn().mockResolvedValue({
+          channel: { name: "support", purpose: { value: "" } },
+        }),
+        replies: vi.fn().mockResolvedValue({
+          messages: [{ ts: "1800000000.000001", user: "UQUOTE", blocks }],
+        }),
+      },
+      chat: {
+        getPermalink: vi
+          .fn()
+          .mockResolvedValue({ permalink: "https://example.com/message" }),
+      },
+    };
+    const executor = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockResolvedValue({
+        text: "Report received",
+        messageId: "quote-response",
+        finishReason: "stop",
+        responseUiMessage: {
+          id: "quote-response",
+          role: "assistant",
+          parts: [{ type: "text", text: "Report received" }],
+        },
+      });
+    const manager = new ChatOpsManager();
+    const root = await provider.parseWebhookNotification(
+      {
+        type: "event_callback",
+        team_id: "TQUOTE",
+        event: {
+          type: "app_mention",
+          channel: "CQUOTE",
+          channel_type: "channel",
+          user: "UQUOTE",
+          ts: "1800000000.000001",
+          blocks,
+        },
+      },
+      {},
+    );
+    expect(root?.text).toContain(report);
+    if (!root) throw new Error("Quoted root was dropped");
+    expect(
+      (
+        await manager.processMessage({
+          provider,
+          message: root,
+          sendReply: false,
+        })
+      ).success,
+    ).toBe(true);
+    expect(executor.mock.calls[0]?.[0].message).toContain(report);
+    expect(executor.mock.calls[0]?.[0].message).toContain(
+      "create a task from the report above",
+    );
+    const followUp = await provider.parseWebhookNotification(
+      {
+        type: "event_callback",
+        team_id: "TQUOTE",
+        event: {
+          type: "message",
+          channel: "CQUOTE",
+          channel_type: "channel",
+          user: "UQUOTE",
+          ts: "1800000000.000002",
+          thread_ts: root.threadId,
+          text: "see the report above",
+        },
+      },
+      {},
+    );
+    if (!followUp) throw new Error("Follow-up was dropped");
+    expect(
+      (
+        await manager.processMessage({
+          provider,
+          message: followUp,
+          sendReply: false,
+        })
+      ).success,
+    ).toBe(true);
+    expect(executor.mock.calls[1]?.[0].message).toContain(report);
+    expect(executor.mock.calls[1]?.[0].message).toContain(
+      "see the report above",
+    );
   });
 });
 

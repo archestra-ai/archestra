@@ -10,6 +10,7 @@ import {
   UserModel,
   UserTokenModel,
 } from "@/models";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import { purgePersonalAppsForUser } from "@/services/apps/app-mcp-backing";
 
 type MemberRemovalTarget =
@@ -142,4 +143,6 @@ export async function cleanupAfterMembershipRemoval(params: {
       "[member-removal] failed to clean up personal resources after membership removal",
     );
   }
+  // The former member leaves the organization's member roster.
+  await openappaBatteriesService.recompileOrganizations([organizationId]);
 }

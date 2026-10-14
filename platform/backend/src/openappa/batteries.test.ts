@@ -4,13 +4,28 @@ import { and, eq } from "drizzle-orm";
 import config from "@/config";
 import db, { schema } from "@/database";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
+import MemberModel from "@/models/member";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
+import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import ToolModel from "@/models/tool";
+import {
+  deleteRuntimeCredentialConnection,
+  deleteRuntimeCredentialDefinition,
+  updateRuntimeCredentialDefinition,
+} from "@/services/agent-runtime/runtime-credentials";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
+import { removeMemberTarget } from "@/services/member-removal";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { bindOrganizationCredential } from "@/test/openappa-credentials";
+import {
+  createGithubApp,
+  deployGithubWithRoster,
+  GITHUB_ROSTER_ROOT,
+  storedHostMembers,
+} from "@/test/openappa-github-roster";
+import { type GitHubUserId, GitHubUserIdSchema } from "@/types";
 import { openappaBatteriesService } from "./batteries";
 import {
   helperUrlBase,
@@ -19,6 +34,7 @@ import {
 } from "./declarations";
 import { parsePolicyToml } from "./policy-text";
 import { openappaRemediesService } from "./remedies";
+import { recompileAllOnStart } from "./service";
 import { openappaTrustAudienceService } from "./trust-audience";
 
 const BRIDGE_TOKEN_ENV = "APPA_ARCHESTRA_BRIDGE_TOKEN";
@@ -1028,6 +1044,299 @@ readers = { "github:1" = "ana@corp.example" }
 `,
     });
     expect(await roster()).toEqual({ "github:1": "ana@corp.example" });
+  });
+});
+
+describe("the host member roster", () => {
+  const sandbox = config.daggerRuntime.enabled;
+  afterEach(() => {
+    config.daggerRuntime.enabled = sandbox;
+  });
+
+  const ANA = GitHubUserIdSchema.parse(1001);
+  const BOB = GitHubUserIdSchema.parse(1002);
+
+  const setUp = async (fixtures: {
+    makeOrganization: () => Promise<{ id: string }>;
+    makeUser: (overrides?: { email?: string }) => Promise<{ id: string }>;
+    makeMember: (
+      userId: string,
+      organizationId: string,
+      overrides?: { role?: string },
+    ) => Promise<unknown>;
+    makeInternalMcpCatalog: (overrides: {
+      organizationId: string;
+      name: string;
+    }) => Promise<{ id: string }>;
+    makeTool: (overrides: {
+      catalogId: string;
+      name: string;
+      rawName: string;
+    }) => Promise<unknown>;
+  }) => {
+    const organizationId = (await fixtures.makeOrganization()).id;
+    const userId = (await fixtures.makeUser()).id;
+    await fixtures.makeMember(userId, organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    await deployGithubWithRoster({ organizationId, userId, ...fixtures });
+    const member = async (email: string, githubId: GitHubUserId) => {
+      const user = await fixtures.makeUser({ email });
+      await fixtures.makeMember(user.id, organizationId);
+      await RuntimeCredentialConnectionModel.upsert({
+        organizationId,
+        scope: "personal",
+        userId: user.id,
+        credentialId: "github-user",
+        value: "token",
+        githubId,
+      });
+      return user.id;
+    };
+    return { organizationId, userId, member };
+  };
+
+  test("names each connected member by their GitHub account, leaving out an account two members share", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const { organizationId, member } = await setUp({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeInternalMcpCatalog,
+      makeTool,
+    });
+    await member("ana@corp.example", ANA);
+    await member("mallory@corp.example", ANA);
+    await member("bob@corp.example", BOB);
+
+    const first = await openappaBatteriesService.recompile(organizationId);
+    expect(first.lastError).toBeNull();
+    expect(await storedHostMembers(organizationId)).toEqual({
+      [`github:${BOB}`]: "bob@corp.example",
+    });
+    // The same roster composes the same bytes.
+    const again = await openappaBatteriesService.recompile(organizationId);
+    expect(again.content).toBe(first.content);
+    expect(again.installFingerprint).toBe(first.installFingerprint);
+  });
+
+  test("a roster change alone moves the fingerprint", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const { organizationId, member } = await setUp({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeInternalMcpCatalog,
+      makeTool,
+    });
+    const before = await openappaBatteriesService.recompile(organizationId);
+    await member("ana@corp.example", ANA);
+    const after = await openappaBatteriesService.recompile(organizationId);
+    expect(after.installFingerprint).not.toBe(before.installFingerprint);
+    expect(await storedHostMembers(organizationId)).toEqual({
+      [`github:${ANA}`]: "ana@corp.example",
+    });
+  });
+
+  test("a roster the root declares is the root's", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const { organizationId, userId, member } = await setUp({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeInternalMcpCatalog,
+      makeTool,
+    });
+    await member("ana@corp.example", ANA);
+    await declare({
+      organizationId,
+      userId,
+      content: `${GITHUB_ROSTER_ROOT}
+[externals.audience.host-members]
+readers = { "github:7" = "zoe@corp.example" }
+`,
+    });
+    expect(await storedHostMembers(organizationId)).toEqual({
+      "github:7": "zoe@corp.example",
+    });
+  });
+
+  test("knows nobody while GitHub's token is bound to an App on another GitHub", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const { organizationId, userId, member } = await setUp({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeInternalMcpCatalog,
+      makeTool,
+    });
+    await member("ana@corp.example", ANA);
+    await createGithubApp({
+      organizationId,
+      userId,
+      key: "enterprise-app",
+      githubUrl: "https://github.example.com/api/v3",
+    });
+    await openappaBatteriesService.setCredentialBinding({
+      userId,
+      organizationId,
+      variable: "APPA_PROVIDER_GITHUB_TOKEN",
+      key: "enterprise-app",
+    });
+    expect(await storedHostMembers(organizationId)).toEqual({});
+  });
+
+  describe("follows", () => {
+    test("a disconnect", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const { organizationId, member } = await setUp({
+        makeOrganization,
+        makeUser,
+        makeMember,
+        makeInternalMcpCatalog,
+        makeTool,
+      });
+      const ana = await member("ana@corp.example", ANA);
+      await member("bob@corp.example", BOB);
+      await openappaBatteriesService.recompile(organizationId);
+
+      await deleteRuntimeCredentialConnection({
+        organizationId,
+        userId: ana,
+        credentialId: "github-user",
+        scope: "personal",
+      });
+      expect(await storedHostMembers(organizationId)).toEqual({
+        [`github:${BOB}`]: "bob@corp.example",
+      });
+    });
+
+    test("deleting the definition members connect through", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const { organizationId, member } = await setUp({
+        makeOrganization,
+        makeUser,
+        makeMember,
+        makeInternalMcpCatalog,
+        makeTool,
+      });
+      await member("ana@corp.example", ANA);
+      await openappaBatteriesService.recompile(organizationId);
+
+      await deleteRuntimeCredentialDefinition({
+        organizationId,
+        key: "github-user",
+      });
+      expect(await storedHostMembers(organizationId)).toEqual({});
+    });
+
+    test("pointing the GitHub App at another GitHub", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const { organizationId, member } = await setUp({
+        makeOrganization,
+        makeUser,
+        makeMember,
+        makeInternalMcpCatalog,
+        makeTool,
+      });
+      await member("ana@corp.example", ANA);
+      await openappaBatteriesService.recompile(organizationId);
+
+      await updateRuntimeCredentialDefinition({
+        organizationId,
+        key: "repository-app",
+        definition: { githubUrl: "https://github.example.com/api/v3" },
+      });
+      expect(await storedHostMembers(organizationId)).toEqual({});
+    });
+
+    test("a member's removal", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeInternalMcpCatalog,
+      makeTool,
+      makeAccount,
+    }) => {
+      const { organizationId, member } = await setUp({
+        makeOrganization,
+        makeUser,
+        makeMember,
+        makeInternalMcpCatalog,
+        makeTool,
+      });
+      const ana = await member("ana@corp.example", ANA);
+      await makeAccount(ana);
+      await openappaBatteriesService.recompile(organizationId);
+
+      const membership = await MemberModel.getByUserId(ana, organizationId);
+      expect(
+        await removeMemberTarget({
+          organizationId,
+          target: { kind: "member", id: membership?.id ?? "" },
+        }),
+      ).toEqual({ status: "removed" });
+      expect(await storedHostMembers(organizationId)).toEqual({});
+    });
+
+    test("a start that finds a composition an earlier build stored", async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeInternalMcpCatalog,
+      makeTool,
+    }) => {
+      const { organizationId, member } = await setUp({
+        makeOrganization,
+        makeUser,
+        makeMember,
+        makeInternalMcpCatalog,
+        makeTool,
+      });
+      // Connected before the roster was composed: the stored row predates it.
+      await member("ana@corp.example", ANA);
+      expect(await storedHostMembers(organizationId)).toEqual({});
+
+      await recompileAllOnStart();
+      expect(await storedHostMembers(organizationId)).toEqual({
+        [`github:${ANA}`]: "ana@corp.example",
+      });
+    });
   });
 });
 

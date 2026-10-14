@@ -278,6 +278,20 @@ export async function declareOpenappaInstalls(): Promise<void> {
   }
 }
 
+/**
+ * Recompose every organization once the declarations are carried over, so a
+ * composition an earlier build stored takes in what this build composes, such
+ * as the member roster. Never rejects: a server starts whatever it finds.
+ */
+export async function recompileAllOnStart(): Promise<void> {
+  if (!openappaEnabled()) return;
+  try {
+    await openappaBatteriesService.recompileAll();
+  } catch (error) {
+    logger.error({ err: error }, "Recomposing the OpenAPPA policies failed");
+  }
+}
+
 export async function executeYell(params: {
   session: OpenAppaSession;
   toolCallId: string;

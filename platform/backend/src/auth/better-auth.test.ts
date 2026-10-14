@@ -24,6 +24,7 @@ import {
   AccountModel,
   AgentModel,
   MemberModel,
+  RuntimeCredentialConnectionModel,
   SessionModel,
   TeamModel,
   UserModel,
@@ -32,8 +33,14 @@ import AuditLogModel from "@/models/audit-log";
 import InvitationModel from "@/models/invitation";
 import McpServerModel from "@/models/mcp-server";
 import SecretModel from "@/models/secret";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import { beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
+import {
+  deployGithubWithRoster,
+  storedHostMembers,
+} from "@/test/openappa-github-roster";
+import { GitHubUserIdSchema } from "@/types";
 
 // Create a hoisted ref to control disableInvitations in tests
 const mockDisableInvitations = vi.hoisted(() => ({ value: false }));
@@ -1354,6 +1361,55 @@ describe("handleAfterHook", () => {
       // Should not throw
       await expect(handleAfterHook(ctx)).resolves.toBeUndefined();
     });
+  });
+
+  test("an admin's change of a member's email reaches the member roster", async ({
+    makeOrganization,
+    makeAdmin,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const openappa = { ...config.openappa };
+    const sandbox = config.daggerRuntime.enabled;
+    try {
+      const organizationId = (await makeOrganization()).id;
+      const admin = await makeAdmin();
+      await makeMember(admin.id, organizationId, { role: "admin" });
+      await deployGithubWithRoster({
+        organizationId,
+        userId: admin.id,
+        makeInternalMcpCatalog,
+        makeTool,
+      });
+      const ana = await makeUser({ email: "ana@corp.example" });
+      await makeMember(ana.id, organizationId);
+      await RuntimeCredentialConnectionModel.upsert({
+        organizationId,
+        scope: "personal",
+        userId: ana.id,
+        credentialId: "github-user",
+        value: "token",
+        githubId: GitHubUserIdSchema.parse(1001),
+      });
+      await openappaBatteriesService.recompile(organizationId);
+
+      await UserModel.patch(ana.id, { email: "ana@new.example" });
+      await handleAfterHook(
+        createMockContext({
+          path: "/admin/update-user",
+          method: "POST",
+          body: { userId: ana.id, data: { email: "ana@new.example" } },
+        }),
+      );
+      expect(await storedHostMembers(organizationId)).toEqual({
+        "github:1001": "ana@new.example",
+      });
+    } finally {
+      config.openappa = openappa;
+      config.daggerRuntime.enabled = sandbox;
+    }
   });
 
   describe("sign-in active organization", () => {

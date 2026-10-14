@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
+import config from "@/config";
 import db, { schema } from "@/database";
 import {
   createFastifyInstance,
@@ -15,6 +16,10 @@ import {
 import { resolveCredential } from "@/services/credentials";
 import { afterEach, beforeEach, expect, test } from "@/test";
 import { useMswServer as setupMswServer } from "@/test/msw";
+import {
+  declareGithub,
+  storedHostMembers,
+} from "@/test/openappa-github-roster";
 import type { User } from "@/types";
 
 const server = setupMswServer();
@@ -290,6 +295,31 @@ test("does not save tokens when GitHub cannot verify the user", async () => {
       scope: "personal",
     }),
   ).toBeNull();
+});
+
+test("a connected account joins the member roster of GitHub's deployed target", async ({
+  makeInternalMcpCatalog,
+  makeTool,
+}) => {
+  const openappa = { ...config.openappa };
+  const sandbox = config.daggerRuntime.enabled;
+  try {
+    await declareGithub({
+      organizationId,
+      userId: user.id,
+      makeInternalMcpCatalog,
+      makeTool,
+    });
+    expect(await storedHostMembers(organizationId)).toEqual({});
+
+    expect((await complete(await start())).statusCode).toBe(200);
+    expect(await storedHostMembers(organizationId)).toEqual({
+      "github:12345": user.email,
+    });
+  } finally {
+    config.openappa = openappa;
+    config.daggerRuntime.enabled = sandbox;
+  }
 });
 
 async function start() {

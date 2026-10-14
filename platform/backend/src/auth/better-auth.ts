@@ -48,6 +48,7 @@ import SessionModel from "@/models/session";
 import SkillModel from "@/models/skill";
 import UserModel from "@/models/user";
 import { reportAuditWriteFailure } from "@/observability/metrics/audit";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import { purgePersonalAppsForUser } from "@/services/apps/app-mcp-backing";
 import { cleanupAfterMembershipRemoval } from "@/services/member-removal";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -2065,6 +2066,17 @@ export async function handleAfterHook(ctx: HookEndpointContext) {
       }
     }
   }
+
+  // The member roster maps GitHub accounts to the user's email.
+  if (
+    path === "/admin/update-user" &&
+    method === "POST" &&
+    typeof body.userId === "string" &&
+    typeof body.data?.email === "string"
+  )
+    await openappaBatteriesService.recompileOrganizations(
+      await MemberModel.findOrganizationIdsByUserId(body.userId),
+    );
 
   // NOTE: User deletion on member removal is handled in routes/auth.ts
   // Better-auth handles member deletion, we just clean up orphaned users

@@ -110,7 +110,7 @@ delta = { audience = ["self"] }
 [[policy.tool]]
 name = "mail__send"
 delta = { audience = ["self"] }
-requires = { audience = { contains = ["self"], within = ["internal"] } }
+requires = { audience = { contains = ["self"] } }
 
 [[policy.tool]]
 name = "docs__search"
@@ -132,6 +132,22 @@ delta = { trust = "untrusted", audience = ["public"] }
     });
   });
 
+  test("an audience only a rule's forwards names is unmapped", async () => {
+    await saveRoot(`[policy]
+version = 2
+trust_chain = ["untrusted", "trusted"]
+
+[[policy.tool]]
+name = "mail__send"
+forwards = { audience = ["self"] }
+`);
+
+    expect(audience(await view(), "self")).toEqual({
+      name: "self",
+      kind: "unmapped",
+    });
+  });
+
   test("an audience read from two sources lists both, and a group follows the chain", async () => {
     const content = `include = ["${ARCHESTRA}", "${GITHUB}"]
 
@@ -147,7 +163,7 @@ from = ["github:org/acme/team/eng"]
 
 [[policy.tool]]
 name = "wiki__publish"
-requires = { audience = { within = ["@eng"] } }
+requires = { audience = { contains = ["@eng"] } }
 `;
     await saveRoot(content);
 

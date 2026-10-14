@@ -1,24 +1,19 @@
 "use client";
 
-import { DocsPage, getDocsUrl } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   AlertTriangle,
   BatteryCharging,
   ExternalLink,
-  Eye,
   KeyRound,
   Loader2,
   Pencil,
   Plus,
   RefreshCw,
-  Trash2,
   Unlink,
-  Upload,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import {
@@ -26,7 +21,6 @@ import {
   RowClickShield,
 } from "@/components/agent-pages/row-click-shield";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { FileDropInput } from "@/components/files/file-drop-input";
 import {
   CollectionFilters,
   FilterBar,
@@ -40,16 +34,12 @@ import {
   runtimeCredentialIconOf,
 } from "@/components/runtime-credential-icon";
 import { SearchInput } from "@/components/search-input";
-import {
-  StandardDialog,
-  StandardFormDialog,
-} from "@/components/standard-dialog";
+import { StandardDialog } from "@/components/standard-dialog";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -80,16 +70,15 @@ import {
   useBatteryMatches,
   useCreateBatteryInstall,
   useDeleteBatteryInstall,
-  useDeleteBatteryPackage,
   usePolicyDeclarations,
   useRemoveBatteryInclude,
   useSetCredentialBinding,
-  useUploadBatteryPackage,
 } from "@/lib/openappa-batteries.query";
 import { useCoverageSummary } from "@/lib/openappa-coverage.query";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import {
   type RuntimeCredentialDefinition,
+  useCanUseEveryCredential,
   useRuntimeCredentials,
 } from "@/lib/runtime-credentials.query";
 import { cn } from "@/lib/utils/tailwind";
@@ -112,14 +101,8 @@ import { batteryStatusBadge } from "./policy-decorations";
 
 type BatteryStatus = PolicyBattery["status"];
 
-const SOURCE_OPTIONS = [
-  { value: DEFAULT_FILTER_ALL, label: "All sources" },
-  { value: "bundled", label: "Bundled" },
-  { value: "upload", label: "Uploaded" },
-];
-
 const STATUS_OPTIONS = [
-  { value: DEFAULT_FILTER_ALL, label: "All statuses" },
+  { value: DEFAULT_FILTER_ALL, label: "All batteries" },
   ...BATTERY_STATUS_GROUPS,
 ];
 
@@ -149,31 +132,6 @@ const knownFilter = (
  * battery list is a read of the document, not of a table: an entry is included
  * because a line spells it, and every control here edits that line.
  */
-export function BatteriesUploadAction() {
-  const pathname = usePathname();
-  const declarations = usePolicyDeclarations();
-  const { data: canBind } = useHasPermissions({
-    openappaPolicy: ["update"],
-    credential: ["update"],
-  });
-  const [uploading, setUploading] = useState(false);
-  if (
-    pathname !== "/openappa/batteries" ||
-    !canBind ||
-    declarations.data?.managedInGithub
-  )
-    return null;
-  return (
-    <>
-      <Button size="sm" onClick={() => setUploading(true)}>
-        <Upload className="size-4" />
-        <span>Upload package</span>
-      </Button>
-      {uploading && <UploadPackageDialog onOpenChange={setUploading} />}
-    </>
-  );
-}
-
 export function BatteriesPanel() {
   const declarations = usePolicyDeclarations();
   const batteries = useBatteries();
@@ -185,11 +143,9 @@ export function BatteriesPanel() {
     openappaPolicy: ["update"],
   });
   // Binding a credential hands its value to helper code, and an uploaded
-  // package may carry such code, so both take the credential permission too.
-  const { data: canBind } = useHasPermissions({
-    openappaPolicy: ["update"],
-    credential: ["update"],
-  });
+  // package may carry such code, so both take Can use on every credential too.
+  const { data: canUseEveryCredential } = useCanUseEveryCredential();
+  const canBind = canManage === true && canUseEveryCredential === true;
   // Filters and page live in the URL, so a reload or a shared link keeps them.
   const {
     searchParams,
@@ -199,27 +155,21 @@ export function BatteriesPanel() {
     setPagination,
   } = useDataTableQueryParams();
   const search = searchParams.get("search") ?? "";
-  const sourceFilter = knownFilter(SOURCE_OPTIONS, searchParams.get("source"));
   const statusFilter = knownFilter(STATUS_OPTIONS, searchParams.get("status"));
   // `?battery=<name>` opens that battery, so other pages can link to it.
   const [editing, setEditing] = useState<string | null>(
     searchParams.get("battery"),
   );
   const [removing, setRemoving] = useState<string | null>(null);
-  const [deletingPackage, setDeletingPackage] = useState<BatterySummary | null>(
-    null,
-  );
-  const setFilter = (name: "source" | "status", value: string) =>
+  const setFilter = (name: "status", value: string) =>
     updateQueryParams({
       [name]: value === DEFAULT_FILTER_ALL ? null : value,
       page: "1",
     });
   const clearFilters = () =>
-    updateQueryParams({ search: null, source: null, status: null, page: "1" });
+    updateQueryParams({ search: null, status: null, page: "1" });
   const hasActiveFilters =
-    !!search.trim() ||
-    sourceFilter !== DEFAULT_FILTER_ALL ||
-    statusFilter !== DEFAULT_FILTER_ALL;
+    !!search.trim() || statusFilter !== DEFAULT_FILTER_ALL;
   const needsFit = statusFilter === "fits" || statusFilter === "other";
   if (
     declarations.isPending ||
@@ -256,11 +206,6 @@ export function BatteriesPanel() {
   const installedCatalogIds = servers.data
     ? new Set(servers.data.map((server) => server.catalogId))
     : null;
-  const includedHashes = new Set(
-    included
-      .map((battery) => battery.packageHash)
-      .filter((hash): hash is string => hash !== null),
-  );
   const rows: BatteryTableRow[] = batteries.data.map((summary) => ({
     name: summary.name,
     summary,
@@ -289,8 +234,6 @@ export function BatteriesPanel() {
           row.summary?.description ?? "",
           ...(row.summary?.namespaces ?? []),
         ].some((value) => value.toLowerCase().includes(query))) &&
-      (sourceFilter === DEFAULT_FILTER_ALL ||
-        (row.included?.source ?? row.summary?.source) === sourceFilter) &&
       (statusFilter === DEFAULT_FILTER_ALL ||
         statusGroup(status, fitting.has(row.name)) === statusFilter)
     );
@@ -311,16 +254,8 @@ export function BatteriesPanel() {
       ),
     },
     {
-      id: "source",
-      header: "Source",
-      size: 130,
-      cell: ({ row }) => (
-        <Badge variant="outline">{sourceLabel(row.original)}</Badge>
-      ),
-    },
-    {
       id: "status",
-      header: "Status",
+      header: "Enforcement",
       size: 160,
       cell: ({ row }) => {
         const entry = row.original.included;
@@ -329,7 +264,7 @@ export function BatteriesPanel() {
             <span className="text-muted-foreground">
               {fitting.has(row.original.name)
                 ? "Fits your servers"
-                : "Available"}
+                : "Not included"}
             </span>
           );
         const status = enforced ? entry.status : "refused";
@@ -343,27 +278,23 @@ export function BatteriesPanel() {
       size: 110,
       cell: ({ row }) => row.original.included?.servers.length ?? 0,
     },
-    {
-      id: "actions",
-      header: "Actions",
-      size: 96,
-      cell: ({ row }) => (
-        <BatteryRowActions
-          row={row.original}
-          writable={writable}
-          onEdit={() => setEditing(row.original.name)}
-          onRemove={() => setRemoving(row.original.name)}
-          onDelete={() =>
-            row.original.summary && setDeletingPackage(row.original.summary)
-          }
-          packageIncluded={
-            row.original.summary?.contentHash !== null &&
-            row.original.summary?.contentHash !== undefined &&
-            includedHashes.has(row.original.summary.contentHash)
-          }
-        />
-      ),
-    },
+    // A read-only reader opens a battery by clicking its row: no action is left.
+    ...(writable
+      ? [
+          {
+            id: "actions",
+            header: "Actions",
+            size: 96,
+            cell: ({ row }: { row: { original: BatteryTableRow } }) => (
+              <BatteryRowActions
+                row={row.original}
+                onEdit={() => setEditing(row.original.name)}
+                onRemove={() => setRemoving(row.original.name)}
+              />
+            ),
+          } satisfies ColumnDef<BatteryTableRow>,
+        ]
+      : []),
   ];
   return (
     <section aria-label="OpenAPPA batteries" className="space-y-4">
@@ -397,17 +328,10 @@ export function BatteriesPanel() {
           }
         >
           <FilterSelect
-            value={sourceFilter}
-            showSearch={false}
-            onValueChange={(value) => setFilter("source", value)}
-            placeholder="Filter by source"
-            items={SOURCE_OPTIONS}
-          />
-          <FilterSelect
             value={statusFilter}
             showSearch={false}
             onValueChange={(value) => setFilter("status", value)}
-            placeholder="Filter by status"
+            placeholder="Filter by enforcement"
             items={STATUS_OPTIONS}
           />
         </FilterBar>
@@ -429,7 +353,7 @@ export function BatteriesPanel() {
           </Button>
         }
         filteredEmptyMessage="No batteries match your filters"
-        fixedWidthColumnIds={["source", "status", "servers", "actions"]}
+        fixedWidthColumnIds={["status", "servers", "actions"]}
         flexibleColumnIds={["name"]}
         onRowClick={(row, event) =>
           openRowOnPlainClick(event, () => setEditing(row.name))
@@ -461,12 +385,6 @@ export function BatteriesPanel() {
         <RemoveBatteryDialog
           name={removing}
           onClose={() => setRemoving(null)}
-        />
-      )}
-      {deletingPackage && (
-        <DeleteBatteryPackageDialog
-          battery={deletingPackage}
-          onClose={() => setDeletingPackage(null)}
         />
       )}
       {declarations.data.unusedAliases.length > 0 && (
@@ -519,14 +437,6 @@ function RowBatteryIcon({
       catalog={catalog}
     />
   );
-}
-
-function sourceLabel(row: BatteryTableRow) {
-  return row.included?.source === "upload"
-    ? `Upload ${row.included.packageHash?.slice(0, 12) ?? "unknown"}`
-    : row.summary?.source === "upload"
-      ? "Upload"
-      : "Bundled";
 }
 
 /**
@@ -597,7 +507,7 @@ function BatteryDialog({
           className="line-clamp-1"
           title={summary?.description ?? undefined}
         >
-          {[sourceLabel(row), summary?.description].filter(Boolean).join(" · ")}
+          {summary?.description}
         </span>
       }
       bodyClassName="space-y-6"
@@ -1020,7 +930,7 @@ function CredentialRow({
           position="popper"
           className="w-[var(--radix-select-trigger-width)]"
         >
-          <SelectItem value={UNBOUND}>Not bound</SelectItem>
+          <SelectItem value={UNBOUND}>Not set</SelectItem>
           {unlisted !== null && (
             <SelectItem
               value={unlisted}
@@ -1133,38 +1043,26 @@ function CredentialOptionLabel({
 
 function BatteryRowActions({
   row,
-  writable,
-  packageIncluded,
   onEdit,
   onRemove,
-  onDelete,
 }: {
   row: BatteryTableRow;
-  writable: boolean;
-  packageIncluded: boolean;
   onEdit: () => void;
   onRemove: () => void;
-  onDelete: () => void;
 }) {
   return (
     <RowClickShield>
       <TableRowActions
         itemName={row.name}
         actions={[
-          writable
-            ? {
-                icon: <Pencil className="size-4" />,
-                label: "Edit",
-                onClick: onEdit,
-              }
-            : {
-                icon: <Eye className="size-4" />,
-                label: "View",
-                onClick: onEdit,
-              },
+          {
+            icon: <Pencil className="size-4" />,
+            label: "Edit",
+            onClick: onEdit,
+          },
         ]}
-        dropdownActions={[
-          ...(writable && row.included
+        dropdownActions={
+          row.included
             ? [
                 {
                   icon: <Unlink className="size-4" />,
@@ -1173,20 +1071,8 @@ function BatteryRowActions({
                   variant: "destructive" as const,
                 },
               ]
-            : []),
-          ...(writable && row.summary?.source === "upload"
-            ? [
-                {
-                  icon: <Trash2 className="size-4" />,
-                  label: "Delete package",
-                  onClick: onDelete,
-                  disabled: packageIncluded,
-                  disabledTooltip: "Included by the policy",
-                  variant: "destructive" as const,
-                },
-              ]
-            : []),
-        ]}
+            : []
+        }
       />
     </RowClickShield>
   );
@@ -1219,31 +1105,6 @@ function RemoveBatteryDialog({
         } finally {
           onClose();
         }
-      }}
-    />
-  );
-}
-
-function DeleteBatteryPackageDialog({
-  battery,
-  onClose,
-}: {
-  battery: BatterySummary;
-  onClose: () => void;
-}) {
-  const remove = useDeleteBatteryPackage();
-  return (
-    <DeleteConfirmDialog
-      open
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-      title={`Delete the ${battery.name} package?`}
-      description="The policy can no longer include this version of the battery."
-      isPending={remove.isPending}
-      onConfirm={async () => {
-        if (battery.contentHash) await remove.mutateAsync(battery.contentHash);
-        onClose();
       }}
     />
   );
@@ -1297,106 +1158,5 @@ function SyncToolsButton({ catalogId }: { catalogId: string }) {
       )}
       <span>Sync tools</span>
     </PermissionButton>
-  );
-}
-
-function UploadPackageDialog({
-  onOpenChange,
-}: {
-  onOpenChange: (open: boolean) => void;
-}) {
-  const upload = useUploadBatteryPackage();
-  const [name, setName] = useState("");
-  const [files, setFiles] = useState<File[]>([]);
-  return (
-    <StandardFormDialog
-      open
-      onOpenChange={onOpenChange}
-      isDirty={name.trim().length > 0 || files.length > 0}
-      title="Upload a battery package"
-      description={
-        <span>
-          Pick the package folder: its manifest, policy and helper scripts.{" "}
-          <a
-            href={getDocsUrl(DocsPage.PlatformAiToolGuardrailsBatteries)}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 underline underline-offset-4"
-          >
-            <span>About batteries</span>
-            <ExternalLink className="size-3.5" />
-          </a>
-        </span>
-      }
-      size="medium"
-      bodyClassName="space-y-5"
-      onSubmit={async (event) => {
-        event.preventDefault();
-        upload.mutate(
-          { name: name.trim(), files: await readPackage(files) },
-          { onSuccess: () => onOpenChange(false) },
-        );
-      }}
-      footer={
-        <>
-          <DialogCancelButton disabled={upload.isPending} />
-          <Button
-            type="submit"
-            disabled={upload.isPending || files.length === 0}
-          >
-            <span>{upload.isPending ? "Uploading…" : "Upload"}</span>
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-2">
-        <Label htmlFor="battery-package-name">Name</Label>
-        <Input
-          id="battery-package-name"
-          value={name}
-          required
-          pattern="[a-z0-9][a-z0-9\-]*"
-          placeholder="my-battery"
-          onChange={(event) => setName(event.target.value)}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="battery-package-files">Package folder</Label>
-        <FileDropInput
-          directory
-          inputId="battery-package-files"
-          inputLabel="Package folder"
-          typesLabel="Select the whole package directory."
-          onFiles={setFiles}
-        />
-        {files.length > 0 && (
-          <div className="space-y-1 text-xs text-muted-foreground">
-            <p>{files.length} files selected</p>
-            <ul className="max-h-24 overflow-auto font-mono">
-              {files.slice(0, 5).map((file) => (
-                <li key={file.webkitRelativePath || file.name}>
-                  {file.webkitRelativePath || file.name}
-                </li>
-              ))}
-            </ul>
-            {files.length > 5 && <p>And {files.length - 5} more files</p>}
-          </div>
-        )}
-      </div>
-    </StandardFormDialog>
-  );
-}
-
-/** Package files keyed by their path inside the picked folder. */
-async function readPackage(files: File[]) {
-  const paths = files.map((file) => file.webkitRelativePath || file.name);
-  const slash = paths[0]?.indexOf("/") ?? -1;
-  const root = slash === -1 ? "" : (paths[0]?.slice(0, slash + 1) ?? "");
-  const shared = root !== "" && paths.every((path) => path.startsWith(root));
-  return Promise.all(
-    files.map(async (file, index) => ({
-      path: shared ? paths[index].slice(root.length) : paths[index],
-      text: await file.text(),
-    })),
   );
 }

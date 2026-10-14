@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleCheck } from "lucide-react";
+import { CircleCheck, Lock } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -21,6 +21,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { SecretInput } from "@/components/ui/secret-input";
 import {
   useAgentRuntimePreflight,
@@ -128,9 +129,17 @@ export function AgentRuntimeCredentialsDialog({
   const missing = declarations.filter((credential) =>
     missingKeys.has(credential.key),
   );
+  // A saved credential the caller may not use cannot take their value: an
+  // admin has to share it first, so it gets no field.
+  const noAccessKeys = new Set(
+    (preflight.data?.missing ?? [])
+      .filter((entry) => entry.canConnect === false)
+      .map(({ key }) => key),
+  );
   const canSet = (credential: (typeof declarations)[number]) =>
-    credential.scope === "per_user" ||
-    (credential.credentialId ? canManageOrganization : canEditAgent);
+    !noAccessKeys.has(credential.key) &&
+    (credential.scope === "per_user" ||
+      (credential.credentialId ? canManageOrganization : canEditAgent));
   const isGitHubUserConnection = (credential: (typeof declarations)[number]) =>
     definitions.data?.some(
       (definition) =>
@@ -279,7 +288,17 @@ export function AgentRuntimeCredentialsDialog({
                           {description.trim()}
                         </FormDescription>
                       )}
-                      {!canSet(credential) ? (
+                      {noAccessKeys.has(credential.key) ? (
+                        <InlineNotice>
+                          <Lock />
+                          <span className="font-medium">
+                            You don't have access to this credential
+                          </span>
+                          <InlineNoticeText>
+                            Ask an admin to share it with you.
+                          </InlineNoticeText>
+                        </InlineNotice>
+                      ) : !canSet(credential) ? (
                         <p className="text-sm text-muted-foreground">
                           An administrator must configure this organization
                           credential.

@@ -55,6 +55,8 @@ import { resourceAccessSelection } from "@/models/resource-permission-subject";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
 import { propagateAppCatalogChange } from "@/services/apps/app-mcp-backing";
+import { CredentialAccess } from "@/services/credential-access";
+import { preflightMcpCredentials } from "@/services/credentials";
 import {
   assertCanAssignEnvironment,
   assertRemoteServerUrlAllowedByNetworkPolicy,
@@ -77,6 +79,7 @@ import {
 } from "@/services/mcp-install-policy";
 import {
   autoReinstallServer,
+  clearSatisfiedNewInputFlags,
   manualReinstallReason,
   multitenantSharedPodChanged,
   onlyForwardCompatibleEnvDiff,
@@ -94,6 +97,7 @@ import {
   type InternalMcpCatalog,
   ListInternalMcpCatalogSchema,
   type LocalConfig,
+  McpCredentialBlockerSchema,
   type McpServer,
   McpServerAlertMuteSchema,
   type McpServerDismissibleAlertKind,
@@ -471,6 +475,16 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         requested: restBody.deploymentSpecYaml,
         requestedLocalConfig: restBody.localConfig,
       });
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await CredentialAccess.requireUseOfNewKeys({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+        previous: [],
+        next: boundCredentialKeys(restBody.localConfig),
+      });
+      // SPDX-SnippetEnd
 
       // Secret FK columns are server-managed: clients submit secret values, never
       // ids. Trusting an inbound id would let a caller point the row at another
@@ -758,6 +772,49 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
+    "/api/internal_mcp_catalog/:id/credential-preflight",
+    {
+      schema: {
+        operationId: RouteId.GetInternalMcpCatalogCredentialPreflight,
+        description:
+          "List the saved credentials that would stop the caller installing this MCP server, and why",
+        tags: ["MCP Catalog"],
+        params: z.object({ id: UuidIdSchema }),
+        querystring: z.object({
+          scope: z.enum(["personal", "team", "org"]),
+        }),
+        response: constructResponseSchema(
+          z.object({ blockers: z.array(McpCredentialBlockerSchema) }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      const { id } = request.params;
+      const isAdmin = await isMcpInstallationAdmin({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+      });
+      const catalogItem = await InternalMcpCatalogModel.findById(id, {
+        userId: request.user.id,
+        isAdmin,
+        organizationId: request.organizationId,
+      });
+      if (!catalogItem) {
+        throw new ApiError(404, "Catalog item not found");
+      }
+      await requireCatalogRead({ request, id });
+      return reply.send({
+        blockers: await preflightMcpCredentials({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          installationScope: request.query.scope,
+          environment: catalogItem.localConfig?.environment ?? [],
+        }),
+      });
+    },
+  );
+
+  fastify.get(
     "/api/internal_mcp_catalog/tools",
     {
       schema: {
@@ -852,6 +909,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // retired sharing fields are refused rather than dropped.
           scope: RetiredSharingUpdateFieldSchema,
           teams: RetiredSharingUpdateFieldSchema,
+          // Tenancy is locked after creation. Accepted only so a change can be
+          // refused with a 400 instead of silently dropped; the unchanged
+          // value is fine, since edit forms send it back.
+          multitenant: z.boolean().optional(),
           // BYOS: External Vault path for OAuth client secret
           oauthClientSecretVaultPath: z.string().optional(),
           // BYOS: External Vault key for OAuth client secret
@@ -876,6 +937,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         oauthClientSecretVaultKey,
         localConfigVaultPath,
         localConfigVaultKey,
+        multitenant: requestedMultitenant,
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
         // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -923,6 +985,16 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (!originalCatalogItem) {
         throw new ApiError(404, "Catalog item not found");
+      }
+
+      if (
+        requestedMultitenant !== undefined &&
+        requestedMultitenant !== originalCatalogItem.multitenant
+      ) {
+        throw new ApiError(
+          400,
+          "Tenancy can't be changed after the server is created",
+        );
       }
 
       // App backing catalogs are owned by the Apps flow. Through this generic
@@ -1036,6 +1108,17 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         current: originalCatalogItem.deploymentSpecYaml,
         currentLocalConfig: originalCatalogItem.localConfig,
       });
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (restBody.localConfig !== undefined)
+        await CredentialAccess.requireUseOfNewKeys({
+          userId: request.user.id,
+          organizationId: request.organizationId,
+          previous: boundCredentialKeys(originalCatalogItem.localConfig),
+          next: boundCredentialKeys(restBody.localConfig),
+        });
+      // SPDX-SnippetEnd
 
       const clientSecretRecovery = {
         requiredKeys: [
@@ -2332,6 +2415,10 @@ async function cascadeReinstallForCatalog(
     return;
   }
 
+  // This edit asks for nothing new, but it may have dropped what an earlier
+  // edit asked for — clear flags whose installs now hold every required value.
+  await clearSatisfiedNewInputFlags(catalogItem, installedServers);
+
   // Execution-only drift on a shared deployment. The admin who saved the
   // edit is the sole owner of that pod and no tenant owes new input, so the
   // recreate runs now instead of parking behind a second click. Not routed
@@ -2787,4 +2874,16 @@ async function requireCatalogRead({
   });
   if (!readable) throw new ApiError(404, "Catalog item not found");
   // SPDX-SnippetEnd
+}
+
+/** The saved credentials a catalog item's environment variables read. */
+function boundCredentialKeys(
+  localConfig:
+    | { environment?: { credentialId?: string | null }[] }
+    | null
+    | undefined,
+): string[] {
+  return (localConfig?.environment ?? []).flatMap((variable) =>
+    variable.credentialId ? [variable.credentialId] : [],
+  );
 }

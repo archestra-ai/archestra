@@ -104,6 +104,9 @@ export function useUpdateResourcePermissions(
         client.invalidateQueries({ queryKey: ["agent-runs"] }),
         client.invalidateQueries({ queryKey: ["llm-models"] }),
         client.invalidateQueries({ queryKey: ["models-with-api-keys"] }),
+        client.invalidateQueries({ queryKey: ["runtime-credentials"] }),
+        client.invalidateQueries({ queryKey: ["github-app-configs"] }),
+        client.invalidateQueries({ queryKey: ["github-pats"] }),
       ]);
       toast.success("Permissions saved");
     },

@@ -178,6 +178,42 @@ describe("fetchOpenrouterModels", () => {
     });
   });
 
+  test("captures pricing and context length from /embeddings/models", async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ data: [] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            data: [
+              {
+                id: "openai/text-embedding-3-large",
+                name: "OpenAI: Text Embedding 3 Large",
+                context_length: 8192,
+                architecture: {
+                  input_modalities: ["text"],
+                  output_modalities: ["embeddings"],
+                },
+                pricing: { prompt: "0.00000013", completion: "0" },
+                supported_parameters: [],
+              },
+            ],
+          }),
+      });
+
+    const [model] = await fetchOpenrouterModels("test-api-key");
+
+    expect(model.capabilities).toMatchObject({
+      contextLength: 8192,
+      inputModalities: ["text"],
+      promptPricePerToken: "0.00000013",
+      completionPricePerToken: "0",
+    });
+  });
+
   test("captures architecture modalities, mapping OpenRouter's `file` to `pdf`", async () => {
     mockFetch
       .mockResolvedValueOnce({

@@ -78,7 +78,7 @@ Lists of shared resources filter by how you reach each item. These lists have th
 
 - **Access:** **Mine** for items you own. **Shared with me** for items shared with you, your team, your role, or everyone. **Admin access** for items nobody shared with you, visible through an organization-wide grant.
 - **Shared with:** everyone, a role, a team, a person, or a service account. Shown while **Admin access** is on.
-- **Owner:** one or more owners.
+- **Owner:** one or more owners. Shown while **Admin access** is on.
 
 Models have no owner, so their list has no **Mine** option and no **Owner** filter. On Knowledge Files, the filters narrow documents. Directories always show. The filters combine. The list API takes the same filters as `access`, `sharedWith`, and `owner` query parameters. `sharedWith` takes comma-separated `org`, `role:<id>`, `team:<id>`, `user:<id>`, or `serviceAccount:<id>`. `org` matches only grants to everyone. `owner` takes comma-separated user IDs.
 
@@ -153,6 +153,10 @@ MCP and LLM OAuth clients have separate grants. **Can edit** permits reconfigura
 ### Visibility-Scoped Credentials
 
 Provider keys and virtual keys can have personal, team, or organization scope. Personal records are limited to their owner. Team records require membership. Team admins can manage their team's records. Organization records require an update grant on `*` for that kind.
+
+### Saved Credentials
+
+[Credentials](/docs/admin/security/credentials#who-can-manage-a-credential) take grants like any other resource. **Can use** lets a person connect their own value or bind the credential to a guardrails battery. Editing or deleting a credential needs **Can edit** or **Full access** on it, not a role permission.
 
 ### Models
 

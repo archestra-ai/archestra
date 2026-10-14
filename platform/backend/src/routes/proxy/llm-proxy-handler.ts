@@ -17,7 +17,7 @@ import {
   isCodexOriginator,
   isProviderApiKeyOptional,
   OPENCODE_AGENT_HEADER,
-  OPENCODE_CLIENT_ID,
+  openCodeFamilySource,
   PROVIDER_BASE_URL_HEADER,
   providerDisplayNames,
   providerRequiresPerUserCredential,
@@ -25,6 +25,7 @@ import {
   stripClaudeContextVariantSuffix,
 } from "@archestra/shared";
 import { ARCHESTRA_CODEX_CONNECTION_ORIGINATOR } from "@archestra/shared/interactions/client";
+import { isOpenCodeFamilyClient } from "@archestra/shared/opencode-family";
 import {
   type Context,
   context as otelContext,
@@ -167,6 +168,7 @@ import {
   type LlmProxyRequestContext,
   type LlmProxyToolCallRefusal,
 } from "@/proxy/plugins/registry";
+import { collectedDelegationMarkers } from "@/routes/proxy/utils/delegation-markers";
 import {
   RUNTIME_BINDING_HEADER,
   resolveRuntimeIdentityByVirtualKeys,
@@ -228,6 +230,7 @@ import {
   shouldForwardAnthropicBeta,
   toSpanUserInfo,
   toToolCallBlock,
+  upstreamErrorMessage,
   withProviderToolCallIds,
   withSessionContext,
 } from "./llm-proxy-helpers";
@@ -706,10 +709,14 @@ export async function handleLLMProxy<
         (proof) => stripChildTrajectoryReceipts(proof).receipts,
       ),
     );
-    delegationMarkers = collectDelegationMarkers({
-      family: requestWireFamily,
-      body,
-    });
+    // A route that translated the wire first collected the markers from the
+    // client's own wire; the translated text may no longer end with them.
+    delegationMarkers =
+      collectedDelegationMarkers(request) ??
+      collectDelegationMarkers({
+        family: requestWireFamily,
+        body,
+      });
     stripDelegationMarkers({ family: requestWireFamily, body });
     const nativeClient = APPA_CLIENT_ADAPTERS.find((adapter) =>
       adapter.matches({
@@ -718,7 +725,9 @@ export async function handleLLMProxy<
       }),
     )?.id;
     childReturns = collectAndStripChildReturns(body, {
-      openCodeBackgroundReturns: nativeClient === "opencode",
+      // Kilo Code frames its background tasks as OpenCode does.
+      openCodeBackgroundReturns:
+        !!nativeClient && isOpenCodeFamilyClient(nativeClient),
       codexMailboxReturns: nativeClient === "codex",
       onRefusal: (refusal) => {
         childReturnRefusal ??= refusal;
@@ -748,7 +757,8 @@ export async function handleLLMProxy<
   // from the request body; Codex clients → "openai_codex" from the
   // client_metadata body shape or the originator/User-Agent headers the Codex
   // CLI stamps on every request; OpenCode → "opencode" from its equivalent
-  // identity headers; Cursor → "cursor" from its User-Agent).
+  // identity headers; Kilo Code → "kilo" and Cursor → "cursor" from their
+  // User-Agents).
   const externalAgentId =
     utils.headers.externalAgentId.getExternalAgentId(headersForExtraction) ??
     utils.headers.clientApp.detectClaudeClientId(bodyForExtraction) ??
@@ -757,6 +767,7 @@ export async function handleLLMProxy<
       bodyForExtraction,
     ) ??
     utils.headers.clientApp.detectOpenCodeClientId(headersForExtraction) ??
+    utils.headers.clientApp.detectKiloClientId(headersForExtraction) ??
     utils.headers.clientApp.detectCursorClientId(headersForExtraction);
   const runId = utils.headers.runId.getRunId(headersForExtraction);
   const authOverride = (
@@ -797,15 +808,20 @@ export async function handleLLMProxy<
     headersForExtraction,
     "x-parent-session-id",
   );
+  // OpenCode and Kilo Code frame their turns the same way; each gets its own
+  // source prefix (opencode:main, kilo:main, ...).
   const openCodeSource: InteractionSource | undefined =
-    externalAgentId === OPENCODE_CLIENT_ID
-      ? openCodeParentSession
-        ? "opencode:subagent"
-        : openCodeAgent === "title"
-          ? "opencode:title"
-          : openCodeAgent === "compaction"
-            ? "opencode:compaction"
-            : "opencode:main"
+    externalAgentId && isOpenCodeFamilyClient(externalAgentId)
+      ? openCodeFamilySource(
+          externalAgentId,
+          openCodeParentSession
+            ? "subagent"
+            : openCodeAgent === "title"
+              ? "title"
+              : openCodeAgent === "compaction"
+                ? "compaction"
+                : "main",
+        )
       : undefined;
   const untrustedAppaChatSource =
     isAppaChatSource(parsedSource) && !isLoopbackRequest(request);
@@ -1287,8 +1303,9 @@ export async function handleLLMProxy<
   // turns on: the sessions that start now, and the calls governed sessions make.
   // The records hold ids only, so they cover encrypted chats too.
   const appaObserving = appaFeatureEnabled && !appaActive;
-  // An encrypted chat that started while enforcement was off stays out of
-  // OpenAPPA, so the encrypted storage OpenAPPA lacks does not matter to it.
+  // An encrypted chat that started while enforcement was off, or that a
+  // person superyelled, stays out of OpenAPPA, so the encrypted storage
+  // OpenAPPA lacks does not matter to it.
   if (
     appaActive &&
     isEncryptedChatSession &&
@@ -1984,11 +2001,12 @@ export async function handleLLMProxy<
           }).session,
         ))
       ) {
-        // The session started while enforcement was off. OpenAPPA never
-        // governs it: the request goes on as if enforcement were off.
+        // The session started while enforcement was off, or a person
+        // superyelled it. OpenAPPA never governs it: the request goes on as
+        // if enforcement were off.
         logger.info(
           { sessionId: openappaSession.session_id },
-          "OpenAPPA ignores a session that started while Guardrails enforcement was off",
+          "OpenAPPA ignores a session that started while Guardrails enforcement was off or was superyelled",
         );
         openappaSession = undefined;
       }
@@ -2544,7 +2562,10 @@ export async function handleLLMProxy<
     }
     // Persist failed interactions so they appear in LLM logs
     try {
-      const errorMessage = provider.extractErrorMessage(lifecycleError);
+      const errorMessage = upstreamErrorMessage(
+        lifecycleError,
+        provider.extractErrorMessage,
+      );
       // Provider errors routinely echo the prompt back.
       logger.info(
         {
@@ -2870,6 +2891,7 @@ async function handleStreaming<
         model: actualModel,
         inputTokens: 0,
         outputTokens: 0,
+        toolCallBlock,
       };
       await persistProxyInteraction(record, encryptedChat);
     } catch (interactionError) {
@@ -3122,6 +3144,7 @@ async function handleStreaming<
           source,
         });
       }
+      toolCallBlock = toToolCallBlock(null, hostedHold.blocked);
       const heldEvents = streamAdapter.formatHeldHostedToolCallsSSE(
         hostedHold.notices,
       );
@@ -3187,7 +3210,10 @@ async function handleStreaming<
         "Proxy plugin tool-call ruling",
       );
 
-      toolCallBlock = toToolCallBlock(toolInvocationRefusal);
+      toolCallBlock = toToolCallBlock(
+        toolInvocationRefusal,
+        policyOutcome.blocked,
+      );
     }
 
     await recordGovernedThreadResponse({
@@ -3339,6 +3365,19 @@ async function handleStreaming<
     const codexError =
       error instanceof CodexResponsesGenerationError ? error : undefined;
     if (codexError) {
+      // The terminal status and its reason are not on the chat completion type.
+      const outcome = asRecord(codexError.completion);
+      logger.warn(
+        {
+          status: outcome?.status,
+          incompleteReason: asRecord(outcome?.incomplete_details)?.reason,
+          errorCode: asRecord(outcome?.error)?.code,
+          errorMessage: asRecord(outcome?.error)?.message,
+          usagePresent: codexError.completion.usage !== undefined,
+          usage: codexError.completion.usage,
+        },
+        "Codex subscription response ended without completing",
+      );
       // Translation keeps partial text and usage, but is not a successful turn.
       failedStreamResponse = codexError.completion;
       streamAdapter.state.usage = provider
@@ -3448,7 +3487,10 @@ async function handleStreaming<
     // rejecting the request, or a mid-stream failure once SSE headers and
     // content are already on the wire) still has to reach interaction history.
     if (!streamAdapter.state.usage) {
-      const errorMessage = provider.extractErrorMessage(lifecycleError);
+      const errorMessage = upstreamErrorMessage(
+        lifecycleError,
+        provider.extractErrorMessage,
+      );
       // Provider errors routinely echo the prompt back.
       logger.info(
         { profileId: agent.id, ...(suppressContent ? {} : { errorMessage }) },
@@ -3860,6 +3902,8 @@ async function handleNonStreaming<
 
   // Let the proxy plugins rule on the response's tool calls
   let rewrittenToolCalls: AccumulatedToolCall[] | null = null;
+  let blockedToolCalls: readonly { reason: string }[] =
+    hostedHold?.blocked ?? [];
   if (toolCalls.length === 0) {
     await recordGovernedThreadResponse({
       context: ctx.pluginContext,
@@ -3906,6 +3950,7 @@ async function handleNonStreaming<
       held: !!hostedHold,
     });
     // Record metrics for tool calls substituted with denial notices.
+    blockedToolCalls = policyOutcome.blocked;
     for (const blocked of policyOutcome.blocked) {
       recordBlockedToolCallMetrics({
         allToolCallNames: [blocked.name],
@@ -4022,7 +4067,7 @@ async function handleNonStreaming<
         actualModel,
         usage,
         costs,
-        toolCallBlock: toToolCallBlock(toolInvocationRefusal),
+        toolCallBlock: toToolCallBlock(toolInvocationRefusal, []),
       });
       await persistProxyInteraction(refusalRecord, encryptedChat);
 
@@ -4178,6 +4223,7 @@ async function handleNonStreaming<
       actualModel,
       usage,
       costs,
+      toolCallBlock: toToolCallBlock(null, blockedToolCalls),
     });
     await persistProxyInteraction(record, encryptedChat);
     responsePersisted = true;

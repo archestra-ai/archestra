@@ -628,6 +628,62 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
         ]),
       );
     });
+    test("persists Kilo Code main, title, and child-session sources under its own prefix", async () => {
+      const run = (params: {
+        sessionId: string;
+        agent: string;
+        parentSessionId?: string;
+      }) =>
+        app.inject({
+          method: "POST",
+          url: `/v1/openai/${testAgent.id}/chat/completions`,
+          headers: {
+            "content-type": "application/json",
+            authorization: "Bearer test-key",
+            [EXTERNAL_AGENT_ID_HEADER]: "kilo",
+            [OPENCODE_AGENT_HEADER]: params.agent,
+            "x-opencode-session": params.sessionId,
+            ...(params.parentSessionId
+              ? { "x-parent-session-id": params.parentSessionId }
+              : {}),
+          },
+          payload: {
+            model: "gpt-4o",
+            messages: [{ role: "user", content: "Hello" }],
+          },
+        });
+
+      for (const params of [
+        { sessionId: "ses_kilo_title", agent: "title" },
+        { sessionId: "ses_kilo_main", agent: "build" },
+        {
+          sessionId: "ses_kilo_child",
+          agent: "explore",
+          parentSessionId: "ses_kilo_main",
+        },
+      ]) {
+        expect((await run(params)).statusCode).toBe(200);
+      }
+
+      const rows = await db
+        .select({
+          sessionId: schema.interactionsTable.sessionId,
+          sessionSource: schema.interactionsTable.sessionSource,
+          source: schema.interactionsTable.source,
+        })
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, testAgent.id));
+      expect(new Map(rows.map((row) => [row.sessionId, row.source]))).toEqual(
+        new Map([
+          ["ses_kilo_title", "kilo:title"],
+          ["ses_kilo_main", "kilo:main"],
+          ["ses_kilo_child", "kilo:subagent"],
+        ]),
+      );
+      expect(new Set(rows.map((row) => row.sessionSource))).toEqual(
+        new Set(["kilo_session"]),
+      );
+    });
   });
 
   describe("Anthropic", () => {

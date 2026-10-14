@@ -25,7 +25,7 @@ export async function handleCheckDueSkillGithubSyncs(): Promise<void> {
     });
     logger.info(
       { skillId: skill.id, skillName: skill.name },
-      "[Skills] Enqueued scheduled GitHub sync",
+      "[Skills] Enqueued scheduled Git sync",
     );
   }
 }

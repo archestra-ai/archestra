@@ -2,7 +2,13 @@
 
 import { APP_RECORDING_RENDER_ROUTE } from "@archestra/shared";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { MOBILE_HEADER_ACTIONS_CONTAINER_ID } from "@/components/chat/chat-help-link";
 import { ConnectivityStatusBar } from "@/components/connectivity-status-bar";
 import { ConversationSearchProvider } from "@/components/conversation-search-provider";
@@ -37,6 +43,10 @@ import { AuthSurfaceFrame } from "./auth-surface-frame";
 import { MaintenanceModeOverlay } from "./maintenance-mode-overlay";
 import { McpDeploymentStatusFeed } from "./mcp-deployment-status-feed";
 import { AppSidebar } from "./sidebar";
+import {
+  SidebarResizeHandle,
+  useSidebarWidthState,
+} from "./sidebar-resize-handle";
 import {
   EnvSiteNotificationBar,
   SiteNotificationBar,
@@ -97,6 +107,7 @@ export function AppShell({ children }: AppShellProps) {
   const isProjectDetail = /^\/projects\/[^/]+/.test(pathname);
   const isViewportLocked = isChat || isProjectDetail;
   const [sidebarOpen, setSidebarOpen] = useSidebarOpenState();
+  const sidebarWidth = useSidebarWidthState();
   // Every signed-in user sees the active banner.
   const { data: notification } = useActiveSiteNotification({
     enabled: !isAuthPage && !isBrowserPreview && !isAppRuntime && !isReview,
@@ -164,7 +175,21 @@ export function AppShell({ children }: AppShellProps) {
     <ConnectivityProvider>
       <McpDeploymentStatusFeed />
       <NavigationStatusProvider>
-        <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
+        <SidebarProvider
+          open={sidebarOpen}
+          onOpenChange={setSidebarOpen}
+          style={
+            {
+              "--sidebar-width": `${sidebarWidth.width}px`,
+            } as CSSProperties
+          }
+          // The width follows the pointer while dragging; easing it would lag,
+          // and an eased collapse button would trail behind the sidebar edge.
+          className={cn(
+            sidebarWidth.resizing &&
+              "cursor-col-resize select-none **:data-[slot=sidebar-container]:transition-none **:data-[slot=sidebar-gap]:transition-none **:data-[slot=sidebar-circle-toggle]:transition-none",
+          )}
+        >
           <SkipToContentLink />
           {/* The toggle is position:fixed, so DOM order only affects focus
                 order: keeping it before the sidebar means expanding it with
@@ -172,6 +197,11 @@ export function AppShell({ children }: AppShellProps) {
                 instead of skipping to <main> (WCAG 2.4.3). */}
           <NavAwareSidebarCircleToggle />
           <AppSidebar />
+          <SidebarResizeHandle
+            width={sidebarWidth.width}
+            onWidthChange={sidebarWidth.setWidth}
+            onResizingChange={sidebarWidth.setResizing}
+          />
           <MaintenanceModeOverlay />
           {/* MAIN_CONTENT_ID + tabIndex={-1} make this the "skip to main
               content" target (WCAG 2.4.1 Bypass Blocks), so activating that

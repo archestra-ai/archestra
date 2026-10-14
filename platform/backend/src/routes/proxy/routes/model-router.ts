@@ -20,18 +20,18 @@ import logger from "@/logging";
 import {
   LlmOauthClientModel,
   LlmProviderApiKeyModel,
-  LlmProviderApiKeyModelLinkModel,
   MemberModel,
-  ModelModel,
-  ModelTeamModel,
   OAuthAccessTokenModel,
   OAuthClientModel,
   TeamModel,
   VirtualApiKeyModel,
 } from "@/models";
+import { collectDelegationMarkers } from "@/openappa/delegation";
+import { setCollectedDelegationMarkers } from "@/routes/proxy/utils/delegation-markers";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
+import { resolveVirtualKeyProviderMappings } from "@/services/virtual-key-providers";
 import type { GatewayAgent, LLMProvider } from "@/types";
 import {
   ApiError,
@@ -88,9 +88,9 @@ import {
 } from "../llm-proxy-handler";
 import {
   buildRoutableModelId,
+  listRoutableModels,
   type ModelRouterResolution,
   resolveModelRoute,
-  sortRoutableModels,
 } from "../model-router-resolver";
 
 type OpenAiWireProvider = LLMProvider<
@@ -538,6 +538,14 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
     );
   }
 
+  // The translation joins a message's text parts into one string, which can
+  // leave a client's delegation marker mid-text (Kilo Code appends an
+  // environment part after the prompt it was handed). Collect the markers
+  // from the wire the client sent, where each still ends its own part.
+  setCollectedDelegationMarkers(
+    request,
+    collectDelegationMarkers({ family: "openai:responses", body }),
+  );
   const { chatBody, responsesContext } = responsesToOpenaiChat(body, {
     preserveContentParts: resolution.provider === "bedrock",
   });
@@ -824,37 +832,18 @@ function handleModelRouterResponsesProvider(
 }
 
 async function listModels(params: { auth: ModelRouterAuth }) {
-  const apiKeyIds = params.auth.providerApiKeys
-    .filter((mapping) => modelRouterSupportedProviders.has(mapping.provider))
-    .map((mapping) => mapping.providerApiKeyId);
-  const linkedModels =
-    await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds(apiKeyIds);
-  const candidateModels = linkedModels
-    .map(({ model }) => model)
-    .filter((model) => {
-      if (!modelRouterSupportedProviders.has(model.provider)) {
-        return false;
-      }
-      return (
-        ModelModel.supportsTextChat(model) ||
-        ModelModel.supportsEmbeddings(model)
-      );
-    });
-
   // Hide models the caller cannot invoke, mirroring the proxy-time check: a
   // user-attributed credential needs a `use` grant; auth without a user
   // identity may exercise only an organization-wide grant.
-  const allowedModelIds = await ModelTeamModel.filterAllowedModelIds({
-    modelIds: candidateModels.map((model) => model.id),
+  const chatModels = await listRoutableModels({
     organizationId: params.auth.organizationId,
+    providerApiKeyIds: params.auth.providerApiKeys
+      .filter((mapping) => modelRouterSupportedProviders.has(mapping.provider))
+      .map((mapping) => mapping.providerApiKeyId),
     userId:
       params.auth.authMethod === "oauth_user" ? params.auth.userId : undefined,
-    action: "use",
+    includeEmbeddings: true,
   });
-
-  const chatModels = sortRoutableModels(
-    candidateModels.filter((model) => allowedModelIds.has(model.id)),
-  );
 
   return {
     object: "list" as const,
@@ -923,7 +912,7 @@ async function getModelRouterAuth(
   });
   try {
     const resolved = await validateVirtualApiKeyToken(bearerToken);
-    const mappings = await VirtualApiKeyModel.getProviderApiKeysForRouting(
+    const mappings = await resolveVirtualKeyProviderMappings(
       resolved.virtualKey.id,
     );
     if (mappings.length === 0) {

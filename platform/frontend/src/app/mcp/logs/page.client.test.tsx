@@ -7,6 +7,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useMcpToolCalls } from "@/lib/mcp/mcp-tool-call.query";
+import { useOrganizationMembers } from "@/lib/organization.query";
 import McpGatewayLogsPage from "./page.client";
 
 // The cmdk-backed picker reaches for pointer-capture / scrollIntoView /
@@ -24,9 +25,11 @@ globalThis.ResizeObserver = class {
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
+vi.mock("@/lib/organization.query");
 
 vi.mock("@/lib/agent.query", () => ({ useProfiles: vi.fn() }));
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  useMcpCatalogCredentialPreflight: () => ({ data: [] }),
   useInternalMcpCatalog: vi.fn(),
 }));
 vi.mock("@/lib/mcp/mcp-server.query", () => ({ useMcpServers: vi.fn() }));
@@ -80,6 +83,11 @@ describe("McpGatewayLogsPage filters", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
     } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useOrganizationMembers).mockReturnValue({
+      data: [
+        { id: "user-alex", name: "Alex Reader", email: "alex@example.com" },
+      ],
+    } as unknown as ReturnType<typeof useOrganizationMembers>);
     vi.mocked(useInternalMcpCatalog).mockReturnValue({
       data: [],
     } as unknown as ReturnType<typeof useInternalMcpCatalog>);
@@ -143,6 +151,31 @@ describe("McpGatewayLogsPage filters", () => {
     expect(vi.mocked(useMcpToolCalls)).toHaveBeenLastCalledWith(
       expect.objectContaining({ agentId: "g1" }),
     );
+  });
+
+  it("filters tool calls by the picked user", async () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams({
+        userId: "user-alex",
+      }) as unknown as ReturnType<typeof useSearchParams>,
+    );
+
+    render(<McpGatewayLogsPage />);
+
+    expect(vi.mocked(useMcpToolCalls)).toHaveBeenLastCalledWith(
+      expect.objectContaining({ userId: "user-alex" }),
+    );
+  });
+
+  // Without log:admin the server scopes the listing to the caller anyway.
+  it("offers no user filter without log:admin", () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+    } as ReturnType<typeof useHasPermissions>);
+
+    render(<McpGatewayLogsPage />);
+
+    expect(screen.queryByText("All Users")).toBeNull();
   });
 
   it("distinguishes MCP server installations by owner instead of installation id", async () => {

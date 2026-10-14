@@ -16,6 +16,7 @@
       "**/*.tsx",
       "**/*.ts",
       "e2e-tests/**/*.ts",
+      "e2e-tests/**/*.mts",
       "shared/**/*.ts",
       "standalone-scripts/**/*.ts",
       "benchmarks/**/*.mjs",

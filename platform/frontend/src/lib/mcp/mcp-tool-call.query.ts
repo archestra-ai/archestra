@@ -62,6 +62,7 @@ const { getMcpToolCall, getMcpToolCalls } = archestraApiSdk;
 export function useMcpToolCalls({
   agentId,
   mcpServerName,
+  userId,
   startDate,
   endDate,
   limit = DEFAULT_TABLE_LIMIT,
@@ -70,6 +71,7 @@ export function useMcpToolCalls({
 }: {
   agentId?: string;
   mcpServerName?: string;
+  userId?: string;
   startDate?: string;
   endDate?: string;
   limit?: number;
@@ -81,6 +83,7 @@ export function useMcpToolCalls({
       "mcpToolCalls",
       agentId,
       mcpServerName,
+      userId,
       startDate,
       endDate,
       limit,
@@ -91,6 +94,7 @@ export function useMcpToolCalls({
         query: {
           ...(agentId ? { agentId } : {}),
           ...(mcpServerName ? { mcpServerName } : {}),
+          ...(userId ? { userId } : {}),
           ...(startDate ? { startDate } : {}),
           ...(endDate ? { endDate } : {}),
           limit,
@@ -116,6 +120,7 @@ export function useMcpToolCalls({
       limit === DEFAULT_TABLE_LIMIT &&
       !agentId &&
       !mcpServerName &&
+      !userId &&
       !startDate &&
       !endDate
         ? initialData

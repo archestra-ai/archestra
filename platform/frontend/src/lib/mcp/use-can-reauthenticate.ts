@@ -13,8 +13,10 @@ type ReauthCandidate = {
 /**
  * Per-connection re-authentication permission, shared by the registry card and
  * the connections dialog so both gate the OAuth re-auth entry point identically.
- * Installation admins may act across every scope. Otherwise: personal owner;
- * team member with update; org denied. All paths require create.
+ * A personal connection is its owner's alone: re-authenticating signs in with
+ * the caller's own account, so anyone else would replace the owner's sign-in
+ * with theirs. Installation admins may act on team and org connections.
+ * Otherwise: team member with update; org denied. All paths require create.
  */
 export function useCanReauthenticate() {
   const { data: session } = useSession();
@@ -36,12 +38,13 @@ export function useCanReauthenticate() {
   // on every page), and a fresh closure each render would defeat that.
   return useCallback(
     (server: ReauthCandidate): boolean => {
+      const scope = server.scope ?? (server.teamId ? "team" : "personal");
+      if (scope === "personal") {
+        return !!hasCreatePermission && server.ownerId === currentUserId;
+      }
       if (hasAdminPermission) return true;
       if (!hasCreatePermission) return false;
-      const scope = server.scope ?? (server.teamId ? "team" : "personal");
-
       if (scope === "org") return false;
-      if (scope === "personal") return server.ownerId === currentUserId;
 
       const team = server.teamId
         ? userTeams?.find((t) => t.id === server.teamId)

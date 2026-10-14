@@ -88,6 +88,55 @@ describe("PUT/DELETE /api/apps pin routes", () => {
     expect(await listItems()).toHaveLength(2);
   });
 
+  test("pinned=true lists pinned external apps next to owned ones", async ({
+    makeApp,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeTool,
+  }) => {
+    const owned = await makeApp({
+      organizationId,
+      authorId: user.id,
+      name: "Owned",
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Board",
+      serverType: "remote",
+      serverUrl: "https://example.com/mcp",
+    });
+    const server = await makeMcpServer({ catalogId: catalog.id, scope: "org" });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "show_board",
+      meta: { _meta: { ui: { resourceUri: "ui://board/app.html" } } },
+    });
+
+    const empty = await app.inject({
+      method: "GET",
+      url: "/api/apps?limit=100&offset=0&pinned=true",
+    });
+    expect(empty.json().data).toEqual([]);
+
+    await app.inject({ method: "PUT", url: `/api/apps/${owned.id}/pin` });
+    await app.inject({
+      method: "PUT",
+      url: `/api/apps/external/${server.id}/pin`,
+      payload: { resourceUri: "ui://board/app.html", toolName: "show_board" },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/apps?limit=100&offset=0&pinned=true",
+    });
+    expect(
+      res
+        .json()
+        .data.map((i: { source: string; name: string }) => i.source)
+        .sort(),
+    ).toEqual(["external", "owned"]);
+  });
+
   test("external app: pin and unpin by (install, resource, tool); pinnedAt surfaces in the listing", async ({
     makeInternalMcpCatalog,
     makeMcpServer,

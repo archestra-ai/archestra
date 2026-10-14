@@ -37,6 +37,19 @@ export interface SetupScriptProxySection {
    * keeps their own provider credentials — virtualKey/virtualKeyName are
    * null. "virtual-key" and "primary-providers": the auto-provisioned key is injected.
    */
+  /**
+   * Cursor only: the chat models GET /models lists for the setup's virtual
+   * key, which replace Cursor's built-in models in its picker. `defaultId` is
+   * the organization's default model when the key can route it.
+   */
+  cursorModels?: { ids: string[]; defaultId: string | null };
+  /**
+   * OpenCode family, primary-providers mode: the native providers the user may
+   * sign in to from the client itself (a ChatGPT or Claude subscription, their
+   * own key). Each is routed through the proxy with the user's own credential,
+   * next to the Archestra providers. Admin-hidden providers are left out.
+   */
+  passthroughProviders?: SupportedProvider[];
   authMode: ConnectionSetupProxyAuth;
   provider: SupportedProvider;
   providerLabel: string;

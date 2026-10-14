@@ -1,6 +1,20 @@
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  type ResourceAccessRelation,
+} from "@archestra/shared";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { toast } from "sonner";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+} from "@/lib/auth/auth.query";
+import { holdsItemGrant } from "@/lib/auth/auth.utils";
 import { rememberGitHubConnectionReturn } from "@/lib/github-connection-return";
 import { PERSISTED_QUERY_META } from "@/lib/query-persistence";
 import { reportApiError, throwOnApiError } from "@/lib/utils/api";
@@ -25,6 +39,31 @@ export type RuntimeCredentialUsage =
 export const runtimeCredentialsQueryKey = ["runtime-credentials"] as const;
 export const runtimeCredentialUsageQueryKey = (key: string | null) =>
   ["runtime-credential-usage", key] as const;
+
+/**
+ * The Credentials page's list, narrowed by its access filters. Pickers
+ * elsewhere use {@link useRuntimeCredentials}, which lists every credential
+ * the viewer can read.
+ */
+export function useFilteredRuntimeCredentials(params: {
+  access: ResourceAccessRelation[];
+  sharedWith?: string[];
+  owner?: string[];
+}) {
+  const { access, sharedWith, owner } = params;
+  return useQuery({
+    queryKey: [...runtimeCredentialsQueryKey, { access, sharedWith, owner }],
+    queryFn: async () => {
+      const { data, error } = await listRuntimeCredentials({
+        query: { access, sharedWith, owner },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+    placeholderData: keepPreviousData,
+    refetchOnMount: "always",
+  });
+}
 
 export function useRuntimeCredentials(enabled = true) {
   return useQuery({
@@ -52,14 +91,17 @@ export function useRuntimeCredentials(enabled = true) {
   });
 }
 
-export function useCreateRuntimeCredential() {
+/** `silent` skips the success toast, for a caller that shows the result itself. */
+export function useCreateRuntimeCredential({ silent = false } = {}) {
   return useCredentialMutation(
     async (body: archestraApiTypes.CreateRuntimeCredentialData["body"]) => {
       const { data, error } = await createRuntimeCredential({ body });
       if (error) throw reportApiError(error);
       return data;
     },
-    (_, body) => toast.success(`${body.name} added`),
+    (_, body) => {
+      if (!silent) toast.success(`${body.name} added`);
+    },
   );
 }
 
@@ -115,7 +157,8 @@ export function useDeleteRuntimeCredential() {
   );
 }
 
-export function useSetRuntimeCredentialConnection() {
+/** `silent` skips the success toast, for a caller that shows the result itself. */
+export function useSetRuntimeCredentialConnection({ silent = false } = {}) {
   return useCredentialMutation(
     async (input: {
       key: string;
@@ -132,7 +175,9 @@ export function useSetRuntimeCredentialConnection() {
       if (error) throw reportApiError(error);
       return data;
     },
-    (_, input) => toast.success(`${input.name} connected`),
+    (_, input) => {
+      if (!silent) toast.success(`${input.name} connected`);
+    },
   );
 }
 
@@ -215,4 +260,36 @@ export function useCompleteGitHubUserConnection() {
       toast.success(`Connected GitHub${data ? ` as ${data.login}` : ""}`);
     },
   });
+}
+
+/**
+ * Whether the caller holds `use` on every credential: a grant at `*`, not one
+ * gathered credential by credential. Binding a credential to guardrails helper
+ * code, uploading a package, or approving a pull that rebinds one hands a
+ * credential's value to code, so each needs it.
+ */
+export function useCanUseEveryCredential() {
+  // `use` is a grant action, not a role action, so the role-permission type
+  // does not list it; the scoped check below reads grants.
+  return useHasPermissions(
+    { credential: ["use"] } as unknown as Parameters<
+      typeof useHasPermissions
+    >[0],
+    "*",
+  );
+}
+
+/**
+ * Whether the caller may attach each saved credential, by its id. Attaching
+ * one hands its value to every run of the server or Agent, so it takes `use`.
+ */
+export function useCanAttachCredential() {
+  const { data: grants } = useScopedCapabilities();
+  return (credentialId: string) =>
+    holdsItemGrant({
+      grants,
+      resource: "credential",
+      action: "use",
+      id: credentialId,
+    });
 }

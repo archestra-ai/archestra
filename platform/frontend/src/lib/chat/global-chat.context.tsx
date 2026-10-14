@@ -1395,11 +1395,19 @@ function ChatSessionHook({
       return;
     }
     queueDrainInFlightRef.current = true;
+    const fileParts = (next.files ?? []).map((file) => ({
+      type: "file" as const,
+      ...file,
+    }));
     sendMessageRef.current?.({
       role: "user",
-      // a bare skill command carries no text; keep an empty text part so the
-      // message is well-formed and the backend can inject the skill
-      parts: [{ type: "text", text: next.text }],
+      // Text first, then attachments — the same order as a direct send. A
+      // bare skill command carries no text; keep an empty text part so the
+      // message is well-formed and the backend can inject the skill.
+      parts:
+        next.text.trim() || fileParts.length === 0
+          ? [{ type: "text", text: next.text }, ...fileParts]
+          : fileParts,
       metadata: {
         createdAt: new Date().toISOString(),
         ...(next.skill ? { skill: next.skill } : {}),

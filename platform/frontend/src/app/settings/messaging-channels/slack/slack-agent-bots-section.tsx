@@ -12,6 +12,7 @@ import {
   MoreHorizontal,
   Plus,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -52,14 +53,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useInternalAgents } from "@/lib/agent.query";
 import { useSession } from "@/lib/auth/auth.query";
+import { useAllChatOpsBindings } from "@/lib/chatops/chatops.query";
 import {
   useConvertSlackAppToAgentBot,
   useCreateSlackAgentBotApp,
   useDeleteSlackAgentBot,
   useMigrateSlackApps,
   useSaveSlackAppConfigToken,
+  useSlackAgentBotChannels,
   useSlackAgentBots,
   useUpdateSlackAgentBot,
 } from "@/lib/chatops/chatops-config.query";
@@ -98,7 +102,9 @@ export function SlackAgentBotsSection({
   const [addOpen, setAddOpen] = useState(false);
   const [manualAgent, setManualAgent] = useState<AgentRef | null>(null);
   const [finishBot, setFinishBot] = useState<FinishTarget | null>(null);
-  const [removeBot, setRemoveBot] = useState<AgentRef | null>(null);
+  const [removeBot, setRemoveBot] = useState<
+    (AgentRef & { handle: string }) | null
+  >(null);
   const [editBot, setEditBot] = useState<AgentBot | null>(null);
   const [shareBot, setShareBot] = useState<ShareTarget | null>(null);
 
@@ -161,28 +167,40 @@ export function SlackAgentBotsSection({
 
   return (
     <section className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <h2 className="text-2xl font-semibold tracking-tight">Slack</h2>
-          <p className="text-sm text-muted-foreground">
-            {bots.length > 0 ? (
-              <span>
-                {data?.workspaceName ? (
-                  <span>
-                    Workspace{" "}
-                    <span className="font-medium text-foreground">
-                      {data.workspaceName}
-                    </span>{" "}
-                    ·{" "}
-                  </span>
-                ) : null}
-                {bots.length} {bots.length === 1 ? "bot" : "bots"}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+          {bots.length > 0 ? (
+            <span>
+              {data?.workspaceName ? (
+                <span>
+                  Workspace{" "}
+                  <span className="font-medium text-foreground">
+                    {data.workspaceName}
+                  </span>{" "}
+                  ·{" "}
+                </span>
+              ) : null}
+              {bots.length} {bots.length === 1 ? "bot" : "bots"}
+            </span>
+          ) : (
+            <span>Not connected yet</span>
+          )}
+          {!isLoading && (
+            <span className="inline-flex items-center gap-1.5">
+              Your Slack token
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-xs font-medium",
+                  canCreateApps
+                    ? "bg-green-500/10 text-green-700 dark:text-green-400"
+                    : "bg-muted text-muted-foreground",
+                )}
+              >
+                {canCreateApps ? "Saved" : "Not saved"}
               </span>
-            ) : (
-              <span>Not connected yet</span>
-            )}
-          </p>
-        </div>
+            </span>
+          )}
+        </p>
         {!isEmpty && (
           <Button size="sm" onClick={startAdd}>
             <Plus />
@@ -245,74 +263,91 @@ export function SlackAgentBotsSection({
             <TableHeader>
               <TableRow>
                 <TableHead>Bot</TableHead>
-                <TableHead className="w-[22%]">Agent</TableHead>
-                <TableHead className="w-[20%]">Status</TableHead>
-                <TableHead className="w-[170px]" />
+                <TableHead className="w-[20%]">Agent</TableHead>
+                <TableHead className="w-[24%]">Channels</TableHead>
+                <TableHead className="w-[17%]">Managed in Slack by</TableHead>
+                <TableHead className="w-[64px]" />
               </TableRow>
             </TableHeader>
             <TableBody>
               {bots.map((bot) => {
                 const handle =
                   bot.handle ?? slackHandleFor(appName, bot.agentName);
+                const health = botHealth(bot);
+                const needsSetup = !bot.installed || bot.needsAppLevelToken;
                 const notes =
                   bot.identitySyncError || (bot.installed && bot.reinstallUrl);
+                const agent = agents.find(
+                  (candidate) => candidate.id === bot.agentId,
+                );
                 return (
                   <Fragment key={bot.agentId}>
                     <TableRow className={cn(notes && "border-b-0")}>
                       <TableCell>
                         <div className="flex min-w-0 items-center gap-3">
-                          <AgentIcon
-                            icon={
-                              agents.find((agent) => agent.id === bot.agentId)
-                                ?.icon
-                            }
-                            size={20}
+                          <span
+                            title={health.label}
+                            className={cn(
+                              "size-2 shrink-0 rounded-full",
+                              health.dot,
+                            )}
                           />
-                          <div className="flex min-w-0 flex-col">
-                            <span className="truncate font-medium">
+                          <div className="flex min-w-0 flex-col items-start">
+                            <UnstyledButton
+                              className="max-w-full truncate text-left font-medium hover:underline"
+                              onClick={() =>
+                                needsSetup ? openFinish(bot) : setEditBot(bot)
+                              }
+                            >
                               @{handle}
-                            </span>
-                            <span className="truncate text-xs text-muted-foreground">
-                              {bot.installed
-                                ? `${bot.connectionMode === "socket" ? "Socket Mode" : "Webhook"} · ${bot.appId}`
-                                : `${bot.appId} · not installed yet`}
-                            </span>
-                            {bot.createdBy && (
-                              <span className="truncate text-xs text-muted-foreground">
-                                {bot.createdBy.id === userId
-                                  ? "Your Slack app"
-                                  : `${bot.createdBy.name ?? "A teammate"}'s Slack app — ask them to add you in Slack`}
+                            </UnstyledButton>
+                            {health.problem ? (
+                              <span className="text-xs text-amber-800 dark:text-amber-300">
+                                {health.label}
+                                {needsSetup && (
+                                  <span>
+                                    {" · "}
+                                    <UnstyledButton
+                                      className="underline hover:no-underline"
+                                      onClick={() => openFinish(bot)}
+                                    >
+                                      Finish setup
+                                    </UnstyledButton>
+                                  </span>
+                                )}
                               </span>
+                            ) : (
+                              <span className="sr-only">{health.label}</span>
                             )}
                           </div>
                         </div>
                       </TableCell>
+                      <TableCell>
+                        <Link
+                          href={`/agents/${bot.agentId}`}
+                          className="flex min-w-0 items-center gap-2 hover:underline"
+                        >
+                          <AgentIcon icon={agent?.icon} size={16} />
+                          <span className="truncate">{bot.agentName}</span>
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <BotChannels
+                          agentId={bot.agentId}
+                          installed={bot.installed}
+                        />
+                      </TableCell>
                       <TableCell className="truncate">
-                        {bot.agentName}
+                        {!bot.createdBy ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : bot.createdBy.id === userId ? (
+                          "You"
+                        ) : (
+                          (bot.createdBy.name ?? "A teammate")
+                        )}
                       </TableCell>
                       <TableCell>
-                        <BotStatus bot={bot} />
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex justify-end gap-2">
-                          {(!bot.installed || bot.needsAppLevelToken) && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => openFinish(bot)}
-                            >
-                              Finish setup
-                            </Button>
-                          )}
-                          {bot.installed && !bot.needsAppLevelToken && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setEditBot(bot)}
-                            >
-                              Edit
-                            </Button>
-                          )}
+                        <div className="flex justify-end">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button
@@ -324,13 +359,20 @@ export function SlackAgentBotsSection({
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onSelect={() =>
+                                  needsSetup ? openFinish(bot) : setEditBot(bot)
+                                }
+                              >
+                                {needsSetup ? "Finish setup" : "Edit"}
+                              </DropdownMenuItem>
                               <DropdownMenuItem asChild>
                                 <a
                                   href={`https://api.slack.com/apps/${bot.appId}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                 >
-                                  Open in Slack
+                                  Open in Slack ({bot.appId})
                                 </a>
                               </DropdownMenuItem>
                               {bot.createdBy?.id === userId && (
@@ -342,12 +384,19 @@ export function SlackAgentBotsSection({
                                   Give your team access
                                 </DropdownMenuItem>
                               )}
+                              {bot.createdBy && bot.createdBy.id !== userId && (
+                                <DropdownMenuItem disabled>
+                                  Ask {bot.createdBy.name ?? "its creator"} to
+                                  add you in Slack
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuItem
                                 variant="destructive"
                                 onSelect={() =>
                                   setRemoveBot({
                                     id: bot.agentId,
                                     name: `@${handle}`,
+                                    handle,
                                   })
                                 }
                               >
@@ -360,7 +409,7 @@ export function SlackAgentBotsSection({
                     </TableRow>
                     {notes && (
                       <TableRow className="hover:bg-transparent">
-                        <TableCell colSpan={4} className="pt-0 pb-3">
+                        <TableCell colSpan={5} className="pt-0 pb-3">
                           <div className="flex flex-col gap-2">
                             {bot.identitySyncError && (
                               <p className="text-xs text-amber-800 dark:text-amber-300">
@@ -476,6 +525,7 @@ export function SlackAgentBotsSection({
         title="Remove Slack bot"
         description={`${removeBot?.name ?? "This bot"} stops answering in Slack. A Slack app ${appName} created or manages is deleted from Slack too.`}
         isPending={deleteMutation.isPending}
+        confirmationPhrase={removeBot?.handle}
         confirmLabel="Remove"
         pendingLabel="Removing..."
         onConfirm={async () => {
@@ -536,34 +586,83 @@ function HandleChip({ handle, tone }: { handle: string; tone: number }) {
   );
 }
 
-function BotStatus({ bot }: { bot: AgentBot }) {
-  const status = !bot.installed
-    ? { label: "Not installed", dot: "border-[1.5px] border-muted-foreground" }
-    : bot.needsAppLevelToken
-      ? { label: "Needs app-level token", dot: "bg-amber-600", warn: true }
-      : bot.reinstallUrl
-        ? { label: "Needs reinstall", dot: "bg-amber-600", warn: true }
-        : bot.connected
-          ? { label: "Connected", dot: "bg-green-600", ok: true }
-          : { label: "Not connected", dot: "bg-muted-foreground" };
+/**
+ * Whether the bot works, as a dot beside its handle. Only a problem gets
+ * words on the row; a working bot needs none.
+ */
+function botHealth(bot: AgentBot): {
+  label: string;
+  dot: string;
+  problem: boolean;
+} {
+  if (!bot.installed) {
+    return {
+      label: "Not installed",
+      dot: "border-[1.5px] border-muted-foreground",
+      problem: true,
+    };
+  }
+  if (bot.needsAppLevelToken) {
+    return {
+      label: "Needs app-level token",
+      dot: "bg-amber-600",
+      problem: true,
+    };
+  }
+  if (bot.reinstallUrl) {
+    return { label: "Needs reinstall", dot: "bg-amber-600", problem: true };
+  }
+  return bot.connected
+    ? { label: "Connected", dot: "bg-green-600", problem: false }
+    : { label: "Not connected", dot: "bg-muted-foreground", problem: true };
+}
+
+/** How many channels the bot is in, and where it replies to every message. */
+function BotChannels({
+  agentId,
+  installed,
+}: {
+  agentId: string;
+  installed: boolean;
+}) {
+  const channels = useSlackAgentBotChannels(installed ? agentId : undefined);
+  const bindings = useAllChatOpsBindings();
+  const memberCount = channels.data?.channels.filter(
+    (channel) => channel.isMember,
+  ).length;
+  const repliesToAll = (bindings.data?.bindings ?? []).filter(
+    (binding) =>
+      binding.provider === "slack" &&
+      !binding.isDm &&
+      binding.answerAllMessages &&
+      binding.agentId === agentId,
+  );
+  if (!installed) {
+    return <span className="text-muted-foreground">—</span>;
+  }
   return (
-    <div
-      className={cn(
-        "flex items-center gap-2 text-sm",
-        status.ok
-          ? "text-green-700 dark:text-green-400"
-          : status.warn
-            ? "text-amber-800 dark:text-amber-300"
-            : "text-muted-foreground",
+    <span className="flex min-w-0 flex-col">
+      <span>
+        {memberCount === undefined
+          ? "…"
+          : memberCount === 1
+            ? "1 channel"
+            : `${memberCount} channels`}
+      </span>
+      {repliesToAll.length > 0 && (
+        <span className="truncate text-xs text-muted-foreground">
+          Replies to all in{" "}
+          {repliesToAll
+            .map((binding) => `#${binding.channelName ?? binding.channelId}`)
+            .join(", ")}
+        </span>
       )}
-    >
-      <span className={cn("size-2 shrink-0 rounded-full", status.dot)} />
-      <span>{status.label}</span>
-    </div>
+    </span>
   );
 }
 
 /**
+ * The bot's token lacks scopes/**
  * The bot's token lacks scopes Archestra needs — typically right after
  * Archestra updated the app's settings, since Slack grants new scopes only on
  * a reinstall. Says how, and re-checks on request.

@@ -13,6 +13,8 @@ import {
   clearHitlReview,
   consumeHitlRuling,
   getHitlAskUserArguments,
+  peekHitlDecision,
+  peekHitlRuling,
   recordHitlRuling,
   stageHitlReview,
 } from "@/openappa/hitl-review";
@@ -474,7 +476,7 @@ describe("chat tool execution", () => {
     expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
   });
 
-  test("accepts the proxy's rewritten review call with option previews", async () => {
+  test("accepts the proxy's rewritten review call", async () => {
     const offerId = "offer-hitl-preview";
     const session = reviewSession({
       sessionId: scopedSessionId(`user:${mockContext.userId}`, sessionId),
@@ -492,7 +494,7 @@ describe("chat tool execution", () => {
       session,
       offerIds: [offerId],
     });
-    expect(rewritten?.options[0].preview).toBe("Approve\n\nvalue  1");
+    expect(rewritten?.callPreview).toContain("```yaml\nvalue: 1\n```");
     const requests: Array<{ message: string }> = [];
     mockContext = {
       ...mockContext,
@@ -513,7 +515,7 @@ describe("chat tool execution", () => {
       mockContext,
     );
 
-    // MCP forms keep the full review text; they have no preview pane.
+    // MCP forms keep the full review text.
     expect(requests.map((request) => request.message)).toEqual([
       "Full review text.",
     ]);
@@ -562,6 +564,43 @@ describe("chat tool execution", () => {
       }
     });
   }
+
+  test("runtime none is not a ruling and does not seal a fresh review", async () => {
+    const offerId = "runtime-none";
+    const session = reviewSession({
+      sessionId: scopedSessionId(`user:${mockContext.userId}`, sessionId),
+    });
+    await stageHitlReview({
+      session,
+      review: { offerId, text: "Exact action", tool: "mcp/example/write" },
+    });
+    const nativeForm = vi.fn();
+    const wait = vi
+      .spyOn(runtimeReview, "awaitRuntimeHitlReview")
+      .mockResolvedValue("none");
+    try {
+      const result = await executeArchestraTool(
+        TOOL_ASK_USER_FULL_NAME,
+        {
+          question: "Approve?",
+          options: [{ label: "Approve" }, { label: "Deny" }],
+          remedy_offer_ids: [offerId],
+          trajectory: trajectory(),
+        },
+        { ...mockContext, elicitation: { elicit: nativeForm } },
+      );
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toBeUndefined();
+      expect(nativeForm).not.toHaveBeenCalled();
+      expect(await peekHitlRuling({ session, offerId })).toBeUndefined();
+      expect(
+        await recordHitlRuling({ session, offerId, ruling: "approve" }),
+      ).toBe(true);
+      expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
+    } finally {
+      wait.mockRestore();
+    }
+  });
 
   test("a runtime review waits on the platform instead of an auto-declining native form", async () => {
     const offerId = "runtime-review";
@@ -899,6 +938,191 @@ describe("chat tool execution", () => {
     expect(text).toContain("cannot show the HITL review");
     expect(text).toContain("Do not ask for approval in plain text");
     expect(text).toContain("do not retry it");
+    expect(await peekHitlDecision({ session, offerId })).toEqual({
+      ruling: "none",
+      closure: "unavailable",
+    });
+    expect(await consumeHitlRuling({ session, offerId })).not.toBe("deny");
+  });
+
+  test("a staged HITL decline is not a human denial and is not asked again", async () => {
+    const offerId = "offer-hitl-decline";
+    const session = reviewSession({
+      sessionId: scopedSessionId(`user:${mockContext.userId}`, sessionId),
+    });
+    await stageHitlReview({
+      session,
+      review: { offerId, text: "Review this exact call." },
+    });
+    const elicit = vi
+      .fn()
+      .mockResolvedValueOnce({
+        status: "answered" as const,
+        result: { action: "decline" as const },
+      })
+      .mockResolvedValue({
+        status: "answered" as const,
+        result: { action: "accept" as const, content: { choice: "Approve" } },
+      });
+    mockContext = { ...mockContext, elicitation: { elicit } };
+
+    const declined = await executeArchestraTool(
+      TOOL_ASK_USER_FULL_NAME,
+      {
+        question: "Approve everything?",
+        options: [{ label: "Yes" }, { label: "No" }],
+        remedy_offer_ids: [offerId],
+        trajectory: trajectory(),
+      },
+      mockContext,
+    );
+    expect(declined.structuredContent).toEqual({
+      action: "decline",
+      selected: [],
+    });
+    expect(await peekHitlDecision({ session, offerId })).toEqual({
+      ruling: "none",
+      closure: "declined",
+    });
+    expect(await consumeHitlRuling({ session, offerId })).not.toBe("deny");
+
+    const again = await executeArchestraTool(
+      TOOL_ASK_USER_FULL_NAME,
+      {
+        question: "Approve everything?",
+        options: [{ label: "Yes" }, { label: "No" }],
+        remedy_offer_ids: [offerId],
+        trajectory: trajectory(),
+      },
+      mockContext,
+    );
+    expect(again.isError).toBe(true);
+    expect(JSON.stringify(again.content)).toContain("already closed");
+    expect(elicit).toHaveBeenCalledTimes(1);
+  });
+
+  test("a no-viewer close returns a stored approval without spending it", async () => {
+    const offerId = "offer-stored-approve";
+    const session = reviewSession({
+      sessionId: scopedSessionId(`user:${mockContext.userId}`, sessionId),
+    });
+    await stageHitlReview({
+      session,
+      review: { offerId, text: "Review this exact call." },
+    });
+    const elicit = vi.fn(async () => {
+      expect(
+        await recordHitlRuling({ session, offerId, ruling: "approve" }),
+      ).toBe(true);
+      return { status: "no_viewer" as const };
+    });
+    mockContext = { ...mockContext, elicitation: { elicit } };
+
+    const result = await executeArchestraTool(
+      TOOL_ASK_USER_FULL_NAME,
+      {
+        question: "Approve?",
+        options: [{ label: "Approve" }, { label: "Deny" }],
+        remedy_offer_ids: [offerId],
+        trajectory: trajectory(),
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toEqual({
+      action: "accept",
+      selected: ["Approve"],
+    });
+    expect(JSON.stringify(result.content)).toContain("execute_remedy_plan");
+    expect(await peekHitlRuling({ session, offerId })).toBe("approve");
+    expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
+    expect(await consumeHitlRuling({ session, offerId })).not.toBe("approve");
+  });
+
+  test("a canceled form returns a stored denial without spending it", async () => {
+    const offerId = "offer-stored-deny";
+    const session = reviewSession({
+      sessionId: scopedSessionId(`user:${mockContext.userId}`, sessionId),
+    });
+    await stageHitlReview({
+      session,
+      review: { offerId, text: "Review this exact call." },
+    });
+    const elicit = vi.fn(async () => {
+      expect(await recordHitlRuling({ session, offerId, ruling: "deny" })).toBe(
+        true,
+      );
+      return {
+        status: "answered" as const,
+        result: { action: "cancel" as const },
+      };
+    });
+    mockContext = { ...mockContext, elicitation: { elicit } };
+
+    const result = await executeArchestraTool(
+      TOOL_ASK_USER_FULL_NAME,
+      {
+        question: "Approve?",
+        options: [{ label: "Approve" }, { label: "Deny" }],
+        remedy_offer_ids: [offerId],
+        trajectory: trajectory(),
+      },
+      mockContext,
+    );
+
+    expect(result.structuredContent).toEqual({
+      action: "accept",
+      selected: ["Deny"],
+    });
+    expect(JSON.stringify(result.content)).toContain("remains blocked");
+    expect(await consumeHitlRuling({ session, offerId })).toBe("deny");
+  });
+
+  test("a no-viewer answer closes the review so the next ask does not elicit", async () => {
+    const offerId = "offer-no-viewer-answer";
+    const session = reviewSession({
+      sessionId: scopedSessionId(`user:${mockContext.userId}`, sessionId),
+    });
+    await stageHitlReview({
+      session,
+      review: { offerId, text: "Review this exact call." },
+    });
+    const elicit = vi
+      .fn()
+      .mockResolvedValueOnce({ status: "no_viewer" as const })
+      .mockResolvedValue({
+        status: "answered" as const,
+        result: { action: "accept" as const, content: { choice: "Approve" } },
+      });
+    mockContext = { ...mockContext, elicitation: { elicit } };
+    const args = {
+      question: "Approve?",
+      options: [{ label: "Approve" }, { label: "Deny" }],
+      remedy_offer_ids: [offerId],
+      trajectory: trajectory(),
+    };
+
+    const first = await executeArchestraTool(
+      TOOL_ASK_USER_FULL_NAME,
+      args,
+      mockContext,
+    );
+    expect(first.isError).toBe(true);
+    expect(await peekHitlDecision({ session, offerId })).toEqual({
+      ruling: "none",
+      closure: "unavailable",
+    });
+
+    const second = await executeArchestraTool(
+      TOOL_ASK_USER_FULL_NAME,
+      args,
+      mockContext,
+    );
+    expect(second.isError).toBe(true);
+    expect(JSON.stringify(second.content)).toContain("already closed");
+    expect(elicit).toHaveBeenCalledTimes(1);
+    expect(await consumeHitlRuling({ session, offerId })).not.toBe("approve");
   });
 
   test("a late form answer cannot approve a review whose stage was cleared", async () => {

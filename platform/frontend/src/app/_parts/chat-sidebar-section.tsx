@@ -409,11 +409,7 @@ export function ChatSidebarSection({
   };
 
   const openConversationSearch = () => {
-    window.dispatchEvent(
-      new CustomEvent("open-conversation-search", {
-        detail: { recentChatsView: true },
-      }),
-    );
+    window.dispatchEvent(new CustomEvent("open-conversation-search"));
   };
 
   const renderConversationItem = (conv: (typeof conversations)[number]) => {
@@ -763,7 +759,16 @@ export function ChatSidebarSection({
     const isPinned = !!run.pinnedAt;
     return (
       <SidebarMenuSubItem key={menuKey}>
-        <div className="flex w-full items-center justify-between gap-1">
+        <div
+          className={cn(
+            "relative flex w-full items-center justify-between gap-1 rounded-md hover:bg-sidebar-accent focus-within:bg-sidebar-accent",
+            active && "bg-sidebar-accent",
+            // The menu trigger sits inside the row highlight; reserve its
+            // gutter only while the trigger is visible.
+            !isEditing && "hover:pr-7 focus-within:pr-7",
+            !isEditing && isMenuOpen && "pr-7",
+          )}
+        >
           {isEditing ? (
             <Input
               ref={inputRef}
@@ -831,7 +836,7 @@ export function ChatSidebarSection({
                   type="button"
                   aria-label="Run actions"
                   className={cn(
-                    "shrink-0 transition-opacity",
+                    "absolute right-1 top-1/2 -translate-y-1/2 transition-opacity",
                     isMenuOpen
                       ? "opacity-100"
                       : "opacity-0 group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100",
@@ -920,7 +925,16 @@ export function ChatSidebarSection({
 
     return (
       <SidebarMenuSubItem key={menuKey}>
-        <div className="flex items-center justify-between w-full gap-1">
+        <div
+          className={cn(
+            "relative flex w-full items-center justify-between gap-1 rounded-md hover:bg-sidebar-accent focus-within:bg-sidebar-accent",
+            isActive && "bg-sidebar-accent",
+            // The menu trigger sits inside the row highlight; reserve its
+            // gutter only while the trigger is visible.
+            "hover:pr-7 focus-within:pr-7",
+            isMenuOpen && "pr-7",
+          )}
+        >
           <SidebarMenuButton
             onClick={() => handleSelectProject(project.id)}
             isActive={isActive}
@@ -955,7 +969,7 @@ export function ChatSidebarSection({
                 type="button"
                 aria-label="Project actions"
                 className={cn(
-                  "shrink-0 transition-opacity",
+                  "absolute right-1 top-1/2 -translate-y-1/2 transition-opacity",
                   isMenuOpen
                     ? "opacity-100"
                     : "opacity-0 group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100",
@@ -993,7 +1007,15 @@ export function ChatSidebarSection({
 
     return (
       <SidebarMenuSubItem key={menuKey}>
-        <div className="flex items-center justify-between w-full gap-1">
+        <div
+          className={cn(
+            "relative flex w-full items-center justify-between gap-1 rounded-md hover:bg-sidebar-accent focus-within:bg-sidebar-accent",
+            // The menu trigger sits inside the row highlight; reserve its
+            // gutter only while the trigger is visible.
+            "hover:pr-7 focus-within:pr-7",
+            isMenuOpen && "pr-7",
+          )}
+        >
           <SidebarMenuButton
             onClick={() => handleSelectApp(appItem)}
             className="cursor-pointer flex-1 justify-between"
@@ -1026,7 +1048,7 @@ export function ChatSidebarSection({
                 type="button"
                 aria-label="App actions"
                 className={cn(
-                  "shrink-0 transition-opacity",
+                  "absolute right-1 top-1/2 -translate-y-1/2 transition-opacity",
                   isMenuOpen
                     ? "opacity-100"
                     : "opacity-0 group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100",

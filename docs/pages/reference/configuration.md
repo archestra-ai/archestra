@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 2
-lastUpdated: 2026-10-09
+lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -62,10 +62,11 @@ Archestra reads its configuration from environment variables. Pass them with `-e
   - Values: a positive whole number of milliseconds, digits only, such as `620000`
   - Keep it above the keep-alive timeout of every proxy and load balancer in front of Archestra. See [Keep-Alive Timeouts](/docs/admin/deployment#keep-alive-timeouts).
 
-- **`ARCHESTRA_API_BODY_LIMIT`** - Maximum request body size for LLM Proxy and chat requests.
+- **`ARCHESTRA_API_BODY_LIMIT`** - Maximum HTTP request body size for LLM Proxy and chat requests.
   - Default: `70MB`
   - Values: bytes (`73400320`) or a size with `KB`, `MB`, or `GB` (`100MB`)
-  - Guardrails uses the same limit for the size of a tool result, so a result the LLM Proxy accepts is never dropped for size. A policy's `max_body_bytes` has no effect.
+  - When a policy omits `externals.max_body_bytes`, guardrails use this size for external helper responses and tool results.
+  - The policy setting accepts a positive integer of bytes, not a size string such as `70MB`. It overrides both caps without changing the HTTP request limit; oversized tool results are withheld.
   - All attachments of one chat message share this limit. Raise it when you raise [`ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT`](/docs/reference/configuration#ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT), or for very long conversations.
 
 - **`ARCHESTRA_PROCESS_TYPE`** - Which part of the backend this process runs.
@@ -78,7 +79,7 @@ Archestra reads its configuration from environment variables. Pass them with `-e
 - **`ARCHESTRA_BETA`** - Turns on beta features.
   - Default: `false`
   - Values: `true`, `false`
-  - Turns on plugins directly. Guardrails and Agent Runtime do not use this switch.
+  - Plugins, Guardrails, and Agent Runtime do not use this switch.
   - Also turns on [`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED`](/docs/reference/configuration#ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED) when it is left blank. Set to `false`, it stays off.
 
 - **`ARCHESTRA_QUICKSTART`** - Runs MCP servers in a small Kubernetes (KinD) cluster inside the Docker container.
@@ -733,9 +734,20 @@ Chat streams and A2A task streams wake through PostgreSQL `LISTEN/NOTIFY` across
   - Raise it for slow tools, such as a scraper or a report builder, that fail with a request-timeout error.
   - A call from a client that supports MCP Tasks becomes a background task after half this value, capped at 10 seconds.
 
+- **`ARCHESTRA_MCP_GATEWAY_STDIO_MAX_MESSAGE_BYTES`** - Largest reply, in bytes, that Archestra accepts from a stdio MCP server that runs in Kubernetes.
+  - Default: `10485760` (10 MB)
+  - A larger reply fails only the tool call that it answers. The model gets an error that names the limit, and the next call to the server works.
+  - Raise it only if a tool must return more data. Each reply up to this size is held in backend memory until it is complete.
+
 - **`ARCHESTRA_MCP_GATEWAY_WAKE_WAIT_TIMEOUT_MS`** - How long a tool call waits for a hibernated MCP server to wake before it returns a retryable "still starting" result, in milliseconds.
   - Default: `30000` (30 seconds)
   - Keep it below your clients' own request timeouts. Otherwise the client aborts first and sees a transport error.
+
+- **`ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS`** - Optional limit, in milliseconds, on how long one notification stream stays open before the gateway ends it with a complete result.
+  - Default: `0` (no expiry). The stream stays open until the client disconnects.
+  - An abrupt proxy close can fail an open form. This setting is a partial mitigation, not a guarantee: clients can stop reconnecting after repeated clean ends, which stops tool-list change notifications. Enable it only after checking your client's behavior and accepting that limitation.
+  - Set a positive value below your proxy's maximum request duration. Heartbeats do not extend that maximum, and Archestra does not detect it. A GKE Ingress backend with no `timeoutSec` uses 30 seconds.
+  - Accepts whole numbers from `0` through `2147483647`. Invalid or larger values disable expiry, avoiding timer overflow.
 
 ## MCP Servers
 
@@ -946,6 +958,7 @@ Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox con
 
 - **`ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG`** - Tag of the maintained images.
   - Default: `latest` on stable releases, otherwise the platform version
+  - Agents made from a catalog template run this tag, whatever tag was current when they were created. See [Upgrades](/docs/agents/runtime/setup#upgrades).
 
 - **`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`** - Lets Agent administrators enable privileged runtime pods, which have node-level access.
   - Default: `false`
@@ -1455,4 +1468,4 @@ Retention is an Enterprise feature: the backend does not start when a window is 
 - **`ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS`** - PostgreSQL connections each backend process opens for guardrail checks.
   - Default: `4`
   - Values: `1`–`64`
-  - A check that waits more than 30 seconds for a connection fails. Raise it when policies consult slow external authorities.
+  - A check holds a connection only for each database step, never while it waits on an external consult. A step that waits more than 30 seconds for a free connection fails.

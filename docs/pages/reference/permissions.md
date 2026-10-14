@@ -2,7 +2,7 @@
 title: "Permissions"
 description: "Built-in role grants, available permissions, and LLM API access requirements"
 order: 6
-lastUpdated: 2026-10-09
+lastUpdated: 2026-10-13
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -50,7 +50,7 @@ Full access to core resources, but cannot change organization settings or manage
 | MCP Registry | `read`, `create` |
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
 | Environments | `read`, `create`, `update`, `delete` |
-| Credentials | `read`, `create`, `update`, `delete` |
+| Credentials | `read`, `create` |
 | OpenAPPA Policy | `read`, `update` |
 | OpenAPPA Diagnostics | `read`, `update` |
 | Knowledge Sources | `read`, `create`, `update`, `delete`, `query` |
@@ -119,10 +119,8 @@ These permissions can be selected in custom roles. Per-resource actions and scop
 | <span id="chat:update"></span>`chat:update` | Edit chat messages and conversation settings |
 | <span id="chat:delete"></span>`chat:delete` | Delete chat conversations |
 | <span id="chat:full-view"></span>`chat:full-view` | Show the full chat: the agent picker, model and API key selectors, and expandable tool calls. Without it, chat shows a simpler view |
-| <span id="credential:read"></span>`credential:read` | View saved credentials |
+| <span id="credential:read"></span>`credential:read` | Open Credentials |
 | <span id="credential:create"></span>`credential:create` | Create saved credentials |
-| <span id="credential:update"></span>`credential:update` | Modify saved credentials |
-| <span id="credential:delete"></span>`credential:delete` | Delete saved credentials |
 | <span id="environment:read"></span>`environment:read` | View and list deployment environments |
 | <span id="environment:create"></span>`environment:create` | Create deployment environments |
 | <span id="environment:update"></span>`environment:update` | Modify deployment environments, including the org default environment |
@@ -211,6 +209,7 @@ These permissions can be selected in custom roles. Per-resource actions and scop
 | User cost statistics for all users | `llmCost:read` and `member:read` | Identified users in the active organization |
 | App cost statistics | `llmCost:read` and `app:read` | Apps allowed by the caller’s read grants |
 | Skill cost statistics | `llmCost:read` and `skill:read` | Skills allowed by the caller’s read grants |
+| Tool-call, app, and skill usage (`/api/statistics/mcp-tool-calls`, `app-usage`, `skill-usage`) | `llmCost:read`, plus `app:read` or `skill:read` for apps and skills | The caller's usage; add `member:read` for everyone's |
 | LLM and MCP logs for the caller | `log:read` | Records attributed to the caller |
 | All LLM and MCP logs | `log:read` and `log:admin` | All records in the active organization, including unattributed traffic |
 

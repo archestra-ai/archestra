@@ -242,11 +242,20 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "app",
         "read",
       );
-      const accessibleAppIds = await AppAccessModel.getUserAccessibleAppIds({
-        organizationId,
-        userId: user.id,
-        access: resourceAccessSelection(query),
-      });
+      const [reachableAppIds, pins] = await Promise.all([
+        AppAccessModel.getUserAccessibleAppIds({
+          organizationId,
+          userId: user.id,
+          access: resourceAccessSelection(query),
+        }),
+        query.pinned ? AppPinModel.getPinnedRefs(user.id) : undefined,
+      ]);
+      // A pinned-only listing loads just the pinned apps instead of building
+      // every card and dropping the unpinned ones at the end.
+      const pinnedAppIds = pins ? new Set(pins.appIds) : undefined;
+      const accessibleAppIds = pinnedAppIds
+        ? reachableAppIds.filter((id) => pinnedAppIds.has(id))
+        : reachableAppIds;
       // Grants are the only way to reach an app, so there is no longer a set
       // an administrator sees only through oversight.
       const nonAdminAccessibleIds = new Set(accessibleAppIds);
@@ -257,7 +266,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       };
       const [ownedCount, external] = await Promise.all([
         AppModel.countByOrganization(ownedFilters),
-        hasBaseRead
+        hasBaseRead && (!pins || pins.hasExternal)
           ? McpServerModel.findUiCapableForCaller({
               userId: user.id,
               organizationId,

@@ -8,8 +8,8 @@ import { PageLayout } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { BatteriesUploadAction } from "./batteries-panel";
 import { OpenAppaPageActionSlotContext } from "./openappa-page-action";
+import { OverviewHeaderActions } from "./overview-header-actions";
 import { openAppaUrl } from "./overview-setup-cards";
 import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 
@@ -96,7 +96,7 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
         <span>
           {page.title}{" "}
           <Badge variant="secondary" className="align-middle">
-            Alpha
+            Beta
           </Badge>
         </span>
       }
@@ -126,9 +126,9 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
           pathname === "/openappa/yells" ||
           pathname === "/openappa/tests" ||
           pathname.startsWith("/openappa/validation") ||
-          pathname === "/openappa/policy" ? null : (
-          <BatteriesUploadAction />
-        )
+          pathname === "/openappa/policy" ? null : pathname === "/openappa" ? (
+          <OverviewHeaderActions />
+        ) : null
       }
     >
       <OpenAppaPageActionSlotContext.Provider value={pageActionSlot}>

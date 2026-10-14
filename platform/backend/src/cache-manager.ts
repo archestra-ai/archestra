@@ -36,6 +36,10 @@ export const CacheKey = {
   LegacySseSession: "legacy-sse-session",
   /** Short-lived replies waiting for a legacy SSE stream on another replica */
   LegacySseMessages: "legacy-sse-messages",
+  /** Who an in-band gateway request (a form) was sent to, readable by every replica */
+  McpGatewayPendingRequest: "mcp-gateway-pending-request",
+  /** A client's answer to an in-band gateway request, waiting for the replica that sent it */
+  McpGatewayParkedAnswer: "mcp-gateway-parked-answer",
   /** IdP groups cache during login flow */
   IdpGroups: "idp-groups",
   /** Chat stream stop signal for cross-pod abort */
@@ -54,6 +58,8 @@ export const CacheKey = {
   OpenAppaHitlReview: "openappa-hitl-review",
   /** One-use rulings returned by a native client question */
   OpenAppaHitlRuling: "openappa-hitl-ruling",
+  /** review_required results the proxy already asked the client to put to the user, once each */
+  OpenAppaHitlQuestionAsked: "openappa-hitl-question-asked",
   /** Per-call server-issued review status, for history only; never a ruling. */
   OpenAppaHitlReviewHistory: "openappa-hitl-review-history",
   /** Pending OpenAPPA review indexed by a verified runtime workspace */
@@ -460,6 +466,27 @@ class CacheManager {
         getAndDeleteMany: take,
       });
     });
+  }
+
+  /**
+   * Read several keys in one statement. Unlike {@link getMany}, a storage
+   * failure throws so a caller cannot treat an outage as an empty poll.
+   */
+  async readMany<T>(keys: AllowedCacheKey[]): Promise<Map<AllowedCacheKey, T>> {
+    const entries = new Map<AllowedCacheKey, T>();
+    if (!this.keyv) throw new Error("CacheManager: Not started");
+    if (keys.length === 0) return entries;
+    const rows = await CacheEntryModel.getMany(
+      keys.map((key) => `keyv:${key}`),
+    );
+    const now = Date.now();
+    for (const row of rows) {
+      const data = await this.keyv.deserializeData<T>(row.value);
+      if (data?.value === undefined) continue;
+      if (typeof data.expires === "number" && now > data.expires) continue;
+      entries.set(row.key.slice("keyv:".length) as AllowedCacheKey, data.value);
+    }
+    return entries;
   }
 
   /**

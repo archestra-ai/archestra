@@ -1353,6 +1353,22 @@ class WebSocketService {
       return result;
     };
 
+    // A full refresh can take many seconds on a large cluster, and clients
+    // re-subscribe on every page navigation. When an earlier refresh already
+    // filled the summary, answer with it right away so the page does not sit
+    // on "Checking…"; the fresh statuses follow below only if they differ.
+    let cachedStatusesJson: string | null = null;
+    if (this.lastMcpDeploymentRefreshAt > 0 && ws.readyState === WS.OPEN) {
+      const cachedStatuses = buildStatuses(
+        McpServerRuntimeManager.statusSummary,
+      );
+      cachedStatusesJson = JSON.stringify(cachedStatuses);
+      this.sendToClient(ws, {
+        type: "mcp_deployment_statuses",
+        payload: { statuses: cachedStatuses },
+      });
+    }
+
     // Refresh (through the shared in-flight guard) and build initial statuses
     await this.refreshMcpDeploymentStates();
 
@@ -1363,16 +1379,19 @@ class WebSocketService {
     }
 
     const statuses = buildStatuses(McpServerRuntimeManager.statusSummary);
+    const statusesJson = JSON.stringify(statuses);
 
-    // Send initial statuses
-    this.sendToClient(ws, {
-      type: "mcp_deployment_statuses",
-      payload: { statuses },
-    });
+    // Send initial statuses, unless the cached answer above already said so
+    if (statusesJson !== cachedStatusesJson) {
+      this.sendToClient(ws, {
+        type: "mcp_deployment_statuses",
+        payload: { statuses },
+      });
+    }
 
     this.mcpDeploymentStatusSubscriptions.set(ws, {
       buildStatuses,
-      lastStatusesJson: JSON.stringify(statuses),
+      lastStatusesJson: statusesJson,
     });
     this.startMcpDeploymentStatusPollingIfNeeded();
 
@@ -1698,6 +1717,13 @@ class WebSocketService {
     error: string | null,
   ): void {
     if (!this.wss) return;
+    // Clients classify runtime alerts from both feeds together. A reinstall
+    // reports "success" only after this process has seen the new pod ready,
+    // but the deployment feed is pushed on watch events and can still carry
+    // the restart gap ("not_created"), which reads as "Not running" until the
+    // next push. Send the current deployment states first so a client never
+    // pairs a fresh installation status with a stale runtime state.
+    this.pushMcpDeploymentStatusesToSubscribers();
     this.broadcast({
       type: "mcp_installation_status",
       payload: { serverId, status, error },

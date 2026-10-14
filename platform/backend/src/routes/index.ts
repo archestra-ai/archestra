@@ -14,6 +14,7 @@ export { default as archestraCatalogProxyRoutes } from "./archestra-catalog-prox
 export { default as auditLogRoutes } from "./audit-log/audit-log.routes";
 export { default as authRoutes } from "./auth";
 export { default as bootstrapRoutes } from "./bootstrap";
+export { default as browserStorageStatesRoutes } from "./browser-storage-state/browser-storage-state.routes";
 export { default as chatRoutes } from "./chat/routes";
 export { default as chatopsRoutes } from "./chatops";
 export { default as clientConnectionRoutes } from "./client-connection/client-connection.routes";
@@ -22,6 +23,7 @@ export { default as connectedClientRoutes } from "./connected-client/connected-c
 export { default as connectionSetupRoutes } from "./connection-setup/connection-setup.routes";
 export { default as defaultUserLimitRoutes } from "./default-user-limit";
 export { default as environmentRoutes } from "./environment";
+export { default as gitCredentialRoutes } from "./git-credential/git-credential.routes";
 export { default as githubAppConfigRoutes } from "./github-app-config";
 export { default as githubCopilotAuthRoutes } from "./github-copilot-auth/github-copilot-auth.routes";
 export { default as githubPatRoutes } from "./github-pat/github-pat.routes";

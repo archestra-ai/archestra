@@ -25,6 +25,8 @@ export const openappaGithubSyncTable = pgTable("openappa_github_sync", {
   interval: text("interval").$type<AppaSyncInterval>(),
   githubPatId: uuid("github_pat_id"),
   githubAppConfigId: uuid("github_app_config_id"),
+  // A GitLab access token in place of the GitHub App; its credential holds the host.
+  gitlabTokenId: uuid("gitlab_token_id"),
   revision: uuid("revision").notNull().defaultRandom(),
   content: text("content"),
   sourceCommit: text("source_commit"),

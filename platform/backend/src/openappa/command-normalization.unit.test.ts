@@ -1,10 +1,12 @@
 import { validateOpenappaPolicy } from "@archestra/openappa-rs";
+import { parse as parseToml } from "smol-toml";
 import { describe, expect, test } from "vitest";
 import {
   expandCommandExecutionPolicyRules,
   isCommandExecutionTool,
   normalizeCommandExecutionArguments,
 } from "./command-normalization";
+import { asRecord, toolEntries } from "./policy-text";
 
 describe("command-normalization", () => {
   describe("isCommandExecutionTool", () => {
@@ -57,151 +59,137 @@ describe("command-normalization", () => {
   });
 
   describe("expandCommandExecutionPolicyRules", () => {
-    test("expands command execution tool rules across all command tools and parameter names", () => {
-      const toml = `
-[[policy.tool]]
-name = "builtin:shell(command:*secret.txt*)"
-delta = { audience = ["lab@archestra.local"] }
-
-[[policy.tool]]
-name = "read"
-delta = {}
-`;
-      const expanded = expandCommandExecutionPolicyRules(toml);
-      expect(expanded).toContain('name = "builtin:bash(command:*secret.txt*)"');
-      expect(expanded).toContain('name = "builtin:bash(cmd:*secret.txt*)"');
-      expect(expanded).toContain('name = "builtin:Bash(command:*secret.txt*)"');
-      expect(expanded).toContain(
-        'name = "builtin:exec_command(cmd:*secret.txt*)"',
-      );
-      expect(expanded).toContain(
-        'name = "host/archestra/bash(command:*secret.txt*)"',
-      );
-      expect(expanded).toContain(
-        'name = "host/archestra/exec_command(cmd:*secret.txt*)"',
-      );
-      expect(expanded).toContain(
-        'name = "host/archestra/run_command(command:*secret.txt*)"',
-      );
-    });
-
-    test("does not duplicate already defined rules", () => {
-      const toml = `
-[[policy.tool]]
-name = "builtin:bash(command:*secret.txt*)"
-delta = { audience = ["lab@archestra.local"] }
-
-[[policy.tool]]
-name = "builtin:shell(command:*secret.txt*)"
-delta = { audience = ["lab@archestra.local"] }
-`;
-      const expanded = expandCommandExecutionPolicyRules(toml);
-      const matches = expanded.match(
-        /name\s*=\s*"builtin:bash\(command:\*secret\.txt\*\)"/g,
-      );
-      expect(matches).toHaveLength(1);
-    });
-
-    test("preserves restrictions authored before the name on every alias", async () => {
-      const toml = `[policy]
+    const rule = (name: string) => `[policy]
 version = 2
 
 [[policy.tool]]
+name = ${name}
 requires = { audience = { contains = ["public"] } }
-delta = { audience = ["private"] }
-name = "builtin:shell(command:*secret*)"
+
+[policy.tool.delta]
+audience = ["private"]
 `;
+    const names = (toml: string) =>
+      toolEntries(toml).map((entry) => entry.name);
 
-      expect(await validateOpenappaPolicy(toml)).toEqual([]);
-
+    test("aliases a rule across every command tool and argument spelling, keeping its labels", async () => {
+      const toml = rule('"builtin:shell(command:*secret*)"');
       const expanded = expandCommandExecutionPolicyRules(toml);
-      const rules = expanded.split("[[policy.tool]]").slice(1);
 
-      expect(rules).toHaveLength(20);
-      for (const rule of rules) {
-        expect(rule).toContain(
-          'requires = { audience = { contains = ["public"] } }',
-        );
-        expect(rule).toContain('delta = { audience = ["private"] }');
+      expect(new Set(names(expanded))).toEqual(
+        new Set(
+          ["builtin:", "host/archestra/"].flatMap((prefix) =>
+            ["bash", "Bash", "shell", "exec_command", "run_command"].flatMap(
+              (tool) =>
+                ["command", "cmd"].map(
+                  (param) => `${prefix}${tool}(${param}:*secret*)`,
+                ),
+            ),
+          ),
+        ),
+      );
+      expect(names(expanded)).toHaveLength(20);
+      for (const entry of toolEntries(expanded)) {
+        expect(entry.delta).toEqual({ audience: ["private"] });
+        expect(entry.requires).toEqual({
+          audience: { contains: ["public"] },
+        });
       }
       expect(await validateOpenappaPolicy(expanded)).toEqual([]);
     });
 
-    test("preserves a trailing comment when name is the final line", async () => {
-      const toml = `[policy]
-version = 2
-
+    test("keeps every alias ahead of a broader rule written after the original", async () => {
+      const toml = `${rule('"host/archestra/exec_command(command:*secret*)"')}
 [[policy.tool]]
+name = "host/archestra/exec_command"
 delta = {}
-name = "builtin:shell(command:*secret*)" # selector stays last`;
-
-      expect(await validateOpenappaPolicy(toml)).toEqual([]);
-
+`;
       const expanded = expandCommandExecutionPolicyRules(toml);
 
-      expect(expanded.match(/^\[\[policy\.tool\]\]$/gm)).toHaveLength(20);
-      expect(expanded.match(/# selector stays last$/gm)).toHaveLength(20);
+      expect(names(expanded).at(-1)).toBe("host/archestra/exec_command");
       expect(
-        expanded.match(/name = "builtin:shell\(command:\*secret\*\)"/g),
-      ).toHaveLength(1);
+        names(expanded).indexOf("host/archestra/exec_command(cmd:*secret*)"),
+      ).toBeLessThan(names(expanded).length - 1);
+      expect(names(expanded)).toHaveLength(21);
       expect(await validateOpenappaPolicy(expanded)).toEqual([]);
     });
 
-    test("does not use a nested metadata name as the tool rule name", () => {
-      const toml = `[[policy.tool]]
+    test("an alias spelling written later still gets an alias ahead of the broader rule", async () => {
+      const toml = `${rule('"host/archestra/exec_command(command:*secret*)"')}
+[[policy.tool]]
+name = "host/archestra/exec_command"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/exec_command(cmd:*secret*)"
+delta = {}
+`;
+      const spelled = names(expandCommandExecutionPolicyRules(toml));
+
+      expect(
+        spelled.indexOf("host/archestra/exec_command(cmd:*secret*)"),
+      ).toBeLessThan(spelled.indexOf("host/archestra/exec_command"));
+      expect(
+        await validateOpenappaPolicy(expandCommandExecutionPolicyRules(toml)),
+      ).toEqual([]);
+    });
+
+    test("a selector naming both spellings is aliased across tools only", async () => {
+      const toml = rule('"builtin:bash(command:*,cmd:*)"');
+      const expanded = expandCommandExecutionPolicyRules(toml);
+
+      expect(names(expanded)).toContain(
+        "host/archestra/exec_command(command:*,cmd:*)",
+      );
+      expect(names(expanded)).toHaveLength(10);
+      expect(await validateOpenappaPolicy(expanded)).toEqual([]);
+    });
+
+    test("keeps integers beyond JavaScript's safe range exact", () => {
+      const toml = `${rule('"builtin:bash(command:*)"')}
+[externals]
+timeout_ms = 9007199254740993
+`;
+      const expanded = parseToml(expandCommandExecutionPolicyRules(toml), {
+        integersAsBigInt: "asNeeded",
+      });
+
+      expect(asRecord(expanded.externals)?.timeout_ms).toBe(9007199254740993n);
+      expect((asRecord(expanded.policy)?.tool as unknown[]).length).toBe(20);
+    });
+
+    test("refuses a policy it cannot read rather than serve it unexpanded", () => {
+      expect(() => expandCommandExecutionPolicyRules("not toml [")).toThrow();
+    });
+
+    test("renames the command condition wherever it stands, past escaped characters", async () => {
+      const toml = rule(
+        String.raw`'host/claude-code/exec_command(workdir:/a\,b,cmd:*a\)b*)'`,
+      );
+      const expanded = expandCommandExecutionPolicyRules(toml);
+
+      expect(names(expanded)).toEqual(
+        expect.arrayContaining([
+          String.raw`host/claude-code/Bash(workdir:/a\,b,command:*a\)b*)`,
+          String.raw`host/archestra/shell(workdir:/a\,b,cmd:*a\)b*)`,
+        ]),
+      );
+      expect(names(expanded)).toHaveLength(30);
+      expect(await validateOpenappaPolicy(expanded)).toEqual([]);
+    });
+
+    test("leaves policies without a command condition unchanged", () => {
+      for (const toml of [
+        rule('"builtin:bash(workdir:/repo)"'),
+        rule('"read(path:*)"'),
+        `[[policy.tool]]
 delta = {}
 
 [policy.tool.metadata]
 name = "builtin:shell(command:*)"
-`;
-
-      expect(expandCommandExecutionPolicyRules(toml)).toBe(toml);
-    });
-
-    test("copies nested tool tables without duplicating later policy or external tables", async () => {
-      const toml = `[policy]
-version = 2
-
-[[policy.tool]]
-# Keep this rule comment in the source policy.
-name = "builtin:shell(command:*secret*)"
-
-[policy.tool.delta]
-audience = ["private"]
-
-[policy.tool.requires.audience]
-contains = ["public"]
-
-# These tables belong to the policy, not to the command rule.
-[[policy.sanitizer]]
-name = "redactor"
-on = ["tool_input"]
-
-[policy.sanitizer.permits]
-audience = { from = ["private"], to = ["public"] }
-
-[externals]
-timeout_ms = 2000
-max_body_bytes = 65536
-
-[externals.sanitizers.redactor]
-url = "https://example.test/sanitize"
-`;
-
-      expect(await validateOpenappaPolicy(toml)).toEqual([]);
-
-      const expanded = expandCommandExecutionPolicyRules(toml);
-
-      expect(expanded.startsWith(toml)).toBe(true);
-      expect(expanded.match(/^\[externals\]$/gm)).toHaveLength(1);
-      expect(
-        expanded.match(/^\[externals\.sanitizers\.redactor\]$/gm),
-      ).toHaveLength(1);
-      expect(expanded.match(/^\[\[policy\.sanitizer\]\]$/gm)).toHaveLength(1);
-      expect(expanded).toMatch(
-        /name = "builtin:bash\(cmd:\*secret\*\)"\n\n\[policy\.tool\.delta\]\naudience = \["private"\]\n\n\[policy\.tool\.requires\.audience\]\ncontains = \["public"\]/,
-      );
-      expect(await validateOpenappaPolicy(expanded)).toEqual([]);
+`,
+      ])
+        expect(expandCommandExecutionPolicyRules(toml)).toBe(toml);
     });
   });
 });

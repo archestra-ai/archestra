@@ -404,12 +404,7 @@ async function loadPluginsForLink(params: {
   clientType: string | null;
   pluginPlatform: PluginPlatform | null;
 }): Promise<MaterializePluginInput[]> {
-  if (
-    !config.plugins.enabled ||
-    params.ids.length === 0 ||
-    !params.clientType ||
-    !params.pluginPlatform
-  ) {
+  if (params.ids.length === 0 || !params.clientType || !params.pluginPlatform) {
     return [];
   }
   const clientType = params.clientType;

@@ -40,6 +40,12 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .string()
               .optional()
               .describe("Filter by exact MCP server name"),
+            userId: z
+              .string()
+              .optional()
+              .describe(
+                "Filter by the user the call is attributed to. Ignored without `log:admin`, which already scopes the listing to the caller.",
+              ),
           })
           .merge(CursorQuerySchema),
         response: constructResponseSchema(
@@ -49,7 +55,15 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (
       {
-        query: { agentId, startDate, endDate, mcpServerName, limit, cursor },
+        query: {
+          agentId,
+          startDate,
+          endDate,
+          mcpServerName,
+          userId,
+          limit,
+          cursor,
+        },
         user,
         organizationId,
       },
@@ -75,7 +89,7 @@ const mcpToolCallRoutes: FastifyPluginAsyncZod = async (fastify) => {
             startDate: startDate ? new Date(startDate) : undefined,
             endDate: endDate ? new Date(endDate) : undefined,
             mcpServerName,
-            ownUserId: canSeeAllLogs ? undefined : user.id,
+            ownUserId: canSeeAllLogs ? userId : user.id,
           },
         ),
       );

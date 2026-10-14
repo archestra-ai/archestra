@@ -22,7 +22,8 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   ConnectionBaseUrl,
-  ConnectionDefaultProviderKeys,
+  ConnectionClientFutureProviders,
+  ConnectionClientProviderKeys,
   LimitCleanupInterval,
   NetworkPolicy,
   OnboardingWizard,
@@ -307,14 +308,24 @@ const organizationsTable = pgTable("organization", {
   >(),
 
   /**
-   * Admin-chosen provider API key per provider for auto-provisioned
-   * connection virtual keys (provider → llm_provider_api_keys.id). When a
-   * provider has no entry, provisioning falls back to the user's
-   * personal → team → org key resolution.
+   * Admin-chosen provider API keys per setup client for the virtual key a
+   * setup command mints (client → provider → llm_provider_api_keys.id). A
+   * client or provider with no entry falls back to the user's own key
+   * resolution.
    */
-  connectionDefaultProviderKeys: jsonb(
-    "connection_default_provider_keys",
-  ).$type<ConnectionDefaultProviderKeys>(),
+  connectionClientFutureProviders: jsonb(
+    "connection_client_future_providers",
+  ).$type<ConnectionClientFutureProviders>(),
+  connectionClientProviderKeys: jsonb(
+    "connection_client_provider_keys",
+  ).$type<ConnectionClientProviderKeys>(),
+  /**
+   * @deprecated Superseded by `connectionClientProviderKeys`, which a migration
+   * backfilled from it. Retained so app versions still reading it keep working
+   * through a rolling deploy; no longer read or written. Drop in a later
+   * release.
+   */
+  connectionDefaultProviderKeys: jsonb("connection_default_provider_keys"),
 
   /**
    * When false, /connection does not offer installing shared skills, and

@@ -1184,7 +1184,10 @@ export function McpCatalogForm({
                               <FormControl>
                                 <Select
                                   onValueChange={field.onChange}
-                                  value={field.value || "streamable-http"}
+                                  // New servers default to streamable-http
+                                  // explicitly; an unset value on an existing
+                                  // server runs as stdio.
+                                  value={field.value || "stdio"}
                                 >
                                   <SelectTrigger
                                     aria-label="Transport Type"

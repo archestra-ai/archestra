@@ -2116,6 +2116,94 @@ describe("websocket MCP deployment statuses shared poller", () => {
     }
   });
 
+  test("an installation status change reaches a subscriber after the deployment state it was decided on", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog({
+      serverType: "local",
+      organizationId: org.id,
+    });
+    const mcpServer = await makeMcpServer({
+      scope: "team",
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    vi.spyOn(McpServerRuntimeManager, "refreshAllStates").mockResolvedValue(
+      undefined,
+    );
+    // The reinstall stopped the old deployment: the subscriber's last push
+    // is the restart gap.
+    let summary: typeof McpServerRuntimeManager.statusSummary = {
+      status: "running",
+      mcpServers: {},
+    };
+    vi.spyOn(
+      McpServerRuntimeManager,
+      "statusSummary",
+      "get",
+    ).mockImplementation(() => summary);
+
+    const ws = makeWs();
+    service.clientContexts.set(ws, {
+      userId: user.id,
+      organizationId: org.id,
+      userIsMcpServerAdmin: true,
+    });
+    const previousWss = service.wss;
+    service.wss = { clients: new Set([ws]) };
+    await subscribe(ws);
+    const sent = () =>
+      (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
+        ([raw]) => JSON.parse(raw) as { type: string; payload: never },
+      );
+    expect(sent()).toHaveLength(1);
+
+    try {
+      // The new pod is ready and the reinstall reports success before any
+      // watch event has pushed the running state.
+      summary = {
+        status: "running",
+        mcpServers: {
+          [mcpServer.id]: {
+            state: "running",
+            message: "Deployment is running",
+            error: null,
+            serverName: "test-server",
+            deploymentName: `mcp-${mcpServer.id}`,
+            namespace: "default",
+          },
+        },
+      };
+      websocketService.broadcastMcpInstallationStatus(
+        mcpServer.id,
+        "success",
+        null,
+      );
+
+      const [, deployment, installation] = sent();
+      expect(deployment).toMatchObject({
+        type: "mcp_deployment_statuses",
+        payload: { statuses: { [mcpServer.id]: { state: "running" } } },
+      });
+      expect(installation).toMatchObject({
+        type: "mcp_installation_status",
+        payload: { serverId: mcpServer.id, status: "success" },
+      });
+    } finally {
+      service.wss = previousWss;
+      service.unsubscribeMcpDeploymentStatuses(ws);
+    }
+  });
+
   test("poll ticks skip the K8s refresh while watch streams are healthy and state is fresh", async ({
     makeOrganization,
     makeUser,
@@ -2542,6 +2630,9 @@ describe("websocket MCP deployment statuses shared poller", () => {
       mcpServers: {},
     });
 
+    // No earlier refresh, so there is no cached summary to answer with first.
+    service.lastMcpDeploymentRefreshAt = 0;
+
     const ws = makeWs();
     service.clientContexts.set(ws, {
       userId: user.id,
@@ -2561,6 +2652,68 @@ describe("websocket MCP deployment statuses shared poller", () => {
     expect(ws.send).not.toHaveBeenCalled();
     expect(service.mcpDeploymentStatusSubscriptions.has(ws)).toBe(false);
     expect(service.mcpDeploymentStatusPollInterval).toBeNull();
+  });
+
+  test("answers a re-subscribe from the cached summary without waiting for a slow refresh", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog({
+      serverType: "local",
+      organizationId: org.id,
+    });
+    const server = await makeMcpServer({
+      scope: "team",
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    let resolveRefresh: (() => void) | undefined;
+    const refreshSpy = vi
+      .spyOn(McpServerRuntimeManager, "refreshAllStates")
+      .mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveRefresh = resolve;
+          }),
+      );
+    vi.spyOn(McpServerRuntimeManager, "statusSummary", "get").mockReturnValue({
+      status: "running",
+      mcpServers: {},
+    });
+    // An earlier subscriber already filled the summary.
+    service.lastMcpDeploymentRefreshAt = Date.now();
+
+    const ws = makeWs();
+    service.clientContexts.set(ws, {
+      userId: user.id,
+      organizationId: org.id,
+      userIsMcpServerAdmin: true,
+    });
+
+    const subscribePromise = subscribe(ws);
+    await vi.waitFor(() => expect(refreshSpy).toHaveBeenCalled());
+
+    // The refresh is still running, yet the client already has statuses.
+    expect(ws.send).toHaveBeenCalledTimes(1);
+    const sent = JSON.parse(
+      (ws.send as ReturnType<typeof vi.fn>).mock.calls[0][0],
+    );
+    expect(sent.type).toBe("mcp_deployment_statuses");
+    expect(sent.payload.statuses[server.id]).toBeDefined();
+
+    resolveRefresh?.();
+    await subscribePromise;
+
+    // Nothing changed during the refresh, so no duplicate is sent.
+    expect(ws.send).toHaveBeenCalledTimes(1);
   });
 });
 

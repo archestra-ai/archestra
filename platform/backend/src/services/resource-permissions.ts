@@ -190,27 +190,44 @@ export class ResourcePermissions {
     userId: string;
     environmentIds: string[];
   }): Promise<Set<string>> {
-    if (params.environmentIds.length === 0) return new Set();
+    return ResourcePermissions.getPermittedIds({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      resource: "environment",
+      scopes: params.environmentIds,
+      action: "use",
+    });
+  }
+
+  /** The objects among `scopes` the caller holds `action` on, in one policy read. */
+  static async getPermittedIds(params: {
+    organizationId: string;
+    userId: string;
+    resource: ScopedResource;
+    scopes: string[];
+    action: ResourcePermissionAction;
+  }): Promise<Set<string>> {
+    if (params.scopes.length === 0) return new Set();
     const subjects = await ResourcePermissions.getSubjects(params);
     if (subjects.length === 0) return new Set();
     const policies = await ResourcePermissionPolicyModel.findApplicableBatch({
       organizationId: params.organizationId,
-      resource: "environment",
-      scopes: params.environmentIds,
+      resource: params.resource,
+      scopes: params.scopes,
     });
     const grants = expandScopedGrants({
       policies,
       subjectKeys: new Set(subjects.map(subjectKey)),
     });
     return new Set(
-      params.environmentIds.filter((scope) =>
+      params.scopes.filter((scope) =>
         hasScopedPermission({
           grants,
           required: {
             organizationId: params.organizationId,
-            resource: "environment",
+            resource: params.resource,
             scope,
-            action: "use",
+            action: params.action,
           },
         }),
       ),

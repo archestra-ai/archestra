@@ -4,7 +4,7 @@ import { renderClaudeDesktopSetupScript } from "./agents/claude-desktop";
 import { codexSetup } from "./agents/codex";
 import { copilotCliSetup } from "./agents/copilot-cli";
 import { cursorSetup } from "./agents/cursor";
-import { opencodeSetup } from "./agents/opencode";
+import { kiloSetup, opencodeSetup } from "./agents/opencode";
 import { buildEnding } from "./steps/ending";
 import {
   bashFooter,
@@ -58,6 +58,7 @@ const SHELL_AGENTS: Record<
   "copilot-cli": copilotCliSetup,
   cursor: cursorSetup,
   opencode: opencodeSetup,
+  kilo: kiloSetup,
 };
 
 export function renderSetupScript(rawCtx: SetupScriptContext): string {

@@ -36,6 +36,7 @@ export const TOOL_PERMISSIONS: Record<
   // OpenAPPA
   execute_remedy_plan: null,
   yell: null,
+  superyell: null,
   get_remedy_plans: null,
   list_peer_messages: null,
   read_peer_message: null,
@@ -663,4 +664,6 @@ const SCOPED_RESOURCE_TOOLS: Partial<
   edit_agent: { resource: "agent", action: "update" },
   get_mcp_gateway: { resource: "mcpGateway", action: "read" },
   edit_mcp_gateway: { resource: "mcpGateway", action: "update" },
+  update_runtime_credential: { resource: "credential", action: "update" },
+  delete_runtime_credential: { resource: "credential", action: "delete" },
 };

@@ -8,6 +8,7 @@ import {
   isAlwaysExposedArchestraToolShortName,
   isImplicitOpenAppaReadToolShortName,
   isSkillTool,
+  isYellToolShortName,
   MCP_EXECUTED_AS_META_KEY,
   MCP_GATEWAY_OAUTH_SCOPE,
   MCP_OAUTH_CLIENT_REFERENCE_PREFIX,
@@ -30,6 +31,7 @@ import {
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_START_RUN_SHORT_NAME,
   TOOL_STEER_RUN_SHORT_NAME,
+  YELL_TOOL_SHORT_NAMES,
 } from "@archestra/shared";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -49,6 +51,7 @@ import {
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { FastifyRequest } from "fastify";
+import { ZodError } from "zod";
 import {
   archestraMcpBranding,
   executeArchestraTool,
@@ -61,7 +64,11 @@ import {
   getUnassignedDiscoverableTools,
   resolveDynamicTool,
 } from "@/archestra-mcp-server/dynamic-tools";
-import { structuredToolErrorResult } from "@/archestra-mcp-server/helpers";
+import {
+  catchError,
+  errorResult,
+  structuredToolErrorResult,
+} from "@/archestra-mcp-server/helpers";
 import { isOpenappaTool } from "@/archestra-mcp-server/openappa";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import type { RequestLookups } from "@/auth/request-lookups";
@@ -71,7 +78,10 @@ import {
   type ArchestraElicitationOutcome,
   ELICITATION_ANSWER_TIMEOUT_MS,
 } from "@/clients/chat-mcp-elicitation";
-import mcpClient, { type TokenAuthContext } from "@/clients/mcp-client";
+import mcpClient, {
+  McpServerStoppedError,
+  type TokenAuthContext,
+} from "@/clients/mcp-client";
 import { isToolRejectedForMcpHeaders } from "@/clients/mcp-param-headers";
 import config from "@/config";
 import logger from "@/logging";
@@ -110,7 +120,10 @@ import {
   sanitizeAppNameForToolMetadata,
 } from "@/services/apps/app-run-link";
 import { filterToolsByCallerCatalogAccess } from "@/services/caller-catalog-access";
-import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
+import {
+  getGuardrailsDeployment,
+  superyellAvailableIn,
+} from "@/services/guardrails-deployment";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import {
   discoverOidcJwksUrl,
@@ -133,6 +146,7 @@ import {
   type SelectUserToken,
   type ToolExposureMode,
 } from "@/types";
+import { ApiError } from "@/types/api";
 import { APP_LAUNCH_TOOL_NAME } from "@/types/app";
 import { deriveAuthMethod } from "@/utils/auth-method";
 import { estimateToolResultContentLength } from "@/utils/tool-result-preview";
@@ -309,7 +323,7 @@ const ANTHROPIC_ALWAYS_LOAD_META_KEY = "anthropic/alwaysLoad";
 
 /**
  * OpenAPPA's session tools: the notice and control tools of a remedy, ask_user
- * for a remedy that needs a person, the peer inbox, and yell. A tool the
+ * for a remedy that needs a person, the peer inbox, yell and superyell. A tool the
  * request does not declare is one the proxy cannot verify, and a session must
  * not have to search for the tools that explain a block, so these are declared
  * from the first request. The policy tools stay behind the search: only a
@@ -318,7 +332,7 @@ const ANTHROPIC_ALWAYS_LOAD_META_KEY = "anthropic/alwaysLoad";
 const ALWAYS_LOADED_SHORT_NAMES: ReadonlySet<string> = new Set([
   ...APPA_IMPLICIT_TOOL_SHORT_NAMES,
   TOOL_ASK_USER_SHORT_NAME,
-  "yell",
+  ...YELL_TOOL_SHORT_NAMES,
 ]);
 
 /** Build the exact caller-scoped gateway tools/list surface without logging a request. */
@@ -447,13 +461,17 @@ export async function buildAgentMcpToolList(params: {
       ? getImplicitTaskControlTools()
       : [];
   // A thrown switch read must fail the list, not look like the switch is off.
-  const remediesActive = await isGuardrailsV2Active();
+  // One read serves both the remedy tools and superyell.
+  const deployment = await getGuardrailsDeployment();
+  const remediesActive = deployment.active;
+  // superyell can also arrive assigned, so it is dropped from the whole list.
+  const superyellAvailable = superyellAvailableIn(deployment);
   const implicitOpenAppaTools = getArchestraMcpTools().filter((tool) => {
     const shortName = archestraMcpBranding.getToolShortName(tool.name);
     if (APPA_IMPLICIT_TOOL_SHORT_NAMES.has(shortName ?? "")) {
       return remediesActive;
     }
-    return shortName === "yell" && openappaYellEnabled();
+    return isYellToolShortName(shortName) && openappaYellEnabled();
   });
   const implicitPolicyTools = openappaEnabled()
     ? getArchestraMcpTools().filter(
@@ -488,6 +506,10 @@ export async function buildAgentMcpToolList(params: {
         },
       })),
     ].map(toMcpListTool),
+  ).filter(
+    (tool) =>
+      superyellAvailable ||
+      archestraMcpBranding.getToolShortName(tool.name) !== "superyell",
   );
 
   // Filter Archestra tools based on user RBAC permissions
@@ -1404,15 +1426,33 @@ export async function createAgentServer(params: {
           requestSizeBytes: args ? JSON.stringify(args).length : undefined,
         });
 
-        if (typeof error === "object" && error !== null && "code" in error) {
+        // Liveness failures carry authored text and must settle detached tasks
+        // as failed rather than as completed error results.
+        if (error instanceof McpServerStoppedError) throw error;
+
+        if (
+          error instanceof McpError ||
+          (typeof error === "object" &&
+            error !== null &&
+            Object.getPrototypeOf(error) === Object.prototype &&
+            "code" in error &&
+            Number.isSafeInteger(error.code) &&
+            "message" in error &&
+            typeof error.message === "string")
+        ) {
           throw error; // Re-throw JSON-RPC errors
         }
 
-        throw {
-          code: -32603, // Internal error
-          message: "Tool execution failed",
-          data: error instanceof Error ? error.message : "Unknown error",
-        };
+        if (error instanceof ApiError && error.statusCode < 500) {
+          logger.warn({ err: error }, "MCP tool execution refused");
+          return errorResult(error.message);
+        }
+        // Custom validation messages and paths can contain submitted secrets.
+        if (error instanceof ZodError) {
+          logger.warn({ err: error }, "MCP tool arguments failed validation");
+          return errorResult("Invalid tool arguments");
+        }
+        return catchError(error, "executing tool");
       }
     };
 
@@ -2674,10 +2714,12 @@ function createGatewayUserElicit(params: {
 }
 
 /**
- * A form answer no person gave is no answer. Codex declares forms but declines
- * each one itself when no person drives the turn (`codex exec`) and under its
- * automatic reviewer. Read as a refusal, that decline would record a denial
- * nobody made.
+ * A form answer that no person gave is not an answer. Codex declares forms but
+ * answers each one itself when no person drives the turn (`codex exec`) and
+ * under its automatic reviewer. Any of those results, including an accept,
+ * means no person saw the form.
+ * Read as a refusal, a decline would record a denial nobody made; read as an
+ * accept, it would record an approval nobody made.
  */
 function formAnswer(params: {
   result: ElicitResult;
@@ -2685,9 +2727,8 @@ function formAnswer(params: {
 }): ArchestraElicitationOutcome {
   const { result, requestMeta } = params;
   if (
-    result.action === "decline" &&
-    (result._meta?.approvals_reviewer === "auto_review" ||
-      codexTurnTrigger(requestMeta) === "exec")
+    result._meta?.approvals_reviewer === "auto_review" ||
+    codexTurnTrigger(requestMeta) === "exec"
   ) {
     return { status: "no_viewer" };
   }

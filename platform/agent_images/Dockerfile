@@ -53,6 +53,10 @@ RUN --network=none \
     --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/mcp-startup.py claude-code
 
+RUN --network=none \
+    --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \
+    python3 /tmp/agent-image-tests/claude-background-agents.py
+
 FROM agent-base AS agent-codex
 USER root
 RUN pnpm add --global @openai/codex@0.153.0 \

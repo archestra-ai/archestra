@@ -3,8 +3,8 @@ title: Agent Runtime Setup
 sidebarTitle: Setup
 description: Prepare Kubernetes nodes, storage, and the Agent Sandbox controller for Agent Runtime
 order: 1
-alpha: "Agent Runtime is in Alpha and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-09
+beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
+lastUpdated: 2026-10-14
 ---
 
 Prepare your cluster once, and every agent can get a dedicated runtime. Each run becomes a pod with its own persistent volume, created by the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/).
@@ -70,6 +70,8 @@ A warm pool keeps spare containers ready, so runs start faster. Agents in the sa
 
 After installing the controller extensions above, set [`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE=1`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE) to keep one spare per group. Up to four groups are prepared by default; change this with [`ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_WARM_POOL_MAX_POOLS).
 
+Pools go to the Agents with the most recent runs. Agents with no run in the last 7 days get no spare, so idle Agents don't hold cluster capacity.
+
 Assigned containers never return to the pool. Without a spare, a run starts a new container. Setting the size to `0` removes unused spares and preserves assigned runs.
 
 ## Privileged Containers
@@ -88,6 +90,16 @@ Archestra prefetches maintained catalog images onto runtime nodes. Registry and 
 Prefetch uses the runtime namespace's default ServiceAccount image pull secrets. Each image consumes disk on every matching node. Fresh nodes still need their first download; an unavailable image does not block other launches.
 
 <!-- SPDX-SnippetEnd -->
+
+## Upgrades
+
+Upgrading Archestra moves every agent made from a catalog template onto the new maintained image. You do not edit agents after an upgrade. An agent runs this deployment's image, whatever tag was current when someone created it.
+
+- **New runs** start on the new image.
+- **Retained workspaces** move to the new image on their next turn. Archestra restarts the workspace and keeps its files and conversation.
+- **A turn already running** keeps its image until it ends.
+
+A custom image, or a maintained image pinned by digest, runs exactly as saved.
 
 ## Troubleshooting
 

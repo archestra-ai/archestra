@@ -84,23 +84,32 @@ test('a new session opens under the text its dispatch carried while a stale sibl
   // A pool of one would serialize fresh and stale on the same connection,
   // masking the race: this needs both to hold a connection at once.
   await native.initializeOpenappa(databaseUrl, 2);
-  // Holding a root's ledger advisory lock parks its dispatch on its own
-  // pooled connection after it pinned its deployment and before the session opens.
+  // An uncommitted family row parks a new session's dispatch on its own pooled
+  // connection after it pinned its deployment and before the session opens: the
+  // opening writes that row in the same transaction, and waits for the row to
+  // settle.
   const ledger = new Client({ connectionString: databaseUrl });
   await ledger.connect();
   t.after(() => ledger.end());
+  const ledgerPid = (await ledger.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+  // Watched from a connection of its own: inside the ledger's open transaction
+  // the activity view would stay as it was at its first read.
+  const monitor = new Client({ connectionString: databaseUrl });
+  await monitor.connect();
+  t.after(() => monitor.end());
   const scope = () => ({ organization_id: 'policy-race-test', caller_id: 'user:test', session_id: randomUUID() });
   const hook = async (session, event, policy) => JSON.parse(await native.dispatchHook(JSON.stringify({ ...session, ...event }), hosted(policy)));
   const root = (session) => `archestra:${createHash('sha256').update(`${session.organization_id}\n${session.session_id}`).digest('hex')}`;
-  const hold = (session) => ledger.query('SELECT pg_advisory_lock(hashtextextended($1, 0))', [root(session)]);
-  const release = (session) => ledger.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [root(session)]);
-  const parked = async (session) => {
+  const hold = (session) => ledger.query('INSERT INTO openappa_roots (root) VALUES ($1)', [root(session)]);
+  const release = () => ledger.query('ROLLBACK');
+  // Waits until `count` dispatches wait on the rows this connection holds.
+  const parked = async (count) => {
     for (;;) {
-      const { rows } = await ledger.query(`SELECT EXISTS (
-        SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND NOT granted AND objsubid = 1
-          AND classid = ((hashtextextended($1, 0) >> 32) & 4294967295)::oid
-          AND objid = (hashtextextended($1, 0) & 4294967295)::oid) AS parked`, [root(session)]);
-      if (rows[0].parked) return;
+      const { rows } = await monitor.query(
+        'SELECT count(*)::int AS parked FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid))',
+        [ledgerPid],
+      );
+      if (rows[0].parked >= count) return;
       await delay(10);
     }
   };
@@ -111,19 +120,19 @@ test('a new session opens under the text its dispatch carried while a stale sibl
   assert.equal((await hook(scope(), { event: 'session_start' }, allow)).decision, 'ack');
   const fresh = scope();
   const stale = scope();
+  await ledger.query('BEGIN');
   await hold(fresh);
   await hold(stale);
   // The fresh session read the saved text.
   const freshStart = hook(fresh, { event: 'session_start' }, deny);
-  await parked(fresh);
+  await parked(1);
   // A request that read the text just before the save carries that text.
   const staleStart = hook(stale, { event: 'session_start' }, allow);
-  // Wait until the stale dispatch has pinned its deployment and reached its
-  // ledger lock. A fixed delay cannot establish that ordering on a busy CI host.
-  await parked(stale);
+  // Wait until the stale dispatch has pinned its deployment and reached the
+  // family row. A fixed delay cannot establish that ordering on a busy CI host.
+  await parked(2);
   assert.equal(await opened(fresh), false, 'the stale dispatch pinned its text before the fresh session opened');
-  await release(fresh);
-  await release(stale);
+  await release();
   assert.equal((await freshStart).decision, 'ack');
   assert.equal((await staleStart).decision, 'ack');
 
@@ -180,7 +189,7 @@ url = "http://127.0.0.1:${server.address().port}/annotate"
   assert.deepEqual(requests.map(request => request.artifact.args.name), ['host/archestra/unknown_before', 'host/archestra/unknown_after']);
 });
 
-test('the host sets the result body limit and a policy text cannot change it', { skip: !databaseUrl }, async () => {
+test('an explicit policy result cap takes precedence over the host default', { skip: !databaseUrl }, async () => {
   const proxyLimit = 70 * 1024 * 1024;
   const priorLimit = process.env.APPA_ARCHESTRA_MAX_BODY_BYTES;
   try {
@@ -199,15 +208,21 @@ test('the host sets the result body limit and a policy text cannot change it', {
       assert.equal(kept.approved_output, output);
     };
     process.env.APPA_ARCHESTRA_MAX_BODY_BYTES = String(proxyLimit);
-    // The host limit applies to a text that states nothing, one that states the old
-    // 64 KiB (as every stored effective text does today), a lower value and a higher one.
-    for (const stated of ['', 'max_body_bytes = 65536\n', 'max_body_bytes = 4096\n', 'max_body_bytes = 999999999999\n']) {
+    // Without an explicit cap, results use the published proxy limit. A policy can
+    // also choose a cap above that default without changing the proxy request limit.
+    for (const stated of ['', 'max_body_bytes = 999999999999\n']) {
       const policyText = stated ? `${allow}[externals]\ntimeout_ms = 2000\n${stated}` : allow;
       await carried(policyText, text);
       await carried(policyText, 'x'.repeat(5 * 1024 * 1024));
     }
-    // A result the limit does carry is still ruled on by the policy: a rewrite stands.
-    // Without a published limit a policy keeps the value its text states.
+    for (const limit of [4096, 65536]) {
+      const policyText = `${allow}[externals]\nmax_body_bytes = ${limit}\n`;
+      await carried(policyText, 'x'.repeat(limit));
+      const dropped = await report(policyText, 'x'.repeat(limit + 1));
+      assert.equal(dropped.decision, 'replace_output');
+      assert.equal(dropped.approved_output, withheld);
+    }
+    // A policy keeps its stated limit even without a published host default.
     delete process.env.APPA_ARCHESTRA_MAX_BODY_BYTES;
     const stated = `${allow}[externals]\ntimeout_ms = 2000\nmax_body_bytes = 65536\n`;
     const dropped = await report(stated, text);

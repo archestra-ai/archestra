@@ -90,6 +90,7 @@ type SkillsPaginatedParams = Pick<
   | "offset"
   | "search"
   | "sourceRepo"
+  | "skillIds"
   | "forAgentId"
   | "mcpGatewayEnvironment"
   | "agentSkillView"
@@ -724,7 +725,9 @@ export function useUpdateSkillGithubSync() {
       } else if (variables.body.disconnect) {
         toast.success("Sync stopped — the skill is now editable");
       } else {
-        toast.success("Sync frequency updated");
+        toast.success(
+          variables.body.source ? "Source updated" : "Sync frequency updated",
+        );
       }
     },
   });
@@ -754,6 +757,8 @@ export function usePreviewGithubSkill(
       body?.repoUrl,
       body?.path ?? null,
       body?.skillPath,
+      // The same repository can read differently through another credential.
+      body?.githubAppConfigId ?? body?.gitlabTokenId ?? null,
     ],
     enabled: !!body,
     staleTime: 5 * 60 * 1000,

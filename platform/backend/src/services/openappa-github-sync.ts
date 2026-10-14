@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { getGithubWebOrigin } from "@archestra/shared";
+import { getGithubWebOrigin, gitHostFromUrl } from "@archestra/shared";
 import { userHasPermission } from "@/auth";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
@@ -14,8 +14,13 @@ import {
 } from "@/openappa/declarations";
 import { OPENAPPA_TEMPLATE } from "@/openappa/template.generated";
 import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
+import { CredentialAccess } from "@/services/credential-access";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
-import { resolveOpenAppaGithubAccess } from "@/services/openappa-github-access";
+import {
+  resolveOpenAppaGithubAccess,
+  resolveOpenAppaGitlabAccess,
+} from "@/services/openappa-github-access";
+import { openappaGitlab } from "@/services/openappa-gitlab";
 import { ApiError } from "@/types";
 import type {
   AppaGithubSource,
@@ -28,9 +33,10 @@ export async function getAppaGithubSync(organizationId: string) {
     OpenAppaPolicyTestsModel.find(organizationId),
   ]);
   const validationDirectory = row?.repo ? (suite?.directory ?? "traces") : "";
-  const githubWebUrl = await githubWebOrigin({
+  const { webUrl: githubWebUrl, provider } = await sourceWebOrigin({
     organizationId,
     githubAppConfigId: row?.githubAppConfigId ?? null,
+    gitlabTokenId: row?.gitlabTokenId ?? null,
   });
   if (!row)
     return {
@@ -39,6 +45,7 @@ export async function getAppaGithubSync(organizationId: string) {
       hasPolicy: false,
       validationDirectory,
       githubWebUrl,
+      provider,
     };
   // Neither the accepted bytes nor the held ones leave the database: the panel
   // reads a held pull by its hash, its commit and its reasons.
@@ -49,6 +56,7 @@ export async function getAppaGithubSync(organizationId: string) {
     hasPolicy: content !== null,
     validationDirectory,
     githubWebUrl,
+    provider,
   };
 }
 export async function configureAppaGithubSync(params: {
@@ -95,7 +103,7 @@ export async function connectAppaGithubRepository(params: {
   )
     throw new ApiError(
       409,
-      "Stop the existing GitHub sync before connecting another repository",
+      "Stop the current Git sync before connecting another repository",
     );
   await saveSource(params);
   await syncAppaGithubPolicy(params.organizationId);
@@ -116,7 +124,8 @@ export async function createAppaGithubRepository(params: {
   userId: string;
   owner: string;
   name: string;
-  githubAppConfigId: string;
+  githubAppConfigId?: string;
+  gitlabTokenId?: string;
   interval: AppaGithubSource["interval"];
   existing?: boolean;
   ref?: string | null;
@@ -131,7 +140,7 @@ export async function createAppaGithubRepository(params: {
   )
     throw new ApiError(
       409,
-      "Stop the existing GitHub sync before creating a repository",
+      "Stop the current Git sync before creating a repository",
     );
   if (
     !(await userHasPermission(
@@ -142,17 +151,25 @@ export async function createAppaGithubRepository(params: {
     ))
   )
     throw new ApiError(403, "You do not have access to GitHub credentials");
+  if (params.gitlabTokenId)
+    return createAppaGitlabProject({
+      ...params,
+      gitlabTokenId: params.gitlabTokenId,
+    });
+  if (!params.githubAppConfigId)
+    throw new ApiError(400, "Choose a GitHub App or a GitLab token");
+  const githubAppConfigId = params.githubAppConfigId;
   const { token: appToken, api } = await resolveOpenAppaGithubAccess({
     organizationId: params.organizationId,
     githubPatId: null,
-    githubAppConfigId: params.githubAppConfigId,
+    githubAppConfigId,
   });
   const token = appToken as string;
   const policy = await guardrailsPolicyService.get(params.organizationId);
   if (Buffer.byteLength(policy.content) > 1024 * 1024)
     throw new ApiError(
       400,
-      "The current policy exceeds the 1 MiB GitHub sync limit",
+      "The current policy exceeds the 1 MiB Git sync limit",
     );
 
   let created: {
@@ -210,7 +227,8 @@ export async function createAppaGithubRepository(params: {
           path: params.path ?? "appa.toml",
           interval: params.interval,
           githubPatId: null,
-          githubAppConfigId: params.githubAppConfigId,
+          githubAppConfigId,
+          gitlabTokenId: null,
           // Kept even before the folder exists: validations run once it does.
           validationDirectory,
         },
@@ -365,7 +383,8 @@ export async function createAppaGithubRepository(params: {
     path: "appa.toml",
     interval: params.interval,
     githubPatId: null,
-    githubAppConfigId: params.githubAppConfigId,
+    githubAppConfigId,
+    gitlabTokenId: null,
     // The template ships this folder, so validations work without a setup step.
     validationDirectory,
     setupPullRequestNumber,
@@ -373,6 +392,98 @@ export async function createAppaGithubRepository(params: {
   await syncAppaGithubPolicy(params.organizationId);
   return getAppaGithubSync(params.organizationId);
 }
+
+/**
+ * The GitLab side of creating a policy repository: a new private project (or
+ * an existing empty one) seeded from the bundled template, or an existing
+ * project that already holds a policy connected as the source.
+ */
+async function createAppaGitlabProject(params: {
+  organizationId: string;
+  userId: string;
+  owner: string;
+  name: string;
+  gitlabTokenId: string;
+  interval: AppaGithubSource["interval"];
+  existing?: boolean;
+  ref?: string | null;
+  path?: string;
+  validationDirectory?: string;
+  replace?: boolean;
+}) {
+  const access = await resolveOpenAppaGitlabAccess({
+    organizationId: params.organizationId,
+    gitlabTokenId: params.gitlabTokenId,
+  });
+  const policy = await guardrailsPolicyService.get(params.organizationId);
+  if (Buffer.byteLength(policy.content) > 1024 * 1024)
+    throw new ApiError(400, "The current policy exceeds the 1 MiB sync limit");
+  const validationDirectory =
+    params.validationDirectory ?? VALIDATION_DIRECTORY;
+  const repo = params.owner ? `${params.owner}/${params.name}` : params.name;
+  let seeded: { repo: string; branch: string };
+  if (params.existing) {
+    const status = await openappaGitlab.repositoryStatus({
+      access,
+      repo,
+      ref: params.ref ?? undefined,
+      path: params.path ?? "appa.toml",
+      validationDirectory,
+    });
+    if (status.status !== "empty")
+      return connectAppaGithubRepository({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        replace: params.replace,
+        source: {
+          repo,
+          ref: params.ref ?? null,
+          path: params.path ?? "appa.toml",
+          interval: params.interval,
+          githubPatId: null,
+          githubAppConfigId: null,
+          gitlabTokenId: params.gitlabTokenId,
+          validationDirectory,
+        },
+      });
+    seeded = {
+      repo,
+      ...(await openappaGitlab.seedExisting({
+        access,
+        repo,
+        policy: policy.content,
+      })),
+    };
+  } else {
+    seeded = await openappaGitlab.createProject({
+      access,
+      namespace: params.owner || null,
+      name: params.name,
+      policy: policy.content,
+    });
+  }
+  if (
+    (await guardrailsPolicyService.get(params.organizationId)).revision !==
+    policy.revision
+  )
+    throw new ApiError(
+      409,
+      `The policy changed while creating ${seeded.repo}. Review the project and connect it manually.`,
+    );
+  await OpenAppaGithubSyncModel.save(params.organizationId, {
+    repo: seeded.repo,
+    ref: seeded.branch,
+    path: "appa.toml",
+    interval: params.interval,
+    githubPatId: null,
+    githubAppConfigId: null,
+    gitlabTokenId: params.gitlabTokenId,
+    validationDirectory,
+  });
+  await syncAppaGithubPolicy(params.organizationId);
+  return getAppaGithubSync(params.organizationId);
+}
+
 export async function updateAppaGithubSync(params: {
   organizationId: string;
   action: "sync" | "disconnect" | "schedule";
@@ -446,14 +557,16 @@ export async function acceptHeldAppaGithubPull(params: {
   // Bindings can change while a pull is held, so the grants are judged as they
   // stand now as well as by the reasons recorded at hold time.
   if (
-    (row.heldReasons.includes("changes_credentials") ||
-      changes.granted.length > 0) &&
-    !(await userHasPermission(userId, organizationId, "credential", "update"))
+    row.heldReasons.includes("changes_credentials") ||
+    changes.granted.length > 0
   )
-    throw new ApiError(
-      403,
-      "Credential update permission is required: this pull changes which credentials batteries or the root policy read",
-    );
+    await CredentialAccess.requireOnEvery({
+      organizationId,
+      userId,
+      action: "use",
+      message:
+        "Use access to every credential is required: this pull changes which credentials batteries or the root policy read",
+    });
   const published = await OpenAppaGithubSyncModel.publishHeld({
     organizationId,
     userId,
@@ -491,60 +604,32 @@ export async function syncAppaGithubPolicy(organizationId: string) {
   }
   const { repo, path } = row;
   try {
-    const { token, api } = await resolveOpenAppaGithubAccess(row);
-    const headers = {
-      Accept: "application/vnd.github+json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    };
-    const base = `${api}/repos/${repo}`;
-    if (row.setupPullRequestNumber) {
-      const pull = await githubJson<{ merged?: boolean; state?: string }>({
-        url: `${base}/pulls/${row.setupPullRequestNumber}`,
-        token: token ?? "",
+    const read = row.gitlabTokenId
+      ? await openappaGitlab.readPolicy({
+          access: await resolveOpenAppaGitlabAccess({
+            organizationId,
+            gitlabTokenId: row.gitlabTokenId,
+          }),
+          repo,
+          ref: row.ref,
+          path,
+        })
+      : await readGithubPolicy({ row, repo, path });
+    if (read.pending) {
+      await OpenAppaGithubSyncModel.finish({
+        organizationId,
+        revision: row.revision,
+        outcome: {
+          error:
+            read.pending === "closed"
+              ? `The initial policy pull request was closed without merging. Reopen and merge it to finish setup, or stop syncing to keep managing the policy locally.`
+              : null,
+        },
       });
-      if (pull.merged !== true) {
-        if (pull.state !== "open" && pull.state !== "closed")
-          throw new ApiError(
-            502,
-            "GitHub returned an invalid setup pull request",
-          );
-        await OpenAppaGithubSyncModel.finish({
-          organizationId,
-          revision: row.revision,
-          outcome: {
-            error:
-              pull.state === "closed"
-                ? "The initial policy pull request was closed without merging. Reopen and merge it to finish setup, or stop syncing to keep managing the policy locally."
-                : null,
-          },
-        });
-        return;
-      }
+      return;
     }
-    const commitResponse = await githubFetch(
-      `${base}/commits/${encodeURIComponent(row.ref ?? "HEAD")}`,
-      headers,
-      row.ref
-        ? `Repository not found: ${repo}, or its ${row.ref} branch. It may have been deleted or renamed, or the App lost access. Pick another with Edit source.`
-        : `Repository not found: ${repo}. It may have been deleted or renamed, or the App lost access. Pick another with Edit source.`,
-    );
-    const commitBytes = await readResponseBodyWithLimit(
-      commitResponse,
-      2 * 1024 * 1024,
-    );
-    if (!commitBytes)
-      throw new ApiError(400, "GitHub commit response is too large");
-    const commit = JSON.parse(commitBytes.toString()) as { sha?: unknown };
-    if (typeof commit.sha !== "string" || !/^[a-f0-9]{40}$/.test(commit.sha))
-      throw new ApiError(400, "GitHub returned an invalid commit");
-    const response = await githubFetch(
-      `${base}/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${commit.sha}`,
-      { ...headers, Accept: "application/vnd.github.raw+json" },
-      `Policy file not found: ${path} in ${repo}. Check the policy file with Edit source.`,
-    );
-    const bytes = await readResponseBodyWithLimit(response, 1024 * 1024);
-    if (!bytes) throw new ApiError(400, "APPA policy exceeds the 1 MiB limit");
-    const content = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    const { content } = read;
+    const commit = { sha: read.commitSha };
     const local = await guardrailsPolicyService.get(organizationId);
     const resolved = await resolvePair({
       organizationId,
@@ -720,7 +805,9 @@ async function saveSource(params: {
   source: AppaGithubSource & { setupPullRequestNumber?: number };
 }) {
   if (
-    (params.source.githubPatId || params.source.githubAppConfigId) &&
+    (params.source.githubPatId ||
+      params.source.githubAppConfigId ||
+      params.source.gitlabTokenId) &&
     !(await userHasPermission(
       params.userId,
       params.organizationId,
@@ -729,6 +816,34 @@ async function saveSource(params: {
     ))
   ) {
     throw new ApiError(403, "You do not have access to GitHub credentials");
+  }
+  if (params.source.gitlabTokenId) {
+    // Resolve now to reject a missing, foreign or non-GitLab credential.
+    const access = await resolveOpenAppaGitlabAccess({
+      organizationId: params.organizationId,
+      gitlabTokenId: params.source.gitlabTokenId,
+    });
+    if (params.source.validationDirectory) {
+      const ref =
+        params.source.ref ??
+        (await openappaGitlab.defaultBranch({
+          access,
+          repo: params.source.repo,
+        }));
+      await openappaGitlab.loadPolicyTests({
+        access,
+        repo: params.source.repo,
+        commitSha: await openappaGitlab.branchCommit({
+          access,
+          repo: params.source.repo,
+          branch: ref,
+        }),
+        directory: params.source.validationDirectory,
+        allowEmpty: true,
+      });
+    }
+    await OpenAppaGithubSyncModel.save(params.organizationId, params.source);
+    return;
   }
   // Resolve now to reject a missing or cross-organization credential before saving it.
   const { token, api } = await resolveOpenAppaGithubAccess({
@@ -761,25 +876,95 @@ async function saveSource(params: {
   await OpenAppaGithubSyncModel.save(params.organizationId, params.source);
 }
 
-/** Read from the App credential alone, so status reads never touch its key. */
-async function githubWebOrigin(params: {
+/** The policy at a GitHub source's ref, or the setup pull request's state while it is open. */
+async function readGithubPolicy(params: {
+  row: NonNullable<Awaited<ReturnType<typeof OpenAppaGithubSyncModel.find>>>;
+  repo: string;
+  path: string;
+}): Promise<
+  | { pending: "open" | "closed" }
+  | { pending: null; commitSha: string; content: string }
+> {
+  const { row, repo, path } = params;
+  const { token, api } = await resolveOpenAppaGithubAccess(row);
+  const headers = {
+    Accept: "application/vnd.github+json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+  const base = `${api}/repos/${repo}`;
+  if (row.setupPullRequestNumber) {
+    const pull = await githubJson<{ merged?: boolean; state?: string }>({
+      url: `${base}/pulls/${row.setupPullRequestNumber}`,
+      token: token ?? "",
+    });
+    if (pull.merged !== true) {
+      if (pull.state !== "open" && pull.state !== "closed")
+        throw new ApiError(
+          502,
+          "GitHub returned an invalid setup pull request",
+        );
+      return { pending: pull.state };
+    }
+  }
+  const commitResponse = await githubFetch(
+    `${base}/commits/${encodeURIComponent(row.ref ?? "HEAD")}`,
+    headers,
+    row.ref
+      ? `Repository not found: ${repo}, or its ${row.ref} branch. It may have been deleted or renamed, or the App lost access. Pick another with Edit source.`
+      : `Repository not found: ${repo}. It may have been deleted or renamed, or the App lost access. Pick another with Edit source.`,
+  );
+  const commitBytes = await readResponseBodyWithLimit(
+    commitResponse,
+    2 * 1024 * 1024,
+  );
+  if (!commitBytes)
+    throw new ApiError(400, "GitHub commit response is too large");
+  const commit = JSON.parse(commitBytes.toString()) as { sha?: unknown };
+  if (typeof commit.sha !== "string" || !/^[a-f0-9]{40}$/.test(commit.sha))
+    throw new ApiError(400, "GitHub returned an invalid commit");
+  const response = await githubFetch(
+    `${base}/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${commit.sha}`,
+    { ...headers, Accept: "application/vnd.github.raw+json" },
+    `Policy file not found: ${path} in ${repo}. Check the policy file with Edit source.`,
+  );
+  const bytes = await readResponseBodyWithLimit(response, 1024 * 1024);
+  if (!bytes) throw new ApiError(400, "APPA policy exceeds the 1 MiB limit");
+  const content = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  return { pending: null, commitSha: commit.sha, content };
+}
+
+/** Read from the credential's definition alone, so status reads never touch its secret. */
+async function sourceWebOrigin(params: {
   organizationId: string;
   githubAppConfigId: string | null;
-}) {
-  const definition = params.githubAppConfigId
+  gitlabTokenId: string | null;
+}): Promise<{ webUrl: string; provider: "github" | "gitlab" }> {
+  const id = params.gitlabTokenId ?? params.githubAppConfigId;
+  const definition = id
     ? await RuntimeCredentialDefinitionModel.findById({
-        id: params.githubAppConfigId,
+        id,
         organizationId: params.organizationId,
       })
     : null;
-  return getGithubWebOrigin(definition?.githubUrl ?? undefined);
+  if (params.gitlabTokenId)
+    return {
+      webUrl: gitHostFromUrl({
+        provider: "gitlab",
+        url: definition?.gitlabUrl,
+      }).webUrl,
+      provider: "gitlab",
+    };
+  return {
+    webUrl: getGithubWebOrigin(definition?.githubUrl ?? undefined),
+    provider: "github",
+  };
 }
 
 function assertEnabled() {
   if (!enterpriseTier.isOpenappaActive())
     throw new ApiError(
       409,
-      "Enable OpenAPPA on the server before configuring GitHub sync",
+      "Enable OpenAPPA on the server before configuring Git sync",
     );
 }
 async function githubFetch(
@@ -1087,6 +1272,7 @@ export async function loadAppaGithubPolicyTests(params: {
     | "organizationId"
     | "githubPatId"
     | "githubAppConfigId"
+    | "gitlabTokenId"
   >;
   directory: string;
   allowEmpty?: boolean;
@@ -1099,6 +1285,17 @@ export async function loadAppaGithubPolicyTests(params: {
     );
   if (!source.sourceCommit || !/^[a-f0-9]{40}$/.test(source.sourceCommit))
     throw new ApiError(409, "GitHub policy sync has no accepted commit yet");
+  if (source.gitlabTokenId)
+    return openappaGitlab.loadPolicyTests({
+      access: await resolveOpenAppaGitlabAccess({
+        organizationId: source.organizationId,
+        gitlabTokenId: source.gitlabTokenId,
+      }),
+      repo: source.repo,
+      commitSha: source.sourceCommit,
+      directory,
+      allowEmpty: params.allowEmpty,
+    });
   const { token, api } = await resolveOpenAppaGithubAccess({
     ...source,
     organizationId: source.organizationId,

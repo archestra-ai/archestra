@@ -370,6 +370,7 @@ vi.mock("@/lib/a2a-remote-agents.query", () => ({
 }));
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  useMcpCatalogCredentialPreflight: () => ({ data: [] }),
   useInternalMcpCatalog: useInternalMcpCatalogMock,
 }));
 
@@ -2807,6 +2808,26 @@ describe("AgentForm save payload and failure handling", () => {
 
       await screen.findByLabelText("Instructions");
       expect(screen.queryByText("Labels", { exact: true })).toBeNull();
+    });
+
+    it("saves its assigned tools, without the All mode", async () => {
+      const user = userEvent.setup();
+      pendingSaveChanges.mockResolvedValue(undefined);
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={builtInAgent}
+          sections={["configuration", "tools"]}
+        />,
+      );
+
+      expect(screen.getByText("Mock Tools Editor")).toBeInTheDocument();
+      expect(screen.queryByRole("tab", { name: "All" })).toBeNull();
+
+      await user.click(screen.getByRole("button", { name: /update/i }));
+
+      await waitFor(() => expect(pendingSaveChanges).toHaveBeenCalledTimes(1));
+      expect(savedBody()).not.toHaveProperty("accessAllTools");
     });
   });
   it("keeps Update disabled while a save is in flight", async () => {

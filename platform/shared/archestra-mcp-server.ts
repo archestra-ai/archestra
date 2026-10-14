@@ -235,6 +235,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_WHOAMI_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   "yell",
+  "superyell",
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
@@ -456,6 +457,7 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   whoami: "identity",
   execute_remedy_plan: "openappa",
   yell: "openappa",
+  superyell: "openappa",
   get_remedy_plans: "openappa",
   list_peer_messages: "openappa",
   read_peer_message: "openappa",
@@ -827,7 +829,24 @@ export const REQUIRED_OPENAPPA_TOOL_SHORT_NAMES = [
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   "yell",
+  "superyell",
 ] as const satisfies readonly ArchestraToolShortName[];
+
+/**
+ * The OpenAPPA feedback tools. superyell sends the same report as yell, then
+ * turns OpenAPPA off for the session, so both are offered and refused alike.
+ */
+export const YELL_TOOL_SHORT_NAMES = [
+  "yell",
+  "superyell",
+] as const satisfies readonly ArchestraToolShortName[];
+export type YellToolShortName = (typeof YELL_TOOL_SHORT_NAMES)[number];
+
+export function isYellToolShortName(
+  shortName: string | null | undefined,
+): shortName is YellToolShortName {
+  return (YELL_TOOL_SHORT_NAMES as readonly string[]).includes(shortName ?? "");
+}
 
 export function isRequiredOpenAppaToolShortName(shortName: string): boolean {
   return (REQUIRED_OPENAPPA_TOOL_SHORT_NAMES as readonly string[]).includes(
@@ -887,9 +906,8 @@ const SKILL_RUNTIME_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set(
 );
 
 /**
- * Plugin management tools. Never auto-assigned: the whole group follows the
- * `plugins` deployment beta flag (see `config.plugins.enabled`), stays out of
- * the default seed sets, and is reached through manual assignment or the
+ * Plugin management tools. Never auto-assigned: the group stays out of
+ * the default seed sets and is reached through manual assignment or the
  * search_tools/run_tool dynamic surface.
  */
 export const PLUGIN_ARCHESTRA_TOOL_SHORT_NAMES = [
@@ -1186,7 +1204,7 @@ export function buildElicitationMandateInstruction(params?: {
     tools.length > 1
       ? `${tools[0]} (or ${tools[1]})`
       : (tools[0] ?? TOOL_ASK_USER_SHORT_NAME);
-  return `When you need a decision, a clarification, a preference, or an approval from the user, ask with ${toolName}. The user then answers in the client's question interface. Ask multiple-choice questions with ${toolName} too, not in plain text.`;
+  return `When you need a decision, a clarification, a preference, or an approval from the user, ask with ${toolName}. The user then answers in the client's question interface. Ask multiple-choice questions with ${toolName} too, not in plain text. A link or command the user must open or run goes in your reply text, not in the question.`;
 }
 
 /**

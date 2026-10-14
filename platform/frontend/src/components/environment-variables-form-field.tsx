@@ -34,7 +34,10 @@ import {
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { FormDescription } from "@/components/ui/form";
-import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
+import {
+  useCanAttachCredential,
+  useRuntimeCredentials,
+} from "@/lib/runtime-credentials.query";
 
 const ExternalSecretSelector = lazy(
   () =>
@@ -128,6 +131,7 @@ export function EnvironmentVariablesFormField<
     number | null
   >(null);
   const { data: credentials = [] } = useRuntimeCredentials();
+  const canAttach = useCanAttachCredential();
   const credentialBindingOptions = credentials
     .filter(
       (credential) =>
@@ -144,6 +148,7 @@ export function EnvironmentVariablesFormField<
       allowedScopes: credential.allowOrganization
         ? ["static" as const]
         : ["installation" as const],
+      canAttach: canAttach(credential.id),
     }));
   const [envVarDialog, setEnvVarDialog] = useState<
     { mode: "add" } | { mode: "edit"; index: number } | null

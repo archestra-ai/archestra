@@ -27,18 +27,20 @@ import {
   TOOL_UPLOAD_FILE_FULL_NAME,
   TOOL_WHOAMI_FULL_NAME,
 } from "@archestra/shared";
+import { StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import {
   ErrorCode,
   type ListToolsResult,
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 import { type MockInstance, onTestFinished, vi } from "vitest";
+import { ZodError } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import {
   takeLeadingAttestation,
   verifyToolAttestation,
 } from "@/archestra-mcp-server/tool-attestation";
-import mcpClient from "@/clients/mcp-client";
+import mcpClient, { McpServerStoppedError } from "@/clients/mcp-client";
 import config from "@/config";
 import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import {
@@ -58,6 +60,9 @@ import {
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import { jwksValidator } from "@/services/jwks-validator";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
+import { ApiError } from "@/types/api";
+import { handleTaskMethod, MCP_TASKS_EXTENSION_ID } from "./tasks";
 import {
   authenticateMCPGatewayRequest,
   createAgentServer,
@@ -94,6 +99,7 @@ type TestCallToolHandler = (
   content: Array<{ type: string; text: string }>;
   isError?: boolean;
   resultType?: string;
+  task?: { taskId: string };
   structuredContent?: { items?: unknown[] };
 }>;
 
@@ -1814,6 +1820,7 @@ describe("createAgentServer tools/list", () => {
       "get_remedy_plans",
       "list_peer_messages",
       "read_peer_message",
+      "superyell",
       "yell",
     ]);
     for (const inboxTool of [
@@ -1838,6 +1845,55 @@ describe("createAgentServer tools/list", () => {
     expect(names).not.toContain(
       archestraMcpBranding.getToolName("update_guardrails_policy"),
     );
+  });
+
+  test("hides superyell, and keeps yell, when an administrator turns superyell off", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const previousEnabled = config.openappa.enabled;
+    config.openappa.enabled = true;
+    await GuardrailsDeploymentModel.set({
+      enabled: true,
+      superyellEnabled: false,
+    });
+    onTestFinished(() => {
+      config.openappa.enabled = previousEnabled;
+    });
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      toolExposureMode: "search_and_run_only",
+    });
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      },
+    });
+    const listToolsHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+    if (!listToolsHandler) throw new Error("Expected tools/list handler");
+    const response = await listToolsHandler({
+      method: "tools/list",
+      params: {},
+    });
+    const names = response.tools.map((tool) => tool.name);
+    expect(names).not.toContain(archestraMcpBranding.getToolName("superyell"));
+    expect(names).toContain(archestraMcpBranding.getToolName("yell"));
   });
 
   test("hides remedy tools while the deployment switch is off and still lists policy tools", async ({
@@ -3743,6 +3799,302 @@ describe("createAgentServer tools/list", () => {
     );
   });
 
+  describe("tool execution errors", () => {
+    setupTestCacheManager();
+
+    test.for([
+      {
+        label: "silent server",
+        error: new McpServerStoppedError("not_answering"),
+      },
+      {
+        label: "closed connection",
+        error: new McpServerStoppedError("connection_closed"),
+      },
+      { label: "unexpected error", error: new Error("PRIVATE_SENTINEL") },
+    ])("settles a detached $label without losing its error contract", async ({
+      error,
+    }, {
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeOrganization,
+      makeTool,
+    }) => {
+      config.mcpGateway.toolCallTimeoutMs = 20;
+      const org = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: org.id,
+        name: "qa-errors",
+      });
+      const tool = await makeTool({
+        catalogId: catalog.id,
+        name: "qa-errors__execute",
+        parameters: { type: "object", properties: {} },
+      });
+      await makeAgentTool(agent.id, tool.id);
+      let rejectExecution!: (reason: unknown) => void;
+      const pending = new Promise<never>((_resolve, reject) => {
+        rejectExecution = reject;
+      });
+      const execute = vi
+        .spyOn(mcpClient, "executeToolCallForOwner")
+        .mockImplementationOnce(() => pending);
+      onTestFinished(() => execute.mockRestore());
+      const { server } = await createAgentServer({
+        agentId: agent.id,
+        mrtr: { enabled: true },
+      });
+      const handler = (
+        server.server as unknown as {
+          _requestHandlers: Map<string, TestCallToolHandler>;
+        }
+      )._requestHandlers.get("tools/call");
+      if (!handler) throw new Error("Expected tools/call handler");
+      const result = await handler(
+        {
+          method: "tools/call",
+          params: {
+            name: tool.name,
+            arguments: {},
+            _meta: {
+              "io.modelcontextprotocol/clientCapabilities": {
+                extensions: { [MCP_TASKS_EXTENSION_ID]: {} },
+              },
+            },
+          },
+        },
+        { sendRequest: vi.fn() },
+      );
+      expect(result.resultType).toBe("task");
+      expect(result.task?.taskId).toBeDefined();
+      await vi.waitFor(() => expect(execute).toHaveBeenCalledOnce());
+      rejectExecution(error);
+      await vi.waitFor(async () => {
+        const state = await handleTaskMethod({
+          body: {
+            method: "tasks/get",
+            params: { taskId: result.task?.taskId },
+          },
+          agentId: agent.id,
+          principal: "anonymous",
+        });
+        expect(state).toMatchObject({
+          result: {
+            task:
+              error instanceof McpServerStoppedError
+                ? {
+                    status: "failed",
+                    error: { code: -32603, message: error.message },
+                  }
+                : {
+                    status: "completed",
+                    result: {
+                      resultType: "complete",
+                      isError: true,
+                      content: [
+                        {
+                          type: "text",
+                          text: "Error: An internal error occurred while executing tool",
+                        },
+                      ],
+                    },
+                  },
+          },
+        });
+        expect(JSON.stringify(state)).not.toContain("PRIVATE_SENTINEL");
+      });
+    });
+
+    test("returns the real yell missing-identity reason as tool content", async ({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      config.openappa.enabled = true;
+      config.openappa.yellEnabled = true;
+      config.enterpriseFeatures.aiSecurity = true;
+      await GuardrailsDeploymentModel.setEnabled(true);
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({ organizationId: org.id });
+      const { server } = await createAgentServer({
+        agentId: agent.id,
+        tokenAuth: {
+          tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+          teamId: null,
+          isOrganizationToken: false,
+          organizationId: org.id,
+          isUserToken: true,
+          userId: user.id,
+        },
+      });
+      const handler = (
+        server.server as unknown as {
+          _requestHandlers: Map<string, TestCallToolHandler>;
+        }
+      )._requestHandlers.get("tools/call");
+      if (!handler) throw new Error("Expected tools/call handler");
+      const result = await handler(
+        {
+          method: "tools/call",
+          params: {
+            name: "archestra__yell",
+            arguments: { message: "QA feedback", with_trajectory: false },
+          },
+        },
+        { sendRequest: vi.fn() },
+      );
+      expect(result).toMatchObject({
+        resultType: "complete",
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: "Error: OpenAPPA reporting requires an authenticated session and tool-call identity",
+          },
+        ],
+      });
+    });
+
+    test.for([
+      {
+        label: "authored client error",
+        error: new ApiError(403, "Access denied"),
+        message: "Error: Access denied",
+      },
+      {
+        label: "internal API error",
+        error: new ApiError(500, "PRIVATE_SENTINEL"),
+      },
+      { label: "unexpected error", error: new Error("PRIVATE_SENTINEL") },
+      {
+        label: "spoofed server-stopped error",
+        error: Object.assign(new Error("PRIVATE_SENTINEL"), {
+          name: "McpServerStoppedError",
+        }),
+      },
+      {
+        label: "HTTP transport error",
+        error: new StreamableHTTPError(503, "PRIVATE_SENTINEL"),
+      },
+      {
+        label: "numeric-code Error",
+        error: Object.assign(new Error("PRIVATE_SENTINEL"), { code: -32603 }),
+      },
+      {
+        label: "SQL unique violation",
+        error: Object.assign(new Error("PRIVATE_SENTINEL"), {
+          code: "23505",
+          detail: "PRIVATE_SENTINEL",
+        }),
+        message:
+          "Error: A record with the same value already exists (executing tool)",
+      },
+      {
+        label: "other string-code error",
+        error: Object.assign(new Error("PRIVATE_SENTINEL"), {
+          code: "ECONNRESET",
+        }),
+      },
+      {
+        label: "malformed protocol object",
+        error: { code: -32603.5, message: "PRIVATE_SENTINEL" },
+      },
+      { label: "thrown string", error: "PRIVATE_SENTINEL" },
+      { label: "thrown null", error: null },
+      {
+        label: "custom validation message and path",
+        error: new ZodError([
+          {
+            code: "custom",
+            path: ["PRIVATE_SENTINEL"],
+            message: "PRIVATE_SENTINEL",
+          },
+        ]),
+        message: "Error: Invalid tool arguments",
+      },
+      {
+        label: "MCP protocol error",
+        error: new McpError(
+          ErrorCode.InvalidParams,
+          "Invalid protocol parameters",
+          { field: "name" },
+        ),
+        protocol: true,
+      },
+      {
+        label: "authored protocol object",
+        error: {
+          code: -32601,
+          message: "Method not found",
+          data: { method: "unknown" },
+        },
+        protocol: true,
+      },
+    ])("handles $label without leaking execution details", async ({
+      error,
+      message,
+      protocol,
+    }, {
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeOrganization,
+      makeTool,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: org.id,
+        name: "qa-errors",
+      });
+      const tool = await makeTool({
+        catalogId: catalog.id,
+        name: "qa-errors__execute",
+        parameters: { type: "object", properties: {} },
+      });
+      await makeAgentTool(agent.id, tool.id);
+      const execute = vi
+        .spyOn(mcpClient, "executeToolCallForOwner")
+        .mockRejectedValueOnce(error);
+      onTestFinished(() => execute.mockRestore());
+      const { server } = await createAgentServer({ agentId: agent.id });
+      const handler = (
+        server.server as unknown as {
+          _requestHandlers: Map<string, TestCallToolHandler>;
+        }
+      )._requestHandlers.get("tools/call");
+      if (!handler) throw new Error("Expected tools/call handler");
+      const response = handler(
+        { method: "tools/call", params: { name: tool.name, arguments: {} } },
+        { sendRequest: vi.fn() },
+      );
+      if (protocol) {
+        await expect(response).rejects.toBe(error);
+      } else {
+        const result = await response;
+        expect(result).toMatchObject({
+          resultType: "complete",
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text:
+                message ??
+                "Error: An internal error occurred while executing tool",
+            },
+          ],
+        });
+        expect(JSON.stringify(result)).not.toContain("PRIVATE_SENTINEL");
+      }
+      expect(execute).toHaveBeenCalledOnce();
+    });
+  });
+
   test("preserves user context when calling restricted Archestra tools", async ({
     makeAgent,
     makeMember,
@@ -3997,6 +4349,22 @@ describe("createAgentServer tools/list", () => {
       noPerson: true,
     },
     {
+      case: "accepted by its automatic reviewer",
+      callMeta: {},
+      answer: {
+        action: "accept",
+        content: { choice: "One" },
+        _meta: { approvals_reviewer: "auto_review" },
+      },
+      noPerson: true,
+    },
+    {
+      case: "accepted in a run no person drives",
+      callMeta: { "x-codex-turn-metadata": { turn_trigger: "exec" } },
+      answer: { action: "accept", content: { choice: "One" } },
+      noPerson: true,
+    },
+    {
       // `codex exec` declares forms, then declines each one itself.
       case: "in a run no person drives",
       callMeta: { "x-codex-turn-metadata": { turn_trigger: "exec" } },
@@ -4018,7 +4386,7 @@ describe("createAgentServer tools/list", () => {
       answer: { action: "decline" },
       noPerson: false,
     },
-  ])("ask_user reads a Codex form decline $case", async ({
+  ])("ask_user treats a Codex form answer $case as unanswered when no person gave it", async ({
     callMeta,
     answer,
     noPerson,

@@ -9,6 +9,11 @@ import logger from "@/logging";
 import { AgentModel, ConversationModel } from "@/models";
 
 const SCREENSHOT_INTERVAL_MS = 2_000; // Stream at ~0.5 FPS (every 2 seconds)
+// After an input is sent, wait this long before a quick frame so it shows the
+// input's effect
+const FAST_FRAME_DELAY_MS = 120;
+// Quiet time after the latest input before a settled frame
+const SETTLED_FRAME_DELAY_MS = 300;
 
 type BrowserStreamSubscription = {
   conversationId: string;
@@ -16,8 +21,20 @@ type BrowserStreamSubscription = {
   userContext: BrowserUserContext;
   intervalId: NodeJS.Timeout;
   isSending: boolean;
+  /** An immediate screenshot was requested while one was in flight. */
+  refreshPending?: boolean;
   /** Set when screenshots were skipped due to active subagents */
   wasBlockedBySubagent: boolean;
+  /** Numbers each capture as it starts; see sendScreenshot. */
+  frameSeq: number;
+  lastSentFrameSeq: number;
+  /** Quick frames during input: one in flight, at most one more pending. */
+  fastFrameInFlight: boolean;
+  fastFramePending: boolean;
+  /** Settled frame (caret, URL) once input pauses. */
+  settledFrameTimer?: NodeJS.Timeout;
+  /** Bumped per input sent, so only the latest input's own frame is shown. */
+  inputSeq: number;
 };
 
 type BrowserStreamClientContextParams = {
@@ -141,6 +158,15 @@ export class BrowserStreamSocketClientContext {
         );
         return true;
 
+      case "browser_scroll":
+        await this.handleBrowserScroll(ws, conversationId, {
+          x: typeof payload?.x === "number" ? payload.x : 0,
+          y: typeof payload?.y === "number" ? payload.y : 0,
+          deltaX: typeof payload?.deltaX === "number" ? payload.deltaX : 0,
+          deltaY: typeof payload?.deltaY === "number" ? payload.deltaY : 0,
+        });
+        return true;
+
       case "browser_press_key":
         await this.handleBrowserPressKey(
           ws,
@@ -188,6 +214,7 @@ export class BrowserStreamSocketClientContext {
     const subscription = this.browserSubscriptions.get(ws);
     if (subscription) {
       clearInterval(subscription.intervalId);
+      clearTimeout(subscription.settledFrameTimer);
       this.browserSubscriptions.delete(ws);
 
       // NOTE: We intentionally do NOT close the MCP client connection here.
@@ -215,6 +242,14 @@ export class BrowserStreamSocketClientContext {
     },
     initialUrl?: string,
   ): Promise<void> {
+    // Re-subscribing to the same conversation is a no-op: tearing down and
+    // rebuilding would leave a gap where input fails as "not subscribed"
+    const existing = this.browserSubscriptions.get(ws);
+    if (existing?.conversationId === conversationId) {
+      await this.sendImmediateScreenshot(ws, conversationId);
+      return;
+    }
+
     // Unsubscribe from any existing stream first (for this WebSocket)
     this.unsubscribeBrowserStream(ws);
 
@@ -273,20 +308,26 @@ export class BrowserStreamSocketClientContext {
     };
 
     // Select or create the tab for this conversation
-    // This also restores the conversation's URL if it had one
-    const tabResult = await browserStreamFeature.selectOrCreateTab(
-      agentId,
-      conversationId,
-      userContext,
-      initialUrl,
-    );
-    if (!tabResult.success) {
-      logger.warn(
-        { conversationId, agentId, error: tabResult.error },
-        "Failed to select/create browser tab",
-      );
-      // Continue anyway - screenshot will work on current tab
-    }
+    // This also restores the conversation's URL if it had one. Not awaited:
+    // restoring the URL waits for the page to load, and frames can stream
+    // (showing it load) in the meantime.
+    const tabSelection = browserStreamFeature
+      .selectOrCreateTab(agentId, conversationId, userContext, initialUrl)
+      .then((tabResult) => {
+        if (!tabResult.success) {
+          logger.warn(
+            { conversationId, agentId, error: tabResult.error },
+            "Failed to select/create browser tab",
+          );
+          // Continue anyway - screenshot will work on current tab
+        }
+      })
+      .catch((error) => {
+        logger.warn(
+          { conversationId, agentId, error },
+          "Failed to select/create browser tab",
+        );
+      });
 
     // Send initial screenshot
     const sendTick = async () => {
@@ -318,6 +359,9 @@ export class BrowserStreamSocketClientContext {
       } finally {
         subscription.isSending = false;
       }
+      if (subscription.refreshPending) {
+        await this.sendImmediateScreenshot(ws, conversationId);
+      }
     };
 
     // Set up interval for continuous streaming
@@ -337,9 +381,19 @@ export class BrowserStreamSocketClientContext {
       intervalId,
       isSending: false,
       wasBlockedBySubagent: false,
+      frameSeq: 0,
+      lastSentFrameSeq: 0,
+      fastFrameInFlight: false,
+      fastFramePending: false,
+      inputSeq: 0,
     });
 
-    void sendTick();
+    // A quick first frame right away, then a settled one (caret, URL) once
+    // the tab and its URL are restored
+    void this.requestFastFrame(ws);
+    void tabSelection.then(() =>
+      this.sendImmediateScreenshot(ws, conversationId),
+    );
   }
 
   async handleBrowserNavigate(
@@ -464,6 +518,7 @@ export class BrowserStreamSocketClientContext {
       return;
     }
 
+    const inputSeq = this.beginInput(ws);
     try {
       const result = await browserStreamFeature.click(
         subscription.agentId,
@@ -483,7 +538,7 @@ export class BrowserStreamSocketClientContext {
       });
 
       if (result.success) {
-        await this.sendImmediateScreenshot(ws, conversationId);
+        this.finishInput(ws, conversationId, inputSeq, result.frame);
       }
     } catch (error) {
       logger.error(
@@ -520,6 +575,7 @@ export class BrowserStreamSocketClientContext {
       return;
     }
 
+    const inputSeq = this.beginInput(ws);
     try {
       const result = await browserStreamFeature.type(
         subscription.agentId,
@@ -538,7 +594,7 @@ export class BrowserStreamSocketClientContext {
       });
 
       if (result.success) {
-        await this.sendImmediateScreenshot(ws, conversationId);
+        this.finishInput(ws, conversationId, inputSeq, result.frame);
       }
     } catch (error) {
       logger.error({ error, conversationId }, "Browser type failed");
@@ -571,6 +627,7 @@ export class BrowserStreamSocketClientContext {
       return;
     }
 
+    const inputSeq = this.beginInput(ws);
     try {
       const result = await browserStreamFeature.pressKey(
         subscription.agentId,
@@ -588,7 +645,7 @@ export class BrowserStreamSocketClientContext {
       });
 
       if (result.success) {
-        await this.sendImmediateScreenshot(ws, conversationId);
+        this.finishInput(ws, conversationId, inputSeq, result.frame);
       }
     } catch (error) {
       logger.error({ error, conversationId, key }, "Browser press key failed");
@@ -598,6 +655,57 @@ export class BrowserStreamSocketClientContext {
           conversationId,
           success: false,
           error: error instanceof Error ? error.message : "Press key failed",
+        },
+      });
+    }
+  }
+
+  async handleBrowserScroll(
+    ws: WebSocket,
+    conversationId: string,
+    params: { x: number; y: number; deltaX: number; deltaY: number },
+  ): Promise<void> {
+    const subscription = this.browserSubscriptions.get(ws);
+    if (!subscription || subscription.conversationId !== conversationId) {
+      this.sendToClient(ws, {
+        type: "browser_scroll_result",
+        payload: {
+          conversationId,
+          success: false,
+          error: "Not subscribed to this conversation's browser stream",
+        },
+      });
+      return;
+    }
+
+    const inputSeq = this.beginInput(ws);
+    try {
+      const result = await browserStreamFeature.scroll(
+        subscription.agentId,
+        conversationId,
+        subscription.userContext,
+        params,
+      );
+      this.sendToClient(ws, {
+        type: "browser_scroll_result",
+        payload: {
+          conversationId,
+          success: result.success,
+          error: result.error,
+        },
+      });
+
+      if (result.success) {
+        this.finishInput(ws, conversationId, inputSeq, result.frame);
+      }
+    } catch (error) {
+      logger.error({ error, conversationId }, "Browser scroll failed");
+      this.sendToClient(ws, {
+        type: "browser_scroll_result",
+        payload: {
+          conversationId,
+          success: false,
+          error: error instanceof Error ? error.message : "Scroll failed",
         },
       });
     }
@@ -650,17 +758,30 @@ export class BrowserStreamSocketClientContext {
     agentId: string,
     conversationId: string,
     userContext: BrowserUserContext,
+    options?: { fast?: boolean },
   ): Promise<void> {
     if (ws.readyState !== WS.OPEN) {
       return;
     }
+
+    // Captures overlap (quick frames during input, slower settled frames), so
+    // a frame that started before one already sent is stale: drop it
+    const subscription = this.browserSubscriptions.get(ws);
+    const frameSeq = subscription ? ++subscription.frameSeq : 0;
 
     try {
       const result = await browserStreamFeature.takeScreenshot(
         agentId,
         conversationId,
         userContext,
+        options,
       );
+
+      const current = this.browserSubscriptions.get(ws);
+      if (current && current === subscription) {
+        if (frameSeq < current.lastSentFrameSeq) return;
+        current.lastSentFrameSeq = frameSeq;
+      }
 
       if (result.screenshot) {
         // Sync URL to conversation state, but ONLY if subscription is still active
@@ -682,8 +803,9 @@ export class BrowserStreamSocketClientContext {
         }
 
         // Determine canGoBack based on current URL
-        // If on about:blank, there's nowhere useful to go back to
-        const canGoBack = result.url ? !this.isBlankUrl(result.url) : false;
+        // If on about:blank, there's nowhere useful to go back to. A quick
+        // frame carries no URL, so it leaves canGoBack as it was.
+        const canGoBack = result.url ? !this.isBlankUrl(result.url) : undefined;
 
         this.sendToClient(ws, {
           type: "browser_screenshot",
@@ -738,11 +860,14 @@ export class BrowserStreamSocketClientContext {
     if (ws.readyState !== WS.OPEN) {
       return;
     }
+    // A capture in flight may predate the action; take another right after it
     if (subscription.isSending) {
+      subscription.refreshPending = true;
       return;
     }
 
     subscription.isSending = true;
+    subscription.refreshPending = false;
     try {
       await this.sendScreenshot(
         ws,
@@ -752,6 +877,87 @@ export class BrowserStreamSocketClientContext {
       );
     } finally {
       subscription.isSending = false;
+    }
+    if (subscription.refreshPending) {
+      await this.sendImmediateScreenshot(ws, conversationId);
+    }
+  }
+
+  /**
+   * An input is about to run: show its effect in quick frames as it lands.
+   * Inputs run concurrently (the page keeps them in order), so the preview
+   * keeps up with typing instead of waiting out each browser call.
+   */
+  private beginInput(ws: WebSocket): number {
+    const subscription = this.browserSubscriptions.get(ws);
+    if (!subscription) return 0;
+    subscription.inputSeq += 1;
+    clearTimeout(subscription.settledFrameTimer);
+    // Give the action a moment to reach the page before capturing
+    setTimeout(() => void this.requestFastFrame(ws), FAST_FRAME_DELAY_MS);
+    return subscription.inputSeq;
+  }
+
+  /**
+   * An input finished. The latest one's own frame shows the caret; once input
+   * pauses, a settled frame brings the caret, URL and any page updates.
+   */
+  private finishInput(
+    ws: WebSocket,
+    conversationId: string,
+    inputSeq: number,
+    frame: { screenshot: string; url: string } | undefined,
+  ): void {
+    const subscription = this.browserSubscriptions.get(ws);
+    if (!subscription || subscription.conversationId !== conversationId) {
+      return;
+    }
+    if (inputSeq !== subscription.inputSeq) return;
+
+    if (frame) {
+      // Newest content: anything captured before now is stale
+      subscription.frameSeq += 1;
+      subscription.lastSentFrameSeq = subscription.frameSeq;
+      this.sendToClient(ws, {
+        type: "browser_screenshot",
+        payload: {
+          conversationId,
+          screenshot: frame.screenshot,
+          url: frame.url || undefined,
+          canGoBack: frame.url ? !this.isBlankUrl(frame.url) : undefined,
+        },
+      });
+    }
+
+    clearTimeout(subscription.settledFrameTimer);
+    subscription.settledFrameTimer = setTimeout(() => {
+      void this.sendImmediateScreenshot(ws, conversationId);
+    }, SETTLED_FRAME_DELAY_MS);
+  }
+
+  /** Capture a quick frame; while one is in flight, queue a single follow-up. */
+  private async requestFastFrame(ws: WebSocket): Promise<void> {
+    const subscription = this.browserSubscriptions.get(ws);
+    if (!subscription || ws.readyState !== WS.OPEN) return;
+    if (subscription.fastFrameInFlight) {
+      subscription.fastFramePending = true;
+      return;
+    }
+    subscription.fastFrameInFlight = true;
+    subscription.fastFramePending = false;
+    try {
+      await this.sendScreenshot(
+        ws,
+        subscription.agentId,
+        subscription.conversationId,
+        subscription.userContext,
+        { fast: true },
+      );
+    } finally {
+      subscription.fastFrameInFlight = false;
+    }
+    if (subscription.fastFramePending) {
+      await this.requestFastFrame(ws);
     }
   }
 }

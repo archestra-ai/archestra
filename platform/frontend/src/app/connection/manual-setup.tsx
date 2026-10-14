@@ -36,10 +36,11 @@ export function setupModeFor(client: ConnectClient): SetupMode {
 
 /**
  * An agent on the other end can read a prompt (the starter and cleanup
- * prompts). Generic client is set up by hand but is still an agent; n8n isn't.
+ * prompts). Generic client is set up by hand but is still an agent; n8n is a
+ * workflow tool, not an agent.
  */
 export function readsPrompts(client: ConnectClient): boolean {
-  return setupModeFor(client) !== "manual" || client.id === "generic";
+  return client.id !== "n8n";
 }
 
 export interface ManualStep {

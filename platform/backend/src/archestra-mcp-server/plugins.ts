@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  GIT_PROVIDER_LABELS,
   ResourcePermissionGrantSchema,
   TOOL_CREATE_PLUGIN_SHORT_NAME,
   TOOL_DELETE_PLUGIN_SHORT_NAME,
@@ -10,7 +11,6 @@ import {
 } from "@archestra/shared";
 import { z } from "zod";
 import { userHasPermission } from "@/auth";
-import config from "@/config";
 import { PluginModel, PluginTeamModel } from "@/models";
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -58,10 +58,6 @@ import type { ArchestraContext } from "./types";
  * matching the REST routes. GitHub-sourced plugin bytes stay read-only here,
  * exactly as in the UI: source updates go through the review-and-approve
  * flow, which is deliberately not reproduced in chat.
- *
- * The whole group follows the `plugins` deployment beta flag: tools are
- * filtered from the advertised surface when it is off, and every handler
- * re-checks it (a previously assigned tool can still be dispatched directly).
  */
 
 const ListPluginsSchema = z.object({
@@ -94,7 +90,7 @@ const CreatePluginToolSchema = z
       .default("")
       .describe("What the plugin does."),
     clientType: ClientTypeSchema.describe(
-      "The coding client the payload targets: claude-code, codex, copilot-cli, or cursor.",
+      "The client the payload targets: claude-code, claude-desktop, codex, copilot-cli, or cursor.",
     ),
     supportedPlatforms: z
       .array(PluginPlatformSchema)
@@ -251,8 +247,6 @@ const registry = defineArchestraTools([
       "plugin admin permission).",
     schema: ListPluginsSchema,
     async handler({ args, context }) {
-      const disabled = pluginsDisabledError();
-      if (disabled) return disabled;
       const ctx = requireUserContext(context);
       if (!ctx) {
         return errorResult("This tool requires an authenticated user session.");
@@ -289,7 +283,7 @@ const registry = defineArchestraTools([
       const lines = plugins.map((plugin) => {
         const source =
           plugin.sourceKind === "github"
-            ? `github ${plugin.sourceRepo ?? ""}`.trim()
+            ? `${plugin.sourceProvider ?? "github"} ${plugin.sourceRepo ?? ""}`.trim()
             : "manual";
         const state = plugin.enabled ? "enabled" : "disabled";
         return (
@@ -311,8 +305,6 @@ const registry = defineArchestraTools([
       "edit_plugin's conflict check.",
     schema: GetPluginSchema,
     async handler({ args, context }) {
-      const disabled = pluginsDisabledError();
-      if (disabled) return disabled;
       const ctx = requireUserContext(context);
       if (!ctx) {
         return errorResult("This tool requires an authenticated user session.");
@@ -343,8 +335,6 @@ const registry = defineArchestraTools([
       "has access unless initialGrants share it further.",
     schema: CreatePluginToolSchema,
     async handler({ args, context }) {
-      const disabled = pluginsDisabledError();
-      if (disabled) return disabled;
       const ctx = requireUserContext(context);
       if (!ctx) {
         return errorResult("This tool requires an authenticated user session.");
@@ -409,8 +399,6 @@ const registry = defineArchestraTools([
       "the source review flow in the Plugins UI.",
     schema: UpdatePluginToolSchema,
     async handler({ args, context }) {
-      const disabled = pluginsDisabledError();
-      if (disabled) return disabled;
       const ctx = requireUserContext(context);
       if (!ctx) {
         return errorResult("This tool requires an authenticated user session.");
@@ -463,8 +451,6 @@ const registry = defineArchestraTools([
       "you read it. Manual plugins only — GitHub-sourced files are read-only.",
     schema: EditPluginSchema,
     async handler({ args, context }) {
-      const disabled = pluginsDisabledError();
-      if (disabled) return disabled;
       const ctx = requireUserContext(context);
       if (!ctx) {
         return errorResult("This tool requires an authenticated user session.");
@@ -576,12 +562,10 @@ const registry = defineArchestraTools([
     title: "Delete Plugin",
     description:
       "Delete a plugin. The plugin disappears from the catalog and future " +
-      "setup commands, and its GitHub sync stops. Copies already installed " +
+      "setup commands, and its Git sync stops. Copies already installed " +
       "on developer machines are not removed.",
     schema: DeletePluginSchema,
     async handler({ args, context }) {
-      const disabled = pluginsDisabledError();
-      if (disabled) return disabled;
       const ctx = requireUserContext(context);
       if (!ctx) {
         return errorResult("This tool requires an authenticated user session.");
@@ -625,16 +609,6 @@ function requireUserContext(context: ArchestraContext): UserContext | null {
 }
 
 /**
- * Defense in depth behind the tools/list filtering: a plugin tool can still
- * be dispatched directly (previously assigned, or called through run_tool),
- * so every handler re-checks the deployment flag.
- */
-function pluginsDisabledError() {
-  if (config.plugins.enabled) return null;
-  return errorResult("Plugins are not enabled on this deployment.");
-}
-
-/**
  * TOOL_PERMISSIONS applies the action-specific role permission. Plugins are
  * executable bytes, so every tool beyond the metadata listing also needs
  * `update` on every plugin — the grant at `*` the retired `plugin:admin` role
@@ -667,12 +641,15 @@ function unknownPluginError(id: string) {
   return errorResult(`No plugin with id "${id}" exists.`);
 }
 
-/** A GitHub-sourced plugin's bytes are owned by its source repository. */
+/** A Git-sourced plugin's bytes are owned by its source repository. */
 function githubReadOnlyMessage(
-  plugin: Pick<PluginWithFiles, "displayName" | "sourceRepo">,
+  plugin: Pick<
+    PluginWithFiles,
+    "displayName" | "sourceRepo" | "sourceProvider"
+  >,
 ): string {
   return (
-    `Plugin "${plugin.displayName}" is synced from GitHub` +
+    `Plugin "${plugin.displayName}" is synced from ${GIT_PROVIDER_LABELS[plugin.sourceProvider ?? "github"]}` +
     (plugin.sourceRepo ? ` (${plugin.sourceRepo})` : "") +
     " and its files are read-only here. Tell the user to edit them in the " +
     "source repository, then review and apply the update in the Plugins UI."
@@ -680,7 +657,10 @@ function githubReadOnlyMessage(
 }
 
 function checkManualFilesUpdate(
-  plugin: Pick<PluginWithFiles, "displayName" | "sourceKind" | "sourceRepo">,
+  plugin: Pick<
+    PluginWithFiles,
+    "displayName" | "sourceKind" | "sourceRepo" | "sourceProvider"
+  >,
   files: PluginFileInput[] | undefined,
 ): string | null {
   if (files && plugin.sourceKind === "github") {

@@ -7,3 +7,13 @@ import { z } from "zod";
  */
 const UnenforcedCallReasonSchema = z.enum(["made", "child"]);
 export type UnenforcedCallReason = z.infer<typeof UnenforcedCallReasonSchema>;
+
+/**
+ * Why OpenAPPA leaves a session alone: it started while Guardrails enforcement
+ * was off (`enforcement_off`), or a person approved a `superyell` in it
+ * (`superyell`). A child of such a session carries the parent's reason.
+ */
+const UnenforcedSessionReasonSchema = z.enum(["enforcement_off", "superyell"]);
+export type UnenforcedSessionReason = z.infer<
+  typeof UnenforcedSessionReasonSchema
+>;

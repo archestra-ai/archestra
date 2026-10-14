@@ -1,3 +1,8 @@
+import { EXTERNAL_AGENT_ID_HEADER } from "@archestra/shared/consts";
+import {
+  isKiloClientAgentId,
+  isKiloUserAgent,
+} from "@archestra/shared/interactions/client";
 import type { AppaSessionIdentity } from "@/openappa/wire";
 import { ApiError } from "@/types";
 import type { CommonToolResult } from "@/types/common-llm-format";
@@ -29,8 +34,14 @@ const CHILD_ID_KEYS = ["task_id", "session_id", "sessionID"] as const;
 
 /** Identifies OpenCode Chat Completions requests and normalizes local tool names. */
 export class AppaOpenCodeAdapter implements AppaClientAdapter {
-  readonly id = "opencode" as const;
-  readonly trajectoryPrefix = "opencode";
+  readonly id: "opencode" | "kilo" = "opencode";
+  readonly trajectoryPrefix: string = "opencode";
+  /** The client named in errors about its session headers. */
+  protected readonly clientLabel: string = "OpenCode";
+  protected readonly provenance: {
+    session: NonNullable<AppaSessionIdentity["provenance"]>;
+    hosted: NonNullable<AppaSessionIdentity["provenance"]>;
+  } = { session: "opencode-session-header", hosted: "opencode-hosted-header" };
   // OpenCode shows no MCP forms (its client declares no elicitation), but its
   // own `question` tool renders one.
   readonly nativeQuestion = {
@@ -95,26 +106,21 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
     const hosted = readHeader(context.headers, "x-opencode-session");
     const explicitParent = readHeader(context.headers, "x-session-id");
     const [normal] = claims;
+    const contradiction = `OpenAPPA cannot bind contradictory ${this.clientLabel} session headers`;
     if (claims.some((claim) => claim !== normal)) {
-      throw new ApiError(
-        400,
-        "OpenAPPA cannot bind contradictory OpenCode session headers",
-      );
+      throw new ApiError(400, contradiction);
     }
     if (normal && hosted && normal !== hosted) {
       if (explicitParent === normal) {
-        return { sessionId: hosted, provenance: "opencode-hosted-header" };
+        return { sessionId: hosted, provenance: this.provenance.hosted };
       }
-      throw new ApiError(
-        400,
-        "OpenAPPA cannot bind contradictory OpenCode session headers",
-      );
+      throw new ApiError(400, contradiction);
     }
     if (normal) {
-      return { sessionId: normal, provenance: "opencode-session-header" };
+      return { sessionId: normal, provenance: this.provenance.session };
     }
     return hosted
-      ? { sessionId: hosted, provenance: "opencode-hosted-header" }
+      ? { sessionId: hosted, provenance: this.provenance.hosted }
       : undefined;
   }
 
@@ -193,6 +199,30 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
       "task_id",
       "agent_id",
     ]);
+  }
+}
+
+/**
+ * Kilo Code's CLI, an OpenCode fork: the same session headers, `task` and
+ * `question` tools, answer wording and `<task>` framing. Only its identity
+ * differs: a `kilo/…` User-Agent, or the agent id its setup sends. Its
+ * ChatGPT-login OpenAI requests carry OpenCode's identity and match the
+ * OpenCode adapter instead.
+ */
+export class AppaKiloAdapter extends AppaOpenCodeAdapter {
+  override readonly id = "kilo" as const;
+  override readonly trajectoryPrefix = "kilo";
+  protected override readonly clientLabel = "Kilo Code";
+  protected override readonly provenance = {
+    session: "kilo-session-header",
+    hosted: "kilo-hosted-header",
+  } as const;
+
+  override matches(context: AppaMatchContext): boolean {
+    return (
+      isKiloUserAgent(readHeader(context.headers, "user-agent")) ||
+      isKiloClientAgentId(readHeader(context.headers, EXTERNAL_AGENT_ID_HEADER))
+    );
   }
 }
 

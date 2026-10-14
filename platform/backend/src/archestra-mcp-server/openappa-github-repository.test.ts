@@ -187,6 +187,24 @@ describe("connect_guardrails_repository", () => {
     expect(await OpenAppaGithubSyncModel.find(organizationId)).toBeNull();
   });
 
+  test("explains a repository the source cannot use and saves nothing", async () => {
+    // The tool advertises `repo` as a plain string, so the source schema's
+    // owner/repository check is what refuses it.
+    for (const repo of ["example", "example//policy", "/example/policy"]) {
+      const response = await executeArchestraTool(
+        CONNECT,
+        { repo, githubAppConfigId },
+        context,
+      );
+
+      expect(response.isError).toBe(true);
+      expect(JSON.stringify(response.content)).toContain(
+        "Use owner/repository, or group/project on GitLab",
+      );
+    }
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toBeNull();
+  });
+
   test("refuses to replace a sync that is already running", async () => {
     await OpenAppaGithubSyncModel.save(organizationId, {
       repo: "example/current-policy",
@@ -205,7 +223,7 @@ describe("connect_guardrails_repository", () => {
 
     expect(response.isError).toBe(true);
     expect(JSON.stringify(response.content)).toContain(
-      "Stop the existing GitHub sync before connecting another repository",
+      "Stop the current Git sync before connecting another repository",
     );
     expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
       repo: "example/current-policy",

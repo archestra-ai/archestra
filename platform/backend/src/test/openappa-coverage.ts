@@ -179,11 +179,13 @@ delta = { trust = "suspicious", audience = ["public"] }
 [[policy.tool]]
 name = "acme__delete_item"
 delta = {}
+forwards = { audience = ["self"] }
 requires = { trust = "trusted" }
 
 [[policy.tool]]
 name = "acme__ping"
 delta = {}
+requires = { audience = { within = ["internal"] } }
 
 [[policy.tool]]
 name = "*"

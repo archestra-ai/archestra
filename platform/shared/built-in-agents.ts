@@ -8,11 +8,14 @@ export { BUILT_IN_AGENT_IDS } from "./built-in-agent-ids";
 
 /** Display names for built-in agents */
 export const BUILT_IN_AGENT_NAMES = {
-  OPENAPPA_CONFIG: "APPAdvisor",
+  OPENAPPA_CONFIG: "APPA Keeper",
   CONTEXT_COMPACTION: "Context Compaction Subagent",
   CHAT_TITLE_GENERATION: "Chat Title Generation Subagent",
   APP_RUNTIME: "App Runtime LLM Agent",
 } as const;
+
+/** The APPA Keeper's agent icon, drawn by the frontend's agent icon control. */
+export const APPA_KEEPER_AGENT_ICON = "logo:appa-keeper";
 
 export const OPENAPPA_CONFIG_SUGGESTED_PROMPTS = [
   {

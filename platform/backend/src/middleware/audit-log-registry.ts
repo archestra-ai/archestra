@@ -4,6 +4,7 @@ import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
 import AppModel from "@/models/app";
+import BrowserStorageStateModel from "@/models/browser-storage-state";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import chatOpsConfigModel from "@/models/chatops-config";
 import EnvironmentModel from "@/models/environment";
@@ -681,6 +682,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) => GithubAppConfigModel.findByIdForAudit(id, orgId),
   },
 
+  // GitLab access tokens, stored as organization credentials
+  "/api/git-credentials/gitlab": {
+    resourceType: "credential",
+    fetchById: (id, orgId) =>
+      RuntimeCredentialDefinitionModel.findByIdForAudit(id, orgId),
+  },
   // Stored GitHub personal access tokens
   "/api/github-pats": {
     resourceType: "credential",
@@ -994,6 +1001,14 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/llm-virtual-keys/:id": {
     resourceType: "virtualApiKey",
     fetchById: (id, orgId) => VirtualApiKeyModel.findByIdForAudit(id, orgId),
+  },
+
+  // Saved browser logins (admin "Sign out" on the Playwright server page)
+  "/api/browser-storage-states/:userId": {
+    resourceType: "browserStorageState",
+    resourceIdParam: "userId",
+    fetchById: (id, orgId) =>
+      BrowserStorageStateModel.findByIdForAudit(id, orgId),
   },
 
   "/api/llm-oauth-clients": {

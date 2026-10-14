@@ -1,3 +1,4 @@
+import type { GitAccess } from "@/git-hosts/git-access";
 import type {
   ClientType,
   PluginMarketplaceDiscovery,
@@ -7,6 +8,7 @@ import { importPluginFromGithub } from "./github-import";
 import {
   discoverGithubMarketplace,
   MarketplaceDiscoveryError,
+  marketplaceSourceAccess,
 } from "./github-marketplace";
 
 interface GithubMarketplaceImportSelection {
@@ -31,21 +33,32 @@ export class GithubMarketplaceChangedError extends Error {
   }
 }
 
+/**
+ * Re-resolve a reviewed marketplace snapshot and import the selected entries.
+ * `marketplacePath: null` imports plugin folders discovered in a repository
+ * without a marketplace manifest.
+ */
 export async function prepareGithubMarketplaceImports(params: {
   repoUrl: string;
   ref?: string | null;
-  marketplacePath: string;
+  marketplacePath: string | null;
   approvedCommitSha: string;
   trackingRef: string | null;
   selections: GithubMarketplaceImportSelection[];
-  githubToken?: string;
+  /** Host and token of the marketplace; omitted means public github.com. */
+  access?: GitAccess;
   deadlineAt?: number;
   reviewedSnapshot?: PluginMarketplaceDiscovery;
 }): Promise<{
-  marketplace: { repoUrl: string; path: string };
+  marketplace: { repoUrl: string; path: string | null };
   prepared: Array<{
     selection: GithubMarketplaceImportSelection;
     imported: Awaited<ReturnType<typeof importPluginFromGithub>>;
+    /**
+     * The manifest that advertised the plugin: the marketplace manifest, or
+     * the folder's own `plugin.json` when the repository has no marketplace.
+     */
+    manifestPath: string;
   }>;
   failed: Array<{ name: string; error: string }>;
 }> {
@@ -62,8 +75,8 @@ export async function prepareGithubMarketplaceImports(params: {
     : await discoverGithubMarketplace({
         repoUrl: params.repoUrl,
         ref: params.trackingRef,
-        marketplacePath: params.marketplacePath,
-        githubToken: params.githubToken,
+        marketplacePath: params.marketplacePath ?? undefined,
+        access: params.access,
       });
   assertApprovedCommit(trackingSnapshot.commitSha, params.approvedCommitSha);
   const pinnedSnapshot = canReuseReviewedSnapshot
@@ -71,13 +84,18 @@ export async function prepareGithubMarketplaceImports(params: {
     : await discoverGithubMarketplace({
         repoUrl: params.repoUrl,
         ref: params.approvedCommitSha,
-        marketplacePath: params.marketplacePath,
-        githubToken: params.githubToken,
+        marketplacePath: params.marketplacePath ?? undefined,
+        access: params.access,
       });
   assertApprovedCommit(pinnedSnapshot.commitSha, params.approvedCommitSha);
-  if (!pinnedSnapshot.marketplacePath || pinnedSnapshot.reason) {
+  if (pinnedSnapshot.reason) {
+    throw new MarketplaceDiscoveryError(pinnedSnapshot.reason);
+  }
+  if (pinnedSnapshot.marketplacePath !== params.marketplacePath) {
     throw new MarketplaceDiscoveryError(
-      pinnedSnapshot.reason ?? "Marketplace manifest was not found",
+      params.marketplacePath
+        ? "Marketplace manifest was not found"
+        : "The repository now has a marketplace manifest; discover it again",
     );
   }
   const allowedSelections = new Map(
@@ -124,22 +142,29 @@ export async function prepareGithubMarketplaceImports(params: {
         expectedSourceRef !== selection.sourceRef ||
         advertised.sourceCommitSha.toLowerCase() !==
           selection.approvedSourceSha.toLowerCase() ||
-        advertised.clientType !== selection.clientType
+        !isImportableAs({
+          advertised: advertised.clientType,
+          selected: selection.clientType,
+        })
       ) {
         throw new Error(
           "Selection source does not match the reviewed marketplace snapshot",
         );
       }
+      const source = marketplaceSourceAccess({
+        sourceRepoUrl: selection.sourceRepoUrl,
+        access: params.access,
+      });
       const imported = await runWithDeadline({
         deadlineAt,
         operation: () =>
           importPluginFromGithub({
-            repoUrl: selection.sourceRepoUrl,
+            repoUrl: source.repoUrl,
             ref: selection.approvedSourceSha,
             trackingRef: selection.sourceRef,
             subdir: selection.sourceSubdir,
             exclude: selection.exclude,
-            githubToken: params.githubToken,
+            access: source.access,
             deadlineAt,
           }),
       });
@@ -162,7 +187,11 @@ export async function prepareGithubMarketplaceImports(params: {
           "Marketplace import aggregate payload budget was exhausted";
         throw new Error(exhaustedReason);
       }
-      prepared.push({ selection, imported });
+      prepared.push({
+        selection,
+        imported,
+        manifestPath: advertised.marketplacePath,
+      });
       importedFileCount += imported.files.length;
       importedBytes += candidateBytes;
     } catch (error) {
@@ -228,4 +257,22 @@ async function runWithDeadline<Value>(params: {
   } finally {
     if (timer) clearTimeout(timer);
   }
+}
+
+/**
+ * Claude Code and Claude Desktop share one plugin format, so an entry a
+ * marketplace advertises for either can be imported for the other.
+ */
+function isImportableAs(params: {
+  advertised: ClientType | null;
+  selected: ClientType;
+}): boolean {
+  if (params.advertised === params.selected) return true;
+  const claudeFormat: ReadonlySet<ClientType | null> = new Set([
+    "claude-code",
+    "claude-desktop",
+  ]);
+  return (
+    claudeFormat.has(params.advertised) && claudeFormat.has(params.selected)
+  );
 }

@@ -70,6 +70,41 @@ describe("McpElicitationCard", () => {
     });
   });
 
+  it("shows a link, a command and the agent's line breaks in the question as such, and a link click answers nothing", async () => {
+    const user = userEvent.setup();
+    const onRespond = vi.fn().mockResolvedValue(true);
+    const url =
+      "https://example.com/agents/agent-1?setup=credentials&keys=MY_TOKEN";
+
+    render(
+      <McpElicitationCard
+        requests={[
+          singleChoice({
+            id: "q-1",
+            message: `Open ${url} and save the token.\nThen run \`kubectl port-forward pod/web 3000:3000\`.\nDone?`,
+            options: ["Done", "Not yet"],
+          }),
+        ]}
+        onRespond={onRespond}
+      />,
+    );
+
+    const card = screen.getByTestId("mcp-elicitation-card");
+    const link = within(card).getByText(url);
+    expect(link.closest("[data-streamdown='link']")).not.toBeNull();
+    expect(
+      within(card).getByText("kubectl port-forward pod/web 3000:3000").tagName,
+    ).toBe("CODE");
+    expect(card.querySelectorAll("br")).toHaveLength(2);
+
+    await user.click(link);
+
+    expect(onRespond).not.toHaveBeenCalled();
+    expect(
+      within(card).getByRole("button", { name: "Done" }),
+    ).toBeInTheDocument();
+  });
+
   it("renders an OpenAPPA review as a collapsed tool card and submits approval from Approve", async () => {
     const user = userEvent.setup();
     const onRespond = vi.fn().mockResolvedValue(true);
@@ -101,6 +136,30 @@ describe("McpElicitationCard", () => {
       action: "accept",
       content: { action: "approve" },
     });
+  });
+
+  it("shows accepted review coverage without opening the arguments", () => {
+    render(
+      <McpElicitationCard
+        requests={[
+          openappaReview({
+            coverage: [
+              "  - attention: human-approval",
+              "  - the readers must be the public audience",
+            ].join("\n"),
+          }),
+        ]}
+        onRespond={vi.fn()}
+      />,
+    );
+
+    const card = screen.getByTestId("mcp-elicitation-card");
+    expect(card).toHaveTextContent("Approving also accepts:");
+    expect(card).toHaveTextContent("the readers must be the public audience");
+    expect(card).not.toHaveTextContent("What this ruling would cover");
+    expect(card).not.toHaveTextContent("attention: human-approval");
+    expect(card).not.toHaveTextContent("APPA asks you to rule");
+    expect(screen.queryByText(/qa-hitl/)).not.toBeInTheDocument();
   });
 
   it("submits an all-optional multi-choice question with nothing checked", async () => {
@@ -448,6 +507,44 @@ describe("McpElicitationCard", () => {
       action: "accept",
       content: { choice: "my-org", [ASK_USER_OTHER_ANSWER_FIELD]: "" },
     });
+  });
+
+  it("hands a lone question's Type something to the chat composer", async () => {
+    const user = userEvent.setup();
+    const onRespond = vi.fn().mockResolvedValue(true);
+    const onTypeAnswer = vi.fn();
+    render(
+      <McpElicitationCard
+        requests={[
+          {
+            ...singleChoice({
+              id: "q-owner",
+              message: "Owner?",
+              options: ["my-user", "my-org"],
+            }),
+            requestedSchema: {
+              type: "object",
+              properties: {
+                choice: { type: "string", enum: ["my-user", "my-org"] },
+                [ASK_USER_OTHER_ANSWER_FIELD]: {
+                  type: "string",
+                  title: "Type something",
+                },
+              },
+              required: [],
+            },
+          },
+        ]}
+        onRespond={onRespond}
+        onTypeAnswer={onTypeAnswer}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Type something/ }));
+
+    expect(onTypeAnswer).toHaveBeenCalledOnce();
+    expect(onRespond).not.toHaveBeenCalled();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 
   it("shows only navigation in the footer of every tab but the last", async () => {
@@ -1044,6 +1141,101 @@ describe("McpElicitationCard", () => {
     );
   });
 
+  it("marks a typed answer apart from a picked option", () => {
+    render(
+      <McpElicitationCard
+        groupId="assistant-1-ask-user-1"
+        members={[
+          groupMember("call-1", "Pick a color", {
+            status: "answered",
+            selected: ["Blue"],
+          }),
+          groupMember("call-2", "Which site?", {
+            status: "answered",
+            selected: [],
+            text: "Google",
+          }),
+        ]}
+        requests={[]}
+        onRespond={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    const [picked, typed] = within(
+      screen.getByRole("list", { name: "Answers" }),
+    ).getAllByRole("listitem");
+    expect(picked).toHaveTextContent("Pick a colorBlue");
+    expect(picked).not.toHaveTextContent("Typed answer");
+    expect(typed).toHaveTextContent("Which site?GoogleTyped answer");
+  });
+
+  it("folds the offered options under an answered question until expanded", async () => {
+    const user = userEvent.setup();
+    render(
+      <McpElicitationCard
+        groupId="assistant-1-ask-user-1"
+        members={[
+          groupMember(
+            "call-1",
+            "Stricter or looser?",
+            { status: "answered", selected: ["Stricter"] },
+            ["Stricter", "Looser"],
+          ),
+        ]}
+        requests={[]}
+        onRespond={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("list", { name: "Offered options" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Show 2 options" }));
+
+    const options = within(
+      screen.getByRole("list", { name: "Offered options" }),
+    ).getAllByRole("listitem");
+    expect(options.map((option) => option.textContent)).toEqual([
+      "Stricter",
+      "Looser",
+    ]);
+    expect(options[0]).toHaveAttribute("aria-current", "true");
+    expect(options[1]).not.toHaveAttribute("aria-current");
+  });
+
+  it("folds a long answered question until the user expands it", async () => {
+    const user = userEvent.setup();
+    const longQuestion = `${"It is late on a Friday and prod is down. ".repeat(8)}What do you do first?`;
+    render(
+      <McpElicitationCard
+        groupId="assistant-1-ask-user-1"
+        members={[
+          groupMember("call-1", longQuestion, {
+            status: "answered",
+            selected: ["Roll back"],
+          }),
+          groupMember("call-2", "Pick a color", {
+            status: "answered",
+            selected: ["Blue"],
+          }),
+        ]}
+        requests={[]}
+        onRespond={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    // Only the long question offers to expand.
+    const toggle = screen.getByRole("button", { name: "Show full question" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(toggle);
+
+    expect(screen.getByRole("button", { name: "Show less" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+  });
+
   it("does not fabricate a stopped result for an initial replay gap", () => {
     render(
       <McpElicitationCard
@@ -1169,7 +1361,9 @@ function singleChoice(params: {
   };
 }
 
-function openappaReview(): ChatMcpElicitationRequest {
+function openappaReview(params?: {
+  coverage?: string;
+}): ChatMcpElicitationRequest {
   return {
     id: "review-1",
     conversationId: CONVERSATION_ID,
@@ -1182,7 +1376,7 @@ function openappaReview(): ChatMcpElicitationRequest {
       '{"todos":"[{\\"id\\":1,\\"content\\":\\"qa-hitl\\",\\"status\\":\\"pending\\"}]"}',
       "",
       "What this ruling would cover:",
-      "  attention: signoff",
+      params?.coverage ?? "  attention: signoff",
     ].join("\n"),
     mode: "form",
     kind: "openappa_review",
@@ -1207,8 +1401,9 @@ function groupMember(
   toolCallId: string,
   question: string,
   outcome: AskUserGroupMember["outcome"],
-) {
-  return { toolCallId, question, outcome };
+  options: string[] = [],
+): AskUserGroupMember {
+  return { toolCallId, question, options, outcome };
 }
 
 function deferred<T>() {

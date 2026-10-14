@@ -18,6 +18,12 @@ type PermissionButtonProps = ButtonProps & {
   permissions: Permissions;
   permissionScope?: string;
   tooltip?: string;
+  /**
+   * Shown in place of `tooltip` when the caller refuses the control, for a
+   * reason that reads better structured than as one sentence. `tooltip` stays
+   * the plain-text description screen readers announce.
+   */
+  reasonContent?: React.ReactNode;
   noPermissionHandle?: "tooltip" | "hide";
 };
 
@@ -51,6 +57,7 @@ export function PermissionButton({
   permissions,
   permissionScope,
   tooltip,
+  reasonContent,
   children,
   noPermissionHandle = "tooltip",
   className,
@@ -164,7 +171,7 @@ export function PermissionButton({
             </ul>
           </div>
         ) : (
-          reason
+          (reasonContent ?? reason)
         )}
       </TooltipContent>
     </Tooltip>

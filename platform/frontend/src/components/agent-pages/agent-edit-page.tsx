@@ -133,7 +133,9 @@ function AgentEditor({ agent }: { agent: Agent }) {
     id === "configuration"
       ? [
           "configuration",
-          ...(runtimeEnabled && !isBuiltIn ? (["runtime"] as const) : []),
+          ...((runtimeEnabled || agent.runtime != null) && !isBuiltIn
+            ? (["runtime"] as const)
+            : []),
         ]
       : [id];
   const mountedGroups = steps.flatMap((entry) => groupsForStep(entry.id));

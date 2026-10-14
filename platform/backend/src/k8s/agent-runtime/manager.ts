@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { Readable, Writable } from "node:stream";
 import { Readable as NodeReadable } from "node:stream";
+import { followAgentCatalogImage } from "@archestra/shared";
 import type * as k8s from "@kubernetes/client-node";
 import { PatchStrategy, setHeaderOptions } from "@kubernetes/client-node";
 import type WebSocket from "ws";
@@ -61,6 +62,7 @@ import {
   execAgentRuntimeCommand,
   streamAgentRuntimeCommand,
 } from "./exec";
+import { usesFloatingAgentImageTag } from "./image-pull-policy";
 import {
   AGENT_RUNTIME_CONTAINER_NAME,
   AGENT_RUNTIME_TMUX_SESSION,
@@ -417,14 +419,31 @@ class AgentRuntimeManager {
     initial?: boolean;
   }): Promise<void> {
     const clients = this.requireClients();
-    const sandbox = await readWorkspaceSandbox({
+    let sandbox = await readWorkspaceSandbox({
       api: clients.customObjectsApi,
       namespace: params.session.runtimeScope,
       name: params.session.workloadName,
     });
-    const container = sandbox.spec.podTemplate.spec?.containers.find(
-      (entry) => entry.name === AGENT_RUNTIME_CONTAINER_NAME,
-    );
+    let container = findAgentRuntimeContainer(sandbox);
+    // A platform upgrade moves the maintained image tag under a retained
+    // workspace. Its old wrapper may no longer speak to this backend, so the
+    // next turn starts on the current image rather than refusing the workspace.
+    if (
+      container &&
+      container.image !== params.spec.image &&
+      followAgentCatalogImage({
+        image: container.image ?? "",
+        catalogImages: config.agentRuntime.catalogImages,
+      }) === params.spec.image &&
+      Boolean(container.securityContext?.privileged) === params.spec.privileged
+    ) {
+      sandbox = await this.moveWorkspaceToImage({
+        session: params.session,
+        sandbox,
+        image: params.spec.image,
+      });
+      container = findAgentRuntimeContainer(sandbox);
+    }
     if (
       container?.image !== params.spec.image ||
       Boolean(container.securityContext?.privileged) !== params.spec.privileged
@@ -1358,6 +1377,93 @@ class AgentRuntimeManager {
 
   // ===================== internals =====================
 
+  /**
+   * Restart an idle workspace on the deployment's current maintained image.
+   * The workspace PVC holds HOME and the saved conversation, so the next turn
+   * resumes there exactly as it does after an idle suspension.
+   */
+  private async moveWorkspaceToImage(params: {
+    session: AgentRunRecord;
+    sandbox: AgentSandbox;
+    image: string;
+  }): Promise<AgentSandbox> {
+    const clients = this.requireClients();
+    const previous = findAgentRuntimeContainer(params.sandbox)?.image;
+    logger.info(
+      {
+        taskId: params.session.taskId,
+        workloadName: params.session.workloadName,
+        previousImage: previous,
+        image: params.image,
+      },
+      "Moving an Agent Runtime workspace to the current maintained image",
+    );
+    await this.suspendWorkspace(params.session);
+    await this.waitForPodRemoval(params.session);
+    const imagePullPolicy = usesFloatingAgentImageTag(params.image)
+      ? ("Always" as const)
+      : undefined;
+    const withImage = (entries: k8s.V1Container[] | undefined) =>
+      entries?.map((entry) => {
+        if (entry.image !== previous) return entry;
+        const { imagePullPolicy: _previousPolicy, ...rest } = entry;
+        return {
+          ...rest,
+          image: params.image,
+          ...(imagePullPolicy ? { imagePullPolicy } : {}),
+        };
+      });
+    const podSpec = params.sandbox.spec.podTemplate.spec;
+    await clients.customObjectsApi.patchNamespacedCustomObject(
+      {
+        ...AGENT_SANDBOX_API,
+        namespace: params.session.runtimeScope,
+        name: params.sandbox.metadata.name ?? params.session.workloadName,
+        // A merge patch replaces arrays whole, so send every container back.
+        body: {
+          spec: {
+            podTemplate: {
+              spec: {
+                containers: withImage(podSpec?.containers),
+                ...(podSpec?.initContainers
+                  ? { initContainers: withImage(podSpec.initContainers) }
+                  : {}),
+              },
+            },
+          },
+        },
+      },
+      setHeaderOptions("Content-Type", PatchStrategy.MergePatch),
+    );
+    return readWorkspaceSandbox({
+      api: clients.customObjectsApi,
+      namespace: params.session.runtimeScope,
+      name: params.session.workloadName,
+    });
+  }
+
+  /**
+   * A terminating Pod still holds the workspace volume, so wait until none
+   * is left, not merely until none is live.
+   */
+  private async waitForPodRemoval(
+    session: Pick<AgentRunRecord, "runtimeScope" | "workloadName">,
+  ): Promise<void> {
+    const clients = this.requireClients();
+    const deadline = Date.now() + AGENT_RUNTIME_INPUT_STAGING_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      const pods = await clients.coreApi.listNamespacedPod({
+        namespace: session.runtimeScope,
+        labelSelector: `${AGENT_RUNTIME_WORKSPACE_LABEL}=${session.workloadName}`,
+      });
+      if (pods.items.length === 0) return;
+      await delay(AGENT_RUNTIME_INPUT_STAGING_POLL_MS);
+    }
+    throw new Error(
+      "The workspace did not stop in time to move to the current Agent image",
+    );
+  }
+
   private async projectWarmCredentials(
     session: AgentRunRecord,
     podName?: string,
@@ -1809,6 +1915,14 @@ function isTransientObservationError(error: unknown): boolean {
       "ENETUNREACH",
       "EHOSTUNREACH",
     ].includes(String(error.code))
+  );
+}
+
+function findAgentRuntimeContainer(
+  sandbox: AgentSandbox,
+): k8s.V1Container | undefined {
+  return sandbox.spec.podTemplate.spec?.containers.find(
+    (entry) => entry.name === AGENT_RUNTIME_CONTAINER_NAME,
   );
 }
 

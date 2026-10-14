@@ -80,8 +80,10 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   readonly childTranscriptPaths = CHILD_PATHS;
   readonly nativeQuestion = {
     toolName: "AskUserQuestion",
+    // A review shows its call in full in each option's preview, inside the
+    // form, and asks one line about it.
     fromAskUser: (args: AskUserArguments) => {
-      const previews = showsPreviews(args);
+      const preview = showsCallPreview(args) ? args.callPreview : undefined;
       return {
         questions: [
           {
@@ -91,9 +93,7 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
             options: args.options.map((option) => ({
               label: option.label,
               description: option.description ?? option.label,
-              ...(previews && typeof option.preview === "string"
-                ? { preview: option.preview }
-                : {}),
+              ...(preview ? { preview } : {}),
             })),
             multiSelect: args.allowMultiple === true,
           },
@@ -403,19 +403,33 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   }
 }
 
-/** AskUserQuestion shows option previews for single-select questions only. */
-function showsPreviews(args: AskUserArguments): boolean {
+/**
+ * A review whose call each option previews, so the form can ask in one line.
+ * AskUserQuestion shows previews for single-select questions only, and the
+ * terminal withholds a preview that is too long or has control characters.
+ * Such a review asks the full question, which carries the call itself.
+ */
+function showsCallPreview(
+  args: AskUserArguments,
+): args is AskUserArguments & { callPreview: string; shortQuestion: string } {
   return (
     args.allowMultiple !== true &&
-    args.options.some((option) => typeof option.preview === "string")
+    typeof args.callPreview === "string" &&
+    args.callPreview.length <= PREVIEW_MAX_LENGTH &&
+    !CONTROL_CHARACTERS.test(args.callPreview) &&
+    typeof args.shortQuestion === "string"
   );
 }
 
+/** The longest option preview Claude Code shows instead of withholding it. */
+const PREVIEW_MAX_LENGTH = 2000;
+/** Control characters other than tab and newline. */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: the characters are what this matches
+const CONTROL_CHARACTERS = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/;
+
 /** The question text Claude Code shows, and repeats before the answer. */
 function shownQuestion(args: AskUserArguments): string {
-  return showsPreviews(args) && typeof args.previewQuestion === "string"
-    ? args.previewQuestion
-    : args.question;
+  return showsCallPreview(args) ? args.shortQuestion : args.question;
 }
 
 function parentSessionId(context: AppaMatchContext): string | undefined {

@@ -298,6 +298,44 @@ describe("chat agent roster", () => {
   });
 });
 
+describe("agent detail", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("fetches the agent's tools instead of trusting a list fetched without them", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    // The roster every picker loads: complete agents except for their tools.
+    queryClient.setQueryData(
+      [
+        "agents",
+        "all",
+        { agentType: "agent", excludeBuiltIn: true, includeTools: false },
+      ],
+      [{ id: "agent-1", name: "Agent", tools: [] }],
+    );
+    sdk.getAgent.mockResolvedValue({
+      data: {
+        id: "agent-1",
+        name: "Agent",
+        tools: [{ id: "tool-1", catalogId: "catalog-1" }],
+      },
+      error: undefined,
+    } as never);
+
+    const { result } = setup(() => useProfile("agent-1"), queryClient);
+
+    await waitFor(() =>
+      expect(result.current.data?.tools).toEqual([
+        { id: "tool-1", catalogId: "catalog-1" },
+      ]),
+    );
+    expect(sdk.getAgent).toHaveBeenCalledWith({ path: { id: "agent-1" } });
+  });
+});
+
 describe("agent pin mutation", () => {
   beforeEach(() => {
     vi.clearAllMocks();

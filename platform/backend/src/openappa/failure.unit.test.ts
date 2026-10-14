@@ -95,6 +95,21 @@ describe("openappaFailure", () => {
     );
   });
 
+  test("an operation another request still works on asks the client to retry", () => {
+    const failure = openappaFailure(
+      new Error(
+        "OpenAPPA is processing this operation in another request; retry the request",
+      ),
+    );
+
+    expect(failure.statusCode).toBe(503);
+    expect(failure.shouldRetry).toBe(true);
+    expect(failure.retryAfterSeconds).toBeGreaterThan(0);
+    expect(failure.message).toBe(
+      "OpenAPPA could not safely complete this operation: another request of this session is still working on this operation. Retry the request.",
+    );
+  });
+
   test("strips URL credentials and bounds the detail of a refused policy", () => {
     const failure = openappaFailure(
       new Error(

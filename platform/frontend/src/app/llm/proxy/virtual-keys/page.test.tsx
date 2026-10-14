@@ -1,6 +1,7 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import {
@@ -21,6 +22,7 @@ vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
 vi.mock("sonner");
+vi.mock("@/lib/hooks/use-app-name");
 
 vi.mock("next/image", () => ({
   default: ({
@@ -33,6 +35,7 @@ vi.mock("next/image", () => ({
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { useOrganization } from "@/lib/organization.query";
 import VirtualKeysPage from "./page";
 
@@ -92,6 +95,7 @@ function renderPage(query: string) {
 describe("VirtualKeysPage provider-key filter", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useAppName).mockReturnValue("Test platform");
     virtualKeys = [];
     vi.mocked(useRouter).mockReturnValue({
       push: vi.fn(),
@@ -106,6 +110,39 @@ describe("VirtualKeysPage provider-key filter", () => {
     vi.mocked(useOrganization).mockReturnValue({
       data: null,
     } as unknown as ReturnType<typeof useOrganization>);
+  });
+
+  it("opens provider creation directly from the first-provider guidance", async () => {
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
+        HttpResponse.json([]),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage("");
+    await user.click(
+      await screen.findByRole("button", { name: "Add model provider" }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Add model provider" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toHaveTextContent("Provider");
+  });
+
+  it("does not show first-provider guidance when provider loading fails", async () => {
+    server.use(
+      http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
+        HttpResponse.json(
+          { error: { message: "Unavailable" } },
+          { status: 500 },
+        ),
+      ),
+    );
+    renderPage("");
+    await waitFor(() => expect(listRequests.length).toBeGreaterThan(0));
+    expect(
+      screen.queryByText("Connect your first model provider"),
+    ).not.toBeInTheDocument();
   });
 
   it("narrows the list to the provider key named in the URL", async () => {

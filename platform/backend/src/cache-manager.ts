@@ -471,6 +471,27 @@ class CacheManager {
   }
 
   /**
+   * Read several keys in one statement. Unlike {@link getMany}, a storage
+   * failure throws so a caller cannot treat an outage as an empty poll.
+   */
+  async readMany<T>(keys: AllowedCacheKey[]): Promise<Map<AllowedCacheKey, T>> {
+    const entries = new Map<AllowedCacheKey, T>();
+    if (!this.keyv) throw new Error("CacheManager: Not started");
+    if (keys.length === 0) return entries;
+    const rows = await CacheEntryModel.getMany(
+      keys.map((key) => `keyv:${key}`),
+    );
+    const now = Date.now();
+    for (const row of rows) {
+      const data = await this.keyv.deserializeData<T>(row.value);
+      if (data?.value === undefined) continue;
+      if (typeof data.expires === "number" && now > data.expires) continue;
+      entries.set(row.key.slice("keyv:".length) as AllowedCacheKey, data.value);
+    }
+    return entries;
+  }
+
+  /**
    * Read several keys in one statement. Absent and expired entries are left
    * out. Like {@link get}, a failed read is reported as misses.
    */

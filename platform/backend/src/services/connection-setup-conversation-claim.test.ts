@@ -269,6 +269,41 @@ test("claude, codex, and opencode own ids claim, and a bad id does not", async (
   ).toBe(false);
 });
 
+test("Kilo requires its own session id, not affinity, to own a setup", async () => {
+  const params = {
+    organizationId,
+    setupId,
+    expiresAt: Date.now() + 60_000,
+    requestBody: {},
+  };
+  const headers = { "user-agent": "kilo/latest/7.8.8/cli" };
+  expect(
+    await claimConnectionSetupConversation({
+      ...params,
+      headers: { ...headers, "x-session-affinity": ownerId },
+    }),
+  ).toBe(false);
+  expect(await storedClaim()).toBeUndefined();
+  expect(
+    await claimConnectionSetupConversation({
+      ...params,
+      headers: { ...headers, "x-opencode-session": ownerId },
+    }),
+  ).toBe(true);
+  expect(
+    await claimConnectionSetupConversation({
+      ...params,
+      headers: { ...headers, "x-opencode-session": copierId },
+    }),
+  ).toBe(false);
+  expect(
+    await claimConnectionSetupConversation({
+      ...params,
+      headers: { ...headers, "x-opencode-session": ownerId },
+    }),
+  ).toBe(true);
+});
+
 async function claim(params: {
   organizationId?: string;
   setupId?: string;

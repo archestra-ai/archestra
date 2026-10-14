@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 
+import { isOpenCodeFamilyClient } from "@archestra/shared/opencode-family";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { isWellFormedAppaId } from "@/openappa/service";
@@ -67,7 +68,8 @@ function nativeConversationIdForSetupClaim(params: {
     const sessionId = adapter?.extractSessionIdentity?.(context)?.sessionId;
     if (!isWellFormedAppaId(sessionId)) return undefined;
     if (
-      adapter?.id === "opencode" &&
+      adapter &&
+      isOpenCodeFamilyClient(adapter.id) &&
       !isOpenCodeOwnSession(context, sessionId)
     ) {
       return undefined;

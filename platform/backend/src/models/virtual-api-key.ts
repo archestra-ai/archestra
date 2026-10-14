@@ -98,6 +98,7 @@ class VirtualApiKeyModel {
     authorId?: string | null;
     teamIds?: string[];
     providerApiKeys?: ProviderApiKeyInput[];
+    includeFutureProviders?: boolean;
     /** Explicit starting audience; omitted derives one from the scope. */
     initialPermissionGrants?: ResourcePermissionGrant[];
     /** Publish to the whole organization; for system callers only. */
@@ -149,6 +150,7 @@ class VirtualApiKeyModel {
               organizationId: resolvedOrganizationId,
               name,
               keyType,
+              includeFutureProviders: params.includeFutureProviders ?? false,
               secretId: secret.id,
               tokenStart,
               scope,
@@ -225,6 +227,7 @@ class VirtualApiKeyModel {
     authorId: string | null;
     teamIds: string[];
     providerApiKeys: ProviderApiKeyInput[];
+    includeFutureProviders?: boolean;
     /** Omit to keep the current billing team. */
     billingTeamId?: string | null;
   }): Promise<SelectVirtualApiKey | null> {
@@ -236,6 +239,9 @@ class VirtualApiKeyModel {
         .update(schema.virtualApiKeysTable)
         .set({
           name,
+          ...(params.includeFutureProviders !== undefined
+            ? { includeFutureProviders: params.includeFutureProviders }
+            : {}),
           expiresAt: expiresAt ?? null,
           scope,
           authorId,
@@ -370,6 +376,8 @@ class VirtualApiKeyModel {
           organizationId: schema.virtualApiKeysTable.organizationId,
           name: schema.virtualApiKeysTable.name,
           keyType: schema.virtualApiKeysTable.keyType,
+          includeFutureProviders:
+            schema.virtualApiKeysTable.includeFutureProviders,
           secretId: schema.virtualApiKeysTable.secretId,
           tokenStart: schema.virtualApiKeysTable.tokenStart,
           scope: schema.virtualApiKeysTable.scope,
@@ -455,6 +463,8 @@ class VirtualApiKeyModel {
           name: schema.virtualApiKeysTable.name,
           scope: schema.virtualApiKeysTable.scope,
           keyType: schema.virtualApiKeysTable.keyType,
+          includeFutureProviders:
+            schema.virtualApiKeysTable.includeFutureProviders,
           tokenStart: schema.virtualApiKeysTable.tokenStart,
           authorId: schema.virtualApiKeysTable.authorId,
           createdByServiceAccountId:
@@ -511,6 +521,7 @@ class VirtualApiKeyModel {
           name: row.name,
           scope: row.scope,
           keyType: row.keyType,
+          includeFutureProviders: row.includeFutureProviders,
           tokenStart: row.tokenStart,
           // Only a personal key attributes traffic to its author. On a shared
           // key the author is reported as `createdByUserName` instead, so the
@@ -922,6 +933,8 @@ class VirtualApiKeyModel {
           organizationId: schema.virtualApiKeysTable.organizationId,
           name: schema.virtualApiKeysTable.name,
           keyType: schema.virtualApiKeysTable.keyType,
+          includeFutureProviders:
+            schema.virtualApiKeysTable.includeFutureProviders,
           secretId: schema.virtualApiKeysTable.secretId,
           tokenStart: schema.virtualApiKeysTable.tokenStart,
           scope: schema.virtualApiKeysTable.scope,
@@ -1163,6 +1176,7 @@ class VirtualApiKeyModel {
       name: row.name,
       scope: row.scope,
       keyType: row.keyType,
+      includeFutureProviders: row.includeFutureProviders,
       authorId: row.authorId,
       teamIds: [...teamIds].sort(),
       providerApiKeyIds: providerKeyRows.map((r) => r.providerApiKeyId).sort(),

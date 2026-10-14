@@ -493,7 +493,6 @@ version = 2
 [[policy.tool]]
 name = "read_internal"
 delta = { audience = ["internal"] }
-requires = { audience = { within = ["internal"] } }
 "#,
         );
         let actor = started(&runtime, "symbolic-approval").await;

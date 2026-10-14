@@ -50,11 +50,11 @@ beforeEach(() => {
 });
 
 describe("PluginSkillPage", () => {
-  it("renders a beta, read-only plugin source view", () => {
+  it("renders a read-only plugin source view", () => {
     render(<PluginSkillPage pluginId="plugin-1" />);
 
     expect(screen.getByText("ste-writing")).toBeInTheDocument();
-    expect(screen.getByText("Beta")).toBeInTheDocument();
+    expect(screen.queryByText("Beta")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "STE bundle" })).toHaveAttribute(
       "href",
       "/plugins/plugin-1",

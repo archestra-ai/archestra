@@ -1,4 +1,4 @@
-// Dispatch leases on the real native runtime and a real PostgreSQL ledger.
+// Receipt leases on the real native runtime and a real PostgreSQL ledger.
 // Each "pod" is a separate backend process, so a test can stop one mid-dispatch.
 const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
@@ -14,7 +14,7 @@ const { databaseUrl } = require('./test-database.cjs');
 
 const annotation = '{"version":1,"answer":{"delta":{},"requires":{"history":[],"attention":[]},"emits":[]}}';
 
-test('a dispatch lease recovers work its owner did not finish', { skip: !databaseUrl, timeout: 180000 }, async (t) => {
+test('a receipt lease recovers work its owner did not finish', { skip: !databaseUrl, timeout: 180000 }, async (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), 'openappa-lease-'));
   // A holdable HTTP consult stand-in: while `hold` is set the request stays
   // open, so the dispatch sits between its claim and its finish. Serves the
@@ -155,11 +155,25 @@ url = "http://127.0.0.1:${sanitizer.server.address().port}/"
     'SELECT tool_call_id, status FROM openappa_processed_results WHERE organization_id = $1 AND session_id = $2 ORDER BY tool_call_id',
     [session.organization_id, session.session_id],
   )).rows.map((row) => `${row.tool_call_id}=${row.status}`);
-  const lease = async (session) => (await client.query(
-    `SELECT l.owner, l.attempt FROM openappa_dispatch_leases l JOIN openappa_sessions s ON s.root = l.root
-     WHERE s.organization_id = $1 AND s.session_id = $2`,
+  // The owners whose leases still stand on the session's pending receipts.
+  const liveLeases = async (session) => (await client.query(
+    `SELECT lease_owner FROM openappa_operations
+       WHERE organization_id = $1 AND session_id = $2 AND status = 'pending' AND lease_expires_at > now()
+     UNION ALL
+     SELECT lease_owner FROM openappa_processed_results
+       WHERE organization_id = $1 AND session_id = $2 AND status = 'pending' AND lease_expires_at > now()`,
     [session.organization_id, session.session_id],
-  )).rows[0];
+  )).rows.map((row) => row.lease_owner);
+  // A stopped pod renews nothing, so its leases run out; the tests end them at
+  // once instead of waiting out their time to live.
+  const lapse = async (session) => {
+    for (const table of ['openappa_operations', 'openappa_processed_results']) {
+      await client.query(
+        `UPDATE ${table} SET lease_expires_at = now() WHERE organization_id = $1 AND session_id = $2 AND status = 'pending'`,
+        [session.organization_id, session.session_id],
+      );
+    }
+  };
   const eventCount = async (session) => Number((await client.query(
     'SELECT count(*) AS n FROM openappa_events WHERE root = (SELECT root FROM openappa_sessions WHERE organization_id = $1 AND session_id = $2)',
     [session.organization_id, session.session_id],
@@ -210,7 +224,7 @@ url = "http://127.0.0.1:${sanitizer.server.address().port}/"
     const name = `openappa_lease_fail_${table}`;
     await client.query(`CREATE OR REPLACE FUNCTION ${name}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected receipt failure'; END $$`);
     await client.query(`DROP TRIGGER IF EXISTS ${name} ON ${table}`);
-    await client.query(`CREATE TRIGGER ${name} BEFORE UPDATE ON ${table} FOR EACH ROW WHEN (NEW.${column} = '${id}') EXECUTE FUNCTION ${name}()`);
+    await client.query(`CREATE TRIGGER ${name} BEFORE UPDATE ON ${table} FOR EACH ROW WHEN (NEW.${column} = '${id}' AND NEW.status = 'complete') EXECUTE FUNCTION ${name}()`);
     try {
       await fn();
     } finally {
@@ -241,13 +255,14 @@ url = "http://127.0.0.1:${sanitizer.server.address().port}/"
       const session = scope();
       await stoppedMidConsult(toolCall(session, 'one', 'annotated_read'), signal);
       assert.deepEqual(await receipts(session), ['call:one=pending']);
+      await lapse(session);
 
       const consultsBefore = consults.annotator;
       const retried = await run(toolCall(session, 'one', 'annotated_read'));
       assert.equal(retried.decision, 'allow_call', JSON.stringify(retried));
       assert.equal(consults.annotator, consultsBefore + 1, 'the released operation ran again');
       assert.deepEqual(await receipts(session), ['call:one=complete']);
-      assert.equal(await lease(session), undefined, 'a finished dispatch keeps no lease');
+      assert.deepEqual(await liveLeases(session), [], 'a finished dispatch holds no lease');
 
       assert.equal((await run(toolCall(session, 'two', 'read_plain'))).decision, 'allow_call');
     });
@@ -260,40 +275,51 @@ url = "http://127.0.0.1:${sanitizer.server.address().port}/"
     const other = await run(toolCall(session, 'two', 'read_plain'));
     assert.equal(other.decision, 'allow_call', JSON.stringify(other));
     assert.deepEqual(await receipts(session), ['call:one=pending', 'call:two=complete']);
-    // The call that never finished is submitted again later, as a first run.
+    // The call that never finished is submitted again after its lease ran out.
+    await lapse(session);
     assert.equal((await run(toolCall(session, 'one', 'annotated_read'))).decision, 'allow_call');
     assert.deepEqual(await receipts(session), ['call:one=complete', 'call:two=complete']);
   });
 
-  await t.test('a second pod waits for a working owner and does not take its work', async () => {
+  await t.test('a second pod works beside a working owner and does not take its work', async () => {
     const session = scope();
     const working = await waitingOnConsult(annotator.gate, toolCall(session, 'one', 'annotated_read'));
-    const second = pod(toolCall(session, 'two', 'read_plain'));
-    const early = await Promise.race([second.done, sleep(1500).then(() => 'still waiting')]);
-    assert.equal(early, 'still waiting');
-    assert.deepEqual(await receipts(session), ['call:one=pending']);
+    // Another call of the family does not wait for the consult.
+    const second = await run(toolCall(session, 'two', 'read_plain'));
+    assert.equal(second.decision, 'allow_call', JSON.stringify(second));
+    assert.deepEqual(await receipts(session), ['call:one=pending', 'call:two=complete']);
+    assert.equal((await liveLeases(session)).length, 1);
 
+    // A retry of the working call waits for the owner's answer and runs nothing.
+    const consultsBefore = consults.annotator;
+    const duplicate = pod(toolCall(session, 'one', 'annotated_read'));
+    await sleep(1000);
     answerConsults(annotator.gate);
-    assert.equal((await working.done).decision, 'allow_call');
-    assert.equal((await second.done).decision, 'allow_call');
+    const answered = await working.done;
+    assert.equal(answered.decision, 'allow_call', JSON.stringify(answered));
+    assert.deepEqual(await duplicate.done, answered, 'the retry gets the owner\'s answer');
+    assert.equal(consults.annotator, consultsBefore, 'the retry consulted nothing');
     assert.deepEqual(await receipts(session), ['call:one=complete', 'call:two=complete']);
   });
 
   await t.test('a family recovers no matter how many stops precede the healthy run', async () => {
     const session = scope();
+    const owners = new Set();
     for (let attempt = 1; attempt <= 4; attempt += 1) {
       const stopped = await waitingOnConsult(annotator.gate, toolCall(session, 'one', 'annotated_read'));
-      assert.equal((await lease(session)).attempt, attempt);
+      for (const owner of await liveLeases(session)) owners.add(owner);
+      assert.equal(owners.size, attempt, 'each pod takes the receipt over as its own owner');
       stopped.child.kill('SIGKILL');
       await stopped.done;
       answerConsults(annotator.gate);
+      await lapse(session);
     }
     const consultsBefore = consults.annotator;
     const recovered = await run(toolCall(session, 'one', 'annotated_read'));
     assert.equal(recovered.decision, 'allow_call', JSON.stringify(recovered));
     assert.equal(consults.annotator, consultsBefore + 1, 'the recovered operation ran once more');
     assert.deepEqual(await receipts(session), ['call:one=complete']);
-    assert.equal(await lease(session), undefined);
+    assert.deepEqual(await liveLeases(session), []);
     assert.equal((await run(toolCall(session, 'two', 'read_plain'))).decision, 'allow_call');
   });
 
@@ -311,7 +337,7 @@ url = "http://127.0.0.1:${sanitizer.server.address().port}/"
       assert.match(failed.error ?? JSON.stringify(failed), /PostgreSQL|database|db error/);
     });
     assert.deepEqual(await receipts(session), ['call:start=complete']);
-    assert.equal(await lease(session), undefined);
+    assert.deepEqual(await liveLeases(session), []);
     assert.equal((await run(address)).decision, 'ack');
     assert.equal((await run(toolCall(session, 'next', 'read_plain'))).decision, 'allow_call');
   });
@@ -361,6 +387,7 @@ url = "http://127.0.0.1:${sanitizer.server.address().port}/"
     await stopped.done;
     answerConsults(sanitizer.gate);
     assert.deepEqual(await resultReceipts(session), [...beforeReceipts, 'read=pending'].sort());
+    await lapse(session);
 
     const sanitizations = consults.sanitizer;
     const recovered = await run(result);
@@ -474,6 +501,7 @@ url = "http://127.0.0.1:${sanitizer.server.address().port}/"
       });
       assert.deepEqual(await receipts(session), ['call:kept=pending'], 'a failed recovery releases no receipt it did not claim');
       assert.deepEqual(await resultReceipts(session), [], 'its own uncommitted receipt is released');
+      assert.deepEqual(await liveLeases(session), [], 'and the retry takes the call over at once');
       assert.equal(await eventCount(session), committedEvents, 'the failed recovery recorded nothing');
 
       const recovered = await run(report(session));
@@ -490,6 +518,7 @@ url = "http://127.0.0.1:${sanitizer.server.address().port}/"
     const session = scope();
     await stoppedMidConsult(toolCall(session, 'one', 'annotated_read'));
     assert.deepEqual(await receipts(session), ['call:one=pending']);
+    await lapse(session);
 
     const consultsBefore = consults.annotator;
     const [first, second] = await Promise.all([
@@ -497,7 +526,7 @@ url = "http://127.0.0.1:${sanitizer.server.address().port}/"
       run(toolCall(session, 'one', 'annotated_read')),
     ]);
     assert.equal(first.decision, 'allow_call', JSON.stringify(first));
-    assert.deepEqual(second, first, 'both pods answer identically');
+    assert.deepEqual(second, first, 'both pods answer identically: one works, the other waits for it');
     assert.equal(consults.annotator, consultsBefore + 1, 'the operation ran exactly once');
     assert.deepEqual(await receipts(session), ['call:one=complete']);
     assert.deepEqual(await resultReceipts(session), []);
@@ -600,20 +629,24 @@ url = "http://127.0.0.1:${sanitizer.server.address().port}/"
     assert.equal((await run(toolCall(session, 'next', 'read_plain'))).decision, 'allow_call');
   });
 
-  await t.test('a late consult answer cannot write through a lost connection before the lease probe', async () => {
+  await t.test('a late consult answer cannot write once another pod took the work over', async () => {
     const session = scope();
     const request = toolCall(session, 'one', 'annotated_read');
-    const ledgerName = `openappa-lease-late-${randomUUID()}`;
-    const stopped = await waitingOnConsult(annotator.gate, request, ledgerName);
-    const ended = await client.query('SELECT pg_terminate_backend(pid) AS ended FROM pg_stat_activity WHERE application_name = $1 AND pid <> pg_backend_pid()', [ledgerName]);
-    assert.ok(ended.rows.some((row) => row.ended), 'the old dispatch lost its database connection');
+    const stopped = await waitingOnConsult(annotator.gate, request);
+    // The pod freezes before it renews its lease again, and the lease runs out.
+    stopped.child.kill('SIGSTOP');
+    await lapse(session);
     annotator.gate.hold = false;
     const taken = await run(request);
     assert.equal(taken.decision, 'allow_call', JSON.stringify(taken));
     const committed = await eventCount(session);
+    stopped.child.kill('SIGCONT');
     answerConsults(annotator.gate);
+    // The stale pod either finds its receipt taken over, or replays the owner's
+    // decision from the log and answers with it; it never decides anew.
     const late = await stopped.done;
-    assert.ok(late.error, `the stale dispatch must not finish successfully: ${JSON.stringify(late)}`);
+    if (late.error) assert.match(late.error, /lost its lease on this operation; retry the request/);
+    else assert.deepEqual(late, taken);
     assert.equal(await eventCount(session), committed, 'no stale decision or effects were appended');
     assert.deepEqual(await run(request), taken, 'the current owner retains the only published answer');
   });
@@ -623,13 +656,13 @@ url = "http://127.0.0.1:${sanitizer.server.address().port}/"
     const ledgerName = `openappa-lease-stale-${randomUUID()}`;
     const stale = await waitingOnConsult(annotator.gate, toolCall(session, 'one', 'annotated_read'), ledgerName);
     // The pod freezes, and the database ends its connections, as a network
-    // partition or a failover would.
+    // partition or a failover would. Its lease runs out meanwhile.
     stale.child.kill('SIGSTOP');
-    const ended = await client.query(
+    await client.query(
       'SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE application_name = $1',
       [ledgerName],
     );
-    assert.ok(ended.rowCount > 0);
+    await lapse(session);
 
     // Keep the old HTTP request held, but let newly arriving consults answer.
     annotator.gate.hold = false;
@@ -638,7 +671,8 @@ url = "http://127.0.0.1:${sanitizer.server.address().port}/"
     assert.equal(taken.decision, 'allow_call', JSON.stringify(taken));
     assert.deepEqual(await receipts(session), ['call:one=complete']);
 
-    // The frozen pod wakes up while its own consult is still unanswered.
+    // The frozen pod wakes up while its own consult is still unanswered. Its
+    // next renewal finds the receipt taken over.
     stale.child.kill('SIGCONT');
     assert.match((await stale.done).error, /lost its lease on this operation; retry the request/);
     annotator.gate.held.splice(0);

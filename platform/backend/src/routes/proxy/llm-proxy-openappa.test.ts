@@ -47,7 +47,10 @@ import {
 import { mintDelegationMarker } from "@/openappa/delegation";
 import {
   consumeHitlRuling,
+  getHitlAskUserArguments,
+  getHitlReview,
   getHitlReviewResult,
+  peekHitlDecision,
   stageHitlReview,
 } from "@/openappa/hitl-review";
 import { buildNoticeArguments } from "@/openappa/notice";
@@ -513,9 +516,35 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         offerId,
       }),
     ).toBeUndefined();
+    const closure =
+      outcome === "review_unanswered" ? "unanswered" : "cancelled";
+    expect(await consumeHitlRuling({ session: runtimeSession, offerId })).toBe(
+      "none",
+    );
     expect(
-      await consumeHitlRuling({ session: runtimeSession, offerId }),
+      await peekHitlDecision({ session: runtimeSession, offerId }),
+    ).toEqual({ ruling: "none", closure });
+    expect(
+      await getHitlReview({ session: runtimeSession, offerId }),
     ).toBeUndefined();
+    expect(await consumeHitlRuling({ session: runtimeSession, offerId })).toBe(
+      "none",
+    );
+    expect(
+      await stageHitlReview({
+        session: runtimeSession,
+        review: { offerId, text: "Review this call" },
+        callId: "late-restage",
+      }),
+    ).toEqual({ status: "none", closure });
+    expect(
+      await getHitlAskUserArguments({
+        session: runtimeSession,
+        offerIds: [offerId],
+      }),
+    ).toBeUndefined();
+    expect(executeNative).not.toHaveBeenCalled();
+    expect(extractMcpHumanRuling(rawResult)).toBeNull();
     providerCalls = [];
     const nextBody = {
       ...body,
@@ -536,8 +565,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(visible.instruction).toContain(
       outcome === "review_unanswered"
         ? "expired without an answer"
-        : "cancelled the approval review",
+        : "canceled the approval review",
     );
+    expect(visible.instruction).toContain("no ruling was granted");
     expect(String(resultMessage?.content)).not.toMatch(
       /withheld|cannot be reached|Authorized|Denied:/,
     );
@@ -1311,6 +1341,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         id: "deployment",
         enabled: false,
         unsupportedClientAction: "bypass",
+        superyellEnabled: true,
       });
 
       const response = await post(continuation("msg_made_elsewhere"));
@@ -1862,6 +1893,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             id: "global",
             enabled: false,
             unsupportedClientAction: "bypass",
+            superyellEnabled: true,
           };
         }
         return realGet();
@@ -4396,6 +4428,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           {
             sessionId: mode === "valid" ? workload : credential,
             parentId: null,
+            reason: "enforcement_off",
           },
         ]);
       });
@@ -5497,12 +5530,32 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(starts[0].parent_id).toBeUndefined();
   });
 
-  test("has Claude Code wait for the gateway when its first request has no remedy tools, then delivers the ruling", async () => {
+  test.each([
+    {
+      outcome: "succeeds",
+      waitResult: {
+        content:
+          "ready: true Connected (their tools are now available — call them directly): archestra",
+      },
+      failure: undefined,
+    },
+    {
+      outcome: "fails",
+      waitResult: {
+        content: "ready: false\nFailed to connect: plugin:appa-runtime:appa",
+        is_error: true,
+      },
+      failure: "Failed to connect: plugin:appa-runtime:appa",
+    },
+  ])("has Claude Code wait for the gateway when its first request has no remedy tools, then delivers the ruling when the wait $outcome", async ({
+    waitResult,
+    failure,
+  }) => {
     // Claude Code sends its first request while the gateway is still
     // connecting: no remedy tools yet, but its own WaitForMcpServers. The
     // denied call goes back as that wait, so the turn continues. The next
     // request declares the remedy tools and reads the runtime's ruling where
-    // the wait's output was.
+    // the wait's output was, with the client's error when the wait failed.
     block = true;
     options.nonStreamingToolUse = {
       name: "Read",
@@ -5556,8 +5609,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             {
               type: "tool_result",
               tool_use_id: wait.id,
-              content:
-                "ready: true Connected (their tools are now available — call them directly): archestra",
+              ...waitResult,
             },
           ],
         },
@@ -5572,6 +5624,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     );
     expect(forwarded).toContain("[appa] NATIVE REFUSAL");
     expect(forwarded).not.toContain("ready: true");
+    if (failure) expect(forwarded).toContain(failure);
     expect(
       second
         .json()

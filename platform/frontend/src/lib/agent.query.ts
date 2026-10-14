@@ -10,6 +10,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { toast } from "sonner";
 import {
   DEFAULT_SORT_BY,
@@ -19,6 +20,7 @@ import {
 import { toBulkOutcome } from "@/lib/bulk-action";
 import { incomingEmailKeys } from "@/lib/chatops/incoming-email.query";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
+import { useOrganization } from "@/lib/organization.query";
 import {
   BOOTSTRAP_QUERY_RETRY,
   flushPersistedQueryCache,
@@ -325,6 +327,115 @@ export function usePinAgent() {
       queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
   });
+}
+
+/**
+ * Ids of the agents pinned for the current user, in the Agents page's order:
+ * first the ones pinned automatically (their default, their personal chat
+ * agent, the organization's default), then the ones they pinned, newest first.
+ */
+export function usePinnedAgentIds(params?: { enabled?: boolean }) {
+  const { data: pinned } = useQuery({
+    queryKey: ["agents", "pinned-ids"],
+    queryFn: async () => {
+      const { data, error } = await getAgents({
+        query: { pinned: true, agentTypes: ["agent"], limit: 100, offset: 0 },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return (data?.data ?? []).map((agent) => agent.id);
+    },
+    enabled: params?.enabled,
+    // A short id list; kept across reloads so pins show without a wait.
+    meta: PERSISTED_QUERY_META,
+  });
+  const { data: personalDefaultAgentId } = useDefaultAgentId();
+  const { data: personalChatAgentId } = usePersonalChatAgentId();
+  const { data: organization } = useOrganization();
+  const organizationDefaultAgentId = organization?.defaultAgentId;
+  const data = useMemo(
+    () =>
+      pinned && [
+        ...new Set(
+          [
+            personalDefaultAgentId,
+            personalChatAgentId,
+            organizationDefaultAgentId,
+            ...pinned,
+          ].filter((id): id is string => !!id),
+        ),
+      ],
+    [
+      pinned,
+      personalDefaultAgentId,
+      personalChatAgentId,
+      organizationDefaultAgentId,
+    ],
+  );
+  return { data };
+}
+
+/**
+ * Flip an agent between All and Manual access to tools or subagents. The
+ * change saves at once, so the toast offers Undo instead of a Save button.
+ * Turning All tools on also turns on progressive tool loading, which is the
+ * only surface dynamic access works through (as in the full configuration).
+ */
+export function useSwitchAgentAccess() {
+  const queryClient = useQueryClient();
+  const updateProfile = useUpdateProfile();
+  const switchAccess = (params: {
+    agent: Pick<
+      archestraApiTypes.GetAgentResponses["200"],
+      "id" | "toolExposureMode"
+    >;
+    target: "tools" | "subagents";
+    all: boolean;
+  }) => {
+    const { agent, target, all } = params;
+    const accessData = (
+      on: boolean,
+    ): archestraApiTypes.UpdateAgentData["body"] =>
+      target === "subagents"
+        ? { accessAllSubagents: on }
+        : on
+          ? { accessAllTools: true, toolExposureMode: "search_and_run_only" }
+          : { accessAllTools: false, toolExposureMode: agent.toolExposureMode };
+    updateProfile.mutate(
+      {
+        id: agent.id,
+        // Leaving All keeps whatever loading mode it set; Undo restores it.
+        data:
+          target === "tools" && !all
+            ? { accessAllTools: false }
+            : accessData(all),
+      },
+      {
+        onSuccess: (saved) => {
+          if (!saved) return;
+          const what = target === "tools" ? "tool access" : "subagents";
+          toast.success(`Switched to ${all ? "All" : "Manual"} ${what}`, {
+            action: {
+              label: "Undo",
+              // Through the client, not the mutation hook: the dialog that
+              // owns the hook may have closed by the time Undo is clicked.
+              onClick: async () => {
+                const { error } = await updateAgent({
+                  path: { id: agent.id },
+                  body: accessData(!all),
+                });
+                if (error) {
+                  reportApiError(error);
+                  return;
+                }
+                await queryClient.invalidateQueries({ queryKey: ["agents"] });
+              },
+            },
+          });
+        },
+      },
+    );
+  };
+  return { switchAccess, isPending: updateProfile.isPending };
 }
 
 export function useDefaultMcpGateway(params?: {
@@ -825,6 +936,10 @@ function findCachedAgent(
     // enough to paint and initialize chat, but must never seed an editing form
     // as though it came from the full detail endpoint.
     if (query.queryKey[1] === "chat-roster") continue;
+    // A list fetched without tools would seed a detail with no tools, which
+    // reads as "this agent has none" until the seed goes stale.
+    const params = query.queryKey[2] as { includeTools?: boolean } | undefined;
+    if (params?.includeTools === false) continue;
     const cached: unknown = query.state.data;
     const rows = Array.isArray(cached)
       ? cached

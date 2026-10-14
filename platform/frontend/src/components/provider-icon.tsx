@@ -1,19 +1,26 @@
 import type { ClientFamily, SupportedProvider } from "@archestra/shared";
 import { Key } from "lucide-react";
 import Image from "next/image";
+import { ClientMarkTile } from "@/components/client-mark-tile";
 import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
 
 /**
- * Logo for a client family: its own mark when it has one (Cursor), else its
- * vendor's provider logo (Claude → Anthropic, Codex → OpenAI).
+ * Logo for a client family: its mark on its tile when it has one (OpenCode,
+ * Kilo Code), drawn as the Connect page draws it; else its own image (Cursor);
+ * else its vendor's provider logo (Claude → Anthropic, Codex → OpenAI).
  */
 export function ClientIcon({
   client,
   size = 16,
 }: {
-  client: Pick<ClientFamily, "label" | "provider" | "icon">;
+  client: Pick<ClientFamily, "label" | "provider" | "icon" | "mark">;
   size?: number;
 }) {
+  if (client.mark) {
+    return (
+      <ClientMarkTile mark={client.mark} label={client.label} size={size} />
+    );
+  }
   if (client.icon) {
     return (
       <span

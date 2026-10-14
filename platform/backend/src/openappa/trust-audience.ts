@@ -296,12 +296,14 @@ function templateMatches(template: string, selector: string): boolean {
   );
 }
 
-/** Every audience some rule names in its `delta` or `requires`. */
+/** Every audience some rule names in its `delta`, `forwards` or `requires`. */
 function audiencesNamedByRules(files: PolicyFile[]): Set<string> {
   const named = new Set<string>();
   for (const file of files)
     for (const entry of toolEntries(file.text)) {
       for (const name of audienceNames(asRecord(entry.delta)?.audience))
+        named.add(name);
+      for (const name of audienceNames(asRecord(entry.forwards)?.audience))
         named.add(name);
       for (const name of audienceNames(asRecord(entry.requires)?.audience))
         named.add(name);
@@ -309,14 +311,11 @@ function audiencesNamedByRules(files: PolicyFile[]): Set<string> {
   return named;
 }
 
-/** A `delta` audience list, or a `requires` audience's `contains` and `within`. */
+/** A `delta` audience list, or a `requires` audience's `contains`. */
 function audienceNames(value: unknown): string[] {
   const record = asRecord(value);
   if (!record) return strings(value) ?? [];
-  return [
-    ...(strings(record.contains) ?? []),
-    ...(strings(record.within) ?? []),
-  ];
+  return strings(record.contains) ?? [];
 }
 
 function strings(value: unknown): string[] | null {

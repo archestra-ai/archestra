@@ -50,6 +50,7 @@ export function makeVirtualKey(
     name: "test-virtual-key",
     labels: [],
     keyType: "standard",
+    includeFutureProviders: false,
     secretId: "test-vk-secret",
     tokenStart: "archestra_test",
     scope: "personal",

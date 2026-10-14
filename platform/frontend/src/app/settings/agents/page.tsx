@@ -6,6 +6,7 @@ import {
   MESSAGING_CHANNEL_LABELS,
   type MessagingChannelId,
   PopularAgentIdSchema,
+  providerSupportsChat,
 } from "@archestra/shared";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
@@ -153,7 +154,12 @@ export default function AgentSettingsPage() {
     initializedRef.current = true;
   }, [organization, apiKeys]);
 
-  const availableKeys = apiKeys ?? [];
+  // The default model answers chats, so a key whose provider cannot chat
+  // (embeddings-only, decisions-only) is never offered for it.
+  const availableKeys = useMemo(
+    () => (apiKeys ?? []).filter((key) => providerSupportsChat(key.provider)),
+    [apiKeys],
+  );
 
   const localState: AgentSettingsState = {
     selectedApiKeyId,

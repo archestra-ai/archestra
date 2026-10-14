@@ -209,14 +209,13 @@ function SkillsList() {
   const sortDirection =
     (searchParams.get("sortDirection") as "asc" | "desc" | null) || "desc";
   const mcpSkillsEnabled = useFeature("mcpGatewaySkillsEnabled") === true;
-  const pluginsEnabled = useFeature("plugins") === true;
   const scopedCapabilities = useScopedCapabilities();
   const { data: canReadPlugins } = useHasPermissions({ plugin: ["read"] });
   const { data: canOpenPluginDetails } = useHasPermissions(
     { plugin: ["read", "update"] },
     "*",
   );
-  const pluginSkillsEnabled = pluginsEnabled && canReadPlugins === true;
+  const pluginSkillsEnabled = canReadPlugins === true;
   const kindParam = searchParams.get("kind");
   const requestedKind: SkillKind =
     kindParam === "standalone" || kindParam === "mcp" || kindParam === "plugin"

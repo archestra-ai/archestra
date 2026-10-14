@@ -13,8 +13,10 @@ import {
 import {
   getHitlAskUserArguments,
   hitlRulingFromLabels,
+  peekHitlDecision,
   recordHitlRuling,
   reviewSessionFromTrajectory,
+  sealHitlClosure,
 } from "@/openappa/hitl-review";
 import { awaitRuntimeHitlReview } from "@/openappa/runtime-hitl-review";
 import type { OpenAppaSession } from "@/openappa/service";
@@ -119,9 +121,9 @@ const AskUserSchema = z.object({
 });
 
 const AskUserExecutionSchema = AskUserSchema.extend({
-  // The proxy rewrites a staged review's ask_user call with an option preview
-  // for hosts that show one (Claude Code). It is not advertised to models,
-  // and the handler uses the server-held review, so the preview is ignored here.
+  // Earlier proxy versions rewrote a staged review's ask_user call with option
+  // previews for Claude Code. They are not advertised to models, and the
+  // handler uses the server-held review, so a preview is ignored here.
   options: z
     .array(AskUserOptionSchema.extend({ preview: z.string().optional() }))
     .min(2)
@@ -234,7 +236,28 @@ const registry = defineArchestraTools([
       const allowText = !hitlArgs;
 
       const elicitation = context.elicitation;
+      // The live review text is gone once the review is closed. The offer id
+      // still identifies that closure, so do not open another form.
+      if (session && liveOffers.length === 1) {
+        const closed = await peekHitlDecision({
+          session,
+          offerId: liveOffers[0],
+        });
+        if (closed?.ruling === "none" || closed?.ruling === "deny") {
+          return errorResult(
+            "This review is already closed. Keep the call blocked. Do not ask again.",
+          );
+        }
+      }
       if (!elicitation) {
+        if (hitlArgs && session) {
+          const stored = await sealOrReturnStoredRuling({
+            session,
+            offerId: hitlArgs.remedy_offer_ids[0],
+            closure: "unavailable",
+          });
+          if (stored) return stored;
+        }
         return errorResult(
           hitlArgs ? HITL_NO_VIEWER_MESSAGE : NO_VIEWER_MESSAGE,
         );
@@ -255,6 +278,14 @@ const registry = defineArchestraTools([
 
       // The gateway also reports a decline no person gave as no viewer.
       if (outcome.status === "no_viewer") {
+        if (hitlArgs && session) {
+          const stored = await sealOrReturnStoredRuling({
+            session,
+            offerId: hitlArgs.remedy_offer_ids[0],
+            closure: "unavailable",
+          });
+          if (stored) return stored;
+        }
         return errorResult(
           hitlArgs ? HITL_NO_VIEWER_MESSAGE : NO_CHOICE_FORM_MESSAGE,
         );
@@ -267,12 +298,20 @@ const registry = defineArchestraTools([
           : { action: "cancel" as const };
       if (result.action !== "accept") {
         const action = result.action === "decline" ? "decline" : "cancel";
+        // A client decline or dismissal is not a human Deny, including when
+        // the form carried a staged review.
         if (hitlArgs && session) {
-          await recordHitlRuling({
+          const stored = await sealOrReturnStoredRuling({
             session,
             offerId: hitlArgs.remedy_offer_ids[0],
-            ruling: action === "decline" ? "deny" : "none",
+            closure:
+              outcome.status === "unanswered"
+                ? "unanswered"
+                : action === "decline"
+                  ? "declined"
+                  : "cancelled",
           });
+          if (stored) return stored;
         }
         return structuredSuccessResult(
           {
@@ -358,6 +397,24 @@ export const toolEntries = registry.toolEntries;
 // === Exports ===
 
 export const tools = registry.tools;
+
+async function sealOrReturnStoredRuling(params: {
+  session: OpenAppaSession;
+  offerId: string;
+  closure: "declined" | "cancelled" | "unanswered" | "unavailable";
+}) {
+  const sealed = await sealHitlClosure(params);
+  if (sealed !== "approve" && sealed !== "deny") return undefined;
+  return structuredSuccessResult(
+    {
+      action: "accept" as const,
+      selected: [sealed === "approve" ? "Approve" : "Deny"],
+    },
+    sealed === "approve"
+      ? "An approval is already recorded for this offer. Retry execute_remedy_plan for the same offer before retrying the blocked call. Do not ask again."
+      : "A denial is already recorded for this offer. The original call remains blocked. Do not ask again and do not call execute_remedy_plan.",
+  );
+}
 
 function buildSingleChoiceSchema(
   options: Array<{ label: string; description?: string }>,

@@ -1,6 +1,6 @@
 {
   "name": "@archestra/shared",
-  "version": "1.4.0-rc.38",
+  "version": "1.4.0-rc.39",
   "description": "",
   "type": "module",
   "private": true,
@@ -21,6 +21,7 @@
     "./interactions/client": "./interactions/client.ts",
     "./interactions/session-source": "./interactions/session-source.ts",
     "./model-constants": "./model-constants.ts",
+    "./opencode-family": "./opencode-family.ts",
     "./opencode-provider-routes": "./opencode-provider-routes.ts",
     "./permission.types": "./permission.types.ts",
     "./roles": "./roles.ts",

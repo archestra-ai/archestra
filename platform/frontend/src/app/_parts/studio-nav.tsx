@@ -60,6 +60,8 @@ export interface NavItem {
   dotKey?: NavDotKey;
   /** Chip label shown when `beta` is set; defaults to "New". */
   badgeLabel?: string;
+  /** Hover text for the `beta` chip, e.g. what is still unfinished. */
+  badgeTooltip?: string;
   /**
    * Trailing live count, e.g. MCP servers needing attention. Rendered as a
    * sibling of the nav link rather than inside it: the badge is itself a link
@@ -165,7 +167,9 @@ export const contentNavGroups: NavGroup[] = [
         icon: OpenAppaIcon,
         customIsActive: (pathname: string) => pathname.startsWith("/openappa"),
         beta: true,
-        badgeLabel: "Alpha",
+        badgeLabel: "Beta",
+        badgeTooltip: "Guardrails is still undergoing some UX polishing.",
+        dotKey: "nav:guardrails",
       },
       {
         title: "Skills",
@@ -174,8 +178,6 @@ export const contentNavGroups: NavGroup[] = [
         customIsActive: (pathname: string) => pathname.startsWith("/skills"),
       },
       {
-        // Dropped entirely when the deployment has plugins turned off — see
-        // the `pluginsEnabled` filter in `AppSidebar`.
         title: "Plugins",
         url: "/plugins",
         icon: Puzzle,

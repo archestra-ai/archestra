@@ -21,6 +21,7 @@ import {
   MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
   MAX_SUGGESTED_PROMPT_TITLE_LENGTH,
   MAX_SUGGESTED_PROMPTS,
+  providerSupportsChat,
   resolveAgentCatalogId,
   SUBSCRIPTION_CREDENTIALS,
   type SupportedProvider,
@@ -1455,6 +1456,9 @@ export function AgentForm({
     useFeature("anthropicVertexAiEnabled") === true;
   const isClaudeCodeRuntime = runtime?.command?.[0] === "archestra-claude-code";
   const agentRuntimeEnabled = useFeature("agentRuntime") === true;
+  // A runtime saved before the deployment turned Agent Runtime off stays
+  // editable, so it can be switched off.
+  const runtimeEditable = agentRuntimeEnabled || !!agent?.runtime;
   const runtimePreflight = useAgentRuntimePreflight(
     agent?.id ?? "",
     agentRuntimeEnabled && !!agent?.runtime,
@@ -1896,10 +1900,16 @@ export function AgentForm({
       }).compatible,
     [runtime],
   );
+  // The agent's key answers its conversations, so only providers that can
+  // chat are offered; a runtime narrows that further.
+  const apiKeyProviderFilter = useCallback(
+    (provider: SupportedProvider) =>
+      providerSupportsChat(provider) && runtimeProviderFilter(provider),
+    [runtimeProviderFilter],
+  );
   const allowedApiKeyProviders = useMemo(
-    () =>
-      runtime ? SupportedProviders.filter(runtimeProviderFilter) : undefined,
-    [runtime, runtimeProviderFilter],
+    () => SupportedProviders.filter(apiKeyProviderFilter),
+    [apiKeyProviderFilter],
   );
   // A runtime with no explicit model inherits the organization default. Validate
   // that effective model locally before allowing a create or runtime change.
@@ -2263,7 +2273,7 @@ export function AgentForm({
                   passthroughHeaders.length > 0 ? passthroughHeaders : null,
               }),
             }),
-            ...(showRuntimeSection && agentRuntimeEnabled && { runtime }),
+            ...(showRuntimeSection && runtimeEditable && { runtime }),
             // The tools group: what the agent may reach, and how.
             ...(showToolsSections && {
               knowledgeBaseIds: knowledgeBaseIds,
@@ -2598,6 +2608,7 @@ export function AgentForm({
     supportsEnvironment,
     supportsSubagents,
     agentRuntimeEnabled,
+    runtimeEditable,
     runtime,
     channelAssignmentsDirty,
     isClaudeCodeRuntime,
@@ -2802,7 +2813,7 @@ export function AgentForm({
         }}
         onAddApiKey={onAddApiKey}
         currentProvider={currentLlmProvider ?? undefined}
-        providerFilter={runtime ? runtimeProviderFilter : undefined}
+        providerFilter={apiKeyProviderFilter}
         triggerVariant="button"
         triggerClassName="h-8 max-w-[250px] text-xs"
         popoverClassName="w-96"
@@ -3672,7 +3683,7 @@ export function AgentForm({
           {agent &&
             showRuntimeSection &&
             agentType === "agent" &&
-            agentRuntimeEnabled &&
+            runtimeEditable &&
             !isBuiltIn && (
               <div className={cn(!isActiveSection("runtime") && "hidden")}>
                 <AgentRuntimeFields

@@ -64,14 +64,18 @@ export function ClientFilterSelect({
       placeholder="Filter by Client"
       items={[
         { value: DEFAULT_FILTER_ALL, label: "All Clients" },
-        ...options.map(({ value: optionValue, label, provider, icon }) => ({
-          value: optionValue,
-          label,
-          content: <ClientFilterOption client={{ label, provider, icon }} />,
-          selectedContent: (
-            <ClientFilterOption client={{ label, provider, icon }} />
-          ),
-        })),
+        ...options.map(
+          ({ value: optionValue, label, provider, icon, mark }) => ({
+            value: optionValue,
+            label,
+            content: (
+              <ClientFilterOption client={{ label, provider, icon, mark }} />
+            ),
+            selectedContent: (
+              <ClientFilterOption client={{ label, provider, icon, mark }} />
+            ),
+          }),
+        ),
       ]}
     />
   );

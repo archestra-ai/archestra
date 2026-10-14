@@ -387,7 +387,6 @@ export async function injectPluginSkillActivation({
   provider: SupportedProvider;
   model: string;
 }): Promise<ChatMessage[]> {
-  if (!config.plugins.enabled) return messages;
   const lastUserIndex = messages.findLastIndex(
     (message) => message.role === "user",
   );

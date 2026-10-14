@@ -41,6 +41,8 @@ export const AuditEventNameSchema = z.enum([
   // No route emits these any more; kept so earlier records still parse.
   "agentRun.shared",
   "agentRun.unshared",
+  // An admin signed a member out of the browser: their saved cookies were deleted
+  "browserStorageState.deleted",
   "credential.created",
   "credential.updated",
   "credential.deleted",

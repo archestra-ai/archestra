@@ -3,9 +3,11 @@
   "include": [
     "*.ts",
     "tests/**/*.ts",
-    "utils/**/*.ts"
+    "utils/**/*.ts",
+    "utils/**/*.mts"
   ],
   "compilerOptions": {
+    "target": "ES2022",
     "types": ["node"]
   }
 }

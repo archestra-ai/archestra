@@ -53,10 +53,7 @@ import {
   supportsInputRequired,
   verifyRequestState,
 } from "./mrtr";
-import {
-  deliverClientMessage,
-  PendingInboundRequests,
-} from "./pending-inbound-requests";
+import { PendingInboundRequests } from "./pending-inbound-requests";
 import { cachedPendingRequests } from "./pending-inbound-shared";
 import {
   buildDiscoverResult,
@@ -256,6 +253,7 @@ async function handleMcpPostRequest(
         pendingRequests,
         wireId: requestId,
         agentId: profileId,
+        organizationId: tokenAuthContext?.organizationId,
         caller: principal,
         message: body,
       }))
@@ -277,6 +275,7 @@ async function handleMcpPostRequest(
       pendingRequests,
       wireId: body.id,
       agentId: profileId,
+      organizationId: tokenAuthContext?.organizationId,
       caller: principal,
       message: body,
     }))
@@ -509,11 +508,12 @@ async function handleMcpPostRequest(
             id: message.id,
             transport,
             agentId: profileId,
+            organizationId: tokenAuthContext?.organizationId,
             caller: principal,
           });
           return await originalSend({ ...message, id: wireId }, options);
         } catch (error) {
-          if (wireId !== undefined) pendingRequests.forget({ wireId });
+          if (wireId !== undefined) await pendingRequests.forget({ wireId });
           throw error;
         }
       }
@@ -523,7 +523,7 @@ async function handleMcpPostRequest(
           ? undefined
           : pendingRequests.wireIdOf({ transport, id: cancelled });
       if (wireId !== undefined) {
-        pendingRequests.forget({ wireId });
+        await pendingRequests.forget({ wireId });
         return originalSend(
           {
             ...message,
@@ -633,7 +633,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
     options.pendingRequests ??
     new PendingInboundRequests({ shared: cachedPendingRequests });
   fastify.addHook("onClose", async () => {
-    pendingRequests.close();
+    await pendingRequests.close();
   });
 
   // Legacy HTTP+SSE streams this process holds. Ended from `preClose`, before
@@ -1311,16 +1311,12 @@ async function routeClientMessage(params: {
   pendingRequests: PendingInboundRequests;
   wireId: string | number;
   agentId: string;
+  organizationId: string | undefined;
   caller: string;
   message: Record<string, unknown>;
 }): Promise<boolean> {
   const { pendingRequests, ...answer } = params;
-  const pending = pendingRequests.consume(answer);
-  if (pending) {
-    deliverClientMessage({ entry: pending, message: answer.message });
-    return true;
-  }
-  return pendingRequests.parkForOtherReplica(answer);
+  return pendingRequests.acceptAnswer(answer);
 }
 
 function isServerInitiatedRequestMessage(

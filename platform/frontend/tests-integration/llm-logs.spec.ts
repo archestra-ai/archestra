@@ -74,6 +74,7 @@ test.describe("LLM logs — Client filter", () => {
       "Cursor",
       "Codex",
       "OpenCode",
+      "Kilo Code",
       "Copilot CLI",
     ]);
   });

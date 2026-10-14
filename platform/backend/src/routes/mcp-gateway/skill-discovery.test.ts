@@ -214,7 +214,7 @@ test("previews effective native precedence and collision-safe plugin/MCP names",
   makeMcpServer,
   makeSkill,
 }) => {
-  config.plugins.enabled = true;
+  config.beta = false;
   config.mcpGateway.skillsEnabled = true;
   const org = await makeOrganization();
   const user = await makeUser();

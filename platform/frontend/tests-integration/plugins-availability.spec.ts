@@ -84,5 +84,10 @@ test("Skills shows plugin-backed instructions with beta disabled", async ({
   await expect(
     page.getByText("Plugin writing instructions", { exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("Writing bundle", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Writing bundle · Plugin" }),
+  ).toHaveAttribute("href", "/plugins/11111111-1111-4111-8111-111111111111");
+  await expect(
+    page.getByRole("checkbox", { name: "Select Plugin writing instructions" }),
+  ).toBeDisabled();
 });

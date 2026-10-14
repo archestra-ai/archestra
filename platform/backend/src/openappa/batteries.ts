@@ -25,7 +25,7 @@ import {
   GUARDRAILS_REVISION_CONFLICT,
   guardrailsPolicyService,
 } from "@/services/guardrails-policy";
-import { ApiError } from "@/types";
+import { ApiError, GITHUB_COM_API_URL, type GitHubUserId } from "@/types";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
 import type {
   AttachReadiness,
@@ -1035,6 +1035,7 @@ class OpenAppaBatteriesService {
       }
       const values = await this.compose({
         root: planned.root,
+        roster: planned.roster,
         planned: planned.batteries,
         composed,
         installFingerprint,
@@ -1119,6 +1120,7 @@ class OpenAppaBatteriesService {
 
   private async compose(params: {
     root: GuardrailsPolicy;
+    roster: HostMemberRoster;
     planned: readonly PlannedBattery[];
     composed: ComposeBatteryInput[];
     installFingerprint: string;
@@ -1130,6 +1132,7 @@ class OpenAppaBatteriesService {
     const result = await native.composeOpenappaPolicy({
       root: root.content,
       batteries: composed,
+      memberRosters: memberRosters(params.roster),
     });
     // A refused composition carries no document. napi renders that absence as
     // `undefined`, not the `null` the generated typing spells, so normalize it
@@ -1182,6 +1185,11 @@ class OpenAppaBatteriesService {
       resolution,
       keyOf: (variable) => resolution.credentials[variable] ?? null,
       bindable,
+    });
+    const roster = await this.hostMemberRoster({
+      organizationId,
+      resolution,
+      deployed,
     });
     const aliases = new Map(
       resolution.aliases.map((alias) => [alias.namespace, alias.servers]),
@@ -1330,6 +1338,7 @@ class OpenAppaBatteriesService {
       root,
       resolution,
       deployed,
+      roster,
       batteries,
       rows: [...rows.values()],
       unusedAliases: resolution.aliases.filter(
@@ -1339,6 +1348,42 @@ class OpenAppaBatteriesService {
   }
 
   /** Keys of the organization's credential definitions holding an organization value. */
+  /**
+   * The organization's members by the GitHub account they connected, for the
+   * member roster deployed targets look people up in. A GitHub App bound to
+   * one of their audience helpers that is not GitHub.com's answers for other
+   * accounts, so then nobody is known.
+   */
+  async hostMemberRoster(params: {
+    organizationId: string;
+    resolution: PolicyResolution;
+    deployed: DeployedEntries;
+  }): Promise<HostMemberRoster> {
+    const { organizationId, resolution } = params;
+    const targets = [...params.deployed.values()].filter(
+      (deployed) => deployed.target !== null,
+    );
+    if (targets.length === 0) return new Map();
+    const keys = targets.flatMap(({ externals }) =>
+      externals.flatMap(({ kind, tokenEnv }) => {
+        const key = tokenEnv && resolution.credentials[tokenEnv];
+        return kind === "audience" && key ? [key] : [];
+      }),
+    );
+    const definitions = await RuntimeCredentialDefinitionModel.findByKeys({
+      organizationId,
+      keys,
+    });
+    const foreign = [...definitions.values()].some(
+      ({ kind, githubUrl }) =>
+        kind === "github_app" &&
+        (githubUrl ?? GITHUB_COM_API_URL) !== GITHUB_COM_API_URL,
+    );
+    return foreign
+      ? new Map()
+      : RuntimeCredentialConnectionModel.listGitHubRoster(organizationId);
+  }
+
   private async bindableKeys(
     organizationId: string,
   ): Promise<ReadonlySet<string>> {
@@ -1828,10 +1873,25 @@ type CatalogPrefixes = {
 
 type PlannedBattery = PolicyBatteryView;
 
+/** Members by the GitHub account they connected: the host's member roster. */
+type HostMemberRoster = ReadonlyMap<GitHubUserId, string>;
+
+/** The rosters composition fills, by the lookup name the battery targets use. */
+export function memberRosters(
+  roster: HostMemberRoster,
+): Record<string, Record<string, string>> {
+  return {
+    "host-members": Object.fromEntries(
+      [...roster].map(([id, email]) => [`github:${id}`, email]),
+    ),
+  };
+}
+
 type PlannedComposition = {
   root: GuardrailsPolicy;
   resolution: PolicyResolution;
   deployed: DeployedEntries;
+  roster: HostMemberRoster;
   batteries: PlannedBattery[];
   rows: BatteryInstallRow[];
   unusedAliases: PolicyDeclarationsView["unusedAliases"];
@@ -1960,8 +2020,9 @@ function heldBackRemedy(battery: HeldBackBattery): string {
 
 // Recompose legacy documents that froze an unstated 64 KiB body limit before
 // explicit policy limits took precedence over the host default (v2), and rows
-// derived before they recorded the target each battery deploys as (v3).
-const COMPOSITION_VERSION = "v3:";
+// derived before they recorded the target each battery deploys as (v3), and
+// compositions before the host filled the member rosters it declares (v4).
+const COMPOSITION_VERSION = "v4:";
 
 /**
  * What a stored composition answers: the batteries it composed, the credential
@@ -1980,6 +2041,7 @@ function compositionFingerprint(params: {
       JSON.stringify({
         batteries,
         credentials: planned.resolution.credentials,
+        roster: [...planned.roster].sort(([a], [b]) => a - b),
         // A base composes while its target waits on a credential; the rows still move.
         statuses: planned.batteries.map(({ name, status }) => [name, status]),
         ...(held.length > 0 ? { held } : {}),

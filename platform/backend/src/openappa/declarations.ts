@@ -405,11 +405,13 @@ class OpenAppaDeclarations {
     resolution: PolicyResolution;
     deployed: DeployedEntries;
     held?: ReadonlySet<string>;
+    memberRosters?: Record<string, Record<string, string>>;
   }): Promise<ComposedPolicy> {
     const native = await loadNative();
     const tokenEnv = this.publishBridgeToken();
     return native.composeOpenappaPolicy({
       root: params.root,
+      memberRosters: params.memberRosters,
       batteries: this.composeInputs({
         entries: params.resolution.entries,
         deployed: params.deployed,

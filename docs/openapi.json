@@ -332729,10 +332729,20 @@
                               ]
                             },
                             "target": {
-                              "nullable": true,
-                              "type": "string",
-                              "enum": [
-                                "multi-user"
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "multi-user"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "nullable": true,
+                                  "enum": [
+                                    null
+                                  ]
+                                }
                               ]
                             },
                             "packageHash": {
@@ -334211,10 +334221,20 @@
                                 ]
                               },
                               "target": {
-                                "nullable": true,
-                                "type": "string",
-                                "enum": [
-                                  "multi-user"
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": [
+                                      "multi-user"
+                                    ]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "nullable": true,
+                                    "enum": [
+                                      null
+                                    ]
+                                  }
                                 ]
                               },
                               "packageHash": {

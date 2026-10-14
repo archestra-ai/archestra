@@ -87899,7 +87899,7 @@ export type GetOpenappaBatteriesResponses = {
             catalogId: string | null;
             enabled: boolean;
             status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
-            target: 'multi-user';
+            target: 'multi-user' | null;
             packageHash: string | null;
             lastError: string | null;
             credentialBindings: {
@@ -88313,7 +88313,7 @@ export type GetOpenappaBatteryMatchesResponses = {
                 catalogId: string | null;
                 enabled: boolean;
                 status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
-                target: 'multi-user';
+                target: 'multi-user' | null;
                 packageHash: string | null;
                 lastError: string | null;
                 credentialBindings: {

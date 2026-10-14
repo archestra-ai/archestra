@@ -80,7 +80,7 @@ export const BatteryInstallSchema = createSelectSchema(
   openappaBatteryInstallsTable,
 ).extend({
   status: BatteryInstallStatusSchema,
-  target: BatteryTargetNameSchema.nullable(),
+  target: z.union([BatteryTargetNameSchema, z.null()]),
   credentialBindings: BatteryCredentialBindingsSchema,
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
@@ -96,7 +96,7 @@ export const BatteryInstallRowSchema = z.strictObject({
   catalogId: z.string().uuid().nullable(),
   status: BatteryInstallStatusSchema,
   /** Null when the battery deploys as its base alone. */
-  target: BatteryTargetNameSchema.nullable(),
+  target: z.union([BatteryTargetNameSchema, z.null()]),
   packageHash: z.string().nullable(),
   lastError: z.string().nullable(),
   credentialBindings: BatteryCredentialBindingsSchema,

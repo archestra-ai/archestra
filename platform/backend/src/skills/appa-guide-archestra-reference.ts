@@ -57,7 +57,7 @@ include = ["batteries/github/appa.toml"]
 github = ["github_prod"]
 \`\`\`
 
-Each credential variable a battery reads is bound to a runtime credential key with \`archestra__bind_guardrails_credential\`, for example \`{ "variable": "APPA_PROVIDER_GITHUB_TOKEN", "key": "github-token" }\`. The binding lives outside the policy text and never holds the value, only the key. A \`[credentials]\` line in the text overrides the binding and locks it in the Batteries dialog; do not add one.
+Each credential variable a battery reads is bound to a runtime credential key with \`archestra__bind_guardrails_credential\`, for example \`{ "variable": "APPA_PROVIDER_GITHUB_TOKEN", "key": "github-token" }\`. A root HTTP \`token_env\` uses the same call with an \`APPA_*\` name outside \`APPA_PROVIDER_*\` and \`APPA_ARCHESTRA_*\`, for example \`{ "variable": "APPA_P5_ANNOTATOR_TOKEN", "key": "p5-annotator" }\`. The binding lives outside the policy text and never holds the value, only the key. A \`[credentials]\` line in the text overrides a provider binding and locks it in the Batteries dialog; do not add one, and do not put a URL token there.
 
 A battery governs calls only when \`effective.batteries\` marks it \`active\`. Removing its \`include\` entry turns it off.
 

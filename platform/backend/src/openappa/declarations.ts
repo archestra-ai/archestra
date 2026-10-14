@@ -5,8 +5,8 @@ import type {
   DispatchPolicy,
   HelperBindingInput,
   BatteryPackage as NativeBatteryPackage,
+  TokenEnvReader as NativeTokenEnvReader,
   PolicyDeclarations,
-  TokenEnvReader,
 } from "@archestra/openappa-rs";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
@@ -14,16 +14,18 @@ import logger from "@/logging";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import { OpenappaCredentialError } from "@/openappa/failure";
+import { asRecord, parsePolicyToml } from "@/openappa/policy-text";
 import {
   OPENAPPA_ARCHESTRA_ANNOTATOR_PATH,
   OPENAPPA_HELPERS_PREFIX,
 } from "@/routes/route-paths";
 import { resolveCredentialValue } from "@/services/credentials";
 import { ApiError } from "@/types";
-import type {
-  BatteryPackageFile,
-  BatterySource,
-  CredentialSource,
+import {
+  type BatteryPackageFile,
+  type BatterySource,
+  type CredentialSource,
+  isHostLookupCredentialVariable,
 } from "@/types/openappa-batteries";
 import { mapWithConcurrency } from "@/utils/concurrency";
 import { archestraAudience } from "./archestra-audience";
@@ -85,10 +87,24 @@ type BoundPolicy = {
  * One credential value reaching code outside the platform: a battery's helper
  * sandbox (`battery` is the name an include entry resolves to) or a root external
  * or profile the runtime authenticates with it (`battery` is the reader's
- * identity, its `externals` path and binding), a variable it reads, and the store
- * key the `[credentials]` table binds to that variable.
+ * identity, its `externals` path), a variable it reads, and the store key bound
+ * to that variable. `destination` is a normalized fingerprint of the external
+ * declaration that receives the token. A URL, provider, or command change is
+ * a new grant. Equivalent quoting is not.
  */
-type Grant = { battery: string; variable: string; key: string };
+type Grant = {
+  battery: string;
+  variable: string;
+  key: string;
+  destination?: string;
+};
+
+/**
+ * A root `token_env` reader plus the normalized declaration that receives its
+ * token. An unmatched reader is `unresolved:` plus a content hash, never a
+ * blank destination that would hide a retarget.
+ */
+export type TokenEnvReader = NativeTokenEnvReader & { destination: string };
 
 /** A bound runtime credential whose value could not be read for a dispatch. */
 export type UnreadableCredential = { variable: string; key: string };
@@ -235,16 +251,20 @@ class OpenAppaDeclarations {
         declarations.credentials.map(({ variable, key }) => [variable, key]),
       ),
       routedAnnotators: declarations.routedAnnotators,
-      tokenEnvReaders: declarations.tokenEnvReaders,
+      tokenEnvReaders: attachReaderDestinations(
+        params.content,
+        declarations.tokenEnvReaders ?? [],
+      ),
       errors,
     };
   }
 
   /**
    * Resolve a root document with the organization's stored bindings applied.
-   * A `[credentials]` line in the text wins; a stored binding fills a variable
-   * the text leaves out, and only when an included battery reads it, since the
-   * runtime refuses a `[credentials]` variable no helper reads.
+   * A `[credentials]` line in the text wins. A stored binding is written into
+   * the text only when an included battery reads it. A root URL token cannot
+   * be written there; its stored key is still applied to the resolution so a
+   * policy edit that adds or retargets a reader of it is a credential grant.
    */
   async resolveWithBindings(params: {
     organizationId: string;
@@ -271,41 +291,14 @@ class OpenAppaDeclarations {
       (binding) =>
         read.has(binding.variable) && !(binding.variable in credentialSource),
     );
-    if (filling.length === 0) return { content, resolution, credentialSource };
-    const native = await loadNative();
-    const edited = await native.editOpenappaPolicy(
+    const applied = await applyBatteryBindings({
+      organizationId,
       content,
-      filling.map((binding) => ({
-        kind: "setCredential",
-        variable: binding.variable,
-        key: binding.credentialKey,
-      })),
-    );
-    if (edited.content === undefined || edited.content === null) {
-      logger.warn(
-        { organizationId, errors: edited.errors },
-        "OpenAPPA credential bindings could not be applied to the policy",
-      );
-      return { content, resolution, credentialSource };
-    }
-    return {
-      content: edited.content,
-      resolution: {
-        ...resolution,
-        credentials: {
-          ...resolution.credentials,
-          ...Object.fromEntries(
-            filling.map((binding) => [binding.variable, binding.credentialKey]),
-          ),
-        },
-      },
-      credentialSource: {
-        ...credentialSource,
-        ...Object.fromEntries(
-          filling.map((binding) => [binding.variable, "binding" as const]),
-        ),
-      },
-    };
+      resolution,
+      credentialSource,
+      filling,
+    });
+    return applyHostLookupBindings({ ...applied, bindings });
   }
 
   /**
@@ -441,13 +434,14 @@ class OpenAppaDeclarations {
   }
 
   /**
-   * The document with the values of the credentials the runtime reads itself:
-   * the `[credentials]` variables an external or profile names as its
-   * `token_env`, resolved for the organization now, so a value set, rotated or
-   * removed since the last dispatch reaches this one. A variable with no
-   * binding or no organization value is left out; a bound one that cannot be
-   * resolved rejects. `onUnreadable` hears, before either outcome, of every
-   * bound variable whose value could not be read.
+   * The document with the values of the credentials the runtime reads itself.
+   * A `[credentials]` line wins. A stored binding fills a root URL `token_env`
+   * the text cannot name there (`APPA_*` outside `APPA_PROVIDER_*`). Values
+   * are the organization's credential store, never this process's environment.
+   * `APPA_ARCHESTRA_*` stays the host's. A variable with no binding or no
+   * organization value is left out; a bound one that cannot be resolved
+   * rejects. `onUnreadable` hears, before either outcome, of every bound
+   * variable whose value could not be read.
    */
   async dispatchPolicy(params: {
     organizationId: string;
@@ -462,11 +456,39 @@ class OpenAppaDeclarations {
       declarations = await native.parseOpenappaDeclarations(content);
       this.effective.set(contentHash, declarations);
     }
-    const keys = new Map(
+    const textKeys = new Map(
       declarations.credentials.map(({ variable, key }) => [variable, key]),
     );
-    const bound = declarations.runtimeCredentials.flatMap((variable) => {
-      const key = keys.get(variable);
+    // Root HTTP tokens cannot live in `[credentials]`. Resolve a stored
+    // binding for each one the document names, and only those.
+    const helperReaders = [
+      ...new Set(
+        declarations.tokenEnvReaders
+          .map((reader) => reader.variable)
+          .filter(
+            (variable) =>
+              isHostLookupCredentialVariable(variable) &&
+              !textKeys.has(variable),
+          ),
+      ),
+    ];
+    const storedKeys = new Map<string, string>();
+    if (helperReaders.length > 0) {
+      const wanted = new Set(helperReaders);
+      for (const binding of await OpenAppaCredentialBindingModel.list(
+        organizationId,
+      )) {
+        if (wanted.has(binding.variable))
+          storedKeys.set(binding.variable, binding.credentialKey);
+      }
+    }
+    const variables = [
+      ...declarations.runtimeCredentials,
+      ...helperReaders.filter((variable) => storedKeys.has(variable)),
+    ];
+    const bound = variables.flatMap((variable) => {
+      // The text line wins when both exist. Helper variables have no line.
+      const key = textKeys.get(variable) ?? storedKeys.get(variable);
       return key ? [{ variable, key }] : [];
     });
     const outcomes = await Promise.allSettled(
@@ -501,7 +523,7 @@ class OpenAppaDeclarations {
       // A bound credential that cannot be read fails the dispatch rather than
       // running it as though the credential were unset. Only a refused
       // binding is the organization's to fix; any other failure stays
-      // retryable.
+      // retryable. Never fall back to the process environment.
       if (failed.error instanceof ApiError && failed.error.statusCode === 400)
         throw new OpenappaCredentialError(failed.variable, failed.error);
       throw failed.error;
@@ -526,12 +548,18 @@ class OpenAppaDeclarations {
     return [...grants, ...this.rootGrants(resolution)];
   }
 
-  /** The grants the runtime itself sends: a root reader × the key its variable is bound to. */
+  /**
+   * The grants the runtime itself sends: a root reader, the key its variable
+   * is bound to, and the declaration that receives that token. A stored
+   * binding counts. Changing where the token goes is a different grant.
+   */
   rootGrants(resolution: PolicyResolution): Grant[] {
-    return resolution.tokenEnvReaders.flatMap(({ variable, reader }) => {
-      const key = resolution.credentials[variable];
-      return key ? [{ battery: reader, variable, key }] : [];
-    });
+    return resolution.tokenEnvReaders.flatMap(
+      ({ variable, reader, destination }) => {
+        const key = resolution.credentials[variable];
+        return key ? [{ battery: reader, variable, key, destination }] : [];
+      },
+    );
   }
 
   /**
@@ -678,9 +706,187 @@ function classify(entry: string): EntrySpelling | null {
   return null;
 }
 
-/** What identifies a grant across revisions: the battery and the variable, not the key. */
-export function grantKey(grant: Pick<Grant, "battery" | "variable">): string {
-  return JSON.stringify([grant.battery, grant.variable]);
+/**
+ * What identifies a grant across revisions: who receives it, which variable,
+ * and the normalized declaration the token is sent to. The store key is
+ * compared separately, so a rekey of the same reader is still a new grant.
+ */
+export function grantKey(
+  grant: Pick<Grant, "battery" | "variable"> & { destination?: string },
+): string {
+  return JSON.stringify([
+    grant.battery,
+    grant.variable,
+    grant.destination ?? "",
+  ]);
+}
+
+/**
+ * Write battery-read bindings into the text. A root URL token is not written:
+ * the native `[credentials]` table refuses a name outside `APPA_PROVIDER_*`.
+ */
+async function applyBatteryBindings(params: {
+  organizationId: string;
+  content: string;
+  resolution: PolicyResolution;
+  credentialSource: Record<string, CredentialSource>;
+  filling: Awaited<ReturnType<typeof OpenAppaCredentialBindingModel.list>>;
+}): Promise<BoundPolicy> {
+  const { organizationId, content, resolution, credentialSource, filling } =
+    params;
+  if (filling.length === 0) return { content, resolution, credentialSource };
+  const native = await loadNative();
+  const edited = await native.editOpenappaPolicy(
+    content,
+    filling.map((binding) => ({
+      kind: "setCredential",
+      variable: binding.variable,
+      key: binding.credentialKey,
+    })),
+  );
+  if (edited.content === undefined || edited.content === null) {
+    logger.warn(
+      { organizationId, errors: edited.errors },
+      "OpenAPPA credential bindings could not be applied to the policy",
+    );
+    return { content, resolution, credentialSource };
+  }
+  return {
+    content: edited.content,
+    resolution: {
+      ...resolution,
+      credentials: {
+        ...resolution.credentials,
+        ...Object.fromEntries(
+          filling.map((binding) => [binding.variable, binding.credentialKey]),
+        ),
+      },
+    },
+    credentialSource: {
+      ...credentialSource,
+      ...Object.fromEntries(
+        filling.map((binding) => [binding.variable, "binding" as const]),
+      ),
+    },
+  };
+}
+
+/**
+ * A stored binding for a root URL token stays out of the policy text and still
+ * counts as the key that reader is granted. A `[credentials]` line already in
+ * `credentialSource` wins.
+ */
+function applyHostLookupBindings(params: {
+  content: string;
+  resolution: PolicyResolution;
+  credentialSource: Record<string, CredentialSource>;
+  bindings: Awaited<ReturnType<typeof OpenAppaCredentialBindingModel.list>>;
+}): BoundPolicy {
+  const extra = params.bindings.filter(
+    (binding) =>
+      isHostLookupCredentialVariable(binding.variable) &&
+      !(binding.variable in params.credentialSource),
+  );
+  if (extra.length === 0) return params;
+  return {
+    content: params.content,
+    resolution: {
+      ...params.resolution,
+      credentials: {
+        ...params.resolution.credentials,
+        ...Object.fromEntries(
+          extra.map((binding) => [binding.variable, binding.credentialKey]),
+        ),
+      },
+    },
+    credentialSource: {
+      ...params.credentialSource,
+      ...Object.fromEntries(
+        extra.map((binding) => [binding.variable, "binding" as const]),
+      ),
+    },
+  };
+}
+
+/**
+ * Attach each native reader to the parsed declaration it names. The reader
+ * string is decoded by the TOML parser, not by re-rendering the key: native
+ * `display_repr` and `JSON.stringify` disagree on quotes and backslashes.
+ * A reader that does not resolve is fail-closed, so a retarget cannot hide
+ * behind a blank destination.
+ */
+function attachReaderDestinations(
+  content: string,
+  readers: NativeTokenEnvReader[],
+): TokenEnvReader[] {
+  const policy = parsePolicyToml(content);
+  const unresolved = unresolvedDestination(content);
+  return readers.map((reader) => {
+    const path = decodeReaderPath(reader.reader);
+    const binding = path && policy ? lookupPath(policy, path) : undefined;
+    return {
+      ...reader,
+      destination:
+        binding === undefined || !asRecord(binding)
+          ? unresolved
+          : stableJson(binding),
+    };
+  });
+}
+
+/**
+ * Path components of a native `externals...` reader. The string is a TOML key
+ * path; parsing it as a table header recovers the components without copying
+ * the native quoting rules.
+ */
+function decodeReaderPath(reader: string): string[] | null {
+  if (!reader.startsWith("externals")) return null;
+  const parsed = parsePolicyToml(`[${reader}]\n__marker = true\n`);
+  const path = parsed ? pathToMarker(parsed) : null;
+  if (!path || path[0] !== "externals" || path.length < 2) return null;
+  return path;
+}
+
+function pathToMarker(value: unknown, prefix: string[] = []): string[] | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  if (record.__marker === true) return prefix;
+  for (const [key, child] of Object.entries(record)) {
+    const found = pathToMarker(child, [...prefix, key]);
+    if (found) return found;
+  }
+  return null;
+}
+
+function lookupPath(root: unknown, path: string[]): unknown {
+  let current = root;
+  for (const key of path) {
+    const record = asRecord(current);
+    if (!record || !Object.hasOwn(record, key)) return undefined;
+    current = record[key];
+  }
+  return current;
+}
+
+/** Parsed declaration, key order and quoting normalized away. */
+function stableJson(value: unknown): string {
+  return JSON.stringify(normalizeToml(value));
+}
+
+function normalizeToml(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(normalizeToml);
+  const record = asRecord(value);
+  if (!record) return value;
+  return Object.fromEntries(
+    Object.entries(record)
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      .map(([key, child]) => [key, normalizeToml(child)]),
+  );
+}
+
+/** Same document, same sentinel. Any other text cannot compare equal. */
+function unresolvedDestination(content: string): string {
+  return `unresolved:${createHash("sha256").update(content).digest("hex")}`;
 }
 
 const loadNative = () => import("@archestra/openappa-rs");

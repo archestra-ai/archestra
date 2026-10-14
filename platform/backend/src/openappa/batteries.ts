@@ -732,10 +732,13 @@ class OpenAppaBatteriesService {
   }
 
   /**
-   * Bind a helper variable to an organization credential, or unbind it, for
-   * every battery that reads it. The binding is stored beside the policy text,
-   * so it needs no text write and is open while the repository owns the text;
-   * a variable the text binds itself is the text's, since its line wins.
+   * Bind a credential variable to an organization credential, or unbind it.
+   * `APPA_PROVIDER_*` fills every battery that reads it. Any other bindable
+   * `APPA_*` name fills a root URL `token_env` the runtime sends itself; that
+   * name cannot be written into `[credentials]`. The binding is stored beside
+   * the policy text, so it needs no text write and is open while the
+   * repository owns the text. A variable the text binds itself is the text's,
+   * since its line wins.
    */
   async setCredentialBinding(params: {
     userId: string;

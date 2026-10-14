@@ -345762,7 +345762,7 @@
           {
             "schema": {
               "type": "string",
-              "pattern": "^APPA_PROVIDER_[A-Z0-9_]+$"
+              "pattern": "^APPA_(?:PROVIDER_[A-Z0-9_]+|(?!ARCHESTRA_|PROVIDER_)[A-Z0-9_]+)$"
             },
             "in": "path",
             "name": "variable",

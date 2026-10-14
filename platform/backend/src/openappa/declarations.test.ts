@@ -1,4 +1,5 @@
 import { generateKeyPairSync } from "node:crypto";
+import { parseOpenappaDeclarations } from "@archestra/openappa-rs";
 import { HttpResponse, http } from "msw";
 import config from "@/config";
 import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
@@ -192,6 +193,103 @@ test("a policy line wins, a stored binding fills what an included battery reads,
   expect(won.resolution.credentials).toEqual({ [GITHUB_TOKEN]: "repo-github" });
   expect(won.credentialSource).toEqual({ [GITHUB_TOKEN]: "policy" });
 });
+
+test("quoted token_env readers are fingerprinted from parsed declarations, not rendered keys", async () => {
+  const names = ['say"hi', "say\\hi", "say'hi", "p5.note"] as const;
+  for (const name of names) {
+    const original = namedExternal(name, "http://127.0.0.1:9/a");
+    const reordered = namedExternal(name, "http://127.0.0.1:9/a", {
+      reorder: true,
+    });
+    const retarget = namedExternal(name, "https://attacker.example/a");
+    const withRule = `${original}\n[[policy.tool]]\nname = "notes__keep"\ndelta = {}\n`;
+    const [kept, equivalent, moved, ruled] = await Promise.all(
+      [original, reordered, retarget, withRule].map((content) =>
+        openappaDeclarations.resolve({ organizationId: "unused", content }),
+      ),
+    );
+    const native = await parseOpenappaDeclarations(original);
+    expect(native.tokenEnvReaders.map((reader) => reader.reader)).toEqual([
+      kept.tokenEnvReaders[0]?.reader,
+    ]);
+    const destination = kept.tokenEnvReaders[0]?.destination ?? "";
+    expect(destination).toContain("http://127.0.0.1:9/a");
+    expect(destination.startsWith("unresolved:")).toBe(false);
+    expect(equivalent.tokenEnvReaders[0]?.destination).toBe(destination);
+    expect(ruled.tokenEnvReaders[0]?.destination).toBe(destination);
+    expect(moved.tokenEnvReaders[0]?.destination).not.toBe(destination);
+    expect(moved.tokenEnvReaders[0]?.destination).toContain(
+      "https://attacker.example/a",
+    );
+  }
+  const quoted = await parseOpenappaDeclarations(
+    namedExternal('say"hi', "http://127.0.0.1:9/a"),
+  );
+  expect(quoted.tokenEnvReaders[0]?.reader).toBe(
+    `externals.annotators.'say"hi'`,
+  );
+
+  const anthropic = await openappaDeclarations.resolve({
+    organizationId: "unused",
+    content: llmExternal("anthropic"),
+  });
+  const openai = await openappaDeclarations.resolve({
+    organizationId: "unused",
+    content: llmExternal("openai"),
+  });
+  const anthropicReordered = await openappaDeclarations.resolve({
+    organizationId: "unused",
+    content: llmExternal("anthropic", true),
+  });
+  expect(anthropic.tokenEnvReaders[0]?.destination).toContain("anthropic");
+  expect(
+    anthropic.tokenEnvReaders[0]?.destination.startsWith("unresolved:"),
+  ).toBe(false);
+  expect(anthropicReordered.tokenEnvReaders[0]?.destination).toBe(
+    anthropic.tokenEnvReaders[0]?.destination,
+  );
+  expect(openai.tokenEnvReaders[0]?.destination).not.toBe(
+    anthropic.tokenEnvReaders[0]?.destination,
+  );
+
+  const echo = await openappaDeclarations.resolve({
+    organizationId: "unused",
+    content: commandExternal("echo"),
+  });
+  const printf = await openappaDeclarations.resolve({
+    organizationId: "unused",
+    content: commandExternal("printf"),
+  });
+  expect(echo.tokenEnvReaders[0]?.destination.startsWith("unresolved:")).toBe(
+    false,
+  );
+  expect(printf.tokenEnvReaders[0]?.destination).not.toBe(
+    echo.tokenEnvReaders[0]?.destination,
+  );
+});
+
+function namedExternal(
+  name: string,
+  url: string,
+  options?: { reorder?: boolean },
+): string {
+  const key = /^[A-Za-z0-9_-]+$/.test(name) ? name : JSON.stringify(name);
+  const fields = options?.reorder
+    ? `token_env = 'APPA_P5_ANNOTATOR_TOKEN'\nurl = '${url}'`
+    : `url = "${url}"\ntoken_env = "APPA_P5_ANNOTATOR_TOKEN"`;
+  return `[policy]\nversion = 2\n[[policy.annotator]]\nname = ${JSON.stringify(name)}\n[externals.annotators.${key}]\n${fields}\n`;
+}
+
+function llmExternal(provider: string, reorder = false): string {
+  const fields = reorder
+    ? `token_env = 'APPA_LLM_TOKEN'\nmodel = 'claude'\nprovider = '${provider}'`
+    : `provider = "${provider}"\nmodel = "claude"\ntoken_env = "APPA_LLM_TOKEN"`;
+  return `[policy]\nversion = 2\n[externals.llm]\n${fields}\n`;
+}
+
+function commandExternal(command: string): string {
+  return `[policy]\nversion = 2\n[externals.authorities.review]\ncommand = "${command}"\ntoken_env = "APPA_P5_ANNOTATOR_TOKEN"\n`;
+}
 
 test("publishes the proxy body limit as the default result cap of a policy that states none", () => {
   const variable = "APPA_ARCHESTRA_MAX_BODY_BYTES";

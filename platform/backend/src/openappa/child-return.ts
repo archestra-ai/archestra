@@ -49,6 +49,20 @@ export function mintChildReturnMarker(params: {
 }
 
 /**
+ * Claude's parent-visible form of a crossed return: the exact admitted bytes, then
+ * one server-verified native id line. A caller-supplied id is not copied here.
+ */
+export function parentVisibleChildReturn(
+  value: string,
+  childNativeId: string | undefined,
+): string {
+  if (!childNativeId || !isBoundedNativeMetadata(childNativeId)) return value;
+  // Even identical id-like text in the admitted value is data, not metadata.
+  const line = verifiedChildIdLine(childNativeId);
+  return `${value}\n${line}`;
+}
+
+/**
  * Extracts and removes child-return markers before provider dispatch.
  * Records each structured completion leaf separately; every leaf is then
  * verified against the child returns the runtime durably crossed, so one
@@ -64,6 +78,7 @@ export function collectAndStripChildReturns(
   options: {
     openCodeBackgroundReturns?: boolean;
     codexMailboxReturns?: boolean;
+    claudeAgentMetadata?: boolean;
     onRefusal?: RefusalSink;
   } = {},
 ): CollectedChildReturns {
@@ -126,6 +141,17 @@ export function collectAndStripChildReturns(
         rewritten = replaceTaskResults(value, context, collected);
       } else if (context.nativeResultSite) {
         rewritten = replaceAgentReport(value, context, collected);
+        if (rewritten === value && options.claudeAgentMetadata) {
+          const split = splitPresentedChildReturn(value);
+          if (split.childNativeId) {
+            recordCompletion(
+              { value: split.value },
+              { ...context, childNativeId: split.childNativeId },
+              collected,
+            );
+            return parentVisibleChildReturn(split.value, split.childNativeId);
+          }
+        }
       }
       if (rewritten !== value) return rewritten;
       if (!context.nativeResultSite && !context.assistantOrigin) return value;
@@ -555,15 +581,16 @@ function replaceAgentReport(
   const lines = content.split("\n");
   const metadataAt = lines.findIndex(
     (line) =>
-      /^\s*agentId:\s*[a-zA-Z0-9_:-]+/.test(line) || line.startsWith("<usage>"),
+      /^agentId:[\t ]*[a-zA-Z0-9_:-]+/.test(line) || line.startsWith("<usage>"),
   );
   const reportLines = metadataAt === -1 ? lines : lines.slice(0, metadataAt);
+  const metadata = metadataAt === -1 ? "" : lines.slice(metadataAt).join("\n");
   const report = reportLines
     .map((line) => (line.startsWith("  ") ? line.slice(2) : line))
     .join("\n");
   const childNativeId =
     agentMessageSender(value) ??
-    value.match(/agentId:\s*([a-zA-Z0-9_:-]+)/)?.[1] ??
+    metadata.match(/^agentId:[\t ]*([a-zA-Z0-9_:-]+)/m)?.[1] ??
     context.childNativeId;
   if (childNativeId && !isBoundedNativeMetadata(childNativeId)) {
     throw new ApiError(400, "OpenAPPA received invalid agent report metadata");
@@ -927,6 +954,32 @@ const NATIVE_COMPLETION_TOOLS = new Set([
   "wait_agent",
 ]);
 const NATIVE_METADATA = /^[A-Za-z0-9_.:@/-]{1,512}$/;
+const VERIFIED_CHILD_ID_LINE =
+  /^agentId: ([A-Za-z0-9_.:@/-]{1,512}) \(use SendMessage with to: '([A-Za-z0-9_.:@/-]{1,512})'\)$/;
+
+function verifiedChildIdLine(childNativeId: string): string {
+  return `agentId: ${childNativeId} (use SendMessage with to: '${childNativeId}')`;
+}
+
+/** Parsed presentation is still a claim until it matches a retained return. */
+function splitPresentedChildReturn(presented: string): {
+  value: string;
+  childNativeId?: string;
+} {
+  const splitAt = presented.lastIndexOf("\n");
+  if (splitAt < 0) return { value: presented };
+  const childNativeId = verifiedChildId(presented.slice(splitAt + 1));
+  if (!childNativeId) return { value: presented };
+  return { value: presented.slice(0, splitAt), childNativeId };
+}
+
+function verifiedChildId(line: string): string | undefined {
+  const match = line.match(VERIFIED_CHILD_ID_LINE);
+  if (!match || match[1] !== match[2] || !isBoundedNativeMetadata(match[1])) {
+    return undefined;
+  }
+  return match[1];
+}
 
 function collectNativeResultCallIds(body: unknown): Set<string> {
   const ids = new Set<string>();

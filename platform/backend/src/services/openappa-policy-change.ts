@@ -370,10 +370,10 @@ export async function getOpenAppaPolicyChangeStatus(params: {
  * The agent path binds battery credentials with bind_guardrails_credential. A
  * `[credentials]` line wins over that binding and locks it in the Batteries
  * dialog, so an agent may not add a line, or change its key, for a variable an
- * included battery reads. Removing a line is allowed. A credential a root
- * external or profile reads as its `token_env` has no stored binding, so adding
- * or rekeying it, or pointing another reader at it, takes `credential:update`
- * as it does on the Policy route.
+ * included battery reads. Removing a line is allowed. A root URL `token_env`
+ * is bound beside the text, not with a `[credentials]` line. Adding or
+ * rekeying a line the text does hold, or pointing another reader at it, still
+ * takes `use` on that credential, as it does on the Policy route.
  */
 export async function refuseCredentialLines(params: {
   organizationId: string;

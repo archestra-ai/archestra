@@ -17,6 +17,30 @@ export type BatteryPackageFile = z.infer<typeof BatteryPackageFileSchema>;
 /** The variables a battery may read: the runtime's provider-credential namespace. */
 export const BATTERY_CREDENTIAL_VARIABLE = /^APPA_PROVIDER_[A-Z0-9_]+$/;
 
+/**
+ * The addon reads `APPA_ARCHESTRA_*` from this process, never from an
+ * organization credential. A binding must not name one: the hosted lookup
+ * ignores the organization value and would send the host setting instead.
+ */
+const HOST_RESERVED_CREDENTIAL_PREFIX = "APPA_ARCHESTRA_";
+
+/**
+ * A variable the public binding API may name. Provider credentials stay
+ * `APPA_PROVIDER_*`. A URL `token_env` uses any other `APPA_*` name, such as
+ * `APPA_P5_ANNOTATOR_TOKEN`, and never the host's `APPA_ARCHESTRA_*` settings.
+ */
+export const BINDABLE_CREDENTIAL_VARIABLE =
+  /^APPA_(?:PROVIDER_[A-Z0-9_]+|(?!ARCHESTRA_|PROVIDER_)[A-Z0-9_]+)$/;
+
+/** A URL `token_env` the runtime sends itself, resolved through the host lookup. */
+export function isHostLookupCredentialVariable(variable: string): boolean {
+  return (
+    BINDABLE_CREDENTIAL_VARIABLE.test(variable) &&
+    !variable.startsWith("APPA_PROVIDER_") &&
+    !variable.startsWith(HOST_RESERVED_CREDENTIAL_PREFIX)
+  );
+}
+
 /** Battery credential name (an `APPA_PROVIDER_*` variable) → runtime credential definition key. */
 export const BatteryCredentialBindingsSchema = z.record(
   z.string().regex(BATTERY_CREDENTIAL_VARIABLE),
@@ -30,7 +54,7 @@ export type BatteryCredentialBindings = z.infer<
 export const CredentialBindingSchema = createSelectSchema(
   openappaCredentialBindingsTable,
 ).extend({
-  variable: z.string().regex(BATTERY_CREDENTIAL_VARIABLE),
+  variable: z.string().regex(BINDABLE_CREDENTIAL_VARIABLE),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
 });
@@ -44,7 +68,7 @@ export const CredentialSourceSchema = z.enum(["policy", "binding"]);
 export type CredentialSource = z.infer<typeof CredentialSourceSchema>;
 
 export const CredentialBindingParamsSchema = z.object({
-  variable: z.string().regex(BATTERY_CREDENTIAL_VARIABLE),
+  variable: z.string().regex(BINDABLE_CREDENTIAL_VARIABLE),
 });
 
 /** The key to bind a variable to; null unbinds it. */

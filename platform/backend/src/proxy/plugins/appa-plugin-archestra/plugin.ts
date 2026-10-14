@@ -35,6 +35,7 @@ import {
   type AppaChildReturnCompletion,
   collectAndStripChildReturns,
   mintChildReturnMarker,
+  parentVisibleChildReturn,
 } from "@/openappa/child-return";
 import {
   mintChildTrajectoryReceipt,
@@ -1357,6 +1358,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         !reusedNames.has(call.id) &&
         binding.adapter?.relayMessage?.(call) !== undefined,
     );
+    const relayCandidateIds = new Set(relayCandidates.map((call) => call.id));
     const relayEvaluations = relayCandidates.length
       ? await withCapturedGuardrailsActivation("active", () =>
           evaluateToolCalls(session, relayCandidates, evaluateOptions, policy),
@@ -1371,13 +1373,25 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       const decision = relayEvaluations[index];
       if (decision?.kind === "allow") {
         admittedRelayIds.add(call.id);
-      } else if (decision) withheldRelayDecisions.set(call.id, decision);
+      } else if (decision) {
+        withheldRelayDecisions.set(call.id, decision);
+      } else {
+        withheldRelayDecisions.set(call.id, {
+          kind: "deny",
+          feedback: RELAY_UNGOVERNED,
+        });
+      }
     }
     const relays = await governRelays({
       binding,
       calls: relayCandidates.filter((call) => admittedRelayIds.has(call.id)),
       session,
     });
+    for (const call of relayCandidates) {
+      if (!admittedRelayIds.has(call.id) || relays.has(call.id)) continue;
+      await cancelCalls(session, [call.id]);
+      relays.set(call.id, { kind: "deny", feedback: RELAY_UNGOVERNED });
+    }
     const peerInbox = new Map<string, RelayOutcome>();
     for (const call of calls) {
       if (
@@ -1398,7 +1412,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         !handbackIds.has(call.id) &&
         !blockedTranscriptCalls.has(call.id) &&
         !reusedNames.has(call.id) &&
-        !relays.has(call.id) &&
+        !relayCandidateIds.has(call.id) &&
         !peerInbox.has(call.id),
     );
     const decisions = rest.length
@@ -2802,7 +2816,7 @@ async function approveChildReturnCarriers(params: {
     });
   }
   // Strips unverified text and metadata beside valid returns.
-  // Reconstructs result content solely from crossed values.
+  // Reconstructs result content from crossed values and verified routing metadata.
   const updates: Record<string, string> = Object.create(null);
   for (const result of completionResults) {
     const envelopeId = withoutTrajectoryStamp(result.id);
@@ -2825,7 +2839,12 @@ async function approveChildReturnCarriers(params: {
       verified.length + emptyHere.length === 1 &&
       ignoredHere.length === 0 &&
       adapter?.isSpawnTool(result.name, result.namespace)
-        ? (verified[0]?.value ?? "")
+        ? parentVisibleChildReturn(
+            verified[0]?.value ?? "",
+            adapter?.id === "claude-code"
+              ? verified[0]?.childNativeId
+              : undefined,
+          )
         : JSON.stringify({
             status: Object.fromEntries([
               ...matched
@@ -3275,6 +3294,9 @@ type PeerNotice = {
  * A new send is a peer message. It does not end the sender and it does not
  * start the recipient. The runtime mints the message id; free text carries
  * that id in a trailer. Structured protocol stays byte-stable.
+ *
+ * Every call passed here gets an outcome. A transport this runtime cannot
+ * bind to a checked recipient is cancelled and denied, never released.
  */
 async function governRelays(params: {
   binding: AppaPluginBinding;
@@ -3287,7 +3309,17 @@ async function governRelays(params: {
   if (!adapter?.relayMessage) return outcomes;
   for (const call of params.calls) {
     const relay = adapter.relayMessage(call);
-    if (!relay || relay.to.kind === "session") continue;
+    if (!relay || relay.to.kind === "session") {
+      await cancelCalls(session, [call.id]);
+      outcomes.set(call.id, {
+        kind: "deny",
+        feedback:
+          relay?.to.kind === "session"
+            ? RELAY_UNSUPPORTED_TRANSPORT
+            : RELAY_UNGOVERNED,
+      });
+      continue;
+    }
     if (relay.to.kind === "broadcast") {
       outcomes.set(call.id, { kind: "deny", feedback: RELAY_BROADCAST });
       continue;
@@ -3504,6 +3536,8 @@ const RELAY_UNCHECKED =
   "This teammate started while Guardrails enforcement was off, so OpenAPPA does not check it. OpenAPPA does not send messages to an agent that it does not check, so it did not send this message. To continue its work, start a new teammate under a new name with the Agent tool and give it the task. OpenAPPA checks that spawn.";
 const RELAY_UNGOVERNED =
   "OpenAPPA cannot tell which spawn started this agent, so it cannot check this message. The message was not sent.";
+const RELAY_UNSUPPORTED_TRANSPORT =
+  "OpenAPPA cannot check a message addressed by a socket, bridge, path, or other session transport, so it did not send the message. Send it to a teammate by the name the teammate started with, or to team-lead.";
 const WITHHELD_RELAY =
   "[appa] Message withheld: this message has no record of crossing from its sender into this session, so its text is hidden.";
 const WITHHELD_PEER_READ =

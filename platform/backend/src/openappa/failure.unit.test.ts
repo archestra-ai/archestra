@@ -59,6 +59,32 @@ describe("openappaFailure", () => {
     expect(failure.cause).toBe(cause);
   });
 
+  test("a missing tool contract is not a transient runtime outage", () => {
+    const cause = new Error(
+      "OpenAPPA processing interrupted: tool host/archestra/WebFetch is not declared in this policy and no wildcard covers it; the call is refused before it runs",
+    );
+
+    const failure = openappaFailure(cause);
+
+    expect(failure.statusCode).toBe(500);
+    expect(failure.shouldRetry).toBe(false);
+    expect(failure.retryAfterSeconds).toBeUndefined();
+    expect(failure.message).toContain("no contract for the requested tool");
+    expect(failure.message).not.toContain("runtime is unavailable");
+    expect(failure.cause).toBe(cause);
+  });
+
+  test("does not interpret an unrecognized native failure as a missing contract", () => {
+    const failure = openappaFailure(
+      new Error(
+        "OpenAPPA processing interrupted: tool storage unavailable; is not declared in this policy",
+      ),
+    );
+
+    expect(failure.statusCode).toBe(503);
+    expect(failure.shouldRetry).toBe(true);
+  });
+
   test("names an exhausted connection pool without its internals", () => {
     const failure = openappaFailure(
       new Error(

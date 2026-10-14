@@ -12,7 +12,7 @@ import McpDeploymentLeaseModel, {
   ClusterLeaseHeldError,
 } from "@/models/mcp-deployment-lease";
 import { isByosEnabled } from "@/secrets-manager";
-import { ApiError, GitHubUserIdSchema } from "@/types";
+import { ApiError, GITHUB_COM_API_URL, GitHubUserIdSchema } from "@/types";
 
 class GitHubUserConnectionManager {
   async start(owner: Owner) {
@@ -197,7 +197,7 @@ class GitHubUserConnectionManager {
     if (
       app?.kind !== "github_app" ||
       !app.allowOrganization ||
-      app.githubUrl !== "https://api.github.com" ||
+      app.githubUrl !== GITHUB_COM_API_URL ||
       !app.githubClientId
     )
       throw new ApiError(

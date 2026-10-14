@@ -8,6 +8,7 @@ import {
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import {
   createRuntimeCredentialDefinition,
   deleteRuntimeCredentialConnection,
@@ -85,6 +86,10 @@ const runtimeCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       request.auditBefore = result.before;
       request.auditAfter = result.after;
+      // The connected account joins the organization's member roster.
+      await openappaBatteriesService.recompileOrganizations([
+        request.organizationId,
+      ]);
       return {
         id: result.credentialId,
         login: result.login,

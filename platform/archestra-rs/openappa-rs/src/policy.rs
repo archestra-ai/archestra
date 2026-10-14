@@ -126,6 +126,18 @@ pub(crate) struct Composed {
 /// unresolved, which the runtime refuses naming the entry. The composed document is
 /// checked as an open checks it, so a composition that returns is also a validation.
 pub(crate) fn compose(root: &str, batteries: &[ResolvedBattery]) -> Result<Composed, String> {
+    compose_with_rosters(root, batteries, &MemberRosters::new())
+}
+
+/// The readers of each member roster the host keeps, by roster name: principal → email.
+pub(crate) type MemberRosters = BTreeMap<String, BTreeMap<String, String>>;
+
+/// `compose`, with the readers the host knows for the member rosters it declares.
+pub(crate) fn compose_with_rosters(
+    root: &str,
+    batteries: &[ResolvedBattery],
+    rosters: &MemberRosters,
+) -> Result<Composed, String> {
     let document: toml::Table =
         toml::from_str(root).map_err(|error| format!("root policy: {error}"))?;
     refuse_host_variables(&document)?;
@@ -133,7 +145,7 @@ pub(crate) fn compose(root: &str, batteries: &[ResolvedBattery]) -> Result<Compo
         .iter()
         .map(|battery| Ok((battery, bind_helpers(battery)?)))
         .collect::<Result<Vec<_>, String>>()?;
-    let root = &with_member_rosters(root, &document, &bound)?;
+    let root = &with_member_rosters(root, &document, &bound, rosters)?;
     let hosted: Vec<(&ResolvedBattery, &BoundBattery, Vec<&str>)> = bound
         .iter()
         .map(|(battery, bound)| {
@@ -170,11 +182,12 @@ pub(crate) fn compose(root: &str, batteries: &[ResolvedBattery]) -> Result<Compo
 
 /// The root with a readers table for every member roster a deployed target sends its
 /// audience lookups to and nothing composed declares. The host owns these rosters;
-/// each is empty until the host knows its readers, so every lookup through it denies.
+/// one it supplies no readers for is empty, so every lookup through it denies.
 fn with_member_rosters(
     root: &str,
     document: &toml::Table,
     bound: &[(&ResolvedBattery, BoundBattery)],
+    readers: &MemberRosters,
 ) -> Result<String, String> {
     let mut declared: BTreeSet<String> = audience_entries(document)
         .map(|(name, _)| name.to_owned())
@@ -208,8 +221,14 @@ fn with_member_rosters(
         return Ok(root.to_owned());
     };
     for roster in rosters {
+        let known: toml_edit::InlineTable = readers
+            .get(roster)
+            .into_iter()
+            .flatten()
+            .map(|(principal, email)| (principal.as_str(), email.as_str()))
+            .collect();
         let mut entry = toml_edit::InlineTable::new();
-        entry.insert("readers", toml_edit::InlineTable::new().into());
+        entry.insert("readers", known.into());
         audience.insert(roster, toml_edit::value(entry));
     }
     Ok(edited.to_string())
@@ -980,6 +999,28 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
         assert_eq!(
             roster(&kept.content).and_then(|entry| entry.get("readers")?.get("github:1").cloned()),
             Some(toml::Value::String("ana@corp.example".into()))
+        );
+        // A roster the host supplies fills the readers it declares.
+        let rosters = MemberRosters::from([(
+            "host-members".to_owned(),
+            BTreeMap::from([("github:7".to_owned(), "ana@corp.example".to_owned())]),
+        )]);
+        let filled =
+            compose_with_rosters(&root, &[battery(Some(target.policy.clone()))], &rosters).unwrap();
+        assert_eq!(
+            roster(&filled.content).and_then(|entry| entry.get("readers").cloned()),
+            Some(toml::Value::Table(toml::Table::from_iter([(
+                "github:7".to_owned(),
+                toml::Value::String("ana@corp.example".into())
+            )])))
+        );
+        // The root's own roster wins over the host's.
+        let kept =
+            compose_with_rosters(&declared, &[battery(Some(target.policy.clone()))], &rosters)
+                .unwrap();
+        assert_eq!(
+            roster(&kept.content).and_then(|entry| entry.get("readers")?.get("github:7").cloned()),
+            None
         );
         // The base alone looks nobody up, so no roster is written.
         let base_only = compose(&root, &[battery(None)]).unwrap();

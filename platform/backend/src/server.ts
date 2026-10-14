@@ -96,7 +96,10 @@ import { reportAbnormalPreviousTermination } from "@/observability/previous-term
 import { rumExporter } from "@/observability/rum/exporter.ee";
 import { createCachedOpenApiRouteHandler } from "@/openapi/cached-openapi-route";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
-import { declareOpenappaInstalls } from "@/openappa/service";
+import {
+  declareOpenappaInstalls,
+  recompileAllOnStart,
+} from "@/openappa/service";
 import { initializeLlmProxyPlugins } from "@/proxy/plugins/registry";
 import { activeChatRunService } from "@/services/active-chat-run";
 import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
@@ -927,6 +930,7 @@ const startWebServer = async () => {
     // a recompose rewrites those rows from the text and deletes every row the
     // text does not declare.
     await declareOpenappaInstalls();
+    void recompileAllOnStart();
 
     // With basic auth disabled, a password session that predates the flag
     // would otherwise stay valid until it expired. Runs after seeding so the
@@ -1491,6 +1495,7 @@ const startWorker = async () => {
     // deletes every install row the policy text does not declare: the worker
     // carries the legacy rows into the text first, exactly as `start` does.
     await declareOpenappaInstalls();
+    void recompileAllOnStart();
 
     registerTaskHandlers(taskQueueService);
     await taskQueueService.seedPeriodicTasks();

@@ -6,6 +6,7 @@ import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { McpCatalogItemEditPage } from "./page.client";
 
 vi.mock("next/navigation");
+vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/hooks/use-app-name", () => ({
   useAppName: () => "Archestra",
 }));

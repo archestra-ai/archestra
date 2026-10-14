@@ -34,6 +34,30 @@ export function isCommandExecutionTool(name: string): boolean {
 }
 
 /**
+ * Aliases `command` and `cmd` arguments so command tools match policy
+ * wildcard patterns across different client parameter names.
+ */
+export function normalizeCommandExecutionArguments(
+  toolName: string,
+  args: unknown,
+): unknown {
+  if (
+    !isCommandExecutionTool(toolName) ||
+    typeof args !== "object" ||
+    args === null
+  ) {
+    return args;
+  }
+  const normalized = { ...(args as Record<string, unknown>) };
+  if (normalized.command !== undefined && normalized.cmd === undefined) {
+    normalized.cmd = normalized.command;
+  } else if (normalized.cmd !== undefined && normalized.command === undefined) {
+    normalized.command = normalized.cmd;
+  }
+  return normalized;
+}
+
+/**
  * Expands command tool policy rules across all tool names (`bash`, `shell`,
  * `exec_command`, `run_command`) and parameter names (`command`, `cmd`), so
  * a rule matches each client's own spelling of a command call. Contracts are
@@ -54,20 +78,11 @@ export function expandCommandExecutionPolicyRules(content: string): string {
     if (!rule || typeof rule.name !== "string") return [entry];
     declared.add(rule.name);
     const aliases = commandAliases(rule.name).filter(
-      (alias) => !declared.has(alias.name),
+      (name) => !declared.has(name),
     );
-    for (const alias of aliases) declared.add(alias.name);
+    for (const name of aliases) declared.add(name);
     expanded ||= aliases.length > 0;
-    return [
-      entry,
-      ...aliases.map((alias) => ({
-        ...rule,
-        name: alias.name,
-        ...(rule.parameters === undefined
-          ? {}
-          : { parameters: renamedParameter(rule.parameters, alias) }),
-      })),
-    ];
+    return [entry, ...aliases.map((name) => ({ ...rule, name }))];
   });
 
   return expanded
@@ -75,23 +90,32 @@ export function expandCommandExecutionPolicyRules(content: string): string {
     : content;
 }
 
-type CommandParam = (typeof COMMAND_PARAMS)[number];
-
-type CommandAlias = { name: string; from: CommandParam; to: CommandParam };
-
 /** Every other spelling of a command rule's tool and command argument. */
-function commandAliases(name: string): CommandAlias[] {
+function commandAliases(name: string): string[] {
   const spelled = name.match(COMMAND_TOOL_NAME);
   if (!spelled) return [];
   const [, origPrefix, selector] = spelled;
   const conditions = selectorConditions(selector);
+  const commands = conditions.filter((condition) =>
+    COMMAND_CONDITION.test(condition),
+  ).length;
+  if (commands === 0) return [];
+  // A selector naming both spellings already matches either client.
   const command = conditions.findIndex((condition) =>
     COMMAND_CONDITION.test(condition),
   );
-  if (command === -1) return [];
-  const from: CommandParam = conditions[command].startsWith("cmd:")
-    ? "cmd"
-    : "command";
+  const selectors =
+    commands > 1
+      ? [selector]
+      : COMMAND_PARAMS.map((param) =>
+          conditions
+            .map((condition, index) =>
+              index === command
+                ? condition.replace(COMMAND_CONDITION, param)
+                : condition,
+            )
+            .join(","),
+        );
 
   const prefixes =
     origPrefix.startsWith("host/") && origPrefix !== "host/archestra/"
@@ -99,40 +123,9 @@ function commandAliases(name: string): CommandAlias[] {
       : COMMAND_PREFIXES;
   return prefixes.flatMap((prefix) =>
     COMMAND_TOOLS.flatMap((tool) =>
-      COMMAND_PARAMS.map((to) => {
-        const renamed = conditions.map((condition, index) =>
-          index === command
-            ? condition.replace(COMMAND_CONDITION, to)
-            : condition,
-        );
-        return { name: `${prefix}${tool}(${renamed.join(",")})`, from, to };
-      }),
+      selectors.map((renamed) => `${prefix}${tool}(${renamed})`),
     ),
   );
-}
-
-/** A rule's `parameters` schema with the command argument under the alias's spelling. */
-function renamedParameter(parameters: unknown, alias: CommandAlias): unknown {
-  const schema = asRecord(parameters);
-  if (!schema || alias.from === alias.to) return parameters;
-  const rename = (key: string) => (key === alias.from ? alias.to : key);
-  const properties = asRecord(schema.properties);
-  return {
-    ...schema,
-    ...(properties
-      ? {
-          properties: Object.fromEntries(
-            Object.entries(properties).map(([key, value]) => [
-              rename(key),
-              value,
-            ]),
-          ),
-        }
-      : {}),
-    ...(Array.isArray(schema.required)
-      ? { required: schema.required.map(rename) }
-      : {}),
-  };
 }
 
 /** A selector's `argument:pattern` conditions, split at unescaped commas. */

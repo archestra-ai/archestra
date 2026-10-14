@@ -4,6 +4,7 @@ import { describe, expect, test } from "vitest";
 import {
   expandCommandExecutionPolicyRules,
   isCommandExecutionTool,
+  normalizeCommandExecutionArguments,
 } from "./command-normalization";
 import { asRecord, toolEntries } from "./policy-text";
 
@@ -23,6 +24,37 @@ describe("command-normalization", () => {
       expect(isCommandExecutionTool("read")).toBe(false);
       expect(isCommandExecutionTool("write")).toBe(false);
       expect(isCommandExecutionTool("task")).toBe(false);
+    });
+  });
+
+  describe("normalizeCommandExecutionArguments", () => {
+    test("mirrors command to cmd when cmd is missing", () => {
+      const args = normalizeCommandExecutionArguments("bash", {
+        command: "cat secret.txt",
+      });
+      expect(args).toEqual({
+        command: "cat secret.txt",
+        cmd: "cat secret.txt",
+      });
+    });
+
+    test("mirrors cmd to command when command is missing", () => {
+      const args = normalizeCommandExecutionArguments("builtin:exec_command", {
+        cmd: "cat secret.txt",
+      });
+      expect(args).toEqual({
+        cmd: "cat secret.txt",
+        command: "cat secret.txt",
+      });
+    });
+
+    test("ignores non-command tools", () => {
+      const args = normalizeCommandExecutionArguments("read", {
+        filePath: "/tmp/secret.txt",
+      });
+      expect(args).toEqual({
+        filePath: "/tmp/secret.txt",
+      });
     });
   });
 
@@ -102,29 +134,15 @@ delta = {}
       ).toEqual([]);
     });
 
-    test("renames the command argument in an alias's parameters", () => {
-      const toml = `[[policy.tool]]
-name = "builtin:bash(command:*)"
-delta = {}
-parameters = { type = "object", properties = { command = { type = "string" } }, required = ["command"] }
-`;
-      const { policy } = parseToml(expandCommandExecutionPolicyRules(toml)) as {
-        policy: { tool: { name: string; parameters: unknown }[] };
-      };
-      const parameters = Object.fromEntries(
-        policy.tool.map((entry) => [entry.name, entry.parameters]),
-      );
+    test("a selector naming both spellings is aliased across tools only", async () => {
+      const toml = rule('"builtin:bash(command:*,cmd:*)"');
+      const expanded = expandCommandExecutionPolicyRules(toml);
 
-      expect(parameters["builtin:exec_command(cmd:*)"]).toEqual({
-        type: "object",
-        properties: { cmd: { type: "string" } },
-        required: ["cmd"],
-      });
-      expect(parameters["builtin:shell(command:*)"]).toEqual({
-        type: "object",
-        properties: { command: { type: "string" } },
-        required: ["command"],
-      });
+      expect(names(expanded)).toContain(
+        "host/archestra/exec_command(command:*,cmd:*)",
+      );
+      expect(names(expanded)).toHaveLength(10);
+      expect(await validateOpenappaPolicy(expanded)).toEqual([]);
     });
 
     test("keeps integers beyond JavaScript's safe range exact", () => {

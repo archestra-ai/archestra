@@ -534,27 +534,15 @@ test.each([
 });
 
 describe.each([
-  // `title` is the tool label as the preview's markdown writes it, and `key`
-  // the argument the host spells the command with.
-  {
-    adapter: new AppaClaudeCodeAdapter(),
-    tool: "Bash",
-    title: "Bash",
-    key: "command",
-  },
+  // `title` is the tool label as the preview's markdown writes it.
+  { adapter: new AppaClaudeCodeAdapter(), tool: "Bash", title: "Bash" },
   {
     adapter: new AppaCodexAdapter(),
     tool: "exec_command",
     title: "exec\\_command",
-    key: "cmd",
   },
-  {
-    adapter: new AppaOpenCodeAdapter(),
-    tool: "bash",
-    title: "bash",
-    key: "command",
-  },
-])("$tool approval questions", ({ adapter, tool, title, key }) => {
+  { adapter: new AppaOpenCodeAdapter(), tool: "bash", title: "bash" },
+])("$tool approval questions", ({ adapter, tool, title }) => {
   test.each([
     { label: "Approve", ruling: "approve" },
     { label: "Deny", ruling: "deny" },
@@ -569,8 +557,10 @@ describe.each([
         offerId: "offer-1",
         text: runtimeReview("  - the readers must be the public audience"),
         tool,
+        // The runtime returns the arguments as the proxy evaluated them.
         arguments: JSON.stringify({
-          [key]: 'git push -u origin "feature"',
+          cmd: 'git push -u origin "feature"',
+          command: 'git push -u origin "feature"',
           description: "Push the branch",
         }),
       },
@@ -580,7 +570,8 @@ describe.each([
       session: active,
       offerIds: ["offer-1"],
     });
-    const argumentLines = `${key.padEnd(13)}git push -u origin "feature"\ndescription  Push the branch`;
+    const argumentLines =
+      'command      git push -u origin "feature"\ndescription  Push the branch';
     expect(question?.question).toBe(
       `Approve ${tool}?\n\nApproving also accepts:\n  - the readers must be the public audience\n\n${argumentLines}\n\nApprove lets this exact call run. Deny keeps it blocked.`,
     );

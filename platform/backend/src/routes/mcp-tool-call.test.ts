@@ -203,6 +203,43 @@ describe("mcp-tool-call routes", () => {
     expect(other.statusCode).toBe(404);
   });
 
+  test("log:admin narrows the listing to one user with userId", async ({
+    makeCustomRole,
+    makeMember,
+    makeUser,
+  }) => {
+    const auditor = await makeUser();
+    const allLogs = await makeCustomRole(organizationId, {
+      permission: { log: ["read", "admin"] },
+    });
+    await makeMember(auditor.id, organizationId, { role: allLogs.role });
+    currentUser = auditor;
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/mcp-tool-calls?limit=10&userId=${otherUser.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.map((row: { id: string }) => row.id)).toEqual([
+      otherRowId,
+    ]);
+  });
+
+  test("log:read ignores userId and stays scoped to the caller", async () => {
+    currentUser = limitedUser;
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/mcp-tool-calls?limit=10&userId=${otherUser.id}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.map((row: { id: string }) => row.id)).toEqual([
+      ownRowId,
+    ]);
+  });
+
   test("the agentId filter stays own-scoped without requiring agent permissions", async ({
     makeAgent,
     makeUser,

@@ -4,18 +4,21 @@ import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import {
   ArrowLeftRight,
+  ArrowRight,
   ChevronDown,
   Copy,
   KeyRound,
   type LucideIcon,
   Pencil,
   Plus,
+  Server,
   Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { useSetLlmProxyAction } from "@/app/llm/proxy/_parts/llm-proxy-action-context";
+import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import {
   CreateVirtualKeyDialogWithData,
   type VirtualKeyType,
@@ -23,6 +26,7 @@ import {
 import { formatSpendCap } from "@/components/credential-billing/budget-fields";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EditVirtualKeyDialog } from "@/components/edit-virtual-key-dialog";
+import { EmptyState } from "@/components/empty-state";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import {
   CollectionFilters,
@@ -85,6 +89,7 @@ import {
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
+import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
   formatRelativeTime,
   formatRelativeTimeFromNow,
@@ -160,6 +165,27 @@ function VirtualKeysTable() {
   const [editingKey, setEditingKey] = useState<VirtualKeyRow | null>(null);
   const [deletingKey, setDeletingKey] = useState<VirtualKeyRow | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [providerDialogOpen, setProviderDialogOpen] = useState(false);
+  const { data: canReadProviders } = useHasPermissions({
+    llmProviderApiKey: ["read"],
+  });
+  const providerQuery = useLlmProviderApiKeys({
+    enabled: canReadProviders === true,
+    toastOnError: false,
+  });
+  const needsFirstProvider =
+    canReadProviders === true &&
+    providerQuery.isSuccess &&
+    providerQuery.data.length === 0 &&
+    query.isSuccess &&
+    query.data.data.length === 0 &&
+    query.data.pagination.total === 0 &&
+    !searchFromUrl &&
+    !keyTypeFilter &&
+    !providerApiKeyIdFilter &&
+    !labelsFilter &&
+    !hasActiveScopeFilters;
+
   const deleteMutation = useDeleteVirtualApiKey();
   const bulkDelete = useBulkDeleteVirtualApiKeys();
 
@@ -168,6 +194,10 @@ function VirtualKeysTable() {
   // The header's Create control: a small menu, because standard and
   // passthrough keys are created through the same dialog in different modes.
   useEffect(() => {
+    if (needsFirstProvider) {
+      setActionButton(null);
+      return () => setActionButton(null);
+    }
     setActionButton(
       <div className="flex items-center gap-2">
         {canCreate ? (
@@ -211,7 +241,7 @@ function VirtualKeysTable() {
       </div>,
     );
     return () => setActionButton(null);
-  }, [canCreate, setActionButton]);
+  }, [canCreate, needsFirstProvider, setActionButton]);
 
   const keys = query.data?.data ?? [];
   const pagination = query.data?.pagination;
@@ -359,9 +389,64 @@ function VirtualKeysTable() {
     );
   }
 
+  if (needsFirstProvider) {
+    return (
+      <>
+        <EmptyState
+          icon={Server}
+          title="Connect your first model provider"
+          description="Add a provider API key or a self-hosted endpoint. Then create a virtual key to use it."
+          action={
+            <div className="flex flex-col items-center gap-3">
+              <PermissionButton
+                size="sm"
+                permissions={{ llmProviderApiKey: ["create"] }}
+                onClick={() => setProviderDialogOpen(true)}
+              >
+                <Plus />
+                <span>Add model provider</span>
+              </PermissionButton>
+              {canCreate && (
+                <Button
+                  size="sm"
+                  variant="link"
+                  onClick={() => setCreateKeyType("passthrough")}
+                >
+                  <span>Use my own API key instead</span>
+                  <ArrowRight />
+                </Button>
+              )}
+            </div>
+          }
+        />
+        <CreateLlmProviderApiKeyDialog
+          open={providerDialogOpen}
+          onOpenChange={setProviderDialogOpen}
+          title="Add model provider"
+          description="Add a provider API key or a self-hosted endpoint"
+          onSuccess={() => setCreateKeyType("standard")}
+        />
+        <CreateVirtualKeyDialogWithData
+          open={createKeyType !== null}
+          onOpenChange={(open) => {
+            if (!open) setCreateKeyType(null);
+          }}
+          keyType={createKeyType ?? "standard"}
+        />
+      </>
+    );
+  }
+
   return (
     <TableCardView storageKey="archestra-llm-virtual-keys-view">
       <div>
+        <CreateLlmProviderApiKeyDialog
+          open={providerDialogOpen}
+          onOpenChange={setProviderDialogOpen}
+          title="Add model provider"
+          description="Add a provider API key or a self-hosted endpoint"
+          onSuccess={() => setCreateKeyType("standard")}
+        />
         <CollectionFilters>
           <FilterBar
             leading
@@ -712,6 +797,8 @@ function VirtualKeyProviders({
   if (virtualKey.keyType === "passthrough") {
     return <span className="text-muted-foreground">Caller's own key</span>;
   }
+  if (virtualKey.includeFutureProviders)
+    return <span>Current and future providers</span>;
   return (
     <span>{formatProviderKeySummary(virtualKey.providerApiKeys, label)}</span>
   );

@@ -1,6 +1,9 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { filterAndSortInitialAgents } from "./initial-agent-selector.utils";
+import {
+  filterAndSortInitialAgents,
+  groupInitialAgents,
+} from "./initial-agent-selector.utils";
 
 const userId = "user-1";
 
@@ -190,5 +193,62 @@ describe("filterAndSortInitialAgents", () => {
     });
 
     expect(result.map((agent) => agent.id)).toEqual(["a", "m", "z"]);
+  });
+});
+
+describe("groupInitialAgents", () => {
+  it("splits the user's own agents from shared ones, keeping the sort order", () => {
+    const mine = makeAgent({ id: "mine", scope: "personal", authorId: userId });
+    const team = makeAgent({ id: "team", scope: "team" });
+    const org = makeAgent({ id: "org", scope: "org" });
+
+    const groups = groupInitialAgents({ agents: [team, mine, org], userId });
+
+    expect(
+      groups.map((group) => ({
+        label: group.label,
+        ids: group.agents.map((agent) => agent.id),
+      })),
+    ).toEqual([
+      { label: "Yours", ids: ["mine"] },
+      { label: "Shared with you", ids: ["team", "org"] },
+    ]);
+  });
+
+  it("puts pinned agents first, newest pin first, and out of their own group", () => {
+    const mine = makeAgent({ id: "mine", scope: "personal", authorId: userId });
+    const minePinned = makeAgent({
+      id: "mine-pinned",
+      scope: "personal",
+      authorId: userId,
+    });
+    const orgPinned = makeAgent({ id: "org-pinned", scope: "org" });
+    const org = makeAgent({ id: "org", scope: "org" });
+
+    const groups = groupInitialAgents({
+      agents: [minePinned, mine, orgPinned, org],
+      userId,
+      pinnedIds: ["org-pinned", "mine-pinned"],
+    });
+
+    expect(
+      groups.map((group) => ({
+        label: group.label,
+        ids: group.agents.map((agent) => agent.id),
+      })),
+    ).toEqual([
+      { label: "Pinned", ids: ["org-pinned", "mine-pinned"] },
+      { label: "Yours", ids: ["mine"] },
+      { label: "Shared with you", ids: ["org"] },
+    ]);
+  });
+
+  it("drops a group with nothing in it", () => {
+    const groups = groupInitialAgents({
+      agents: [makeAgent({ id: "org", scope: "org" })],
+      userId,
+    });
+
+    expect(groups.map((group) => group.label)).toEqual(["Shared with you"]);
   });
 });

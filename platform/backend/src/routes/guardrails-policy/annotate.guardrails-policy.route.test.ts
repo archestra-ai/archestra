@@ -43,6 +43,7 @@ describe("catch-all tool annotations", () => {
     expect(policy.content.match(/name = "archestra__[^"]*"/g)).toEqual([
       'name = "archestra__run_command"',
       'name = "archestra__ask_user"',
+      'name = "archestra__superyell"',
     ]);
     expect(
       await guardrailsPolicyService.validate(policy.content, {

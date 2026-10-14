@@ -52,7 +52,7 @@ export async function observeUnenforcedSession(
 
 /**
  * Whether the session, or the parent that started it, started while
- * enforcement was off. A record counts only for the same parent, so a root
+ * enforcement was off, or was superyelled. A record counts only for the same parent, so a root
  * whose id spells a recorded child's id is not that child. A child of such a
  * parent is recorded too, so its own children follow it. A session the
  * runtime already governs is not: its record lost a race with the session's
@@ -69,13 +69,27 @@ export async function startedUnenforced(
       ...(session.parent_id ? [session.parent_id] : []),
     ],
   });
-  const own = recorded.some(
+  const ownRow = recorded.find(
     (row) =>
       row.sessionId === session.session_id &&
       (row.parentId ?? undefined) === session.parent_id,
   );
-  const parent = recorded.some((row) => row.sessionId === session.parent_id);
+  const parentRow = recorded.find((row) => row.sessionId === session.parent_id);
+  const own = ownRow !== undefined;
+  const parent = parentRow !== undefined;
   if (!own && !parent) return false;
+  // A person superyelled the session or its parent: it stays out of OpenAPPA
+  // although the runtime governed it before.
+  if (ownRow?.reason === "superyell") return true;
+  if (!own && parentRow?.reason === "superyell") {
+    await OpenAppaUnenforcedModel.recordSession({
+      organizationId: session.organization_id,
+      sessionId: session.session_id,
+      parentId: session.parent_id,
+      reason: "superyell",
+    });
+    return true;
+  }
   // One lookup for the session and its parent in the runtime's own rows.
   const governed = await OpenAppaSessionModel.startedSessionIds({
     organizationId: session.organization_id,
@@ -96,6 +110,24 @@ export async function startedUnenforced(
     });
   }
   return true;
+}
+
+/**
+ * Takes a governed session out of OpenAPPA after a person approved a
+ * `superyell` in it. From its next request on, the proxy treats it like a
+ * session that started while enforcement was off: OpenAPPA no longer checks
+ * its calls, its label no longer applies, and the children it starts are out
+ * too. Unlike a record of enforcement being off, this one is never deleted.
+ */
+export async function superyellSession(
+  session: OpenAppaSession,
+): Promise<void> {
+  await OpenAppaUnenforcedModel.recordSession({
+    organizationId: session.organization_id,
+    sessionId: session.session_id,
+    parentId: session.parent_id,
+    reason: "superyell",
+  });
 }
 
 /**

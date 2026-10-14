@@ -1794,7 +1794,7 @@ class StatisticsModel {
    * `interactions.created_at`; pass another timestamp column to bound a
    * different table (e.g. `skill_usage_events.created_at`) on the same window.
    */
-  private static timeframeConditions(
+  static timeframeConditions(
     timeframe: StatisticsTimeFrame,
     column: AnyColumn = schema.interactionsTable.createdAt,
   ): SQL[] {

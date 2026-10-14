@@ -57,6 +57,7 @@ const VirtualApiKeyBodyObjectSchema = z.object({
   name: z.string().min(1, "Name is required").max(256),
   keyType: VirtualApiKeyTypeSchema.default("standard"),
   expiresAt: z.coerce.date().nullable().optional(),
+  includeFutureProviders: z.boolean().optional(),
   providerApiKeys: z
     .array(
       z.object({
@@ -88,7 +89,7 @@ function refineVirtualApiKeyBody(
   ctx: z.RefinementCtx,
 ): void {
   if (value.keyType === "passthrough") {
-    if (value.providerApiKeys.length > 0) {
+    if (value.providerApiKeys.length > 0 || value.includeFutureProviders) {
       ctx.addIssue({
         code: "custom",
         path: ["providerApiKeys"],
@@ -98,7 +99,7 @@ function refineVirtualApiKeyBody(
     return;
   }
 
-  if (value.providerApiKeys.length === 0) {
+  if (value.providerApiKeys.length === 0 && !value.includeFutureProviders) {
     ctx.addIssue({
       code: "custom",
       path: ["providerApiKeys"],
@@ -447,6 +448,20 @@ async function createVirtualApiKey(params: {
     throw new ApiError(400, "Expiration date must be in the future");
   }
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  if (body.includeFutureProviders) {
+    await ResourcePermissions.require({
+      organizationId,
+      userId: user.id,
+      resource: "llmProviderApiKey",
+      scope: "*",
+      action: "use",
+    });
+  }
+  // SPDX-SnippetEnd
+
   const isVirtualKeyAdmin = await ResourcePermissions.allows({
     userId: user.id,
     organizationId: organizationId,
@@ -525,6 +540,7 @@ async function createVirtualApiKey(params: {
       organizationId,
       name: body.name,
       keyType: "standard",
+      includeFutureProviders: body.includeFutureProviders,
       expiresAt: body.expiresAt ?? null,
       // The retired visibility column; the grants decide who reaches the key.
       scope: "personal",
@@ -608,6 +624,23 @@ async function updateVirtualApiKey(params: {
     throw new ApiError(400, "Expiration date must be in the future");
   }
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  if (
+    body.includeFutureProviders &&
+    !(await VirtualApiKeyModel.findById(id))?.includeFutureProviders
+  ) {
+    await ResourcePermissions.require({
+      organizationId,
+      userId: user.id,
+      resource: "llmProviderApiKey",
+      scope: "*",
+      action: "use",
+    });
+  }
+  // SPDX-SnippetEnd
+
   await requireVirtualKeyModifyPermission({
     virtualKey: accessContext,
     userId: user.id,
@@ -676,6 +709,7 @@ async function updateVirtualApiKey(params: {
       id,
       name: body.name,
       expiresAt: body.expiresAt ?? null,
+      includeFutureProviders: body.includeFutureProviders,
       scope: accessContext.scope,
       // Preserve the key's owner; an edit must not transfer it to the editor
       // (e.g. an admin editing a key minted on behalf of another user).

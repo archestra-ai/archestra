@@ -1769,6 +1769,7 @@ describe("createAgentServer tools/list", () => {
       "get_remedy_plans",
       "list_peer_messages",
       "read_peer_message",
+      "superyell",
       "yell",
     ]);
     for (const inboxTool of [
@@ -1793,6 +1794,55 @@ describe("createAgentServer tools/list", () => {
     expect(names).not.toContain(
       archestraMcpBranding.getToolName("update_guardrails_policy"),
     );
+  });
+
+  test("hides superyell, and keeps yell, when an administrator turns superyell off", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const previousEnabled = config.openappa.enabled;
+    config.openappa.enabled = true;
+    await GuardrailsDeploymentModel.set({
+      enabled: true,
+      superyellEnabled: false,
+    });
+    onTestFinished(() => {
+      config.openappa.enabled = previousEnabled;
+    });
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      toolExposureMode: "search_and_run_only",
+    });
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      },
+    });
+    const listToolsHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+    if (!listToolsHandler) throw new Error("Expected tools/list handler");
+    const response = await listToolsHandler({
+      method: "tools/list",
+      params: {},
+    });
+    const names = response.tools.map((tool) => tool.name);
+    expect(names).not.toContain(archestraMcpBranding.getToolName("superyell"));
+    expect(names).toContain(archestraMcpBranding.getToolName("yell"));
   });
 
   test("hides remedy tools while the deployment switch is off and still lists policy tools", async ({
@@ -4137,6 +4187,22 @@ describe("createAgentServer tools/list", () => {
       noPerson: true,
     },
     {
+      case: "accepted by its automatic reviewer",
+      callMeta: {},
+      answer: {
+        action: "accept",
+        content: { choice: "One" },
+        _meta: { approvals_reviewer: "auto_review" },
+      },
+      noPerson: true,
+    },
+    {
+      case: "accepted in a run no person drives",
+      callMeta: { "x-codex-turn-metadata": { turn_trigger: "exec" } },
+      answer: { action: "accept", content: { choice: "One" } },
+      noPerson: true,
+    },
+    {
       // `codex exec` declares forms, then declines each one itself.
       case: "in a run no person drives",
       callMeta: { "x-codex-turn-metadata": { turn_trigger: "exec" } },
@@ -4158,7 +4224,7 @@ describe("createAgentServer tools/list", () => {
       answer: { action: "decline" },
       noPerson: false,
     },
-  ])("ask_user reads a Codex form decline $case", async ({
+  ])("ask_user treats a Codex form answer $case as unanswered when no person gave it", async ({
     callMeta,
     answer,
     noPerson,

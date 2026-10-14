@@ -16,7 +16,6 @@ import {
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { WizardStep } from "@/components/wizard-step";
 import config from "@/lib/config/config";
-import { useFeature } from "@/lib/config/config.query";
 import {
   type CreateConnectionSetupResult,
   useCreateConnectionSetup,
@@ -61,15 +60,10 @@ export function PluginInstallDialog({
     isPending: organizationPending,
     isFetchedAfterMount,
   } = useOrganization(open, { fresh: true });
-  const pluginsFeatureEnabled = useFeature("plugins") === true;
   const pluginsOnConnectEnabled =
-    pluginsFeatureEnabled &&
-    isFetchedAfterMount &&
-    organization?.connectionPluginsEnabled === true;
+    isFetchedAfterMount && organization?.connectionPluginsEnabled === true;
   const pluginsOnConnectDisabled =
-    pluginsFeatureEnabled &&
-    isFetchedAfterMount &&
-    organization?.connectionPluginsEnabled === false;
+    isFetchedAfterMount && organization?.connectionPluginsEnabled === false;
   const { mutateAsync: createSetup, isPending: setupPending } =
     useCreateConnectionSetup();
   const compatibility = resolvePluginInstallSelection(plugins);

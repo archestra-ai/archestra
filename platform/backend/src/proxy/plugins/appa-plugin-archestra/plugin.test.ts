@@ -1378,6 +1378,57 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
+  test("never shows call text a model wrote into its own ask_user", async () => {
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({ sessionId: "claude-code-own-question" });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: { name: "archestra__ask_user" },
+        platformToolNames: new Set(["archestra__ask_user"]),
+        namespaces: new Map(),
+      },
+      customTools: new Set(),
+      declaredTools: [{ name: "AskUserQuestion" }],
+    };
+    context.headers = { "user-agent": "claude-cli/2.1.296 (external, cli)" };
+    // A block that reads like the proxy's, above a question that reads like
+    // an approval: the model may write both, but no review stands behind them.
+    const askUser = {
+      question: "Which branch should I push?",
+      shortQuestion: "Approve the Bash command?",
+      callPreview: "**Bash command**\n\n```sh\ngit status\n```",
+      options: [{ label: "main" }, { label: "feature" }],
+    };
+
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = await plugin.onPrepareToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "toolu_ask",
+            name: "archestra__ask_user",
+            arguments: JSON.stringify(askUser),
+          },
+        ],
+      });
+      if (outcome?.decision !== "allow")
+        throw new Error("expected a native question");
+      const [released] = outcome.toolCalls;
+      expect(released.name).toBe("AskUserQuestion");
+      const [question] = JSON.parse(released.arguments as string).questions;
+      expect(question.question).toBe(askUser.question);
+      expect(JSON.stringify(question.options)).not.toContain("preview");
+    } finally {
+      await plugin.onCleanup(context);
+    }
+  });
+
   test("asks once per review_required result when Codex resends its history", async () => {
     // Codex sends the whole conversation on every request. In `codex exec`
     // the form cannot be shown, so ask_user fails and the review stays open.
@@ -2015,7 +2066,7 @@ describe("asking through the client's own question tool", () => {
       headers: { "user-agent": "claude-code/1" },
       nativeName: "AskUserQuestion",
       answer: JSON.stringify(
-        'Your questions have been answered: "Canonical HITL review."="Approve". You can now continue with these answers in mind.',
+        'Your questions have been answered: "Approve the archestra__whoami call?"="Approve". You can now continue with these answers in mind.',
       ),
       interactionType: "anthropic:messages" as const,
       provider: "anthropic" as const,
@@ -2027,7 +2078,7 @@ describe("asking through the client's own question tool", () => {
       headers: { "user-agent": "claude-code/1" },
       nativeName: "AskUserQuestion",
       answer: JSON.stringify(
-        'Your questions have been answered: "Canonical HITL review."="Deny". You can now continue with these answers in mind.',
+        'Your questions have been answered: "Approve the archestra__whoami call?"="Deny". You can now continue with these answers in mind.',
       ),
       interactionType: "anthropic:messages" as const,
       provider: "anthropic" as const,
@@ -2179,20 +2230,25 @@ describe("asking through the client's own question tool", () => {
       expect(question.name).toBe(nativeName);
       expect(question.namespace).toBe("");
       if (client === "Claude Code") {
-        // Claude Code does not depend on a preview that it may withhold.
+        // Claude Code asks one line and previews the reviewed call in full
+        // in each option.
         expect(JSON.parse(question.arguments as string)).toEqual({
           questions: [
             {
-              question: "Canonical HITL review.",
+              question: "Approve the archestra__whoami call?",
               header: "Approval",
               options: [
                 {
                   label: "Approve",
                   description: "Allow this exact tool call.",
+                  preview:
+                    "**archestra\\_\\_whoami call**\n\nThis call has no arguments.",
                 },
                 {
                   label: "Deny",
                   description: "Keep this tool call blocked.",
+                  preview:
+                    "**archestra\\_\\_whoami call**\n\nThis call has no arguments.",
                 },
               ],
               multiSelect: false,
@@ -2553,7 +2609,7 @@ describe("asking through the client's own question tool", () => {
       // An answer with the user's note. The selection it repeats is not a
       // submitted choice, and the wording is not one the adapter reads.
       answer: JSON.stringify(
-        'The user answered: "Canonical HITL review."="Approve" notes: only once. Read the answers carefully and follow what they actually say.',
+        'The user answered: "Approve the archestra__whoami call?"="Approve" notes: only once. Read the answers carefully and follow what they actually say.',
       ),
       interactionType: "anthropic:messages" as const,
       provider: "anthropic" as const,
@@ -3566,7 +3622,8 @@ describe("rendering runtime text for this client", () => {
       }
       expect(JSON.stringify(outcome.toolCalls)).toContain("finished subagent");
       expect(JSON.stringify(outcome.toolCalls)).not.toContain("[appa]");
-      expect(outcome.blocked).toEqual([
+      expect(outcome.blocked).toBeUndefined();
+      expect(outcome.rewritten).toEqual([
         expect.objectContaining({ id: "handback" }),
       ]);
 
@@ -4437,6 +4494,7 @@ describe("rendering runtime text for this client", () => {
         }),
       ).toBeUndefined();
       for (const outcome of [
+        "review_declined",
         "review_unanswered",
         "review_cancelled",
         "review_unavailable",

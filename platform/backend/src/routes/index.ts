@@ -14,6 +14,7 @@ export { default as archestraCatalogProxyRoutes } from "./archestra-catalog-prox
 export { default as auditLogRoutes } from "./audit-log/audit-log.routes";
 export { default as authRoutes } from "./auth";
 export { default as bootstrapRoutes } from "./bootstrap";
+export { default as browserStorageStatesRoutes } from "./browser-storage-state/browser-storage-state.routes";
 export { default as chatRoutes } from "./chat/routes";
 export { default as chatopsRoutes } from "./chatops";
 export { default as clientConnectionRoutes } from "./client-connection/client-connection.routes";

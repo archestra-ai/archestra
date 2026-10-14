@@ -23,7 +23,7 @@ import type { CreatePlugin, User } from "@/types";
 import pluginRoutes from "./plugin.routes";
 
 beforeEach(() => {
-  config.plugins.enabled = true;
+  config.beta = false;
   grantEverywhere(["plugin"]);
 });
 
@@ -913,7 +913,7 @@ describe("plugin routes", () => {
     expect(codex.json().failed).toHaveLength(2);
   });
 
-  test("rejects marketplace imports above the beta batch limit", async () => {
+  test("rejects marketplace imports above the batch limit", async () => {
     const response = await ctx.app.inject({
       method: "POST",
       url: "/api/plugins/github/marketplace/import",

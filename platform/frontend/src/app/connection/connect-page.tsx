@@ -903,6 +903,11 @@ function scriptNextSteps(client: ConnectClient): string[] {
         "Say yes when the terminal offers to sign you in to the gateway.",
         "Close OpenCode if it's open, then run the opencode command it prints in a new terminal.",
       ];
+    case "kilo":
+      return [
+        "Say yes when the terminal offers to sign you in to the gateway.",
+        "Close Kilo Code if it's open, then run the kilo command it prints in a new terminal.",
+      ];
     default:
       return [`Restart ${nameOf(client)}.`];
   }
@@ -1012,8 +1017,8 @@ function ManualSteps({
 // === Guardrails status ===
 
 /**
- * Agents OpenAPPA follows natively (the Claude Code, Codex and OpenCode
- * adapters in backend/src/proxy/plugins/appa-plugin-archestra/
+ * Agents OpenAPPA follows natively (the Claude Code, Codex, OpenCode and
+ * Kilo Code adapters in backend/src/proxy/plugins/appa-plugin-archestra/
  * session-identity.ts). Others count as unsupported unless they send OpenAPPA
  * session headers, which the agents on this page don't.
  */

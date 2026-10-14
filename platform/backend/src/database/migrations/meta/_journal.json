@@ -3795,6 +3795,13 @@
       "when": 1791944799746,
       "tag": "0541_virtual_key_future_providers",
       "breakpoints": true
+    },
+    {
+      "idx": 542,
+      "version": "7",
+      "when": 1791971504679,
+      "tag": "0542_tricky_firebrand",
+      "breakpoints": true
     }
   ]
 }

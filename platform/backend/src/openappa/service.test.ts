@@ -700,6 +700,30 @@ describe("APPA feature boundary", () => {
     expect(await startedUnenforced(session)).toBe(false);
   });
 
+  test("superyell refuses when an administrator turned it off, while enforcement stays on", async () => {
+    config.openappa.yellEnabled = true;
+    await GuardrailsDeploymentModel.set({
+      enabled: true,
+      superyellEnabled: false,
+    });
+    const result = await executeArchestraTool(
+      "archestra__superyell",
+      { message: "Turn it off", with_trajectory: false },
+      {
+        agent: { id: "agent", name: "Assistant" },
+        organizationId,
+        userId: "alice",
+        sessionId: "conversation",
+        currentToolCallId: "toolu_super",
+      },
+    );
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(
+      "turned off superyell in Guardrails settings",
+    );
+    expect(await startedUnenforced(session)).toBe(false);
+  });
+
   test("a gateway yell finds only the platform's yell, in its organization, with its arguments", async () => {
     config.openappa.yellEnabled = true;
     config.analytics.enabled = true;

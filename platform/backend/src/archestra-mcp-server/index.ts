@@ -41,7 +41,11 @@ import {
   agentToolExclusionsService,
   isToolIdentityExcluded,
 } from "@/services/agent-tool-exclusions";
-import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
+import {
+  isGuardrailsV2Active,
+  isSuperyellAvailable,
+  SUPERYELL_DISABLED_MESSAGE,
+} from "@/services/guardrails-deployment";
 import { ApiError } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
 // Import all groups
@@ -373,6 +377,12 @@ export async function executeArchestraTool(
     // An unavailable feedback tool is a recoverable tool refusal, not a
     // failed agent run. Keep the result with the agent so it can continue.
     return errorResult("OpenAPPA reporting is disabled");
+  }
+  if (
+    archestraMcpBranding.getToolShortName(toolName) === "superyell" &&
+    !(await isSuperyellAvailable())
+  ) {
+    return errorResult(SUPERYELL_DISABLED_MESSAGE);
   }
   // A child runs outside APPA and must not execute remedies on the parent's
   // shared logging session. Direct calls also respect the feature flag.

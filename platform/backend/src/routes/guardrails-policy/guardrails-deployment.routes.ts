@@ -11,6 +11,7 @@ import { UnsupportedAppaClientActionSchema } from "@/types/guardrails-policy";
 const status = z.object({
   enabled: z.boolean(),
   unsupportedClientAction: UnsupportedAppaClientActionSchema,
+  superyellEnabled: z.boolean(),
   featureEnabled: z.boolean(),
   active: z.boolean(),
 });
@@ -37,11 +38,13 @@ const routes: FastifyPluginAsyncZod = async (app) => {
             enabled: z.boolean().optional(),
             unsupportedClientAction:
               UnsupportedAppaClientActionSchema.optional(),
+            superyellEnabled: z.boolean().optional(),
           })
           .refine(
             (body) =>
               body.enabled !== undefined ||
-              body.unsupportedClientAction !== undefined,
+              body.unsupportedClientAction !== undefined ||
+              body.superyellEnabled !== undefined,
             "Set at least one guardrails deployment setting",
           ),
         response: constructResponseSchema(status),

@@ -36,7 +36,10 @@ import {
   sanitizeAppNameForToolMetadata,
 } from "@/services/apps/app-run-link";
 import { filterToolsByCallerCatalogAccess } from "@/services/caller-catalog-access";
-import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
+import {
+  getGuardrailsDeployment,
+  superyellAvailableIn,
+} from "@/services/guardrails-deployment";
 import { buildKnowledgeSourcesDescription } from "@/services/knowledge-sources-description";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { APP_LAUNCH_TOOL_NAME } from "@/types/app";
@@ -349,7 +352,9 @@ async function openappaSearchTools(
   }>
 > {
   if (!openappaEnabled()) return [];
-  const remediesActive = await isGuardrailsV2Active();
+  const deployment = await getGuardrailsDeployment();
+  const remediesActive = deployment.active;
+  const superyellAvailable = superyellAvailableIn(deployment);
   return openappaMcpTools.flatMap((tool) => {
     const shortName = archestraMcpBranding.getToolShortName(tool.name);
     if (
@@ -367,6 +372,7 @@ async function openappaSearchTools(
       return [];
     }
     if (isYellToolShortName(shortName) && !openappaYellEnabled()) return [];
+    if (shortName === "superyell" && !superyellAvailable) return [];
     const name = shortName
       ? archestraMcpBranding.getToolName(shortName)
       : tool.name;

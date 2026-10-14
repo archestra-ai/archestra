@@ -75,3 +75,23 @@ export function useUpdateUnsupportedClientAction() {
     },
   });
 }
+
+export function useUpdateSuperyellEnabled() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (superyellEnabled: boolean) => {
+      const { data, error } = await archestraApiSdk.updateGuardrailsDeployment({
+        body: { superyellEnabled },
+      });
+      if (error) {
+        handleApiError(error);
+        throw toApiError(error);
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      client.setQueryData(queryKey, data);
+      client.invalidateQueries({ queryKey });
+    },
+  });
+}

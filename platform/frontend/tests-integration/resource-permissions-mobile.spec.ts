@@ -133,7 +133,7 @@ test("phone controls stay reachable through the permission handoff confirmation"
     .poll(async () => (await permission.boundingBox())?.height ?? 0)
     .toBeGreaterThanOrEqual(43.99);
   await dialog.getByRole("combobox", { name: "Permission for Admin" }).click();
-  await page.getByRole("option", { name: "Can view", exact: true }).click();
+  await page.getByRole("option", { name: "Can read", exact: true }).click();
   await expect(dialog.getByRole("alert")).toContainText(
     "You won’t be able to edit or delete MCP registry entries that other people created.",
   );
@@ -213,7 +213,7 @@ test("a phone draft cannot remove the last permission manager", async ({
     .getByRole("button", { name: "Remove direct access for Admin" })
     .click();
   await expect(dialog.getByRole("alert")).toContainText(
-    "At least one recipient needs Full access.",
+    "Someone must keep Manage access.",
   );
   const save = dialog.getByRole("button", { name: "Save permissions" });
   await expect(save).toBeDisabled();

@@ -409,4 +409,43 @@ describe("SlackAppFactory", () => {
       { appId: "A_HANDMADE", agentId: AGENT_ID, ok: true },
     ]);
   });
+
+  test("updates only the bots this person manages, and those nobody manages yet", async () => {
+    await saveToken();
+    const bot = (agentId: string, appId: string, owner?: string) =>
+      ChatOpsConfigModel.saveSlackAgentBot({
+        agentId,
+        enabled: true,
+        botToken: "xoxb",
+        signingSecret: "s",
+        appId,
+        managed: Boolean(owner),
+        ...(owner && { configTokenUserId: owner }),
+      });
+    await bot(AGENT_ID, "A_MINE", USER_ID);
+    await bot("33333333-3333-4333-8333-333333333333", "A_TEAMMATE", "user-2");
+    await bot("44444444-4444-4444-8444-444444444444", "A_UNOWNED");
+    slack.exportManifest.mockResolvedValue({
+      ok: true,
+      manifest: { features: {} },
+    });
+    slack.update.mockResolvedValue({ ok: true });
+
+    const results = await slackAppFactory.migrateExistingApps(USER_ID);
+
+    // A teammate's app is theirs: Slack would refuse this token for it.
+    expect(results.map((result) => result.appId)).toEqual([
+      "A_MINE",
+      "A_UNOWNED",
+    ]);
+    expect(slack.exportManifest).not.toHaveBeenCalledWith(
+      expect.objectContaining({ app_id: "A_TEAMMATE" }),
+    );
+    // The unowned bot is now managed with this person's token.
+    expect(
+      (await ChatOpsConfigModel.getSlackAgentBots()).find(
+        (candidate) => candidate.appId === "A_UNOWNED",
+      ),
+    ).toMatchObject({ managed: true, configTokenUserId: USER_ID });
+  });
 });

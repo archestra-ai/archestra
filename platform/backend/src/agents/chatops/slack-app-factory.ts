@@ -225,7 +225,10 @@ class SlackAppFactory {
    * events and scopes. From then on Archestra manages them like apps it
    * created. Each app is patched, not replaced, so its name, icon, and URLs
    * stay. Slack cannot switch an app back from the agent experience.
-   * Uses the given user's token, so only apps they collaborate on succeed.
+   *
+   * Uses the given user's token, which only works on apps they collaborate
+   * on. So it leaves alone the bots another person's token manages: Slack
+   * would refuse them, and their owner keeps them up to date.
    */
   async migrateExistingApps(
     userId: string,
@@ -235,7 +238,12 @@ class SlackAppFactory {
     const bots = await ChatOpsConfigModel.getSlackAgentBots();
     const targets: { appId: string; bot?: SlackAgentBotConfig }[] = [
       ...(main?.appId ? [{ appId: main.appId }] : []),
-      ...bots.flatMap((bot) => (bot.appId ? [{ appId: bot.appId, bot }] : [])),
+      ...bots.flatMap((bot) =>
+        bot.appId &&
+        (!bot.configTokenUserId || bot.configTokenUserId === userId)
+          ? [{ appId: bot.appId, bot }]
+          : [],
+      ),
     ];
 
     const results: SlackAppMigrationResult[] = [];

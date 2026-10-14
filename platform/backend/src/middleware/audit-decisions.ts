@@ -1017,6 +1017,10 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "proxy record of sessions that started while enforcement was off",
   },
+  openappaThreadStatesTable: {
+    audited: false,
+    reason: "proxy record of what a governed provider thread was ruled on",
+  },
   openappaUnenforcedCallsTable: {
     audited: false,
     reason: "proxy record of tool calls made while enforcement was off",

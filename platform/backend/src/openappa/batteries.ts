@@ -1218,6 +1218,11 @@ class OpenAppaBatteriesService {
         // node-postgres reads bytea as a Buffer, PGlite as a bare Uint8Array.
         opening = readOpeningPolicy(hash, Buffer.from(bytes).toString("utf8"));
         this.openings.set(hash, opening);
+        if (opening === null)
+          logger.error(
+            { policyHash: hash },
+            "OpenAPPA skipped a stored opening policy that is not valid TOML",
+          );
       }
       return opening ? [opening] : [];
     });

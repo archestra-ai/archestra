@@ -19,6 +19,7 @@ describe("annotators earlier opening policies declare", () => {
   beforeEach(() => {
     config.openappa.enabled = true;
     vi.mocked(logger.warn).mockClear();
+    vi.mocked(logger.error).mockClear();
   });
 
   test("a renamed URL annotator stays declared with its old binding for sessions opened under it", async ({
@@ -107,6 +108,36 @@ describe("annotators earlier opening policies declare", () => {
     expect(effective.lastError).toBeNull();
     expect(effective.content).not.toContain("a.tool-call");
     expect(vi.mocked(logger.warn)).not.toHaveBeenCalled();
+  });
+
+  test("a corrupt snapshot is logged by hash without blocking valid old bindings", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const { organizationId, userId } = await admin({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    });
+    await declare({ organizationId, userId, content: urlJudged("a", JUDGE_A) });
+    await openedUnder(organizationId);
+    const policyHash = await OpenAppaPolicyFileModel.store(
+      `broken = ["${organizationId}"`,
+    );
+
+    await declare({ organizationId, userId, content: urlJudged("b", JUDGE_B) });
+    const effective =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+    expect(effective.lastError).toBeNull();
+    expect(effective.content).toContain(JUDGE_A);
+    expect(effective.content).toContain(JUDGE_B);
+    await openappaBatteriesService.getEffectivePolicy(organizationId);
+    expect(vi.mocked(logger.error)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(logger.error)).toHaveBeenCalledWith(
+      { policyHash },
+      "OpenAPPA skipped a stored opening policy that is not valid TOML",
+    );
   });
 
   test("reusing an open session's annotator name with a different binding is refused", async ({

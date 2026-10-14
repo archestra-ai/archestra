@@ -131,8 +131,9 @@ export function ToolTable({
         ? [
             {
               id: "actions",
-              // Table cells pad less on the right; this evens the edge.
-              header: () => <div className="pr-2 text-right">Actions</div>,
+              // Buttons label themselves, so the title is for screen readers. Cells pad
+              // less on the right; the cell's pr-2 evens that edge with the left.
+              header: () => <span className="sr-only">Actions</span>,
               size: 120,
               cell: ({ row }) => (
                 <div className="flex justify-end pr-2">

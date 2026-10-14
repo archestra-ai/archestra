@@ -208,6 +208,10 @@ export async function getVirtualKeyProviderCatalog(
   const allowedModelIds = await ModelTeamModel.filterAllowedModelIds({
     modelIds: models.map(({ model }) => model.id),
     organizationId: params.organizationId,
+    userId:
+      virtualKey?.scope === "personal"
+        ? (virtualKey.authorId ?? undefined)
+        : undefined,
     action: "use",
   });
   const providers = [...new Set(selected.map((key) => key.provider))];

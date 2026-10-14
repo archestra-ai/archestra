@@ -233,6 +233,7 @@ describe("GET /api/connection-setups/script/:token", () => {
       ].map((match) => Buffer.from(match[1], "base64").toString("utf8"));
       expect(plugins.length).toBeGreaterThan(0);
       for (const plugin of plugins) {
+        expect(plugin).not.toContain(passthroughValue);
         expect(plugin).toContain("runtime.params.routes");
       }
       const payloads = embeddedRuntimeParams(response.body);

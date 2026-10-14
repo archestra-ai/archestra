@@ -62,7 +62,10 @@ import {
   connectionSetupReference,
   issueConnectionProxySetupContext,
 } from "@/services/connection-proxy-setup-context";
-import { authenticateConnectionRuntime } from "@/services/connection-runtime";
+import {
+  authenticateConnectionRuntime,
+  loadManagedRuntimeCatalog,
+} from "@/services/connection-runtime";
 import { issueConnectionRuntimeToken } from "@/services/connection-runtime-token";
 import {
   type ConnectionCreditWarning,
@@ -320,6 +323,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return managedRuntimeManifest({
         installation: installation.setupId,
         clientId: installation.clientId,
+        catalog: await loadManagedRuntimeCatalog(installation),
       });
     },
   );
@@ -1262,6 +1266,7 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
           ? await openCodeFamilyPassthroughProviders(setup.organizationId)
           : undefined,
       authMode: setup.proxyAuth,
+      routingAgentId: proxyAgent.id,
       provider: setup.provider,
       providerLabel: providerDisplayNames[setup.provider] ?? setup.provider,
       baseUrl: proxyBaseUrl,

@@ -5,6 +5,7 @@ import {
   type OpenCodeFamilyClient,
 } from "../opencode-family";
 import { openCodeMcpMergeScript } from "./opencode-mcp-config";
+import type { ManagedRuntimeCatalog } from "./opencode-primary-config";
 import {
   renderOpenCodeRoutingPlugin,
   renderOpenCodeRoutingPluginV2,
@@ -14,9 +15,17 @@ import {
 export function managedRuntimeManifest(params: {
   installation: string;
   clientId: "opencode" | "kilo";
+  /** Public catalog only. Credentials are read from the local runtime file. */
+  catalog?: ManagedRuntimeCatalog;
 }) {
   const client = params.clientId === "kilo" ? KILO_CLIENT : OPENCODE_CLIENT;
-  const plugin = { client, routes: {}, headers: {}, runtime: true };
+  const plugin = {
+    client,
+    routes: {},
+    headers: {},
+    runtime: true as const,
+    catalog: params.catalog,
+  };
   const sources = {
     "launcher.cjs": String.raw`const fs = require("node:fs");
 const path = require("node:path");
@@ -44,7 +53,8 @@ module.exports.prepare = async (runtime, config) => loader.locked(root, async ()
   };
   return {
     format: 1 as const,
-    ...params,
+    installation: params.installation,
+    clientId: params.clientId,
     artifacts: Object.fromEntries(
       Object.entries(sources).map(([name, source]) => [
         name,

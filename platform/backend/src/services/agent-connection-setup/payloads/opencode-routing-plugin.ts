@@ -1,7 +1,16 @@
-import { OPENCODE_AGENT_HEADER } from "@archestra/shared";
+import { DEFAULT_APP_NAME, OPENCODE_AGENT_HEADER } from "@archestra/shared";
 import { OPENCODE_CLIENT, type OpenCodeFamilyClient } from "../opencode-family";
 
+// white-label-ok: stable OpenCode V1 plugin export, not display copy
+export const OPENCODE_V1_PROXY_EXPORT = "ArchestraLlmProxy";
+// white-label-ok: stable OpenCode V1 OAuth plugin export, not display copy
+export const OPENCODE_V1_OAUTH_EXPORT = "ArchestraOpenAiOAuth";
+
 interface RenderOpenCodeRoutingPluginParams {
+  /** Managed implementations read credentials from the private installation file. */
+  runtime?: boolean;
+  /** Deployment name for user-facing errors. Runtime copies read it from params. */
+  appName?: string;
   routes: Record<string, string>;
   headers: Record<string, string>;
   /**
@@ -26,6 +35,11 @@ interface RenderOpenCodeRoutingPluginParams {
  * Inject values only with JSON.stringify. The return value is JavaScript source.
  * Unescaped template interpolation can inject code into the generated plugin.
  */
+function renderedAppName(params: RenderOpenCodeRoutingPluginParams): string {
+  const fallback = JSON.stringify(params.appName ?? DEFAULT_APP_NAME);
+  return params.runtime ? `runtimeParams.appName || ${fallback}` : fallback;
+}
+
 export function renderOpenCodeRoutingPlugin(
   params: RenderOpenCodeRoutingPluginParams,
 ): string {
@@ -36,20 +50,55 @@ export function renderOpenCodeRoutingPlugin(
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const routes = ${JSON.stringify(params.routes)};
+${params.runtime ? 'const runtimeParams = JSON.parse(readFileSync(new URL("../params.json", import.meta.url), "utf8"));' : ""}
+const routes = ${params.runtime ? "runtimeParams.routes" : JSON.stringify(params.routes)};
 let activeRoutes = { ...routes };
-const managedHeaders = ${JSON.stringify(params.headers)};
-const routeHeaders = ${JSON.stringify(params.routeHeaders ?? {})};
-const providerTwins = ${JSON.stringify(params.providerTwins ?? {})};
+const managedHeaders = ${params.runtime ? "{ ...runtimeParams.headers }" : JSON.stringify(params.headers)};
+const routeHeaders = ${params.runtime ? "runtimeParams.routeHeaders ?? {}" : JSON.stringify(params.routeHeaders ?? {})};
+const providerTwins = ${params.runtime ? "runtimeParams.providerTwins ?? {}" : JSON.stringify(params.providerTwins ?? {})};
+${
+  params.runtime
+    ? `const sessionProofSymbol = Symbol.for("archestra." + runtimeParams.clientId + ".sessionBindingProofs");
+const sessionBindingProofs = globalThis[sessionProofSymbol] ?? (globalThis[sessionProofSymbol] = new Map());
+const mcpConnected = () => {
+  try { return !readFileSync(join(homedir(), runtimeParams.skipRelpath), "utf8").split(/\\r?\\n/).includes("mcp"); }
+  catch (error) { if (error.code === "ENOENT") return true; throw error; }
+};
+export function bindSessionProof(sessionID, proof) {
+  if (typeof sessionID !== "string" || sessionID.length > 512) return;
+  sessionBindingProofs.delete(sessionID);
+  sessionBindingProofs.set(sessionID, { origin: runtimeParams.origin, headers: proof ?? {} });
+  if (sessionBindingProofs.size > 512) sessionBindingProofs.delete(sessionBindingProofs.keys().next().value);
+}`
+    : ""
+}
+${
+  params.runtime
+    ? `export function captureMcpAliases(config) {
+  const matches = Object.entries(config.mcp ?? {}).filter(([, entry]) => entry?.type === "remote" && entry.url === runtimeParams.mcp?.url);
+  const active = matches.filter(([, entry]) => entry.enabled !== false);
+  active.sort(([a], [b]) => a === runtimeParams.mcp?.serverName ? -1 : b === runtimeParams.mcp?.serverName ? 1 : 0);
+  const aliases = [...active, ...matches.filter(([, entry]) => entry.enabled === false)].map(([name]) => name);
+  const aliasesJson = JSON.stringify(aliases).split("").map(char => char.charCodeAt(0) > 127 ? "\\\\u" + char.charCodeAt(0).toString(16).padStart(4, "0") : char).join("");
+  if (active.length && aliases.length <= 64 && aliasesJson.length <= 8192 && runtimeParams.source?.token) {
+    return { "x-archestra-client-runtime-token": runtimeParams.source.token, "x-archestra-mcp-aliases": aliasesJson };
+  } else {
+    return {};
+  }
+}`
+    : ""
+}
 const headersFor = (providerId) => ({ ...managedHeaders, ...(routeHeaders[providerId] ?? {}) });
 const credentialEnvByProvider = ${JSON.stringify(OPENCODE_CREDENTIAL_ENV_BY_PROVIDER)};
 const normalizeUrl = (value) => String(value ?? "").replace(/\\/+$/, "");
+
 const directInferencePath = /(?:\\/(?:messages|responses|chat\\/completions)|\\/v1beta\\/models\\/[^/]+:(?:generateContent|streamGenerateContent)|\\/backend-api\\/codex\\/responses)$/;
 const fetchGuardSymbol = Symbol.for("archestra.opencode.llmProxyFetchGuard");
 const openAiOAuthBridgeHeader = "x-archestra-opencode-oauth-bridge";
 const openAiApiBaseUrl = "https://api.openai.com/v1";
 const clientLabel = ${JSON.stringify(label)};
 const clientDir = ${JSON.stringify(dir)};
+const appName = ${renderedAppName(params)};
 // white-label-ok: This constant is a stable wire header identifier.
 const openCodeAgentHeader = ${JSON.stringify(OPENCODE_AGENT_HEADER)};
 const chatGptResponsesUrl = "https://chatgpt.com/backend-api/codex/responses";
@@ -77,11 +126,31 @@ const usableEnvironment = (providerId) => (credentialEnvByProvider[providerId] ?
   .some((name) => typeof process.env[name] === "string" && process.env[name].trim() !== "");
 
 const directFetchSymbol = Symbol.for("archestra.opencode.directFetch");
-const directFetch = globalThis[directFetchSymbol] ?? (globalThis[directFetchSymbol] = globalThis.fetch.bind(globalThis));
+const rawDirectFetch = globalThis[directFetchSymbol] ?? (globalThis[directFetchSymbol] = globalThis.fetch.bind(globalThis));
+const directFetch = ${
+    params.runtime
+      ? `(input, init) => {
+  const request = new Request(input, init);
+  const url = new URL(request.url);
+  const headers = new Headers(request.headers);
+  headers.delete("x-archestra-client-runtime-token");
+  headers.delete("x-archestra-mcp-aliases");
+  const managedRoute = Object.values(activeRoutes).some(route => {
+    const base = new URL(route);
+    return base.origin === url.origin && url.pathname.startsWith(base.pathname.replace(/\\/+$/, "") + "/");
+  });
+  if (url.protocol === "https:" && process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "0" && url.origin === runtimeParams.origin && managedRoute && directInferencePath.test(url.pathname) && mcpConnected()) {
+    const binding = sessionBindingProofs.get(headers.get("x-opencode-session"));
+    for (const [name, value] of Object.entries(binding?.origin === url.origin ? binding.headers : {})) headers.set(name, value);
+  }
+  return rawDirectFetch(new Request(request, { headers, redirect: headers.has("x-archestra-client-runtime-token") ? "error" : request.redirect }));
+}`
+      : "rawDirectFetch"
+  };
 const computeProxyOrigins = (routesMap) => new Set(Object.values(routesMap).map((value) => new URL(value).origin));
 let proxyOrigins = computeProxyOrigins(activeRoutes);
 
-if (!globalThis[fetchGuardSymbol]) {
+if (${params.runtime ? "true" : "!globalThis[fetchGuardSymbol]"}) {
   globalThis.fetch = (input, init) => {
     const request = new Request(input, init);
     const url = new URL(request.url);
@@ -89,7 +158,7 @@ if (!globalThis[fetchGuardSymbol]) {
     const chatGptAuth = url.href === chatGptResponsesUrl ? openAiOAuth ?? currentOpenAiOAuth() : null;
     if (chatGptAuth) {
       const target = routes.openai;
-      if (!target) throw new Error("OpenAI OAuth is not supported by the connected Archestra LLM proxy.");
+      if (!target) throw new Error("OpenAI OAuth is not supported by the connected " + appName + " LLM proxy.");
       const headers = new Headers(request.headers);
       for (const [name, value] of Object.entries(headersFor("openai"))) headers.set(name, value);
       if (!headers.has("Authorization")) throw new Error("OpenAI OAuth request is missing its current bearer token. Refresh the " + clientLabel + " OpenAI connection and try again.");
@@ -99,7 +168,7 @@ if (!globalThis[fetchGuardSymbol]) {
     }
     if (!proxyOrigins.has(url.origin) && directInferencePath.test(url.pathname)) {
       throw new Error(
-        'Blocked a direct provider inference request to "' + url.origin + '" while ' + clientLabel + ' is connected to the Archestra LLM proxy.',
+        'Blocked a direct provider inference request to "' + url.origin + '" while ' + clientLabel + ' is connected to the ' + appName + ' LLM proxy.',
       );
     }
     return directFetch(request);
@@ -107,7 +176,7 @@ if (!globalThis[fetchGuardSymbol]) {
   globalThis[fetchGuardSymbol] = true;
 }
 
-export const ArchestraLlmProxy = async () => ({
+export const ${OPENCODE_V1_PROXY_EXPORT} = async () => ({
   async config(config) {
     config.provider ??= {};
     const localAuth = readLocalAuth();
@@ -167,14 +236,14 @@ export const ArchestraLlmProxy = async () => ({
     const expected = activeRoutes[providerId];
     if (!expected) {
       throw new Error(
-        clientLabel + ' provider "' + providerId + '" is not supported by the connected Archestra LLM proxy. Disconnect or reconfigure the proxy before using it.',
+        clientLabel + ' provider "' + providerId + '" is not supported by the connected ' + appName + ' LLM proxy. Disconnect or reconfigure the proxy before using it.',
       );
     }
     const actual = input.provider.options?.baseURL;
     const expectedResolved = providerId === "openai" && currentOpenAiOAuth() ? openAiApiBaseUrl : expected;
     if (normalizeUrl(actual) !== normalizeUrl(expectedResolved)) {
       throw new Error(
-        clientLabel + ' provider "' + providerId + '" resolved to "' + (actual ?? 'no base URL') + '" instead of the connected Archestra endpoint. Re-run the connection setup.',
+        clientLabel + ' provider "' + providerId + '" resolved to "' + (actual ?? 'no base URL') + '" instead of the connected ' + appName + ' endpoint. Re-run the connection setup.',
       );
     }
   },
@@ -212,7 +281,7 @@ export const ArchestraLlmProxy = async () => ({
   } : {}),
 });
 
-export const ArchestraOpenAiOAuth = async () => ({
+export const ${OPENCODE_V1_OAUTH_EXPORT} = async () => ({
   ...(openAiOAuth ? {
     auth: {
       provider: "openai",
@@ -235,7 +304,7 @@ export const ArchestraOpenAiOAuth = async () => ({
             headers.set(openAiOAuthBridgeHeader, "true");
             for (const [name, value] of Object.entries(headersFor("openai"))) headers.set(name, value);
             const target = routes.openai;
-            if (!target) throw new Error("OpenAI OAuth is not supported by the connected Archestra LLM proxy.");
+            if (!target) throw new Error("OpenAI OAuth is not supported by the connected " + appName + " LLM proxy.");
             return directFetch(new Request(target + "/responses", { method: request.method, headers, body: request.body, signal: request.signal, duplex: request.body ? "half" : undefined }));
           },
         };
@@ -270,18 +339,32 @@ export const ArchestraOpenAiOAuth = async () => ({
 export function renderOpenCodeRoutingPluginV2(
   params: RenderOpenCodeRoutingPluginParams,
 ): string {
-  return `const routes = ${JSON.stringify(params.routes)};
-const managedHeaders = ${JSON.stringify(params.headers)};
-const routeHeaders = ${JSON.stringify(params.routeHeaders ?? {})};
+  return `${params.runtime ? 'import { readFileSync } from "node:fs";\nconst runtimeParams = JSON.parse(readFileSync(new URL("../params.json", import.meta.url), "utf8"));\n' : ""}const appName = ${renderedAppName(params)};
+const routes = ${params.runtime ? "runtimeParams.routes" : JSON.stringify(params.routes)};
+const managedHeaders = ${params.runtime ? "runtimeParams.headers" : JSON.stringify(params.headers)};
+const routeHeaders = ${params.runtime ? "runtimeParams.routeHeaders ?? {}" : JSON.stringify(params.routeHeaders ?? {})};
+${
+  params.runtime
+    ? `export function captureMcpAliases(config) {
+  const matches = Object.entries(config.mcp ?? {}).filter(([, entry]) => entry?.type === "remote" && entry.url === runtimeParams.mcp?.url);
+  const active = matches.filter(([, entry]) => entry.enabled !== false);
+  active.sort(([a], [b]) => a === runtimeParams.mcp?.serverName ? -1 : b === runtimeParams.mcp?.serverName ? 1 : 0);
+  const aliases = [...active, ...matches.filter(([, entry]) => entry.enabled === false)].map(([name]) => name);
+  const aliasesJson = JSON.stringify(aliases).split("").map(char => char.charCodeAt(0) > 127 ? "\\\\u" + char.charCodeAt(0).toString(16).padStart(4, "0") : char).join("");
+  return active.length && aliases.length <= 64 && aliasesJson.length <= 8192 ? { "x-archestra-client-runtime-token": runtimeParams.source.token, "x-archestra-mcp-aliases": aliasesJson } : {};
+}`
+    : ""
+}
 // white-label-ok: This constant is a stable wire header identifier.
 const openCodeAgentHeader = ${JSON.stringify(OPENCODE_AGENT_HEADER)};
 const openAiOAuthBridgeHeader = "x-archestra-opencode-oauth-bridge";
 const chatGptBaseUrl = "https://chatgpt.com/backend-api/codex";
 const normalizeUrl = (value) => String(value ?? "").replace(/\\/+$/, "");
+${params.runtime ? "const directInferencePath = /(?:\\/(?:messages|responses|chat\\/completions)|\\/v1beta\\/models\\/[^/]+:(?:generateContent|streamGenerateContent)|\\/backend-api\\/codex\\/responses)$/;" : ""}
 
 export default {
   id: "archestra.llm-proxy",
-  async setup(ctx) {
+  async setup(ctx${params.runtime ? ", bindingProof" : ""}) {
     await ctx.provider.transform((editor) => {
       for (const record of editor.list()) {
         const providerId = record.provider.id;
@@ -296,15 +379,35 @@ export default {
       const route = Object.hasOwn(routes, providerId) ? routes[providerId] : undefined;
       if (!route) {
         throw new Error(
-          'OpenCode provider "' + providerId + '" is not supported by the connected Archestra LLM proxy. Disconnect or reconfigure the proxy before using it.',
+          'OpenCode provider "' + providerId + '" is not supported by the connected ' + appName + ' LLM proxy. Disconnect or reconfigure the proxy before using it.',
         );
       }
       const chatGptSignIn = providerId === "openai" && normalizeUrl(event.baseURL) === chatGptBaseUrl;
       event.baseURL = route;
+      ${params.runtime ? 'delete event.headers["x-archestra-client-runtime-token"];\n      delete event.headers["x-archestra-mcp-aliases"];' : ""}
       Object.assign(event.headers, managedHeaders, routeHeaders[providerId] ?? {});
       event.headers[openCodeAgentHeader] = event.agent;
       if (chatGptSignIn) event.headers[openAiOAuthBridgeHeader] = "true";
     });
+    ${
+      params.runtime
+        ? `await ctx.session.hook("http.request", event => {
+      const request = event.request;
+      const url = new URL(request.url);
+      const headers = new Headers(request.headers);
+      headers.delete("x-archestra-client-runtime-token");
+      headers.delete("x-archestra-mcp-aliases");
+      const managedRoute = Object.values(routes).some(route => {
+        const base = new URL(route);
+        return base.origin === url.origin && url.pathname.startsWith(base.pathname.replace(/\\/+$/, "") + "/");
+      });
+      if (url.protocol === "https:" && process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "0" && url.origin === runtimeParams.origin && managedRoute && directInferencePath.test(url.pathname)) {
+        for (const [name, value] of Object.entries(bindingProof?.() ?? {})) headers.set(name, value);
+      }
+      event.request = new Request(request, { headers, redirect: headers.has("x-archestra-client-runtime-token") ? "error" : request.redirect });
+    });`
+        : ""
+    }
   },
 };
 `;

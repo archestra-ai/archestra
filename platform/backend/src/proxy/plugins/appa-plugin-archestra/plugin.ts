@@ -62,7 +62,6 @@ import {
   signPeerProof,
   stripPeerProofs,
 } from "@/openappa/peer-claims";
-import { underscoreLabeledPlatformToolName } from "@/openappa/request";
 import {
   RUNTIME_TOOL_PROOF_ARGUMENT,
   signRuntimeToolProof,
@@ -422,7 +421,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         (result) =>
           !binding.adapter?.isChildHandbackTool?.(result.name) &&
           !binding.adapter?.isRelayTool?.(result.name) &&
-          !isPeerInboxResult(binding, result.name) &&
+          !isPeerInboxResult(binding, result.name, result.namespace) &&
           !childReturns.ignored.has(result.id),
       )
       // An answer to an issued question is recognized as the very result the
@@ -750,8 +749,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         );
         return rejected.some((entry) => {
           if (
-            call.name === tools.control.name &&
-            call.namespace === tools.control.namespace &&
+            isSpecialToolMember(binding, call, "control") &&
             toolInputOf(call.arguments).offer_id === entry.offerId
           )
             return true;
@@ -850,10 +848,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // The declared control tool itself, in its own namespace: a same-named
       // tool of another server gets no receipt. The acting run always comes
       // from this request, never from an offer in replayed history.
-      if (
-        call.name === tools.control.name &&
-        call.namespace === tools.control.namespace
-      ) {
+      if (isSpecialToolMember(binding, call, "control")) {
         const stamped = stampControlExecution(call, binding.session);
         changed ||= stamped !== call;
         toolCalls.push(stamped);
@@ -862,8 +857,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       let prepared = call;
       let offerIds: string[] = [];
       if (
-        call.name === tools.askUser?.name &&
-        call.namespace === tools.askUser.namespace &&
+        isSpecialToolMember(binding, call, "askUser") &&
         archestraMcpBranding.getToolShortName(
           this.canonicalize(binding, call),
         ) === TOOL_ASK_USER_SHORT_NAME
@@ -1061,7 +1055,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       isUserQuestion: (name: string, namespace?: string) => {
         const tools = binding.request.tools;
         if (tools?.platformToolNames?.has(name)) {
-          return namespace === tools.askUser?.namespace;
+          return isSpecialToolMember(binding, { name, namespace }, "askUser");
         }
         if (
           namespace !== undefined &&
@@ -1081,6 +1075,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         ? {
             control: binding.request.tools.control,
             notice: binding.request.tools.notice,
+            controlAliases: binding.request.tools.controlAliases,
+            noticeAliases: binding.request.tools.noticeAliases,
           }
         : {}),
     };
@@ -1133,7 +1129,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         blockedTranscriptCalls.has(call.id) ||
         reusedNames.has(call.id) ||
         relays.has(call.id) ||
-        !isPeerInboxCall(binding, call.name)
+        !isPeerInboxCall(binding, call.name, call.namespace)
       ) {
         continue;
       }
@@ -1721,11 +1717,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   ): LlmProxyToolCallsContext["toolCalls"][number] {
     if (binding.runtimeSessionId) return call;
     const native = binding.adapter?.nativeQuestion;
-    const askUser = binding.request.tools?.askUser;
     if (
       !native?.fromAskUser ||
-      call.name !== askUser?.name ||
-      call.namespace !== askUser.namespace ||
+      !isSpecialToolMember(binding, call, "askUser") ||
       native.isAvailable?.(binding.requestHeaders) === false ||
       !declaresNativeQuestion(binding, native.toolName) ||
       archestraMcpBranding.getToolShortName(
@@ -3432,24 +3426,33 @@ function peerShortName(
   name: string,
   namespace?: string,
 ): string | null {
-  const spelled = namespace ? `${namespace}__${name}` : name;
-  const canonical = binding.identity.canonicalize(spelled);
-  return (
-    archestraMcpBranding.getToolShortName(canonical) ??
-    archestraMcpBranding.getToolShortName(binding.identity.canonicalize(name))
+  return archestraMcpBranding.getToolShortName(
+    binding.identity.canonicalize(name, namespace),
   );
 }
 
-function isPeerInboxCall(binding: AppaPluginBinding, name: string): boolean {
-  const short = peerShortName(binding, name);
+function isPeerInboxCall(
+  binding: AppaPluginBinding,
+  name: string,
+  namespace?: string,
+): boolean {
+  const short = peerShortName(binding, name, namespace);
   return (
     short === TOOL_LIST_PEER_MESSAGES_SHORT_NAME ||
     short === TOOL_READ_PEER_MESSAGE_SHORT_NAME
   );
 }
 
-function isPeerInboxResult(binding: AppaPluginBinding, name: string): boolean {
-  return isPeerInboxCall(binding, name);
+function isPeerInboxResult(
+  binding: AppaPluginBinding,
+  name: string,
+  namespace?: string,
+): boolean {
+  return isPeerInboxCall(
+    binding,
+    name,
+    namespace ?? binding.request.tools?.namespaces?.get(name),
+  );
 }
 
 function stampPeerInboxCall(params: {
@@ -3457,7 +3460,11 @@ function stampPeerInboxCall(params: {
   call: ToolCall;
   session: OpenAppaSession;
 }): RelayOutcome {
-  const short = peerShortName(params.binding, params.call.name);
+  const short = peerShortName(
+    params.binding,
+    params.call.name,
+    params.call.namespace,
+  );
   const secret = config.openappa.offerSigningSecret;
   if (
     !secret ||
@@ -3508,8 +3515,9 @@ async function withholdUnrecordedPeerReads(params: {
   updates: Record<string, string>;
 }): Promise<void> {
   for (const result of params.results) {
-    if (!isPeerInboxResult(params.binding, result.name)) continue;
-    if (isPeerReadResult(params.binding, result.name)) {
+    if (!isPeerInboxResult(params.binding, result.name, result.namespace))
+      continue;
+    if (isPeerReadResult(params.binding, result.name, result.namespace)) {
       const receipt = await OpenAppaSessionModel.retainedPeerReadReceipt({
         organizationId: params.session.organization_id,
         sessionId: params.session.session_id,
@@ -3548,8 +3556,18 @@ function restoredPeerRead(
   });
 }
 
-function isPeerReadResult(binding: AppaPluginBinding, name: string): boolean {
-  return peerShortName(binding, name) === TOOL_READ_PEER_MESSAGE_SHORT_NAME;
+function isPeerReadResult(
+  binding: AppaPluginBinding,
+  name: string,
+  namespace?: string,
+): boolean {
+  return (
+    peerShortName(
+      binding,
+      name,
+      namespace ?? binding.request.tools?.namespaces?.get(name),
+    ) === TOOL_READ_PEER_MESSAGE_SHORT_NAME
+  );
 }
 
 function stringArgument(value: unknown): string | undefined {
@@ -4426,39 +4444,25 @@ const EXTERNAL_REMEDY_WORKFLOW_GUIDANCE = [
 const LEGACY_NATIVE_QUESTION_ID_PATTERN =
   /^(toolu|call|aq)_aq1_([A-Za-z0-9_-]{16})_([A-Za-z0-9_-]{22})$/;
 
-function isGatewayAskUser(binding: AppaPluginBinding, name: string): boolean {
-  const namespace = binding.request.tools?.namespaces?.get(name);
-  if (namespace) {
-    const namespaced = `${namespace}__${name}`;
-    const canonical = binding.identity.canonicalize(namespaced);
-    return (
-      canonical !== namespaced &&
-      archestraMcpBranding.getToolShortName(canonical) ===
-        TOOL_ASK_USER_SHORT_NAME
-    );
-  }
-  const labeled = underscoreLabeledPlatformToolName(name, (toolName) =>
-    binding.identity.canonicalize(toolName),
-  );
-  if (labeled) {
-    return (
-      archestraMcpBranding.getToolShortName(labeled) ===
-      TOOL_ASK_USER_SHORT_NAME
-    );
-  }
-  const canonical = binding.identity.canonicalize(name);
-  return (
-    canonical !== name &&
-    archestraMcpBranding.getToolShortName(canonical) ===
-      TOOL_ASK_USER_SHORT_NAME
+function isSpecialToolMember(
+  binding: AppaPluginBinding,
+  call: { name: string; namespace?: string },
+  role: "control" | "notice" | "askUser",
+): boolean {
+  const tools = binding.request.tools;
+  if (!tools) return false;
+  const selected = tools[role];
+  const members = tools[`${role}Aliases`] ?? (selected ? [selected] : []);
+  return members.some(
+    (member) =>
+      member.name === call.name && member.namespace === call.namespace,
   );
 }
 
 function isUserQuestionCall(binding: AppaPluginBinding, name: string): boolean {
   return (
-    binding.request.tools?.platformToolNames?.has(name) === true ||
     nativeQuestionName(binding, name) !== undefined ||
-    isGatewayAskUser(binding, name)
+    isSpecialToolMember(binding, { name }, "askUser")
   );
 }
 
@@ -4473,7 +4477,7 @@ function releasesUserQuestion(
 ): boolean {
   const tools = binding.request.tools;
   if (tools?.platformToolNames?.has(call.name)) {
-    return call.namespace === tools.askUser?.namespace;
+    return isSpecialToolMember(binding, call, "askUser");
   }
   if (
     call.namespace !== undefined &&
@@ -4533,7 +4537,6 @@ function isUserQuestionResult(params: {
     true
   )
     return true;
-  if (isGatewayAskUser(params.binding, params.answer.name)) return true;
   // Adapters pair answers with real client tool-call frames, not tool text.
   // Approval recording still requires the separate, one-use cache binding.
   return nativeQuestionName(params.binding, params.answer.name) !== undefined;
@@ -4828,14 +4831,10 @@ function isOwnControlResult(
   binding: AppaPluginBinding,
   result: { name: string; namespace?: string; content: unknown },
 ): boolean {
-  const control = binding.request.tools?.control;
-  if (!control) return false;
   const namespace =
     result.namespace ?? binding.request.tools?.namespaces?.get(result.name);
-  if (namespace !== control.namespace) return false;
   if (
-    binding.identity.canonicalize(result.name, namespace) !==
-    binding.identity.canonicalize(control.name, control.namespace)
+    !isSpecialToolMember(binding, { name: result.name, namespace }, "control")
   )
     return false;
   return reviewResultStatus(result.content, 0) === null;
@@ -4845,15 +4844,11 @@ async function pendingReviewResult(
   binding: AppaPluginBinding,
   result: LlmProxyToolResultsContext["toolResults"][number],
 ): Promise<string | undefined> {
-  const control = binding.request.tools?.control;
   const namespace =
     result.namespace ?? binding.request.tools?.namespaces?.get(result.name);
   if (
-    !control ||
     result.isError ||
-    namespace !== control.namespace ||
-    binding.identity.canonicalize(result.name, namespace) !==
-      binding.identity.canonicalize(control.name, control.namespace)
+    !isSpecialToolMember(binding, { name: result.name, namespace }, "control")
   )
     return undefined;
   const status = reviewResultStatus(result.content, 0);
@@ -4918,20 +4913,17 @@ async function pendingNativeHitlOfferIds(params: {
   const offerIds = new Map<string, string>();
   for (const result of params.results) {
     if (result.isError) continue;
-    const canonicalResult = params.binding.identity.canonicalize(
-      result.name,
-      params.binding.request.tools?.namespaces?.get(result.name),
-    );
-    const canonicalControl = params.binding.identity.canonicalize(
-      control.name,
-      control.namespace,
-    );
-    const resultShortName = archestraMcpBranding.getToolShortName(result.name);
     if (
-      result.name !== control.name &&
-      canonicalResult !== canonicalControl &&
-      resultShortName !== TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME &&
-      !result.name.endsWith(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME)
+      !isSpecialToolMember(
+        params.binding,
+        {
+          name: result.name,
+          namespace:
+            result.namespace ??
+            params.binding.request.tools?.namespaces?.get(result.name),
+        },
+        "control",
+      )
     )
       continue;
     const offerId = reviewRequiredOfferId(result, 0);
@@ -5075,17 +5067,18 @@ async function hasRemedyOfferResult(params: {
     )
       return false;
     if (!control) continue;
-    const namespace = result.namespace;
-    if (namespace !== control.namespace) continue;
-    const canonicalResult = params.binding.identity.canonicalize(
-      result.name,
-      namespace,
-    );
-    const canonicalControl = params.binding.identity.canonicalize(
-      control.name,
-      control.namespace,
-    );
-    if (canonicalResult === canonicalControl) {
+    if (
+      isSpecialToolMember(
+        params.binding,
+        {
+          name: result.name,
+          namespace:
+            result.namespace ??
+            params.binding.request.tools?.namespaces?.get(result.name),
+        },
+        "control",
+      )
+    ) {
       return false;
     }
   }

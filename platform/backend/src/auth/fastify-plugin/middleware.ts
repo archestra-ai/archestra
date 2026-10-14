@@ -23,6 +23,7 @@ import {
   AUTH_STATE_PATH,
   CONNECTION_HEALTH_PATH,
   CONNECTION_INSTRUCTIONS_PATH,
+  CONNECTION_RUNTIME_PATH,
   CONNECTION_SETUP_SCRIPT_PREFIX,
   GUARDRAILS_NOOP_ANNOTATOR_PATH,
   HEALTH_PATH,
@@ -238,6 +239,8 @@ export class Authnz {
       (isGetOrHead && url === AUTH_STATE_PATH) ||
       // Managed instructions authenticate their installation credential in the handler.
       (isGetOrHead && url === CONNECTION_INSTRUCTIONS_PATH) ||
+      // Executable updates have a distinct installation capability and live access checks.
+      (isGetOrHead && url === CONNECTION_RUNTIME_PATH) ||
       // Public existence check for connected remotes (Claude Code startup
       // guard) — the querystring rides along on request.url
       (isGetOrHead &&

@@ -14,6 +14,7 @@ import {
   OPENCODE_CLIENT,
   type OpenCodeFamilyClient,
 } from "../../opencode-family";
+import { openCodeMcpMergeScript } from "../../payloads/opencode-mcp-config";
 import { openCodePrimaryConfigScript } from "../../payloads/opencode-primary-config";
 import { psq, sh } from "../../steps/quoting";
 import type { StartupGuardClient, StartupGuardContext } from "../startup-guard";
@@ -73,6 +74,8 @@ const opencodeOwnedStripPy = (
   client: OpenCodeFamilyClient,
 ) => `import json, os, pathlib
 p = pathlib.Path(os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))) / ${JSON.stringify(client.dir)} / ${JSON.stringify(client.configFile)}
+if os.environ.get("ARCH_OC_SECTION") == "mcp" and (p.parent / ${JSON.stringify(client.commentedConfigFile)}).exists():
+    raise SystemExit("Node.js is required to disconnect the sibling JSONC gateway configuration.")
 if p.exists():
     d = json.loads(p.read_text() or "{}")
     section = os.environ["ARCH_OC_SECTION"]
@@ -103,22 +106,30 @@ if p.exists():
     else:
         p.unlink()`;
 
-// Exit 0 when `<section>.<name>` is still in the global config.
+// Exit 0 only when `<section>.<name>` is absent from the global config.
 const opencodeOwnedHasPy = (
   client: OpenCodeFamilyClient,
 ) => `import json, os, pathlib, sys
 p = pathlib.Path(os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))) / ${JSON.stringify(client.dir)} / ${JSON.stringify(client.configFile)}
 d = json.loads(p.read_text() or "{}") if p.exists() else {}
-sys.exit(0 if os.environ["ARCH_OC_NAME"] in (d.get(os.environ["ARCH_OC_SECTION"]) or {}) else 1)`;
+sys.exit(1 if os.environ["ARCH_OC_NAME"] in (d.get(os.environ["ARCH_OC_SECTION"]) or {}) else 0)`;
 
 const opencodeOwnedStripNode = (
   client: OpenCodeFamilyClient,
 ) => `const fs=require("fs"),path=require("path"),os=require("os");
 const home=process.env.HOME||os.homedir();
 const p=path.join(process.env.XDG_CONFIG_HOME||path.join(home,".config"),${JSON.stringify(client.dir)},${JSON.stringify(client.configFile)});
-if(fs.existsSync(p)){
-  const d=JSON.parse(fs.readFileSync(p,"utf8")||"{}");
-  const section=process.env.ARCH_OC_SECTION,name=process.env.ARCH_OC_NAME;
+const section=process.env.ARCH_OC_SECTION,name=process.env.ARCH_OC_NAME;
+if(fs.existsSync(p)||section==="mcp"){
+  const d=fs.existsSync(p)?JSON.parse(fs.readFileSync(p,"utf8")||"{}"):{};
+  let saveMcpSibling=()=>{};
+  if(section==="mcp") {
+    const configPath=p,cfg=d;
+    process.env.ARCHESTRA_OC_MCP_NAME=name;
+    process.env.ARCHESTRA_OC_MCP_URL=process.env.ARCH_OC_URL;
+    ${openCodeMcpMergeScript(client, "disconnect").replaceAll("\n", "\n    ")}
+    saveMcpSibling=writeMcpSibling;
+  }
   const entries=d[section];
   if(entries&&typeof entries==="object") { delete entries[name]; if(Object.keys(entries).length===0) delete d[section]; }
   if(section==="provider"){
@@ -139,15 +150,18 @@ if(fs.existsSync(p)){
   const backup=p+".archestra-backup";
   if(Object.keys(d).some((key)=>key!=="$schema")||fs.existsSync(backup)) fs.writeFileSync(p,JSON.stringify(d,null,2)+"\\n");
   else fs.rmSync(p,{force:true});
+  saveMcpSibling();
 }`;
 
-const opencodeOwnedHasNode = (
+const opencodeMcpVerifyNode = (
   client: OpenCodeFamilyClient,
 ) => `const fs=require("fs"),path=require("path"),os=require("os");
 const home=process.env.HOME||os.homedir();
-const p=path.join(process.env.XDG_CONFIG_HOME||path.join(home,".config"),${JSON.stringify(client.dir)},${JSON.stringify(client.configFile)});
-const d=fs.existsSync(p)?JSON.parse(fs.readFileSync(p,"utf8")||"{}"):{};
-process.exit(Object.hasOwn(d[process.env.ARCH_OC_SECTION]||{},process.env.ARCH_OC_NAME)?0:1);`;
+const configPath=path.join(process.env.XDG_CONFIG_HOME||path.join(home,".config"),${JSON.stringify(client.dir)},${JSON.stringify(client.configFile)});
+const cfg=fs.existsSync(configPath)?JSON.parse(fs.readFileSync(configPath,"utf8")||"{}"):{};
+process.env.ARCHESTRA_OC_MCP_NAME=process.env.ARCH_OC_NAME;
+process.env.ARCHESTRA_OC_MCP_URL=process.env.ARCH_OC_URL;
+${openCodeMcpMergeScript(client, "verify").replaceAll("\n", "\n  ")}`;
 
 const opencodePassthroughStripPy = (
   client: OpenCodeFamilyClient,
@@ -503,7 +517,6 @@ function openCodeFamilyGuardClient(
   >,
 ): StartupGuardClient {
   const skillsDir = opencodeSkillsDirSh(client);
-  const configPath = `~/.config/${client.dir}/${client.configFile}`;
   return {
     clientId: client.clientId,
     binary: client.binary,
@@ -514,7 +527,7 @@ function openCodeFamilyGuardClient(
     ...STARTUP_GUARD_INSTALL[client.clientId],
     mcpDisconnectCommands: `      command ${client.binary} mcp logout "$MCP_SERVER_NAME" </dev/null >/dev/null 2>&1 || true
       if command -v node >/dev/null 2>&1; then
-        ARCH_OC_SECTION=mcp ARCH_OC_NAME="$MCP_SERVER_NAME" node -e ${sh(opencodeOwnedStripNode(client))} >/dev/null 2>&1 || true
+        ARCH_OC_SECTION=mcp ARCH_OC_NAME="$MCP_SERVER_NAME" ARCH_OC_URL="\${MCP_SERVER_URL:-}" node -e ${sh(opencodeOwnedStripNode(client))} >/dev/null 2>&1 || true
       elif command -v python3 >/dev/null 2>&1; then
         ARCH_OC_SECTION=mcp ARCH_OC_NAME="$MCP_SERVER_NAME" python3 -c ${sh(opencodeOwnedStripPy(client))} >/dev/null 2>&1 || true
       fi`,
@@ -523,16 +536,17 @@ function openCodeFamilyGuardClient(
   [ -d "$arch_oc_skills/.git" ] || return 0
   command -v git >/dev/null 2>&1 || return 1
   git -C "$arch_oc_skills" pull --ff-only -q </dev/null >/dev/null 2>&1 || return 1`,
-    mcpDisconnectVerify: `      arch_oc_mcp_present=1
-      if command -v node >/dev/null 2>&1; then
-        ARCH_OC_SECTION=mcp ARCH_OC_NAME="$MCP_SERVER_NAME" node -e ${sh(opencodeOwnedHasNode(client))} 2>/dev/null && arch_oc_mcp_present=0
+    mcpDisconnectVerify: `      if command -v node >/dev/null 2>&1; then
+        if ! ARCH_OC_NAME="$MCP_SERVER_NAME" ARCH_OC_URL="\${MCP_SERVER_URL:-}" node -e ${sh(opencodeMcpVerifyNode(client))} >/dev/null 2>&1; then
+          line_reset
+          printf '%s  Could not verify that the gateway is disabled in ${client.configFile} and ${client.commentedConfigFile}.%s\\n' "$C_WARN" "$C_RESET"
+          return 1
+        fi
       elif command -v python3 >/dev/null 2>&1; then
-        ARCH_OC_SECTION=mcp ARCH_OC_NAME="$MCP_SERVER_NAME" python3 -c ${sh(opencodeOwnedHasPy(client))} 2>/dev/null && arch_oc_mcp_present=0
-      fi
-      if [ -f "\${XDG_CONFIG_HOME:-$HOME/.config}/${client.dir}/${client.configFile}" ] && [ "$arch_oc_mcp_present" -eq 0 ]; then
-        line_reset
-        printf '%s  "%s" is still in ${configPath} — remove it from the mcp block yourself.%s\\n' "$C_WARN" "$MCP_SERVER_NAME" "$C_RESET"
-        return 1
+        [ ! -f "\${XDG_CONFIG_HOME:-$HOME/.config}/${client.dir}/${client.commentedConfigFile}" ] || return 1
+        ARCH_OC_SECTION=mcp ARCH_OC_NAME="$MCP_SERVER_NAME" python3 -c ${sh(opencodeOwnedHasPy(client))} 2>/dev/null || return 1
+      else
+        if [ -f "\${XDG_CONFIG_HOME:-$HOME/.config}/${client.dir}/${client.configFile}" ] || [ -f "\${XDG_CONFIG_HOME:-$HOME/.config}/${client.dir}/${client.commentedConfigFile}" ]; then return 1; fi
       fi`,
     skillsDisconnectVerify: `      if [ -n "$SKILLS_MARKETPLACE_NAME" ] && [ -d ${skillsDir} ]; then
         line_reset
@@ -542,18 +556,36 @@ function openCodeFamilyGuardClient(
     renderProxyDisconnect: (ctx) => opencodeProxyDisconnect(client, ctx),
     windows: {
       mcpDisconnect: `      if ($archRealExe) { try { & $archRealExe.Source mcp logout $McpServerName 2>$null | Out-Null } catch { } }
-${opencodeWindowsStrip(client, "mcp", "$McpServerName")}`,
+      if (Get-Command node -ErrorAction SilentlyContinue) {
+        $env:ARCH_OC_SECTION = 'mcp'
+        $env:ARCH_OC_NAME = $McpServerName
+        $env:ARCH_OC_URL = $McpServerUrl
+        try { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(${psq(Buffer.from(opencodeOwnedStripNode(client)).toString("base64"))})) | & node - }
+        finally { Remove-Item Env:ARCH_OC_SECTION, Env:ARCH_OC_NAME, Env:ARCH_OC_URL -ErrorAction SilentlyContinue }
+      } elseif (-not (Test-Path (Join-Path ${opencodeConfigDirPs(client)} ${psq(client.commentedConfigFile)}))) {
+${opencodeWindowsStrip(client, "mcp", "$McpServerName")}
+      }`,
       skillsDisconnect: `      if ($SkillsMarketplaceName) { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue (Join-Path ${opencodeConfigDirPs(client)} ('skills/' + $SkillsMarketplaceName)) }`,
       skillsRefreshCommands: `  $archOcSkills = Join-Path ${opencodeConfigDirPs(client)} ('skills/' + $ArchRefreshMarketplace)
   if (-not (Test-Path (Join-Path $archOcSkills '.git'))) { return $true }
   if (-not (Get-Command git -ErrorAction SilentlyContinue)) { return $false }
   try { & git -C $archOcSkills pull --ff-only -q 2>$null | Out-Null } catch { return $false }
   if ($LASTEXITCODE -ne 0) { return $false }`,
-      mcpDisconnectVerify: opencodeWindowsVerifyGone(
-        client,
-        "mcp",
-        "$McpServerName",
-      ),
+      mcpDisconnectVerify: `    if (Get-Command node -ErrorAction SilentlyContinue) {
+      $env:ARCH_OC_NAME = $McpServerName
+      $env:ARCH_OC_URL = $McpServerUrl
+      try { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(${psq(Buffer.from(opencodeMcpVerifyNode(client)).toString("base64"))})) | & node - | Out-Null }
+      finally { Remove-Item Env:ARCH_OC_NAME, Env:ARCH_OC_URL -ErrorAction SilentlyContinue }
+      if ($LASTEXITCODE -ne 0) {
+        $Script:ArchDisconnectReason = 'Could not verify that the gateway is disabled in both config files.'
+        return $false
+      }
+    } elseif (Test-Path (Join-Path ${opencodeConfigDirPs(client)} ${psq(client.commentedConfigFile)})) {
+      $Script:ArchDisconnectReason = 'Node.js is required to verify the sibling JSONC gateway configuration.'
+      return $false
+    } else {
+${opencodeWindowsVerifyGone(client, "mcp", "$McpServerName")}
+    }`,
       skillsDisconnectVerify: `    $archOcSkills = Join-Path ${opencodeConfigDirPs(client)} ('skills/' + $SkillsMarketplaceName)
     if ($SkillsMarketplaceName -and (Test-Path $archOcSkills)) {
       $Script:ArchDisconnectReason = $archOcSkills + ' is still there — delete it yourself.'

@@ -42293,6 +42293,100 @@ export type DisconnectConnectedClientResponses = {
 
 export type DisconnectConnectedClientResponse = DisconnectConnectedClientResponses[keyof DisconnectConnectedClientResponses];
 
+export type GetConnectionRuntimeData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/connection-setups/runtime';
+};
+
+export type GetConnectionRuntimeErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetConnectionRuntimeError = GetConnectionRuntimeErrors[keyof GetConnectionRuntimeErrors];
+
+export type GetConnectionRuntimeResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        format: 1;
+        installation: string;
+        clientId: 'opencode' | 'kilo';
+        artifacts: {
+            [key: string]: {
+                source: string;
+                sha256: string;
+            };
+        };
+    };
+};
+
+export type GetConnectionRuntimeResponse = GetConnectionRuntimeResponses[keyof GetConnectionRuntimeResponses];
+
 export type GetConnectionInstructionsData = {
     body?: never;
     path?: never;

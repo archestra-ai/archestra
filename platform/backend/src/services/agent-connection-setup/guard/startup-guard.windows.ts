@@ -109,7 +109,8 @@ ${remoteEntries}
 )${
     ctx.mcp
       ? `
-$McpServerName = ${psq(ctx.mcp.serverName)}`
+$McpServerName = ${psq(ctx.mcp.serverName)}
+$McpServerUrl = ${psq(ctx.mcp.url)}`
       : ""
   }${
     ctx.skills
@@ -1101,6 +1102,15 @@ ${inSingleQuotedHereString(refreshBlock)}
 function ${client.binary} {
   $archGuard = Join-Path $env:USERPROFILE '${client.psScriptRelpath}'
   $archUtilityCommand = $args.Count -gt 0 -and $args[0] -in @(${client.utilitySubcommands.map(psq).join(", ")}, '--help', '-h', '--version', '-v')
+  ${
+    ctx.managedRuntimeSource
+      ? `if (-not $archUtilityCommand -and (Test-Path $archGuard)) {
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) { throw 'Node.js is required for the managed launcher' }
+    & node (Join-Path $env:USERPROFILE '.archestra/${client.clientId}-runtime/bootstrap.cjs')
+    if ($LASTEXITCODE -ne 0) { throw 'Managed launcher preparation failed' }
+  }`
+      : ""
+  }
   ${
     ctx.managedInstructionsSource
       ? `# Windows PowerShell 5.1 Select-String reports a missing file even with

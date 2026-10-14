@@ -338,10 +338,7 @@ export async function getHitlAskUserArguments(params: {
   // line about it. Where it would withhold that preview, and on forms and
   // other hosts, the question itself carries the exact call and what an
   // approval accepts besides it.
-  const args = withoutCommandAlias(
-    review.tool,
-    parseReviewedArguments(review.arguments) ?? {},
-  );
+  const args = parseReviewedArguments(review.arguments) ?? {};
   const accepted = acceptedCoverage(review.text);
   const preview = callPreview(review.tool, args);
   return {
@@ -633,20 +630,6 @@ function acceptedBlock(accepted: string[] | undefined): string[] {
   ];
 }
 
-/**
- * The proxy evaluates command tools with `command` and `cmd` set to one value,
- * so policies match either spelling. The reviewer sees that value once.
- */
-function withoutCommandAlias(
-  tool: string,
-  args: Record<string, unknown>,
-): Record<string, unknown> {
-  if (!isCommandExecutionTool(tool) || args.cmd !== args.command) return args;
-  return Object.fromEntries(
-    Object.entries(args).filter(([name]) => name !== "cmd"),
-  );
-}
-
 /** The runtime's "What this ruling would cover" lines, or undefined. */
 function reviewCoverage(text: string): string[] | undefined {
   const lines = text.split("\n");
@@ -708,8 +691,10 @@ function previewText(params: {
 function callPreview(tool: string, args: Record<string, unknown>): CallPreview {
   const label = reviewedToolLabel(tool);
   const baseName = tool.replace(/^(builtin:|host\/[^/]+\/)/, "");
-  const { command, description, file_path, content, old_string, new_string } =
-    args;
+  const { description, file_path, content, old_string, new_string } = args;
+  // Claude Code and OpenCode spell the command `command`, Codex `cmd`.
+  const commandKey = "command" in args ? "command" : "cmd";
+  const command = args[commandKey];
   if (isCommandExecutionTool(tool) && typeof command === "string") {
     const summary =
       typeof description === "string"
@@ -721,7 +706,7 @@ function callPreview(tool: string, args: Record<string, unknown>): CallPreview {
       body: [
         codeBlock(wrapCode(command), "sh"),
         ...argumentsBlock(
-          without(args, summary ? ["command", "description"] : ["command"]),
+          without(args, summary ? [commandKey, "description"] : [commandKey]),
         ),
       ],
     };

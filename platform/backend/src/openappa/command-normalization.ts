@@ -34,30 +34,6 @@ export function isCommandExecutionTool(name: string): boolean {
 }
 
 /**
- * Aliases `command` and `cmd` arguments so command tools match policy
- * wildcard patterns across different client parameter names.
- */
-export function normalizeCommandExecutionArguments(
-  toolName: string,
-  args: unknown,
-): unknown {
-  if (
-    !isCommandExecutionTool(toolName) ||
-    typeof args !== "object" ||
-    args === null
-  ) {
-    return args;
-  }
-  const normalized = { ...(args as Record<string, unknown>) };
-  if (normalized.command !== undefined && normalized.cmd === undefined) {
-    normalized.cmd = normalized.command;
-  } else if (normalized.cmd !== undefined && normalized.command === undefined) {
-    normalized.command = normalized.cmd;
-  }
-  return normalized;
-}
-
-/**
  * Expands command tool policy rules across all tool names (`bash`, `shell`,
  * `exec_command`, `run_command`) and parameter names (`command`, `cmd`).
  * This makes sure policies evaluate consistently across clients.

@@ -3,7 +3,6 @@ import { describe, expect, test } from "vitest";
 import {
   expandCommandExecutionPolicyRules,
   isCommandExecutionTool,
-  normalizeCommandExecutionArguments,
 } from "./command-normalization";
 
 describe("command-normalization", () => {
@@ -22,37 +21,6 @@ describe("command-normalization", () => {
       expect(isCommandExecutionTool("read")).toBe(false);
       expect(isCommandExecutionTool("write")).toBe(false);
       expect(isCommandExecutionTool("task")).toBe(false);
-    });
-  });
-
-  describe("normalizeCommandExecutionArguments", () => {
-    test("mirrors command to cmd when cmd is missing", () => {
-      const args = normalizeCommandExecutionArguments("bash", {
-        command: "cat secret.txt",
-      });
-      expect(args).toEqual({
-        command: "cat secret.txt",
-        cmd: "cat secret.txt",
-      });
-    });
-
-    test("mirrors cmd to command when command is missing", () => {
-      const args = normalizeCommandExecutionArguments("builtin:exec_command", {
-        cmd: "cat secret.txt",
-      });
-      expect(args).toEqual({
-        cmd: "cat secret.txt",
-        command: "cat secret.txt",
-      });
-    });
-
-    test("ignores non-command tools", () => {
-      const args = normalizeCommandExecutionArguments("read", {
-        filePath: "/tmp/secret.txt",
-      });
-      expect(args).toEqual({
-        filePath: "/tmp/secret.txt",
-      });
     });
   });
 

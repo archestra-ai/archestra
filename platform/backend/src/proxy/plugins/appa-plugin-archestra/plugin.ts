@@ -37,7 +37,6 @@ import {
   verifyChildTrajectoryReceipt,
 } from "@/openappa/child-trajectory-receipt";
 import { recordOpenAppaClientFailure } from "@/openappa/client-failure-report";
-import { normalizeCommandExecutionArguments } from "@/openappa/command-normalization";
 import { currentTrajectory } from "@/openappa/current-trajectory";
 import {
   delegationEnabled,
@@ -749,10 +748,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           if (!entry.reviewedArguments) return true;
           try {
             return isDeepStrictEqual(
-              normalizeCommandExecutionArguments(
-                target.toolCallName,
-                JSON.parse(target.toolCallArgs),
-              ),
+              JSON.parse(target.toolCallArgs),
               JSON.parse(entry.reviewedArguments),
             );
           } catch {

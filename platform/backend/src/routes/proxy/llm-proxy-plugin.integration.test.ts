@@ -966,4 +966,97 @@ describe("LLM proxy plugin lifecycle", () => {
       unregisterFirst();
     }
   });
+
+  test("records calls an allowing plugin replaced with denial notices", async ({
+    makeAgent,
+  }) => {
+    vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(
+      () =>
+        ({
+          chat: {
+            completions: {
+              create: async () => ({
+                id: "chatcmpl-plugin-test",
+                object: "chat.completion",
+                created: 1,
+                model: "gpt-4o",
+                choices: [
+                  {
+                    index: 0,
+                    message: {
+                      role: "assistant",
+                      content: null,
+                      refusal: null,
+                      tool_calls: [
+                        {
+                          id: "call-1",
+                          type: "function",
+                          function: { name: "read_file", arguments: "{}" },
+                        },
+                      ],
+                    },
+                    finish_reason: "tool_calls",
+                    logprobs: null,
+                  },
+                ],
+                usage: {
+                  prompt_tokens: 1,
+                  completion_tokens: 1,
+                  total_tokens: 2,
+                },
+              }),
+            },
+          },
+        }) as never,
+    );
+    const unregister = registerLlmProxyPlugin({
+      id: `test-notice-${crypto.randomUUID()}`,
+      finalizesToolCalls: true,
+      async onToolCalls({ toolCalls }) {
+        return {
+          decision: "allow",
+          toolCalls,
+          blocked: [
+            { id: "call-1", name: "read_file", reason: "policy denied read" },
+          ],
+        };
+      },
+    });
+    const agent = await makeAgent({ agentType: "llm_proxy", isDefault: true });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/openai/${agent.id}/chat/completions`,
+        headers: {
+          authorization: "Bearer test-key",
+          "content-type": "application/json",
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "read a file" }],
+          tools: [
+            {
+              type: "function",
+              function: {
+                name: "read_file",
+                parameters: { type: "object", properties: {} },
+              },
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      const [interaction] = await InteractionModel.getAllInteractionsForProfile(
+        agent.id,
+      );
+      expect(interaction.toolCallBlock).toEqual({
+        reason: "policy denied read",
+        blockedToolCallCount: 1,
+      });
+    } finally {
+      unregister();
+    }
+  });
 });

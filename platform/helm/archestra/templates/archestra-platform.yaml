@@ -125,6 +125,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
+      terminationGracePeriodSeconds: {{ .Values.archestra.terminationGracePeriodSeconds }}
       serviceAccountName: {{ include "archestra-platform.serviceAccountName" . }}
       {{- if ne (include "archestra-platform.maintenanceModeEnabled" .) "true" }}
       initContainers:

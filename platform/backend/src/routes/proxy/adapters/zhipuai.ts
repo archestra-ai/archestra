@@ -77,7 +77,7 @@ class ZhipuaiClient {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
+      const errorText = await response.text().catch(() => "");
       let errorMessage = `Zhipu AI API error: ${response.status} ${response.statusText}`;
 
       try {
@@ -121,7 +121,7 @@ class ZhipuaiClient {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
+      const errorText = await response.text().catch(() => "");
       let errorMessage = `Zhipu AI API error: ${response.status} ${response.statusText}`;
 
       try {

@@ -159,6 +159,10 @@ import {
   SKILL_MARKETPLACE_PREFIX,
 } from "./routes/route-paths";
 import {
+  beginLlmProxyDrain,
+  registerLlmProxyDrain,
+} from "./server/llm-proxy-drain";
+import {
   UserConfigFieldDefaultSchema,
   UserConfigFieldSchema,
 } from "./types/mcp-catalog";
@@ -515,8 +519,8 @@ function formatBodyTooLargeMessage(params: {
 /**
  * Sets up logging and zod type provider + request validation & response serialization
  */
-export const createFastifyInstance = () =>
-  Fastify({
+export const createFastifyInstance = () => {
+  const fastify = Fastify({
     loggerInstance: logger,
     disableRequestLogging: true,
     trustProxy: config.api.trustProxy,
@@ -830,6 +834,10 @@ export const createFastifyInstance = () =>
         },
       });
     });
+
+  registerLlmProxyDrain(fastify);
+  return fastify;
+};
 
 /**
  * Helper function to register the metrics plugin on a fastify instance.
@@ -1734,8 +1742,19 @@ function registerWebServerShutdown(
     activeChatRunReaperIntervalId?: NodeJS.Timeout;
   } = {},
 ): void {
+  let shuttingDown = false;
   const gracefulShutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     fastify.log.info(`Received ${signal}, shutting down gracefully...`);
+    beginLlmProxyDrain(fastify);
+    // Leave time after the 60s proxy drain for dependency cleanup, but never
+    // let unrelated long-lived connections or cleanup exceed the supervisor.
+    const shutdownDeadline = setTimeout(() => {
+      fastify.log.error("Graceful shutdown timed out");
+      process.exit(1);
+    }, 80_000);
+    shutdownDeadline.unref();
 
     // Stop accepting new runs before snapshotting, so nothing created after this
     // point escapes the cleanup below.
@@ -1850,8 +1869,10 @@ function registerWebServerShutdown(
         );
       }
 
+      clearTimeout(shutdownDeadline);
       process.exit(0);
     } catch (error) {
+      clearTimeout(shutdownDeadline);
       fastify.log.error({ error }, "Error during shutdown");
       process.exit(1);
     }

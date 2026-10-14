@@ -78,7 +78,7 @@ class MinimaxClient {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
+      const errorText = await response.text().catch(() => "");
       let errorMessage = `MiniMax API error: ${response.status} ${response.statusText}`;
 
       try {
@@ -115,7 +115,7 @@ class MinimaxClient {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
+      const errorText = await response.text().catch(() => "");
       throw upstreamHttpError(
         `MiniMax streaming error: ${response.status} - ${errorText}`,
         response.status,

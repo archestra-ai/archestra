@@ -61,6 +61,11 @@ export interface SetupScriptProxySection {
    * ran the installer.
    */
   setupReference?: string;
+  /**
+   * LLM proxy selected at installation. Runtime catalogs address this agent
+   * directly so a later refresh cannot fall through to the deployment default.
+   */
+  routingAgentId?: string;
   /** Proxy URL, e.g. https://host/v1/anthropic/<profile-id>. */
   url: string;
   /** Slug of the LLM proxy name — provider id in client configs. */

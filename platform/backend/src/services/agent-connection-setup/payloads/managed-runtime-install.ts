@@ -5,6 +5,7 @@ import {
   MANAGED_RUNTIME_BOOTSTRAP,
   managedPluginBootstrap,
 } from "./managed-runtime-bootstrap";
+import { publicManagedCatalog } from "./opencode-primary-config";
 
 export function managedRuntimeInstall(params: {
   client: OpenCodeFamilyClient;
@@ -16,9 +17,11 @@ export function managedRuntimeInstall(params: {
 }): { script: string; v1: string; v2: string } | null {
   const source = params.context.managedRuntimeSource;
   if (!source) return null;
+  const catalog = installCatalog(params.context);
   const manifest = managedRuntimeManifest({
     installation: source.installation,
     clientId: params.client.clientId,
+    catalog,
   });
   const privateParams = {
     clientId: params.client.clientId,
@@ -32,6 +35,9 @@ export function managedRuntimeInstall(params: {
     providerTwins: params.providerTwins,
     mcp: params.context.mcp,
     skipRelpath: `.archestra/${params.client.stateName}-startup-guard.skip`,
+    ...(params.context.proxy?.virtualKey
+      ? { managedKeyFile: `${params.client.stateName}-primary.key` }
+      : {}),
   };
   return {
     v1: managedPluginBootstrap(1).replace(
@@ -48,6 +54,10 @@ const root = path.join(os.homedir(), ".archestra", ${JSON.stringify(`${params.cl
 const manifest = ${JSON.stringify(manifest)};
 const params = ${JSON.stringify(privateParams)};
 params.apiMajor = params.clientId === "opencode" && Number(process.env.ARCHESTRA_OC_RUNTIME_API_MAJOR) >= 2 ? 2 : 1;
+if (params.managedKeyFile) {
+  params.managedKeyPath = path.join(os.homedir(), ".archestra", params.managedKeyFile);
+  delete params.managedKeyFile;
+}
 const bootstrap = ${JSON.stringify(MANAGED_RUNTIME_BOOTSTRAP)};
 fs.mkdirSync(root, { recursive: true, mode: 0o700 });
 if (process.platform === "win32") {
@@ -124,4 +134,22 @@ atomic(ownerFile, JSON.stringify({ clientId: params.clientId, installation: para
 } finally { fs.rmSync(lock, { recursive: true, force: true }); }
 `,
   };
+}
+
+function installCatalog(context: SetupScriptContext) {
+  const proxy = context.proxy;
+  const agentId = proxy?.routingAgentId;
+  if (!proxy || !agentId) return undefined;
+  let ordinaryBaseUrl: string;
+  try {
+    ordinaryBaseUrl = `${new URL(proxy.baseUrl).origin}/v1`;
+  } catch {
+    return undefined;
+  }
+  return publicManagedCatalog({
+    primaryProviders: proxy.primaryProviders,
+    passthroughProviders: proxy.passthroughProviders,
+    ordinaryBaseUrl,
+    routingAgentId: agentId,
+  });
 }

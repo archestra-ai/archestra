@@ -59,6 +59,14 @@ async function main() {
   // After the lock: the sign-in and the agent it starts can run for a long time.
   finishSetup(ending, platform);
 }
+async function sleepAtLeast(ms) {
+  const end = process.hrtime.bigint() + BigInt(ms) * 1000000n;
+  for (;;) {
+    const left = Number(end - process.hrtime.bigint()) / 1e6;
+    if (left <= 0) return;
+    await new Promise(resolve => setTimeout(resolve, left < 1 ? 1 : left));
+  }
+}
 async function runConnection({ args, clientId, exclude, gateway, plugins, networkOrigin, origin, platform }) {
   const request = async (path, body) => {
     const response = await fetch(new URL(path, networkOrigin), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), redirect: 'error', signal: AbortSignal.timeout(15000) });
@@ -79,7 +87,7 @@ async function runConnection({ args, clientId, exclude, gateway, plugins, networ
   const deadline = Math.min(Date.parse(started.expiresAt), Date.now() + 600000);
   if (!Number.isFinite(deadline)) throw new Error('Invalid connection expiry.');
   while (Date.now() < deadline) {
-    await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+    await sleepAtLeast(pollIntervalMs);
     let state;
     try { state = await request('/api/client-connections/poll', { deviceCode: started.deviceCode }); }
     catch (error) {

@@ -9,7 +9,7 @@ import { expect, test } from "@/test";
 
 const statements = fs
   .readFileSync(
-    path.join(__dirname, "0547_unify-oauth-client-scopes.sql"),
+    path.join(__dirname, "0548_unify-oauth-client-scopes.sql"),
     "utf8",
   )
   .split("--> statement-breakpoint")

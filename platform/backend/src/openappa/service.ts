@@ -304,6 +304,7 @@ export async function executeYell(params: {
   session: OpenAppaSession;
   toolCallId: string;
   args: { message: string; with_trajectory: boolean };
+  superyell?: boolean;
 }): Promise<CallToolResult> {
   if (!openappaYellEnabled()) {
     return {
@@ -318,6 +319,7 @@ export async function executeYell(params: {
     toolCallId: params.toolCallId,
     message: params.args.message,
     withTrajectory: params.args.with_trajectory,
+    superyell: params.superyell ?? false,
   });
   try {
     const result = await captureYellReport({

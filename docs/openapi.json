@@ -353313,6 +353313,9 @@
                           "withTrajectory": {
                             "type": "boolean"
                           },
+                          "superyell": {
+                            "type": "boolean"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -353401,6 +353404,7 @@
                           "toolCallId",
                           "message",
                           "withTrajectory",
+                          "superyell",
                           "createdAt",
                           "reportedAt",
                           "reportFailed",
@@ -353704,10 +353708,14 @@
                   "properties": {
                     "unresolved": {
                       "type": "number"
+                    },
+                    "superyells": {
+                      "type": "number"
                     }
                   },
                   "required": [
-                    "unresolved"
+                    "unresolved",
+                    "superyells"
                   ],
                   "additionalProperties": false
                 }
@@ -354005,6 +354013,9 @@
                     "withTrajectory": {
                       "type": "boolean"
                     },
+                    "superyell": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -354093,6 +354104,7 @@
                     "toolCallId",
                     "message",
                     "withTrajectory",
+                    "superyell",
                     "createdAt",
                     "reportedAt",
                     "reportFailed",
@@ -354414,6 +354426,9 @@
                     "withTrajectory": {
                       "type": "boolean"
                     },
+                    "superyell": {
+                      "type": "boolean"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -354502,6 +354517,7 @@
                     "toolCallId",
                     "message",
                     "withTrajectory",
+                    "superyell",
                     "createdAt",
                     "reportedAt",
                     "reportFailed",

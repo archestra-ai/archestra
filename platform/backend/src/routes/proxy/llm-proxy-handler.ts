@@ -706,10 +706,18 @@ export async function handleLLMProxy<
         (proof) => stripChildTrajectoryReceipts(proof).receipts,
       ),
     );
-    delegationMarkers = collectDelegationMarkers({
-      family: requestWireFamily,
-      body,
-    });
+    // A route that translated the wire first collected the markers from the
+    // client's own wire; the translated text may no longer end with them.
+    delegationMarkers =
+      (
+        request as FastifyRequest & {
+          llmProxyDelegationMarkers?: AppaDelegationMarker[];
+        }
+      ).llmProxyDelegationMarkers ??
+      collectDelegationMarkers({
+        family: requestWireFamily,
+        body,
+      });
     stripDelegationMarkers({ family: requestWireFamily, body });
     const nativeClient = APPA_CLIENT_ADAPTERS.find((adapter) =>
       adapter.matches({

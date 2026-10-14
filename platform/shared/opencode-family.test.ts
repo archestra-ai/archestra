@@ -42,7 +42,7 @@ describe("OpenCode family", () => {
       "oauth",
       "sessionSource",
       "stateName",
-      "userAgentToken",
+      "userAgentTokens",
     ]);
     // Kilo's own `mcp add` writes the commented file; OpenCode's does not.
     expect(kilo.mcpAddConfigFile).toBe("kilo.jsonc");
@@ -92,6 +92,13 @@ describe("OpenCode family", () => {
     ).toBe("opencode");
     expect(openCodeFamilyClientForUserAgent("Anthropic/JS 0.78.0")).toBeNull();
     expect(isKiloUserAgent("kilo/latest/7.8.8/cli")).toBe(true);
+    // Kilo's provider requests carry its product name.
+    expect(
+      isKiloUserAgent("Kilo-Code/7.8.8 ai-sdk/provider-utils/4.0.46"),
+    ).toBe(true);
+    expect(
+      openCodeFamilyClientForUserAgent("Kilo-Code/7.8.8 ai-sdk/4.0.46")?.id,
+    ).toBe("kilo");
     expect(isOpenCodeUserAgent("kilo/latest/7.8.8/cli")).toBe(false);
     expect(isOpenCodeUserAgent("opencode/1.18.32")).toBe(true);
     expect(isOpenCodeFamilySessionSource("kilo_session")).toBe(true);

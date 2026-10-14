@@ -15,6 +15,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import config from "@/config";
 import db, { schema } from "@/database";
 import {
   AgentModel,
@@ -26,6 +27,10 @@ import {
   OAuthClientModel,
   VirtualApiKeyModel,
 } from "@/models";
+import {
+  type AppaDelegationMarker,
+  mintDelegationMarker,
+} from "@/openappa/delegation";
 import authRoutes from "@/routes/auth";
 import { encodeXaiSubscriptionCredential } from "@/services/xai-subscription-credentials";
 import {
@@ -822,6 +827,86 @@ describe("model router proxy routes", () => {
       );
     });
   }
+
+  test("collects a delegation marker from the Responses wire before flattening a two-part prompt", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(modelRouterProxyRoutes);
+    await upsertModel({ provider: "anthropic", modelId: "claude-test" });
+    const organization = await makeOrganization();
+    const { value } = await createModelRouterVirtualKey({
+      organizationId: organization.id,
+      provider: "anthropic",
+      makeUser,
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      name: "Anthropic Model Router Agent",
+      agentType: "llm_proxy",
+    });
+    const previousSecret = config.openappa.offerSigningSecret;
+    config.openappa.offerSigningSecret = "model-router-delegation-secret";
+    let collected: AppaDelegationMarker[] | undefined;
+    app.addHook("onSend", async (request) => {
+      collected = (
+        request as typeof request & {
+          llmProxyDelegationMarkers?: AppaDelegationMarker[];
+        }
+      ).llmProxyDelegationMarkers;
+    });
+    try {
+      const prompt = "CHILD-MARKER: reply with exactly child-done";
+      const marker = mintDelegationMarker({
+        organizationId: organization.id,
+        callerId: "user:test",
+        parentId: "ses_parent",
+        spawnerNativeId: "ses_parent",
+        prompt,
+        spawnCallId: "toolu_spawn",
+      });
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/model-router/${agent.id}/responses`,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${value}`,
+          "user-agent": "Kilo-Code/7.8.8 ai-sdk/provider-utils/4.0.46",
+        },
+        payload: {
+          model: "anthropic:claude-test",
+          input: [
+            {
+              role: "user",
+              content: [
+                // Kilo Code hands the child its prompt, marker last, and then
+                // appends an environment block as a part of its own. The
+                // translation to Chat Completions joins both parts, so the
+                // marker no longer ends the text the handler sees.
+                { type: "input_text", text: `${prompt}\n\n${marker}` },
+                {
+                  type: "input_text",
+                  text: "\n\n<environment_details>\nWorking directory: /tmp\n</environment_details>",
+                },
+              ],
+            },
+          ],
+        },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(collected?.map((m) => [m.parentId, m.spawnCallId])).toEqual([
+        ["ses_parent", "toolu_spawn"],
+      ]);
+    } finally {
+      config.openappa.offerSigningSecret = previousSecret;
+    }
+  });
 
   test("routes an internal Agent through the model router for Agent Runtime attribution", async ({
     makeAgent,

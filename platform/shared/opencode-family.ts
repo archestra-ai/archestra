@@ -33,8 +33,8 @@ export interface OpenCodeFamilyDescriptor {
   sessionSource: "opencode_session" | "kilo_session";
   /** OAuth identity at sign-in: the CIMD document, or the DCR client name. */
   oauth: { clientId: string; clientNamePattern: string };
-  /** Leading token of the User-Agent on provider requests. */
-  userAgentToken: string;
+  /** Leading tokens (lower case) of the User-Agents the client sends. */
+  userAgentTokens: readonly string[];
   /** Icon in the LLM logs. */
   icon: string;
 }
@@ -62,7 +62,7 @@ export const OPENCODE_FAMILY: Record<
     },
     // `opencode/<version>` on every provider; `originator: opencode` on the
     // OpenAI Responses wire.
-    userAgentToken: "opencode",
+    userAgentTokens: ["opencode"],
     icon: "/icons/opencode.png",
   },
   kilo: {
@@ -86,9 +86,10 @@ export const OPENCODE_FAMILY: Record<
       clientId: "https://kilo.ai/docs/oauth/kilo/client.json",
       clientNamePattern: "^Kilo$",
     },
-    // `kilo/<channel>/<version>/<surface>`, e.g. `kilo/latest/7.8.8/cli …`.
+    // `Kilo-Code/<version> ai-sdk/…` on provider requests and
+    // `kilo/<channel>/<version>/<surface>` on its own calls (kilo 7.8.8).
     // Its ChatGPT sign-in sends OpenCode's identity instead.
-    userAgentToken: "kilo",
+    userAgentTokens: ["kilo-code", "kilo"],
     icon: "/icons/kilo.png",
   },
 };
@@ -137,7 +138,8 @@ export function openCodeFamilyClientForUserAgent(
   const token = userAgent?.split("/", 1)[0]?.trim().toLowerCase();
   if (!token) return null;
   return (
-    OPENCODE_FAMILY_CLIENTS.find((client) => client.userAgentToken === token) ??
-    null
+    OPENCODE_FAMILY_CLIENTS.find((client) =>
+      client.userAgentTokens.includes(token),
+    ) ?? null
   );
 }

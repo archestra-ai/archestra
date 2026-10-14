@@ -474,6 +474,44 @@ describe("McpElicitationCard", () => {
     });
   });
 
+  it("hands a lone question's Type something to the chat composer", async () => {
+    const user = userEvent.setup();
+    const onRespond = vi.fn().mockResolvedValue(true);
+    const onTypeAnswer = vi.fn();
+    render(
+      <McpElicitationCard
+        requests={[
+          {
+            ...singleChoice({
+              id: "q-owner",
+              message: "Owner?",
+              options: ["my-user", "my-org"],
+            }),
+            requestedSchema: {
+              type: "object",
+              properties: {
+                choice: { type: "string", enum: ["my-user", "my-org"] },
+                [ASK_USER_OTHER_ANSWER_FIELD]: {
+                  type: "string",
+                  title: "Type something",
+                },
+              },
+              required: [],
+            },
+          },
+        ]}
+        onRespond={onRespond}
+        onTypeAnswer={onTypeAnswer}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Type something/ }));
+
+    expect(onTypeAnswer).toHaveBeenCalledOnce();
+    expect(onRespond).not.toHaveBeenCalled();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
   it("shows only navigation in the footer of every tab but the last", async () => {
     const user = userEvent.setup();
 
@@ -1096,7 +1134,8 @@ describe("McpElicitationCard", () => {
     expect(typed).toHaveTextContent("Which site?GoogleTyped answer");
   });
 
-  it("lists the offered options under an answered question", () => {
+  it("folds the offered options under an answered question until expanded", async () => {
+    const user = userEvent.setup();
     render(
       <McpElicitationCard
         groupId="assistant-1-ask-user-1"
@@ -1112,6 +1151,11 @@ describe("McpElicitationCard", () => {
         onRespond={vi.fn().mockResolvedValue(true)}
       />,
     );
+
+    expect(
+      screen.queryByRole("list", { name: "Offered options" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Show 2 options" }));
 
     const options = within(
       screen.getByRole("list", { name: "Offered options" }),

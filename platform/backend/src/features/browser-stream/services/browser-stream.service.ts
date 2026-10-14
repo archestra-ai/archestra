@@ -2101,6 +2101,9 @@ export class BrowserStreamService {
  * calls run concurrently, so each waits in the page for its predecessor by
  * sequence number to keep keystrokes in order. A new token starts a new
  * sequence; a missing predecessor (lost call) stops blocking after 5 s.
+ *
+ * browser_run_code evaluates this in a bare vm context holding only `page`:
+ * JS built-ins exist, Node globals such as setTimeout do not.
  */
 function buildInputActionCode(action: string, order: InputOrder): string {
   const token = JSON.stringify(order.token);
@@ -2110,7 +2113,7 @@ function buildInputActionCode(action: string, order: InputOrder): string {
   let gate = page.__archestraInputGate;
   if (!gate || gate.token !== ${token}) gate = page.__archestraInputGate = { token: ${token}, done: 0 };
   const deadline = Date.now() + 5000;
-  while (gate.done < ${order.seq - 1} && Date.now() < deadline) await new Promise((r) => setTimeout(r, 5));
+  while (gate.done < ${order.seq - 1} && Date.now() < deadline) await page.waitForTimeout(5);
   try { ${action} } finally { gate.done = Math.max(gate.done, ${order.seq}); }
   try { const shot = await page.screenshot({ type: "jpeg", quality: 70, caret: "initial", timeout: 1500 }); return { url: page.url(), screenshot: shot.toString("base64") }; } catch { return { url: page.url() }; }
 }`;

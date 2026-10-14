@@ -1,10 +1,11 @@
 import { validateOpenappaPolicy } from "@archestra/openappa-rs";
+import { parse as parseToml } from "smol-toml";
 import { describe, expect, test } from "vitest";
 import {
   expandCommandExecutionPolicyRules,
   isCommandExecutionTool,
 } from "./command-normalization";
-import { toolEntries } from "./policy-text";
+import { asRecord, toolEntries } from "./policy-text";
 
 describe("command-normalization", () => {
   describe("isCommandExecutionTool", () => {
@@ -81,6 +82,68 @@ delta = {}
       expect(await validateOpenappaPolicy(expanded)).toEqual([]);
     });
 
+    test("an alias spelling written later still gets an alias ahead of the broader rule", async () => {
+      const toml = `${rule('"host/archestra/exec_command(command:*secret*)"')}
+[[policy.tool]]
+name = "host/archestra/exec_command"
+delta = {}
+
+[[policy.tool]]
+name = "host/archestra/exec_command(cmd:*secret*)"
+delta = {}
+`;
+      const spelled = names(expandCommandExecutionPolicyRules(toml));
+
+      expect(
+        spelled.indexOf("host/archestra/exec_command(cmd:*secret*)"),
+      ).toBeLessThan(spelled.indexOf("host/archestra/exec_command"));
+      expect(
+        await validateOpenappaPolicy(expandCommandExecutionPolicyRules(toml)),
+      ).toEqual([]);
+    });
+
+    test("renames the command argument in an alias's parameters", () => {
+      const toml = `[[policy.tool]]
+name = "builtin:bash(command:*)"
+delta = {}
+parameters = { type = "object", properties = { command = { type = "string" } }, required = ["command"] }
+`;
+      const { policy } = parseToml(expandCommandExecutionPolicyRules(toml)) as {
+        policy: { tool: { name: string; parameters: unknown }[] };
+      };
+      const parameters = Object.fromEntries(
+        policy.tool.map((entry) => [entry.name, entry.parameters]),
+      );
+
+      expect(parameters["builtin:exec_command(cmd:*)"]).toEqual({
+        type: "object",
+        properties: { cmd: { type: "string" } },
+        required: ["cmd"],
+      });
+      expect(parameters["builtin:shell(command:*)"]).toEqual({
+        type: "object",
+        properties: { command: { type: "string" } },
+        required: ["command"],
+      });
+    });
+
+    test("keeps integers beyond JavaScript's safe range exact", () => {
+      const toml = `${rule('"builtin:bash(command:*)"')}
+[externals]
+timeout_ms = 9007199254740993
+`;
+      const expanded = parseToml(expandCommandExecutionPolicyRules(toml), {
+        integersAsBigInt: "asNeeded",
+      });
+
+      expect(asRecord(expanded.externals)?.timeout_ms).toBe(9007199254740993n);
+      expect((asRecord(expanded.policy)?.tool as unknown[]).length).toBe(20);
+    });
+
+    test("refuses a policy it cannot read rather than serve it unexpanded", () => {
+      expect(() => expandCommandExecutionPolicyRules("not toml [")).toThrow();
+    });
+
     test("renames the command condition wherever it stands, past escaped characters", async () => {
       const toml = rule(
         String.raw`'host/claude-code/exec_command(workdir:/a\,b,cmd:*a\)b*)'`,
@@ -107,7 +170,6 @@ delta = {}
 [policy.tool.metadata]
 name = "builtin:shell(command:*)"
 `,
-        "not toml [",
       ])
         expect(expandCommandExecutionPolicyRules(toml)).toBe(toml);
     });

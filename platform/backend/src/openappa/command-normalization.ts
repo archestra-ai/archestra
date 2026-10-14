@@ -1,5 +1,5 @@
-import { stringify } from "smol-toml";
-import { asRecord, parsePolicyToml } from "./policy-text";
+import { parse as parseToml, stringify } from "smol-toml";
+import { asRecord } from "./policy-text";
 
 const COMMAND_TOOLS = [
   "bash",
@@ -38,29 +38,36 @@ export function isCommandExecutionTool(name: string): boolean {
  * `exec_command`, `run_command`) and parameter names (`command`, `cmd`), so
  * a rule matches each client's own spelling of a command call. Contracts are
  * first-match in declaration order, so each alias stands right after the rule
- * it copies, ahead of any broader rule written after it.
+ * it copies, ahead of any broader rule written after it. Without aliases a
+ * call in another spelling would fall through to a broader rule, so a policy
+ * this cannot read is refused rather than served unexpanded.
  */
 export function expandCommandExecutionPolicyRules(content: string): string {
-  const document = parsePolicyToml(content);
-  const policy = asRecord(document?.policy);
-  if (!document || !policy || !Array.isArray(policy.tool)) return content;
-  const names = new Set(
-    policy.tool.flatMap((entry) => {
-      const name = asRecord(entry)?.name;
-      return typeof name === "string" ? [name] : [];
-    }),
-  );
+  const document = parseToml(content, { integersAsBigInt: "asNeeded" });
+  const policy = asRecord(document.policy);
+  if (!policy || !Array.isArray(policy.tool)) return content;
 
+  const declared = new Set<string>();
   let expanded = false;
   const tool = policy.tool.flatMap((entry) => {
     const rule = asRecord(entry);
     if (!rule || typeof rule.name !== "string") return [entry];
+    declared.add(rule.name);
     const aliases = commandAliases(rule.name).filter(
-      (name) => !names.has(name),
+      (alias) => !declared.has(alias.name),
     );
-    for (const name of aliases) names.add(name);
+    for (const alias of aliases) declared.add(alias.name);
     expanded ||= aliases.length > 0;
-    return [entry, ...aliases.map((name) => ({ ...rule, name }))];
+    return [
+      entry,
+      ...aliases.map((alias) => ({
+        ...rule,
+        name: alias.name,
+        ...(rule.parameters === undefined
+          ? {}
+          : { parameters: renamedParameter(rule.parameters, alias) }),
+      })),
+    ];
   });
 
   return expanded
@@ -68,8 +75,12 @@ export function expandCommandExecutionPolicyRules(content: string): string {
     : content;
 }
 
+type CommandParam = (typeof COMMAND_PARAMS)[number];
+
+type CommandAlias = { name: string; from: CommandParam; to: CommandParam };
+
 /** Every other spelling of a command rule's tool and command argument. */
-function commandAliases(name: string): string[] {
+function commandAliases(name: string): CommandAlias[] {
   const spelled = name.match(COMMAND_TOOL_NAME);
   if (!spelled) return [];
   const [, origPrefix, selector] = spelled;
@@ -78,6 +89,9 @@ function commandAliases(name: string): string[] {
     COMMAND_CONDITION.test(condition),
   );
   if (command === -1) return [];
+  const from: CommandParam = conditions[command].startsWith("cmd:")
+    ? "cmd"
+    : "command";
 
   const prefixes =
     origPrefix.startsWith("host/") && origPrefix !== "host/archestra/"
@@ -85,16 +99,40 @@ function commandAliases(name: string): string[] {
       : COMMAND_PREFIXES;
   return prefixes.flatMap((prefix) =>
     COMMAND_TOOLS.flatMap((tool) =>
-      COMMAND_PARAMS.map((param) => {
+      COMMAND_PARAMS.map((to) => {
         const renamed = conditions.map((condition, index) =>
           index === command
-            ? condition.replace(COMMAND_CONDITION, param)
+            ? condition.replace(COMMAND_CONDITION, to)
             : condition,
         );
-        return `${prefix}${tool}(${renamed.join(",")})`;
+        return { name: `${prefix}${tool}(${renamed.join(",")})`, from, to };
       }),
     ),
   );
+}
+
+/** A rule's `parameters` schema with the command argument under the alias's spelling. */
+function renamedParameter(parameters: unknown, alias: CommandAlias): unknown {
+  const schema = asRecord(parameters);
+  if (!schema || alias.from === alias.to) return parameters;
+  const rename = (key: string) => (key === alias.from ? alias.to : key);
+  const properties = asRecord(schema.properties);
+  return {
+    ...schema,
+    ...(properties
+      ? {
+          properties: Object.fromEntries(
+            Object.entries(properties).map(([key, value]) => [
+              rename(key),
+              value,
+            ]),
+          ),
+        }
+      : {}),
+    ...(Array.isArray(schema.required)
+      ? { required: schema.required.map(rename) }
+      : {}),
+  };
 }
 
 /** A selector's `argument:pattern` conditions, split at unescaped commas. */

@@ -132,6 +132,22 @@ delta = { trust = "untrusted", audience = ["public"] }
     });
   });
 
+  test("an audience only a rule's forwards names is unmapped", async () => {
+    await saveRoot(`[policy]
+version = 2
+trust_chain = ["untrusted", "trusted"]
+
+[[policy.tool]]
+name = "mail__send"
+forwards = { audience = ["self"] }
+`);
+
+    expect(audience(await view(), "self")).toEqual({
+      name: "self",
+      kind: "unmapped",
+    });
+  });
+
   test("an audience read from two sources lists both, and a group follows the chain", async () => {
     const content = `include = ["${ARCHESTRA}", "${GITHUB}"]
 

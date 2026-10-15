@@ -1,9 +1,9 @@
 "use client";
 
 import { Check, Plus } from "lucide-react";
-import Link from "next/link";
 import { useId } from "react";
 import { TerminalBlock } from "@/app/connection/terminal-block";
+import { SettingsLink } from "@/components/settings-link";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -159,13 +159,16 @@ export function AuthMethodPicker<T extends string>({
               </span>
             </Label>
             {method.manage && (
-              <Link
+              // Every manage page is in Settings; a reader who cannot see
+              // Settings gets no link rather than a bounce.
+              <SettingsLink
                 href={method.manage.href}
                 // Text-wide, 24px tall (WCAG 2.5.8), aligned under the title.
                 className="-mt-2 mb-2 ml-10 self-start py-1 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                fallback={null}
               >
                 {method.manage.label} →
-              </Link>
+              </SettingsLink>
             )}
           </div>
         );

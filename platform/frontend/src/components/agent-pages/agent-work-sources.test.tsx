@@ -14,6 +14,7 @@ import {
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { AgentWorkSources } from "./agent-work-sources";
 
+vi.mock("@/app/_parts/use-settings-area-access");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/chatops/chatops.query", () => ({

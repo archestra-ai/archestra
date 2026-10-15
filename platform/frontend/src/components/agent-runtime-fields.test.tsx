@@ -16,6 +16,7 @@ import {
   it,
   vi,
 } from "vitest";
+import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import {
   useHasPermissions,
   useScopedCapabilities,
@@ -39,6 +40,7 @@ global.ResizeObserver = class ResizeObserver {
   disconnect() {}
 } as typeof ResizeObserver;
 
+vi.mock("@/app/_parts/use-settings-area-access");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("sonner");
@@ -50,6 +52,7 @@ afterAll(() => server.close());
 
 describe("AgentRuntimeFields", () => {
   beforeEach(() => {
+    vi.mocked(useSettingsAreaAccess).mockReturnValue(true);
     vi.mocked(useHasPermissions).mockReturnValue({
       data: false,
       isPending: false,
@@ -310,6 +313,31 @@ describe("AgentRuntimeFields", () => {
         scope: "shared",
       }),
     ]);
+  });
+
+  it("points a reader without Settings at their own credentials", async () => {
+    vi.mocked(useSettingsAreaAccess).mockReturnValue(false);
+    vi.mocked(useAppName).mockReturnValue("Archestra");
+    vi.mocked(useFeature).mockImplementation((flag) =>
+      flag === "agentRuntime" ? true : undefined,
+    );
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <Harness />
+      </QueryClientProvider>,
+    );
+    await user.click(
+      screen.getByRole("switch", { name: "Dedicated Agent runtime" }),
+    );
+    expect(screen.getByRole("link", { name: "Credentials" })).toHaveAttribute(
+      "href",
+      "/account/credentials",
+    );
   });
 
   // The backend reads an absent value as enabled, so the switch has to show

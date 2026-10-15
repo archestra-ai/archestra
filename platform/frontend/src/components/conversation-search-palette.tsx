@@ -1,5 +1,4 @@
 "use client";
-import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { useDebounce } from "@uidotdev/usehooks";
 import { MessageCircle, Pencil, Pin, UsersRound } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
@@ -9,6 +8,7 @@ import {
   contentNavGroups,
   isNavItemPermitted,
 } from "@/app/_parts/studio-nav";
+import { useNavPermissionMap } from "@/app/_parts/use-settings-area-access";
 import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { RunStateIcon } from "@/components/chat/run-state-icon";
 import { ProjectBadgeButton } from "@/components/project-badge-button";
@@ -39,7 +39,7 @@ import {
 } from "@/consts";
 import { useMyAgentRuns } from "@/lib/agent-runtime.query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
-import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   useConversations,
   useDeleteConversation,
@@ -114,7 +114,7 @@ const NAVIGATION_KEYWORDS: Record<string, string> = {
  * one surface cannot go stale in the other.
  */
 function useNavigationDestinations() {
-  const permissionMap = usePermissionMap(requiredPagePermissionsMap);
+  const permissionMap = useNavPermissionMap();
   const openappaEnabled = useFeature("openappaEnabled");
   // Connect is useful with either half, exactly as the sidebar gates its row.
   const { data: canReadLlmProxy } = useHasPermissions({ llmProxy: ["read"] });

@@ -16,6 +16,7 @@ import {
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import {
   ChannelDetailsDialog,
   channelDisplayName,
@@ -945,6 +946,7 @@ function AddChannelPicker({
   onPick: (optionId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const canSeeSettings = useSettingsAreaAccess() === true;
   const [provider, setProvider] = useState<ChatProvider | null>(null);
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
@@ -1012,7 +1014,7 @@ function AddChannelPicker({
         ))}
         {/* An unconnected provider is only worth naming at the moment someone
             looks for one of its channels and does not find it. */}
-        {unconnectedProviders.map((candidate) => (
+        {(canSeeSettings ? unconnectedProviders : []).map((candidate) => (
           <Button
             key={candidate}
             type="button"
@@ -1190,6 +1192,7 @@ function BlockedOptions({
 
 /** Nothing is connected, and connecting is an organization-wide job. */
 function ProvidersEmptyState({ providers }: { providers: ChatProvider[] }) {
+  const canSeeSettings = useSettingsAreaAccess() === true;
   return (
     <div className="rounded-md border border-dashed px-4 py-6">
       <p className="text-sm font-medium">No messaging providers connected</p>
@@ -1197,22 +1200,24 @@ function ProvidersEmptyState({ providers }: { providers: ChatProvider[] }) {
         {listProviderNames(providers)} are connected once for the whole
         organization. Until one is, there is nothing to assign here.
       </p>
-      <div className="mt-4 flex flex-wrap gap-2">
-        {providers.map((provider) => (
-          <Button
-            key={provider}
-            type="button"
-            variant="outline"
-            size="sm"
-            asChild
-          >
-            <Link href={`/settings/messaging-channels/${provider}`}>
-              <ChannelIcon channel={provider} className="size-4" />
-              Connect {MESSAGING_CHANNEL_LABELS[provider]}
-            </Link>
-          </Button>
-        ))}
-      </div>
+      {canSeeSettings && (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {providers.map((provider) => (
+            <Button
+              key={provider}
+              type="button"
+              variant="outline"
+              size="sm"
+              asChild
+            >
+              <Link href={`/settings/messaging-channels/${provider}`}>
+                <ChannelIcon channel={provider} className="size-4" />
+                Connect {MESSAGING_CHANNEL_LABELS[provider]}
+              </Link>
+            </Button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1235,6 +1240,7 @@ function AgentEmailSection({
   readOnly: boolean;
   onEdit: () => void;
 }) {
+  const canSeeSettings = useSettingsAreaAccess() === true;
   if (!providerEnabled) {
     return (
       <div className="flex flex-col items-center gap-1 rounded-md border border-dashed px-4 py-6 text-center">
@@ -1243,17 +1249,19 @@ function AgentEmailSection({
           Set it up once for the organization and every agent gets its own
           address.
         </p>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="mt-2"
-          asChild
-        >
-          <Link href="/settings/messaging-channels/email">
-            Set up email in Settings
-          </Link>
-        </Button>
+        {canSeeSettings && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-2"
+            asChild
+          >
+            <Link href="/settings/messaging-channels/email">
+              Set up email in Settings
+            </Link>
+          </Button>
+        )}
       </div>
     );
   }

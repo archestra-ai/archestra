@@ -31,8 +31,7 @@ const POLICY_LAUNCH_PROMPTS = {
   configureBatteries:
     "Review my OpenAPPA batteries: what is not enforced, and which ones fit my MCP servers.",
   // Overview chat strip: the agent's suggested prompts.
-  explainGuardrails:
-    OPENAPPA_SUGGESTED_LAUNCH_PROMPTS.explainGuardrails.prompt,
+  explainGuardrails: OPENAPPA_SUGGESTED_LAUNCH_PROMPTS.explainGuardrails.prompt,
   explainPolicy: OPENAPPA_SUGGESTED_LAUNCH_PROMPTS.explainPolicy.prompt,
   reviewRisks: OPENAPPA_SUGGESTED_LAUNCH_PROMPTS.reviewRisks.prompt,
   changePolicy: OPENAPPA_SUGGESTED_LAUNCH_PROMPTS.changePolicy.prompt,

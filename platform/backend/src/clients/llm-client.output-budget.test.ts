@@ -25,6 +25,33 @@ describe("default output budget", () => {
     }
   });
 
+  test("an OpenAI chat model gets the budget as max_completion_tokens, and a caller's own one wins", async () => {
+    await ModelModel.create({
+      externalId: "openai/chat-latest",
+      provider: "openai",
+      modelId: "chat-latest",
+      outputLength: 16_384,
+      contextLength: 128_000,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+
+    const defaulted = await sentBody({
+      provider: "openai",
+      modelName: "chat-latest",
+    });
+    expect(defaulted.max_completion_tokens).toBe(16_384);
+    expect(defaulted).not.toHaveProperty("max_tokens");
+
+    const callers = await sentBody({
+      provider: "openai",
+      modelName: "chat-latest",
+      providerOptions: { openai: { maxCompletionTokens: 1_234 } },
+    });
+    expect(callers.max_completion_tokens).toBe(1_234);
+    expect(callers).not.toHaveProperty("max_tokens");
+  });
+
   test("a shared-window model keeps its provider default, so a long prompt can use the leftover window", async () => {
     await ModelModel.create({
       externalId: "openai/gpt-4",
@@ -82,6 +109,24 @@ async function sentMaxTokens(params: {
   modelName: string;
   maxOutputTokens?: number;
 }): Promise<number | undefined> {
+  const body = await sentBody(params);
+  const generationConfig = body.generationConfig as
+    | Record<string, unknown>
+    | undefined;
+  const cap =
+    body.max_tokens ??
+    body.max_completion_tokens ??
+    body.max_output_tokens ??
+    generationConfig?.maxOutputTokens;
+  return cap as number | undefined;
+}
+
+async function sentBody(params: {
+  provider: SupportedProvider;
+  modelName: string;
+  maxOutputTokens?: number;
+  providerOptions?: Parameters<typeof generateText>[0]["providerOptions"];
+}): Promise<Record<string, unknown>> {
   const sent: Array<Record<string, unknown>> = [];
   vi.stubGlobal(
     "fetch",
@@ -100,18 +145,10 @@ async function sentMaxTokens(params: {
     }),
     prompt: "hi",
     maxOutputTokens: params.maxOutputTokens,
+    providerOptions: params.providerOptions,
     maxRetries: 0,
   }).catch(() => {});
 
   expect(sent).toHaveLength(1);
-  const [body] = sent;
-  const generationConfig = body.generationConfig as
-    | Record<string, unknown>
-    | undefined;
-  const cap =
-    body.max_tokens ??
-    body.max_completion_tokens ??
-    body.max_output_tokens ??
-    generationConfig?.maxOutputTokens;
-  return cap as number | undefined;
+  return sent[0];
 }

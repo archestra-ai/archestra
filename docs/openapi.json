@@ -55668,6 +55668,21 @@
                           ],
                           "additionalProperties": false
                         }
+                      },
+                      "users": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id"
+                          ],
+                          "additionalProperties": false
+                        }
                       }
                     },
                     "required": [
@@ -55681,7 +55696,8 @@
                       "isPersonalGateway",
                       "runtime",
                       "description",
-                      "teams"
+                      "teams",
+                      "users"
                     ],
                     "additionalProperties": false
                   }

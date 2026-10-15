@@ -17,7 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useInternalAgents } from "@/lib/agent.query";
+import { useInternalAgentOptions } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   useAllChatOpsBindings,
@@ -43,7 +43,7 @@ export function ProviderChannels({
   provider: "ms-teams" | "telegram";
 }) {
   const bindings = useAllChatOpsBindings();
-  const { data: agents = [] } = useInternalAgents();
+  const { data: agents = [] } = useInternalAgentOptions();
   const { data: canEdit } = useHasPermissions({
     organizationSettings: ["update"],
   });

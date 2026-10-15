@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useInternalAgents } from "@/lib/agent.query";
+import { useInternalAgentOptions } from "@/lib/agent.query";
 import { useSession } from "@/lib/auth/auth.query";
 import { useAllChatOpsBindings } from "@/lib/chatops/chatops.query";
 import {
@@ -27,7 +27,7 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
-vi.mock("@/lib/agent.query", () => ({ useInternalAgents: vi.fn() }));
+vi.mock("@/lib/agent.query", () => ({ useInternalAgentOptions: vi.fn() }));
 vi.mock("@/lib/chatops/chatops-config.query", () => ({
   useConvertSlackAppToAgentBot: vi.fn(),
   useCreateSlackAgentBotApp: vi.fn(),
@@ -121,13 +121,13 @@ beforeEach(() => {
   vi.mocked(useSession).mockReturnValue({
     data: { user: { id: "me" } },
   } as unknown as ReturnType<typeof useSession>);
-  vi.mocked(useInternalAgents).mockReturnValue({
+  vi.mocked(useInternalAgentOptions).mockReturnValue({
     data: [
       { id: "a1", name: "Marketing" },
       { id: "a2", name: "Coding" },
       { id: "a3", name: "Sales" },
     ],
-  } as unknown as ReturnType<typeof useInternalAgents>);
+  } as unknown as ReturnType<typeof useInternalAgentOptions>);
   saveToken.mockResolvedValue({ success: true, migrated: [] });
   vi.mocked(useSlackAgentBotChannels).mockReturnValue({
     data: undefined,

@@ -55,29 +55,22 @@ const {
   unpinAgent,
 } = archestraApiSdk;
 
-/**
- * Internal agent metadata for shared list consumers. Tool pickers load each
- * agent's assignments separately, so keep the embedded tool names and
- * descriptions out of this response.
- */
-const internalAgentsQuery = {
-  agentType: "agent",
-  excludeBuiltIn: true,
-  includeTools: false,
-} as const;
-
-export const internalAgentsQueryKey = [
-  "agents",
-  "all",
-  internalAgentsQuery,
-] as const;
-
 const chatAgentsQueryKey = ["agents", "chat-roster", "v2"] as const;
 
-export async function fetchInternalAgents() {
-  const { data, error } = await getAllAgents({ query: internalAgentsQuery });
+/** Metadata-only internal agents for selectors and runtime labels. */
+export async function fetchInternalAgentOptions() {
+  const { data, error } = await getAgentOptions({
+    query: { agentType: "agent", excludeBuiltIn: true },
+  });
   throwOnApiError(error, { toastOnError: false });
   return data ?? [];
+}
+
+export function useInternalAgentOptions(params?: { enabled?: boolean }) {
+  return useAgentOptions({
+    filters: { agentType: "agent", excludeBuiltIn: true },
+    enabled: params?.enabled,
+  });
 }
 
 async function fetchChatAgents() {
@@ -820,25 +813,6 @@ export function useAgentCredentialReadiness(params?: { enabled?: boolean }) {
       return data ?? [];
     },
     enabled: params?.enabled,
-  });
-}
-
-export function useInternalAgents(params?: { enabled?: boolean }) {
-  return useQuery({
-    queryKey: internalAgentsQueryKey,
-    queryFn: fetchInternalAgents,
-    enabled: params?.enabled,
-    // No staleTime override: inherit the client default so several components
-    // mounting this hook during one page load share a single fetch instead of
-    // each observer refetching the whole roster. Agent mutations invalidate
-    // ["agents"] queries, so edits still show up immediately.
-    //
-    // Restored on refresh because the new-chat screen cannot draw without it:
-    // which agent a new chat starts on is resolved from this roster, so an
-    // unrestored copy is a full-area spinner rather than a stale name. It is
-    // names and labels the picker already shows, and carries no credential (an
-    // agent references its key by id).
-    meta: PERSISTED_QUERY_META,
   });
 }
 

@@ -1894,17 +1894,25 @@ describe("agent routes", () => {
       makeTool,
       makeAgentTool,
       makeOrganization,
+      makeUser,
     }) => {
+      const recipient = await makeUser();
       const agent = await makeAgent({
         organizationId,
         agentType: "agent",
         authorId: user.id,
         name: "Selectable Agent",
+        access: { users: [recipient.id, user.id] },
         systemPrompt: "Configuration content",
         icon: `data:image/png;base64,${"A".repeat(2048)}`,
       });
       const tool = await makeTool({});
       await makeAgentTool(agent.id, tool.id);
+      const hiddenBuiltIn = await makeAgent({
+        organizationId,
+        agentType: "agent",
+        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION },
+      });
       const query = "?excludeBuiltIn=true&agentType=agent";
       const full = await app.inject({
         method: "GET",
@@ -1926,6 +1934,9 @@ describe("agent routes", () => {
           .map((row: { id: string }) => row.id)
           .sort(),
       );
+      expect(options.json().map((row: { id: string }) => row.id)).not.toContain(
+        hiddenBuiltIn.id,
+      );
       const option = options
         .json()
         .find((row: { id: string }) => row.id === agent.id);
@@ -1935,10 +1946,18 @@ describe("agent routes", () => {
         scope: agent.scope,
         icon: null,
       });
+      const fullAgent = full
+        .json()
+        .find((row: { id: string }) => row.id === agent.id);
+      expect(option.users).toEqual(
+        fullAgent.users.map((recipient: { id: string }) => ({
+          id: recipient.id,
+        })),
+      );
+      expect(option.users).toEqual([{ id: recipient.id }]);
       for (const field of [
         "systemPrompt",
         "tools",
-        "users",
         "labels",
         "knowledgeBaseIds",
         "connectorIds",

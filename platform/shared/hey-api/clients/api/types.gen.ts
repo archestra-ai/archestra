@@ -16065,6 +16065,9 @@ export type GetAgentOptionsResponses = {
             id: string;
             name: string;
         }>;
+        users: Array<{
+            id: string;
+        }>;
     }>;
 };
 

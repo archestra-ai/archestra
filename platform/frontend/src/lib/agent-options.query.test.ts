@@ -8,6 +8,7 @@ import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
 import {
   useAgentOptions,
   useDelegationTargetAgents,
+  useInternalAgentOptions,
   useOrgScopedAgents,
   useProfile,
 } from "@/lib/agent.query";
@@ -21,7 +22,10 @@ beforeAll(() => {
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
-it("loads delegation metadata only when enabled and never seeds editable settings from it", async () => {
+it.each([
+  useDelegationTargetAgents,
+  useInternalAgentOptions,
+])("loads internal selector metadata only when enabled and never seeds editable settings from it (%s)", async (useOptions) => {
   const requests: URL[] = [];
   const metadata = [
     {
@@ -49,10 +53,10 @@ it("loads delegation metadata only when enabled and never seeds editable setting
   });
   const wrapper = ({ children }: { children: ReactNode }) =>
     createElement(QueryClientProvider, { client: queryClient }, children);
-  const roster = renderHook(
-    ({ enabled }) => useDelegationTargetAgents({ enabled }),
-    { wrapper, initialProps: { enabled: false } },
-  );
+  const roster = renderHook(({ enabled }) => useOptions({ enabled }), {
+    wrapper,
+    initialProps: { enabled: false },
+  });
   expect(roster.result.current.fetchStatus).toBe("idle");
   expect(requests).toHaveLength(0);
   roster.rerender({ enabled: true });

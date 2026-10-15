@@ -1032,7 +1032,7 @@ class AgentModel {
       isChatView
         ? Promise.resolve(new Map())
         : AgentTeamModel.getTeamDetailsForAgents(agentIds),
-      isCompactView
+      isChatView
         ? Promise.resolve(new Map())
         : AgentUserModel.getUserDetailsForAgents(agentIds),
       isCompactView

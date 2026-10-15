@@ -397,6 +397,10 @@ export const AgentOptionSchema = SelectAgentSchema.pick({
   runtime: true,
   description: true,
   teams: true,
+}).extend({
+  users: z.array(
+    SelectAgentSchema.shape.users.unwrap().element.pick({ id: true }),
+  ),
 });
 
 /** Paginated Agents-surface row with the current user's pin marker. */

@@ -468,13 +468,18 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ query, user, organizationId }, reply) =>
       reply.send(
-        await findPermittedAgentRoster({
-          query,
-          userId: user.id,
-          organizationId,
-          optionsView: true,
-          ids: query.ids,
-        }),
+        (
+          await findPermittedAgentRoster({
+            query,
+            userId: user.id,
+            organizationId,
+            optionsView: true,
+            ids: query.ids,
+          })
+        ).map((agent) => ({
+          ...agent,
+          users: (agent.users ?? []).map(({ id }) => ({ id })),
+        })),
       ),
   );
 

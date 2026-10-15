@@ -16,6 +16,7 @@ import {
   PLAYWRIGHT_MCP_CATALOG_ID,
   SEEDED_APP_RENDER_META_KEY,
 } from "@archestra/shared";
+import { ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import config from "@/config";
@@ -1542,7 +1543,11 @@ describe("McpClient", () => {
       );
       expect(options?.capabilities?.elicitation).toBeUndefined();
       expect(mockSetRequestHandler).not.toHaveBeenCalled();
-      expect(mockSetNotificationHandler).not.toHaveBeenCalled();
+      // The only notification the client listens for is tools/list_changed.
+      expect(mockSetNotificationHandler).toHaveBeenCalledExactlyOnceWith(
+        ToolListChangedNotificationSchema,
+        expect.any(Function),
+      );
     });
 
     test("declares elicitation support when a gateway bridge handler is provided", async () => {
@@ -1598,8 +1603,12 @@ describe("McpClient", () => {
       expect(mockSetRequestHandler).toHaveBeenCalledOnce();
       // No notification handler: 2026-07-28 removes
       // `notifications/elicitation/complete`, since under MRTR the client
-      // learns the outcome by retrying the original request.
-      expect(mockSetNotificationHandler).not.toHaveBeenCalled();
+      // learns the outcome by retrying the original request. Only
+      // tools/list_changed is listened for.
+      expect(mockSetNotificationHandler).toHaveBeenCalledExactlyOnceWith(
+        ToolListChangedNotificationSchema,
+        expect.any(Function),
+      );
     });
 
     describe("Secrets caching (N+1 prevention)", () => {

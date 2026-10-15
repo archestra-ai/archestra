@@ -36,7 +36,6 @@ export const TOOL_PERMISSIONS: Record<
   // OpenAPPA
   execute_remedy_plan: null,
   yell: null,
-  superyell: null,
   get_remedy_plans: null,
   list_peer_messages: null,
   read_peer_message: null,
@@ -50,14 +49,6 @@ export const TOOL_PERMISSIONS: Record<
   get_guardrails_policy: { resource: "openappaPolicy", action: "read" },
   get_openappa_policy_tests: { resource: "openappaPolicy", action: "read" },
   run_openappa_policy_tests: { resource: "openappaPolicy", action: "update" },
-  discover_openappa_validation_scenarios: {
-    resource: "openappaPolicy",
-    action: "read",
-  },
-  draft_openappa_validation_scenario: {
-    resource: "openappaPolicy",
-    action: "read",
-  },
   preview_openappa_validation_change: {
     resource: "openappaPolicy",
     action: "read",

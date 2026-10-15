@@ -214,6 +214,9 @@ function useCredentialMutation<TInput, TOutput>(
         queryClient.invalidateQueries({ queryKey: runtimeCredentialsQueryKey }),
         queryClient.invalidateQueries({ queryKey: ["github-app-configs"] }),
         queryClient.invalidateQueries({ queryKey: ["github-pats"] }),
+        // Adding a credential gives its author Full access on it, and the row
+        // actions read that from the reader's grants.
+        queryClient.invalidateQueries({ queryKey: ["scoped-capabilities"] }),
       ]);
     },
   });

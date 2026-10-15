@@ -76,6 +76,34 @@ describe("enrichOpenApiWithRbac", () => {
     );
   });
 
+  it("documents that a credential just for the caller needs no permission", () => {
+    const spec = {
+      paths: {
+        "/api/credentials": {
+          post: {
+            operationId: RouteId.CreateRuntimeCredential,
+            description: "Create a credential definition",
+          },
+        },
+      },
+    };
+
+    const enriched = enrichOpenApiWithRbac(spec);
+    const createOperation = enriched.paths["/api/credentials"].post as {
+      "x-required-permissions"?: {
+        kind: "dynamic" | "none" | "static";
+        note?: string;
+        permissions: string[];
+      };
+    };
+
+    expect(createOperation["x-required-permissions"]).toEqual({
+      kind: "dynamic",
+      note: expect.stringContaining("require `credential:create`"),
+      permissions: [],
+    });
+  });
+
   it("documents dynamic agent RBAC checks with an explicit note", () => {
     const spec = {
       paths: {

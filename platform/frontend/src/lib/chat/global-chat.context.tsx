@@ -1806,19 +1806,39 @@ export function useChatSessionSnapshot(
   conversationId: string | undefined,
 ): ChatSession | null {
   const { getSession, subscribeSessionUpdates } = useGlobalChat();
-  const [, setVersion] = useState(0);
+  // Held in state, never read from the session map during render. A render
+  // that bails out — an unrelated urgent update landing while this transition
+  // is still pending — keeps the hook values it computed but drops its
+  // effects. Reading the map there would record the new session in effect
+  // dependencies without running those effects, so an effect keyed on the
+  // session's stable functions (sendMessage, setMessages) or an unchanged
+  // status would never fire: a just-created chat would never send its
+  // opening message.
+  const [snapshot, setSnapshot] = useState(() => ({
+    conversationId,
+    session: conversationId ? (getSession(conversationId) ?? null) : null,
+  }));
 
-  useEffect(
-    () =>
-      subscribeSessionUpdates(() => {
-        startTransition(() => {
-          setVersion((version) => version + 1);
-        });
-      }),
-    [subscribeSessionUpdates],
-  );
+  useEffect(() => {
+    const sync = () => {
+      const session = conversationId
+        ? (getSession(conversationId) ?? null)
+        : null;
+      setSnapshot((current) =>
+        current.conversationId === conversationId && current.session === session
+          ? current
+          : { conversationId, session },
+      );
+    };
+    // The session may have been registered between the first render and
+    // this subscription.
+    sync();
+    return subscribeSessionUpdates(() => {
+      startTransition(sync);
+    });
+  }, [conversationId, getSession, subscribeSessionUpdates]);
 
-  return conversationId ? (getSession(conversationId) ?? null) : null;
+  return snapshot.conversationId === conversationId ? snapshot.session : null;
 }
 
 function setConversationGenerating(

@@ -1,6 +1,6 @@
 {
-  "id": "af77b8a5-6d4f-4a7e-b345-800c4f5fa14d",
-  "prevId": "5dd71c10-c36f-49cf-93b9-83bf28b55f2b",
+  "id": "5c7d6726-a750-47f0-8099-36d3ee32fbff",
+  "prevId": "0631ad65-e694-4afc-bf3e-28e24ccfea8b",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -21529,12 +21529,6 @@
           "notNull": true,
           "default": false
         },
-        "secret_id": {
-          "name": "secret_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "last_used_at": {
           "name": "last_used_at",
           "type": "timestamp",
@@ -21600,22 +21594,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "service_account_tokens_platform_token_unique_idx": {
-          "name": "service_account_tokens_platform_token_unique_idx",
-          "columns": [
-            {
-              "expression": "service_account_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"service_account_tokens\".\"secret_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -21625,19 +21603,6 @@
           "tableTo": "service_accounts",
           "columnsFrom": [
             "service_account_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "service_account_tokens_secret_id_secret_id_fk": {
-          "name": "service_account_tokens_secret_id_secret_id_fk",
-          "tableFrom": "service_account_tokens",
-          "tableTo": "secret",
-          "columnsFrom": [
-            "secret_id"
           ],
           "columnsTo": [
             "id"
@@ -21694,19 +21659,6 @@
           "notNull": true,
           "default": false
         },
-        "team_id": {
-          "name": "team_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "is_system": {
-          "name": "is_system",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
         "created_by": {
           "name": "created_by",
           "type": "text",
@@ -21750,21 +21702,6 @@
           "method": "btree",
           "with": {}
         },
-        "service_accounts_team_id_idx": {
-          "name": "service_accounts_team_id_idx",
-          "columns": [
-            {
-              "expression": "team_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "service_accounts_organization_id_name_unique_idx": {
           "name": "service_accounts_organization_id_name_unique_idx",
           "columns": [
@@ -21785,22 +21722,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "service_accounts_organization_id_system_unique_idx": {
-          "name": "service_accounts_organization_id_system_unique_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"service_accounts\".\"is_system\"",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -21815,19 +21736,6 @@
             "id"
           ],
           "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "service_accounts_team_id_team_id_fk": {
-          "name": "service_accounts_team_id_team_id_fk",
-          "tableFrom": "service_accounts",
-          "tableTo": "team",
-          "columnsFrom": [
-            "team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
           "onUpdate": "no action"
         },
         "service_accounts_created_by_user_id_fk": {
@@ -28861,6 +28769,18 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "served": {
+          "name": "served",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "retained_annotators": {
+          "name": "retained_annotators",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},
@@ -28868,6 +28788,80 @@
         "openappa_effective_policies_organization_id_organization_id_fk": {
           "name": "openappa_effective_policies_organization_id_organization_id_fk",
           "tableFrom": "openappa_effective_policies",
+          "tableTo": "organization",
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.openappa_root_openings": {
+      "name": "openappa_root_openings",
+      "schema": "",
+      "columns": {
+        "root": {
+          "name": "root",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "policy_file_key": {
+          "name": "policy_file_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "openappa_root_openings_org_key_idx": {
+          "name": "openappa_root_openings_org_key_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "policy_file_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "openappa_root_openings_organization_id_organization_id_fk": {
+          "name": "openappa_root_openings_organization_id_organization_id_fk",
+          "tableFrom": "openappa_root_openings",
           "tableTo": "organization",
           "columnsFrom": [
             "organization_id"

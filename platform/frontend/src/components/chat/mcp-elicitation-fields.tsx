@@ -140,13 +140,13 @@ export function getComposerAnswer({
   text: string;
 }): ElicitationResponse | null {
   const typed = text.trim();
-  if (requests.length !== 1 || !typed) {
+  if (!typed || !takesComposerAnswer(requests)) {
     return null;
   }
   const [request] = requests;
   const fields = getElicitationFields(request.requestedSchema);
   const other = fields.find(isOtherTextField);
-  if (!other || !isSingleChoiceForm(fields)) {
+  if (!other) {
     return null;
   }
   return {
@@ -157,6 +157,17 @@ export function getComposerAnswer({
       [other.name]: typed,
     }),
   };
+}
+
+/** Whether the chat composer takes the open question's typed answer (see `getComposerAnswer`). */
+export function takesComposerAnswer(
+  requests: ChatMcpElicitationRequest[],
+): boolean {
+  if (requests.length !== 1) {
+    return false;
+  }
+  const fields = getElicitationFields(requests[0].requestedSchema);
+  return fields.some(isOtherTextField) && isSingleChoiceForm(fields);
 }
 
 export function getDefaultValues(fields: ElicitationField[]) {
@@ -318,7 +329,12 @@ export function ElicitationFieldInput({
   /** Focus on a text field; choice controls ignore it. */
   onFocus?: () => void;
   /** Adds an "Type something" option to a single pick, for a typed answer instead. */
-  other?: { selected: boolean; onSelect: () => void };
+  other?: {
+    selected: boolean;
+    onSelect: () => void;
+    /** Shown once selected; defaults to the unselected "Type something…". */
+    selectedLabel?: string;
+  };
   /**
    * Options are buttons that answer on activation, not radios that only
    * select: a radio promises a pick that something else submits.
@@ -419,7 +435,9 @@ export function ElicitationFieldInput({
             onClick={other.onSelect}
             icon={<PencilIcon className="size-4" aria-hidden />}
           >
-            <span className="text-sm leading-5">Type something…</span>
+            <span className="text-sm leading-5">
+              {(other.selected && other.selectedLabel) || "Type something…"}
+            </span>
           </OptionButton>
         ) : null}
       </fieldset>
@@ -614,6 +632,10 @@ function OptionButton({
         "disabled:pointer-events-none disabled:opacity-50",
         icon ? "text-muted-foreground" : null,
         selected ? "border-primary" : "border-border",
+        // A selected typed answer stays a quiet, held state rather than an action.
+        icon && selected
+          ? "bg-muted text-foreground hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground"
+          : null,
         className,
       )}
       {...props}

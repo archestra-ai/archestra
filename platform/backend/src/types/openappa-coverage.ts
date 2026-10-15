@@ -35,6 +35,16 @@ const CoverageAgentRefSchema = z.object({
   name: z.string(),
 });
 
+/**
+ * A battery's status as the enforced composition holds it. `pending`: an
+ * earlier composition is enforced, and it did not hold this battery.
+ */
+export const CoverageBatteryStatusSchema = z.union([
+  BatteryInstallStatusSchema,
+  z.literal("pending"),
+]);
+export type CoverageBatteryStatus = z.infer<typeof CoverageBatteryStatusSchema>;
+
 /** One `[[policy.tool]]` entry as the coverage parse read it. */
 export const CoverageRuleSchema = z.object({
   source: z.enum(["root", "battery", "catchall"]),
@@ -42,8 +52,8 @@ export const CoverageRuleSchema = z.object({
   battery: z.string().nullable(),
   /** The exact include entry that supplies a battery rule; null for a root rule. */
   batteryEntry: z.string().nullable(),
-  /** That battery's status (`refused` while the composition fails); null for a root rule. */
-  batteryStatus: BatteryInstallStatusSchema.nullable(),
+  /** That battery's status in the enforced composition; null for a root rule. */
+  batteryStatus: CoverageBatteryStatusSchema.nullable(),
   /** The rule's header line in its source TOML, when it can be located. */
   line: z.number().int().nullable(),
   /** The tool name as the rule spells it, without its selector. */
@@ -67,7 +77,7 @@ export const CoverageRuleSchema = z.object({
     attention: z.array(z.string()).optional(),
   }),
   annotator: z.string().nullable(),
-  /** Whether the runtime judges calls by this rule: the composition succeeded and, for a battery rule, the battery is active. */
+  /** Whether the runtime judges calls by this rule: a composition is enforced and, for a battery rule, it composed the battery. */
   enforced: z.boolean(),
 });
 export type CoverageRule = z.infer<typeof CoverageRuleSchema>;
@@ -207,7 +217,10 @@ export const CoverageSummarySchema = z.object({
     broken: z.array(
       z.object({
         name: z.string(),
-        status: BatteryInstallStatusSchema.exclude(["active"]),
+        status: z.union([
+          BatteryInstallStatusSchema.exclude(["active"]),
+          z.literal("pending"),
+        ]),
         /** Visible tools a rule of this battery names but does not enforce. */
         tools: z.number().int(),
       }),
@@ -225,6 +238,14 @@ export const CoverageSummarySchema = z.object({
         tools: z.number().int(),
       }),
     ),
+  }),
+  /** Which composition the counts describe; see `CompositionView`. */
+  composition: z.object({
+    kind: z.enum(["current", "previous", "root_only"]),
+    servedRootRevision: z.number().int().nullable(),
+    refusedRootRevision: z.number().int().nullable(),
+    /** An earlier composition of another or an unknown revision is enforced, so its rules may differ from the rows. */
+    rulesMayDiffer: z.boolean(),
   }),
 });
 export type CoverageSummary = z.infer<typeof CoverageSummarySchema>;

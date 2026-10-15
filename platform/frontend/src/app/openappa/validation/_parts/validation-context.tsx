@@ -1,7 +1,6 @@
 "use client";
 
 import { Info } from "lucide-react";
-import { useRouter } from "next/navigation";
 import {
   createContext,
   type ReactNode,
@@ -108,7 +107,6 @@ function useSuite({
   loadError: Error | null;
   sessionKey: string;
 }) {
-  const router = useRouter();
   const [baseline, setBaseline] = useState(collection);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const history = useOpenAppaPolicyTestRuns(true);
@@ -170,10 +168,6 @@ function useSuite({
       directory: collection.directory,
     });
   }
-  function add() {
-    if (github || !canWrite || busy || !available || files.length >= 32) return;
-    router.push("/openappa/validation/new");
-  }
   function createFile(
     file: PolicyTestCollection["files"][number],
     expectedVersion: string,
@@ -230,7 +224,6 @@ function useSuite({
     history,
     runAll,
     save,
-    add,
     createFile,
     deleteFiles,
     summaries: inspection.summaries,

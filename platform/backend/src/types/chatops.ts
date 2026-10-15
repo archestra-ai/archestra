@@ -732,14 +732,6 @@ export interface SlackDbConfig {
   appId: string;
   connectionMode?: ChatOpsConnectionMode;
   appLevelToken?: string;
-}
-
-/**
- * An additional Slack app whose bot always answers as one agent, so people can
- * @mention that agent by its own name (`@archestra_marketing`) in any channel.
- */
-export interface SlackAgentBotConfig extends SlackDbConfig {
-  agentId: string;
   /**
    * OAuth client credentials of an app Archestra created itself (see
    * SlackAppFactory): used to install it, and the mark that Archestra may
@@ -760,6 +752,14 @@ export interface SlackAgentBotConfig extends SlackDbConfig {
    * organization-wide token saved before tokens were per user.
    */
   configTokenUserId?: string;
+}
+
+/**
+ * An additional Slack app whose bot always answers as one agent, so people can
+ * @mention that agent by its own name (`@archestra_marketing`) in any channel.
+ */
+export interface SlackAgentBotConfig extends SlackDbConfig {
+  agentId: string;
   /**
    * The bot's name follows the agent's: renaming the agent renames the bot.
    * Off once someone picks a handle of their own.

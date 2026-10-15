@@ -225,7 +225,7 @@ function describeMcpCredentialBlocker(blocker: McpCredentialBlocker): string {
     case "no_access":
       return `This server needs the ${name} credential, and you don't have access to it. Ask an admin to share it with you.`;
     case "not_connected":
-      return `This server needs your value for the ${name} credential. Add it in Settings → Credentials, then install again.`;
+      return `This server needs your value for the ${name} credential. Add it in Credentials, then install again.`;
     case "not_set_up":
       return `This server needs the ${name} credential, which isn't set up for the organization yet. Ask an admin to set it up.`;
     case "personal_only":

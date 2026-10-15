@@ -96,8 +96,7 @@ test("the agent previews against a proposed policy and saves the patch without l
   expect(preview.structuredContent).toMatchObject({
     stage: "preview",
     policy: { before: originalPolicy, after: candidatePolicy, changed: true },
-    counts: { passed: 2, failed: 0, cannotRun: 0 },
-    tests: { draft: true },
+    validation: { valid: true },
   });
   expect(
     (await GuardrailsPolicyModel.findLatest(organization.id))?.content,
@@ -115,7 +114,7 @@ test("the agent previews against a proposed policy and saves the patch without l
     delivery: "revision",
     revision: 2,
     policyChanged: true,
-    counts: { passed: 2, failed: 0, cannotRun: 0 },
+    validation: { valid: true },
   });
   expect(
     (await GuardrailsPolicyModel.findLatest(organization.id))?.content,
@@ -228,7 +227,7 @@ test.for([
     stage: "preview",
     policy: { revision: 1, changed: false },
     changes: request.changes,
-    counts: { passed: 1, failed: 1, cannotRun: 0 },
+    validation: { valid: true },
   });
   expect(preview.structuredContent?.policy).not.toHaveProperty("before");
   expect(preview.structuredContent?.policy).not.toHaveProperty("after");
@@ -244,7 +243,7 @@ test.for([
   expect(saved.structuredContent).toMatchObject({
     revision: 1,
     policyChanged: false,
-    counts: { passed: 1, failed: 1, cannotRun: 0 },
+    validation: { valid: true },
   });
   expect(await guardrailsPolicyService.get(organization.id)).toMatchObject({
     revision: 1,
@@ -304,7 +303,7 @@ test("blank policy placeholders are rejected before proposing or publishing a po
   expect((await GuardrailsDeploymentModel.get()).enabled).toBe(false);
 });
 
-test("a first combined policy save enables enforcement even with informational failed checks", async ({
+test("a first combined policy save enables enforcement", async ({
   makeOrganization,
   makeUser,
   makeMember,
@@ -335,7 +334,7 @@ test("a first combined policy save enables enforcement even with informational f
   expect(result.structuredContent).toMatchObject({
     revision: 1,
     policyChanged: true,
-    counts: { passed: 0, failed: 1, cannotRun: 0 },
+    validation: { valid: true },
     enforcement: { enabled: true, turnedOn: true },
   });
   expect((await GuardrailsDeploymentModel.get()).enabled).toBe(true);

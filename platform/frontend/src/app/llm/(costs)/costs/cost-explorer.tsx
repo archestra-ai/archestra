@@ -10,11 +10,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { useCostSavingsStatistics } from "@/lib/statistics.query";
 import { cn } from "@/lib/utils/tailwind";
 import {
   formatCompact,
   formatCost,
+  useCostStatistics,
   useCostsTimeRange,
   useKpis,
 } from "./cost-explorer.query";
@@ -60,7 +60,7 @@ export default function CostExplorer() {
 
   const kpis = useKpis({ timeframe, enabled });
   const cube = usePivotCube(q, timeframe, enabled);
-  const savings = useCostSavingsStatistics({
+  const statistics = useCostStatistics({
     timeframe,
     enabled: enabled && (q.metric === "billed" || q.metric === "subscription"),
   });
@@ -318,24 +318,27 @@ export default function CostExplorer() {
             caution={metric.caution}
             note={metricNote}
             extra={
-              q.metric === "billed" && savings.data?.totalSubscriptionCost ? (
+              q.metric === "billed" &&
+              statistics.data?.costSavings.totalSubscriptionCost ? (
                 <UnstyledButton
                   onClick={() => update({ metric: "subscription" })}
                   className="inline-flex items-center gap-1 text-foreground underline-offset-2 hover:underline"
                 >
                   Subscription usage at API rates:{" "}
-                  {formatCost(savings.data.totalSubscriptionCost)} (estimate,
-                  not a bill)
+                  {formatCost(
+                    statistics.data.costSavings.totalSubscriptionCost,
+                  )}{" "}
+                  (estimate, not a bill)
                   <ArrowRight className="size-3" />
                 </UnstyledButton>
-              ) : q.metric === "subscription" && savings.data ? (
+              ) : q.metric === "subscription" && statistics.data ? (
                 <span>
                   Actually billed in this range:{" "}
                   <UnstyledButton
                     onClick={() => update({ metric: "billed" })}
                     className="font-medium text-foreground underline-offset-2 hover:underline"
                   >
-                    {formatCost(savings.data.totalActualCost)}
+                    {formatCost(statistics.data.costSavings.totalActualCost)}
                   </UnstyledButton>
                 </span>
               ) : null

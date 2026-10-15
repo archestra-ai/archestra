@@ -3,6 +3,7 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import { KeyRound, Lock } from "lucide-react";
 import Link from "next/link";
+import { useCredentialsPageHref } from "@/components/settings-link";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useMcpCatalogCredentialPreflight } from "@/lib/mcp/internal-mcp-catalog.query";
@@ -102,13 +103,15 @@ function blockerNextStep(blocker: McpCredentialBlocker) {
     case "no_access":
       return "Ask an admin to share it with you.";
     case "not_connected":
-      return "Add it in Settings → Credentials.";
+      // Settings → Credentials or Personal Settings, depending on the reader.
+      return "Add it in Credentials.";
     default:
       return "Ask an admin to set it up.";
   }
 }
 
 function BlockerNotice({ blocker }: { blocker: McpCredentialBlocker }) {
+  const credentialsHref = useCredentialsPageHref();
   const name = blocker.credentialName;
   switch (blocker.reason) {
     case "no_access":
@@ -135,7 +138,7 @@ function BlockerNotice({ blocker }: { blocker: McpCredentialBlocker }) {
             variant="outline"
             className="ml-auto shrink-0 bg-background"
           >
-            <Link href="/settings/credentials">Open Credentials</Link>
+            <Link href={credentialsHref}>Open Credentials</Link>
           </Button>
         </InlineNotice>
       );

@@ -217,8 +217,14 @@ test("a configuration agent launch uses ordinary creation and chat controls", as
     parts: [{ type: "text", text: openingPrompt }],
   });
   expect(screen.getByRole("tab", { name: "Files" })).toBeInTheDocument();
+  // The header actions render only after the page settles on the created
+  // conversation with its first message, which lags the send on a loaded runner.
   expect(
-    await screen.findByRole("button", { name: "Chat actions" }),
+    await screen.findByRole(
+      "button",
+      { name: "Chat actions" },
+      { timeout: 5000 },
+    ),
   ).toBeInTheDocument();
   expect(
     screen.getByRole("combobox", {
@@ -227,7 +233,11 @@ test("a configuration agent launch uses ordinary creation and chat controls", as
   ).toBeEnabled();
 
   await user.type(
-    await screen.findByPlaceholderText("Ask a follow-up..."),
+    await screen.findByPlaceholderText(
+      "Ask a follow-up...",
+      {},
+      { timeout: 5000 },
+    ),
     "Now tighten it{Enter}",
   );
   await waitFor(() => expect(sent).toHaveLength(2));

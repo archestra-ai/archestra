@@ -83,6 +83,8 @@ const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
     "Beyond `team:read`, the caller must be an organization-level team manager (a role granting `team:create`) or an **admin** of the target team.",
   remove_team_member:
     "Beyond `team:read`, the caller must be an organization-level team manager (a role granting `team:create`) or an **admin** of the target team.",
+  create_schedule_trigger:
+    "Requires an acting user. Omitting `project_id` also requires [`project:create`](/docs/reference/permissions#project:create); it creates a private project with the task prompt as its instructions. Repeating the same new-project task returns the existing schedule. An existing project must be accessible to the caller.",
   get_schedule_trigger:
     "Requires a user token. The caller must be the schedule actor, a project member, or a scheduled-task administrator.",
   list_schedule_trigger_runs:

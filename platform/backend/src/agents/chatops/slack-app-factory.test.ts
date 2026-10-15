@@ -202,6 +202,53 @@ describe("SlackAppFactory", () => {
     ).rejects.toThrow("expired");
   });
 
+  test("creates the router bot's app with slash commands and installs it in one click", async () => {
+    vi.spyOn(ngrokTunnelManager, "getPublicDomain").mockReturnValue(
+      "team.ngrok.app",
+    );
+    await saveToken();
+
+    const result = await slackAppFactory.createRouterApp({
+      appName: "archestra",
+      connectionMode: "webhook",
+      organizationId: "org-1",
+      userId: USER_ID,
+    });
+
+    const { manifest } = slack.create.mock.calls[0][0];
+    // People pick their agent with /select-agent, so the router keeps it.
+    expect(manifest.features.slash_commands).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          command: expect.stringMatching(/select-agent$/),
+          url: "https://team.ngrok.app/api/webhooks/chatops/slack/slash-command",
+        }),
+      ]),
+    );
+    expect(manifest.settings.event_subscriptions.request_url).toBe(
+      "https://team.ngrok.app/api/webhooks/chatops/slack",
+    );
+    expect(await ChatOpsConfigModel.getSlackConfig()).toEqual(
+      expect.objectContaining({
+        enabled: false,
+        botToken: "",
+        appId: "A_NEW",
+        clientId: "client-1",
+        configTokenUserId: USER_ID,
+      }),
+    );
+    // Agent bots are untouched.
+    expect(await ChatOpsConfigModel.getSlackAgentBots()).toEqual([]);
+
+    const state = new URL(result.installUrl).searchParams.get("state") ?? "";
+    await expect(
+      slackAppFactory.completeOAuthInstall({ code: "code-1", state }),
+    ).resolves.toEqual({ agentId: null });
+    expect(await ChatOpsConfigModel.getSlackConfig()).toEqual(
+      expect.objectContaining({ botToken: "xoxb-installed", enabled: true }),
+    );
+  });
+
   test("an install link this server never issued is refused", async () => {
     await expect(
       slackAppFactory.completeOAuthInstall({ code: "c", state: "forged" }),

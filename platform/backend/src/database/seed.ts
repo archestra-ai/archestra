@@ -44,7 +44,6 @@ import {
   PlaywrightRuntimeModel,
   SkillFileModel,
   SkillModel,
-  TeamModel,
   TeamTokenModel,
   ToolModel,
   UserModel,
@@ -743,15 +742,10 @@ async function seedTeamTokens(): Promise<void> {
     "Ensured organization token exists",
   );
 
-  // Get all teams for this organization and ensure they have tokens
-  const teams = await TeamModel.findByOrganization(org.id);
-  for (const team of teams) {
-    const teamToken = await TeamTokenModel.ensureTeamToken(team.id, team.name);
-    logger.info(
-      { teamId: team.id, teamName: team.name, tokenId: teamToken.id },
-      "Ensured team token exists",
-    );
-  }
+  const ensuredTeamCount = await TeamTokenModel.ensureTeamTokensForOrganization(
+    org.id,
+  );
+  logger.info({ ensuredTeamCount }, "Ensured missing team tokens exist");
 }
 
 /**

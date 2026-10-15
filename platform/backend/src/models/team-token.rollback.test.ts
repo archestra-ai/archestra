@@ -5,6 +5,7 @@ import {
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import db, { schema } from "@/database";
+import { secretManager } from "@/secrets-manager";
 import { describe, expect, test } from "@/test";
 import TeamTokenModel from "./team-token";
 
@@ -342,6 +343,115 @@ describe("TeamTokenModel", () => {
       const second = await TeamTokenModel.ensureOrganizationToken();
 
       expect(first.id).toBe(second.id);
+    });
+  });
+
+  describe("ensureTeamTokensForOrganization", () => {
+    test("creates only missing team tokens and preserves existing credentials on replay", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const existingTeam = await makeTeam(org.id, user.id, {
+        name: "Existing",
+      });
+      const missingTeam = await makeTeam(org.id, user.id, { name: "Missing" });
+      const existing = await TeamTokenModel.ensureTeamToken(
+        existingTeam.id,
+        existingTeam.name,
+      );
+      const existingValue = await TeamTokenModel.getTokenValue(existing.id);
+      const secretsBefore = await db.select().from(schema.secretsTable);
+
+      expect(await TeamTokenModel.ensureTeamTokensForOrganization(org.id)).toBe(
+        1,
+      );
+      const created = await TeamTokenModel.findTeamToken(missingTeam.id);
+      expect(created).toMatchObject({
+        organizationId: org.id,
+        teamId: missingTeam.id,
+        name: "Missing Token",
+        isOrganizationToken: false,
+      });
+      expect(await TeamTokenModel.getTokenValue(created?.id ?? "")).toMatch(
+        new RegExp(`^${ARCHESTRA_TOKEN_PREFIX}[a-f0-9]{32}$`),
+      );
+      expect(await TeamTokenModel.findTeamToken(existingTeam.id)).toEqual(
+        existing,
+      );
+      expect(await TeamTokenModel.getTokenValue(existing.id)).toBe(
+        existingValue,
+      );
+      const secretsAfter = await db.select().from(schema.secretsTable);
+      expect(secretsAfter).toHaveLength(secretsBefore.length + 1);
+
+      expect(await TeamTokenModel.ensureTeamTokensForOrganization(org.id)).toBe(
+        0,
+      );
+      expect(await TeamTokenModel.findTeamToken(missingTeam.id)).toEqual(
+        created,
+      );
+      expect(await db.select().from(schema.secretsTable)).toEqual(secretsAfter);
+    });
+
+    test("recreates a token when its credential secret was removed", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id);
+      const existing = await TeamTokenModel.ensureTeamToken(team.id, team.name);
+      await secretManager().deleteSecret(existing.secretId);
+      expect(await TeamTokenModel.findTeamToken(team.id)).toBeNull();
+
+      expect(await TeamTokenModel.ensureTeamTokensForOrganization(org.id)).toBe(
+        1,
+      );
+      const replacement = await TeamTokenModel.findTeamToken(team.id);
+      expect(replacement?.id).not.toBe(existing.id);
+      expect(replacement?.teamId).toBe(team.id);
+      expect(await TeamTokenModel.getTokenValue(replacement?.id ?? "")).toMatch(
+        new RegExp(`^${ARCHESTRA_TOKEN_PREFIX}[a-f0-9]{32}$`),
+      );
+      expect(await db.select().from(schema.secretsTable)).toHaveLength(1);
+    });
+
+    test("limits backfill to teams in the selected organization", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+    }) => {
+      const org = await makeOrganization();
+      const otherOrg = await makeOrganization();
+      const user = await makeUser();
+      const team = await makeTeam(org.id, user.id);
+      const otherTeam = await makeTeam(otherOrg.id, user.id);
+
+      expect(await TeamTokenModel.ensureTeamTokensForOrganization(org.id)).toBe(
+        1,
+      );
+      expect(await TeamTokenModel.findTeamToken(team.id)).toMatchObject({
+        teamId: team.id,
+        organizationId: org.id,
+      });
+      expect(await TeamTokenModel.findTeamToken(otherTeam.id)).toBeNull();
+    });
+
+    test("does not create token secrets when there are no teams", async ({
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const secretsBefore = await db.select().from(schema.secretsTable);
+      expect(await TeamTokenModel.ensureTeamTokensForOrganization(org.id)).toBe(
+        0,
+      );
+      expect(await db.select().from(schema.secretsTable)).toEqual(
+        secretsBefore,
+      );
     });
   });
 

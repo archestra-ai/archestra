@@ -42,7 +42,7 @@ import {
   useHasPlaywrightMcpTools,
 } from "@/lib/chat/chat.query";
 import { cn } from "@/lib/utils/tailwind";
-import { LoadingState } from "../loading";
+import { BrowserConnectingState } from "./browser-connecting-state";
 
 interface BrowserPreviewContentProps {
   conversationId: string | undefined;
@@ -591,7 +591,7 @@ export function BrowserPreviewContent({
       >
         {isConnecting && (
           <div className="flex items-center justify-center h-full">
-            <LoadingState label="Connecting…" />
+            <BrowserConnectingState />
           </div>
         )}
         {!isConnecting && screenshot && (

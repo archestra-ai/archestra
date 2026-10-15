@@ -89454,6 +89454,25 @@ export type GetOpenappaEffectivePolicyResponses = {
                 rootRevision: number | null;
             } | null;
         };
+        retained: {
+            horizonDays: number;
+            livenessKnown: boolean;
+            kept: Array<{
+                name: string;
+                binding: string;
+                liveRoots: number;
+                lastActivityAt: string | null;
+                retiresAt: string | null;
+            }>;
+            inactive: Array<{
+                name: string;
+                binding: string;
+            }>;
+            dropped: Array<{
+                name: string;
+                reason: string;
+            }>;
+        } | null;
     };
 };
 

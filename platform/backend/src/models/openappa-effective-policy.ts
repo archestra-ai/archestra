@@ -4,6 +4,8 @@ import logger from "@/logging";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import {
   type EffectivePolicy,
+  type RetainedAnnotators,
+  RetainedAnnotatorsSchema,
   type ServedComposition,
   ServedCompositionSchema,
 } from "@/types/openappa-batteries";
@@ -12,7 +14,12 @@ const table = schema.openappaEffectivePoliciesTable;
 
 export type EffectivePolicyValues = Pick<
   EffectivePolicy,
-  "content" | "contentHash" | "rootRevision" | "installFingerprint" | "served"
+  | "content"
+  | "contentHash"
+  | "rootRevision"
+  | "installFingerprint"
+  | "served"
+  | "retainedAnnotators"
 > & { error: string | null };
 
 class OpenAppaEffectivePolicyModel {
@@ -21,7 +28,7 @@ class OpenAppaEffectivePolicyModel {
       .select()
       .from(table)
       .where(eq(table.organizationId, organizationId));
-    return row ? { ...row, served: readServed(row) } : null;
+    return row ? read(row) : null;
   }
 
   /** What a helper consult needs to know about the composition the runtime enforces. */
@@ -89,7 +96,7 @@ class OpenAppaEffectivePolicyModel {
         .values({ organizationId, ...row })
         .onConflictDoNothing()
         .returning();
-      return inserted ? { ...inserted, served: readServed(inserted) } : null;
+      return inserted ? read(inserted) : null;
     }
     const [updated] = await db
       .update(table)
@@ -103,7 +110,7 @@ class OpenAppaEffectivePolicyModel {
         ),
       )
       .returning();
-    return updated ? { ...updated, served: readServed(updated) } : null;
+    return updated ? read(updated) : null;
   }
 
   /** Mark the stored row as needing recomposition: the next read recomposes before serving. */
@@ -120,6 +127,34 @@ const STALE_ROOT_REVISION = -1;
 
 /** Rows whose `served` value did not parse, so each is logged once. */
 const unreadable = registerProcessLocalCache(new Set<string>());
+
+/** A stored row with its records parsed. */
+function read(
+  row: Omit<EffectivePolicy, "served" | "retainedAnnotators"> & {
+    served: unknown;
+    retainedAnnotators: unknown;
+  },
+): EffectivePolicy {
+  return {
+    ...row,
+    served: readServed(row),
+    retainedAnnotators: readRetained(row),
+  };
+}
+
+/**
+ * A stored record of kept annotators, or null when it is absent, not one this
+ * build reads, or describes other bytes than the row's.
+ */
+function readRetained(row: {
+  contentHash: string;
+  retainedAnnotators: unknown;
+}): RetainedAnnotators | null {
+  const parsed = RetainedAnnotatorsSchema.safeParse(row.retainedAnnotators);
+  return parsed.success && parsed.data.contentHash === row.contentHash
+    ? parsed.data
+    : null;
+}
 
 /** A stored `served` record, or null when it is absent or not one this build reads. */
 function readServed(row: {

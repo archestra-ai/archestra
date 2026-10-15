@@ -231,6 +231,7 @@ function row(overrides: Partial<EffectivePolicy>): EffectivePolicy {
     lastError: null,
     lastErrorAt: null,
     served: null,
+    retainedAnnotators: null,
     ...overrides,
   };
 }

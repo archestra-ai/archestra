@@ -25,16 +25,25 @@ export function questionHeader(header: unknown, maxLength: number): string {
 }
 
 /**
- * The ruling without the sections that name a remedy: the plan calls under
- * `Continue:` and the delegation advice that follows them. For a session that
- * cannot make those calls, so the model does not pass them on as options.
+ * The ruling's headline and reasons, without the sections after them. For a
+ * session that cannot make the calls those sections name, so the model does
+ * not pass them on as options.
+ *
+ * The runtime renders a headline, the reasons under `Why:`, and then only
+ * sections that name a remedy or a route around the block (`Continue:`,
+ * `Alternative:`, `Keep this session unchanged:`, and others). Each section
+ * starts with a heading on its own line after a blank line. The cut is at the
+ * first such heading other than `Why:`, so a heading the runtime adds later is
+ * dropped too, never shown as an option the session cannot take.
  */
 export function withoutRemedySections(ruling: string): string {
   const lines = ruling.split("\n");
   const cut = lines.findIndex(
     (line, index) =>
-      REMEDY_SECTION_HEADINGS.has(line) &&
-      (index === 0 || lines[index - 1] === ""),
+      index > 0 &&
+      lines[index - 1] === "" &&
+      SECTION_HEADING.test(line) &&
+      line !== "Why:",
   );
   return cut === -1 ? ruling : lines.slice(0, cut).join("\n").trimEnd();
 }
@@ -57,14 +66,5 @@ export function withoutCallerScope(
   return prefix && id.startsWith(prefix) ? id.slice(prefix.length) : id;
 }
 
-/**
- * The runtime's headings for the parts of a ruling that name a remedy or a
- * route around it. Each sits on its own line after a blank line.
- */
-const REMEDY_SECTION_HEADINGS = new Set([
-  "Continue:",
-  "Keep this session unchanged:",
-  "Delegation:",
-  "Refused by the parent's declaration:",
-  "Alternative:",
-]);
+/** A ruling's section heading: unindented text that ends with a colon. */
+const SECTION_HEADING = /^\S.*:$/;

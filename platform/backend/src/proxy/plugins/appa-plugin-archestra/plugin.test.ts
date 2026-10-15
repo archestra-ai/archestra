@@ -3249,6 +3249,43 @@ describe("withoutRemedySections", () => {
     );
   });
 
+  test("drops a section it does not know by name", () => {
+    // A heading the runtime adds later names a remedy or a route as well;
+    // the session still cannot take it.
+    expect(
+      withoutRemedySections(
+        [
+          "[appa] Blocked: Bash cannot run yet.",
+          "",
+          "Why:",
+          "  - trust is suspicious, below the required floor trusted",
+          "",
+          "To accept this change and receive the output:",
+          '  - archestra__execute_remedy_plan(offer_id: "9b003e10090940eb")',
+        ].join("\n"),
+      ),
+    ).toBe(
+      [
+        "[appa] Blocked: Bash cannot run yet.",
+        "",
+        "Why:",
+        "  - trust is suspicious, below the required floor trusted",
+      ].join("\n"),
+    );
+  });
+
+  test("keeps a reason that ends with a colon", () => {
+    // Only an unindented heading after a blank line starts a section.
+    const ruling = [
+      "[appa] Blocked: Bash cannot run yet.",
+      "",
+      "Why:",
+      "  - the policy names these readers:",
+      "  - internal",
+    ].join("\n");
+    expect(withoutRemedySections(ruling)).toBe(ruling);
+  });
+
   test("leaves a ruling without those sections as it is", () => {
     const ruling =
       "[appa] Refused: tool builtin:exec is not declared in this policy";

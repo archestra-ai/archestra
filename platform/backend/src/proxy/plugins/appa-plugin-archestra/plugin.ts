@@ -2014,6 +2014,9 @@ function remedylessRefusalNote(params: {
   transient: boolean;
 }): string {
   const server = archestraMcpBranding.serverName;
+  // A request with no tools at all is not a gateway that is still loading or
+  // needs a sign-in. The client known to send one is Codex in code mode, which
+  // runs its tools outside the request, so the text names its setting.
   if (params.binding.request.declaredTools.length === 0) {
     return `[appa] This request listed no tools, so the ruling could not be offered as a remedy and the call is refused. Remedies need the ${server} MCP gateway tools in the request. Connect the gateway, then start a new session. In Codex, also set code_mode_host = false: code mode keeps its tools out of the request.`;
   }

@@ -939,14 +939,14 @@ html.theme-doom-64 {
   --chart-4: oklch(0.705 0.213 47.604);
   --chart-5: oklch(0.627 0.265 303.9);
   --radius: 0px;
-  --sidebar: oklch(0.73 0 0);
+  --sidebar: oklch(0.76 0 0);
   --sidebar-foreground: oklch(0.24 0 0);
   --sidebar-primary: oklch(0.50 0.19 27.48);
   --sidebar-primary-foreground: oklch(1.00 0 0);
   --sidebar-accent: oklch(0.59 0.10 245.74);
   --sidebar-accent-foreground: oklch(1.00 0 0);
   --sidebar-border: oklch(0.43 0 0);
-  --sidebar-ring: oklch(0.4792 0.19 27.48);
+  --sidebar-ring: oklch(0.50 0.19 27.48);
   --font-sans: var(--font-oxanium);
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
   --font-mono: var(--font-source-code-pro);

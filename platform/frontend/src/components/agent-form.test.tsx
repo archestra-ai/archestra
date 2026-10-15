@@ -4216,16 +4216,16 @@ describe("AgentForm save payload and failure handling", () => {
 
     const name = screen.getByPlaceholderText("Enter agent name");
     await user.clear(name);
-    await user.type(name, "Incident helper");
+    await user.paste("Incident helper");
     // The variable editor beside it has a Description field of its own.
     const description = document.getElementById(
       "agentDescription",
     ) as HTMLTextAreaElement;
     await user.clear(description);
-    await user.type(description, "Investigate build failures");
+    await user.paste("Investigate build failures");
     const instructions = screen.getByRole("textbox", { name: "Instructions" });
     await user.clear(instructions);
-    await user.type(instructions, "Start with the failing build logs.");
+    await user.paste("Start with the failing build logs.");
 
     await user.click(screen.getByRole("radio", { name: /Codex/ }));
     expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();

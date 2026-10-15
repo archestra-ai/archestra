@@ -89,7 +89,9 @@ export async function resolveEncryptedChatAuditContext(params: {
   // prompt carries the same conversation content as the turn it repairs).
   // NOT chatops:* — those are unrelated messaging-channel sessions.
   if (
-    (source !== "chat" && !source?.startsWith("chat:")) ||
+    (source !== "chat" &&
+      !source?.startsWith("chat:") &&
+      source !== "guardrail:annotator") ||
     !sessionId ||
     !userId ||
     !isLoopbackAddress(requestIp)

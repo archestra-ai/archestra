@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+import { encryptedChatDekFingerprint } from "@/content-encryption/encrypted-chat";
 /** Native decisions at the existing buffered proxy seam. The real native +
  * PostgreSQL engine is exercised separately by openappa-rs/smoke.test.cjs. */
 
@@ -2159,7 +2161,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     ]);
   });
 
-  test("an encrypted chat that started while the switch was off stays out of OpenAPPA, and a new one is still refused", async ({
+  test("an encrypted chat that started while the switch was off stays unenforced; a new one requires a key and escrow", async ({
     makeConversation,
   }) => {
     const encrypt = (id: string) =>
@@ -2189,6 +2191,47 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     await encrypt(sessionId);
     const fresh = await postChat();
     expect(fresh.statusCode, fresh.body).toBe(409);
+  });
+
+  test.each([
+    false,
+    true,
+  ])("encrypted Chat stays governed and sends its key only outside the native hook JSON (deny=%s)", async (deny) => {
+    const dek = randomBytes(32);
+    await db
+      .update(database.schema.conversationsTable)
+      .set({
+        encryptedChat: true,
+        encryptedChatDekFingerprint: encryptedChatDekFingerprint(
+          sessionId,
+          dek,
+        ),
+        encryptedChatEscrow: {
+          v: 1,
+          alg: "RSA-OAEP-256",
+          escrowKeyFingerprint: "test",
+          wrappedDek: "test",
+        },
+      })
+      .where(eq(database.schema.conversationsTable.id, sessionId));
+    block = deny;
+    const response = await post(payload(false), {
+      "x-archestra-session-id": sessionId,
+      "x-archestra-encrypted-chat-key": dek.toString("base64url"),
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(noticeFrom(response.body, false).name).toBe(
+      deny ? "archestra__get_remedy_plans" : "get_weather",
+    );
+    expect(events.some((e) => e.event === "tool_call")).toBe(true);
+    for (const [input, , encryption] of native.dispatchHook.mock.calls) {
+      expect(input).not.toContain(dek.toString("base64url"));
+      expect(encryption).toMatchObject({
+        key: dek,
+        scope: JSON.stringify([agent.organizationId, sessionId]),
+      });
+    }
+    expect(await GuardrailsDeploymentModel.isEnabled()).toBe(true);
   });
 
   test("does not issue a remedy notice while the deployment switch is off, then does for a session that starts after it is turned on", async ({

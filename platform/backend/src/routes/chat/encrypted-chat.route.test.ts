@@ -31,6 +31,7 @@ import {
 import db from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import MessageModel from "@/models/message";
 import ProjectModel from "@/models/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -123,6 +124,26 @@ describe("encrypted chat routes", () => {
   }
 
   describe("POST /api/chat/conversations (encrypted chat)", () => {
+    test.each([
+      "deployment switch",
+      "feature flag",
+    ])("allows encrypted chat creation when the Guardrails %s is off", async (off) => {
+      config.openappa.enabled = off !== "feature flag";
+      await GuardrailsDeploymentModel.setEnabled(off !== "deployment switch");
+      const id = await createEncryptedChatConversation();
+      expect((await readEncryptedChatRow(id)).encrypted_chat).toBe(true);
+    });
+
+    test("creates an encrypted chat while Guardrails enforcement remains active", async () => {
+      config.openappa.enabled = true;
+      await GuardrailsDeploymentModel.setEnabled(true);
+      const id = await createEncryptedChatConversation();
+      const row = await readEncryptedChatRow(id);
+      expect(row.encrypted_chat).toBe(true);
+      expect(row.encrypted_chat_escrow).not.toBeNull();
+      expect(await GuardrailsDeploymentModel.isEnabled()).toBe(true);
+    });
+
     test("rejects a missing or malformed key header", async () => {
       const missing = await app.inject({
         method: "POST",

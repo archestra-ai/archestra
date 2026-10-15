@@ -5,6 +5,7 @@ import {
   AGENT_TOOL_PREFIX,
   buildElicitationMandateInstruction,
   isAgentTool,
+  isYellToolShortName,
   OPENAPPA_RUNTIME_TOOL_SHORT_NAMES,
   PROXY_STAMPED_TOOL_ARGUMENTS,
   SELF_FORK_TOOL_NAME,
@@ -17,6 +18,7 @@ import {
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   TOOL_START_RUN_SHORT_NAME,
 } from "@archestra/shared";
+import { isOpenCodeFamilyClient } from "@archestra/shared/opencode-family";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { readRunToolArgs } from "@/archestra-mcp-server/run-tool-target";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
@@ -30,6 +32,7 @@ import OpenAppaSpawnCorrelationModel, {
 import { childSessionId, clientSessionId } from "@/openappa/actor";
 import {
   type AppaChildReturnCompletion,
+  collectAndStripChildReturns,
   mintChildReturnMarker,
 } from "@/openappa/child-return";
 import {
@@ -45,6 +48,7 @@ import {
   mintDelegationMarker,
   verifyDelegatedPrompt,
 } from "@/openappa/delegation";
+import { recoverDiagnosticTurn } from "@/openappa/diagnostic-recovery";
 import {
   askHitlReviewInForm,
   getHitlAskUserArguments,
@@ -79,6 +83,7 @@ import {
   evaluateToolCalls,
   loadChildAddresses,
   loadChildReturns,
+  loadOfferReview,
   notePrompt,
   type OpenAppaSession,
   processProxyResults,
@@ -105,8 +110,12 @@ import {
   startedUnenforced,
   type UnenforcedCalls,
 } from "@/openappa/unenforced";
-import { appaWireFamily } from "@/openappa/wire";
-import { rememberYellSession } from "@/openappa/yell-session";
+import { appaTurnBoundaries, appaWireFamily } from "@/openappa/wire";
+import {
+  isReportingToolCall,
+  rememberYellSession,
+  reportingToolSpellings,
+} from "@/openappa/yell-session";
 import type {
   LlmProxyBeforeModelContext,
   LlmProxyBufferedModelResponseContext,
@@ -156,6 +165,8 @@ import { withCallerScope, withoutCallerScope } from "./utils";
 type AppaPluginBinding = {
   /** The request continues a provider thread that holds the system prompt. */
   threadContinue: boolean;
+  /** Limits later hooks to reporting and prevents a second recovery attempt. */
+  reportingRecovery?: boolean;
   session: OpenAppaSession;
   identity: AppaTrustedContext["toolIdentity"];
   adapter: AppaClientAdapter | undefined;
@@ -341,10 +352,61 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       childResultUpdates[result.id] = content;
       return { ...result, content };
     });
-    const childReturns = await approveChildReturnCarriers({
-      binding,
-      results,
-    });
+    let childReturns: Awaited<ReturnType<typeof approveChildReturnCarriers>>;
+    const trustedContext = context.resources.get(APPA_PLUGIN_TRUSTED_CONTEXT) as
+      | AppaTrustedContext
+      | undefined;
+    try {
+      if (trustedContext?.childReturnRefusal)
+        throw trustedContext.childReturnRefusal;
+      childReturns = await approveChildReturnCarriers({ binding, results });
+    } catch (error) {
+      const family = appaWireFamily(context.interactionType);
+      const recovery =
+        (error instanceof ChildReturnRefusal ||
+          (error instanceof ApiError &&
+            error === trustedContext?.childReturnRefusal)) &&
+        family &&
+        !binding.threadContinue &&
+        !binding.reportingRecovery
+          ? recoverDiagnosticTurn({
+              body: binding.requestBody,
+              family,
+              refusal: error.message,
+              tools: reportingToolSpellings({
+                identity: binding.identity,
+                declarations: binding.request.declaredTools,
+                nativeQuestion: binding.adapter?.nativeQuestion?.toolName,
+              }),
+              isAllowedCall: (call) =>
+                isReportingToolCall({
+                  call,
+                  resolution: this.resolution(binding),
+                  nativeQuestion: binding.adapter?.nativeQuestion?.toolName,
+                }),
+            })
+          : undefined;
+      if (!recovery || !family) throw error;
+      binding.reportingRecovery = true;
+      if (trustedContext) trustedContext.childReturnRefusal = undefined;
+      Object.assign(binding.request, {
+        // Any malformed frame left after filtering must fail closed here.
+        childReturns: collectAndStripChildReturns(binding.requestBody, {
+          openCodeBackgroundReturns:
+            !!binding.adapter && isOpenCodeFamilyClient(binding.adapter.id),
+          codexMailboxReturns: binding.adapter?.id === "codex",
+        }),
+        promptOperationId: undefined,
+        ...appaTurnBoundaries({ family, body: binding.requestBody }),
+      });
+      // reportingRecovery prevents this filtered pass from recovering again.
+      return this.onToolResults({
+        ...context,
+        toolResults: context.toolResults.filter((result) =>
+          recovery.resultIds.has(result.id),
+        ),
+      });
+    }
     Object.assign(childResultUpdates, childReturns.updates);
     const governed = this.governedSession(binding);
     await admitRelayReports({
@@ -711,7 +773,18 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // Ordinary questions are identified by their actual client call/result
     // frames. Only a pending review needs a proxy-issued, one-use binding.
     if (!tools) return;
-    const illegalSpawn = unsupportedNativeSpawn(binding, context.toolCalls);
+    const illegalSpawn = unsupportedNativeSpawn(
+      binding,
+      binding.reportingRecovery
+        ? context.toolCalls.filter((call) =>
+            isReportingToolCall({
+              call,
+              resolution: this.resolution(binding),
+              nativeQuestion: binding.adapter?.nativeQuestion?.toolName,
+            }),
+          )
+        : context.toolCalls,
+    );
     if (illegalSpawn) {
       const message = illegalSpawnFeedback(illegalSpawn);
       return {
@@ -736,6 +809,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         binding.adapter?.isSpawnTool(name, namespace) === true,
     });
     let changed = incomingToolCalls !== context.toolCalls;
+    if (binding.reportingRecovery)
+      binding.nativeHitlRulings = binding.nativeHitlRulings.filter((entry) =>
+        isReportingReviewTool(entry.reviewedTool),
+      );
     if (binding.nativeHitlRulings.length > 0) {
       const blocked = context.toolCalls[0];
       if (!blocked) return;
@@ -931,13 +1008,19 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (!binding || !tools) return;
     enterCapturedGuardrailsActivation("active");
     const calls = [...context.hostedToolCalls];
-    const decisions = await withCapturedGuardrailsActivation("active", () =>
-      evaluateHostedToolCalls(this.governedSession(binding), calls, {
-        ...this.resolution(binding),
-        control: tools.control,
-        lineage: binding.child?.lineage,
-      }),
-    );
+    const decisions = binding.reportingRecovery
+      ? calls.map(() => ({
+          kind: "hold" as const,
+          feedback:
+            "OpenAPPA blocked this conversation. Only reporting tools and their approval flow may run; this operation did not run.",
+        }))
+      : await withCapturedGuardrailsActivation("active", () =>
+          evaluateHostedToolCalls(this.governedSession(binding), calls, {
+            ...this.resolution(binding),
+            control: tools.control,
+            lineage: binding.child?.lineage,
+          }),
+        );
     const held = calls.flatMap((call, index) => {
       const decision = decisions[index];
       return decision.kind === "hold"
@@ -1001,9 +1084,63 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // Children named by this trajectory mint under this request's own id: the
     // minted parent:child id for a child turn, the root id for a parent.
     const rootId = session.session_id;
-    const blockedTranscriptCalls = new Set<string>();
+    const blockedTranscriptCalls = new Set<string>(
+      binding.reportingRecovery
+        ? calls
+            .filter(
+              (call) =>
+                !isReportingToolCall({
+                  call,
+                  resolution: this.resolution(binding),
+                  nativeQuestion: binding.adapter?.nativeQuestion?.toolName,
+                }),
+            )
+            .map((call) => call.id)
+        : [],
+    );
+    if (binding.reportingRecovery) {
+      for (const call of calls) {
+        if (blockedTranscriptCalls.has(call.id)) continue;
+        const [target] = normalizeToolCallsForPolicy(
+          [call],
+          this.resolution(binding),
+        );
+        if (
+          archestraMcpBranding.getToolShortName(target.toolCallName) !==
+          TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME
+        )
+          continue;
+        const offerId = toolInputOf(target.toolCallArgs).offer_id;
+        try {
+          const tool =
+            typeof offerId === "string"
+              ? ((await getHitlReview({ session: binding.session, offerId }))
+                  ?.tool ??
+                (
+                  await loadOfferReview({
+                    organizationId: binding.session.organization_id,
+                    sessionId: binding.session.session_id,
+                    offerId,
+                  })
+                )?.tool)
+              : undefined;
+          if (!isReportingReviewTool(tool)) blockedTranscriptCalls.add(call.id);
+        } catch (error) {
+          logger.warn(
+            {
+              err: error,
+              sessionId: binding.session.session_id,
+              callId: call.id,
+            },
+            "OpenAPPA withheld a reporting remedy because its review could not be loaded",
+          );
+          blockedTranscriptCalls.add(call.id);
+        }
+      }
+    }
     if (binding.adapter) {
       for (const call of calls) {
+        if (blockedTranscriptCalls.has(call.id)) continue;
         // Native transcript files contain unchecked intermediate output, not
         // the child's admitted return. A correctly prefixed id is not proof
         // that reading those bytes is safe.
@@ -1042,7 +1179,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const policy = sharedPolicy(session.organization_id);
     const runtimeCalls = await resolveRuntimeCalls({
       binding,
-      calls,
+      calls: calls.filter((call) => !blockedTranscriptCalls.has(call.id)),
       resolution: this.resolution(binding),
     });
     const evaluateOptions = {
@@ -1165,8 +1302,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     for (const id of blockedTranscriptCalls) {
       decisionById.set(id, {
         kind: "deny",
-        feedback:
-          "OpenAPPA withheld raw child transcript access; use the verified child completion instead",
+        feedback: binding.reportingRecovery
+          ? "OpenAPPA blocked this conversation. Only reporting tools and their approval flow may run; this operation did not run."
+          : "OpenAPPA withheld raw child transcript access; use the verified child completion instead",
       });
     }
     for (const [id, feedback] of reusedNames) {
@@ -2533,6 +2671,16 @@ async function approveChildReturnCarriers(params: {
  * re-sends that history with every later request, so a retry fails the same
  * way: the SDK is told not to retry, and the user is told how to continue.
  */
+class ChildReturnRefusal extends ApiError {}
+
+function isReportingReviewTool(tool: string | undefined): boolean {
+  // The native intrinsic is unprefixed; gateway tools have branded names.
+  return (
+    tool === "yell" ||
+    isYellToolShortName(archestraMcpBranding.getToolShortName(tool ?? ""))
+  );
+}
+
 function childReturnRefusal(params: {
   reason: string;
   recovery?: string;
@@ -2546,7 +2694,7 @@ function childReturnRefusal(params: {
     params.callId ? `tool call ${params.callId}` : undefined,
     params.childNativeId ? `subagent ${params.childNativeId}` : undefined,
   ].filter((reference) => reference !== undefined);
-  const error = new ApiError(
+  const error = new ChildReturnRefusal(
     params.status ?? 409,
     [
       "OpenAPPA blocked this request.",
@@ -2563,7 +2711,7 @@ function childReturnRefusal(params: {
 }
 
 const CHILD_RETURN_RECOVERY =
-  "To continue, start a new session, or rewind the conversation to a message you sent before this subagent started.";
+  "You can ask your agent to report this failure, or to report it and turn OpenAPPA off for this session. To continue other work, start a new session, or rewind the conversation to a message you sent before this subagent started.";
 const FORKED_CHILD_RETURN_RECOVERY =
   "To keep this context, resume the original session. Otherwise, start a new session, or rewind the conversation to a message you sent before this subagent started.";
 const UNRECORDED_CHILD_RETURN =
@@ -4439,6 +4587,7 @@ const EXTERNAL_REMEDY_WORKFLOW_GUIDANCE = [
   "Put the offer ID in remedy_offer_ids, and use the header Approval and the options Approve and Deny.",
   "The platform shows the user the exact review.",
   "Retry the blocked call only after execute_remedy_plan reports that the plan is authorized.",
+  "If a plan makes no sense, you keep getting blocked, the user keeps being asked to approve similar calls, or the user is frustrated, call yell.",
 ].join(" ");
 
 const LEGACY_NATIVE_QUESTION_ID_PATTERN =

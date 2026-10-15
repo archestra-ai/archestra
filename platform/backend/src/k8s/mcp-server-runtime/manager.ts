@@ -82,6 +82,7 @@ import { McpImagePrepuller } from "./image-prepuller.ee";
 import K8sDeployment, {
   fetchPlatformPodNodeSelector,
   fetchPlatformPodTolerations,
+  type RunningMcpImage,
 } from "./k8s-deployment";
 import { resolveRuntimeOwnerReferences } from "./runtime-owner";
 import type {
@@ -2225,6 +2226,33 @@ export class McpServerRuntimeManager {
   async hasResolvableDeployment(mcpServerId: string): Promise<boolean> {
     if (!this.isEnabled) return false;
     return Boolean(await this.getOrLoadDeployment(mcpServerId));
+  }
+
+  /**
+   * The image an install's deployment is serving right now — see
+   * {@link K8sDeployment.readRunningImage}. `null` when the runtime is off,
+   * the install has no local deployment, or the pods give no settled answer.
+   * Read-only: never wakes, restarts, or scales anything.
+   */
+  async readRunningImage(mcpServerId: string): Promise<RunningMcpImage | null> {
+    if (!this.isEnabled) return null;
+    const deployment = await this.getOrLoadDeployment(mcpServerId);
+    return deployment ? deployment.readRunningImage() : null;
+  }
+
+  /**
+   * The registry auth documents of an install's pull secrets, read from its
+   * deployment's namespace — the same credentials its pods pull with.
+   */
+  async readImagePullSecretConfigs(params: {
+    mcpServerId: string;
+    secretNames: readonly string[];
+  }): Promise<string[]> {
+    if (!this.isEnabled || params.secretNames.length === 0) return [];
+    const deployment = await this.getOrLoadDeployment(params.mcpServerId);
+    return deployment
+      ? deployment.readImagePullSecretConfigs(params.secretNames)
+      : [];
   }
 
   // SPDX-SnippetBegin

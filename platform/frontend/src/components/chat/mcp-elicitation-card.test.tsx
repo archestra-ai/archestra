@@ -545,6 +545,9 @@ describe("McpElicitationCard", () => {
     expect(onTypeAnswer).toHaveBeenCalledOnce();
     expect(onRespond).not.toHaveBeenCalled();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Type your answer below/ }),
+    ).toHaveAttribute("aria-expanded", "true");
   });
 
   it("shows only navigation in the footer of every tab but the last", async () => {

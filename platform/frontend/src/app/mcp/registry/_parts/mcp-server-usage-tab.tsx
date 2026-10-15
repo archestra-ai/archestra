@@ -48,9 +48,8 @@ export function McpServerUsageTab({
           No agents or MCP gateways use this server yet
         </p>
         <p className="max-w-md text-sm text-muted-foreground">
-          Agents and MCP gateways reach a server by having its tools assigned,
-          or through auto mode, which gives them every tool without assigning
-          each one.
+          Agents and MCP gateways reach a server when their tool access is All,
+          or Manual with some of this server's tools picked.
         </p>
       </div>
     );
@@ -61,8 +60,8 @@ export function McpServerUsageTab({
       <p className="text-sm text-muted-foreground">
         {all.length}{" "}
         {all.length === 1 ? "agent or gateway" : "agents and gateways"} can
-        reach this server — {assigned.length} with assigned tools,{" "}
-        {autoOnly.length} in auto mode.
+        reach this server — {assigned.length} with Manual tool access,{" "}
+        {autoOnly.length} with All.
       </p>
       <div className="rounded-lg border">
         <Table>
@@ -71,7 +70,7 @@ export function McpServerUsageTab({
               <TableHead>Name</TableHead>
               <TableHead>Type</TableHead>
               <TableHead>Owner</TableHead>
-              <TableHead>Access</TableHead>
+              <TableHead>Tool access</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -86,9 +85,9 @@ export function McpServerUsageTab({
                 </TableCell>
                 <TableCell>
                   {agent.access === "assigned" ? (
-                    <Badge variant="secondary">Assigned tools</Badge>
+                    <Badge variant="secondary">Manual</Badge>
                   ) : (
-                    <Badge variant="outline">Auto — all tools</Badge>
+                    <Badge variant="outline">All</Badge>
                   )}
                 </TableCell>
               </TableRow>

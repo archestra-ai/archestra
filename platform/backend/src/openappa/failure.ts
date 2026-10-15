@@ -11,8 +11,9 @@ import { ApiError } from "@/types/api";
  * id so an operator can find the full cause in the logs.
  *
  * A refused policy fails the same way on every request, so clients are told
- * not to retry it (`x-should-retry: false` on a 500). An unavailable runtime
- * may recover, so it stays a retryable 503.
+ * not to retry it (`x-should-retry: false` on a 500). So does a conversation
+ * whose opening policy the runtime cannot reopen (a 409). An unavailable
+ * runtime may recover, so it stays a retryable 503.
  */
 export function openappaFailure(error: unknown): ApiError {
   if (error instanceof ApiError && error.message.startsWith(FAILURE_PREFIX))
@@ -36,6 +37,17 @@ export class OpenappaRetiredAnnotatorError extends Error {
       "the served policy does not answer an annotator from the opening policy",
     );
     this.name = "OpenappaRetiredAnnotatorError";
+  }
+}
+
+/**
+ * The organization's text was refused and no composition ever opened, so the
+ * runtime has nothing to enforce: every governed call is refused.
+ */
+export class OpenappaRootOnlyError extends Error {
+  constructor(readonly refusal: string) {
+    super("no composition of the organization's policy has opened");
+    this.name = "OpenappaRootOnlyError";
   }
 }
 
@@ -78,6 +90,7 @@ const POLICY_REFUSALS = [
   /^annotator \S+ names /,
   /^root policy: /,
   /^battery \S+: /,
+  /^a hosted document declares /,
 ];
 
 function classify(error: unknown): {
@@ -88,6 +101,11 @@ function classify(error: unknown): {
     return {
       statusCode: 409,
       detail: `this conversation started under a policy that no longer declares annotator "${summarize(error.annotator, MAX_NAME)}". Start a new conversation, or an administrator can declare "${summarize(error.annotator, MAX_NAME)}" again on the ${POLICY_PAGE} page.`,
+    };
+  if (error instanceof OpenappaRootOnlyError)
+    return {
+      statusCode: 500,
+      detail: `the organization's guardrails policy was refused and no earlier composition exists (${summarize(error.refusal)}). An administrator can fix it on the ${POLICY_PAGE} page.`,
     };
   if (error instanceof OpenappaCredentialError)
     return {
@@ -121,6 +139,15 @@ function classify(error: unknown): {
       detail:
         "another request of this session is still working on this operation. Retry the request.",
     };
+  // The runtime cannot reopen the policy this conversation started under: the
+  // stored file is gone or no longer compiles to the identity the opening
+  // recorded. Every later request of the conversation fails the same way.
+  if (message.includes(OPENING_POLICY_UNAVAILABLE))
+    return {
+      statusCode: 409,
+      detail:
+        "this conversation started under a guardrails policy that the policy runtime cannot reopen. Start a new conversation.",
+    };
   // Every later request of the subagent fails the same way: no fork exists
   // for it to open, whatever the retry.
   if (message.includes(UNFORKED_CHILD) || message === UNSTARTED_PARENT)
@@ -139,6 +166,9 @@ const LEASE_LOST =
 /** The runtime's report of an operation another live request is working on. */
 const HELD_ELSEWHERE =
   "OpenAPPA is processing this operation in another request; retry the request";
+
+/** The runtime's refusal of a root whose opening policy it cannot load or verify. */
+const OPENING_POLICY_UNAVAILABLE = "the opening policy is unavailable: ";
 
 /** The runtime's refusal of a child that no approved spawn prepared. */
 const UNFORKED_CHILD = "no prepared fork to open this child";

@@ -19,7 +19,7 @@ export function useLogsLayoutConfig() {
         ? [{ label: "Agent connections", href: "/connections/logs" }]
         : []),
       ...(openappaEnabled && permissionMap?.["/consults/logs"]
-        ? [{ label: "Guardrail consults", href: "/consults/logs" }]
+        ? [{ label: "Guardrails consult", href: "/consults/logs" }]
         : []),
     ],
   };

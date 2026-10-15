@@ -24,6 +24,7 @@ import {
   AppUsageResponseSchema,
   ChatCostBaselineSchema,
   CostSavingsStatisticsSchema,
+  CostStatisticsSchema,
   constructResponseSchema,
   createSortingQuerySchema,
   MCP_TOOL_CALL_USAGE_DIMENSIONS,
@@ -394,6 +395,40 @@ const statisticsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
         }),
       );
+    },
+  );
+
+  fastify.get(
+    "/api/statistics/costs",
+    {
+      schema: {
+        operationId: RouteId.GetCostStatistics,
+        description:
+          "Get the Costs overview and model chart from shared aggregates. Active user counts are self-scoped without member:read; no user identities are returned.",
+        tags: ["Statistics"],
+        querystring: StatisticsQuerySchema,
+        response: constructResponseSchema(CostStatisticsSchema),
+      },
+    },
+    async ({
+      query: { timeframe },
+      organizationId,
+      user,
+      headers,
+      serviceAccount,
+    }) => {
+      const { success: canReadAllUsers } = await hasPermission(
+        { member: ["read"] },
+        headers,
+        serviceAccount,
+        { userId: user.id, organizationId },
+      );
+      return StatisticsModel.getCostStatistics({
+        timeframe,
+        organizationId,
+        requestingUserId: user.id,
+        canReadAllUsers,
+      });
     },
   );
 

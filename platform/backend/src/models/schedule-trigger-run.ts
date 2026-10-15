@@ -13,12 +13,95 @@ import { z } from "zod";
 import db, { schema } from "@/database";
 import { decodeCursor } from "@/database/utils/pagination";
 import type {
+  ScheduleRunBlocker,
   ScheduleTrigger,
   ScheduleTriggerRun,
   ScheduleTriggerRunStatus,
 } from "@/types";
+import TaskModel from "./task";
 
 class ScheduleTriggerRunModel {
+  /** Claim one due tick, persist its result and queue its work atomically. */
+  static async recordDueRun(params: {
+    trigger: ScheduleTrigger;
+    now: Date;
+    skip?: { error: string; blockedBy: ScheduleRunBlocker };
+  }): Promise<ScheduleTriggerRun | null> {
+    const { trigger, now, skip } = params;
+    return db.transaction(async (tx) => {
+      const [claimed] = await tx
+        .update(schema.scheduleTriggersTable)
+        .set({ lastExecutedAt: now })
+        .where(
+          and(
+            eq(schema.scheduleTriggersTable.id, trigger.id),
+            eq(schema.scheduleTriggersTable.enabled, true),
+            trigger.lastExecutedAt
+              ? eq(
+                  schema.scheduleTriggersTable.lastExecutedAt,
+                  trigger.lastExecutedAt,
+                )
+              : isNull(schema.scheduleTriggersTable.lastExecutedAt),
+          ),
+        )
+        .returning({ id: schema.scheduleTriggersTable.id });
+      if (!claimed) return null;
+      const [run] = await tx
+        .insert(schema.scheduleTriggerRunsTable)
+        .values({
+          organizationId: trigger.organizationId,
+          triggerId: trigger.id,
+          runKind: "due",
+          startedAt: now,
+          ...(skip
+            ? {
+                status: "failed" as const,
+                completedAt: now,
+                error: skip.error,
+                blockedBy: skip.blockedBy,
+              }
+            : {}),
+        })
+        .returning();
+      if (!skip)
+        await TaskModel.create(
+          {
+            taskType: "schedule_trigger_run_execute",
+            payload: { runId: run.id, triggerId: trigger.id },
+          },
+          tx,
+        );
+      return run;
+    });
+  }
+
+  /** Include queue deliveries still launching, before a runtime task is linked. */
+  static async findQueuedExecutions() {
+    return db
+      .select({
+        triggerId: sql<
+          string | null
+        >`${schema.tasksTable.payload}->>'triggerId'`,
+        runId: schema.scheduleTriggerRunsTable.id,
+        chatConversationId: schema.scheduleTriggerRunsTable.chatConversationId,
+        startedAt:
+          sql<Date>`coalesce(${schema.scheduleTriggerRunsTable.startedAt}, ${schema.tasksTable.createdAt})`.mapWith(
+            schema.tasksTable.createdAt,
+          ),
+      })
+      .from(schema.tasksTable)
+      .leftJoin(
+        schema.scheduleTriggerRunsTable,
+        sql`${schema.scheduleTriggerRunsTable.id}::text = ${schema.tasksTable.payload}->>'runId'`,
+      )
+      .where(
+        and(
+          eq(schema.tasksTable.taskType, "schedule_trigger_run_execute"),
+          inArray(schema.tasksTable.status, ["pending", "processing"]),
+        ),
+      );
+  }
+
   static async create(params: {
     organizationId: string;
     triggerId: string;
@@ -217,6 +300,13 @@ class ScheduleTriggerRunModel {
       .select({
         runId: schema.scheduleTriggerRunsTable.id,
         triggerId: schema.scheduleTriggerRunsTable.triggerId,
+        runtimeTaskId: schema.scheduleTriggerRunsTable.runtimeTaskId,
+        startedAt: schema.scheduleTriggerRunsTable.startedAt,
+        createdAt: schema.scheduleTriggerRunsTable.createdAt,
+        runtimeRunId: schema.agentRunsTable.id,
+        endedAt: schema.agentRunsTable.endedAt,
+        deadline: schema.agentWorkspacesTable.expiresAt,
+        maximumDurationSeconds: schema.agentRunsTable.activeDeadlineSeconds,
         state: schema.a2aTasksTable.state,
         statusReason: schema.a2aTasksTable.statusReason,
         agentName: schema.agentsTable.name,
@@ -232,6 +322,20 @@ class ScheduleTriggerRunModel {
       .leftJoin(
         schema.agentsTable,
         eq(schema.agentsTable.id, schema.a2aTasksTable.agentId),
+      )
+      .leftJoin(
+        schema.agentRunsTable,
+        eq(
+          schema.agentRunsTable.taskId,
+          schema.scheduleTriggerRunsTable.runtimeTaskId,
+        ),
+      )
+      .leftJoin(
+        schema.agentWorkspacesTable,
+        eq(
+          schema.agentWorkspacesTable.workloadName,
+          schema.agentRunsTable.workloadName,
+        ),
       )
       .where(
         and(

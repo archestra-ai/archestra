@@ -1,5 +1,8 @@
-import { describe, expect, test } from "vitest";
+import { randomBytes, randomUUID } from "node:crypto";
+import { afterEach, describe, expect, test } from "vitest";
+import db, { schema } from "@/database";
 import { ThreadToolSchema } from "@/types/openappa-thread-state";
+import { enterOpenappaEncryptedChat } from "./encrypted-chat";
 import {
   clientKeepsThreadPairing,
   echoedCallsMessage,
@@ -9,6 +12,8 @@ import {
   threadToolsOf,
   toolSkeletonOf,
 } from "./thread-state";
+
+afterEach(() => enterOpenappaEncryptedChat(null));
 
 describe("readThreadRequest", () => {
   test("reads a create and a continue, and nothing else", () => {
@@ -58,6 +63,58 @@ describe("thread state rules", () => {
     types: [undefined, "custom"],
   });
   const call = { id: "toolu_1", name: "Read", input: { path: "a" } };
+
+  test("encrypted thread continuations retain evidence without plaintext rows or a decrypted shared cache", async () => {
+    const chat = {
+      organizationId: randomUUID(),
+      userId: randomUUID(),
+      audit: { conversationId: randomUUID(), dek: randomBytes(32) },
+    };
+    const messageId = randomUUID();
+    const request = {
+      organizationId: chat.organizationId,
+      sessionId: chat.audit.conversationId,
+      previousMessageId: messageId,
+    };
+    enterOpenappaEncryptedChat(chat);
+    await threadStates.record({
+      record: {
+        organizationId: chat.organizationId,
+        sessionId: chat.audit.conversationId,
+        tools,
+      },
+      messageId,
+      calls: [call],
+      diverged: false,
+    });
+    expect(await threadStates.forContinue(request)).toMatchObject({
+      ok: true,
+      tools,
+      calls: [call],
+    });
+    const [stored] = await db.select().from(schema.openappaThreadStatesTable);
+    expect(stored.tools).toHaveProperty("__encrypted");
+    expect(stored.calls).toHaveProperty("__encrypted");
+    enterOpenappaEncryptedChat({
+      ...chat,
+      audit: { ...chat.audit, dek: randomBytes(32) },
+    });
+    expect(await threadStates.forContinue(request)).toEqual({
+      ok: false,
+      reason: "unavailable",
+    });
+    enterOpenappaEncryptedChat(null);
+    expect(await threadStates.forContinue(request)).toEqual({
+      ok: false,
+      reason: "unavailable",
+    });
+    enterOpenappaEncryptedChat(chat);
+    expect(await threadStates.forContinue(request)).toMatchObject({
+      ok: true,
+      tools,
+      calls: [call],
+    });
+  });
 
   test("retains original contracts through JSON storage and continuation hydration", async () => {
     const tools = threadToolsOf({

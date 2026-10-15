@@ -155,7 +155,7 @@ test.each([
   { promptKey: undefined, children: "Ask about the policy" },
   {
     promptKey: "writeValidations" as const,
-    children: "Ask About Validations",
+    children: "Write a validation",
     permissions: {
       openappaPolicy: ["read", "update"] as ("read" | "update")[],
     },

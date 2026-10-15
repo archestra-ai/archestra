@@ -4,7 +4,7 @@ sidebarTitle: Policies
 description: Cover your tools with rules, change the policy, and sync it with GitHub or GitLab
 order: 1
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -24,6 +24,8 @@ The **Tool coverage** chart on **Overview** shows how many of your tools a rule 
 | **Catch-all rule** | A wildcard rule that classifies the call. |
 | **Not enforced** | A battery covers the tool but cannot run yet. |
 | **No rule** | Nothing restricts the tool. The starting policy's catch-all counts here, because it adds no restrictions. |
+
+While a revision is refused, the chart counts the earlier composition the runtime still enforces, and says so under the chart.
 
 Start with the servers that read private data or send data out. Under **MCP servers**, click **Ask** on a server to have the agent propose rules for its tools. **Improve with chat** does the same for all your tools.
 
@@ -51,7 +53,7 @@ requires = { trust = "trusted", audience = { contains = ["public"] } }
 
 What to know:
 
-- Changes apply to new conversations. Running ones keep the policy they started with.
+- Changes apply to new conversations. Running ones keep the policy they started with. A renamed or removed annotator stays available to them while one of them was active in the last 30 days ([`ARCHESTRA_OPENAPPA_KEPT_ANNOTATOR_HORIZON_DAYS`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_KEPT_ANNOTATOR_HORIZON_DAYS)). **Effective** lists what it keeps.
 - A change that fails keeps the last valid policy running. **Effective** shows the error.
 - Changing the policy needs [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update). Turning enforcement on or off needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
 
@@ -147,7 +149,7 @@ For a concrete policy change, the agent can include a focused regression check a
 
 ## Yells
 
-When an agent finds a block confusing, it reports it with the [`yell`](/docs/reference/archestra-mcp-server#yell) tool. See [Reporting](https://www.openappa.com/yell). The **Yells** tab lists the reports for anyone with [`openappaDiagnostics:read`](/docs/reference/permissions#openappaDiagnostics:read). The list shows unresolved reports. To see a resolved report or reopen it, set the status filter to **Resolved**. The link keeps the filter, so you can share it. Click **Investigate in chat** to have the agent propose a fix, then **Mark resolved**, which needs [`openappaDiagnostics:update`](/docs/reference/permissions#openappaDiagnostics:update).
+When a remedy plan makes no sense, an agent keeps getting blocked, the user keeps being asked to approve similar calls, or the user is frustrated, the agent reports it with the [`yell`](/docs/reference/archestra-mcp-server#yell) tool. See [Reporting](https://www.openappa.com/yell). With **Break the glass** on in **Settings → Guardrails**, a yell also turns Guardrails off for that session, so the agent is no longer stuck. A yell that did this is marked in the list. The **Yells** tab lists the reports for anyone with [`openappaDiagnostics:read`](/docs/reference/permissions#openappaDiagnostics:read). The list shows unresolved reports. To see a resolved report or reopen it, set the status filter to **Resolved**. The link keeps the filter, so you can share it. Click **Investigate in chat** to have the agent propose a fix, then **Mark resolved**, which needs [`openappaDiagnostics:update`](/docs/reference/permissions#openappaDiagnostics:update).
 
 The agent compares the report with the current policy and validations. A policy fix can include an essential regression check where offline replay represents the issue. Client and helper failures receive their own diagnosis rather than weaker policy.
 

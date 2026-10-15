@@ -39,6 +39,7 @@ import {
   McpError,
   type ReadResourceResult,
   type Tool,
+  ToolListChangedNotificationSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import QuickLRU from "quick-lru";
 import { unavailableThirdPartyToolMessage } from "@/archestra-mcp-server/tool-recovery-messages";
@@ -106,6 +107,7 @@ import { findExternalIdentityProviderById } from "@/services/identity-providers/
 // biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
 import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
 // SPDX-SnippetEnd
+import { mcpToolListChangedSync } from "@/services/mcp-tools-list-changed";
 import {
   classifyThrownRefreshError,
   type OAuthRefreshOutcome,
@@ -1806,6 +1808,12 @@ class McpClient {
     if (elicitationHandler) {
       configureMcpElicitation(client, elicitationHandler);
     }
+    // The server announced a different tool list: re-sync its catalog's tool
+    // snapshot (coalesced per catalog, never wakes a hibernated server). The
+    // gateway's own subscriptions then notify downstream clients.
+    client.setNotificationHandler(ToolListChangedNotificationSchema, () => {
+      mcpToolListChangedSync.onToolListChanged(targetMcpServerId);
+    });
 
     // Track whether we're using a stored session ID (for stale session cleanup)
     const storedSessionId =

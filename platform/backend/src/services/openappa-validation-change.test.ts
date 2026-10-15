@@ -5,8 +5,6 @@ import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
-import { openappaBatteriesService } from "@/openappa/batteries";
-import { openappaDeclarations } from "@/openappa/declarations";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { beforeEach, describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
@@ -82,7 +80,7 @@ describe("source-aware validation proposals", () => {
     version = suite.version;
   });
 
-  test("candidate-policy replay keeps unrelated regressions and changes no active state or saved history", async () => {
+  test("preview checks syntax and the candidate policy without replaying or saving anything", async () => {
     const unsupported = {
       path: "traces/unknown.appa",
       content: "mcp/unknown/tool {}\nexpect allow\n",
@@ -93,16 +91,18 @@ describe("source-aware validation proposals", () => {
       changes: { upsert: [added, unsupported], delete: [] },
     });
     expect(preview.policy.changed).toBe(true);
-    expect(preview.counts).toEqual({ passed: 1, failed: 1, cannotRun: 1 });
-    expect(preview.tests.files).toMatchObject([
-      { path: existing.path, status: "failed" },
-      { path: added.path, status: "passed" },
-      { path: unsupported.path, status: "cannot_run" },
-    ]);
-    expect(preview.tests).toMatchObject({
-      draft: true,
-      policyHash: hash(proposedPolicy),
+    expect(preview.validation).toEqual({
+      valid: true,
+      errors: [],
+      warnings: [],
     });
+    // Only the changed files are inspected, and nothing is replayed.
+    expect(preview.files.map((file) => file.path)).toEqual([
+      added.path,
+      unsupported.path,
+    ]);
+    expect(preview).not.toHaveProperty("tests");
+    expect(preview).not.toHaveProperty("counts");
     expect(await guardrailsPolicyService.get(ctx.organizationId)).toMatchObject(
       { content: policy, revision: 1 },
     );
@@ -114,7 +114,7 @@ describe("source-aware validation proposals", () => {
     ).toHaveLength(0);
   });
 
-  test("candidate replay applies stored credential bindings without writing them into the policy", async () => {
+  test("preview checks a candidate policy against stored credential bindings without writing them into it", async () => {
     await OpenAppaCredentialBindingModel.upsert({
       organizationId: ctx.organizationId,
       variable: "APPA_PROVIDER_GITHUB_TOKEN",
@@ -122,48 +122,12 @@ describe("source-aware validation proposals", () => {
       updatedBy: ctx.user.id,
     });
     const candidate = `include = ["batteries/github/appa.toml"]\n\n${policy}`;
-    const repository = {
-      path: "traces/repository.appa",
-      content:
-        'mcp/files/read {}\nexpect allow\nmcp/github/list_branches {\n  owner: "acme"\n  repo: "app"\n}\nexpect allow\n',
-    };
     const preview = await previewOpenAppaValidationChange({
       ...request(),
       policyContent: candidate,
-      changes: { upsert: [repository], delete: [] },
     });
-    const declared = `${candidate}\n[credentials]\nAPPA_PROVIDER_GITHUB_TOKEN = "stored-github"\n`;
-    const resolution = await openappaDeclarations.resolve({
-      organizationId: ctx.organizationId,
-      content: declared,
-    });
-    const composed = await openappaDeclarations.composeForCheck({
-      root: declared,
-      resolution,
-      deployed: await openappaBatteriesService.deployedBatteries({
-        organizationId: ctx.organizationId,
-        resolution,
-      }),
-    });
-    expect(composed.content).toBeTruthy();
-    expect(preview.tests.effectivePolicyHash).toBe(
-      hash(composed.content ?? ""),
-    );
-    expect(preview.tests.policyHash).toBe(hash(candidate));
-    expect(preview.tests.validation.valid).toBe(true);
-    // The bound key holds no organization value, so the battery deploys its
-    // base alone, which consults no helper: every step runs offline.
-    expect(preview.tests.files).toMatchObject([
-      { path: existing.path, status: "passed" },
-      {
-        path: repository.path,
-        status: "passed",
-        steps: [
-          { line: 1, status: "passed" },
-          { line: 3, status: "passed" },
-        ],
-      },
-    ]);
+    expect(preview.validation.valid).toBe(true);
+    expect(preview.policy).toMatchObject({ changed: true, after: candidate });
     expect(await guardrailsPolicyService.get(ctx.organizationId)).toMatchObject(
       {
         content: policy,
@@ -172,7 +136,7 @@ describe("source-aware validation proposals", () => {
     );
   });
 
-  test("policy and specification publication is atomic and failed assertions stay informational", async () => {
+  test("policy and specification publication is atomic and records no run", async () => {
     const saved = await publishOpenAppaValidationChange({
       ...publish(),
       policyContent: proposedPolicy,
@@ -181,8 +145,9 @@ describe("source-aware validation proposals", () => {
       delivery: "revision",
       revision: 2,
       policyChanged: true,
-      counts: { passed: 1, failed: 1, cannotRun: 0 },
+      validation: { valid: true },
     });
+    expect(saved).not.toHaveProperty("counts");
     expect(await guardrailsPolicyService.get(ctx.organizationId)).toMatchObject(
       { content: proposedPolicy, revision: 2 },
     );
@@ -216,8 +181,10 @@ describe("source-aware validation proposals", () => {
       ...request(),
       changes,
     });
-    expect(preview.tests.validation.valid).toBe(false);
-    expect(preview.tests.validation.errors).toHaveLength(1);
+    expect(preview.validation.valid).toBe(false);
+    expect(preview.validation.errors).toEqual([
+      expect.stringContaining(broken.path),
+    ]);
     await expect(
       publishOpenAppaValidationChange({ ...publish(), changes }),
     ).rejects.toMatchObject({ statusCode: 400 });
@@ -320,8 +287,7 @@ describe("source-aware validation proposals", () => {
     expect(saved).toMatchObject({
       revision: 1,
       policyChanged: false,
-      counts: { passed: 0, failed: 0, cannotRun: 0 },
-      tests: { files: [], validation: { valid: true } },
+      validation: { valid: true },
     });
     expect(
       (await OpenAppaPolicyTestsModel.find(ctx.organizationId))?.files,
@@ -346,8 +312,7 @@ describe("source-aware validation proposals", () => {
     expect(saved).toMatchObject({
       revision: 2,
       policyChanged: true,
-      counts: { passed: 0, failed: 0, cannotRun: 0 },
-      tests: { files: [], validation: { valid: true } },
+      validation: { valid: true },
     });
     expect(
       (await OpenAppaPolicyTestsModel.find(ctx.organizationId))?.version,

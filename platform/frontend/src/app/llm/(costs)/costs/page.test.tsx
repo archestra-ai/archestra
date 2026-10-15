@@ -150,6 +150,12 @@ beforeEach(() => {
       requests.push(new URL(request.url));
       if (pending) await delay("infinite");
       switch (params.kind) {
+        case "costs":
+          return HttpResponse.json({
+            models,
+            costSavings: savings,
+            activeUsers: users.length,
+          });
         case "models":
           return HttpResponse.json(models);
         case "teams":

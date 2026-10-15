@@ -23,6 +23,11 @@ import {
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 
+const scopedCapabilities = vi.hoisted(() => ({
+  data: undefined as
+    | { resource: string; scope: string; action: string }[]
+    | undefined,
+}));
 vi.mock("@/lib/auth/auth.query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/auth.query")>()),
   useSession: () => ({
@@ -30,6 +35,7 @@ vi.mock("@/lib/auth/auth.query", async (importOriginal) => ({
       user: { id: "author-user", name: "Sam Author", email: "sam@example.com" },
     },
   }),
+  useScopedCapabilities: () => ({ data: scopedCapabilities.data }),
 }));
 
 const origin = "http://localhost:9000";
@@ -42,7 +48,10 @@ beforeAll(() => {
   server.listen({ onUnhandledRequest: "error" });
 });
 beforeEach(() => archestraApiClient.setConfig({ baseUrl: origin }));
-afterEach(() => server.resetHandlers());
+afterEach(() => {
+  server.resetHandlers();
+  scopedCapabilities.data = undefined;
+});
 afterAll(() => {
   server.close();
   archestraApiClient.setConfig({ baseUrl: "" });

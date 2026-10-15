@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { OpenappaRetiredAnnotatorError, openappaFailure } from "./failure";
+import {
+  OpenappaRetiredAnnotatorError,
+  OpenappaRootOnlyError,
+  openappaFailure,
+} from "./failure";
 
 describe("openappaFailure", () => {
   test("names a refused policy and tells clients not to retry it", () => {
@@ -35,6 +39,23 @@ describe("openappaFailure", () => {
         "OpenAPPA could not safely complete this operation: the policy runtime is unavailable.",
       );
     }
+  });
+
+  test.each([
+    "OpenAPPA processing interrupted: the opening policy is unavailable: the stored policy file compiles to a different identity than the opening of archestra:f779b8",
+    "OpenAPPA result refused: the opening policy is unavailable: the policy file 0a1b is not stored",
+  ])("tells a conversation whose opening policy cannot reopen to start again: %s", (message) => {
+    const cause = new Error(message);
+
+    const failure = openappaFailure(cause);
+
+    expect(failure.statusCode).toBe(409);
+    expect(failure.shouldRetry).toBe(false);
+    expect(failure.retryAfterSeconds).toBeUndefined();
+    expect(failure.message).toBe(
+      "OpenAPPA could not safely complete this operation: this conversation started under a guardrails policy that the policy runtime cannot reopen. Start a new conversation.",
+    );
+    expect(failure.cause).toBe(cause);
   });
 
   test("names an exhausted connection pool without its internals", () => {
@@ -146,6 +167,27 @@ describe("openappaFailure", () => {
     expect(failure.message).not.toContain("user:token");
     expect(failure.message).toContain("https://example.com/annotate");
     expect(failure.message.length).toBeLessThan(420);
+  });
+
+  test("a policy with no composition that ever opened is refused, not retried", () => {
+    for (const cause of [
+      new OpenappaRootOnlyError(
+        "policy refused: tool mcp/acme/list names annotator nobody.declares",
+      ),
+      // What the runtime says if a root text alone still reaches it.
+      new Error(
+        "a hosted document declares \"include\", which is the host's to declare, not the policy's",
+      ),
+    ]) {
+      const failure = openappaFailure(cause);
+      expect(failure.statusCode).toBe(500);
+      expect(failure.shouldRetry).toBe(false);
+    }
+    expect(
+      openappaFailure(new OpenappaRootOnlyError("policy refused: x")).message,
+    ).toBe(
+      "OpenAPPA could not safely complete this operation: the organization's guardrails policy was refused and no earlier composition exists (policy refused: x). An administrator can fix it on the Guardrails page.",
+    );
   });
 
   test("does not wrap a failure twice", () => {

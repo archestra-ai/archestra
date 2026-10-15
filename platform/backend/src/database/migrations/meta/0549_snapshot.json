@@ -1,5 +1,5 @@
 {
-  "id": "5dd71c10-c36f-49cf-93b9-83bf28b55f2b",
+  "id": "0631ad65-e694-4afc-bf3e-28e24ccfea8b",
   "prevId": "d9772a3e-6e74-4ecc-9be0-741e9c59dea9",
   "version": "7",
   "dialect": "postgresql",
@@ -21659,12 +21659,6 @@
           "notNull": true,
           "default": false
         },
-        "team_id": {
-          "name": "team_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_by": {
           "name": "created_by",
           "type": "text",
@@ -21698,21 +21692,6 @@
           "columns": [
             {
               "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "service_accounts_team_id_idx": {
-          "name": "service_accounts_team_id_idx",
-          "columns": [
-            {
-              "expression": "team_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -21757,19 +21736,6 @@
             "id"
           ],
           "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "service_accounts_team_id_team_id_fk": {
-          "name": "service_accounts_team_id_team_id_fk",
-          "tableFrom": "service_accounts",
-          "tableTo": "team",
-          "columnsFrom": [
-            "team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
           "onUpdate": "no action"
         },
         "service_accounts_created_by_user_id_fk": {
@@ -28801,6 +28767,12 @@
         "last_error_at": {
           "name": "last_error_at",
           "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "served": {
+          "name": "served",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         }

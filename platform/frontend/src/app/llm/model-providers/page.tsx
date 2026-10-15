@@ -53,6 +53,7 @@ import { ResourceAccessSection } from "@/components/resource-access-section";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
+import { SettingsLink } from "@/components/settings-link";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -1080,12 +1081,13 @@ function DeleteApiKeyDescription({
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
             <p className="font-medium">OAuth clients</p>
-            <Link
+            <SettingsLink
               className="text-primary underline-offset-4 hover:underline"
               href={`/settings/oauth-clients?type=llm&providerApiKeyId=${apiKey.id}`}
+              fallback={null}
             >
               View all
-            </Link>
+            </SettingsLink>
           </div>
           <ul className="space-y-2">
             {oauthClients.slice(0, 5).map((client) => (

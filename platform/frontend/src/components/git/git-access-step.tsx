@@ -12,8 +12,8 @@ import {
   LoaderCircle,
   Plus,
 } from "lucide-react";
-import Link from "next/link";
 import { type ReactNode, useEffect, useState } from "react";
+import { SettingsLink } from "@/components/settings-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FieldDescription } from "@/components/ui/field-description";
@@ -157,14 +157,15 @@ export function GitAccessStep({
           ) : (
             <span>No GitHub Apps yet. </span>
           )}
-          <Link
+          <SettingsLink
             href="/settings/credentials"
             target="_blank"
             className="inline-flex items-center gap-0.5 font-medium text-foreground underline-offset-4 hover:underline"
+            fallback={<span>Ask an admin to add one.</span>}
           >
             <span>Add one in Settings</span>
             <ExternalLink className="size-3" aria-hidden />
-          </Link>
+          </SettingsLink>
         </p>
       ) : !canAddToken && !options.length ? (
         <p className="text-xs text-muted-foreground">

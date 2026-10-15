@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { usePermissionRecipients } from "@/lib/resource-permissions.query";
 import {
   type RuntimeCredentialDefinition,
   useCreateRuntimeCredential,
@@ -47,6 +48,7 @@ export function RuntimeCredentialDefinitionDialog({
   initialValues,
   setupNotice,
   hideProvidedBy = false,
+  personal = false,
   onCreated,
   backLabel,
   size = "medium",
@@ -58,6 +60,12 @@ export function RuntimeCredentialDefinitionDialog({
   initialValues?: { name: string; description: string; icon: string | null };
   setupNotice?: ReactNode;
   hideProvidedBy?: boolean;
+  /**
+   * Personal Settings: a new credential takes a personal value and is shared
+   * with nobody, so there is no "Provided by" choice and no Permissions
+   * section on create.
+   */
+  personal?: boolean;
   onCreated?: (id: string) => void;
   backLabel?: string;
   size?: "small" | "medium";
@@ -93,14 +101,32 @@ export function RuntimeCredentialDefinitionDialog({
   );
   const [permissionsDirty, setPermissionsDirty] = useState(false);
   // A new credential has no policy yet, so its starting grants travel with it.
-  // It starts shared with everyone; remove that to keep it to a team.
-  const [initialGrants, setInitialGrants] = useState<InitialPermissionGrant[]>(
+  // It starts shared with everyone; remove that to keep it to a team. A
+  // personal one starts with nobody: an empty list, since omitting it would
+  // apply the server's default audience.
+  const [chosenGrants, setChosenGrants] = useState<InitialPermissionGrant[]>(
     () =>
-      DEFAULT_CREDENTIAL_GRANTS.map((grant) => ({
-        ...grant,
-        name: "Everyone in the organization",
-      })),
+      personal
+        ? []
+        : DEFAULT_CREDENTIAL_GRANTS.map((grant) => ({
+            ...grant,
+            name: "Everyone in the organization",
+          })),
   );
+  // Only someone who may share a credential with everyone starts there. The
+  // server offers Everyone as a recipient exactly to them.
+  const recipients = usePermissionRecipients({
+    resource: "credential",
+    query: "",
+    enabled: !definition && !personal,
+  });
+  const offersEveryone = recipients.data?.some(
+    (recipient) => recipient.subject.type === "organization",
+  );
+  const initialGrants =
+    offersEveryone === false
+      ? chosenGrants.filter((grant) => grant.subject.type !== "organization")
+      : chosenGrants;
   const form = useForm<DefinitionFormValues>({
     resolver: zodResolver(DefinitionFormSchema),
     defaultValues: {
@@ -115,7 +141,9 @@ export function RuntimeCredentialDefinitionDialog({
       icon: definition?.icon ?? initialValues?.icon ?? null,
       scope: definition?.allowOrganization
         ? "organization"
-        : (initialScope ?? "personal"),
+        : personal
+          ? "personal"
+          : (initialScope ?? "personal"),
     },
   });
   const pending = create.isPending || update.isPending;
@@ -294,17 +322,19 @@ export function RuntimeCredentialDefinitionDialog({
                 >
                   Custom secret
                 </SelectItem>
-                <SelectItem
-                  value="github_app"
-                  icon={
-                    <RuntimeCredentialIcon
-                      icon="logo:github"
-                      className="size-4"
-                    />
-                  }
-                >
-                  GitHub App
-                </SelectItem>
+                {!personal && (
+                  <SelectItem
+                    value="github_app"
+                    icon={
+                      <RuntimeCredentialIcon
+                        icon="logo:github"
+                        className="size-4"
+                      />
+                    }
+                  >
+                    GitHub App
+                  </SelectItem>
+                )}
                 <SelectItem
                   value="github_app_user"
                   disabled={githubApps.length === 0}
@@ -420,6 +450,7 @@ export function RuntimeCredentialDefinitionDialog({
         />
       )}
       {!definition &&
+        !personal &&
         (!hideProvidedBy || form.watch("kind") !== "github_app") && (
           <FormField
             control={form.control}
@@ -484,7 +515,9 @@ export function RuntimeCredentialDefinitionDialog({
           ? undefined
           : initialKind === "github_app"
             ? "Enter the App details, then connect its private key."
-            : "Choose the credential type and who provides its value. Use it across the platform."
+            : personal
+              ? "Only you can use it. Connect its value after adding it."
+              : "Choose the credential type and who provides its value. Use it across the platform."
       }
       size={size}
       onSubmit={(event) => {
@@ -529,11 +562,11 @@ export function RuntimeCredentialDefinitionDialog({
           onDirtyChange={setPermissionsDirty}
           registerSave={canUpdate ? registerPermissionsSave : undefined}
         />
-      ) : (
+      ) : personal ? null : (
         <ResourceAccessSection
           resource="credential"
           grants={initialGrants}
-          onGrantsChange={setInitialGrants}
+          onGrantsChange={setChosenGrants}
         />
       )}
       {/* SPDX-SnippetEnd */}

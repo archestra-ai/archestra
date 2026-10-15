@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
+import { slackAppFactory } from "@/agents/chatops/slack-app-factory";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -33,8 +34,31 @@ const { authTestMock } = vi.hoisted(() => ({
 vi.mock("@slack/web-api", () => ({
   WebClient: class {
     auth = { test: authTestMock };
+    tooling = {
+      tokens: {
+        rotate: () =>
+          Promise.resolve({
+            ok: true,
+            token: "xoxe.xoxp-rotated",
+            refresh_token: "xoxe-next",
+            exp: Math.floor(Date.now() / 1000) + 12 * 3600,
+          }),
+      },
+    };
     apps = {
       connections: { open: () => Promise.resolve({ ok: true }) },
+      manifest: {
+        create: () =>
+          Promise.resolve({
+            ok: true,
+            app_id: "A_ROUTER",
+            credentials: {
+              client_id: "client-1",
+              client_secret: "client-secret",
+              signing_secret: "signing-secret",
+            },
+          }),
+      },
     };
   },
 }));
@@ -263,6 +287,69 @@ describe("Slack agent bots", () => {
     expect(JSON.stringify(row)).not.toContain("xoxb-secret");
   });
 
+  describe("creating the router bot", () => {
+    const createRouter = () =>
+      app.inject({
+        method: "POST",
+        url: "/api/chatops/config/slack/router/app",
+        payload: { appName: "archestra", connectionMode: "socket" },
+      });
+
+    test("creates its Slack app with the person's token and records it without secrets", async () => {
+      await slackAppFactory.saveConfigToken({
+        userId: user.id,
+        accessToken: "xoxe.xoxp-pasted",
+        refreshToken: "xoxe-1",
+      });
+
+      const response = await createRouter();
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        appId: "A_ROUTER",
+        installMode: "manual",
+        installUrl: "https://api.slack.com/apps/A_ROUTER/oauth",
+      });
+      expect(await ChatOpsConfigModel.getSlackConfig()).toEqual(
+        expect.objectContaining({ appId: "A_ROUTER", enabled: false }),
+      );
+
+      const rows = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.resourceId, organizationId));
+      const row = rows.find(
+        (candidate) =>
+          (candidate.after as { slack?: { hasAppId?: boolean } } | null)?.slack
+            ?.hasAppId,
+      );
+      expect(row).toBeDefined();
+      expect(JSON.stringify(row)).not.toContain("client-secret");
+      expect(JSON.stringify(row)).not.toContain("signing-secret");
+    });
+
+    test("is refused while a router bot is connected", async () => {
+      await ChatOpsConfigModel.saveSlackConfig({
+        enabled: true,
+        botToken: "xoxb-main",
+        signingSecret: "",
+        appId: "A_MAIN",
+        connectionMode: "socket",
+        appLevelToken: "xapp-main",
+      });
+      await slackAppFactory.saveConfigToken({
+        userId: user.id,
+        accessToken: "xoxe.xoxp-pasted",
+        refreshToken: "xoxe-1",
+      });
+
+      const response = await createRouter();
+
+      expect(response.statusCode).toBe(400);
+      expect((await ChatOpsConfigModel.getSlackConfig())?.appId).toBe("A_MAIN");
+    });
+  });
+
   describe("converting the channel-routed Slack app", () => {
     async function connectMainApp(connectionMode: "socket" | "webhook") {
       await ChatOpsConfigModel.saveSlackConfig({
@@ -312,6 +399,11 @@ describe("Slack agent bots", () => {
 
       expect(list.json().unassignedApp).toEqual({
         appId: "A_MAIN",
+        handle: null,
+        connected: false,
+        installed: true,
+        needsAppLevelToken: false,
+        createdBy: null,
         connectionMode: "socket",
         agentUsage: [
           { agentId: support.id, agentName: "Support", bindings: 2 },

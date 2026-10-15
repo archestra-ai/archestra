@@ -234,40 +234,50 @@ it.each([
 
 it("aligns uneven model series by timestamp without crashing the overview", async () => {
   server.use(
-    http.get(`${origin}/api/statistics/models`, () =>
-      HttpResponse.json([
-        {
-          model: "first",
-          requests: 9,
-          inputTokens: 90,
-          outputTokens: 9,
-          cacheReadTokens: 0,
-          timeSeries: [
-            { timestamp: "2026-01-01T00:00:00Z", requests: 4, inputTokens: 40 },
-            { timestamp: "2026-01-02T00:00:00Z", requests: 5, inputTokens: 50 },
-          ],
-        },
-        {
-          model: "second",
-          requests: 3,
-          inputTokens: 30,
-          outputTokens: 3,
-          cacheReadTokens: 0,
-          timeSeries: [
-            { timestamp: "2026-01-02T00:00:00Z", requests: 3, inputTokens: 30 },
-          ],
-        },
-      ]),
-    ),
-    http.get(`${origin}/api/statistics/cost-savings`, () =>
+    http.get(`${origin}/api/statistics/costs`, () =>
       HttpResponse.json({
-        totalActualCost: 1,
-        totalSubscriptionCost: 2,
-        timeSeries: [],
+        activeUsers: 53,
+        costSavings: {
+          totalActualCost: 1,
+          totalSubscriptionCost: 2,
+          timeSeries: [],
+        },
+        models: [
+          {
+            model: "first",
+            requests: 9,
+            inputTokens: 90,
+            outputTokens: 9,
+            cacheReadTokens: 0,
+            timeSeries: [
+              {
+                timestamp: "2026-01-01T00:00:00Z",
+                requests: 4,
+                inputTokens: 40,
+              },
+              {
+                timestamp: "2026-01-02T00:00:00Z",
+                requests: 5,
+                inputTokens: 50,
+              },
+            ],
+          },
+          {
+            model: "second",
+            requests: 3,
+            inputTokens: 30,
+            outputTokens: 3,
+            cacheReadTokens: 0,
+            timeSeries: [
+              {
+                timestamp: "2026-01-02T00:00:00Z",
+                requests: 3,
+                inputTokens: 30,
+              },
+            ],
+          },
+        ],
       }),
-    ),
-    http.get(`${origin}/api/statistics/users`, () =>
-      HttpResponse.json(response([])),
     ),
   );
   const { result } = renderHook(
@@ -275,6 +285,45 @@ it("aligns uneven model series by timestamp without crashing the overview", asyn
     { wrapper },
   );
   await waitFor(() => expect(result.current.isUsagePending).toBe(false));
+  expect(result.current.people.value).toBe(53);
   expect(result.current.requests).toEqual({ value: 12, series: [4, 8] });
   expect(result.current.tokens).toEqual({ value: 132, series: [40, 80] });
+});
+
+it("deduplicates overview and model chart requests without eagerly fetching user details", async () => {
+  let requests = 0;
+  server.use(
+    http.get(`${origin}/api/statistics/costs`, () => {
+      requests++;
+      return HttpResponse.json({
+        activeUsers: 5,
+        costSavings: { totalActualCost: 2, timeSeries: [] },
+        models: [
+          {
+            model: "example",
+            requests: 3,
+            cost: 2,
+            inputTokens: 10,
+            outputTokens: 2,
+            cacheReadTokens: 0,
+            timeSeries: [{ timestamp: "2026-01-01", value: 2 }],
+          },
+        ],
+      });
+    }),
+  );
+  const { result } = renderHook(
+    () => ({
+      kpis: useKpis({ timeframe: "30d", enabled: true }),
+      cube: usePivotCube(
+        { metric: "billed", group: "model", split: "none", chart: "bars" },
+        "30d",
+        true,
+      ),
+    }),
+    { wrapper },
+  );
+  await waitFor(() => expect(result.current.cube.total).toBe(2));
+  expect(result.current.kpis.people.value).toBe(5);
+  expect(requests).toBe(1);
 });

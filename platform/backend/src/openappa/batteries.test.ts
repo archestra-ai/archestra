@@ -133,6 +133,7 @@ describe("composing an organization's declarations", () => {
     const oldContent = "[policy]\nversion = 2\n";
     await OpenAppaEffectivePolicyModel.save({
       organizationId,
+      now: new Date(),
       expected: initial,
       values: {
         content: oldContent,
@@ -140,6 +141,8 @@ describe("composing an organization's declarations", () => {
         rootRevision: 0,
         installFingerprint: "cached-before-default-update",
         error: null,
+        served: null,
+        retainedAnnotators: null,
       },
     });
 
@@ -173,6 +176,7 @@ describe("composing an organization's declarations", () => {
           : content;
       await OpenAppaEffectivePolicyModel.save({
         organizationId,
+        now: new Date(),
         expected: initial,
         values: {
           content: legacyContent,
@@ -180,6 +184,8 @@ describe("composing an organization's declarations", () => {
           rootRevision: initial.rootRevision,
           installFingerprint: initial.installFingerprint.replace(/^v\d+:/, ""),
           error: null,
+          served: null,
+          retainedAnnotators: null,
         },
       });
 

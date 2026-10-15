@@ -122,7 +122,7 @@ export default function NewMcpCatalogItemPage() {
       title="Add MCP Server to the Private Registry"
       description="Once you add an MCP server here, it will be available for installation."
       backLink={<PageBackLink href="/mcp/registry">MCP Registry</PageBackLink>}
-      actionButton={<SetupStepper compact activeStep="configuration" />}
+      actionButton={<SetupStepper activeStep="configuration" />}
       maxWidth="wizard"
       contentOverflowX="clip"
     >

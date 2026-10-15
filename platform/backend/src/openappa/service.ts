@@ -17,11 +17,13 @@ import {
 import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
+import { encryptEncryptedChatValue } from "@/content-encryption/encrypted-chat";
 import { getDatabaseConnectionString } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
 import MemberModel from "@/models/member";
+import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { openappaBatteriesService } from "@/openappa/batteries";
@@ -29,18 +31,29 @@ import {
   expandCommandExecutionPolicyRules,
   normalizeCommandExecutionArguments,
 } from "@/openappa/command-normalization";
+import { compositionView } from "@/openappa/composition-view";
 import { currentTrajectory } from "@/openappa/current-trajectory";
-import { helperUrlBase, openappaDeclarations } from "@/openappa/declarations";
+import {
+  helperUrlBase,
+  openappaDeclarations,
+  type UnreadableCredential,
+} from "@/openappa/declarations";
 import {
   declareExistingInstalls,
   seedCredentialBindings,
 } from "@/openappa/declare-installs";
 import {
+  openappaEncryptedChat,
+  withOpenappaContentEncryption,
+} from "@/openappa/encrypted-chat";
+import {
   OpenappaRetiredAnnotatorError,
+  OpenappaRootOnlyError,
   openappaFailure,
 } from "@/openappa/failure";
 import { unservedAnnotator } from "@/openappa/retired-annotators";
 import { captureYellReport } from "@/openappa/yell-receiver";
+import { readYellResult } from "@/openappa/yell-session";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import type { ToolNameCanonicalizer } from "@/routes/proxy/utils/gateway-tool-names";
 import {
@@ -244,9 +257,15 @@ export async function getOpenappaStatus(params: {
   if (!openappaEnabled()) return null;
   try {
     const module = await binding();
-    return await module.getOpenappaStatus(
+    return await withOpenappaContentEncryption(
       params.organizationId,
       params.sessionId,
+      (encryption) =>
+        module.getOpenappaStatus(
+          params.organizationId,
+          params.sessionId,
+          encryption,
+        ),
     );
   } catch (error) {
     throw openappaFailure(error);
@@ -304,7 +323,8 @@ export async function executeYell(params: {
   session: OpenAppaSession;
   toolCallId: string;
   args: { message: string; with_trajectory: boolean };
-  superyell?: boolean;
+  /** Break the glass is on, so this yell also turns OpenAPPA off for the session. */
+  brokeTheGlass?: boolean;
 }): Promise<CallToolResult> {
   if (!openappaYellEnabled()) {
     return {
@@ -312,19 +332,31 @@ export async function executeYell(params: {
       content: [{ type: "text", text: "OpenAPPA reporting is disabled" }],
     };
   }
+  const encryptedChat = openappaEncryptedChat(
+    params.session.organization_id,
+    params.session.session_id,
+  );
   const record = await OpenAppaYellModel.record({
     organizationId: params.session.organization_id,
     callerId: params.session.caller_id ?? "unknown",
     sessionId: params.session.session_id,
     toolCallId: params.toolCallId,
-    message: params.args.message,
+    message: encryptedChat
+      ? JSON.stringify(
+          encryptEncryptedChatValue(params.args.message, {
+            ...encryptedChat.audit,
+            context: "openappa_yells.message",
+          }),
+        )
+      : params.args.message,
     withTrajectory: params.args.with_trajectory,
-    superyell: params.superyell ?? false,
+    superyell: params.brokeTheGlass ?? false,
   });
   try {
     const result = await captureYellReport({
       id: record.id,
       organizationId: record.organizationId,
+      encryptedChat: encryptedChat?.audit,
       send: async (receiver) =>
         runtimeToolResult(
           await dispatch(params.session, {
@@ -348,7 +380,7 @@ export async function executeYell(params: {
         content: [
           {
             type: "text",
-            text: "Report saved. You can download it or investigate it in chat from Guardrails → Yells.",
+            text: "Report recorded for review in Guardrails → Yells.",
           },
         ],
       };
@@ -445,15 +477,21 @@ async function dispatchWithPrincipal(params: {
   return withRuntime(
     session.organization_id,
     (module, policy) =>
-      module.dispatchHook(
-        JSON.stringify({
-          ...session,
-          ...event,
-          ...principal,
-          // Last, so nothing spread above can override the host's reading.
-          withhold_consult_content: withholdConsultContent(),
-        }),
-        policy,
+      withOpenappaContentEncryption(
+        session.organization_id,
+        session.session_id,
+        (encryption) =>
+          module.dispatchHook(
+            JSON.stringify({
+              ...session,
+              ...event,
+              ...principal,
+              // Last, so nothing spread above can override the host's reading.
+              withhold_consult_content: withholdConsultContent(),
+            }),
+            policy,
+            encryption,
+          ),
       ),
     policy,
     session,
@@ -530,21 +568,49 @@ async function withRuntime(
     const rawResult = await call(module, policy);
     return NativeDecisionSchema.parse(JSON.parse(rawResult));
   } catch (error) {
-    throw await dispatchFailure({ session, served: policy.content, error });
+    throw await dispatchFailure({
+      organizationId,
+      session,
+      served: policy.content,
+      error,
+    });
   }
 }
 
 async function dispatchFailure(params: {
+  organizationId: string;
   session?: OpenAppaSession;
   served: string;
   error: unknown;
 }): Promise<ApiError> {
   const missing = await missingOpeningAnnotator(params.session, params.served);
+  if (missing !== null)
+    return openappaFailure(new OpenappaRetiredAnnotatorError(missing));
   return openappaFailure(
-    missing === null
-      ? params.error
-      : new OpenappaRetiredAnnotatorError(missing),
+    (await rootOnlyRefusal(params.organizationId)) ?? params.error,
   );
+}
+
+/**
+ * When the runtime refuses the served document because it is the root text
+ * alone (no composition ever opened), what was refused, said plainly: the
+ * runtime's own words only name the `include` list it cannot open.
+ */
+async function rootOnlyRefusal(
+  organizationId: string,
+): Promise<OpenappaRootOnlyError | null> {
+  try {
+    const stored = await OpenAppaEffectivePolicyModel.find(organizationId);
+    return stored && compositionView(stored).served.kind === "root_only"
+      ? new OpenappaRootOnlyError(stored.lastError ?? "")
+      : null;
+  } catch (error) {
+    logger.warn(
+      { organizationId, err: error },
+      "OpenAPPA could not read the stored composition after a refused dispatch",
+    );
+    return null;
+  }
 }
 
 async function missingOpeningAnnotator(
@@ -558,7 +624,12 @@ async function missingOpeningAnnotator(
       sessionId: session.session_id,
     });
     if (!root) return null;
-    const opening = await (await binding()).readOpenappaOpeningPolicy(root);
+    const module = await binding();
+    const opening = await withOpenappaContentEncryption(
+      session.organization_id,
+      session.session_id,
+      (encryption) => module.readOpenappaOpeningPolicy(root, encryption),
+    );
     return opening === null
       ? null
       : unservedAnnotator({ opening, served, helperBase: helperUrlBase("") });
@@ -583,16 +654,53 @@ async function effectivePolicy(
   organizationId: string,
 ): Promise<DispatchPolicy> {
   try {
-    const rawContent = (
-      await openappaBatteriesService.getEffectivePolicy(organizationId)
-    ).content;
+    const { policy, readable } =
+      await openappaBatteriesService.readForDispatch(organizationId);
+    let unreadable: UnreadableCredential[] = [];
+    let dispatch: DispatchPolicy | null = null;
+    try {
+      dispatch = await openappaDeclarations.dispatchPolicy({
+        organizationId,
+        content: expandCommandExecutionPolicyRules(policy.content),
+        onUnreadable: (found) => {
+          unreadable = found;
+        },
+      });
+    } catch (error) {
+      if (!retainedKeyLost({ unreadable, readable })) throw error;
+    }
+    if (dispatch && !retainedKeyLost({ unreadable, readable })) return dispatch;
+    // A credential the policy was composed to read is unreadable now. Compose
+    // again first, as a fresh read would have: a kept annotator that needed it
+    // is dropped, so its sessions are told to start a new conversation instead
+    // of failing their consults on a key that is not set.
+    logger.info(
+      { organizationId, keys: unreadable.map(({ key }) => key) },
+      "OpenAPPA composes again before a dispatch: a credential the served policy reads cannot be read",
+    );
+    const recompiled = await openappaBatteriesService.recompile(organizationId);
     return await openappaDeclarations.dispatchPolicy({
       organizationId,
-      content: expandCommandExecutionPolicyRules(rawContent),
+      content: expandCommandExecutionPolicyRules(recompiled.content),
     });
   } catch (error) {
     throw openappaFailure(error);
   }
+}
+
+/**
+ * Whether a key the served policy's retirement inputs held readable cannot be
+ * read now. With no snapshot to compare against, any unreadable key counts.
+ */
+function retainedKeyLost(params: {
+  unreadable: UnreadableCredential[];
+  readable: ReadonlySet<string> | null;
+}): boolean {
+  const { unreadable, readable } = params;
+  return (
+    unreadable.length > 0 &&
+    (readable === null || unreadable.some(({ key }) => readable.has(key)))
+  );
 }
 
 /** One policy read shared by a batch of dispatches, taken by the first of them. */
@@ -959,6 +1067,21 @@ export async function processProxyResults(params: {
   });
   const updates: Record<string, ProcessedToolResult> = {};
   for (const result of params.results) {
+    const reportingName = archestraMcpBranding.getToolShortName(
+      params.canonicalize(result.name, result.namespace),
+    );
+    const reportingResult = ["yell", "run_tool"].some(
+      (name) => name === reportingName,
+    )
+      ? await readYellResult(params.session, result.id)
+      : undefined;
+    if (reportingResult !== undefined) {
+      updates[result.id] = {
+        content: reportingResult,
+        outputSource: "runtime",
+      };
+      continue;
+    }
     if (params.trustedChat && isSeededAppRenderToolResult(result.content))
       continue;
     // The runtime released no question call, so it would withhold the answer.
@@ -1186,8 +1309,6 @@ export async function evaluateToolCalls(
         decision.decision === "pass_control"
       ) {
         admitted.push(call.id);
-        if (shortName === "superyell" && decision.decision === "allow_call")
-          await releaseSuperyellReport({ dispatchCall, session, call, event });
         return { kind: "allow" as const };
       }
       // Denied calls return as notices; other calls in the batch stand.
@@ -1244,42 +1365,6 @@ export async function evaluateToolCalls(
     (result) => (result as PromiseFulfilledResult<AppaCallDecision>).value,
   );
 }
-
-/**
- * The runtime sends a yell report only for a call it released as its own
- * yell. A superyell is ruled on under its own name, so the approval its policy
- * rule asks for stays its own. Once the runtime allows it, the runtime also
- * rules on the yell the superyell carries, under its own call id, and the
- * report the superyell sends takes that release. A yell the policy refuses
- * leaves the report unsent; the superyell itself still runs.
- */
-async function releaseSuperyellReport(params: {
-  dispatchCall: ReturnType<typeof sessionDispatch>;
-  session: OpenAppaSession;
-  call: { id: string };
-  event: Record<string, unknown>;
-}): Promise<void> {
-  const decision = await params.dispatchCall({
-    event: "tool_call",
-    operation_id: `call:${params.call.id}${SUPERYELL_REPORT_CALL_SUFFIX}`,
-    tool: "yell",
-    presentation: params.event.presentation,
-    arguments: params.event.arguments,
-    spawn: false,
-  });
-  if (decision.decision !== "allow_call")
-    logger.warn(
-      {
-        sessionId: params.session.session_id,
-        toolCallId: params.call.id,
-        decision: decision.decision,
-      },
-      "OpenAPPA did not release the report a superyell carries; the superyell runs without it",
-    );
-}
-
-/** Names the yell a superyell carries apart from the superyell's own call. */
-const SUPERYELL_REPORT_CALL_SUFFIX = "~yell";
 
 function isJson(text: string): boolean {
   try {
@@ -1670,26 +1755,32 @@ export async function executeRemedyByOffer(params: {
   known: boolean;
 }> {
   const decision = await withRuntime(params.organizationId, (module, policy) =>
-    module.executeRemedyByOffer(
-      JSON.stringify({
-        organization_id: params.organizationId,
-        trajectory: currentTrajectory({
-          session_id: params.sessionId,
-          ...(params.parentId ? { parent_id: params.parentId } : {}),
-        }),
-        ...(params.callerId ? { caller_id: params.callerId } : {}),
-        execution_mode: params.toolCallId ? "tracked" : "untracked",
-        ...(params.toolCallId ? { tool_call_id: params.toolCallId } : {}),
-        original_arguments: params.originalArguments,
-        arguments: params.args,
-        presentation: nativePresentation(params.controlToolName),
-        ...(params.ruling ? { ruling: params.ruling } : {}),
-        ...(params.precheckRefusal
-          ? { precheck_refusal: params.precheckRefusal }
-          : {}),
-        withhold_consult_content: withholdConsultContent(),
-      }),
-      policy,
+    withOpenappaContentEncryption(
+      params.organizationId,
+      params.sessionId,
+      (encryption) =>
+        module.executeRemedyByOffer(
+          JSON.stringify({
+            organization_id: params.organizationId,
+            trajectory: currentTrajectory({
+              session_id: params.sessionId,
+              ...(params.parentId ? { parent_id: params.parentId } : {}),
+            }),
+            ...(params.callerId ? { caller_id: params.callerId } : {}),
+            execution_mode: params.toolCallId ? "tracked" : "untracked",
+            ...(params.toolCallId ? { tool_call_id: params.toolCallId } : {}),
+            original_arguments: params.originalArguments,
+            arguments: params.args,
+            presentation: nativePresentation(params.controlToolName),
+            ...(params.ruling ? { ruling: params.ruling } : {}),
+            ...(params.precheckRefusal
+              ? { precheck_refusal: params.precheckRefusal }
+              : {}),
+            withhold_consult_content: withholdConsultContent(),
+          }),
+          policy,
+          encryption,
+        ),
     ),
   );
   if (decision.decision !== "mcp_result" || !decision.offer) {
@@ -2005,10 +2096,16 @@ export async function loadOfferReview(params: {
     )
       return null;
     const module = await binding();
-    const result = await module.loadOfferReview(
+    const result = await withOpenappaContentEncryption(
       params.organizationId,
       params.sessionId,
-      params.offerId,
+      (encryption) =>
+        module.loadOfferReview(
+          params.organizationId,
+          params.sessionId,
+          params.offerId,
+          encryption,
+        ),
     );
     if (!result) return null;
     return {

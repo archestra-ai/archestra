@@ -2,6 +2,7 @@ import {
   parseOpenappaDeclarations,
   validateHostedOpenappaPolicy,
 } from "@archestra/openappa-rs";
+import { afterEach, vi } from "vitest";
 import config from "@/config";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaPolicyFileModel from "@/models/openappa-policy-file";
@@ -17,6 +18,7 @@ import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { beforeEach, describe, expect, test } from "@/test";
 import { openappaBatteriesService } from "./batteries";
 import { openappaDeclarations } from "./declarations";
+import { sharedPolicy } from "./service";
 
 describe("retained annotator credential availability", () => {
   let organizationId: string;
@@ -29,6 +31,9 @@ describe("retained annotator credential availability", () => {
 
   beforeEach(async ({ makeOrganization, makeAdmin, makeMember }) => {
     config.openappa.enabled = true;
+    // Retention itself is under test: a stored opening keeps its names
+    // whatever its conversations last did (kept-liveness.test.ts covers that).
+    config.openappa.keptAnnotatorHorizonDays = 0;
     organizationId = (await makeOrganization()).id;
     userId = (await makeAdmin()).id;
     await makeMember(userId, organizationId, { role: "admin" });
@@ -74,6 +79,91 @@ describe("retained annotator credential availability", () => {
     rootRevision = retained.rootRevision;
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+    config.openappa.keptAnnotatorHorizonDays = 30;
+  });
+
+  test("a dispatch read inside the freshness window reads neither the ledger nor the secret store", async () => {
+    await openappaBatteriesService.readForDispatch(organizationId);
+    const hashes = vi.spyOn(OpenAppaPolicyFileModel, "listHashes");
+    const documents = vi.spyOn(OpenAppaPolicyFileModel, "findByHashes");
+    const secrets = vi.spyOn(RuntimeCredentialConnectionModel, "resolveValue");
+
+    for (let read = 0; read < 3; read++) {
+      const { policy, readable } =
+        await openappaBatteriesService.readForDispatch(organizationId);
+      expect(policy.installFingerprint).toBe(retainedFingerprint);
+      expect(readable).toEqual(new Set([KEY]));
+    }
+    expect(hashes).not.toHaveBeenCalled();
+    expect(documents).not.toHaveBeenCalled();
+    expect(secrets).not.toHaveBeenCalled();
+  });
+
+  test("a definition removed behind the host's back is dropped on the next dispatch instead of failing it", async () => {
+    await openappaBatteriesService.readForDispatch(organizationId);
+    await RuntimeCredentialDefinitionModel.delete({ organizationId, key: KEY });
+
+    const dispatch = await sharedPolicy(organizationId)();
+    expect(dispatch.content).not.toContain("jev.tool-call");
+    expect(dispatch.credentials).toEqual({});
+    await expectDropped(
+      await OpenAppaEffectivePolicyModel.find(organizationId),
+    );
+  });
+
+  test("a value restored behind the host's back is kept again once the freshness window ends", async () => {
+    await openappaBatteriesService.readForDispatch(organizationId);
+    await secretManager().updateSecret(connection.secretId, {
+      [connection.secretKey]: "",
+    });
+    await sharedPolicy(organizationId)();
+    await secretManager().updateSecret(connection.secretId, {
+      [connection.secretKey]: "test-retained-secret",
+    });
+
+    const within =
+      await openappaBatteriesService.readForDispatch(organizationId);
+    expect(within.policy.content).not.toContain("jev.tool-call");
+
+    const now = performance.now();
+    vi.spyOn(performance, "now").mockReturnValue(now + 61_000);
+    const after =
+      await openappaBatteriesService.readForDispatch(organizationId);
+    expect(after.policy.content).toContain("jev.tool-call");
+    expect(after.readable).toEqual(new Set([KEY]));
+    expect(
+      (
+        await openappaDeclarations.dispatchPolicy({
+          organizationId,
+          content: after.policy.content,
+        })
+      ).credentials,
+    ).toEqual({ [VARIABLE]: "test-retained-secret" });
+  });
+
+  test("a credential the organization never could read does not make every dispatch compose again", async () => {
+    expect(
+      await deleteRuntimeCredentialConnection({
+        organizationId,
+        userId,
+        credentialId: KEY,
+        scope: "organization",
+      }),
+    ).toBe(true);
+    // The root itself now reads the credential, so the served policy names it.
+    await savePolicy(OLD_POLICY);
+    const served =
+      await openappaBatteriesService.readForDispatch(organizationId);
+    expect(served.policy.content).toContain("jev.tool-call");
+    const recompile = vi.spyOn(openappaBatteriesService, "recompile");
+
+    for (let dispatch = 0; dispatch < 2; dispatch++)
+      expect((await sharedPolicy(organizationId)()).credentials).toEqual({});
+    expect(recompile).not.toHaveBeenCalled();
+  });
+
   test("deleting a retained-only definition drops it during the lifecycle callback", async () => {
     await deleteRuntimeCredentialDefinition({ organizationId, key: KEY });
     await expectDropped(
@@ -114,6 +204,27 @@ describe("retained annotator credential availability", () => {
   });
 
   for (const scenario of ["empty value", "missing value field"] as const) {
+    test(`the next dispatch drops a retained ${scenario} before the runtime compiles the policy`, async () => {
+      await openappaBatteriesService.readForDispatch(organizationId);
+      await secretManager().updateSecret(
+        connection.secretId,
+        scenario === "empty value" ? { [connection.secretKey]: "" } : {},
+      );
+      // The read alone still serves the stored row inside the window.
+      expect(
+        (await openappaBatteriesService.readForDispatch(organizationId)).policy
+          .installFingerprint,
+      ).toBe(retainedFingerprint);
+
+      const dispatch = await sharedPolicy(organizationId)();
+      expect(dispatch.content).not.toContain("jev.tool-call");
+      expect(dispatch.content).not.toContain(VARIABLE);
+      expect(dispatch.credentials).toEqual({});
+      await expectDropped(
+        await OpenAppaEffectivePolicyModel.find(organizationId),
+      );
+    });
+
     test(`the next effective-policy read drops a retained ${scenario} without a lifecycle callback`, async () => {
       await secretManager().updateSecret(
         connection.secretId,
@@ -195,6 +306,10 @@ name = "other.judge"
 [[policy.tool]]
 name = "mcp/files/read"
 annotator = "jev.tool-call"
+
+[[policy.tool]]
+name = "mcp/files/write"
+annotator = "other.judge"
 
 [externals.jev]
 token_env = "${VARIABLE}"

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { vi } from "vitest";
 import config from "@/config";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
+import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { beforeEach, describe, expect, test } from "@/test";
@@ -189,6 +190,70 @@ describe("recompile coalescing", () => {
     expect(accepted.lastError).toBeNull();
     expect(accepted.lastErrorAt).toBeNull();
   });
+
+  test("a refusal under a revision that composed before keeps that composition and says it is still served", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalMcpCatalog,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeInternalMcpCatalog({ organizationId, name: "Acme" });
+    await declare({ organizationId, userId });
+    const clean = await openappaBatteriesService.recompile(organizationId);
+
+    // The inputs move under the same revision and the runtime refuses them.
+    native.refusals.next = true;
+    await OpenAppaEffectivePolicyModel.invalidate(organizationId);
+    const refused = await openappaBatteriesService.recompile(organizationId);
+    expect(refused.content).toBe(clean.content);
+    expect(refused.served).toEqual(clean.served);
+    expect(
+      (await openappaBatteriesService.policyDeclarations(organizationId))
+        .composition,
+    ).toMatchObject({
+      served: { kind: "previous", rootRevision: clean.rootRevision },
+      refusal: { rootRevision: clean.rootRevision },
+    });
+  });
+
+  test("a refusal whose store keeps losing marks no install row", async ({
+    makeOrganization,
+    makeUser,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Acme",
+    });
+    await makeTool({
+      catalogId: catalog.id,
+      name: "acme__ping",
+      rawName: "ping",
+    });
+    await declare({ organizationId, userId });
+    await openappaBatteriesService.recompile(organizationId);
+    const before = await OpenAppaBatteryInstallModel.list(organizationId);
+    expect(before.length).toBeGreaterThan(0);
+    expect(before.map((row) => row.status)).not.toContain("refused");
+
+    native.contend.each = async () => {
+      native.refusals.next = true;
+      await storeUnrelatedComposition(organizationId);
+    };
+    await OpenAppaEffectivePolicyModel.invalidate(organizationId);
+    await expect(
+      openappaBatteriesService.recompile(organizationId),
+    ).rejects.toMatchObject({ statusCode: 503 });
+    expect(
+      (await OpenAppaBatteryInstallModel.list(organizationId)).map(
+        (row) => row.status,
+      ),
+    ).toEqual(before.map((row) => row.status));
+  });
 });
 
 /** A composition by some other writer: enough to make the caller's store lose. */
@@ -196,12 +261,15 @@ async function storeUnrelatedComposition(organizationId: string) {
   const marker = randomUUID();
   await OpenAppaEffectivePolicyModel.save({
     organizationId,
+    now: new Date(),
     values: {
       content: `# ${marker}`,
       contentHash: marker,
       rootRevision: 0,
       installFingerprint: marker,
       error: null,
+      served: null,
+      retainedAnnotators: null,
     },
     expected: await OpenAppaEffectivePolicyModel.find(organizationId),
   });

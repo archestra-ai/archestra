@@ -2,11 +2,11 @@
 title: Admin
 description: Deploy Archestra, assign access, connect identity providers, and monitor operations
 order: 7
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-15
 ---
 
-Administrators operate an Archestra instance and manage who can use its resources. Start with [Deployment](/docs/admin/deployment) to install the platform and connect a database.
+Install Archestra, decide who can use its resources, and verify that requests run with the intended identity and limits.
 
-For organization access, assign [roles and resource grants](/docs/admin/access-control), then connect an [identity provider](/docs/admin/identity) for sign-in and team membership. Use [environments](/docs/admin/environments) to separate resource access, deployment permissions, and network policies.
+For a first deployment, choose [Docker or Helm](/docs/admin/deployment), preserve the database and encryption keys, and verify access before connecting clients. For an existing deployment, use the guides below to configure roles, environment isolation, sign-in, and telemetry.
 
-Protect stored credentials with [Data Security](/docs/admin/security). [Observability](/docs/admin/observability) covers logs, metrics, and traces for checking platform health and investigating requests. Settings available to operators are listed in [Configuration](/docs/reference/configuration).
+Organization roles and individual resource grants work together: a person may be able to open Agents without being allowed to use a particular agent. Start with [Access Control](/docs/admin/access-control) when diagnosing missing resources. Deployment-wide settings live in [Configuration](/docs/reference/configuration).

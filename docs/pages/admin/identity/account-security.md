@@ -2,7 +2,7 @@
 title: "Account Security"
 description: "Two-factor authentication, session lifetime caps, and CLI account recovery"
 order: 4
-lastUpdated: 2026-10-06
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -27,7 +27,7 @@ Members secure password accounts using time-based one-time passwords (TOTP) from
 
 Require all password-authenticated members to enroll in 2FA before accessing the workspace:
 
-1. Go to **Settings → Organization → Auth**.
+1. Go to **Settings → Auth**.
 2. Turn on **Require Two-Factor Authentication**.
 
 When turned on:
@@ -44,7 +44,7 @@ Deployments with password authentication disabled ([`ARCHESTRA_AUTH_DISABLE_BASI
 
 By default, user sessions renew on activity. Set an absolute session lifetime to force re-authentication regardless of user activity:
 
-1. Go to **Settings → Organization → Auth**.
+1. Go to **Settings → Auth**.
 2. Under **Maximum session lifetime**, select a duration preset (8 hours to 30 days) or enter a custom duration.
 
 Once a session exceeds this age from sign-in, Archestra revokes the session and redirects the user to sign in again. Rotating [`ARCHESTRA_AUTH_SESSION_SECRET`](/docs/reference/configuration#ARCHESTRA_AUTH_SESSION_SECRET) immediately invalidates all active sessions.
@@ -55,24 +55,24 @@ Once a session exceeds this age from sign-in, Archestra revokes the session and 
 
 Because Archestra has no outbound email provider, password recovery runs directly against the database from the backend container using a bundled script.
 
-The CLI script updates credentials within a single database transaction, invalidates existing sessions, and writes a `user.password_reset` entry to the audit log.
+The script invalidates existing sessions and writes a `user.password_reset` audit entry. It changes live account access: run it only against the intended deployment and user.
 
 ### Helm or Kubernetes
 
 Run the reset script inside the platform deployment pod:
 
 ```bash
-kubectl exec -it deploy/archestra-platform -- \
+kubectl --namespace archestra exec -it deploy/archestra-platform -- \
   sh -c 'cd /app/backend && node dist/standalone-scripts/reset-user-password.mjs --email user@example.com'
 ```
 
 ### Docker Quickstart
 
-Pass the database connection URL into the container command:
+Run the script in the application container, using its database connection. For the Docker quickstart, pass the bundled database defaults below; adjust them if you changed `POSTGRES_USER`, `POSTGRES_PASSWORD`, or `POSTGRES_DB`:
 
 ```bash
 docker exec -it <container> sh -c 'cd /app/backend && \
-  ARCHESTRA_DATABASE_URL=postgresql://user:password@localhost:5432/database \
+  ARCHESTRA_DATABASE_URL="postgresql://archestra:archestra_dev_password@localhost:5432/archestra_dev?schema=public" \
   node dist/standalone-scripts/reset-user-password.mjs --email user@example.com'
 ```
 

@@ -2,16 +2,16 @@
 title: Deployment
 description: Install Archestra with Docker or Helm and configure production access
 order: 1
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-15
 ---
 
-Use Docker to try Archestra locally. Use Helm to run it in Kubernetes with a persistent database, workers, and MCP server workloads. The UI listens on port 3000; the backend listens on port 9000.
+Run the Docker quickstart for local evaluation, or use Helm for a persistent Kubernetes deployment. Before connecting agents, verify database readiness, public URLs, and a model request through your ingress.
 
 ## Docker Deployment
 
 ### Quickstart Deployment
 
-Install Docker, then use the command in [Run Archestra](/docs/get-started#run-archestra). Its named volumes preserve database and application data. The Docker socket mount enables the embedded Kubernetes cluster for self-hosted MCP servers.
+The quickstart bundles PostgreSQL and a local cluster. Install Docker, then use the command in [Run Archestra](/docs/get-started#run-archestra). Its named volumes preserve database and application data. The Docker socket mount enables the embedded Kubernetes cluster for self-hosted MCP servers.
 
 Open <http://localhost:3000> to confirm the UI loads. Keep the loopback port bindings for a local instance. For production, use Helm and a database with backups.
 
@@ -25,7 +25,7 @@ You need a Kubernetes cluster, Helm 3 or later, and `kubectl` access. Self-hoste
 
 ### Installation
 
-Pin the chart version and review its defaults:
+Pin a chart version from [GitHub Releases](https://github.com/archestra-ai/archestra/releases) and review its defaults. The example tracks the current release candidate; choose a release your organization has validated:
 
 ```bash
 export ARCHESTRA_VERSION="1.4.0-rc.42" # x-release-please-version
@@ -43,6 +43,8 @@ helm upgrade archestra-platform \
   --install --namespace archestra --create-namespace \
   --values values.yaml --wait
 ```
+
+After Helm completes, run `kubectl --namespace archestra get pods,jobs` and confirm the migration Job completed and application pods are ready.
 
 ### Core Configuration
 
@@ -96,13 +98,19 @@ Use `archestra.resources` and `archestra.worker.resources` to size pods. Diagnos
 
 ### Accessing the Platform
 
-For a local verification before configuring ingress:
+Forward both UI and API ports to verify the installation before adding ingress:
 
 ```bash
 kubectl --namespace archestra port-forward svc/archestra-platform 9000:9000 3000:3000
 ```
 
-Open <http://localhost:3000>. Confirm you can sign in and that the backend is reachable on port 9000. For an external deployment, configure TLS and the public URLs before connecting agents.
+Open <http://localhost:3000> and confirm sign-in works. In another terminal, check database readiness:
+
+```bash
+curl --fail-with-body http://localhost:9000/ready
+```
+
+A ready instance reports `status: "ok"` and `database: "connected"`. Configure TLS and public URLs before connecting external agents.
 
 ### Routing the LLM Proxy Away From the Frontend
 
@@ -110,7 +118,7 @@ Route `/v1` and `/v2` to backend port 9000 and `/` to frontend port 3000. Keep `
 
 ### Keep-Alive Timeouts
 
-Set the ingress or load-balancer response timeout long enough for streamed model responses. Also set [`ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS`](/docs/reference/configuration#ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS) above the load balancer's backend idle-connection timeout if it exceeds the platform default. Test a streaming request through the public endpoint.
+Set the ingress or load-balancer response timeout long enough for streamed model responses. Also set [`ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS`](/docs/reference/configuration#ARCHESTRA_HTTP_KEEP_ALIVE_TIMEOUT_MS) above the load balancer's backend idle-connection timeout if it exceeds the platform default. Send a streaming model request through the public endpoint and check it completes; use the [proxy request example](/docs/llm-proxy#start-using-it) with `"stream": true`.
 
 ### MCP Gateway OAuth Public Origin
 
@@ -155,19 +163,23 @@ During shutdown, Archestra stops accepting new model requests and gives active r
 
 For Docker, use `docker stop --time 120` or set Compose's `stop_grace_period: 120s`. A shorter host deadline can kill the container before requests finish.
 
-The proxy retries a provider connection failure at most twice before receiving the first response chunk. It does not retry provider error responses, timeouts, or failures after output starts. Recovery after partial output depends on your client's retry policy.
-
-Gemini is excluded from these proxy retries because its SDK can report an interrupted error response as a connection failure.
 
 Rolling back a container image does not reverse database migrations. Restore a compatible database backup when required by the release's rollback procedure.
 
 ## Infrastructure as Code
 
-Manage Archestra resources from Terraform or Crossplane. Both use the same API key — mint one in the API Keys section in Personal Settings (click your name in the sidebar) (see [API Reference](/docs/reference/api#authentication)).
+Use the [Terraform provider](https://registry.terraform.io/providers/archestra-ai/archestra/latest/docs) to manage agents, catalog entries, and installations from code. Use a [service-account API key](/docs/reference/api#service-accounts) for shared automation.
 
 ### Terraform
 
-1. Configure the provider. Read credentials from the environment (`export ARCHESTRA_API_KEY=...` and `export ARCHESTRA_BASE_URL=...`) or pass them inline.
+Configure credentials in the execution environment:
+
+```bash
+export ARCHESTRA_BASE_URL="https://api.archestra.example.com"
+# Set ARCHESTRA_API_KEY through your shell or CI secret store.
+```
+
+Declare the provider and a catalog entry:
 
 ```terraform
 terraform {
@@ -179,15 +191,10 @@ terraform {
 }
 
 provider "archestra" {}
-```
 
-2. Define a resource. Register an MCP server in the catalog, then install it.
-
-```terraform
 resource "archestra_mcp_registry_catalog_item" "memory" {
   name        = "memory"
   description = "In-memory key-value store"
-
   local_config = {
     command   = "npx"
     arguments = ["-y", "@modelcontextprotocol/server-memory"]
@@ -200,110 +207,26 @@ resource "archestra_mcp_server_installation" "memory" {
 }
 ```
 
-3. Apply.
-
-```bash
-terraform init
-terraform apply
-```
-
-Full resource reference: [Terraform provider docs](https://registry.terraform.io/providers/archestra-ai/archestra/latest/docs).
+Run `terraform init` and `terraform plan`, inspect the changes, then apply. Confirm the entry and installation appear in **MCP Registry**.
 
 ### Crossplane
 
-Install Crossplane v1 or v2 before adding the provider.
-
-1. Install the provider. Pin the latest tag from [GitHub Releases](https://github.com/archestra-ai/terraform-provider-archestra/releases).
-
-```yaml
-apiVersion: pkg.crossplane.io/v1
-kind: Provider
-metadata:
-  name: provider-archestra
-spec:
-  package: xpkg.upbound.io/archestra/provider-archestra:v1.1.4
-```
-
-2. Configure credentials.
-
-```bash
-kubectl create secret generic archestra-creds \
-  -n crossplane-system \
-  --from-literal=credentials='{"api_key":"arch_...","base_url":"https://api.archestra.example.com"}'
-```
-
-```yaml
-apiVersion: archestra.crossplane.io/v1beta1
-kind: ProviderConfig
-metadata:
-  name: default
-spec:
-  credentials:
-    source: Secret
-    secretRef:
-      namespace: crossplane-system
-      name: archestra-creds
-      key: credentials
-```
-
-3. Create a resource. Mirror of the Terraform example above.
-
-```yaml
-apiVersion: mcp.archestra.crossplane.io/v1alpha1
-kind: RegistryCatalogItem
-metadata:
-  name: memory
-spec:
-  forProvider:
-    name: memory
-    description: In-memory key-value store
-    localConfig:
-      command: npx
-      arguments:
-        - "-y"
-        - "@modelcontextprotocol/server-memory"
-  providerConfigRef:
-    name: default
----
-apiVersion: mcp.archestra.crossplane.io/v1alpha1
-kind: ServerInstallation
-metadata:
-  name: memory
-spec:
-  forProvider:
-    name: memory
-    catalogIdRef:
-      name: memory
-  providerConfigRef:
-    name: default
-```
-
-Full resource reference: [Crossplane provider README](https://github.com/archestra-ai/terraform-provider-archestra/blob/main/crossplane/README.md). Resource coverage is partial — current state and the gap vs. the Terraform provider are tracked on the [coverage badge](https://github.com/archestra-ai/terraform-provider-archestra#archestra-provider).
+Install Crossplane first, then follow the [Crossplane provider setup](https://github.com/archestra-ai/terraform-provider-archestra/blob/main/crossplane/README.md). Pin its package version and supply an API key through a Kubernetes Secret. Resource coverage differs from Terraform; check the provider's coverage before choosing it.
 
 ## Connect Page Settings
 
-Admins configure the page under **Settings → Connect Page**, or with **Connection settings** on the Connect page:
+Choose which clients, provider keys, and managed instructions the organization offers under **Settings → Connect Page**. See [organization settings](/docs/get-started/connect#organization-settings) for how these affect setup and existing connections.
 
-| Setting | Effect |
-| --- | --- |
-| Default client, Default MCP Gateway | Pre-selected for everyone. Users can still switch. |
-| LLM Proxy, Skills, and Plugins on Connect | Turning one off removes it from new setups. Existing setups keep working. |
-| Agents users can connect | The agents offered on Connect, in order. Drag to reorder, click **✕** to remove one, and use **Add back** to restore it. Click an agent to pick the provider keys its setup command shares with everyone who connects it. An agent with no keys picked uses each user's own. **Generic client** is always shown last. |
-| Instructions for connected agents | Added to the system prompt of every agent users connect from the Connect page. The default asks agents to offer moving a session to your deployment's Cloud runtime. CLI wrappers fetch saved changes before the next launch. |
+### Setup Behind an Authentication Proxy
 
-Claude Code, Codex, Copilot CLI, OpenCode, and Kilo Code refresh these instructions before launch. Changes replace the managed copy and preserve the user’s own instructions.
-
-- **Existing connections:** Run setup once to install the refresh capability. Unix wrappers require Python 3 to fetch updates.
-- **Temporary outages:** The client uses its last fetched copy.
-- **Other clients:** Cursor’s User Rules and Claude Desktop’s organization instructions still need a setup update.
+Allow the setup endpoints through a proxy that otherwise requires an interactive login.
 
 Setup reads `/connect.md`, `/llms.txt`, and the setup endpoints under `/api/client-connections` and `/api/connection-setups/script` without a session. A proxy in front of Archestra that requires login for every URL must let these through. It must also allow `/v1/connection-instructions`; this endpoint checks the installation’s read-only credential and current access.
-
 
 ## Upgrade OAuth Clients
 
 Deploy the unified OAuth Clients release to all replicas together, with the older replicas stopped before the updated application starts. Mixed versions and rolling back to the older authorization model are unsupported. Back up the database before the upgrade.
 
-Existing client IDs, secrets, provider keys, gateway assignments, and issued tokens carry over. MCP clients retain MCP Gateway and A2A access; LLM clients retain LLM Proxy access. The upgrade combines each custom role action and wildcard grant across the two former client resources. A read grant never becomes edit or delete, and grants on individual clients keep their scope. See [OAuth client access control](/docs/admin/access-control#oauth-clients).
+Existing client IDs, secrets, tokens, provider mappings, and gateway assignments carry over. MCP clients retain MCP Gateway and A2A access; LLM clients retain LLM Proxy access. Custom role actions combine without turning read into update or delete; per-client grants keep their scope. See [OAuth client access control](/docs/admin/access-control#oauth-clients).
 
-After the upgrade, open **Settings → OAuth Clients** and check the clients' capabilities and permissions. Request tokens with the scopes the application needs. Repeat startups preserve permission changes made after the upgrade.
+After the upgrade, open **Settings → OAuth Clients**, check capabilities and permissions, and test one request for each enabled API. Request only the [token scopes](/docs/mcp/authentication/applications#choose-token-scopes) the application needs.

@@ -2,7 +2,7 @@
 title: "Content Encryption at Rest"
 description: "Server-side encryption of stored conversation and tool content"
 order: 2
-lastUpdated: 2026-10-12
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -30,11 +30,11 @@ Metadata stays in plaintext: timestamps, model names, token counts, tool and ser
 
 ## Enabling on a Running Deployment
 
-Enabling takes two rollouts, so replicas never mix encrypted writes with readers that lack the key: first deploy with the key in [`ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS`](/docs/reference/configuration#ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS) (decrypt-capable everywhere, writes unchanged), then move it to [`ARCHESTRA_CONTENT_ENCRYPTION_SECRET`](/docs/reference/configuration#ARCHESTRA_CONTENT_ENCRYPTION_SECRET). After the second rollout finishes, run `pnpm --filter backend db:reencrypt-content` once: replicas that had not yet restarted during the rollout may have written a few plaintext rows behind the background sweep, and an explicit run always re-verifies the full table.
+Enabling takes two rollouts, so replicas never mix encrypted writes with readers that lack the key: first deploy with the key in [`ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS`](/docs/reference/configuration#ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS) (decrypt-capable everywhere, writes unchanged), then move it to [`ARCHESTRA_CONTENT_ENCRYPTION_SECRET`](/docs/reference/configuration#ARCHESTRA_CONTENT_ENCRYPTION_SECRET). After the second rollout finishes, run `pnpm --filter @backend db:reencrypt-content` once: replicas that had not yet restarted during the rollout may have written a few plaintext rows behind the background sweep, and an explicit run always re-verifies the full table.
 
 ## Rotating the Key
 
-Rotation is the same shape: add the new key as `..._PREVIOUS` and roll out, swap the two variables and roll out again, let the background sweep re-encrypt (or run `pnpm --filter backend db:reencrypt-content`), then drop `..._PREVIOUS`.
+Rotation is the same shape: add the new key as `..._PREVIOUS` and roll out, swap the two variables and roll out again, let the background sweep re-encrypt (or run `pnpm --filter @backend db:reencrypt-content`), then drop `..._PREVIOUS`.
 
 ## Disk Headroom
 

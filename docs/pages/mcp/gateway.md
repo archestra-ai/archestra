@@ -2,7 +2,7 @@
 title: MCP Gateway
 description: One MCP endpoint that gives a client the tools, knowledge, subagents, and skills you choose
 order: 2
-lastUpdated: 2026-10-13
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -43,7 +43,7 @@ Give the client every tool its person can use, or only the ones you pick. Set it
 | **Manual** | Only the tools you pick. For each, pick a shared account, or **Resolve at call time** to use each person's own. | A team, an app, or a script |
 
 - **Subagents** go here too. The client gets one `agent__<name>` tool for each [subagent](/docs/agents/subagents), to hand it a task.
-- **Progressive tool loading** is on by default: the client gets [`search_tools`](/docs/reference/archestra-mcp-server#search_tools) and [`run_tool`](/docs/reference/archestra-mcp-server#run_tool). Turn it off in Manual mode when the client needs the full list up front.
+- **Progressive tool loading** is on by default: the client gets [`search_tools`](/docs/reference/archestra-mcp-server#search_tools) and [`run_tool`](/docs/reference/archestra-mcp-server#run_tool). Turn it off in Manual mode when the client needs the full list up front. Questions, run controls, Guardrails recovery, and assigned MCP App interfaces remain directly available.
 - A team or organization token has no person behind it, so it gets only the tools you picked, even in All mode.
 
 <span id="knowledge"></span>

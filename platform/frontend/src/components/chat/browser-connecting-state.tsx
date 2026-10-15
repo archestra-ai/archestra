@@ -1,7 +1,7 @@
 "use client";
 
+import { Globe } from "lucide-react";
 import { useEffect, useState } from "react";
-import { LoadingState } from "@/components/loading";
 
 /**
  * Loader for the browser panel while the first screenshot is on its way.
@@ -26,24 +26,35 @@ export function BrowserConnectingState() {
   }, [messageIndex]);
 
   return (
-    <div className="flex flex-col items-center gap-2 px-6">
-      <LoadingState
-        variant="compact"
-        label="Connecting to the browser"
-        showLabel={false}
-      />
-      {/* Screen readers get the stable label above; re-announcing a new line every few seconds is noise. */}
-      <p
-        key={messageIndex}
-        aria-hidden="true"
-        className="animate-in fade-in-0 slide-in-from-bottom-1 duration-300 text-sm font-medium text-foreground text-center motion-reduce:animate-none"
-      >
-        {CONNECTING_MESSAGES[messageIndex]}
-      </p>
-      <p aria-hidden="true" className="text-xs text-muted-foreground">
-        The first connection takes a few seconds
-      </p>
-    </div>
+    <output
+      aria-label="Connecting to the browser"
+      className="flex flex-col items-center gap-5 px-8"
+    >
+      <span aria-hidden="true" className="relative block size-14 shrink-0">
+        <span className="absolute inset-0 rounded-full border-2 border-muted-foreground/20" />
+        <span className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-foreground motion-reduce:animate-none" />
+        <Globe
+          strokeWidth={1.6}
+          className="absolute inset-0 m-auto size-[22px] text-foreground/80"
+        />
+      </span>
+      <span className="flex min-h-12 flex-col items-center gap-1.5">
+        {/* Screen readers get the stable label above; re-announcing a new line every few seconds is noise. */}
+        <span
+          key={messageIndex}
+          aria-hidden="true"
+          className="animate-in fade-in-0 slide-in-from-bottom-1.5 duration-300 text-[15px] font-medium text-foreground text-center motion-reduce:animate-none"
+        >
+          {CONNECTING_MESSAGES[messageIndex]}
+        </span>
+        <span
+          aria-hidden="true"
+          className="text-xs text-muted-foreground text-center"
+        >
+          The first connection takes a few seconds
+        </span>
+      </span>
+    </output>
   );
 }
 

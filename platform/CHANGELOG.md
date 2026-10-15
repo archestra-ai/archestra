@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.4.0-rc.42](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.41...platform-v1.4.0-rc.42) (2026-10-15)
+
+
+### Features
+
+* **oauth:** unify client scopes and management permissions ([#8910](https://github.com/archestra-ai/archestra/issues/8910)) ([44315bb](https://github.com/archestra-ai/archestra/commit/44315bbe13a0b664d72086ae4526f3f44cf3321a))
+* **settings:** organize Appearance into focused subpages ([#8915](https://github.com/archestra-ai/archestra/issues/8915)) ([99022d8](https://github.com/archestra-ai/archestra/commit/99022d861036311330ba2498866f8ce342e409a2))
+* **usage:** add a personal activity explorer ([#8829](https://github.com/archestra-ai/archestra/issues/8829)) ([2184afc](https://github.com/archestra-ai/archestra/commit/2184afc8933e63230bd739e1c43e91d35ee95100))
+
+
+### Bug Fixes
+
+* **docs:** stabilize recurring screenshot captures ([#8912](https://github.com/archestra-ai/archestra/issues/8912)) ([f28fdcd](https://github.com/archestra-ai/archestra/commit/f28fdcdbae5d7da70d7836e5ce2198d901fd4792))
+* **openappa:** stop a stored annotator snapshot from refusing and pinning the policy ([#8914](https://github.com/archestra-ai/archestra/issues/8914)) ([5b83757](https://github.com/archestra-ai/archestra/commit/5b8375709b0a992bbff31a4f411146695757bc33))
+
 ## [1.4.0-rc.41](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.40...platform-v1.4.0-rc.41) (2026-10-14)
 
 

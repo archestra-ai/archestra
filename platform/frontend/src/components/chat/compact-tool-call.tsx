@@ -707,8 +707,8 @@ function ExpandedToolCard({
   });
   const policyToolName = parseFullToolName(resolvedPolicyToolName).toolName;
   const validationChange = [
-    "preview_openappa_validation_change",
-    "publish_openappa_validation_change",
+    "preview_guardrails_validation_change",
+    "update_guardrails_validation",
   ].includes(getToolShortName(resolvedPolicyToolName) ?? "");
   // A save reports its result in one line, not the diff it saved.
   const saveResult = errorText

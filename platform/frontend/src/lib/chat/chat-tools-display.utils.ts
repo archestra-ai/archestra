@@ -12,7 +12,7 @@ import type { PendingToolAction } from "@/lib/chat/pending-tool-state";
 
 const POLICY_PREVIEW_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
   "preview_guardrails_policy_change",
-  "preview_openappa_validation_change",
+  "preview_guardrails_validation_change",
 ]);
 
 /**

@@ -2191,8 +2191,6 @@ class InteractionModel {
       let claudeCodeTitle: string | null | undefined;
 
       for (const interaction of windowRows) {
-        // A guardrail consult quotes the call it judges, so the content
-        // markers below say nothing about the consult itself.
         const isGuardrail = isGuardrailSource(interaction.source);
         const isOpenCodeSideTurn =
           isOpenCodeFamilySessionSource(interaction.sessionSource) &&
@@ -2203,11 +2201,7 @@ class InteractionModel {
           ) === "subagent";
 
         // Check for title generation request (Claude Code)
-        if (
-          !isGuardrail &&
-          interaction.isTitleGeneration &&
-          claudeCodeTitle === undefined
-        ) {
+        if (interaction.isTitleGeneration && claudeCodeTitle === undefined) {
           // Extract title from response
           const response = interaction.response as {
             content?: Array<{ text?: string }>;
@@ -2495,7 +2489,11 @@ class InteractionModel {
     // overlap, and the caller's scan must not see the same row twice.
     const byId = new Map<string, SessionWindowRow>();
     for (const row of interactionsResult.rows) {
-      const requestText = JSON.stringify(row.request);
+      // A guardrail consult quotes the call it judges, so its text marks
+      // nothing about the consult itself.
+      const requestText = isGuardrailSource(row.source)
+        ? ""
+        : JSON.stringify(row.request);
       byId.set(row.id, {
         id: row.id,
         sessionId: row.session_id,

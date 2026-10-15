@@ -7,8 +7,9 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
  * agents or gateways. Anyone else (a member) sees only agents they can open,
  * so naming an agent's owner tells them nothing.
  *
- * Mirrors `getVisibleAgentFilter` in backend `routes/mcp-server.ts`; change
- * both together.
+ * Mirrors `getVisibleAgentFilter` in backend `routes/mcp-server.ts`, whose
+ * agent-type admin check is update at `*` on the same two resources (`agent`,
+ * `mcpGateway`); change both together.
  */
 export function useSeesAllAgents(): boolean {
   const { data: sharedInstalls } = useHasPermissions({

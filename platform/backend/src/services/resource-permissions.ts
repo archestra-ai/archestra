@@ -190,11 +190,17 @@ export class ResourcePermissions {
     organizationId: string;
     userId: string;
     resource: ScopedResource;
+    /** The caller's subjects, when the request has read them already. */
+    subjects?: PermissionSubject[];
   }): Promise<boolean> {
     if (await ResourcePermissions.canManageGlobalPolicy(params)) return true;
     const [subjects, policy] = await Promise.all([
-      ResourcePermissions.getSubjects(params),
-      ResourcePermissionPolicyModel.find({ ...params, scope: "*" }),
+      params.subjects ?? ResourcePermissions.getSubjects(params),
+      ResourcePermissionPolicyModel.find({
+        organizationId: params.organizationId,
+        resource: params.resource,
+        scope: "*",
+      }),
     ]);
     const keys = new Set(subjects.map(subjectKey));
     return (
@@ -502,6 +508,7 @@ export class ResourcePermissions {
     const policy = await ResourcePermissionPolicyModel.find(params);
     const applicable =
       await ResourcePermissionPolicyModel.findApplicable(params);
+    const actorSubjects = await ResourcePermissions.getSubjects(params);
     const inherited = inheritedPolicyGrants({
       policies: applicable,
       scope: params.scope,
@@ -525,8 +532,11 @@ export class ResourcePermissions {
         grants: effective.grants,
       }),
       canShareOrganizationWide:
-        await ResourcePermissions.mayAddOrganizationWide(params),
-      actorSubjects: await ResourcePermissions.getSubjects(params),
+        await ResourcePermissions.mayAddOrganizationWide({
+          ...params,
+          subjects: actorSubjects,
+        }),
+      actorSubjects,
     };
   }
 
@@ -597,6 +607,7 @@ export class ResourcePermissions {
       });
     }
     const updated = await ResourcePermissions.getEffective(params);
+    const actorSubjects = await ResourcePermissions.getSubjects(params);
     return {
       resource: ManagedResourceSchema.parse(params.resource),
       scope: params.scope,
@@ -619,8 +630,11 @@ export class ResourcePermissions {
         grants: updated.grants,
       }),
       canShareOrganizationWide:
-        await ResourcePermissions.mayAddOrganizationWide(params),
-      actorSubjects: await ResourcePermissions.getSubjects(params),
+        await ResourcePermissions.mayAddOrganizationWide({
+          ...params,
+          subjects: actorSubjects,
+        }),
+      actorSubjects,
     };
   }
   /**
@@ -800,11 +814,13 @@ export class ResourcePermissions {
   }
 
   /**
-   * Refuse a grant to someone the caller may not add. Beyond the org-wide
-   * rule below, a manager of this one object shares it only with teams they
-   * are in, and with a service account only if they may see service accounts.
-   * As there, keeping, lowering or removing a grant is always allowed, and a
-   * chat or agent run is its owner's to share.
+   * Refuse a grant to someone the caller may not add. Without the authority
+   * to make an object org-wide ({@link canShareOrganizationWide}), a manager
+   * of this one object cannot add everyone or a role, and shares it only with
+   * teams they are in. A service account takes the right to see service
+   * accounts. Keeping, lowering, or removing a grant is always allowed, so a
+   * manager can still narrow who reaches the object, and a chat or agent run
+   * is its owner's to share.
    */
   private static async assertMayAddRecipients(params: {
     organizationId: string;
@@ -813,27 +829,36 @@ export class ResourcePermissions {
     grants: ResourcePermissionGrant[];
     current: ResourcePermissionGrant[];
   }) {
-    await ResourcePermissions.assertMayShareOrganizationWide(params);
     if (isSessionResource(params.resource)) return;
     const added = addedGrants(params).map((grant) => grant.subject);
+    const widens = added.some(isOrganizationWideSubject);
     const addsTeam = added.some((subject) => subject.type === "team");
-    if (
-      addsTeam &&
-      !(await ResourcePermissions.canShareOrganizationWide(params))
-    ) {
-      const ownTeams = new Set(
-        (await ResourcePermissions.getSubjects(params)).map(subjectKey),
-      );
+    if (widens || addsTeam) {
+      // Read once: the org-wide check and the own-teams check share them.
+      const subjects = await ResourcePermissions.getSubjects(params);
       if (
-        added.some(
-          (subject) =>
-            subject.type === "team" && !ownTeams.has(subjectKey(subject)),
+        !(await ResourcePermissions.canShareOrganizationWide({
+          ...params,
+          subjects,
+        }))
+      ) {
+        if (widens)
+          throw new ApiError(
+            403,
+            `Only someone with Full access to every ${scopedResourceNouns[params.resource]} can share it with everyone in the organization or with a role.`,
+          );
+        const ownTeams = new Set(subjects.map(subjectKey));
+        if (
+          added.some(
+            (subject) =>
+              subject.type === "team" && !ownTeams.has(subjectKey(subject)),
+          )
         )
-      )
-        throw new ApiError(
-          403,
-          `Only someone with Full access to every ${scopedResourceNouns[params.resource]} can share it with a team they are not in.`,
-        );
+          throw new ApiError(
+            403,
+            `Only someone with Full access to every ${scopedResourceNouns[params.resource]} can share it with a team they are not in.`,
+          );
+      }
     }
     if (
       added.some((subject) => subject.type === "serviceAccount") &&
@@ -878,32 +903,6 @@ export class ResourcePermissions {
   }
 
   /**
-   * Refuse a grant that makes an object org-wide, or widens one that already
-   * does, unless the caller may do that ({@link canShareOrganizationWide}).
-   * Keeping, lowering, or removing such a grant is always allowed, so a
-   * manager of one object can still narrow who reaches it. A chat or agent
-   * run is its owner's to share.
-   */
-  private static async assertMayShareOrganizationWide(params: {
-    organizationId: string;
-    userId: string;
-    resource: ScopedResource;
-    grants: ResourcePermissionGrant[];
-    current: ResourcePermissionGrant[];
-  }) {
-    if (isSessionResource(params.resource)) return;
-    const widens = addedGrants(params).some((grant) =>
-      isOrganizationWideSubject(grant.subject),
-    );
-    if (!widens || (await ResourcePermissions.canShareOrganizationWide(params)))
-      return;
-    throw new ApiError(
-      403,
-      `Only someone with Full access to every ${scopedResourceNouns[params.resource]} can share it with everyone in the organization or with a role.`,
-    );
-  }
-
-  /**
    * Whether this editor may add everyone or a role. A chat or agent run is
    * its owner's to share, and the `*` policy has its own gate
    * (`accessPolicies:update`).
@@ -913,6 +912,7 @@ export class ResourcePermissions {
     userId: string;
     resource: ScopedResource;
     scope?: ResourcePermissionScope;
+    subjects?: PermissionSubject[];
   }): Promise<boolean> {
     return (
       isSessionResource(params.resource) ||
@@ -1002,14 +1002,19 @@ export class ResourcePermissions {
     // an object org-wide, which a manager of this one object alone cannot;
     // they share it with their own teams, and with people a grant here would
     // give something to.
+    const subjects = await ResourcePermissions.getSubjects(params);
     const [organizationWide, seesServiceAccounts, found] = await Promise.all([
-      ResourcePermissions.mayAddOrganizationWide(params),
+      ResourcePermissions.mayAddOrganizationWide({ ...params, subjects }),
       ResourcePermissions.maySeeServiceAccounts(params),
       ResourcePermissionSubjectModel.search(params),
     ]);
     const recipients = organizationWide
       ? found
-      : await ResourcePermissions.withoutOthersCircles({ ...params, found });
+      : await ResourcePermissions.withoutOthersCircles({
+          ...params,
+          found,
+          subjects,
+        });
     const defaults: { subject: PermissionSubject; name: string }[] = [
       {
         subject: { type: "organization" as const, id: "*" as const },
@@ -1043,19 +1048,20 @@ export class ResourcePermissions {
     userId: string;
     resource: ScopedResource;
     found: T[];
+    /** The caller's subjects, which name their teams. */
+    subjects: PermissionSubject[];
   }): Promise<T[]> {
     const userIds = params.found
       .filter((recipient) => recipient.subject.type === "user")
       .map((recipient) => recipient.subject.id);
-    const [ownSubjects, coveredRoles, members] = await Promise.all([
-      ResourcePermissions.getSubjects(params),
+    const [coveredRoles, members] = await Promise.all([
       ResourcePermissions.rolesWithEveryAction(params),
       MemberModel.findByUserIdsInOrganization({
         organizationId: params.organizationId,
         userIds,
       }),
     ]);
-    const ownTeams = new Set(ownSubjects.map(subjectKey));
+    const ownTeams = new Set(params.subjects.map(subjectKey));
     const covered = new Set(
       members
         .filter((member) => coveredRoles.has(member.role))

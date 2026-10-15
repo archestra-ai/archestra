@@ -1115,12 +1115,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         catalogId: id,
         requested: { ...restBody, multitenant: requestedMultitenant },
         current: originalCatalogItemForGate,
-        requestedVaultReferences: [
+        requestedVaultReferences: {
           oauthClientSecretVaultPath,
           oauthClientSecretVaultKey,
           localConfigVaultPath,
           localConfigVaultKey,
-        ],
+        },
       });
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.

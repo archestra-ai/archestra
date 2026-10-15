@@ -45,7 +45,7 @@ export function agentsLosingAccessOnUninstall<
  */
 export function uninstallConsequence(
   server: { teamId?: string | null; scope?: InstallScope },
-  { seesSharedInstalls }: { seesSharedInstalls: boolean },
+  seesSharedInstalls: boolean,
 ): string | null {
   switch (resolveInstallScope(server)) {
     case "personal":

@@ -118,11 +118,7 @@ export function UninstallServerDialog({
       ? `Are you sure you want to uninstall ${installs.length} selected MCP server connections?`
       : [
           `Are you sure you want to uninstall "${server?.name || ""}"?`,
-          server
-            ? uninstallConsequence(server, {
-                seesSharedInstalls: !!seesSharedInstalls,
-              })
-            : null,
+          server ? uninstallConsequence(server, !!seesSharedInstalls) : null,
         ]
           .filter(Boolean)
           .join(" ");

@@ -80,11 +80,11 @@ export async function assertCanChangeMcpRuntimeConfig(params: {
   catalogId: string;
   requested: Partial<Record<(typeof MCP_RUNTIME_FIELDS)[number], unknown>>;
   current: Partial<Record<(typeof MCP_RUNTIME_FIELDS)[number], unknown>>;
-  /** Secret references stored in a vault, which replace stored values. */
-  requestedVaultReferences?: readonly (string | undefined)[];
+  /** Secret references stored in a vault, by name; each replaces a stored value. */
+  requestedVaultReferences?: Record<string, string | undefined>;
 }): Promise<void> {
   const changed =
-    (params.requestedVaultReferences ?? []).some(
+    Object.values(params.requestedVaultReferences ?? {}).some(
       (reference) => reference !== undefined,
     ) ||
     MCP_RUNTIME_FIELDS.some(

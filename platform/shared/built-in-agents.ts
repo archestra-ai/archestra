@@ -19,6 +19,10 @@ export const APPA_KEEPER_AGENT_ICON = "logo:appa-keeper";
 
 export const OPENAPPA_CONFIG_SUGGESTED_PROMPTS = [
   {
+    summaryTitle: "Explain OpenAPPA guardrails",
+    prompt: "Explain what OpenAPPA guardrails are.",
+  },
+  {
     summaryTitle: "Explain my current policy",
     prompt: "Explain my current OpenAPPA policy in plain language.",
   },

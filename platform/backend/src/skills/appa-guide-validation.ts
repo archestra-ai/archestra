@@ -4,7 +4,7 @@
 // white-label-ok: applyBuiltInSkillBranding rebrands bundled references at reconcile
 export const VALIDATION_WORKFLOW = `# Validations (\`validate\`)
 
-A validation is a unit test for one case the operator cares about: a short \`.appa\` scenario of one or more calls and the decision the operator expects, such as "Slack data must never be posted to a public GitHub repository". Replay runs it offline against the policy; it executes no tools, models, or remote helpers. Saving a validation on its own never changes the policy or the enforcement switch. Approval follows **Save** below, not the policy's approval steps.
+A validation is a unit test for one case the operator cares about: a short \`.appa\` scenario of one or more calls and the decision the operator expects. Replay runs it offline against the policy; it executes no tools, models, or remote helpers. Saving a validation on its own never changes the policy or the enforcement switch. Approval follows **Save** below, not the policy's approval steps.
 
 ## When to offer one
 
@@ -17,10 +17,10 @@ Do not offer one after a first policy or \`init\`, for explain, review, or yell 
 
 ## Get the case
 
-1. A concrete case names an action and the expected decision, plus starting conditions when they matter (for example, after reading private Slack data). If the request or the change you just made gives one, go to **Write**.
+1. A concrete case names an action and the expected decision, plus starting conditions when they matter (for example, after reading private data). If the request or the change you just made gives one, go to **Write**.
 2. Otherwise read only the policy and find the operator's own rules: root \`[[policy.tool]]\` rules that name a tool other than \`archestra__*\` or the catch-all \`*\`. The starter's controls for platform tools (\`run_command\`, \`ask_user\`, \`superyell\`), the catch-all, and battery rules are defaults: never offer them as cases.
-   - **With own rules**: ask one \`archestra__ask_user\` question, "Which case should the validation cover?", with one or two options, each a case one of those rules decides (for example, "Block public posting after reading an HR record"); the operator types their own case in its "Type something" field.
-   - **Without own rules**: say in one sentence that the policy has only default rules, so there is no case of theirs to validate yet, and offer to make a change first (\`references/adjust.md\`); after that change, offer its validation as **When to offer one** says.
+   - **With own rules**: ask one \`archestra__ask_user\` question, "Which case should the validation cover?", with one or two options, each a case one of those rules decides; name only tools and rules that appear in the policy; the operator types their own case in its "Type something" field.
+   - **Without own rules**: do not ask for a case and do not call \`archestra__ask_user\`. Say in one or two sentences that the policy has only the default rules, so there is nothing of theirs to validate yet, and that you will offer a validation after they change the policy. Do not suggest an example change or name a tool or server. End the turn.
    - Either way, that is your whole reply: do not inspect servers or read the suite first, do not summarize the policy or the existing validations, and do not offer to review them.
 3. If the operator asks what to check, name one or two cases their own rules decide and ask them to pick one or describe their own.
 

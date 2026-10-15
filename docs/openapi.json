@@ -338800,6 +338800,24 @@
                   "schema": {
                     "type": "object",
                     "additionalProperties": {}
+                  },
+                  "attribution": {
+                    "type": "object",
+                    "properties": {
+                      "root": {
+                        "type": "string"
+                      },
+                      "trajectory": {
+                        "type": "string"
+                      },
+                      "call_id": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "root",
+                      "trajectory"
+                    ]
                   }
                 },
                 "required": [

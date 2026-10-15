@@ -79,6 +79,11 @@ export const TOOL_PERMISSIONS: Record<
     resource: "organizationSettings",
     action: "update",
   },
+  // Same permission as the REST route's sync action.
+  sync_guardrails_repository: {
+    resource: "organizationSettings",
+    action: "update",
+  },
   list_runtime_credentials: { resource: "credential", action: "read" },
   get_runtime_credential: { resource: "credential", action: "read" },
   create_runtime_credential: { resource: "credential", action: "create" },

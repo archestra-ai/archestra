@@ -2274,8 +2274,9 @@ function heldBackRemedy(battery: HeldBackBattery): string {
 
 // Recompose legacy rows with implicit 64 KiB limits (v2), rows that do not
 // record their deployed battery target (v3), rows before host member rosters
-// (v4), and rows without retained original annotator bindings (v5).
-const COMPOSITION_VERSION = "v5:";
+// (v4), rows without retained original annotator bindings (v5), and rows a
+// same-name rebinding refused and pinned to an earlier composition (v6).
+const COMPOSITION_VERSION = "v6:";
 
 /**
  * What a stored composition answers: the batteries it composed, the credential

@@ -535,7 +535,7 @@ export function defaultMaxOutputTokens(
  * fixed reservation can push a long prompt over it. `uncatalogued`: the
  * catalog has no output cap, so `tokens` is a fallback.
  */
-export type ModelOutputBudget = {
+type ModelOutputBudget = {
   kind: "catalogued" | "shared-window" | "uncatalogued";
   tokens: number;
 };

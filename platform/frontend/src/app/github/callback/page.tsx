@@ -22,7 +22,7 @@ export default function GitHubConnectionCallback() {
   const router = useRouter();
   const started = useRef(false);
   const [initialized, setInitialized] = useState(false);
-  const [returnTo, setReturnTo] = useState("/account#credentials");
+  const [returnTo, setReturnTo] = useState("/account/credentials");
   const returnLabel = returnTo.startsWith("/agents/")
     ? "your agent"
     : returnTo.startsWith("/chat")

@@ -1,6 +1,12 @@
 import { and, eq, isNotNull, lt } from "drizzle-orm";
+import {
+  decryptEncryptedChatValue,
+  type EncryptedChatAuditContext,
+  encryptEncryptedChatValue,
+} from "@/content-encryption/encrypted-chat";
 import db, { schema } from "@/database";
 import type { ThreadCall, ThreadTool } from "@/types/openappa-thread-state";
+import { isContentEnvelope } from "@/utils/crypto";
 
 const table = schema.openappaThreadStatesTable;
 
@@ -23,6 +29,7 @@ class OpenAppaThreadStateModel {
     calls: ThreadCall[];
     diverged: boolean;
     previousMessageId?: string;
+    encryptedChat?: EncryptedChatAuditContext;
   }): Promise<void> {
     await db.transaction(async (tx) => {
       await tx
@@ -32,8 +39,19 @@ class OpenAppaThreadStateModel {
           messageId: params.messageId,
           sessionId: params.sessionId,
           rootMessageId: params.rootMessageId,
-          tools: params.tools ?? null,
-          calls: params.calls,
+          tools:
+            params.encryptedChat && params.tools
+              ? (encryptEncryptedChatValue(params.tools, {
+                  ...params.encryptedChat,
+                  context: "openappa_thread_states.tools",
+                }) as ThreadTool[])
+              : (params.tools ?? null),
+          calls: params.encryptedChat
+            ? (encryptEncryptedChatValue(params.calls, {
+                ...params.encryptedChat,
+                context: "openappa_thread_states.calls",
+              }) as ThreadCall[])
+            : params.calls,
           diverged: params.diverged,
         })
         .onConflictDoNothing();
@@ -55,6 +73,7 @@ class OpenAppaThreadStateModel {
   static async find(params: {
     organizationId: string;
     messageId: string;
+    encryptedChat?: EncryptedChatAuditContext;
   }): Promise<{
     sessionId: string;
     rootMessageId: string;
@@ -85,6 +104,28 @@ class OpenAppaThreadStateModel {
           ),
         );
       tools = root?.tools ?? null;
+    }
+    if (
+      !params.encryptedChat &&
+      (isContentEnvelope(tools) || isContentEnvelope(row.calls))
+    ) {
+      throw new Error("Encrypted thread state requires its conversation key");
+    }
+    if (params.encryptedChat) {
+      tools =
+        tools === null
+          ? null
+          : (decryptEncryptedChatValue(tools, {
+              ...params.encryptedChat,
+              context: "openappa_thread_states.tools",
+            }) as ThreadTool[]);
+      row.calls =
+        row.calls === null
+          ? null
+          : (decryptEncryptedChatValue(row.calls, {
+              ...params.encryptedChat,
+              context: "openappa_thread_states.calls",
+            }) as ThreadCall[]);
     }
     return {
       sessionId: row.sessionId,

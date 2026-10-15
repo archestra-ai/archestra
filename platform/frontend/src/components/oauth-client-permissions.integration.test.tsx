@@ -87,6 +87,7 @@ function makePolicy(resource: Kind): Policy {
     ],
     inheritedGrants: [],
     effectiveActions: ["read", "update", "delete", "manage-permissions"],
+    canShareOrganizationWide: true,
     actorSubjects: [{ type: "role", id: "admin" }],
   };
 }

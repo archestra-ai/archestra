@@ -1052,7 +1052,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/webhooks/chatops/slack/oauth/callback",
     {
       schema: {
-        description: "Slack OAuth callback for an agent bot install",
+        description: "Slack OAuth callback for a Slack bot install",
         tags: ["ChatOps Webhooks"],
         querystring: z.object({
           code: z.string().optional(),
@@ -1080,7 +1080,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           state,
         });
         await chatOpsManager.reinitialize();
-        settingsUrl.searchParams.set("slackBotInstalled", agentId);
+        settingsUrl.searchParams.set("slackBotInstalled", agentId ?? "router");
       } catch (installError) {
         logger.warn(
           { error: errorMessage(installError) },
@@ -1950,9 +1950,11 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         channel: "slack",
       });
 
-      // Merge new values with existing DB config (or defaults for first setup)
+      // Merge new values with existing DB config (or defaults for first setup).
+      // Keeps what the form does not edit, such as a created app's OAuth client.
       const existing = await ChatOpsConfigModel.getSlackConfig();
       const merged = {
+        ...existing,
         enabled: enabled ?? existing?.enabled ?? false,
         botToken: botToken ?? existing?.botToken ?? "",
         signingSecret: signingSecret ?? existing?.signingSecret ?? "",
@@ -1994,12 +1996,23 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             /** The Slack workspace the bots are in, once one has connected. */
             workspaceName: z.string().nullable(),
             /**
-             * A Slack app connected the old way — answering whichever agent a
-             * channel picks — waiting to become one agent's bot.
+             * The router bot: the Slack app that answers as whichever agent
+             * each DM or channel picks, next to the agents' own bots.
              */
             unassignedApp: z
               .object({
                 appId: z.string(),
+                /** The bot's Slack username, what people type after @. */
+                handle: z.string().nullable(),
+                connected: z.boolean(),
+                /** Installed to the workspace (it has a bot token). */
+                installed: z.boolean(),
+                /** Socket Mode without the app-level token Slack has no API to create. */
+                needsAppLevelToken: z.boolean(),
+                /** Whose Slack token created the app, when Archestra created it. */
+                createdBy: z
+                  .object({ id: z.string(), name: z.string().nullable() })
+                  .nullable(),
                 connectionMode: ChatOpsConnectionModeSchema,
                 /** Agents its channels and DMs use, most used first. */
                 agentUsage: z.array(
@@ -2019,7 +2032,11 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const bots = await ChatOpsConfigModel.getSlackAgentBots();
       const main = await ChatOpsConfigModel.getSlackConfig();
       const creatorNames = await UserModel.getNamesByIds([
-        ...new Set(bots.flatMap((bot) => bot.configTokenUserId ?? [])),
+        ...new Set(
+          [...bots, ...(main ? [main] : [])].flatMap(
+            (app) => app.configTokenUserId ?? [],
+          ),
+        ),
       ]);
       const summaries = await Promise.all(
         bots.map(async (bot) => {
@@ -2078,10 +2095,27 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .find(Boolean) ??
           chatOpsManager.getSlackProvider()?.getWorkspaceName() ??
           null,
+        // Listed once connected, or once Archestra created it (to finish
+        // its install).
         unassignedApp:
-          main?.enabled && main.botToken
+          main?.appId &&
+          ((main.enabled && main.botToken) || main.managed || main.clientId)
             ? {
                 appId: main.appId,
+                handle:
+                  chatOpsManager.getSlackProvider()?.getBotHandle() ?? null,
+                connected: Boolean(
+                  chatOpsManager.getSlackProvider()?.getBotUserId(),
+                ),
+                installed: Boolean(main.botToken),
+                needsAppLevelToken:
+                  main.connectionMode === "socket" && !main.appLevelToken,
+                createdBy: main.configTokenUserId
+                  ? {
+                      id: main.configTokenUserId,
+                      name: creatorNames.get(main.configTokenUserId) ?? null,
+                    }
+                  : null,
                 connectionMode: (main.connectionMode ??
                   SLACK_DEFAULT_CONNECTION_MODE) as ChatOpsConnectionMode,
                 agentUsage: await describeSlackAgentUsage(
@@ -2419,6 +2453,68 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             userId: request.user.id,
           }),
         );
+      } catch (error) {
+        throw new ApiError(
+          400,
+          `Slack could not create the app: ${errorMessage(error)}`,
+        );
+      }
+    },
+  );
+
+  /**
+   * Create the router bot's Slack app — the one that answers as whichever agent
+   * each DM or channel picks — with the user's configuration token, and return
+   * the link the admin opens to install it.
+   */
+  fastify.post(
+    "/api/chatops/config/slack/router/app",
+    {
+      schema: {
+        operationId: RouteId.CreateSlackRouterBotApp,
+        description:
+          "Create the Slack app of the router bot and return its install link",
+        tags: ["ChatOps"],
+        body: z.object({
+          /** The bot's handle, what people type after @. */
+          appName: z
+            .string()
+            .regex(
+              SLACK_BOT_HANDLE_PATTERN,
+              "Use lowercase letters, digits, periods, hyphens, and underscores (at most 35)",
+            ),
+          connectionMode: ChatOpsConnectionModeSchema,
+        }),
+        response: constructResponseSchema(
+          z.object({
+            appId: z.string(),
+            installUrl: z.string(),
+            installMode: z.enum(["oauth", "manual"]),
+          }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      await assertMessagingChannelAllowed({
+        organizationId: request.organizationId,
+        channel: "slack",
+      });
+      const existing = await ChatOpsConfigModel.getSlackConfig();
+      if (existing?.enabled && existing.botToken) {
+        throw new ApiError(
+          400,
+          "There already is a router bot. Convert or disconnect it first.",
+        );
+      }
+      try {
+        const created = await slackAppFactory.createRouterApp({
+          appName: request.body.appName,
+          connectionMode: request.body.connectionMode,
+          organizationId: request.organizationId,
+          userId: request.user.id,
+        });
+        await chatOpsManager.reinitialize();
+        return reply.send(created);
       } catch (error) {
         throw new ApiError(
           400,

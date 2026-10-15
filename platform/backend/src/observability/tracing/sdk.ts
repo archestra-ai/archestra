@@ -190,7 +190,7 @@ const sdk = new NodeSDK({
   // Use multiple span processors to send traces to both Sentry and OTLP endpoints
   spanProcessors,
   // Export pino logs (with trace context) to the OTLP endpoint
-  logRecordProcessors: [new BatchLogRecordProcessor(logExporter)],
+  logRecordProcessors: [new BatchLogRecordProcessor({ exporter: logExporter })],
 });
 
 // Start the SDK

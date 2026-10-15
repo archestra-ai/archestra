@@ -32,6 +32,9 @@ export const REDACTED_LOG_PATHS = [
     // The browser-held encrypted chat key rides this request header;
     // the server must never persist it, logs included. Hyphenated keys need
     // fast-redact's bracket syntax (same three shapes as above).
+    '["x-archestra-openappa-context"]',
+    '*["x-archestra-openappa-context"]',
+    '*.headers["x-archestra-openappa-context"]',
     '["x-archestra-encrypted-chat-key"]',
     '*["x-archestra-encrypted-chat-key"]',
     '*.headers["x-archestra-encrypted-chat-key"]',

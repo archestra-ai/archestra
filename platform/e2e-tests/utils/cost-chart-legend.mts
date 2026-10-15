@@ -1,3 +1,4 @@
+import type { archestraApiTypes } from "@archestra/shared";
 import { expect, type Page } from "@playwright/test";
 
 const LONGEST_MODEL_NAME = "deepseek/deepseek-v4-flash-vision-exp";
@@ -19,7 +20,7 @@ const timeSeries = (scale: number) =>
     value: Number((scale * (1 + Math.sin(hour / 3))).toFixed(2)),
   }));
 
-export const modelStatistics = MODEL_NAMES.map((model, index) => {
+const modelStatistics = MODEL_NAMES.map((model, index) => {
   const cost = 100 - index * 12;
   return {
     model,
@@ -32,6 +33,19 @@ export const modelStatistics = MODEL_NAMES.map((model, index) => {
     timeSeries: timeSeries(cost / 20),
   };
 });
+
+export const costStatistics = {
+  models: modelStatistics,
+  costSavings: {
+    totalBaselineCost: 420,
+    totalActualCost: 420,
+    totalSavings: 0,
+    totalSubscriptionCost: 0,
+    totalCacheSavings: 0,
+    timeSeries: [],
+  },
+  activeUsers: 0,
+} satisfies archestraApiTypes.GetCostStatisticsResponses[200];
 
 export async function assertMobileCostLegend(page: Page) {
   const modelsCard = page.getByRole("region", { name: "Cost explorer" });

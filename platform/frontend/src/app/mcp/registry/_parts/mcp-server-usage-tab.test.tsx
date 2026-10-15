@@ -152,10 +152,10 @@ describe("McpServerUsageTab", () => {
     const roamingRow = screen.getByText("Roaming Gateway").closest("tr");
 
     expect(
-      within(pinnedRow as HTMLElement).getByText("Assigned tools"),
+      within(pinnedRow as HTMLElement).getByText("Manual"),
     ).toBeInTheDocument();
     expect(
-      within(roamingRow as HTMLElement).getByText("Auto — all tools"),
+      within(roamingRow as HTMLElement).getByText("All"),
     ).toBeInTheDocument();
   });
 
@@ -170,7 +170,7 @@ describe("McpServerUsageTab", () => {
     );
 
     expect(screen.getAllByText("Hybrid")).toHaveLength(1);
-    expect(screen.getByText("Assigned tools")).toBeInTheDocument();
+    expect(screen.getByText("Manual")).toBeInTheDocument();
   });
 
   it("dedupes an agent that reaches the catalog through several installs", () => {

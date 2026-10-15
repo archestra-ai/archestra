@@ -39833,6 +39833,14 @@ export type ListSlackAgentBotsResponses = {
         workspaceName: string | null;
         unassignedApp: {
             appId: string;
+            handle: string | null;
+            connected: boolean;
+            installed: boolean;
+            needsAppLevelToken: boolean;
+            createdBy: {
+                id: string;
+                name: string | null;
+            } | null;
             connectionMode: 'webhook' | 'socket';
             agentUsage: Array<{
                 agentId: string;
@@ -40397,6 +40405,97 @@ export type CreateSlackAgentBotAppResponses = {
 };
 
 export type CreateSlackAgentBotAppResponse = CreateSlackAgentBotAppResponses[keyof CreateSlackAgentBotAppResponses];
+
+export type CreateSlackRouterBotAppData = {
+    body: {
+        appName: string;
+        connectionMode: 'webhook' | 'socket';
+    };
+    path?: never;
+    query?: never;
+    url: '/api/chatops/config/slack/router/app';
+};
+
+export type CreateSlackRouterBotAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateSlackRouterBotAppError = CreateSlackRouterBotAppErrors[keyof CreateSlackRouterBotAppErrors];
+
+export type CreateSlackRouterBotAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        appId: string;
+        installUrl: string;
+        installMode: 'oauth' | 'manual';
+    };
+};
+
+export type CreateSlackRouterBotAppResponse = CreateSlackRouterBotAppResponses[keyof CreateSlackRouterBotAppResponses];
 
 export type ListSlackAgentBotChannelsData = {
     body?: never;
@@ -48427,7 +48526,7 @@ export type GetGuardrailsDeploymentResponses = {
     200: {
         enabled: boolean;
         unsupportedClientAction: 'bypass' | 'block';
-        superyellEnabled: boolean;
+        breakTheGlassEnabled: boolean;
         featureEnabled: boolean;
         active: boolean;
     };
@@ -48439,7 +48538,7 @@ export type UpdateGuardrailsDeploymentData = {
     body: {
         enabled?: boolean;
         unsupportedClientAction?: 'bypass' | 'block';
-        superyellEnabled?: boolean;
+        breakTheGlassEnabled?: boolean;
     };
     path?: never;
     query?: never;
@@ -48521,7 +48620,7 @@ export type UpdateGuardrailsDeploymentResponses = {
     200: {
         enabled: boolean;
         unsupportedClientAction: 'bypass' | 'block';
-        superyellEnabled: boolean;
+        breakTheGlassEnabled: boolean;
         featureEnabled: boolean;
         active: boolean;
     };
@@ -89202,6 +89301,10 @@ export type GetOpenappaPolicyDeclarationsResponses = {
                 readers: Array<string>;
             }>;
             helpers: Array<string>;
+            served: {
+                status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
+                composed: boolean;
+            } | null;
         }>;
         unusedAliases: Array<{
             namespace: string;
@@ -89210,6 +89313,29 @@ export type GetOpenappaPolicyDeclarationsResponses = {
         }>;
         rootRevision: number;
         lastError: string | null;
+        composition: {
+            served: {
+                kind: 'current';
+                rootRevision: number;
+                composedAt: string;
+            } | {
+                kind: 'previous';
+                rootRevision: number | null;
+                composedAt: string | null;
+                batteries: Array<{
+                    name: string;
+                    status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
+                    composed: boolean;
+                }> | null;
+            } | {
+                kind: 'root_only';
+            };
+            refusal: {
+                message: string;
+                at: string;
+                rootRevision: number | null;
+            } | null;
+        };
         managedInGithub: boolean;
         heldPull: {
             contentHash: string;
@@ -89404,6 +89530,48 @@ export type GetOpenappaEffectivePolicyResponses = {
         compiledAt: string;
         lastError: string | null;
         lastErrorAt: string | null;
+        composition: {
+            served: {
+                kind: 'current';
+                rootRevision: number;
+                composedAt: string;
+            } | {
+                kind: 'previous';
+                rootRevision: number | null;
+                composedAt: string | null;
+                batteries: Array<{
+                    name: string;
+                    status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
+                    composed: boolean;
+                }> | null;
+            } | {
+                kind: 'root_only';
+            };
+            refusal: {
+                message: string;
+                at: string;
+                rootRevision: number | null;
+            } | null;
+        };
+        retained: {
+            horizonDays: number;
+            livenessKnown: boolean;
+            kept: Array<{
+                name: string;
+                binding: string;
+                liveRoots: number;
+                lastActivityAt: string | null;
+                retiresAt: string | null;
+            }>;
+            inactive: Array<{
+                name: string;
+                binding: string;
+            }>;
+            dropped: Array<{
+                name: string;
+                reason: string;
+            }>;
+        } | null;
     };
 };
 
@@ -90013,6 +90181,10 @@ export type SetOpenappaCredentialBindingResponses = {
                 readers: Array<string>;
             }>;
             helpers: Array<string>;
+            served: {
+                status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
+                composed: boolean;
+            } | null;
         }>;
         unusedAliases: Array<{
             namespace: string;
@@ -90021,6 +90193,29 @@ export type SetOpenappaCredentialBindingResponses = {
         }>;
         rootRevision: number;
         lastError: string | null;
+        composition: {
+            served: {
+                kind: 'current';
+                rootRevision: number;
+                composedAt: string;
+            } | {
+                kind: 'previous';
+                rootRevision: number | null;
+                composedAt: string | null;
+                batteries: Array<{
+                    name: string;
+                    status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
+                    composed: boolean;
+                }> | null;
+            } | {
+                kind: 'root_only';
+            };
+            refusal: {
+                message: string;
+                at: string;
+                rootRevision: number | null;
+            } | null;
+        };
         managedInGithub: boolean;
         heldPull: {
             contentHash: string;
@@ -90451,7 +90646,7 @@ export type GetOpenappaCoverageToolsResponses = {
                 source: 'root' | 'battery' | 'catchall';
                 battery: string | null;
                 batteryEntry: string | null;
-                batteryStatus: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
+                batteryStatus: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active' | 'pending' | null;
                 line: number | null;
                 name: string;
                 selector: string | null;
@@ -90593,7 +90788,7 @@ export type GetOpenappaCoverageSummaryResponses = {
             }>;
             broken: Array<{
                 name: string;
-                status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused';
+                status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'pending';
                 tools: number;
             }>;
             available: Array<{
@@ -90601,6 +90796,12 @@ export type GetOpenappaCoverageSummaryResponses = {
                 servers: Array<string>;
                 tools: number;
             }>;
+        };
+        composition: {
+            kind: 'current' | 'previous' | 'root_only';
+            servedRootRevision: number | null;
+            refusedRootRevision: number | null;
+            rulesMayDiffer: boolean;
         };
     };
 };
@@ -105531,6 +105732,15 @@ export type RunScheduleTriggerNowResponses = {
         startedAt: string | null;
         completedAt: string | null;
         error: string | null;
+        blockedBy: {
+            phase: 'starting' | 'running' | 'stopping';
+            runId: string | null;
+            runtimeTaskId: string | null;
+            startedAt: string;
+            elapsedSeconds: number;
+            deadline: string | null;
+            maximumDurationSeconds: number | null;
+        } | null;
         artifact: string | null;
         createdAt: string;
     };
@@ -105636,6 +105846,15 @@ export type GetScheduleTriggerRunsResponses = {
             startedAt: string | null;
             completedAt: string | null;
             error: string | null;
+            blockedBy: {
+                phase: 'starting' | 'running' | 'stopping';
+                runId: string | null;
+                runtimeTaskId: string | null;
+                startedAt: string;
+                elapsedSeconds: number;
+                deadline: string | null;
+                maximumDurationSeconds: number | null;
+            } | null;
             artifact: string | null;
             createdAt: string;
         }>;
@@ -105746,6 +105965,15 @@ export type GetScheduleTriggerRunResponses = {
         startedAt: string | null;
         completedAt: string | null;
         error: string | null;
+        blockedBy: {
+            phase: 'starting' | 'running' | 'stopping';
+            runId: string | null;
+            runtimeTaskId: string | null;
+            startedAt: string;
+            elapsedSeconds: number;
+            deadline: string | null;
+            maximumDurationSeconds: number | null;
+        } | null;
         artifact: string | null;
         createdAt: string;
     };
@@ -112846,6 +113074,127 @@ export type GetOverviewStatisticsResponses = {
 };
 
 export type GetOverviewStatisticsResponse = GetOverviewStatisticsResponses[keyof GetOverviewStatisticsResponses];
+
+export type GetCostStatisticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+    };
+    url: '/api/statistics/costs';
+};
+
+export type GetCostStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetCostStatisticsError = GetCostStatisticsErrors[keyof GetCostStatisticsErrors];
+
+export type GetCostStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        models: Array<{
+            model: string;
+            requests: number;
+            inputTokens: number;
+            outputTokens: number;
+            cacheReadTokens: number;
+            cost: number;
+            percentage: number;
+            timeSeries: Array<{
+                timestamp: string;
+                value: number;
+                requests?: number;
+                inputTokens?: number;
+                outputTokens?: number;
+                cacheReadTokens?: number;
+                billedCost?: number;
+                subscriptionCost?: number;
+            }>;
+        }>;
+        costSavings: {
+            totalBaselineCost: number;
+            totalActualCost: number;
+            totalSavings: number;
+            totalSubscriptionCost: number;
+            totalCacheSavings: number;
+            timeSeries: Array<{
+                timestamp: string;
+                baselineCost: number;
+                actualCost: number;
+                cacheSavings: number;
+                subscriptionCost: number;
+            }>;
+        };
+        activeUsers: number;
+    };
+};
+
+export type GetCostStatisticsResponse = GetCostStatisticsResponses[keyof GetCostStatisticsResponses];
 
 export type GetCostSavingsStatisticsData = {
     body?: never;
@@ -120503,6 +120852,7 @@ export type GetResourcePermissionsResponses = {
             sourceScope?: '*' | string;
         }>;
         effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        canShareOrganizationWide: boolean;
         actorSubjects: Array<{
             type: 'user';
             id: string;
@@ -120675,6 +121025,7 @@ export type UpdateResourcePermissionsResponses = {
             sourceScope?: '*' | string;
         }>;
         effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        canShareOrganizationWide: boolean;
         actorSubjects: Array<{
             type: 'user';
             id: string;

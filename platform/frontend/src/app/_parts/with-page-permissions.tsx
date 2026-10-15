@@ -4,6 +4,12 @@ import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { usePathname } from "next/navigation";
 import type React from "react";
 import { ForbiddenPage } from "@/app/_parts/forbidden-page";
+import {
+  isSettingsAreaPath,
+  settingsAreaFallbackUrl,
+} from "@/app/_parts/settings-navigation";
+import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
+import { ClientRedirect } from "@/components/client-redirect";
 import { useHasPagePermissions } from "@/lib/auth/auth.query";
 
 export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
@@ -16,6 +22,7 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
   const { data: hasRequiredPermissions, isPending } = useHasPagePermissions(
     requiredPermissions || {},
   );
+  const canSeeSettings = useSettingsAreaAccess();
 
   // No loader while the permission check is in flight. It used to render one
   // here, inside the shell and centred on the content column — a different
@@ -25,6 +32,24 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
   // page is even allowed.
   if (isPending && requiredPermissions) {
     return null;
+  }
+
+  // A reader without the Settings area (the member baseline) is sent to the
+  // personal page that holds what they came for, before any Settings page —
+  // or a Forbidden page — renders.
+  if (isSettingsAreaPath(pathname)) {
+    if (canSeeSettings === null) return null;
+    if (!canSeeSettings) {
+      const fallback = settingsAreaFallbackUrl(pathname);
+      // Credentials links carry state in the query (filters, GitHub connect
+      // results); Personal Settings → Credentials reads the same parameters.
+      return (
+        <ClientRedirect
+          to={fallback}
+          keepQuery={fallback === "/account/credentials"}
+        />
+      );
+    }
   }
 
   // Show forbidden page if user doesn't have required permissions

@@ -135,7 +135,7 @@ describe("CompactToolGroup", () => {
         after: '[policy]\nversion = 2\nname = "new"\n',
         changed: true,
       },
-      counts: { passed: 1, failed: 1, cannotRun: 1 },
+      validation: { valid: true, errors: [], warnings: [] },
     };
     const show = (name: string, output: unknown) => (
       <QueryClientProvider client={client}>
@@ -172,9 +172,8 @@ describe("CompactToolGroup", () => {
     expect(screen.getByLabelText("Policy diff")).toHaveTextContent(
       'Added: name = "new"',
     );
-    expect(
-      screen.getByText("1 passed, 1 failed, 1 could not run."),
-    ).toBeInTheDocument();
+    // Previews check syntax only; they report no replay outcome.
+    expect(screen.queryByText(/could not run/)).not.toBeInTheDocument();
     rerender(
       show("preview_openappa_validation_change", {
         content: [
@@ -193,7 +192,7 @@ describe("CompactToolGroup", () => {
     expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();
   });
 
-  it("keeps saved validations and draft replay outcomes visible without claiming policy activation", () => {
+  it("keeps saved validations visible without claiming a run or policy activation", () => {
     mockGetToolShortName.mockImplementation((name: string) =>
       name.replace(/^archestra__/, ""),
     );
@@ -203,7 +202,7 @@ describe("CompactToolGroup", () => {
       revision: 2,
       version: "specs-v2",
       policyChanged: false,
-      counts: { passed: 2, failed: 0, cannotRun: 0 },
+      validation: { valid: true, errors: [], warnings: [] },
     };
     const show = (output: unknown) => (
       <QueryClientProvider client={client}>
@@ -229,9 +228,8 @@ describe("CompactToolGroup", () => {
     );
     const { rerender } = render(show({ structuredContent: publication }));
     expect(screen.getByText("Saved validations")).toBeInTheDocument();
-    expect(
-      screen.getByText(/draft replay: 2 passed, 0 failed, 0 could not run/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/not run yet/)).toBeInTheDocument();
+    expect(screen.queryByText(/draft replay/)).not.toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "View Validations" }),
     ).toHaveAttribute("href", "/openappa/validation");
@@ -242,18 +240,12 @@ describe("CompactToolGroup", () => {
     ).toHaveAttribute("aria-expanded", "true");
     expect(screen.queryByText(/Enforcement confirmed/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Saved revision/)).not.toBeInTheDocument();
-    const withFailures = {
-      ...publication,
-      counts: { passed: 1, failed: 1, cannotRun: 1 },
-    };
-    rerender(show({ content: JSON.stringify(withFailures) }));
-    expect(
-      screen.getByText(/draft replay: 1 passed, 1 failed, 1 could not run/),
-    ).toBeInTheDocument();
+    rerender(show({ content: JSON.stringify(publication) }));
+    expect(screen.getByText("Saved validations")).toBeInTheDocument();
     rerender(
       show({
         structuredContent: {
-          ...withFailures,
+          ...publication,
           delivery: "pull_request",
           number: 17,
           url: "https://github.com/example/policies/pull/17",
@@ -265,9 +257,7 @@ describe("CompactToolGroup", () => {
     expect(
       screen.getByRole("link", { name: "Review pull request" }),
     ).toHaveAttribute("href", "https://github.com/example/policies/pull/17");
-    expect(
-      screen.getByText(/merge it to apply · draft replay/),
-    ).toHaveTextContent("1 failed, 1 could not run");
+    expect(screen.getByText(/merge it to apply/)).toBeInTheDocument();
     expect(screen.queryByText("Saved validations")).not.toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", {

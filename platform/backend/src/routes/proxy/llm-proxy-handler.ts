@@ -1,3 +1,4 @@
+import { enterOpenappaEncryptedChat } from "@/openappa/encrypted-chat";
 /**
  * Generic LLM Proxy Handler
  *
@@ -734,16 +735,23 @@ export async function handleLLMProxy<
         headers: headers as Record<string, string | string[] | undefined>,
         requestBody: body,
       }),
-    )?.id;
-    childReturns = collectAndStripChildReturns(body, {
+    );
+    const childReturnOptions = {
       // Kilo Code frames its background tasks as OpenCode does.
       openCodeBackgroundReturns:
-        !!nativeClient && isOpenCodeFamilyClient(nativeClient),
-      codexMailboxReturns: nativeClient === "codex",
-      onRefusal: (refusal) => {
+        !!nativeClient && isOpenCodeFamilyClient(nativeClient.id),
+      codexMailboxReturns: nativeClient?.id === "codex",
+      onRefusal: (refusal: ApiError) => {
         childReturnRefusal ??= refusal;
       },
-    });
+    };
+    try {
+      childReturns = collectAndStripChildReturns(body, childReturnOptions);
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.statusCode !== 400) throw error;
+      childReturnRefusal = error;
+      childReturns = { completions: [] };
+    }
   }
   // Restores original provider call IDs before request processing, logging,
   // or plugin rulings: the trajectory stamps first, then any stamp a
@@ -1328,12 +1336,10 @@ export async function handleLLMProxy<
   // turns on: the sessions that start now, and the calls governed sessions make.
   // The records hold ids only, so they cover encrypted chats too.
   const appaObserving = appaFeatureEnabled && !appaActive;
-  // An encrypted chat that started while enforcement was off, or that a
-  // person superyelled, stays out of OpenAPPA, so the encrypted storage
-  // OpenAPPA lacks does not matter to it.
+  // A redacted audit context cannot retain an enforceable trajectory safely.
   if (
     appaActive &&
-    isEncryptedChatSession &&
+    encryptedChat.kind === "redact" &&
     !(
       sessionId &&
       (await startedUnenforced({
@@ -1344,9 +1350,18 @@ export async function handleLLMProxy<
   ) {
     throw new ApiError(
       409,
-      "OpenAPPA does not yet support encrypted policy storage for encrypted chats",
+      "Encrypted chat key and escrow are required for policy storage",
     );
   }
+  enterOpenappaEncryptedChat(
+    encryptedChat.kind === "encrypt" && userId
+      ? {
+          organizationId: resolvedAgent.organizationId,
+          userId,
+          audit: encryptedChat.audit,
+        }
+      : null,
+  );
 
   const attributedAppId = await resolveAttributedAppId(request, resolvedAgent);
 
@@ -1851,6 +1866,7 @@ export async function handleLLMProxy<
         appaActive &&
         !installerSetupBypass &&
         !delegatedRun &&
+        !(platformLoopback && internalCall) &&
         !unsupportedClient
       ) {
         appaCallerId = callerId;
@@ -2055,9 +2071,6 @@ export async function handleLLMProxy<
         openappaSession = undefined;
       }
       if (openappaSession) {
-        // OpenAPPA governs this request, so a child return the proxy could not
-        // read at its entry is refused now.
-        if (childReturnRefusal) throw childReturnRefusal;
         // A Chat session is a conversation, and the request must name the
         // user whose conversation it is: without one there is nothing to
         // check the binding against, so the request is refused rather than
@@ -2220,6 +2233,7 @@ export async function handleLLMProxy<
           ...(runtimeSessionId ? { runtimeSessionId, runtimeTaskId } : {}),
           compaction: clientCompaction && !isInternalChat,
           enforcement: "active",
+          childReturnRefusal,
           ...(threadRequest ? { thread: threadRequest.type } : {}),
           ...(isInternalChat ? { chatSource: source } : {}),
         } satisfies AppaTrustedContext);

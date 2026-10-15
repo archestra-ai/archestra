@@ -110,6 +110,11 @@ interface MemberDefaultInfo {
 
 interface ChatContext {
   modelsByProvider: Record<string, ModelInfo[]>;
+  /**
+   * The keys the viewer may USE (GET /api/llm-provider-api-keys/available),
+   * not every key they can see. A key shared as read-only is listed in
+   * settings but refused when a chat sends it.
+   */
   chatApiKeys: Array<{ id: string; provider: string }>;
   organization: OrganizationInfo | null;
   memberDefault: MemberDefaultInfo | null;
@@ -200,10 +205,40 @@ export function resolveInitialModel(
     apiKeyId: isPerUserModel(modelId) ? PER_USER_PLACEHOLDER_KEY : apiKeyId,
   });
 
+  // The member and organization defaults store a key chosen by someone, at
+  // some point, that the viewer may not be allowed to use now (an admin's org
+  // default, a key whose grant was narrowed to read-only). Sending it is
+  // refused, so keep the level's model and pair it with a key the viewer can
+  // use for that provider instead, or skip the level when there is none. The
+  // agent's own key needs no grant — it is used through the agent — so the
+  // agent level, and any level naming that same key, is kept as is.
+  const toUsableLevel = (
+    modelId: string | null | undefined,
+    apiKeyId: string | null | undefined,
+  ): ModelSelection => {
+    if (
+      !modelId ||
+      !apiKeyId ||
+      isPerUserModel(modelId) ||
+      apiKeyId === agent?.llmApiKeyId ||
+      chatApiKeys.some((k) => k.id === apiKeyId)
+    ) {
+      return toLevel(modelId, apiKeyId);
+    }
+    const provider = providerForModel(modelId);
+    return {
+      modelId,
+      apiKeyId: provider ? findKeyForProvider(provider) : null,
+    };
+  };
+
   const levels: ModelSelection[] = [
-    toLevel(memberDefault?.modelId, memberDefault?.chatApiKeyId),
+    toUsableLevel(memberDefault?.modelId, memberDefault?.chatApiKeyId),
     toLevel(agent?.modelId, agent?.llmApiKeyId),
-    toLevel(organization?.defaultModelId, organization?.defaultLlmApiKeyId),
+    toUsableLevel(
+      organization?.defaultModelId,
+      organization?.defaultLlmApiKeyId,
+    ),
   ];
 
   const resolved = resolveModelSelection({ levels, availableModels });
@@ -224,6 +259,39 @@ export function resolveInitialModel(
       ? null
       : (resolved.apiKeyId ?? null),
   };
+}
+
+/**
+ * The key an existing conversation should run a newly picked model through.
+ * Keeps the current key when it serves the model's provider and the viewer may
+ * send it — a key they may use, or the agent's own key, which works through
+ * the agent. Otherwise takes the first key the viewer may use for the
+ * provider, or null when they have none.
+ */
+export function resolveConversationKeyForModel(params: {
+  currentKeyId: string | null | undefined;
+  /** Provider of the conversation's current model (and so of its key). */
+  currentModelProvider: string | undefined;
+  agentApiKeyId: string | null | undefined;
+  modelProvider: string | undefined;
+  usableKeys: Array<{ id: string; provider: string }>;
+}): string | null {
+  const {
+    currentKeyId,
+    currentModelProvider,
+    agentApiKeyId,
+    modelProvider,
+    usableKeys,
+  } = params;
+  if (!modelProvider) return null;
+  if (currentKeyId) {
+    const usableCurrentKey = usableKeys.find((k) => k.id === currentKeyId);
+    const currentKeyProvider =
+      usableCurrentKey?.provider ??
+      (currentKeyId === agentApiKeyId ? currentModelProvider : undefined);
+    if (currentKeyProvider === modelProvider) return currentKeyId;
+  }
+  return usableKeys.find((k) => k.provider === modelProvider)?.id ?? null;
 }
 
 /**

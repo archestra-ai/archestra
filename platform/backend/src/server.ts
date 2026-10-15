@@ -119,6 +119,7 @@ import { instanceAnalyticsService } from "@/services/instance-analytics";
 import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
 // SPDX-SnippetEnd
 import { mcpGatewayTaskReaper } from "@/services/mcp-gateway-task-reaper";
+import { mcpImageUpdateChecker } from "@/services/mcp-image-update-checker";
 import { mcpToolsRefreshManager } from "@/services/mcp-tools-refresh";
 import { initializeManagedPlaywrightRuntime } from "@/services/playwright-runtime";
 import { runScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
@@ -1043,6 +1044,11 @@ const startWebServer = async () => {
     // (no-op unless ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES is set).
     mcpToolsRefreshManager.start();
 
+    // Roll local MCP servers whose `:latest` (or untagged) image moved in the
+    // registry (ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_UPDATE_CHECK_INTERVAL_MINUTES,
+    // 0 disables).
+    mcpImageUpdateChecker.start();
+
     // Post-TTL lifecycle for gateway-minted MCP tasks: mark expired orphans
     // failed, purge rows past the retention grace (the two steps the Tasks
     // extension sanctions).
@@ -1387,6 +1393,8 @@ function registerWebServerShutdown(
       }
 
       mcpToolsRefreshManager.stop();
+
+      mcpImageUpdateChecker.stop();
 
       mcpGatewayTaskReaper.stop();
 

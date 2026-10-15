@@ -739,7 +739,10 @@ describe("search_tools", () => {
     }
   });
 
-  test("excludes always-exposed tools but keeps authoring tools searchable", async ({
+  test.for([
+    "agent",
+    "mcp_gateway",
+  ] as const)("%s can discover its deferred skill and runtime tools", async (agentType, {
     makeAgent,
     makeMember,
     makeOrganization,
@@ -756,6 +759,7 @@ describe("search_tools", () => {
       await makeMember(user.id, org.id, { role: "admin" });
       const agent = await makeAgent({
         name: "Skill Search Agent",
+        agentType,
         organizationId: org.id,
       });
       await seedAndAssignArchestraTools(agent.id);
@@ -780,16 +784,31 @@ describe("search_tools", () => {
         (tool) => tool.toolName,
       );
 
-      // once assigned, the runtime path is top-level, so it stays out of search
-      // (unassigned sandbox tools DO surface — see "sandbox built-in discovery")
-      expect(returnedToolNames).not.toContain(TOOL_LIST_SKILLS_FULL_NAME);
-      expect(returnedToolNames).not.toContain(TOOL_LOAD_SKILL_FULL_NAME);
+      // Only internal chat keeps these assigned tools top-level.
+      expect(returnedToolNames.includes(TOOL_LIST_SKILLS_FULL_NAME)).toBe(
+        agentType !== "agent",
+      );
+      expect(returnedToolNames.includes(TOOL_LOAD_SKILL_FULL_NAME)).toBe(
+        agentType !== "agent",
+      );
       expect(returnedToolNames).not.toContain(TOOL_RUN_COMMAND_FULL_NAME);
       expect(returnedToolNames).not.toContain(TOOL_DOWNLOAD_FILE_FULL_NAME);
       expect(returnedToolNames).not.toContain(TOOL_UPLOAD_FILE_FULL_NAME);
       // authoring tools stay search-gated, so they remain discoverable
       expect(returnedToolNames).toContain(TOOL_CREATE_SKILL_FULL_NAME);
       expect(returnedToolNames).toContain(TOOL_UPDATE_SKILL_FULL_NAME);
+
+      if (agentType === "mcp_gateway") {
+        const chatOnly = await executeArchestraTool(
+          TOOL_SEARCH_TOOLS_FULL_NAME,
+          { query: "^archestra__(copy_file|render_app)$", mode: "regex" },
+          context,
+        );
+        expect(chatOnly.isError).not.toBe(true);
+        expect(
+          (chatOnly.structuredContent as SearchToolsStructuredContent).tools,
+        ).toEqual([]);
+      }
 
       const runtimeResult = await executeArchestraTool(
         TOOL_SEARCH_TOOLS_FULL_NAME,
@@ -803,15 +822,15 @@ describe("search_tools", () => {
       const runtimeReturnedToolNames = runtimeStructuredContent.tools.map(
         (tool) => tool.toolName,
       );
-      expect(runtimeReturnedToolNames).not.toContain(
-        TOOL_RUN_COMMAND_FULL_NAME,
-      );
-      expect(runtimeReturnedToolNames).not.toContain(
-        TOOL_DOWNLOAD_FILE_FULL_NAME,
-      );
-      expect(runtimeReturnedToolNames).not.toContain(
-        TOOL_UPLOAD_FILE_FULL_NAME,
-      );
+      expect(
+        runtimeReturnedToolNames.includes(TOOL_RUN_COMMAND_FULL_NAME),
+      ).toBe(agentType !== "agent");
+      expect(
+        runtimeReturnedToolNames.includes(TOOL_DOWNLOAD_FILE_FULL_NAME),
+      ).toBe(agentType !== "agent");
+      expect(
+        runtimeReturnedToolNames.includes(TOOL_UPLOAD_FILE_FULL_NAME),
+      ).toBe(agentType !== "agent");
     } finally {
       (config.skillsSandbox as { enabled: boolean }).enabled =
         originalSandboxEnabled;
@@ -819,8 +838,8 @@ describe("search_tools", () => {
   });
 
   // Unassigned Archestra built-ins surface in search for All-mode agents (so
-  // the model can discover and run them dynamically); assigned always-exposed
-  // tools stay out (they are already top-level). Sandbox built-ins additionally
+  // the model can discover and run them dynamically). Internal chat omits
+  // assigned runtime tools that it already lists top-level. Sandbox built-ins additionally
   // require their feature flag, and every result is RBAC-filtered — so they
   // only surface for callers who can actually run them (agent:read).
   // Seeded but not assigned here to exercise that path.

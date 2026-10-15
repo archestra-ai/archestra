@@ -1020,7 +1020,7 @@ Required RBAC permission: [`app:read`](/docs/reference/permissions#app:read)
 | `get_project` | Read one project's context in a single call: its metadata, its instructions (the `instructions.md` that steers every chat in the project), the files it owns, and the apps linked into it that you ca... | [`project:read`](/docs/reference/permissions#project:read) † |
 | `link_app_to_project` | Link an existing app into a project so it is listed with the project's files and chats. | [`project:read`](/docs/reference/permissions#project:read) |
 | `unlink_app_from_project` | Remove an app's link from a project. | [`project:read`](/docs/reference/permissions#project:read) |
-| `create_schedule_trigger` | Create a scheduled agent task in a project you can access. | [`scheduledTask:create`](/docs/reference/permissions#scheduledTask:create) |
+| `create_schedule_trigger` | Schedule an agent from chat, Slack, or Teams. | [`scheduledTask:create`](/docs/reference/permissions#scheduledTask:create) † |
 | `update_schedule_trigger` | Edit a scheduled task. | [`scheduledTask:update`](/docs/reference/permissions#scheduledTask:update) † |
 | `delete_schedule_trigger` | Delete a scheduled task and its run history. | [`scheduledTask:delete`](/docs/reference/permissions#scheduledTask:delete) † |
 | `list_schedule_triggers` | List the scheduled agent triggers the caller can see: which agent each one runs, its cron expression and timezone, whether it is enabled, and when it last fired. | [`scheduledTask:read`](/docs/reference/permissions#scheduledTask:read) |
@@ -1177,13 +1177,15 @@ Required RBAC permission: [`project:read`](/docs/reference/permissions#project:r
 
 Required RBAC permission: [`scheduledTask:create`](/docs/reference/permissions#scheduledTask:create)
 
+Additional access requirement: Requires an acting user. Omitting `project_id` also requires [`project:create`](/docs/reference/permissions#project:create); it creates a private project with the task prompt as its instructions. Repeating the same new-project task returns the existing schedule. An existing project must be accessible to the caller.
+
 ##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `name` | `string` | Yes | Name of the scheduled task. |
-| `project_id` | `string` | Yes | Project containing the scheduled task. |
-| `agent_id` | `string` | No | Agent to run. Defaults to the project's agent, then the organization default. |
+| `project_id` | `string` | No | Existing project to schedule in. Omit to create a private project using name and message_template as its instructions. |
+| `agent_id` | `string` | No | Agent to run. For a new project, defaults to the current agent; for an existing project, its agent then the organization default. |
 | `cron_expression` | `string` | Yes | Cron expression, for example 0 9 * * 1-5. |
 | `timezone` | `string` | Yes | IANA timezone, for example America/Toronto. |
 | `message_template` | `string` | Yes | Prompt sent to the agent on each run. |
@@ -1206,6 +1208,7 @@ Required RBAC permission: [`scheduledTask:create`](/docs/reference/permissions#s
 | `actor_name` | `string \| null` | Yes | Display name of that user. |
 | `created_at` | `string` | Yes | ISO 8601 creation timestamp. |
 | `message_template` | `string` | Yes | The prompt sent to the agent on every run. |
+| `created` | `boolean` | Yes | False when an identical new-project request reused an existing schedule. |
 
 #### update_schedule_trigger
 
@@ -1812,7 +1815,7 @@ Required RBAC permission: [`agent:create`](/docs/reference/permissions#agent:cre
 | `labels` | `object[]` | No | Optional key-value labels for organization and categorization. |
 | `labels[].key` | `string` | Yes |  |
 | `labels[].value` | `string` | Yes |  |
-| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. Assigned skill discovery/loading tools (list_skills, load_skill), sandbox runtime tools (run_command, download_file, upload_file) — when the code runtime is enabled and assigned — and persistent-files tools (search_files, read_file, save_file, edit_file, delete_file) — when assigned — stay directly available in both modes. App tools (scaffold_app, edit_app, read_app, render_app, list_apps, and the rest of the app surface) are reached through search_tools/run_tool in 'search_and_run_only' mode. |
+| `toolExposureMode` | `"full" \| "search_and_run_only"` | No | How tools should be loaded for MCP clients and models. Use 'search_and_run_only' to keep the initial tool list small while letting search_tools find assigned tools and run_tool execute them. MCP gateways defer skill, file, sandbox, run lifecycle and policy-management capabilities in this mode; questions and guardrails session/peer-message controls remain directly available. search_tools summarizes the caller's available built-in capability groups as well as connected MCP servers. Manual gateways also keep explicitly assigned MCP App UI tools available for client rendering. Internal chat keeps assigned skill discovery/loading, file, sandbox and run lifecycle tools directly available for its skill activation and file guidance. App tools (scaffold_app, edit_app, read_app, render_app, list_apps, and the rest of the app surface) are reached through search_tools/run_tool in 'search_and_run_only' mode. |
 | `accessAllTools` | `boolean` | No | Allow dynamic tool access: search_tools/run_tool may discover and run any tool the calling user can access (MCP catalog tools and knowledge sources) without assigning it to the agent. Enabling this forces toolExposureMode to 'search_and_run_only', since dynamic access only works through the search/run dispatch surface. Defaults to false. Also gated by the organization's security settings. |
 | `accessAllSubagents` | `boolean` | No | Allow dynamic subagent delegation: the agent may delegate to any internal agent the calling user can access, beyond explicitly-configured delegation targets (minus subagent exclusions). Defaults to false. |
 | `description` | `string \| null` | No | Optional human-readable description of the agent. |
@@ -2972,11 +2975,9 @@ Required RBAC permission: `update` on the MCP gateway (granted per item)
 | `preview_guardrails_policy_change` | Validate a proposed change to organization.appa.toml and return its unified `diff` and `changed` line counts. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `update_guardrails_policy` | Publish a change to organization.appa.toml. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
 | `bind_guardrails_credential` | Bind one battery credential variable to a runtime credential key, or pass key null to unbind it. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
-| `discover_openappa_validation_scenarios` | Find up to three exact current-policy call scenarios verified by offline replay. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
-| `draft_openappa_validation_scenario` | After the user chooses a discovered scenario and confirms its observed decision is the desired expectation, prepare its exact verified file and preview the full suite without saving. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `get_openappa_policy_tests` | Read the authoritative .appa validation files, their version, configured directory and accepted Git commit. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
-| `run_openappa_policy_tests` | Replay the complete currently saved validation suite offline against the current policy and record the result in validation run history. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
-| `preview_openappa_validation_change` | Preview a patch of .appa validation files against the current policy, then replay the full resulting suite offline. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
+| `run_openappa_policy_tests` | Replay saved validations offline against the current policy and record the result in validation run history. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
+| `preview_openappa_validation_change` | Preview a patch of .appa validation files: checks each changed file's syntax and, when policyContent is given, the proposed policy. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `publish_openappa_validation_change` | Publish the exact validation patch explained after preview_openappa_validation_change, only when the user authorized saving it. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
 | `get_guardrails_policy_change_status` | Check the review state of an OpenAPPA policy pull request and whether Git sync has processed the merged policy. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `get_remedy_plans` | Read why the organization's guardrails policy blocked a tool call, and which remedy plans the policy offers. | None (no additional RBAC permission required) |
@@ -3197,25 +3198,6 @@ Required RBAC permission: [`openappaPolicy:update`](/docs/reference/permissions#
 | `key` | `string \| null` | Yes | The runtime credential key to bind, or null to unbind. |
 
 
-#### discover_openappa_validation_scenarios
-
-Required RBAC permission: [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read)
-
-This tool takes no arguments.
-
-
-#### draft_openappa_validation_scenario
-
-Required RBAC permission: [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read)
-
-##### Input
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `discoveryId` | `string` | Yes |  |
-| `candidateId` | `string` | Yes |  |
-
-
 #### get_openappa_policy_tests
 
 Required RBAC permission: [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read)
@@ -3227,7 +3209,11 @@ This tool takes no arguments.
 
 Required RBAC permission: [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update)
 
-This tool takes no arguments.
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | `string` | No | A saved validation file's path, as get_openappa_policy_tests lists it. Omit to run every saved validation. |
 
 
 #### preview_openappa_validation_change

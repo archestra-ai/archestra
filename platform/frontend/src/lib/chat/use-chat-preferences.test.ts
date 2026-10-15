@@ -8,6 +8,7 @@ import {
   getAgentSubscriptionConnection,
   getSavedAgent,
   resolveAutoSelectedModel,
+  resolveConversationKeyForModel,
   resolveInitialModel,
   resolveModelForAgent,
   saveAgent,
@@ -186,6 +187,131 @@ describe("resolveInitialModel", () => {
       memberDefault: { modelId: "uuid-gpt-4o", chatApiKeyId: "key-openai" },
     });
     expect(result).toEqual({ modelId: "uuid-gpt-4o", apiKeyId: "key-openai" });
+  });
+});
+
+describe("resolveInitialModel with defaults naming a key the viewer cannot use", () => {
+  // The viewer may use "key-usable" only. "key-org-admin" is the admin's key
+  // behind the org default and "key-read-only" is shared with the viewer to
+  // see, not to use: sending either is refused.
+  const modelsByProvider = {
+    openai: [{ id: "uuid-gpt-4o" }, { id: "uuid-gpt-4o-mini", isBest: true }],
+    anthropic: [{ id: "uuid-sonnet" }],
+  };
+  const usableKeys = [{ id: "key-usable", provider: "openai" }];
+
+  test("keeps the org default model but runs it through a key the viewer can use", () => {
+    const result = resolveInitialModel({
+      modelsByProvider,
+      agent: { modelId: null, llmApiKeyId: null },
+      chatApiKeys: usableKeys,
+      organization: {
+        defaultModelId: "uuid-gpt-4o",
+        defaultLlmApiKeyId: "key-org-admin",
+      },
+      memberDefault: null,
+    });
+    expect(result).toEqual({ modelId: "uuid-gpt-4o", apiKeyId: "key-usable" });
+  });
+
+  test("re-pairs a member default whose key was narrowed to read-only", () => {
+    const result = resolveInitialModel({
+      modelsByProvider,
+      agent: { modelId: "uuid-sonnet", llmApiKeyId: null },
+      chatApiKeys: usableKeys,
+      organization: null,
+      memberDefault: {
+        modelId: "uuid-gpt-4o",
+        chatApiKeyId: "key-read-only",
+      },
+    });
+    expect(result).toEqual({ modelId: "uuid-gpt-4o", apiKeyId: "key-usable" });
+  });
+
+  test("skips a default whose provider the viewer has no usable key for", () => {
+    const result = resolveInitialModel({
+      modelsByProvider,
+      agent: { modelId: null, llmApiKeyId: null },
+      chatApiKeys: usableKeys,
+      organization: {
+        defaultModelId: "uuid-sonnet",
+        defaultLlmApiKeyId: "key-org-admin",
+      },
+      memberDefault: null,
+    });
+    // Falls through to the best model the viewer can actually run.
+    expect(result).toEqual({
+      modelId: "uuid-gpt-4o-mini",
+      apiKeyId: "key-usable",
+    });
+  });
+
+  test("keeps the agent's own key, which works through the agent", () => {
+    const result = resolveInitialModel({
+      modelsByProvider,
+      agent: { modelId: "uuid-sonnet", llmApiKeyId: "key-agent" },
+      chatApiKeys: usableKeys,
+      organization: null,
+      // The member last picked a model on this agent, through its key.
+      memberDefault: { modelId: "uuid-sonnet", chatApiKeyId: "key-agent" },
+    });
+    expect(result).toEqual({ modelId: "uuid-sonnet", apiKeyId: "key-agent" });
+  });
+});
+
+describe("resolveConversationKeyForModel", () => {
+  const usableKeys = [
+    { id: "key-openai-usable", provider: "openai" },
+    { id: "key-anthropic-usable", provider: "anthropic" },
+  ];
+
+  test("keeps the agent's own key when the picked model is on its provider", () => {
+    expect(
+      resolveConversationKeyForModel({
+        currentKeyId: "key-agent",
+        currentModelProvider: "openai",
+        agentApiKeyId: "key-agent",
+        modelProvider: "openai",
+        usableKeys,
+      }),
+    ).toBe("key-agent");
+  });
+
+  test("replaces a current key the viewer cannot use with a usable one", () => {
+    // e.g. a stored org-default key that is not the agent's.
+    expect(
+      resolveConversationKeyForModel({
+        currentKeyId: "key-org-admin",
+        currentModelProvider: "openai",
+        agentApiKeyId: "key-agent",
+        modelProvider: "openai",
+        usableKeys,
+      }),
+    ).toBe("key-openai-usable");
+  });
+
+  test("switches to a usable key of the new provider", () => {
+    expect(
+      resolveConversationKeyForModel({
+        currentKeyId: "key-agent",
+        currentModelProvider: "openai",
+        agentApiKeyId: "key-agent",
+        modelProvider: "anthropic",
+        usableKeys,
+      }),
+    ).toBe("key-anthropic-usable");
+  });
+
+  test("returns null when the viewer has no usable key for the provider", () => {
+    expect(
+      resolveConversationKeyForModel({
+        currentKeyId: "key-openai-usable",
+        currentModelProvider: "openai",
+        agentApiKeyId: null,
+        modelProvider: "gemini",
+        usableKeys,
+      }),
+    ).toBeNull();
   });
 });
 

@@ -10156,7 +10156,7 @@ export const listRuntimeCredentials = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `credential:create`: Create saved credentials
+ * Checked dynamically based on the credential being created. A credential just for the caller (`allowPersonal: true`, `allowOrganization: false`, no `initialGrants`) needs no permission, and only its author can reach it. Organization credentials and credentials created with grants require `credential:create`.
  */
 export const createRuntimeCredential = <ThrowOnError extends boolean = false>(options: Options<CreateRuntimeCredentialData, ThrowOnError>) => (options.client ?? client).post<CreateRuntimeCredentialResponses, CreateRuntimeCredentialErrors, ThrowOnError>({
     url: '/api/credentials',

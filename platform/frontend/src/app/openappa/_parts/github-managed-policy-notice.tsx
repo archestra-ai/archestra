@@ -7,6 +7,7 @@ import {
   LockKeyhole,
 } from "lucide-react";
 import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import { appaGitHost } from "./appa-git-host";
@@ -64,6 +65,34 @@ export function GithubManagedPolicyNotice({
         </a>
       </InlineNotice>
     );
+
+  // A healthy sync asks for nothing, so it is a chip, not a banner.
+  if (!failed && !(validations && validationDirectory === "")) {
+    const content = (
+      <>
+        <LockKeyhole aria-hidden />
+        <span>{`Managed in ${git.label}`}</span>
+        {href && <ExternalLink aria-hidden />}
+      </>
+    );
+    return (
+      <Badge
+        variant="outline"
+        className="font-normal"
+        title={`The ${git.repository} owns ${validations ? "these validations" : "this policy"}. Change ${validations ? "their files" : "it"} there.`}
+        asChild={Boolean(href)}
+      >
+        {href ? (
+          <a href={href} target="_blank" rel="noopener noreferrer">
+            {content}
+            <span className="sr-only">(opens in new tab)</span>
+          </a>
+        ) : (
+          <span>{content}</span>
+        )}
+      </Badge>
+    );
+  }
 
   return (
     <InlineNotice variant={failed ? "error" : "neutral"}>

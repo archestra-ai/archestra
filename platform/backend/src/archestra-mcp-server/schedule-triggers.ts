@@ -25,6 +25,7 @@ import {
 } from "@/services/schedule-trigger-access";
 import {
   createScheduleTrigger,
+  createScheduleTriggerWithProject,
   updateScheduleTrigger,
 } from "@/services/schedule-trigger-management";
 import type { ScheduleTrigger, ScheduleTriggerRun } from "@/types";
@@ -189,20 +190,53 @@ const registry = defineArchestraTools([
     shortName: TOOL_CREATE_SCHEDULE_TRIGGER_SHORT_NAME,
     title: "Create Scheduled Task",
     description:
-      "Create a scheduled agent task in a project you can access. It runs as you. Use list_projects to find the project id.",
-    schema: ScheduleFieldsSchema.strict(),
-    outputSchema: GetScheduleTriggerOutputSchema,
+      "Schedule an agent from chat, Slack, or Teams. Omit project_id to create a private project named after the task, with message_template as its instructions; agent_id defaults to the current agent. Retry with the same name and task arguments to reuse the schedule. For an existing project, pass its id from list_projects; agent_id defaults to that project's agent, then the organization default. Runs as you. Creating a project also requires project:create.",
+    schema: ScheduleFieldsSchema.extend({
+      project_id: ScheduleFieldsSchema.shape.project_id
+        .optional()
+        .describe(
+          "Existing project to schedule in. Omit to create a private project using name and message_template as its instructions.",
+        ),
+      agent_id: ScheduleFieldsSchema.shape.agent_id.describe(
+        "Agent to run. For a new project, defaults to the current agent; for an existing project, its agent then the organization default.",
+      ),
+    }).strict(),
+    outputSchema: GetScheduleTriggerOutputSchema.extend({
+      created: z
+        .boolean()
+        .describe(
+          "False when an identical new-project request reused an existing schedule.",
+        ),
+    }),
     async handler({ args, context }) {
       const identity = requireUserContext(context);
       if ("error" in identity) return identity.error;
       try {
-        const trigger = await createScheduleTrigger({
-          ...identity,
-          body: CreateScheduleTriggerBodySchema.parse(toScheduleBody(args)),
-        });
+        const { trigger, created } = args.project_id
+          ? {
+              trigger: await createScheduleTrigger({
+                ...identity,
+                body: CreateScheduleTriggerBodySchema.parse(
+                  toScheduleBody(args),
+                ),
+              }),
+              created: true,
+            }
+          : await createScheduleTriggerWithProject({
+              ...identity,
+              body: {
+                name: args.name,
+                agentId: args.agent_id ?? context.agent.id,
+                cronExpression: args.cron_expression,
+                timezone: args.timezone,
+                messageTemplate: args.message_template,
+                enabled: args.enabled ?? true,
+              },
+            });
         return structuredSuccessResult({
           ...toTriggerSummary(trigger),
           message_template: trigger.messageTemplate,
+          created,
         });
       } catch (error) {
         return apiErrorOr(error, "create scheduled task");

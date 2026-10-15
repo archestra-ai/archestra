@@ -7,7 +7,6 @@ import {
   GITHUB_REPO_NEW_ISSUE_URL,
   GITHUB_REPO_URL,
 } from "@archestra/shared";
-import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen,
@@ -65,7 +64,7 @@ import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { SHORTCUT_NEW_CHAT, SHORTCUT_SEARCH } from "@/consts";
 import { prefetchApps } from "@/lib/app.query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
-import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
 import { useDocsScreenshotMode } from "@/lib/docs-screenshot-mode";
 import { useGithubStars } from "@/lib/github/github.query";
@@ -76,6 +75,7 @@ import type { NavDotKey } from "@/lib/onboarding/nav-onboarding";
 import { useNavOnboarding } from "@/lib/onboarding/use-nav-onboarding";
 import { cn } from "@/lib/utils/tailwind";
 import { getSettingsNavigationUrl } from "./settings-navigation";
+import { useNavPermissionMap } from "./use-settings-area-access";
 
 type SidebarMode = "chats" | "studio";
 
@@ -526,7 +526,7 @@ export function AppSidebar() {
     deferMs: 5000,
   });
   const formattedStarCount = starCount ?? "";
-  const permissionMap = usePermissionMap(requiredPagePermissionsMap);
+  const permissionMap = useNavPermissionMap();
   const appIconLogo = useAppIconLogo();
   // Connect is useful with either half: MCP-only (tools) or proxy-only
   // (inference). Org settings can hide a section without hiding the page.

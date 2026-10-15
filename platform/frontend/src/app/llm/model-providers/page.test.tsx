@@ -15,6 +15,7 @@ const { useDataTableQueryParamsMock, updateQueryParamsMock } = vi.hoisted(
   }),
 );
 
+vi.mock("@/app/_parts/use-settings-area-access");
 vi.mock("next/image", () => ({
   default: ({
     alt,

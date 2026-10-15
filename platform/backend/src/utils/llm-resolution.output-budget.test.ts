@@ -1,6 +1,6 @@
+import { describe, expect, test } from "vitest";
 import config from "@/config";
 import { ModelModel } from "@/models";
-import { describe, expect, test } from "@/test";
 import { resolveModelOutputBudget } from "./llm-resolution";
 
 describe("resolveModelOutputBudget", () => {

@@ -1,10 +1,9 @@
 import type { SupportedProvider } from "@archestra/shared";
 import { generateText } from "ai";
-import { vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { createDirectLLMModel } from "@/clients/llm-client";
 import config from "@/config";
 import { ModelModel } from "@/models";
-import { describe, expect, test } from "@/test";
 
 describe("default output budget", () => {
   test("a catalogued model gets its catalog budget on every provider", async () => {

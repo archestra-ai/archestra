@@ -85,17 +85,20 @@ import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { formatRoleName } from "@/lib/utils/role";
 import { useSetSettingsAction } from "../layout";
 import { ServiceAccountDialog } from "./_parts/service-account-dialog";
+import { ServiceAccountTeamSelect } from "./_parts/service-account-team-select";
 
 type ServiceAccountFormValues = {
   name: string;
   icon: string | null;
   role: string;
+  teamId: string | null;
 };
 
 const DEFAULT_FORM_VALUES: ServiceAccountFormValues = {
   name: "",
   icon: null,
   role: "member",
+  teamId: null,
 };
 
 const ALL = "all";
@@ -376,6 +379,7 @@ export default function ServiceAccountsSettingsPage() {
         name: values.name.trim(),
         icon: values.icon,
         role: values.role,
+        ...(values.teamId ? { teamId: values.teamId } : {}),
         labels: finalLabels,
       })
       // The dialog shows the failure: a notice for a refused role, a toast
@@ -670,6 +674,11 @@ export default function ServiceAccountsSettingsPage() {
             <RoleAssignmentBlockedNotice
               error={createMutation.error}
               name={formatRoleName(form.watch("role"))}
+            />
+            <ServiceAccountTeamSelect
+              id="service-account-team"
+              value={form.watch("teamId")}
+              onChange={(teamId) => form.setValue("teamId", teamId)}
             />
             <AdvancedLabelsSection
               collapsible

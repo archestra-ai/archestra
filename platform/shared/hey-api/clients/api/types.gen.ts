@@ -106460,6 +106460,7 @@ export type GetServiceAccountsResponses = {
         name: string;
         icon: string | null;
         role: string;
+        teamId: string | null;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -106483,6 +106484,7 @@ export type CreateServiceAccountData = {
         name: string;
         icon?: string | null;
         role: string;
+        teamId?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -106598,6 +106600,7 @@ export type CreateServiceAccountResponses = {
         name: string;
         icon: string | null;
         role: string;
+        teamId: string | null;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -106806,6 +106809,7 @@ export type GetServiceAccountResponses = {
         name: string;
         icon: string | null;
         role: string;
+        teamId: string | null;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -106838,6 +106842,7 @@ export type UpdateServiceAccountData = {
         name?: string;
         icon?: string | null;
         role?: string;
+        teamId?: string | null;
         disabled?: boolean;
         labels?: Array<{
             key: string;
@@ -106937,6 +106942,7 @@ export type UpdateServiceAccountResponses = {
         name: string;
         icon: string | null;
         role: string;
+        teamId: string | null;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;

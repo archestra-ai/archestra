@@ -9909,6 +9909,46 @@ describe("pickInstallForCaller (caller-scoped install selection)", () => {
     expect(picked?.id).toBe(orgInstall.id);
   });
 
+  test("a service account uses its team's install, then an org-scoped one", async ({
+    makeOrganization,
+    makeTeam,
+    makeUser,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const org = await makeOrganization();
+    const creator = await makeUser();
+    const team = await makeTeam(org.id, creator.id);
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    const orgInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: null,
+      scope: "org",
+    });
+    const teamInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      teamId: team.id,
+      scope: "team",
+    });
+    const account = (teamId: string | null): TokenAuthContext => ({
+      tokenId: randomUUID(),
+      teamId,
+      isOrganizationToken: false,
+      organizationId: org.id,
+      serviceAccountId: randomUUID(),
+    });
+
+    expect(
+      (await pickInstallForCaller([orgInstall, teamInstall], account(team.id)))
+        ?.id,
+    ).toBe(teamInstall.id);
+    // An account acting for the organization still reaches org-scoped installs.
+    expect(
+      (await pickInstallForCaller([orgInstall, teamInstall], account(null)))
+        ?.id,
+    ).toBe(orgInstall.id);
+  });
+
   test("fails closed for a team-scoped token when no team or org install is reachable", async ({
     makeOrganization,
     makeTeam,

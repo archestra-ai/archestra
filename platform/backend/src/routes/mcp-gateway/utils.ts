@@ -1951,6 +1951,8 @@ async function validateServiceAccountGatewayAccess(params: {
   profileId: string;
   serviceAccountId: string;
   organizationId: string;
+  /** Team the account acts for; call-time credentials prefer its installs. */
+  teamId: string | null;
   tokenId: string;
 }): Promise<TokenAuthResult | null> {
   const id = serviceAccountUserId(params.serviceAccountId);
@@ -1969,7 +1971,7 @@ async function validateServiceAccountGatewayAccess(params: {
     tokenId: params.tokenId,
     serviceAccountId: params.serviceAccountId,
     organizationId: params.organizationId,
-    teamId: null,
+    teamId: params.teamId,
     isOrganizationToken: false,
   };
 }
@@ -2047,6 +2049,7 @@ async function validateMcpClientAccessToken(params: {
       profileId,
       serviceAccountId: account.id,
       organizationId,
+      teamId: account.teamId,
       tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
     }))
   )
@@ -2054,7 +2057,7 @@ async function validateMcpClientAccessToken(params: {
   return {
     ...(account ? { serviceAccountId: account.id } : {}),
     tokenId: `${OAUTH_TOKEN_ID_PREFIX}${accessToken.id}`,
-    teamId: null,
+    teamId: account?.teamId ?? null,
     isOrganizationToken: false,
     organizationId,
     oauthClientId: accessToken.clientId,
@@ -2184,6 +2187,7 @@ export async function authenticateMCPGatewayRequest(
         profileId,
         serviceAccountId: resolvedToken.serviceAccount.id,
         organizationId: resolvedToken.serviceAccount.organizationId,
+        teamId: resolvedToken.serviceAccount.teamId,
         tokenId: resolvedToken.token.id,
       });
       return result

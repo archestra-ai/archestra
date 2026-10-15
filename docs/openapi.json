@@ -412534,6 +412534,15 @@
           },
           {
             "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "includeContent",
+            "required": false,
+            "description": "Include manifest bodies (default true). False returns empty content for lightweight lists."
+          },
+          {
+            "schema": {
               "type": "string"
             },
             "in": "query",

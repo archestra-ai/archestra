@@ -205,10 +205,15 @@ export function gatewayServerName(params: {
 }
 
 /** A gateway pick that is no longer visible falls back to the default. */
-export function useConnectPageData(
-  pickedClientId?: string | null,
-  pickedGatewayId: string | null = null,
-): ConnectPageData {
+export function useConnectPageData({
+  pickedClientId,
+  pickedGatewayId = null,
+  showToolDetails = false,
+}: {
+  pickedClientId?: string | null;
+  pickedGatewayId?: string | null;
+  showToolDetails?: boolean;
+} = {}): ConnectPageData {
   const appName = useAppName();
   // A fresh read: these settings decide what a setup may include.
   const orgQuery = useOrganization(true, { fresh: true });
@@ -243,6 +248,7 @@ export function useConnectPageData(
     filters: {
       agentTypes: ["profile", "mcp_gateway"],
       excludeOtherPersonalAgents: true,
+      includeTools: false,
     },
     enabled: canReadGateways === true,
   });
@@ -261,7 +267,7 @@ export function useConnectPageData(
     profileQuery: { isPending: profilePending },
     accessAll,
     servers: gatewayServers,
-  } = useGatewayServers(gatewayId, { withTools: true });
+  } = useGatewayServers(gatewayId, { withTools: showToolDetails });
   const { data: canManage } = useHasPermissions({
     organizationSettings: ["read"],
   });
@@ -343,6 +349,8 @@ export function useConnectPageData(
     clients[0];
   const { data: preview, isError: toolPreviewError } = useGatewayToolPreview({
     agentId: toolsAvailable ? gateway?.id : undefined,
+    // Counting tokens expands every served tool schema; only do it on request.
+    enabled: showToolDetails,
     client: client?.id === "claude-code" ? "claude-code" : "generic",
   });
   const listedTools = preview?.tools;

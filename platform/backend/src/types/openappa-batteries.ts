@@ -117,13 +117,101 @@ export type BatteryPackageSummary = Pick<
   "organizationId" | "name" | "contentHash" | "description" | "createdAt"
 >;
 
+/**
+ * One battery of a served composition as it was composed: its status, and
+ * the install whose id its helper URLs carry, with the package, target and
+ * credential keys that install deployed.
+ */
+const ServedBatterySchema = z.object({
+  /** The include entry; null when it was derived from install rows. */
+  entry: z.string().nullable(),
+  name: z.string(),
+  status: BatteryInstallStatusSchema,
+  composed: z.boolean(),
+  packageHash: z.string().nullable(),
+  target: z.union([BatteryTargetNameSchema, z.null()]),
+  installId: z.string().nullable(),
+  credentialBindings: z.record(z.string(), z.string()),
+});
+
+/**
+ * Where an effective policy's `content` came from, stored beside it. It is a
+ * composition (of a known revision, or of an unknown one for a row an earlier
+ * build stored), or the root text alone when no composition ever opened.
+ * `contentHash` anchors it to the bytes it describes.
+ */
+export const ServedCompositionSchema = z.discriminatedUnion("kind", [
+  z.object({
+    v: z.literal(1),
+    kind: z.literal("composition"),
+    contentHash: z.string(),
+    rootRevision: z.number().int().nullable(),
+    composedAt: z.string().nullable(),
+    batteries: z.array(ServedBatterySchema).nullable(),
+  }),
+  z.object({
+    v: z.literal(1),
+    kind: z.literal("root_only"),
+    contentHash: z.string(),
+    rootRevision: z.number().int(),
+  }),
+]);
+export type ServedComposition = z.infer<typeof ServedCompositionSchema>;
+
 export const EffectivePolicySchema = createSelectSchema(
   openappaEffectivePoliciesTable,
 ).extend({
   compiledAt: z.coerce.date(),
   lastErrorAt: z.coerce.date().nullable(),
+  served: ServedCompositionSchema.nullable(),
 });
 export type EffectivePolicy = z.infer<typeof EffectivePolicySchema>;
+
+/** A battery of the composition the runtime enforces, as a reader sees it. */
+const ServedBatteryViewSchema = ServedBatterySchema.pick({
+  name: true,
+  status: true,
+  composed: true,
+});
+
+/**
+ * What the runtime enforces and what was refused, as two facts. `current`:
+ * the latest revision composed. `previous`: the latest attempt was refused
+ * and an earlier composition stays enforced (its revision, time and battery
+ * statuses are null when an earlier build stored it). `root_only`: nothing
+ * ever composed, so governed calls are refused.
+ */
+export const CompositionViewSchema = z.object({
+  served: z.discriminatedUnion("kind", [
+    z.object({
+      kind: z.literal("current"),
+      rootRevision: z.number().int(),
+      composedAt: z.coerce.date(),
+    }),
+    z.object({
+      kind: z.literal("previous"),
+      rootRevision: z.number().int().nullable(),
+      composedAt: z.coerce.date().nullable(),
+      batteries: z.array(ServedBatteryViewSchema).nullable(),
+    }),
+    z.object({ kind: z.literal("root_only") }),
+  ]),
+  refusal: z
+    .object({
+      message: z.string(),
+      at: z.coerce.date(),
+      /** Null when the row was marked stale before the attempt was stored. */
+      rootRevision: z.number().int().nullable(),
+    })
+    .nullable(),
+});
+export type CompositionView = z.infer<typeof CompositionViewSchema>;
+
+/** The effective policy as the API returns it: the stored row with its composition view. */
+export const EffectivePolicyViewSchema = EffectivePolicySchema.omit({
+  served: true,
+}).extend({ composition: CompositionViewSchema });
+export type EffectivePolicyView = z.infer<typeof EffectivePolicyViewSchema>;
 
 /** Where an include entry's bytes come from: the pinned bundle or a stored upload. */
 export const BatterySourceSchema = z.enum(["bundled", "upload"]);
@@ -234,10 +322,24 @@ const HeldPullViewSchema = z.object({
 });
 
 export const PolicyDeclarationsViewSchema = z.object({
-  batteries: z.array(PolicyBatteryViewSchema),
+  batteries: z.array(
+    PolicyBatteryViewSchema.extend({
+      /**
+       * How the composition the runtime enforces holds this battery; null
+       * when it does not hold it (declared since, or nothing is enforced).
+       * Under a current composition it equals the battery's own status.
+       */
+      served: ServedBatteryViewSchema.pick({
+        status: true,
+        composed: true,
+      }).nullable(),
+    }),
+  ),
   unusedAliases: z.array(UnusedAliasViewSchema),
   rootRevision: z.number(),
+  /** The refusal message; read `composition.refusal` for what it refused. */
   lastError: z.string().nullable(),
+  composition: CompositionViewSchema,
   managedInGithub: z.boolean(),
   heldPull: HeldPullViewSchema.nullable(),
   /**

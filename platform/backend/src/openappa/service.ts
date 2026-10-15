@@ -29,6 +29,7 @@ import {
   expandCommandExecutionPolicyRules,
   normalizeCommandExecutionArguments,
 } from "@/openappa/command-normalization";
+import { compositionView } from "@/openappa/composition-view";
 import { currentTrajectory } from "@/openappa/current-trajectory";
 import {
   helperUrlBase,
@@ -41,6 +42,7 @@ import {
 } from "@/openappa/declare-installs";
 import {
   OpenappaRetiredAnnotatorError,
+  OpenappaRootOnlyError,
   openappaFailure,
 } from "@/openappa/failure";
 import { unservedAnnotator } from "@/openappa/retired-annotators";
@@ -52,6 +54,7 @@ import {
   isGuardrailsV2Active,
 } from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
+import type { EffectivePolicy } from "@/types/openappa-batteries";
 import { policyView } from "./result-view";
 import type { DeclaredToolSpelling } from "./wire";
 
@@ -589,6 +592,7 @@ async function effectivePolicy(
   try {
     const { policy, readable } =
       await openappaBatteriesService.readForDispatch(organizationId);
+    refuseRootOnly(policy);
     let unreadable: UnreadableCredential[] = [];
     let dispatch: DispatchPolicy | null = null;
     try {
@@ -612,6 +616,7 @@ async function effectivePolicy(
       "OpenAPPA composes again before a dispatch: a credential the served policy reads cannot be read",
     );
     const recompiled = await openappaBatteriesService.recompile(organizationId);
+    refuseRootOnly(recompiled);
     return await openappaDeclarations.dispatchPolicy({
       organizationId,
       content: expandCommandExecutionPolicyRules(recompiled.content),
@@ -619,6 +624,15 @@ async function effectivePolicy(
   } catch (error) {
     throw openappaFailure(error);
   }
+}
+
+/**
+ * A stored root text alone cannot open, whatever the call: refuse it plainly
+ * instead of asking the runtime to compile a document it always refuses.
+ */
+function refuseRootOnly(policy: EffectivePolicy): void {
+  if (compositionView(policy).served.kind === "root_only")
+    throw new OpenappaRootOnlyError(policy.lastError ?? "");
 }
 
 /**

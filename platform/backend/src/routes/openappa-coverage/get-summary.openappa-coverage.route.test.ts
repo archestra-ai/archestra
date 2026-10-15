@@ -47,6 +47,13 @@ describe("GET /api/openappa/coverage/summary", () => {
         broken: [{ name: "archestra", status: "refused", tools: 0 }],
         available: [],
       },
+      // Nothing composed before that refusal, so nothing is enforced.
+      composition: {
+        kind: "root_only",
+        servedRootRevision: null,
+        refusedRootRevision: 0,
+        rulesMayDiffer: false,
+      },
     });
   });
 

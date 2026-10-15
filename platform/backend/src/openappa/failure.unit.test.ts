@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { OpenappaRetiredAnnotatorError, openappaFailure } from "./failure";
+import {
+  OpenappaRetiredAnnotatorError,
+  OpenappaRootOnlyError,
+  openappaFailure,
+} from "./failure";
 
 describe("openappaFailure", () => {
   test("names a refused policy and tells clients not to retry it", () => {
@@ -146,6 +150,27 @@ describe("openappaFailure", () => {
     expect(failure.message).not.toContain("user:token");
     expect(failure.message).toContain("https://example.com/annotate");
     expect(failure.message.length).toBeLessThan(420);
+  });
+
+  test("a policy with no composition that ever opened is refused, not retried", () => {
+    for (const cause of [
+      new OpenappaRootOnlyError(
+        "policy refused: tool mcp/acme/list names annotator nobody.declares",
+      ),
+      // What the runtime says if a root text alone still reaches it.
+      new Error(
+        "a hosted document declares \"include\", which is the host's to declare, not the policy's",
+      ),
+    ]) {
+      const failure = openappaFailure(cause);
+      expect(failure.statusCode).toBe(500);
+      expect(failure.shouldRetry).toBe(false);
+    }
+    expect(
+      openappaFailure(new OpenappaRootOnlyError("policy refused: x")).message,
+    ).toBe(
+      "OpenAPPA could not safely complete this operation: the organization's guardrails policy was refused and no earlier composition exists (policy refused: x). An administrator can fix it on the Guardrails page.",
+    );
   });
 
   test("does not wrap a failure twice", () => {

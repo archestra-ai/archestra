@@ -338021,6 +338021,32 @@
                             "items": {
                               "type": "string"
                             }
+                          },
+                          "served": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "unavailable",
+                                  "missing_credentials",
+                                  "naming_conflict",
+                                  "server_missing",
+                                  "unrouted",
+                                  "refused",
+                                  "active"
+                                ]
+                              },
+                              "composed": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "status",
+                              "composed"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [
@@ -338034,7 +338060,8 @@
                           "line",
                           "servers",
                           "credentials",
-                          "helpers"
+                          "helpers",
+                          "served"
                         ],
                         "additionalProperties": false
                       }
@@ -338071,6 +338098,148 @@
                     "lastError": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "composition": {
+                      "type": "object",
+                      "properties": {
+                        "served": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "current"
+                                  ]
+                                },
+                                "rootRevision": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "composedAt": {
+                                  "type": "string",
+                                  "format": "date-time"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "rootRevision",
+                                "composedAt"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "previous"
+                                  ]
+                                },
+                                "rootRevision": {
+                                  "nullable": true,
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "composedAt": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "format": "date-time"
+                                },
+                                "batteries": {
+                                  "nullable": true,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "status": {
+                                        "type": "string",
+                                        "enum": [
+                                          "unavailable",
+                                          "missing_credentials",
+                                          "naming_conflict",
+                                          "server_missing",
+                                          "unrouted",
+                                          "refused",
+                                          "active"
+                                        ]
+                                      },
+                                      "composed": {
+                                        "type": "boolean"
+                                      }
+                                    },
+                                    "required": [
+                                      "name",
+                                      "status",
+                                      "composed"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "rootRevision",
+                                "composedAt",
+                                "batteries"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "root_only"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "refusal": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "message": {
+                              "type": "string"
+                            },
+                            "at": {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "rootRevision": {
+                              "nullable": true,
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "message",
+                            "at",
+                            "rootRevision"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "served",
+                        "refusal"
+                      ],
+                      "additionalProperties": false
                     },
                     "managedInGithub": {
                       "type": "boolean"
@@ -338133,6 +338302,7 @@
                     "unusedAliases",
                     "rootRevision",
                     "lastError",
+                    "composition",
                     "managedInGithub",
                     "heldPull",
                     "credentialBindings"
@@ -338715,6 +338885,148 @@
                       "nullable": true,
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "composition": {
+                      "type": "object",
+                      "properties": {
+                        "served": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "current"
+                                  ]
+                                },
+                                "rootRevision": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "composedAt": {
+                                  "type": "string",
+                                  "format": "date-time"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "rootRevision",
+                                "composedAt"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "previous"
+                                  ]
+                                },
+                                "rootRevision": {
+                                  "nullable": true,
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "composedAt": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "format": "date-time"
+                                },
+                                "batteries": {
+                                  "nullable": true,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "status": {
+                                        "type": "string",
+                                        "enum": [
+                                          "unavailable",
+                                          "missing_credentials",
+                                          "naming_conflict",
+                                          "server_missing",
+                                          "unrouted",
+                                          "refused",
+                                          "active"
+                                        ]
+                                      },
+                                      "composed": {
+                                        "type": "boolean"
+                                      }
+                                    },
+                                    "required": [
+                                      "name",
+                                      "status",
+                                      "composed"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "rootRevision",
+                                "composedAt",
+                                "batteries"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "root_only"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "refusal": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "message": {
+                              "type": "string"
+                            },
+                            "at": {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "rootRevision": {
+                              "nullable": true,
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "message",
+                            "at",
+                            "rootRevision"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "served",
+                        "refusal"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -338725,7 +339037,8 @@
                     "installFingerprint",
                     "compiledAt",
                     "lastError",
-                    "lastErrorAt"
+                    "lastErrorAt",
+                    "composition"
                   ],
                   "additionalProperties": false
                 }
@@ -340947,6 +341260,32 @@
                             "items": {
                               "type": "string"
                             }
+                          },
+                          "served": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "status": {
+                                "type": "string",
+                                "enum": [
+                                  "unavailable",
+                                  "missing_credentials",
+                                  "naming_conflict",
+                                  "server_missing",
+                                  "unrouted",
+                                  "refused",
+                                  "active"
+                                ]
+                              },
+                              "composed": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "status",
+                              "composed"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [
@@ -340960,7 +341299,8 @@
                           "line",
                           "servers",
                           "credentials",
-                          "helpers"
+                          "helpers",
+                          "served"
                         ],
                         "additionalProperties": false
                       }
@@ -340997,6 +341337,148 @@
                     "lastError": {
                       "nullable": true,
                       "type": "string"
+                    },
+                    "composition": {
+                      "type": "object",
+                      "properties": {
+                        "served": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "current"
+                                  ]
+                                },
+                                "rootRevision": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "composedAt": {
+                                  "type": "string",
+                                  "format": "date-time"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "rootRevision",
+                                "composedAt"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "previous"
+                                  ]
+                                },
+                                "rootRevision": {
+                                  "nullable": true,
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "composedAt": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "format": "date-time"
+                                },
+                                "batteries": {
+                                  "nullable": true,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "status": {
+                                        "type": "string",
+                                        "enum": [
+                                          "unavailable",
+                                          "missing_credentials",
+                                          "naming_conflict",
+                                          "server_missing",
+                                          "unrouted",
+                                          "refused",
+                                          "active"
+                                        ]
+                                      },
+                                      "composed": {
+                                        "type": "boolean"
+                                      }
+                                    },
+                                    "required": [
+                                      "name",
+                                      "status",
+                                      "composed"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "rootRevision",
+                                "composedAt",
+                                "batteries"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "root_only"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "kind"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "refusal": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "message": {
+                              "type": "string"
+                            },
+                            "at": {
+                              "type": "string",
+                              "format": "date-time"
+                            },
+                            "rootRevision": {
+                              "nullable": true,
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "message",
+                            "at",
+                            "rootRevision"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "served",
+                        "refusal"
+                      ],
+                      "additionalProperties": false
                     },
                     "managedInGithub": {
                       "type": "boolean"
@@ -341059,6 +341541,7 @@
                     "unusedAliases",
                     "rootRevision",
                     "lastError",
+                    "composition",
                     "managedInGithub",
                     "heldPull",
                     "credentialBindings"
@@ -342642,15 +343125,25 @@
                               },
                               "batteryStatus": {
                                 "nullable": true,
-                                "type": "string",
-                                "enum": [
-                                  "unavailable",
-                                  "missing_credentials",
-                                  "naming_conflict",
-                                  "server_missing",
-                                  "unrouted",
-                                  "refused",
-                                  "active"
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": [
+                                      "unavailable",
+                                      "missing_credentials",
+                                      "naming_conflict",
+                                      "server_missing",
+                                      "unrouted",
+                                      "refused",
+                                      "active"
+                                    ]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending"
+                                    ]
+                                  }
                                 ]
                               },
                               "line": {
@@ -343208,14 +343701,24 @@
                                 "type": "string"
                               },
                               "status": {
-                                "type": "string",
-                                "enum": [
-                                  "unavailable",
-                                  "missing_credentials",
-                                  "naming_conflict",
-                                  "server_missing",
-                                  "unrouted",
-                                  "refused"
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": [
+                                      "unavailable",
+                                      "missing_credentials",
+                                      "naming_conflict",
+                                      "server_missing",
+                                      "unrouted",
+                                      "refused"
+                                    ]
+                                  },
+                                  {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending"
+                                    ]
+                                  }
                                 ]
                               },
                               "tools": {
@@ -343267,11 +343770,47 @@
                         "available"
                       ],
                       "additionalProperties": false
+                    },
+                    "composition": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "current",
+                            "previous",
+                            "root_only"
+                          ]
+                        },
+                        "servedRootRevision": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "refusedRootRevision": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "rulesMayDiffer": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "servedRootRevision",
+                        "refusedRootRevision",
+                        "rulesMayDiffer"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
                     "totals",
-                    "batteries"
+                    "batteries",
+                    "composition"
                   ],
                   "additionalProperties": false
                 }

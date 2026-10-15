@@ -21,6 +21,11 @@ import {
 import { batteryDisplayName } from "./_parts/battery-display-name";
 import { BatteryPolicySourceView } from "./_parts/battery-policy-source-view";
 import { BATTERY_STATUS, batteriesHref } from "./_parts/battery-status";
+import {
+  batteryWorks,
+  compositionNotice,
+  enforcedStatus,
+} from "./_parts/composition-view";
 import { EffectivePolicyView } from "./_parts/effective-policy-view";
 import { GithubManagedPolicyNotice } from "./_parts/github-managed-policy-notice";
 import {
@@ -75,7 +80,9 @@ export function GuardrailsPolicyEditor({
                 label: batteryDisplayName(battery.name),
                 description:
                   BATTERY_STATUS[
-                    declarations.data?.lastError ? "refused" : battery.status
+                    declarations.data
+                      ? enforcedStatus(declarations.data, battery)
+                      : battery.status
                   ].label,
                 disabled: battery.status === "unavailable",
               }))}
@@ -86,7 +93,7 @@ export function GuardrailsPolicyEditor({
               effective.data &&
               (effective.data.lastError !== null ? (
                 <span className="text-xs font-medium">
-                  Last composed policy
+                  {servedHeading(effective.data.composition)}
                 </span>
               ) : (
                 <span className="text-xs text-muted-foreground">
@@ -240,31 +247,36 @@ function CompositionSummary({
   declarations: PolicyDeclarations | null | undefined;
 }) {
   if (!declarations) return null;
-  if (declarations.lastError)
+  const { served } = declarations.composition;
+  if (served.kind === "root_only")
     return (
       <output
         data-testid="composition-summary"
         data-failed="true"
         className="text-destructive"
       >
-        Composition failed: not enforced
+        Composition failed: nothing is enforced
       </output>
     );
   const total = declarations.batteries.length;
   const notEnforced = declarations.batteries.filter(
-    (battery) => battery.status !== "active",
+    (battery) => !batteryWorks(declarations, battery),
   ).length;
+  const stale = served.kind === "previous";
   return (
     <output
       data-testid="composition-summary"
       data-batteries={total}
       data-not-enforced={notEnforced}
+      data-stale={stale}
       className="flex items-center gap-1"
     >
       <span>
-        {total === 1
-          ? "1 battery composes into this policy"
-          : `${total} batteries compose into this policy`}
+        {stale
+          ? `${compositionNotice(declarations)?.title ?? "The latest revision was refused"} · an earlier composition stays enforced`
+          : total === 1
+            ? "1 battery composes into this policy"
+            : `${total} batteries compose into this policy`}
       </span>
       {notEnforced > 0 && (
         <>
@@ -281,4 +293,16 @@ function CompositionSummary({
       )}
     </output>
   );
+}
+
+/** What the effective tab says it shows while the latest attempt is refused. */
+function servedHeading(composition: PolicyDeclarations["composition"]): string {
+  const { served, refusal } = composition;
+  if (served.kind === "root_only")
+    return "Nothing is enforced: the root text alone";
+  if (served.kind === "current" || served.rootRevision === null)
+    return "Still enforced: the last composition that opened";
+  return served.rootRevision === refusal?.rootRevision
+    ? `Still enforced: the earlier composition of revision ${served.rootRevision}`
+    : `Still enforced: revision ${served.rootRevision}`;
 }

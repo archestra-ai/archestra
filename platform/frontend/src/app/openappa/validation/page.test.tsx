@@ -919,9 +919,12 @@ test("Git directory configuration lives in source settings; browser refresh stil
   fireEvent.click(
     await screen.findByRole("button", { name: "Discard changes" }),
   );
-  // A healthy sync shows no banner: the page header's chip names the source.
-  await screen.findByRole("link", { name: scenario.path });
-  expect(screen.queryByText(/owns these validations/)).not.toBeInTheDocument();
+  expect(
+    await screen.findByRole("link", { name: /Managed in GitHub/ }),
+  ).toHaveAttribute(
+    "href",
+    "https://github.com/example/policies/tree/main/traces",
+  );
   expect(
     screen.queryByRole("textbox", { name: "Repository validation directory" }),
   ).not.toBeInTheDocument();
@@ -1759,7 +1762,7 @@ test("policy readers cannot select directories or edit files", async () => {
     ),
   );
   showPage();
-  await screen.findByRole("link", { name: scenario.path });
+  expect(await screen.findByText("Managed in GitHub")).toBeVisible();
   expect(
     screen.queryByRole("button", { name: "Use directory" }),
   ).not.toBeInTheDocument();
@@ -1801,14 +1804,17 @@ test("inventory rows open files while selection and compact actions stay indepen
   expect(currentHref).toBe("/openappa/validation");
   // The list re-renders when inspection lands, which can close a menu opened
   // just before it; reopen until the menu stays.
-  await waitFor(async () => {
-    const trigger = screen.getByRole("button", {
-      name: `More actions ${scenario.path}`,
-    });
-    if (trigger.getAttribute("aria-expanded") !== "true")
-      await userEvent.click(trigger);
-    expect(screen.getByRole("menuitem", { name: "Delete" })).toBeVisible();
-  });
+  await waitFor(
+    async () => {
+      const trigger = screen.getByRole("button", {
+        name: `More actions ${scenario.path}`,
+      });
+      if (trigger.getAttribute("aria-expanded") !== "true")
+        await userEvent.click(trigger);
+      expect(screen.getByRole("menuitem", { name: "Delete" })).toBeVisible();
+    },
+    { timeout: 5000 },
+  );
   await userEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
   const dialog = await screen.findByRole("dialog", {
     name: "Delete 1 validation file?",

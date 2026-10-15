@@ -14,7 +14,6 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { GUARDRAILS_BETA_TOOLTIP } from "@/lib/openappa-maturity";
-import { GitManagedChip } from "./github-managed-policy-notice";
 import { OpenAppaPageActionSlotContext } from "./openappa-page-action";
 import { OverviewHeaderActions } from "./overview-header-actions";
 import { openAppaUrl } from "./overview-setup-cards";
@@ -109,8 +108,7 @@ export function OpenAppaPageLayout({ children }: { children: ReactNode }) {
               </Badge>
             </TooltipTrigger>
             <TooltipContent>{GUARDRAILS_BETA_TOOLTIP}</TooltipContent>
-          </Tooltip>{" "}
-          {canReadPolicy && <GitManagedChip />}
+          </Tooltip>
         </span>
       }
       documentTitle={page.title}

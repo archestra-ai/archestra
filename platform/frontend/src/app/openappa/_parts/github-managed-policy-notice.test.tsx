@@ -14,10 +14,7 @@ import {
 } from "vitest";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { makeSession, makeUserPermissions } from "@/mocks/data/auth";
-import {
-  GithubManagedPolicyNotice,
-  GitManagedChip,
-} from "./github-managed-policy-notice";
+import { GithubManagedPolicyNotice } from "./github-managed-policy-notice";
 
 vi.mock("@/lib/clients/auth/auth-client");
 
@@ -93,52 +90,10 @@ test.each([
   expect(
     screen.queryByRole("link", { name: "Review sync settings" }),
   ).not.toBeInTheDocument();
-  // A healthy sync needs no banner: the page header's chip names the source.
-  expect(screen.queryByText("Managed in GitHub")).not.toBeInTheDocument();
+  // A healthy sync is a chip linking to the same source, not a banner.
   expect(
-    screen.queryByRole("link", { name: /repository/ }),
-  ).not.toBeInTheDocument();
-  client.clear();
-});
-
-test.each([
-  ["a scheduled sync", "1h", true],
-  ["no sync schedule", null, false],
-])("the header chip shows for %s", async (_, interval, shown) => {
-  server.use(
-    http.get("http://localhost:9000/api/openappa/github-sync", () =>
-      HttpResponse.json({
-        enabled: true,
-        githubWebUrl: "https://github.com",
-        source: {
-          repo: "example/policies",
-          ref: "main",
-          path: "appa.toml",
-          interval,
-          lastSyncError: null,
-        },
-      }),
-    ),
-  );
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  render(
-    <QueryClientProvider client={client}>
-      <GitManagedChip />
-    </QueryClientProvider>,
-  );
-  if (shown)
-    expect(
-      await screen.findByRole("link", { name: /Managed in GitHub/ }),
-    ).toHaveAttribute(
-      "href",
-      "https://github.com/example/policies/blob/main/appa.toml",
-    );
-  else {
-    await waitFor(() => expect(client.isFetching()).toBe(0));
-    expect(screen.queryByText("Managed in GitHub")).not.toBeInTheDocument();
-  }
+    screen.getByRole("link", { name: /Managed in GitHub/ }),
+  ).toHaveAttribute("href", `https://github.com/example/policies/${path}`);
   client.clear();
 });
 

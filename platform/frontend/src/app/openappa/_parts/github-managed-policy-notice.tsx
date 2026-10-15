@@ -66,9 +66,33 @@ export function GithubManagedPolicyNotice({
       </InlineNotice>
     );
 
-  // A healthy sync needs no banner: the page header's chip says where the
-  // source lives. Only a failure, or validations switched off, asks for action.
-  if (!failed && !(validations && validationDirectory === "")) return null;
+  // A healthy sync asks for nothing, so it is a chip, not a banner.
+  if (!failed && !(validations && validationDirectory === "")) {
+    const content = (
+      <>
+        <LockKeyhole aria-hidden />
+        <span>{`Managed in ${git.label}`}</span>
+        {href && <ExternalLink aria-hidden />}
+      </>
+    );
+    return (
+      <Badge
+        variant="outline"
+        className="font-normal"
+        title={`The ${git.repository} owns ${validations ? "these validations" : "this policy"}. Change ${validations ? "their files" : "it"} there.`}
+        asChild={Boolean(href)}
+      >
+        {href ? (
+          <a href={href} target="_blank" rel="noopener noreferrer">
+            {content}
+            <span className="sr-only">(opens in new tab)</span>
+          </a>
+        ) : (
+          <span>{content}</span>
+        )}
+      </Badge>
+    );
+  }
 
   return (
     <InlineNotice variant={failed ? "error" : "neutral"}>
@@ -117,42 +141,6 @@ export function GithubManagedPolicyNotice({
         )}
       </InlineNoticeText>
     </InlineNotice>
-  );
-}
-
-/**
- * Where the policy lives while Git sync is on, as a chip beside the page title.
- * It links to the synced policy file.
- */
-export function GitManagedChip() {
-  const { data } = useAppaGithubSync();
-  const source = data?.source;
-  if (!source?.repo || source.interval == null) return null;
-  const git = appaGitHost(data);
-  const href = githubPolicyFileUrl(data, "blob");
-  const content = (
-    <>
-      <LockKeyhole aria-hidden />
-      <span>{`Managed in ${git.label}`}</span>
-      {href && <ExternalLink aria-hidden />}
-    </>
-  );
-  return (
-    <Badge
-      variant="outline"
-      className="align-middle font-normal"
-      title={`The policy and its validations live in the ${git.repository}. Change them there.`}
-      asChild={Boolean(href)}
-    >
-      {href ? (
-        <a href={href} target="_blank" rel="noopener noreferrer">
-          {content}
-          <span className="sr-only">(opens in new tab)</span>
-        </a>
-      ) : (
-        <span>{content}</span>
-      )}
-    </Badge>
   );
 }
 

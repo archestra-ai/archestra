@@ -11,10 +11,6 @@ import {
   ModelTeamModel,
 } from "@/models";
 import { ApiError, type Model } from "@/types";
-import {
-  type ModelOutputBudget,
-  modelOutputBudget,
-} from "@/utils/llm-resolution";
 
 export type ModelRouterResolution = {
   provider: SupportedProvider;
@@ -27,8 +23,6 @@ export type ModelRouterResolution = {
    * surface, which is all of them but GitHub Copilot.
    */
   supportedEndpoints: SupportedProviderEndpoint[] | null;
-  /** The routed model's default output budget, for wires that require one. */
-  outputBudget: ModelOutputBudget;
 };
 
 export async function resolveModelRoute(params: {
@@ -159,7 +153,6 @@ function toResolution(
     modelId: model.modelId,
     requestedModel,
     supportedEndpoints: model.supportedEndpoints ?? null,
-    outputBudget: modelOutputBudget({ provider: model.provider, model }),
   };
 }
 

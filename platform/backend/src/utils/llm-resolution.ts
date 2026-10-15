@@ -483,7 +483,7 @@ export async function resolveModelOutputBudget(params: {
  * none. Never exceeds a known cap, so a provider that forwards `max_tokens`
  * unchanged never rejects it.
  */
-export function modelOutputBudget(params: {
+function modelOutputBudget(params: {
   provider: SupportedProvider;
   model: Model | null;
   /** Output cap to assume when the catalog has none for the model. */

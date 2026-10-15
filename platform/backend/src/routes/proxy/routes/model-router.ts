@@ -45,7 +45,6 @@ import {
   OpenAi,
   UuidIdSchema,
 } from "@/types";
-import type { ModelOutputBudget } from "@/utils/llm-resolution";
 import { selectMappedProviderKey } from "@/utils/provider-key-mappings";
 import {
   azureAdapterFactory,
@@ -503,7 +502,7 @@ async function routeChatCompletion(
   assertModelServesChatCompletions(resolution);
 
   const provider = getOpenAiChatProviderForResolution({
-    resolution,
+    provider: resolution.provider,
     body: routedBody,
   });
   await applyModelRouterAuthOverride({
@@ -564,7 +563,7 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
   };
 
   const provider = getOpenAiChatProviderForResolution({
-    resolution,
+    provider: resolution.provider,
     body: routedChatBody,
   });
   await applyModelRouterAuthOverride({
@@ -713,41 +712,34 @@ function modelRequiresResponses(resolution: ModelRouterResolution): boolean {
 }
 
 function getOpenAiChatProviderForResolution(params: {
-  resolution: ModelRouterResolution;
+  provider: SupportedProvider;
   body: OpenAi.Types.ChatCompletionsRequest;
 }): ModelRouterProvider {
-  const { provider: providerName, outputBudget } = params.resolution;
-  const provider = openAiWireProviders[providerName];
+  const provider = openAiWireProviders[params.provider];
   if (provider) {
     return { kind: "openai-wire", body: params.body, adapter: provider };
   }
 
-  if (isTranslatedModelRouterProvider(providerName)) {
+  if (isTranslatedModelRouterProvider(params.provider)) {
     return getTranslatedModelRouterProvider({
-      provider: providerName,
+      provider: params.provider,
       body: params.body,
-      outputBudget,
     });
   }
 
   throw new ApiError(
     501,
-    `Provider "${providerName}" is not yet available through the OpenAI-compatible model router.`,
+    `Provider "${params.provider}" is not yet available through the OpenAI-compatible model router.`,
   );
 }
 
 function getTranslatedModelRouterProvider(params: {
   provider: TranslatedModelRouterProvider;
   body: OpenAi.Types.ChatCompletionsRequest;
-  outputBudget: ModelOutputBudget;
 }): ModelRouterProvider {
   switch (params.provider) {
     case "anthropic": {
-      // Anthropic requires `max_tokens`; other upstreams default to the
-      // model's own maximum when the client sets none.
-      const { anthropicBody, openaiContext } = openaiToAnthropic(params.body, {
-        defaultMaxTokens: params.outputBudget.tokens,
-      });
+      const { anthropicBody, openaiContext } = openaiToAnthropic(params.body);
       return {
         kind: "anthropic",
         body: anthropicBody,

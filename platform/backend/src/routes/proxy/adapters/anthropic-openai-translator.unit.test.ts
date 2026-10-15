@@ -12,6 +12,18 @@ function req(overrides: Partial<OpenAiRequest> = {}): OpenAiRequest {
   } as OpenAiRequest;
 }
 
+describe("openaiToAnthropic — output cap", () => {
+  test("a client cap under either OpenAI name reaches Anthropic unchanged", () => {
+    expect(
+      openaiToAnthropic(req({ max_tokens: 1_234 })).anthropicBody.max_tokens,
+    ).toBe(1_234);
+    expect(
+      openaiToAnthropic(req({ max_completion_tokens: 2_345 })).anthropicBody
+        .max_tokens,
+    ).toBe(2_345);
+  });
+});
+
 describe("openaiToAnthropic — multimodal user content", () => {
   test("forwards a base64 image as an image block instead of dropping it", () => {
     const request = req({
@@ -30,9 +42,7 @@ describe("openaiToAnthropic — multimodal user content", () => {
       // biome-ignore lint/suspicious/noExplicitAny: minimal multimodal message
     } as any);
 
-    const { anthropicBody } = openaiToAnthropic(request, {
-      defaultMaxTokens: 8_192,
-    });
+    const { anthropicBody } = openaiToAnthropic(request);
 
     expect(anthropicBody.messages[0].content).toEqual([
       { type: "text", text: "describe this" },
@@ -59,9 +69,7 @@ describe("openaiToAnthropic — multimodal user content", () => {
       // biome-ignore lint/suspicious/noExplicitAny: minimal multimodal message
     } as any);
 
-    const { anthropicBody } = openaiToAnthropic(request, {
-      defaultMaxTokens: 8_192,
-    });
+    const { anthropicBody } = openaiToAnthropic(request);
 
     expect(anthropicBody.messages[0].content).toEqual([
       {
@@ -90,9 +98,7 @@ describe("openaiToAnthropic — multimodal user content", () => {
       // biome-ignore lint/suspicious/noExplicitAny: minimal multimodal message
     } as any);
 
-    const { anthropicBody } = openaiToAnthropic(request, {
-      defaultMaxTokens: 8_192,
-    });
+    const { anthropicBody } = openaiToAnthropic(request);
 
     expect(anthropicBody.messages[0].content).toEqual([
       {
@@ -107,9 +113,7 @@ describe("openaiToAnthropic — multimodal user content", () => {
   });
 
   test("still passes a plain string user message through unchanged", () => {
-    const { anthropicBody } = openaiToAnthropic(req(), {
-      defaultMaxTokens: 8_192,
-    });
+    const { anthropicBody } = openaiToAnthropic(req());
     expect(anthropicBody.messages[0].content).toBe("hello");
   });
 
@@ -132,9 +136,7 @@ describe("openaiToAnthropic — multimodal user content", () => {
       // biome-ignore lint/suspicious/noExplicitAny: minimal tool-result message
     } as any);
 
-    const { anthropicBody } = openaiToAnthropic(request, {
-      defaultMaxTokens: 8_192,
-    });
+    const { anthropicBody } = openaiToAnthropic(request);
     // messages[0] is the user turn; messages[1] carries the tool_result.
     expect(anthropicBody.messages[1].content).toEqual([
       {
@@ -164,9 +166,7 @@ describe("openaiToAnthropic — multimodal user content", () => {
       // biome-ignore lint/suspicious/noExplicitAny: minimal tool-result message
     } as any);
 
-    const { anthropicBody } = openaiToAnthropic(request, {
-      defaultMaxTokens: 8_192,
-    });
+    const { anthropicBody } = openaiToAnthropic(request);
     expect(anthropicBody.messages[1].content).toEqual([
       {
         type: "tool_result",

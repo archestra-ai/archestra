@@ -1,0 +1,175 @@
+{
+  "name": "omentir__remote-mcp",
+  "display_name": "Omentir",
+  "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMDAgMjAwIiBmaWxsPSIjMDkwOTBiIiByb2xlPSJpbWciIGFyaWEtbGFiZWw9Ik9tZW50aXIiPgogIDxnIHRyYW5zZm9ybT0idHJhbnNsYXRlKDEwMCAxMDApIHJvdGF0ZSgyMi41KSI+CiAgICA8cmVjdCB4PSItNyIgeT0iLTkwIiB3aWR0aD0iMTQiIGhlaWdodD0iMTgwIiByeD0iMiIvPgogICAgPHJlY3QgeD0iLTciIHk9Ii05MCIgd2lkdGg9IjE0IiBoZWlnaHQ9IjE4MCIgcng9IjIiIHRyYW5zZm9ybT0icm90YXRlKDQ1KSIvPgogICAgPHJlY3QgeD0iLTciIHk9Ii05MCIgd2lkdGg9IjE0IiBoZWlnaHQ9IjE4MCIgcng9IjIiIHRyYW5zZm9ybT0icm90YXRlKDkwKSIvPgogICAgPHJlY3QgeD0iLTciIHk9Ii05MCIgd2lkdGg9IjE0IiBoZWlnaHQ9IjE4MCIgcng9IjIiIHRyYW5zZm9ybT0icm90YXRlKDEzNSkiLz4KICA8L2c+Cjwvc3ZnPg==",
+  "description": "Hosted MCP server for Omentir, an open-source AI sales workspace for LinkedIn. An agent can find and score LinkedIn prospects, draft outreach, run human-paced campaigns with daily limits, and answer replies.",
+  "long_description": "Omentir gives AI assistants a workspace-scoped lead-discovery and outreach interface. Use it to configure lead finders, inspect qualified LinkedIn leads, run or stop queued sends, read the live LinkedIn inbox, and reply in existing threads without exposing LinkedIn passwords.",
+  "author": {
+    "name": "Omentir",
+    "url": "https://omentir.com"
+  },
+  "homepage": "https://omentir.com",
+  "documentation": "https://omentir.com/integrations/mcp",
+  "support": "https://github.com/vanshyadav1408/Omentir/issues",
+  "instructions": "Connect via OAuth 2.1 with dynamic client registration and PKCE, or enter a workspace-scoped Bearer token from Settings -> API keys at https://omentir.com/api-keys.",
+  "oauth_config": {
+    "name": "Omentir",
+    "server_url": "https://omentir.com/api/agent/v1/mcp",
+    "client_id": "",
+    "redirect_uris": ["http://localhost:8080/oauth/callback"],
+    "scopes": ["omentir"],
+    "description": "Omentir MCP Server (OAuth 2.1 with dynamic registration)",
+    "default_scopes": ["omentir"],
+    "supports_resource_metadata": true
+  },
+  "tools": [
+    {
+      "name": "omentir_get_context",
+      "description": "Read workspace readiness, product profile, setup status, counts, owned workspaces, API resources, the workspace time zone, and how much of today"
+    },
+    {
+      "name": "omentir_list_workspaces",
+      "description": "List workspaces the token owner already has, and mark which one this token is bound to."
+    },
+    {
+      "name": "omentir_switch_workspace",
+      "description": "Rebind this Bearer token to another owned workspace. Later MCP and REST calls on the same token hit that workspace. Cannot create or delete a workspace."
+    },
+    {
+      "name": "omentir_get_stats",
+      "description": "Read the Overview headline metrics. Optional range (all/7d/30d/3m/month) windows invites and messages the same way the dashboard picker does."
+    },
+    {
+      "name": "omentir_get_product_profile",
+      "description": "Read the workspace product profile used for ICP matching and outreach personalization."
+    },
+    {
+      "name": "omentir_update_product_profile",
+      "description": "Update the workspace product profile used to qualify and rank discovered leads. Also sets the workspace demo booking link (schedulingLink) used by continue-until-booked outreach."
+    },
+    {
+      "name": "omentir_list_agents",
+      "description": "List Omentir agents in the token workspace (classic lead finders, outreach-only, and Steal Customers / steal_customers), including each one"
+    },
+    {
+      "name": "omentir_create_agent",
+      "description": "Create an agent. Classic: prompt + filters; optional setupOutreach, custom steps, tone, campaignGoal. Steal Customers: groupName + competitor/founder URLs; AI outreach automatic. Outreach-only: mode=outreach plus optional csvContents and steps. Returns agent + leadGroup."
+    },
+    {
+      "name": "omentir_update_agent",
+      "description": "Update any agent: targeting, outreach sequence (steps, tone, campaignGoal), reply policy, send window, or status. A leads-only agent can gain outreach when setupOutreach or steps is set. Steal Customers still rejects manual templates. Only provided fields change."
+    },
+    {
+      "name": "omentir_update_settings",
+      "description": "Update workspace outreach settings: daily connection-request and message limits, first-message delay, AI follow-up behaviour, and the workspace time zone that daily limit resets are measured in. Only provided fields change."
+    },
+    {
+      "name": "omentir_list_leads",
+      "description": "Search, filter, sort, and list discovered leads, optionally within one lead group. Steal Customers leads include signalText, leadReason, and engagementContext (post text, post URL, comment text, comment URL) for outreach context."
+    },
+    {
+      "name": "omentir_get_lead",
+      "description": "Get the complete workspace-owned lead record for an exact lead id, including engagementContext for Steal Customers leads (post text, post URL, comment text, comment URL) plus profile and fit score."
+    },
+    {
+      "name": "omentir_list_conversations",
+      "description": "List LinkedIn reply threads captured by Omentir. Filter with the same Messages tabs (all/successful/booked/interested/follow/denied) and optional text search."
+    },
+    {
+      "name": "omentir_list_groups",
+      "description": "List lead groups in the token workspace."
+    },
+    {
+      "name": "omentir_list_linkedin_accounts",
+      "description": "List connected LinkedIn accounts available to lead-finding agents."
+    },
+    {
+      "name": "omentir_list_activity",
+      "description": "List recent automation activity runs (the workspace activity feed)."
+    },
+    {
+      "name": "omentir_list_scheduled_actions",
+      "description": "List upcoming outreach in send order with each action"
+    },
+    {
+      "name": "omentir_pause_agent",
+      "description": "Pause an agent: stops its lead discovery and freezes all automated outreach (connection requests, follow-ups, AI replies) to the leads it sourced."
+    },
+    {
+      "name": "omentir_resume_agent",
+      "description": "Resume a paused agent: lead discovery runs again on the next tick and its frozen outreach is woken immediately."
+    },
+    {
+      "name": "omentir_delete_agent",
+      "description": "Delete an agent permanently: stops all outreach to the leads it sourced and deletes its lead group and the campaigns contacting that group (unless another agent uses the same group). Leads in that group are permanently deleted."
+    },
+    {
+      "name": "omentir_reply_to_lead",
+      "description": "Reply to a lead in an existing LinkedIn conversation. This cannot start a new conversation and counts against the daily message quota."
+    },
+    {
+      "name": "omentir_draft_agent_setup",
+      "description": "Fill-with-AI for a new agent: titles, industries, locations, keywords, prompt, and starter message templates from Workspace. Does not create the agent."
+    },
+    {
+      "name": "omentir_analyze_website",
+      "description": "Fetch a website and write the Workspace product profile from it (same as AI Analyse on Workspace)."
+    },
+    {
+      "name": "omentir_import_csv_leads",
+      "description": "Import LinkedIn profile URLs from CSV into an outreach-only agent."
+    },
+    {
+      "name": "omentir_export_leads",
+      "description": "Export one lead group as CSV (same columns as the Leads download)."
+    },
+    {
+      "name": "omentir_delete_group",
+      "description": "Delete a lead group that no agent or campaign still uses. Delete or reassign the agent first if this fails."
+    },
+    {
+      "name": "omentir_run_scheduled_action_now",
+      "description": "Send the next queued outreach action for an enrollment immediately (Send now on Leads / Actions)."
+    },
+    {
+      "name": "omentir_stop_lead_outreach",
+      "description": "Stop automated outreach for one lead. Already-sent invites and messages stay."
+    },
+    {
+      "name": "omentir_list_inbox",
+      "description": "List live LinkedIn DM threads from connected seats (the Messages inbox, not only Omentir-captured replies)."
+    },
+    {
+      "name": "omentir_get_chat_messages",
+      "description": "Load older messages for one live LinkedIn chat. Pass the cursor from the previous page."
+    },
+    {
+      "name": "omentir_reply_to_chat",
+      "description": "Reply in a live LinkedIn chat, optionally with attachments (base64, 15MB each). Counts against the daily message quota and the 5-minute send slot."
+    },
+    {
+      "name": "omentir_complete_follow_up",
+      "description": "Mark a manual follow-up done on a conversation (same as Messages)."
+    }
+  ],
+  "prompts": [],
+  "keywords": ["linkedin", "sales", "outreach", "lead-generation", "prospecting", "crm"],
+  "user_config": {},
+  "readme": null,
+  "category": "CRM",
+  "archestra_config": {
+    "client_config_permutations": null,
+    "oauth": {
+      "provider": null,
+      "required": true
+    },
+    "works_in_archestra": true
+  },
+  "server": {
+    "type": "remote",
+    "url": "https://omentir.com/api/agent/v1/mcp",
+    "docs_url": "https://omentir.com/integrations/mcp"
+  },
+  "github_info": null,
+  "programming_language": null
+}

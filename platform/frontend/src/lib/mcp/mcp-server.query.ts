@@ -134,7 +134,7 @@ export function useMcpInstallationStatusCacheSync(enabled = true) {
               .getQueriesData<archestraApiTypes.GetMcpServersResponses["200"]>({
                 queryKey: ["mcp-servers"],
               })
-              .flatMap(([, servers]) => servers ?? [])
+              .flatMap(([, servers]) => (Array.isArray(servers) ? servers : []))
               .find((candidate) => candidate.id === serverId);
             trackEvent("mcp_server_installation_failed", {
               serverId,
@@ -151,7 +151,7 @@ export function useMcpInstallationStatusCacheSync(enabled = true) {
         queryClient.setQueriesData<
           archestraApiTypes.GetMcpServersResponses["200"]
         >({ queryKey: ["mcp-servers"] }, (servers) => {
-          if (!servers) return servers;
+          if (!Array.isArray(servers)) return servers;
           let didUpdate = false;
           const nextServers = servers.map((server) => {
             if (server.id !== serverId) return server;

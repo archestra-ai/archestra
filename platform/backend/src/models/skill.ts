@@ -323,6 +323,8 @@ class SkillModel {
     limit?: number;
     offset?: number;
     search?: string;
+    /** Omit manifest bodies from list-only consumers at the SQL boundary. */
+    includeContent?: boolean;
     sourceRepo?: string;
     /** When set, restricts results to these skill IDs (scope filtering). */
     accessibleSkillIds?: string[];
@@ -362,7 +364,13 @@ class SkillModel {
     sorting?: { sortBy?: SkillSortBy; sortDirection?: SortDirection };
   }): Promise<Skill[]> {
     let query = db
-      .select()
+      .select({
+        ...getTableColumns(schema.skillsTable),
+        content:
+          params.includeContent === false
+            ? sql<string>`''`.as("content")
+            : schema.skillsTable.content,
+      })
       .from(schema.skillsTable)
       .where(and(...buildOrgFilters(params)))
       .orderBy(...buildOrderBy(params.sorting))

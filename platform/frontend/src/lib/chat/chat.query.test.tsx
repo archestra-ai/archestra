@@ -87,6 +87,39 @@ const createWrapper = () => {
 };
 
 describe("useConversations", () => {
+  it("keeps recent chats during a failed refresh and accepts a later empty list", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const conversations = [makeConversation()];
+    queryClient.setQueryData(["conversations", undefined], conversations);
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useConversations({}), { wrapper });
+    expect(result.current.data).toEqual(conversations);
+    expect(result.current.isRefetchError).toBe(false);
+    vi.mocked(archestraApiSdk.getChatConversations).mockResolvedValue(
+      errorResult(503) as Awaited<
+        ReturnType<typeof archestraApiSdk.getChatConversations>
+      >,
+    );
+    await act(async () => {
+      await result.current.refetch();
+    });
+    await waitFor(() => expect(result.current.isRefetchError).toBe(true));
+    expect(result.current.data).toEqual(conversations);
+    vi.mocked(archestraApiSdk.getChatConversations).mockResolvedValue({
+      data: [],
+      error: undefined,
+    } as Awaited<ReturnType<typeof archestraApiSdk.getChatConversations>>);
+    await act(async () => {
+      await result.current.refetch();
+    });
+    await waitFor(() => expect(result.current.data).toEqual([]));
+    expect(result.current.isSuccess).toBe(true);
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(archestraApiSdk.getChatConversations).mockResolvedValue({

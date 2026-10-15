@@ -16,7 +16,7 @@ import { makeFastImageEntrypoint } from "@/test/subprocess-entrypoint";
 const execFileAsync = promisify(execFile);
 const ENTRYPOINT = path.resolve(
   import.meta.dirname,
-  "../../../../agent_images/bin/archestra-claude-code",
+  "../../../../docker_images/agent/bin/archestra-claude-code",
 );
 
 describe("Claude Code image entrypoint", () => {

@@ -241,8 +241,8 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   "get_guardrails_policy",
   "get_openappa_policy_tests",
   "run_openappa_policy_tests",
-  "preview_openappa_validation_change",
-  "publish_openappa_validation_change",
+  "preview_guardrails_validation_change",
+  "update_guardrails_validation",
   "get_openappa_yell",
   "resolve_openappa_yell",
   "list_openappa_yells",
@@ -263,6 +263,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
   "create_guardrails_repository",
   "connect_guardrails_repository",
+  "sync_guardrails_repository",
   TOOL_CREATE_AGENT_SHORT_NAME,
   TOOL_GET_AGENT_SHORT_NAME,
   TOOL_LIST_AGENTS_SHORT_NAME,
@@ -460,8 +461,8 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   get_guardrails_policy: "openappa",
   get_openappa_policy_tests: "openappa",
   run_openappa_policy_tests: "openappa",
-  preview_openappa_validation_change: "openappa",
-  publish_openappa_validation_change: "openappa",
+  preview_guardrails_validation_change: "openappa",
+  update_guardrails_validation: "openappa",
   get_openappa_yell: "openappa",
   resolve_openappa_yell: "openappa",
   list_openappa_yells: "openappa",
@@ -475,6 +476,7 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   get_guardrails_policy_change_status: "openappa",
   create_guardrails_repository: "openappa",
   connect_guardrails_repository: "openappa",
+  sync_guardrails_repository: "openappa",
   list_runtime_credentials: "openappa",
   get_runtime_credential: "openappa",
   create_runtime_credential: "openappa",
@@ -870,8 +872,8 @@ const IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAME_SET: ReadonlySet<string> = new Set(
 export const OPENAPPA_POLICY_CHANGE_TOOL_SHORT_NAMES = [
   "preview_guardrails_policy_change",
   "update_guardrails_policy",
-  "preview_openappa_validation_change",
-  "publish_openappa_validation_change",
+  "preview_guardrails_validation_change",
+  "update_guardrails_validation",
 ] as const satisfies readonly ArchestraToolShortName[];
 
 export function isImplicitOpenAppaReadToolShortName(

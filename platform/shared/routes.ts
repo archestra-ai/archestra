@@ -756,6 +756,8 @@ export const RouteId = {
   ConvertSlackAppToAgentBot: "convertSlackAppToAgentBot",
   ListSlackAgentBotChannels: "listSlackAgentBotChannels",
   JoinSlackAgentBotChannel: "joinSlackAgentBotChannel",
+  ListSlackRouterBotChannels: "listSlackRouterBotChannels",
+  JoinSlackRouterBotChannel: "joinSlackRouterBotChannel",
   UpdateTelegramChatOpsConfig: "updateTelegramChatOpsConfig",
   LinkTelegramChatOpsAccount: "linkTelegramChatOpsAccount",
   UnlinkTelegramChatOpsAccount: "unlinkTelegramChatOpsAccount",

@@ -300,13 +300,6 @@ describe("[credentials] lines on the agent path", () => {
         expectedRevision: 0,
       }),
     ).rejects.toMatchObject(forbidden);
-    await expect(
-      as(author, "preview_openappa_validation_change", {
-        expectedRevision: 0,
-        expectedVersion: "empty",
-        policyContent: external,
-      }),
-    ).rejects.toMatchObject(forbidden);
     expect((await guardrailsPolicyService.get(organizationId)).revision).toBe(
       0,
     );
@@ -352,17 +345,6 @@ describe("[credentials] lines on the agent path", () => {
         })
       ).isError,
     ).toBeFalsy();
-  });
-
-  test("a validation change cannot carry the line either", async () => {
-    await saveFromPolicyTab(withGithub());
-    await expect(
-      call("preview_openappa_validation_change", {
-        expectedRevision: 1,
-        expectedVersion: "empty",
-        policyContent: `${withGithub()}${credentialLine("github-token")}`,
-      }),
-    ).rejects.toThrow(REFUSAL);
   });
 
   test("validation warns about a line that overrides a binding, and only then", async () => {

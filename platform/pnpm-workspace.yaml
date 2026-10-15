@@ -1,6 +1,6 @@
 packages:
   - "backend"
-  - "drizzle-migration-linter"
+  - "tools/drizzle-migration-linter"
   - "frontend"
   - "shared"
   - "archestra-rs/napi-loader"
@@ -9,7 +9,7 @@ packages:
   - "archestra-rs/app-runtime-rs"
   - "archestra-rs/image-rs"
   - "e2e-tests"
-  - "docs-screenshots"
+  - "tools/docs-screenshots"
 
 catalog:
   ai: ^6.0.193

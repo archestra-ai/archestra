@@ -306,6 +306,44 @@ export function useJoinSlackAgentBotChannel(agentId: string) {
   });
 }
 
+export function useSlackRouterBotChannels(enabled: boolean) {
+  return useQuery({
+    queryKey: ["chatops", "slack-router-bot", "channels"],
+    enabled,
+    queryFn: async () => {
+      const { data, error } =
+        await archestraApiSdk.listSlackRouterBotChannels();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+  });
+}
+
+export function useJoinSlackRouterBotChannel() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (channelId: string) => {
+      const { data, error } = await archestraApiSdk.joinSlackRouterBotChannel({
+        path: { channelId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    onSuccess: (data) => {
+      if (!data?.success) return;
+      toast.success("The bot joined the channel");
+      queryClient.invalidateQueries({
+        queryKey: ["chatops", "slack-router-bot", "channels"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
+    },
+  });
+}
+
 export function useUpdateSlackAgentBot(agentId: string | undefined) {
   const queryClient = useQueryClient();
 

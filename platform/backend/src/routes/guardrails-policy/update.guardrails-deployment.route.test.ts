@@ -12,7 +12,8 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import {
-  isBreakTheGlassActive,
+  breakTheGlassActiveIn,
+  getGuardrailsDeployment,
   isGuardrailsV2Active,
 } from "@/services/guardrails-deployment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -125,11 +126,11 @@ describe("Deployment-wide Guardrails v2 switch", () => {
       active: true,
       breakTheGlassEnabled: false,
     });
-    expect(await isBreakTheGlassActive()).toBe(false);
+    expect(breakTheGlassActiveIn(await getGuardrailsDeployment())).toBe(false);
     await GuardrailsDeploymentModel.set({ breakTheGlassEnabled: true });
-    expect(await isBreakTheGlassActive()).toBe(true);
+    expect(breakTheGlassActiveIn(await getGuardrailsDeployment())).toBe(true);
     await set(false);
-    expect(await isBreakTheGlassActive()).toBe(false);
+    expect(breakTheGlassActiveIn(await getGuardrailsDeployment())).toBe(false);
   });
 
   test("rejects an unsupported action without changing the saved setting", async () => {

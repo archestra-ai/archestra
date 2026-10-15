@@ -4,6 +4,7 @@ import logger from "@/logging";
 import OpenAppaThreadStateModel from "@/models/openappa-thread-state";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import type { ThreadCall, ThreadTool } from "@/types/openappa-thread-state";
+import { openappaEncryptedChat } from "./encrypted-chat";
 
 /**
  * Governing a provider-side thread.
@@ -82,17 +83,22 @@ class ThreadStates {
     | { ok: false; reason: ThreadReplayReason }
   > {
     const key = `${params.organizationId}\u0000${params.previousMessageId}`;
-    let row = this.rows.get(key);
+    const encryptedChat = openappaEncryptedChat(
+      params.organizationId,
+      params.sessionId,
+    );
+    let row = encryptedChat ? undefined : this.rows.get(key);
     if (!row) {
       try {
         const found = await OpenAppaThreadStateModel.find({
           organizationId: params.organizationId,
           messageId: params.previousMessageId,
+          encryptedChat: encryptedChat?.audit,
         });
         // Only a row is worth keeping. A cached copy can lag the one clearing
         // `calls` on another replica; that is harmless, because the provider
         // refuses a second continue of the same message.
-        if (found) this.rows.set(key, found);
+        if (found && !encryptedChat) this.rows.set(key, found);
         row = found ?? undefined;
       } catch (error) {
         logger.warn({ err: error }, "OpenAPPA could not read a thread state");
@@ -142,6 +148,10 @@ class ThreadStates {
     try {
       await OpenAppaThreadStateModel.record({
         organizationId: record.organizationId,
+        encryptedChat: openappaEncryptedChat(
+          record.organizationId,
+          record.sessionId,
+        )?.audit,
         messageId,
         sessionId: record.sessionId,
         rootMessageId,

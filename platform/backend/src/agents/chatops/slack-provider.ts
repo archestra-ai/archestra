@@ -97,6 +97,7 @@ class SlackProvider implements ChatOpsProvider {
    * message that @mentions one of them, and not this bot, is addressed to it.
    */
   private siblingBotUserIds = new Set<string>();
+  private agentsWithOwnBot = new Set<string>();
   /**
    * The bot's name as Slack shows it, which is what someone types when they
    * address it without an @mention ("Archestra mute"). auth.test can't provide
@@ -164,6 +165,14 @@ class SlackProvider implements ChatOpsProvider {
     this.siblingBotUserIds = new Set(
       userIds.filter((id) => id !== this.botUserId),
     );
+  }
+
+  /**
+   * Agents that have their own Slack bot. The router bot (not pinned to an
+   * agent) leaves "answer all messages" to them in the channels they own.
+   */
+  setAgentsWithOwnBot(agentIds: string[]): void {
+    this.agentsWithOwnBot = new Set(agentIds);
   }
 
   isConfigured(): boolean {
@@ -470,7 +479,9 @@ class SlackProvider implements ChatOpsProvider {
         botMentioned: hasBotMention,
         text: cleanedText,
         botDisplayName: this.botDisplayName,
-        ...(this.pinnedAgentId && { pinnedAgentId: this.pinnedAgentId }),
+        ...(this.pinnedAgentId
+          ? { pinnedAgentId: this.pinnedAgentId }
+          : { agentsWithOwnBot: this.agentsWithOwnBot }),
         postMutedNotice: async () => {},
         resolveAnswerAllWorkspaceId: async () => body.team_id || null,
       });

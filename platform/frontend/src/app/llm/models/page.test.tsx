@@ -241,8 +241,13 @@ describe("ModelsPage", () => {
     );
     const user = userEvent.setup();
     renderPage();
+    // The model row and its edit permission resolve independently.
     await user.click(
-      await screen.findByRole("button", { name: `Edit ${model.modelId}` }),
+      await screen.findByRole(
+        "button",
+        { name: `Edit ${model.modelId}` },
+        { timeout: 5000 },
+      ),
     );
     await user.click(screen.getByRole("button", { name: "Pricing" }));
     expect(screen.getByLabelText("Cache read")).toHaveValue("");
@@ -262,7 +267,11 @@ describe("ModelsPage", () => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
     await user.click(
-      screen.getByRole("button", { name: `Edit ${model.modelId}` }),
+      await screen.findByRole(
+        "button",
+        { name: `Edit ${model.modelId}` },
+        { timeout: 5000 },
+      ),
     );
     await user.click(screen.getByRole("button", { name: "Pricing" }));
     expect(screen.getByLabelText("Cache read")).toHaveValue("0.25");

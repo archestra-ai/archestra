@@ -180,6 +180,7 @@ export function useOpenappaStatus(conversationId?: string) {
       if (!conversationId) return null;
       const { data, error } = await getChatOpenappaStatus({
         path: { id: conversationId },
+        headers: encryptedChatRequestHeaders(conversationId),
       });
       throwOnApiError(error, { toastOnError: false });
       return data ?? null;

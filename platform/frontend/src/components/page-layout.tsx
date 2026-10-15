@@ -57,6 +57,7 @@ export function PageLayout({
   contentOverflowX = "auto",
   fillContent = false,
   compactHeader = false,
+  stackHeaderOnMobile = false,
 }: {
   children: React.ReactNode;
   /**
@@ -140,6 +141,8 @@ export function PageLayout({
   fillContent?: boolean;
   /** Tighter header spacing when the page layout is hosted in a dialog. */
   compactHeader?: boolean;
+  /** Give long detail titles the full phone width, with actions below the description. */
+  stackHeaderOnMobile?: boolean;
 }) {
   const headerSpacing = compactHeader ? COMPACT_HEADER_SPACING : HEADER_SPACING;
   const pathname = usePathname();
@@ -293,8 +296,11 @@ export function PageLayout({
                     "row-start-1 flex min-w-0 items-center gap-2",
                     headerSpacing.titleRow,
                     icon ? "col-start-2" : "col-start-1",
+                    stackHeaderOnMobile && "col-span-full sm:col-span-1",
                     maxWidthKey === "wizard"
-                      ? "flex-nowrap overflow-hidden"
+                      ? stackHeaderOnMobile
+                        ? "sm:flex-nowrap sm:overflow-hidden"
+                        : "flex-nowrap overflow-hidden"
                       : "flex-wrap",
                   )}
                 >
@@ -304,7 +310,10 @@ export function PageLayout({
                   <h1
                     className={cn(
                       "min-w-0 break-words text-2xl font-semibold tracking-tight",
-                      maxWidthKey === "wizard" && "max-h-10 overflow-hidden",
+                      maxWidthKey === "wizard" &&
+                        (stackHeaderOnMobile
+                          ? "sm:max-h-10 sm:overflow-hidden"
+                          : "max-h-10 overflow-hidden"),
                     )}
                   >
                     <span key={pathname}>{title}</span>
@@ -317,7 +326,10 @@ export function PageLayout({
                     className={cn(
                       "col-span-full row-start-2 text-sm text-muted-foreground",
                       headerSpacing.description,
-                      maxWidthKey === "wizard" && "hidden sm:line-clamp-1",
+                      maxWidthKey === "wizard" &&
+                        (stackHeaderOnMobile
+                          ? "sm:line-clamp-1"
+                          : "hidden sm:line-clamp-1"),
                     )}
                   >
                     <span key={pathname}>{description}</span>
@@ -331,9 +343,18 @@ export function PageLayout({
                     // Actions align with the title row at every width, so they
                     // sit in the same spot on every page however long its
                     // description is.
-                    "row-start-1 flex items-center justify-self-end self-start",
+                    "flex items-center self-start",
+                    stackHeaderOnMobile
+                      ? "col-span-full col-start-1 row-start-3 justify-self-start sm:col-span-1 sm:row-start-1 sm:justify-self-end"
+                      : "row-start-1 justify-self-end",
                     headerSpacing.titleRow,
-                    icon ? "col-start-3" : "col-start-2",
+                    stackHeaderOnMobile
+                      ? icon
+                        ? "sm:col-start-3"
+                        : "sm:col-start-2"
+                      : icon
+                        ? "col-start-3"
+                        : "col-start-2",
                     contentOverflowX === "clip" && "max-w-full overflow-x-auto",
                   )}
                 >

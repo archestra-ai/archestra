@@ -127,6 +127,7 @@ LLM and MCP metrics carry trace exemplars, so a Grafana panel can link a data po
 | <span id="agent_runtime_provision_duration_seconds"></span>`agent_runtime_provision_duration_seconds` | Histogram | | Startup time, including scheduling and image pulls |
 | <span id="agent_runtime_steers_total"></span>`agent_runtime_steers_total` | Counter | `steer_mode` | Steering messages delivered into running sessions |
 | <span id="agent_runtime_completion_deliveries_total"></span>`agent_runtime_completion_deliveries_total` | Counter | `interface`, `outcome` | Final replies delivered to `chatops` or `email` |
+| <span id="agent_runtime_observed_reads_total"></span>`agent_runtime_observed_reads_total` | Counter | `outcome` | Runtime reads a governed session made while [Guardrails](/docs/agents/guardrails) enforcement was off: `signed` so they pass once it is back on, or `unsigned` because the call could not be recorded |
 | <span id="agent_runtime_health_tasks"></span>`agent_runtime_health_tasks` | Gauge | `agent_id`, `backend`, `condition` | Current task counts per condition |
 | <span id="agent_runtime_health_age_seconds"></span>`agent_runtime_health_age_seconds` | Gauge | `agent_id`, `backend`, `condition` | Age of the oldest task per condition |
 | <span id="agent_runtime_health_collection_timestamp_seconds"></span>`agent_runtime_health_collection_timestamp_seconds` | Gauge | | Time of the last health snapshot |

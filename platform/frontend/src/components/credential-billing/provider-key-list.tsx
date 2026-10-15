@@ -35,6 +35,7 @@ export function ProviderKeyList({
   onChange,
   providerApiKeys,
   label = "Provider keys",
+  showLabel = true,
   emptyLabel,
   alwaysOpen = false,
 }: {
@@ -42,6 +43,8 @@ export function ProviderKeyList({
   onChange: (value: ProviderApiKeyMappings) => void;
   providerApiKeys: LlmProviderApiKeyResponse[];
   label?: ReactNode;
+  /** A surrounding disclosure can supply the visible heading. */
+  showLabel?: boolean;
   emptyLabel?: string;
   /**
    * Always show the editable list, with no Change/Done toggle. For a dialog
@@ -62,9 +65,6 @@ export function ProviderKeyList({
   const byLabel = (a: SupportedProvider, b: SupportedProvider) =>
     catalog.label(a).localeCompare(catalog.label(b));
   const providers = [...grouped.keys()].sort(byLabel);
-  const unavailable = catalog.visibleIds
-    .filter((provider) => !grouped.has(provider))
-    .sort(byLabel);
 
   const chosenKeys = (provider: SupportedProvider) => {
     const keys = grouped.get(provider) ?? [];
@@ -128,18 +128,28 @@ export function ProviderKeyList({
 
   if (providers.length === 0) {
     return (
-      <section aria-label="Provider keys" className="space-y-2">
-        <span className="font-medium text-sm">{label}</span>
-        <NoProviderKeys unavailable={unavailable} />
+      <section
+        aria-label={typeof label === "string" ? label : "Provider keys"}
+        className="space-y-2"
+      >
+        <span className={cn("font-medium text-sm", !showLabel && "sr-only")}>
+          {label}
+        </span>
+        <NoProviderKeys />
       </section>
     );
   }
 
   return (
-    <section aria-label="Provider keys" className="space-y-2">
+    <section
+      aria-label={typeof label === "string" ? label : "Provider keys"}
+      className="space-y-2"
+    >
       <div className="flex min-h-8 items-center justify-between gap-2">
-        <span className="font-medium text-sm">{label}</span>
-        <div className="flex gap-2">
+        <span className={cn("font-medium text-sm", !showLabel && "sr-only")}>
+          {label}
+        </span>
+        <div className={cn("flex gap-2", !showLabel && "ml-auto")}>
           <Button
             type="button"
             variant="outline"
@@ -311,17 +321,6 @@ export function ProviderKeyList({
               })}
             </fieldset>
           )}
-          {unavailable.length > 0 && emptyLabel === undefined && (
-            <p className="text-xs text-muted-foreground">
-              <span>
-                No key you can use for{" "}
-                {unavailable
-                  .map((provider) => catalog.label(provider))
-                  .join(", ")}
-                . Ask an admin to share one.
-              </span>
-            </p>
-          )}
         </div>
       )}
 
@@ -486,94 +485,18 @@ function PrimaryNote({ notPrimaryCount }: { notPrimaryCount: number }) {
 }
 
 /** No provider key the caller can use yet: where to get one. */
-function NoProviderKeys({ unavailable }: { unavailable: SupportedProvider[] }) {
-  const shown = unavailable.slice(0, 4);
-  const more = unavailable.length - shown.length;
+function NoProviderKeys() {
   return (
-    <div className="flex items-center gap-6 rounded-xl border border-dashed bg-muted/40 p-6">
-      <svg
-        width="112"
-        height="96"
-        viewBox="0 0 112 96"
-        fill="none"
-        aria-hidden="true"
-        className="shrink-0 text-foreground"
-      >
-        <rect
-          x="22"
-          y="6"
-          width="68"
-          height="44"
-          rx="10"
-          className="fill-muted stroke-border"
-        />
-        <rect
-          x="12"
-          y="22"
-          width="76"
-          height="48"
-          rx="11"
-          className="fill-muted/60 stroke-border"
-        />
-        <rect
-          x="2"
-          y="40"
-          width="84"
-          height="52"
-          rx="12"
-          className="fill-background"
-          stroke="currentColor"
-          strokeWidth="1.5"
-        />
-        <circle cx="26" cy="66" r="9" stroke="currentColor" strokeWidth="2" />
-        <path
-          d="M35 66h30M57 66v7M64 66v5"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-        />
-        <circle cx="98" cy="26" r="12" fill="currentColor" />
-        <path
-          d="M98 20v12M92 26h12"
-          className="stroke-background"
-          strokeWidth="2"
-          strokeLinecap="round"
-        />
-      </svg>
-      <div className="min-w-0 space-y-2">
-        <p className="font-semibold text-base">
-          Connect your first model provider
-        </p>
-        <p className="text-sm text-muted-foreground">
-          Add a provider key for Anthropic, OpenAI or another provider to use
-          its models.
-        </p>
-        {shown.length > 0 && (
-          <div className="flex gap-1.5">
-            {shown.map((provider) => (
-              <span
-                key={provider}
-                className="flex size-7 items-center justify-center rounded-full border bg-background"
-              >
-                <ProviderIcon provider={provider} size={14} />
-              </span>
-            ))}
-            {more > 0 && (
-              <span className="flex h-7 items-center rounded-full border bg-background px-2 font-medium text-[10px]">
-                +{more}
-              </span>
-            )}
-          </div>
-        )}
-        <div className="flex flex-wrap items-center gap-3 pt-1">
-          <Button asChild size="sm">
-            <Link href="/llm/model-providers">Add provider key</Link>
-          </Button>
-          <span className="text-xs text-muted-foreground">
-            Or ask an admin to share one.
-          </span>
-        </div>
-      </div>
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        <span>
+          No provider keys are available. Add a key or ask an admin to share
+          one.
+        </span>
+      </p>
+      <Button asChild size="sm">
+        <Link href="/llm/model-providers">Add provider key</Link>
+      </Button>
     </div>
   );
 }

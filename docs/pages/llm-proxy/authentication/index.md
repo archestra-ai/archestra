@@ -3,7 +3,7 @@ title: LLM Proxy Authentication
 sidebarTitle: Authentication
 description: How apps, agents, and people sign in to the LLM Proxy, and whose provider key each call uses
 order: 1
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -82,10 +82,10 @@ Go to **Settings → OAuth Clients → Create OAuth Client**, and select **LLM P
 
 ### Call as the App
 
-For a bot or a nightly job with no person behind it. Select **Service account (optional)** on **Access** to use that account’s permissions and attribute LLM spend to it. Enable **MCP Gateway** or **A2A** on the same client for [shared A2A run ownership](/docs/mcp/authentication/applications#call-as-the-app).
+For a bot or a nightly job with no person behind it. Select **Service account (optional)** under **Access → Advanced** to use that account’s permissions and attribute LLM spend to it. Enable **MCP Gateway** or **A2A** on the same client for [shared A2A run ownership](/docs/mcp/authentication/applications#call-as-the-app).
 
-1. Pick **As itself**. On **Access**, select a provider key for each provider. If you enabled tools or agents, select their gateways and agents too.
-2. Under **Budget** on the same step, optionally pick the team that pays for it or set a spend cap.
+1. Pick **As itself**. On **Access**, choose **Selected providers** to fix the allowed providers and keys, or **Current and future providers** to follow shared Primary keys automatically. If you enabled tools or agents, select their gateways and agents too.
+2. Under **Advanced → Budget** on the same step, optionally pick the team that pays for it or set a spend cap.
 3. Save the client ID and secret. The secret shows only once.
 4. Get a token. It lasts one hour.
 
@@ -101,6 +101,8 @@ For a bot or a nightly job with no person behind it. Select **Service account (o
 
 - When editing a client, use **Access** to change capabilities and provider keys, and **Budget** to change its payer or spend cap.
 - The billing team's [costs](/docs/llm-proxy/costs-and-limits#track-spending) and [limits](/docs/llm-proxy/costs-and-limits#set-a-budget) count the client's spend. A spend cap limits the client itself.
+- **Current and future providers** uses shared **Primary** keys at request time, including later providers and changes to the Primary key. Personal and subscription keys are excluded. Under **LLM API keys**, you can override the key for a provider. Enabling this mode requires a [**Can use** grant](/docs/admin/access-control#granular-access-control) on all current and future provider keys (`*`); access to each current key separately is insufficient.
+- Existing OAuth clients keep **Selected providers** until you change their mode.
 - Map a metered API key. A personal subscription cannot serve an app.
 - See the [complete example app](https://github.com/archestra-ai/examples/tree/main/model-router-client-credentials).
 

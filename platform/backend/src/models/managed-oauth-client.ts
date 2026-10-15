@@ -16,6 +16,7 @@ import { and, count, eq, ilike, inArray, sql } from "drizzle-orm";
 import { hashOauthClientSecret } from "@/auth/oauth-client-secret";
 import db, { schema, withDbTransaction } from "@/database";
 import { createPaginatedResult } from "@/database/utils/pagination";
+import { ApiError } from "@/types";
 import type {
   LlmOauthClientGrantType,
   LlmOauthClientProviderKey,
@@ -171,6 +172,7 @@ class ManagedOauthClientModel {
     legacyKind?: "mcp" | "llm";
     grantType?: LlmOauthClientGrantType;
     providerApiKeys?: LlmOauthClientProviderKey[];
+    includeFutureProviders?: boolean;
     redirectUris?: string[];
     authorId: string;
     /** The starting audience beside the author, who always gets full access. */
@@ -180,7 +182,14 @@ class ManagedOauthClientModel {
   }) {
     const grantType = params.grantType ?? "client_credentials";
     const isAuthorizationCode = grantType === "authorization_code";
-    const scopes = [...new Set(params.scopes ?? [LLM_PROXY_OAUTH_SCOPE])];
+    const scopes = [
+      ...new Set<OAuthClientScope>(params.scopes ?? [LLM_PROXY_OAUTH_SCOPE]),
+    ];
+    assertFutureProviderMode({
+      includeFutureProviders: params.includeFutureProviders ?? false,
+      grantType,
+      scopes,
+    });
     const clientSecret = createClientSecret(params.legacyKind);
     // authorization_code secrets are verified by better-auth (deterministic
     // hash); client_credentials secrets are verified by this model (bcrypt).
@@ -197,6 +206,7 @@ class ManagedOauthClientModel {
       providerApiKeys: isAuthorizationCode
         ? []
         : (params.providerApiKeys ?? []),
+      includeFutureProviders: params.includeFutureProviders ?? false,
       authorId: params.authorId,
       // Users signed in through an authorization_code client pay for
       // themselves, so only client-credentials clients bill a team.
@@ -375,6 +385,7 @@ class ManagedOauthClientModel {
     scopes?: OAuthClientScope[];
     allowedGatewayIds?: string[];
     providerApiKeys?: LlmOauthClientProviderKey[];
+    includeFutureProviders?: boolean;
     redirectUris?: string[];
     /** Omit to keep the current billing team. */
     billingTeamId?: string | null;
@@ -387,6 +398,12 @@ class ManagedOauthClientModel {
     });
     if (!existing) return null;
     const isAuthorizationCode = existing.grantType === "authorization_code";
+    assertFutureProviderMode({
+      includeFutureProviders:
+        params.includeFutureProviders ?? existing.includeFutureProviders,
+      grantType: existing.grantType,
+      scopes: params.scopes ?? existing.scopes,
+    });
 
     // providerApiKeys never apply to authorization_code clients.
     // The author is fixed at creation; scope falls back to the existing value.
@@ -402,6 +419,8 @@ class ManagedOauthClientModel {
             provider: key.provider,
             providerApiKeyId: key.providerApiKeyId,
           }))),
+      includeFutureProviders:
+        params.includeFutureProviders ?? existing.includeFutureProviders,
       authorId: existing.authorId,
       billingTeamId: isAuthorizationCode
         ? null
@@ -509,6 +528,7 @@ class ManagedOauthClientModel {
       serviceAccountId: client.serviceAccountId,
       organizationId: client.organizationId,
       grantType: client.grantType,
+      includeFutureProviders: client.includeFutureProviders,
       scopes: [...client.scopes].sort(),
       allowedGatewayIds: [...client.allowedGatewayIds].sort(),
       // Sort by providerApiKeyId so audit diffs ignore source ordering and
@@ -705,6 +725,7 @@ async function hydrateOauthClients(
         name: client.name ?? client.clientId,
         organizationId: metadata.organizationId,
         grantType: metadata.grantType,
+        includeFutureProviders: metadata.includeFutureProviders,
         scopes: clientScopes(client),
         allowedGatewayIds: metadata.allowedGatewayIds,
         providerApiKeys: metadata.providerApiKeys
@@ -775,6 +796,22 @@ type MappingWithKey = {
   providerApiKeyId: string;
   apiKey?: { isPrimary: boolean; createdAt: Date };
 };
+
+function assertFutureProviderMode(params: {
+  includeFutureProviders: boolean;
+  grantType: LlmOauthClientGrantType;
+  scopes: OAuthClientScope[];
+}) {
+  if (
+    params.includeFutureProviders &&
+    (params.grantType !== "client_credentials" ||
+      !params.scopes.includes(LLM_PROXY_OAUTH_SCOPE))
+  )
+    throw new ApiError(
+      400,
+      "Current and future providers require a client_credentials client with LLM Proxy access.",
+    );
+}
 
 /** The shared provider table also contains unmanaged DCR/CIMD registrations. */
 function managedClientCondition() {

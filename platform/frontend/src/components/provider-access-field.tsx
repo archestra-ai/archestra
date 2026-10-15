@@ -34,6 +34,9 @@ export function ProviderAccessField({
   canIncludeFutureProviders = true,
   includeFutureProviders,
   onIncludeFutureProvidersChange,
+  credentialLabel = "virtual key",
+  label,
+  apiKeysLabel = "API keys",
 }: {
   canIncludeFutureProviders?: boolean;
   includeFutureProviders: boolean;
@@ -41,25 +44,29 @@ export function ProviderAccessField({
   current: ReactNode;
   automaticCurrent?: ReactNode;
   surface: "create" | "edit" | "connect";
+  credentialLabel?: string;
+  label?: string;
+  apiKeysLabel?: string;
 }) {
   const id = useId();
   const automatic = includeFutureProviders;
   const connect = surface === "connect";
+  const fieldLabel =
+    label ??
+    (connect
+      ? `Providers available to new ${credentialLabel}s`
+      : "Provider access");
 
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <p className="text-sm font-medium">
-          {connect
-            ? "Providers available to new virtual keys"
-            : "Provider access"}
-        </p>
+        <p className="text-sm font-medium">{fieldLabel}</p>
         <RadioGroup
           value={automatic ? "future" : "selected"}
           onValueChange={(value) =>
             onIncludeFutureProvidersChange(value === "future")
           }
-          aria-label="Provider access"
+          aria-label={label ?? "Provider access"}
           className="gap-2"
         >
           <Label
@@ -79,8 +86,8 @@ export function ProviderAccessField({
                 Selected providers
               </span>
               <span className="block text-xs font-normal leading-relaxed text-muted-foreground">
-                Choose the providers this virtual key can use. Providers added
-                later need to be selected here.
+                Choose the providers this {credentialLabel} can use. Providers
+                added later need to be selected here.
               </span>
             </span>
           </Label>
@@ -102,8 +109,8 @@ export function ProviderAccessField({
                 Current and future providers
               </span>
               <span className="block text-xs font-normal leading-relaxed text-muted-foreground">
-                Add a provider later → this virtual key can use it. No new
-                virtual key needed.
+                Add a provider later → this {credentialLabel} can use it. No new{" "}
+                {credentialLabel} needed.
               </span>
             </span>
           </Label>
@@ -132,7 +139,7 @@ export function ProviderAccessField({
             <AccordionItem value="api-keys">
               <AccordionTrigger className="py-2 hover:no-underline">
                 <span className="flex flex-col gap-0.5">
-                  <span>API keys</span>
+                  <span>{apiKeysLabel}</span>
                   <span className="text-[11px] font-normal leading-snug text-muted-foreground">
                     Optional — choose a different API key for an existing
                     provider

@@ -3,7 +3,7 @@ title: Gateway Access for Apps
 sidebarTitle: Apps and Services
 description: Let your own app or service call an MCP Gateway with an OAuth client
 order: 2
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -25,7 +25,7 @@ Create either one under **Settings → OAuth Clients → Create OAuth Client**, 
 
 Each application owns its A2A tasks and retained runtime workspaces. Use the same application's credentials to list, read, follow, or cancel its tasks; tokens renewed for that application retain access. A different application cannot access those tasks, even when both can call the same agent.
 
-Select **Service account (optional)** on the create dialog's **Access** step to give an automation one identity across OAuth and REST API keys. Its A2A tasks and runtime workspaces belong to that account: OAuth credentials and API keys for the same account can read, follow, or cancel those tasks. Other accounts cannot access them. Use the account's API key on the platform API to manage its runs and delete its own retained workspaces.
+Select **Service account (optional)** under **Advanced** on the create dialog's **Access** step to give an automation one identity across OAuth and REST API keys. Its A2A tasks and runtime workspaces belong to that account: OAuth credentials and API keys for the same account can read, follow, or cancel those tasks. Other accounts cannot access them. Use the account's API key on the platform API to manage its runs and delete its own retained workspaces.
 
 The client's allowed agents and gateways still limit OAuth access, and the service account must also have permission to use each resource. Disabling the account stops its OAuth requests; changing the binding revokes issued OAuth tokens. In the edit dialog, the selector is under **Access**.
 
@@ -33,7 +33,7 @@ For LLM Proxy access, enable **LLM Proxy** on the same client and select provide
 
 No person signs in, so the app uses the gateway's shared accounts. Give its tools a shared service account in [Choose Its Tools](/docs/mcp/gateway#choose-its-tools).
 
-1. Create an OAuth client. Under **What can it access?**, select **MCP Gateway** for tools, **A2A** for agent calls, or both. Pick **As itself**. On **Access**, select the gateways and agents it may reach and optionally select a service account.
+1. Create an OAuth client. Under **What can it access?**, select **MCP Gateway** for tools, **A2A** for agent calls, or both. Pick **As itself**. On **Access**, select the gateways and agents it may reach and optionally open **Advanced** to select a service account.
 2. Save the client ID and secret in your secret store. The secret shows only once.
 3. Get a token. This example calls MCP; use `scope=a2a` for agent calls:
 
@@ -75,7 +75,7 @@ For example, `scope=mcp llm:proxy` gets one token for tools and inference. Each 
 
 Open an existing client and use **Access** to change its capabilities, gateways, agents, or provider keys. The client ID and secret stay the same.
 
-In **Settings → OAuth Clients**, use **All APIs** to find clients for a particular API. A client with several capabilities appears under each matching filter. The **Access** column summarizes its allowed targets and provider keys; clients that sign users in use each person's access.
+In **Settings → OAuth Clients**, use **All APIs** to find clients for a particular API. A client with several capabilities appears under each matching filter. The **MCP Gateway**, **A2A**, and **LLM Proxy** columns summarize its targets and provider access; clients that sign users in use each person's access.
 
 ## What to Know
 

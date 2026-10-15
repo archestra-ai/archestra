@@ -69,6 +69,7 @@ export function EditManagedOAuthClientDialog({
       form.reset({
         serviceAccountId: oauthClient.serviceAccountId ?? null,
         name: oauthClient.name,
+        includeFutureProviders: oauthClient.includeFutureProviders ?? false,
         grantType: oauthClient.grantType,
         scopes: oauthClient.scopes,
         allowedGatewayIds: oauthClient.allowedGatewayIds,
@@ -196,6 +197,7 @@ export function EditManagedOAuthClientDialog({
         />
         {/* SPDX-SnippetEnd */}
         <AdvancedLabelsSection
+          collapsible
           ref={labelsRef}
           labels={values.labels ?? []}
           onLabelsChange={(labels) =>

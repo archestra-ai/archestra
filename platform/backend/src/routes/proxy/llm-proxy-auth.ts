@@ -34,6 +34,7 @@ import {
 import { validateExternalIdpToken } from "@/routes/mcp-gateway/utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
+import { resolveOauthClientProviderMappings } from "@/services/oauth-client-providers";
 import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
@@ -999,7 +1000,7 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
     throw new ApiError(403, "Service account cannot access this LLM proxy.");
   const mappedProviderKey = isSupportedProvider(params.expectedProvider)
     ? await selectMappedProviderKey({
-        mappings: oauthClient.providerApiKeys,
+        mappings: await resolveOauthClientProviderMappings(oauthClient),
         provider: params.expectedProvider,
         modelId: params.requestedModel,
       })

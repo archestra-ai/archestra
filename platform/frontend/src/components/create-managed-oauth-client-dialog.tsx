@@ -4,11 +4,7 @@ import { Server, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import type { AgentSelectorAgent } from "@/components/agent-selector";
-import {
-  BudgetFields,
-  formatSpendCap,
-  UsersPayNotice,
-} from "@/components/credential-billing/budget-fields";
+import { formatSpendCap } from "@/components/credential-billing/budget-fields";
 import {
   ReviewList,
   ReviewListRow,
@@ -18,6 +14,7 @@ import { FormDialog } from "@/components/form-dialog";
 import { ChoiceCards } from "@/components/oauth-client/choice-cards";
 import {
   OAuthClientAccessFields,
+  OAuthClientAdvancedFields,
   type OAuthClientFormValues,
   OAuthClientScopePicker,
   oauthCapabilities,
@@ -25,6 +22,12 @@ import {
   oauthClientFormReady,
   setOauthClientScopes,
 } from "@/components/oauth-client/configuration-fields";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -66,6 +69,7 @@ export function CreateManagedOAuthClientDialog({
       grantType: "client_credentials",
       scopes: ["mcp", "a2a"],
       providerApiKeys: [],
+      includeFutureProviders: false,
       allowedGatewayIds: [],
       redirectUrisText: "",
       spendCap: null,
@@ -76,16 +80,19 @@ export function CreateManagedOAuthClientDialog({
   });
   const defaultTargetIds = defaultAllowedGatewayIds?.join(",") ?? "";
   const [step, setStep] = useState(0);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const values = form.watch();
   useEffect(() => {
     if (open) {
       setStep(0);
+      setAdvancedOpen(false);
       form.reset({
         name: "",
         serviceAccountId: null,
         grantType: "client_credentials",
         scopes: defaultClientType === "llm" ? ["llm:proxy"] : ["mcp", "a2a"],
         providerApiKeys: [],
+        includeFutureProviders: false,
         allowedGatewayIds: defaultTargetIds ? defaultTargetIds.split(",") : [],
         redirectUrisText: "",
         spendCap: null,
@@ -96,6 +103,13 @@ export function CreateManagedOAuthClientDialog({
     }
   }, [open, form, defaultClientType, defaultTargetIds]);
   const ready = oauthClientFormReady(values);
+  const hasAdvanced =
+    values.grantType === "client_credentials" ||
+    values.scopes.includes("llm:proxy");
+  const editAdvanced = () => {
+    setStep(1);
+    setAdvancedOpen(true);
+  };
   return (
     <FormDialog
       open={open}
@@ -116,7 +130,7 @@ export function CreateManagedOAuthClientDialog({
           if (ready) await onSubmit(oauthClientFormBody(values, gateways));
         })}
       >
-        <DialogBody className="space-y-5">
+        <DialogBody className="space-y-5 pb-0">
           <WizardSteps
             steps={steps}
             activeStep={steps[step].id}
@@ -177,31 +191,26 @@ export function CreateManagedOAuthClientDialog({
                 form={form}
                 gateways={gateways}
                 providerApiKeys={providerApiKeys}
+                showServiceAccount={false}
+                providerAccessSurface="create"
               />
-              {values.scopes.includes("llm:proxy") && (
-                <>
-                  <div className="border-t pt-4">
-                    <Label>Budget</Label>
-                  </div>
-                  {values.grantType === "authorization_code" && (
-                    <UsersPayNotice />
-                  )}
-                  <BudgetFields
-                    subject="client"
-                    idPrefix="oauth-client-budget"
-                    showBillingTeam={values.grantType !== "authorization_code"}
-                    billingTeamId={values.billingTeamId ?? null}
-                    onBillingTeamIdChange={(value) =>
-                      form.setValue("billingTeamId", value, {
-                        shouldDirty: true,
-                      })
-                    }
-                    spendCap={values.spendCap ?? null}
-                    onSpendCapChange={(value) =>
-                      form.setValue("spendCap", value, { shouldDirty: true })
-                    }
-                  />
-                </>
+              {hasAdvanced && (
+                <Accordion
+                  type="single"
+                  collapsible
+                  value={advancedOpen ? "advanced" : ""}
+                  onValueChange={(value) =>
+                    setAdvancedOpen(value === "advanced")
+                  }
+                  className="border-t"
+                >
+                  <AccordionItem value="advanced">
+                    <AccordionTrigger>Advanced</AccordionTrigger>
+                    <AccordionContent>
+                      <OAuthClientAdvancedFields form={form} />
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
               )}
             </>
           )}
@@ -226,10 +235,7 @@ export function CreateManagedOAuthClientDialog({
                 </span>
               </ReviewListRow>
               {values.grantType === "client_credentials" && (
-                <ReviewListRow
-                  label="Service account"
-                  onEdit={() => setStep(1)}
-                >
+                <ReviewListRow label="Service account" onEdit={editAdvanced}>
                   <span>
                     {values.serviceAccountId ? (
                       <AccountName id={values.serviceAccountId} />
@@ -247,7 +253,7 @@ export function CreateManagedOAuthClientDialog({
                 </ReviewListRow>
               )}
               {values.scopes.includes("llm:proxy") && (
-                <ReviewListRow label="Budget" onEdit={() => setStep(1)}>
+                <ReviewListRow label="Budget" onEdit={editAdvanced}>
                   <span>
                     {values.grantType === "authorization_code" ? (
                       <span>Each user pays</span>
@@ -285,21 +291,23 @@ export function CreateManagedOAuthClientDialog({
                     onEdit={() => setStep(1)}
                   >
                     <span>
-                      {values.providerApiKeys
-                        ?.map(
-                          (mapping) =>
-                            providerApiKeys.find(
-                              (key) => key.id === mapping.providerApiKeyId,
-                            )?.name ?? mapping.provider,
-                        )
-                        .join(", ")}
+                      {values.includeFutureProviders
+                        ? "Current and future providers"
+                        : values.providerApiKeys
+                            ?.map(
+                              (mapping) =>
+                                providerApiKeys.find(
+                                  (key) => key.id === mapping.providerApiKeyId,
+                                )?.name ?? mapping.provider,
+                            )
+                            .join(", ")}
                     </span>
                   </ReviewListRow>
                 )}
             </ReviewList>
           )}
         </DialogBody>
-        <DialogStickyFooter>
+        <DialogStickyFooter className="mt-0">
           {step > 0 && (
             <Button
               type="button"

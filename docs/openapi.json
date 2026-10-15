@@ -325278,6 +325278,9 @@
                               "format": "uuid",
                               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                             }
+                          },
+                          "includeFutureProviders": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -325299,7 +325302,8 @@
                           "billingTeam",
                           "spendCap",
                           "scopes",
-                          "allowedGatewayIds"
+                          "allowedGatewayIds",
+                          "includeFutureProviders"
                         ],
                         "additionalProperties": false
                       }
@@ -325691,6 +325695,10 @@
                         "providerApiKeyId"
                       ]
                     }
+                  },
+                  "includeFutureProviders": {
+                    "description": "Use current and future shared primary provider keys, with selected keys as overrides. Defaults to false on creation; omit on update to preserve the mode. Only valid for client_credentials with LLM Proxy access.",
+                    "type": "boolean"
                   },
                   "redirectUris": {
                     "type": "array",
@@ -326149,6 +326157,9 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       }
                     },
+                    "includeFutureProviders": {
+                      "type": "boolean"
+                    },
                     "clientSecret": {
                       "type": "string"
                     }
@@ -326173,6 +326184,7 @@
                     "spendCap",
                     "scopes",
                     "allowedGatewayIds",
+                    "includeFutureProviders",
                     "clientSecret"
                   ],
                   "additionalProperties": false
@@ -326521,6 +326533,10 @@
                       ]
                     }
                   },
+                  "includeFutureProviders": {
+                    "description": "Use current and future shared primary provider keys, with selected keys as overrides. Defaults to false on creation; omit on update to preserve the mode. Only valid for client_credentials with LLM Proxy access.",
+                    "type": "boolean"
+                  },
                   "redirectUris": {
                     "type": "array",
                     "items": {
@@ -326855,6 +326871,9 @@
                         "format": "uuid",
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       }
+                    },
+                    "includeFutureProviders": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -326876,7 +326895,8 @@
                     "billingTeam",
                     "spendCap",
                     "scopes",
-                    "allowedGatewayIds"
+                    "allowedGatewayIds",
+                    "includeFutureProviders"
                   ],
                   "additionalProperties": false
                 }
@@ -327657,6 +327677,9 @@
                         "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                       }
                     },
+                    "includeFutureProviders": {
+                      "type": "boolean"
+                    },
                     "clientSecret": {
                       "type": "string"
                     }
@@ -327681,6 +327704,7 @@
                     "spendCap",
                     "scopes",
                     "allowedGatewayIds",
+                    "includeFutureProviders",
                     "clientSecret"
                   ],
                   "additionalProperties": false

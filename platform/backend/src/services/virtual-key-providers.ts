@@ -1,6 +1,7 @@
 import {
   credentialRequiresPerUserScope,
   PROVIDERS_REQUIRING_BASE_URL,
+  type SupportedProvider,
 } from "@archestra/shared";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
@@ -36,22 +37,41 @@ export async function resolveVirtualKeyProviderMappings(
   if (!key) return [];
   const mappings =
     await VirtualApiKeyModel.getProviderApiKeysForRouting(virtualApiKeyId);
-  if (key.keyType !== "standard" || !key.includeFutureProviders)
-    return mappings;
-  const providers = new Set(mappings.map((mapping) => mapping.provider));
-  const primaries = await getSharedPrimaryProviderKeys(key.organizationId);
+  return resolveProviderMappings({
+    organizationId: key.organizationId,
+    includeFutureProviders:
+      key.keyType === "standard" && key.includeFutureProviders,
+    mappings,
+    mapPrimary: (primary) => ({
+      provider: primary.provider,
+      providerApiKeyId: primary.id,
+      providerApiKeyName: primary.name,
+      secretId: primary.secretId,
+      scope: primary.scope,
+      userId: primary.userId,
+      baseUrl: primary.inferenceBaseUrl ?? primary.baseUrl,
+    }),
+  });
+}
+
+/** Resolve automatic access at request time without changing explicit overrides. */
+export async function resolveProviderMappings<
+  T extends { provider: SupportedProvider; providerApiKeyId: string },
+>(params: {
+  organizationId: string;
+  includeFutureProviders: boolean;
+  mappings: T[];
+  mapPrimary: (
+    key: Awaited<ReturnType<typeof getSharedPrimaryProviderKeys>>[number],
+  ) => T;
+}): Promise<T[]> {
+  if (!params.includeFutureProviders) return params.mappings;
+  const providers = new Set(params.mappings.map((mapping) => mapping.provider));
+  const primaries = await getSharedPrimaryProviderKeys(params.organizationId);
   return [
-    ...mappings,
+    ...params.mappings,
     ...primaries
       .filter((primary) => !providers.has(primary.provider))
-      .map((primary) => ({
-        provider: primary.provider,
-        providerApiKeyId: primary.id,
-        providerApiKeyName: primary.name,
-        secretId: primary.secretId,
-        scope: primary.scope,
-        userId: primary.userId,
-        baseUrl: primary.inferenceBaseUrl ?? primary.baseUrl,
-      })),
+      .map(params.mapPrimary),
   ];
 }

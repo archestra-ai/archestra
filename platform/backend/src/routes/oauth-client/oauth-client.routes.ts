@@ -59,7 +59,8 @@ const LlmOauthClientProviderKeyBodySchema = z.object({
  * Both grant types share one body shape. `grantType` defaults to
  * `client_credentials` so existing callers keep working unchanged.
  * - client_credentials: a shared application credential scoped to the
- *   organization; requires `providerApiKeys` when LLM Proxy is enabled. `redirectUris` is ignored.
+ *   organization; requires selected `providerApiKeys` or current-and-future
+ *   provider access when LLM Proxy is enabled. `redirectUris` is ignored.
  * - authorization_code: requires `redirectUris`; its tokens are user-bound, so
  *   the proxy resolves the acting user's own provider keys, cost limits, and
  *   policies. `providerApiKeys` never apply — the acting user's own keys
@@ -83,6 +84,14 @@ const OauthClientFields = z
     allowedGatewayIds: z.array(z.string().uuid()).optional(),
     grantType: LlmOauthClientGrantTypeSchema.default("client_credentials"),
     providerApiKeys: z.array(LlmOauthClientProviderKeyBodySchema).optional(),
+    includeFutureProviders: z
+      .boolean()
+      .optional()
+      .describe(
+        "Use current and future shared primary provider keys, with selected keys as overrides. " +
+          "Defaults to false on creation; omit on update to preserve the mode. " +
+          "Only valid for client_credentials with LLM Proxy access.",
+      ),
     redirectUris: z.array(z.string().url()).optional(),
     labels: z
       .array(LabelWithDetailsSchema)
@@ -113,6 +122,17 @@ const validateOauthClientBody = (
   value: z.infer<typeof OauthClientFields>,
   ctx: z.RefinementCtx,
 ) => {
+  if (
+    value.includeFutureProviders &&
+    (value.grantType !== "client_credentials" ||
+      !value.scopes.includes(LLM_PROXY_OAUTH_SCOPE))
+  )
+    ctx.addIssue({
+      code: "custom",
+      path: ["includeFutureProviders"],
+      message:
+        "Current and future providers require a client_credentials client with LLM Proxy access.",
+    });
   if (value.grantType === "authorization_code") {
     if (value.serviceAccountId)
       ctx.addIssue({
@@ -152,6 +172,7 @@ const validateOauthClientBody = (
     });
   if (
     value.scopes.includes(LLM_PROXY_OAUTH_SCOPE) &&
+    !value.includeFutureProviders &&
     (!value.providerApiKeys || value.providerApiKeys.length === 0)
   ) {
     ctx.addIssue({
@@ -176,9 +197,9 @@ const CreateOauthClientBodySchema = OauthClientFields.extend({
     ),
   // SPDX-SnippetEnd
 }).superRefine(validateOauthClientBody);
-const UpdateOauthClientBodySchema = OauthClientFields.superRefine(
-  validateOauthClientBody,
-);
+// Validate the merged configuration after loading the client: omitted access
+// fields preserve its mode and explicit mappings.
+const UpdateOauthClientBodySchema = OauthClientFields;
 
 const oauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   registerEntityLabelRoutes(fastify, {
@@ -254,6 +275,19 @@ const oauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ body, user, organizationId }, reply) => {
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (body.includeFutureProviders) {
+        await ResourcePermissions.require({
+          organizationId,
+          userId: user.id,
+          resource: "llmProviderApiKey",
+          scope: "*",
+          action: "use",
+        });
+      }
+      // SPDX-SnippetEnd
       if (body.initialGrants?.length) {
         // SPDX-SnippetBegin
         // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -304,6 +338,7 @@ const oauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         scopes: body.scopes,
         allowedGatewayIds: body.allowedGatewayIds,
         providerApiKeys: body.providerApiKeys,
+        includeFutureProviders: body.includeFutureProviders,
         redirectUris: body.redirectUris,
         authorId: user.id,
         initialGrants: body.initialGrants,
@@ -361,6 +396,39 @@ const oauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       if (body.grantType !== existing.grantType)
         throw new ApiError(400, "The sign-in mode cannot be changed");
+      const config = OauthClientFields.superRefine(
+        validateOauthClientBody,
+      ).safeParse({
+        ...body,
+        includeFutureProviders:
+          body.includeFutureProviders ?? existing.includeFutureProviders,
+        providerApiKeys:
+          body.providerApiKeys ??
+          existing.providerApiKeys.map(({ provider, providerApiKeyId }) => ({
+            provider,
+            providerApiKeyId,
+          })),
+        allowedGatewayIds: body.allowedGatewayIds ?? existing.allowedGatewayIds,
+        redirectUris: body.redirectUris ?? existing.redirectUris,
+      });
+      if (!config.success)
+        throw new ApiError(
+          400,
+          config.error.issues.map((issue) => issue.message).join("; "),
+        );
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      if (body.includeFutureProviders && !existing.includeFutureProviders) {
+        await ResourcePermissions.require({
+          organizationId,
+          userId: user.id,
+          resource: "llmProviderApiKey",
+          scope: "*",
+          action: "use",
+        });
+      }
+      // SPDX-SnippetEnd
       await validateGatewayConfig({
         organizationId,
         scopes: body.scopes,
@@ -398,6 +466,7 @@ const oauthClientsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         scopes: body.scopes,
         allowedGatewayIds: body.allowedGatewayIds,
         providerApiKeys: body.providerApiKeys,
+        includeFutureProviders: body.includeFutureProviders,
         redirectUris: body.redirectUris,
         billingTeamId: body.billingTeamId,
       });

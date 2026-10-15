@@ -59,20 +59,22 @@ function renderDialog(
   overrides: Partial<Parameters<typeof CreateManagedOAuthClientDialog>[0]> = {},
 ) {
   const onSubmit = vi.fn().mockResolvedValue(undefined);
-  render(
-    <QueryClientProvider client={new QueryClient()}>
+  const queryClient = new QueryClient();
+  const dialog = (open: boolean) => (
+    <QueryClientProvider client={queryClient}>
       <CreateManagedOAuthClientDialog
-        open
         onOpenChange={vi.fn()}
         gateways={GATEWAYS}
         providerApiKeys={PROVIDER_KEYS}
         onSubmit={onSubmit}
         isSubmitting={false}
         {...overrides}
+        open={open}
       />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
-  return { onSubmit };
+  const { rerender } = render(dialog(overrides.open ?? true));
+  return { onSubmit, setOpen: (open: boolean) => rerender(dialog(open)) };
 }
 
 beforeEach(() => {
@@ -229,16 +231,50 @@ describe("CreateManagedOAuthClientDialog", () => {
     expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
   });
 
-  it("bills an LLM client to a team and caps it", async () => {
+  it("retains an LLM client's budget when Advanced closes and review edits reopen it", async () => {
     const user = userEvent.setup();
     const { onSubmit } = renderDialog({ defaultClientType: "llm" });
 
     await user.type(screen.getByLabelText("Name"), "ci-runner");
     await continueStep(user);
+    expect(screen.getByRole("button", { name: "Advanced" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(
+      screen.queryByLabelText("Spend cap in dollars"),
+    ).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Add OpenAI" }));
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
     await user.click(screen.getByLabelText("Who pays for this client?"));
     await user.click(await screen.findByRole("option", { name: /^Platform/ }));
     await user.type(screen.getByLabelText("Spend cap in dollars"), "200");
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    expect(
+      screen.queryByLabelText("Spend cap in dollars"),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    expect(
+      screen.getByLabelText("Who pays for this client?"),
+    ).toHaveTextContent("Platform");
+    expect(screen.getByLabelText("Spend cap in dollars")).toHaveValue("200");
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    await continueStep(user);
+    await user.click(screen.getByRole("button", { name: "Edit Budget" }));
+    expect(screen.getByRole("button", { name: "Advanced" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(screen.getByLabelText("Spend cap in dollars")).toHaveValue("200");
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    await continueStep(user);
+    await user.click(
+      screen.getByRole("button", { name: "Edit Service account" }),
+    );
+    expect(screen.getByRole("button", { name: "Advanced" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
     await continueStep(user);
     expect(screen.queryByLabelText("Label key")).not.toBeInTheDocument();
     expect(screen.queryByText("Permissions")).not.toBeInTheDocument();
@@ -256,8 +292,36 @@ describe("CreateManagedOAuthClientDialog", () => {
     );
   });
 
+  it("starts Advanced collapsed again when creating another client", async () => {
+    const user = userEvent.setup();
+    const { setOpen } = renderDialog({ defaultClientType: "llm" });
+
+    await user.type(screen.getByLabelText("Name"), "first-client");
+    await continueStep(user);
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    expect(screen.getByLabelText("Spend cap in dollars")).toBeVisible();
+
+    setOpen(false);
+    setOpen(true);
+    await user.type(screen.getByLabelText("Name"), "next-client");
+    await continueStep(user);
+    expect(screen.getByRole("button", { name: "Advanced" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(
+      screen.queryByLabelText("Spend cap in dollars"),
+    ).not.toBeInTheDocument();
+  });
+
   it("lets each signed-in user pay for an LLM client that acts for users", async () => {
     const user = userEvent.setup();
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: !!permissions.serviceAccount?.includes("read"),
+        }) as ReturnType<typeof useHasPermissions>,
+    );
     const { onSubmit } = renderDialog({ defaultClientType: "llm" });
 
     await user.type(screen.getByLabelText("Name"), "chat-app");
@@ -268,9 +332,13 @@ describe("CreateManagedOAuthClientDialog", () => {
       "https://app.example.com/cb",
     );
 
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
     expect(screen.getByText("Each signed-in user pays")).toBeVisible();
     expect(
       screen.queryByLabelText("Who pays for this client?"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("combobox", { name: "Service account" }),
     ).not.toBeInTheDocument();
     await continueStep(user);
     expect(screen.queryByLabelText("Label key")).not.toBeInTheDocument();
@@ -282,6 +350,20 @@ describe("CreateManagedOAuthClientDialog", () => {
         expect.not.objectContaining({ billingTeamId: expect.anything() }),
       ),
     );
+  });
+
+  it("omits Advanced when a user-sign-in client has no LLM budget", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    await user.type(screen.getByLabelText("Name"), "tools-app");
+    await user.click(screen.getByRole("radio", { name: /For its users/ }));
+    await continueStep(user);
+
+    expect(screen.getByLabelText("Redirect URIs")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Advanced" }),
+    ).not.toBeInTheDocument();
   });
 });
 

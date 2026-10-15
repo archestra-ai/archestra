@@ -85503,6 +85503,7 @@ export type GetOauthClientsResponses = {
             } | null;
             scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
             allowedGatewayIds: Array<string>;
+            includeFutureProviders: boolean;
         }>;
         pagination: {
             currentPage: number;
@@ -85528,6 +85529,10 @@ export type CreateOauthClientData = {
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             providerApiKeyId: string;
         }>;
+        /**
+         * Use current and future shared primary provider keys, with selected keys as overrides. Defaults to false on creation; omit on update to preserve the mode. Only valid for client_credentials with LLM Proxy access.
+         */
+        includeFutureProviders?: boolean;
         redirectUris?: Array<string>;
         /**
          * Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.
@@ -85691,6 +85696,7 @@ export type CreateOauthClientResponses = {
         } | null;
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds: Array<string>;
+        includeFutureProviders: boolean;
         clientSecret: string;
     };
 };
@@ -85796,6 +85802,10 @@ export type UpdateOauthClientData = {
             provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             providerApiKeyId: string;
         }>;
+        /**
+         * Use current and future shared primary provider keys, with selected keys as overrides. Defaults to false on creation; omit on update to preserve the mode. Only valid for client_credentials with LLM Proxy access.
+         */
+        includeFutureProviders?: boolean;
         redirectUris?: Array<string>;
         /**
          * Key/value labels. Omit to leave existing labels untouched; pass [] to clear them.
@@ -85939,6 +85949,7 @@ export type UpdateOauthClientResponses = {
         } | null;
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds: Array<string>;
+        includeFutureProviders: boolean;
     };
 };
 
@@ -86067,6 +86078,7 @@ export type RotateOauthClientSecretResponses = {
         } | null;
         scopes: Array<'mcp' | 'a2a' | 'llm:proxy'>;
         allowedGatewayIds: Array<string>;
+        includeFutureProviders: boolean;
         clientSecret: string;
     };
 };

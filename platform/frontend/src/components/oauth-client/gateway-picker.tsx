@@ -11,11 +11,13 @@ export function GatewayPicker({
   value,
   onValueChange,
   label,
+  description = "Choose which agents and MCP gateways this application can access.",
 }: {
   gateways: AgentSelectorAgent[];
   value: string[];
   onValueChange: (value: string[]) => void;
   label: string;
+  description?: string;
 }) {
   return (
     <div className="space-y-2">
@@ -25,8 +27,8 @@ export function GatewayPicker({
           {value.length} of {gateways.length} selected
         </span>
       </div>
-      <p className="text-xs text-muted-foreground">
-        Choose which agents and MCP gateways this application can access.
+      <p className="text-sm text-muted-foreground">
+        <span>{description}</span>
       </p>
       <AgentSelector
         mode="multiple"

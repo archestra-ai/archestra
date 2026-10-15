@@ -8,10 +8,75 @@ import { validateLlmOAuthAccessToken } from "@/routes/proxy/llm-proxy-auth";
 import { issueManagedOauthClientAccessToken } from "@/services/oauth-client-credentials";
 import { expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
+import { grantRoleEverywhere } from "@/test/wildcard-grants";
 import routes from "./oauth-client.routes";
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest route fixture registration, not a React hook.
 const ctx = useRouteTestApp(routes);
+
+test("current and future provider access requires a wildcard use grant and accepts no fixed mappings", async ({
+  makeMember,
+}) => {
+  await makeMember(ctx.user.id, ctx.organizationId, { role: "member" });
+  const payload = {
+    name: "Automatic providers",
+    scopes: ["llm:proxy"],
+    includeFutureProviders: true,
+    providerApiKeys: [],
+  };
+  const denied = await ctx.app.inject({
+    method: "POST",
+    url: "/api/oauth-clients",
+    payload,
+  });
+  expect(denied.statusCode).toBe(403);
+  expect(
+    await ManagedOauthClientModel.findAllByOrganization({
+      organizationId: ctx.organizationId,
+    }),
+  ).toEqual([]);
+  await grantRoleEverywhere({
+    organizationId: ctx.organizationId,
+    resource: "llmProviderApiKey",
+    roleId: "member",
+    actions: ["use"],
+  });
+  const allowed = await ctx.app.inject({
+    method: "POST",
+    url: "/api/oauth-clients",
+    payload,
+  });
+  expect(allowed.statusCode, allowed.body).toBe(200);
+  expect(allowed.json()).toMatchObject({
+    includeFutureProviders: true,
+    providerApiKeys: [],
+  });
+});
+
+test.each([
+  {
+    grantType: "authorization_code",
+    scopes: ["llm:proxy"],
+    redirectUris: ["https://app.example.com/callback"],
+  },
+  {
+    grantType: "authorization_code",
+    scopes: ["mcp"],
+    redirectUris: ["https://app.example.com/callback"],
+  },
+  { grantType: "client_credentials", scopes: ["mcp"] },
+])("rejects automatic providers for incompatible configuration %j", async (configuration) => {
+  const response = await ctx.app.inject({
+    method: "POST",
+    url: "/api/oauth-clients",
+    payload: {
+      name: "Invalid automatic access",
+      ...configuration,
+      includeFutureProviders: true,
+    },
+  });
+  expect(response.statusCode).toBe(400);
+});
 
 test("unified bindings require account management and changing principal revokes issued tokens", async ({
   makeMember,

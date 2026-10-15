@@ -19,11 +19,13 @@ export const ManagedOauthClientMetadataSchema = z.object({
   authorId: z.string().nullable().default(null),
   allowedGatewayIds: z.array(z.string().uuid()).default([]),
   providerApiKeys: z.array(LlmOauthClientProviderKeySchema).default([]),
+  includeFutureProviders: z.boolean().default(false),
   billingTeamId: z.string().nullable().default(null),
 });
 export const ManagedOauthClientSchema = LlmOauthClientSchema.extend({
   scopes: z.array(OAuthClientScopeSchema),
   allowedGatewayIds: z.array(z.string().uuid()),
+  includeFutureProviders: z.boolean(),
 });
 export const ManagedOauthClientWithSecretSchema =
   ManagedOauthClientSchema.extend({ clientSecret: z.string() });

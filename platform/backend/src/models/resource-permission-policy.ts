@@ -28,6 +28,7 @@ import {
   sql,
 } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
+import { idArrayCondition } from "./id-array-condition";
 import type { GrantPrincipal } from "./resource-permission-subject";
 import RoleCompositionModel from "./role-composition";
 
@@ -783,7 +784,7 @@ export default class ResourcePermissionPolicyModel {
         and(
           eq(table.organizationId, params.organizationId),
           eq(table.resource, params.resource),
-          inArray(table.scope, params.scopes),
+          idArrayCondition(table.scope, params.scopes),
         ),
       );
     const byScope = new Map(policies.map((policy) => [policy.scope, policy]));
@@ -817,7 +818,7 @@ export default class ResourcePermissionPolicyModel {
       .where(
         and(
           inArray(table.resource, params.resources),
-          inArray(table.scope, params.scopes),
+          idArrayCondition(table.scope, params.scopes),
         ),
       );
     for (const policy of policies) {
@@ -870,7 +871,7 @@ export default class ResourcePermissionPolicyModel {
         : db
             .select({ id: schema.teamsTable.id, name: schema.teamsTable.name })
             .from(schema.teamsTable)
-            .where(inArray(schema.teamsTable.id, teamIds)),
+            .where(idArrayCondition(schema.teamsTable.id, teamIds)),
       userIds.length === 0
         ? []
         : db
@@ -880,7 +881,7 @@ export default class ResourcePermissionPolicyModel {
               email: schema.usersTable.email,
             })
             .from(schema.usersTable)
-            .where(inArray(schema.usersTable.id, userIds)),
+            .where(idArrayCondition(schema.usersTable.id, userIds)),
     ]);
     const teamById = new Map(teams.map((team) => [team.id, team]));
     const userById = new Map(users.map((user) => [user.id, user]));

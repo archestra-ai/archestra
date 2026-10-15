@@ -303,6 +303,39 @@ describe("agent detail", () => {
     vi.clearAllMocks();
   });
 
+  it("never seeds an editing form from selector-only metadata", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    queryClient.setQueryData(
+      ["agents", "options", {}],
+      [{ id: "agent-1", name: "Only a name" }],
+    );
+    let finish: ((value: never) => void) | undefined;
+    sdk.getAgent.mockImplementation(
+      () =>
+        new Promise<never>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const { result } = setup(() => useProfile("agent-1"), queryClient);
+    expect(result.current.data).toBeUndefined();
+    await act(async () => {
+      finish?.({
+        data: {
+          id: "agent-1",
+          name: "Full Agent",
+          systemPrompt: "Configured prompt",
+          tools: [{ id: "tool-1" }],
+        },
+      } as never);
+    });
+    await waitFor(() =>
+      expect(result.current.data?.systemPrompt).toBe("Configured prompt"),
+    );
+    expect(result.current.data?.tools).toEqual([{ id: "tool-1" }]);
+  });
+
   it("fetches the agent's tools instead of trusting a list fetched without them", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },

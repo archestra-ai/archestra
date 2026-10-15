@@ -349,3 +349,31 @@ describe("AgentSelector (multiple, flat)", () => {
     ).toBeInTheDocument();
   });
 });
+
+it("keeps large selector lists bounded while retaining later choices and full-list search", async () => {
+  const user = userEvent.setup();
+  const agents = Array.from({ length: 205 }, (_, i) => ({
+    id: `agent-${i}`,
+    name: `Agent ${String(i).padStart(3, "0")}`,
+    agentType: "agent" as const,
+  }));
+  const select = vi.fn();
+  render(
+    <AgentSelector
+      mode="single"
+      agents={agents}
+      value="agent-204"
+      onValueChange={select}
+    />,
+  );
+  expect(screen.getByRole("combobox")).toHaveTextContent("Agent 204");
+  await user.click(screen.getByRole("combobox"));
+  expect(screen.getAllByRole("option")).toHaveLength(100);
+  await user.click(screen.getByRole("button", { name: "Next agents" }));
+  expect(screen.getAllByRole("option")).toHaveLength(100);
+  expect(screen.getByRole("option", { name: /Agent 100/ })).toBeInTheDocument();
+  await user.type(screen.getByPlaceholderText("Search agents..."), "204");
+  expect(screen.getAllByRole("option")).toHaveLength(1);
+  await user.click(screen.getByRole("option", { name: /Agent 204/ }));
+  expect(select).toHaveBeenCalledWith("agent-204");
+});

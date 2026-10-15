@@ -47,7 +47,7 @@ import {
   SHORTCUT_SEARCH,
   SHORTCUT_SIDEBAR,
 } from "@/consts";
-import { useProfiles } from "@/lib/agent.query";
+import { useAgentOptions } from "@/lib/agent.query";
 import { useMyAgentRuns } from "@/lib/agent-runtime.query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -230,7 +230,7 @@ export function ConversationSearchPalette({
   const { data: canReadMcpRegistry } = useHasPermissions({
     mcpRegistry: ["read"],
   });
-  const { data: agents = [] } = useProfiles({
+  const { data: agents = [] } = useAgentOptions({
     enabled: open && isAuthenticated && canReadAgents === true,
   });
   const { data: mcpCatalogItems = [] } = useInternalMcpCatalog({

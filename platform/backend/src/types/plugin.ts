@@ -15,14 +15,14 @@ import {
   PLUGIN_MAX_TOTAL_BYTES,
 } from "./plugin-file-constraints";
 
+export { PLUGIN_DELIVERY_MAX_COUNT } from "@archestra/shared/connection-setup";
 export {
   isSafePluginPath,
   PLUGIN_MAX_FILE_BYTES,
   PLUGIN_MAX_FILES,
   PLUGIN_MAX_TOTAL_BYTES,
 } from "./plugin-file-constraints";
-export const PLUGIN_DELIVERY_MAX_COUNT = 50;
-export const PLUGIN_DELIVERY_MAX_BYTES = 100 * 1024 * 1024;
+export const PLUGIN_DELIVERY_MAX_BYTES = 1110 * 1024 * 1024;
 
 export const ClientTypeSchema = z.enum([
   "claude-code",

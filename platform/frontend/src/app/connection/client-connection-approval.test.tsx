@@ -7,6 +7,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import {
@@ -71,6 +72,7 @@ function show(
     skillsSelected: true,
   },
   setupId: string | null = "setup",
+  setupProblem: string | null = null,
 ) {
   render(
     <QueryClientProvider
@@ -86,6 +88,7 @@ function show(
       <ClientConnectionApproval
         requestId="request"
         setupId={setupId ?? undefined}
+        setupProblem={setupProblem}
         clientId={clientId}
         platform="linux"
         gatewayName="My Gateway"
@@ -117,8 +120,44 @@ test("a missing prepared setup blocks approval while denial remains available", 
   expect(
     screen.getByRole("button", { name: "Approve connection" }),
   ).toBeDisabled();
+  expect(await approveTooltip()).toHaveTextContent(
+    "Preparing the setup for your terminal. Approve turns on as soon as it is ready.",
+  );
   expect(screen.getByRole("button", { name: "Deny" })).toBeEnabled();
   expect(requests).toEqual([]);
+});
+
+test("an unconfirmed code explains how to enable approval", async () => {
+  show();
+  await screen.findByText("ABCD-1234");
+  expect(
+    screen.getByRole("button", { name: "Approve connection" }),
+  ).toBeDisabled();
+  expect(await approveTooltip()).toHaveTextContent(
+    "Check that the code above matches the code in your terminal, then select the checkbox to confirm it.",
+  );
+});
+
+test("a setup that cannot be prepared keeps approval off and says how to fix it", async () => {
+  const problem =
+    "600 plugins are selected, but one setup can install at most 555. Choose 555 or fewer in Setup options, or turn plugins off.";
+  show("cursor", undefined, null, problem);
+  await screen.findByText("ABCD-1234");
+  fireEvent.click(screen.getByRole("checkbox"));
+  expect(
+    screen.getByRole("button", { name: "Approve connection" }),
+  ).toBeDisabled();
+  expect(await approveTooltip()).toHaveTextContent(problem);
+  expect(requests).toEqual([]);
+});
+
+test("a request for another app names what the terminal asked for", async () => {
+  show("claude-code");
+  await screen.findByText("ABCD-1234");
+  fireEvent.click(screen.getByRole("checkbox"));
+  expect(await approveTooltip()).toHaveTextContent(
+    "Your terminal asked to connect Cursor on macOS / Linux. Select the same app and operating system on this page, then approve.",
+  );
 });
 
 test("a pending decision disables both actions and waits for the result", async () => {
@@ -282,3 +321,10 @@ test("expired requests show recovery guidance and cannot release a setup", async
   ).not.toBeInTheDocument();
   expect(requests).toEqual([]);
 });
+
+async function approveTooltip() {
+  const approve = screen.getByRole("button", { name: "Approve connection" });
+  // A disabled button gets no pointer events; its wrapper carries the tooltip.
+  await userEvent.setup().hover(approve.parentElement as HTMLElement);
+  return screen.findByRole("tooltip");
+}

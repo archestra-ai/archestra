@@ -39,7 +39,7 @@ export function pluginDeliveryBudgetError(
     return `Plugin delivery is limited to ${PLUGIN_DELIVERY_MAX_COUNT} plugins`;
   }
   if (stats.totalBytes > PLUGIN_DELIVERY_MAX_BYTES) {
-    return `Plugin delivery exceeds ${PLUGIN_DELIVERY_MAX_BYTES} decoded bytes`;
+    return `Plugin delivery is limited to ${PLUGIN_DELIVERY_MAX_BYTES / (1024 * 1024)} MiB of plugin files`;
   }
   return null;
 }

@@ -83,6 +83,7 @@ class OpenAppaArchestraAnnotator {
         tag: "annotation",
         system: `${request.system}\n\nThe annotation is one JSON object that matches this JSON schema:\n${JSON.stringify(request.schema)}`,
         prompt: request.input,
+        maxOutputTokens: ANNOTATION_MAX_OUTPUT_TOKENS,
       });
       const answer = text === null ? null : parseObject(text);
       if (answer === null)
@@ -123,6 +124,12 @@ class OpenAppaArchestraAnnotator {
 }
 
 export const openappaArchestraAnnotator = new OpenAppaArchestraAnnotator();
+
+/**
+ * Room for the annotation plus the thinking models do by default. Explicit so
+ * a truncated first attempt is retried with more room, not the same ceiling.
+ */
+const ANNOTATION_MAX_OUTPUT_TOKENS = 16_384;
 
 /**
  * What the upstream said, from the `error.message` every provider body and

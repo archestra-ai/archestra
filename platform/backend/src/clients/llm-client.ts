@@ -36,6 +36,7 @@ import {
 
 import { context, propagation } from "@opentelemetry/api";
 import {
+  defaultSettingsMiddleware,
   extractReasoningMiddleware,
   type streamText,
   wrapLanguageModel,
@@ -596,19 +597,21 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
 
   anthropic: {
     createModel: ({ apiKey, modelName, baseURL, headers, fetch, direct }) =>
-      direct && anthropicVertexClient.isEnabled()
-        ? anthropicVertexClient.createModel({
-            modelId: modelName,
-            fetch: createAnthropicThinkingDisplayFetch(fetch),
-          })
-        : createAnthropic({
-            apiKey,
-            baseURL,
-            headers,
-            // Models that think by default return their thinking text only on
-            // request — see createAnthropicThinkingDisplayFetch.
-            fetch: createAnthropicThinkingDisplayFetch(fetch),
-          })(modelName),
+      withAnthropicOutputBudget(
+        direct && anthropicVertexClient.isEnabled()
+          ? anthropicVertexClient.createModel({
+              modelId: modelName,
+              fetch: createAnthropicThinkingDisplayFetch(fetch),
+            })
+          : createAnthropic({
+              apiKey,
+              baseURL,
+              headers,
+              // Models that think by default return their thinking text only on
+              // request — see createAnthropicThinkingDisplayFetch.
+              fetch: createAnthropicThinkingDisplayFetch(fetch),
+            })(modelName),
+      ),
     defaultBaseUrl: config.llm.anthropic.baseUrl,
     apiKeyRequiredMessage: isAnthropicKeylessAuthEnabled()
       ? undefined
@@ -1237,6 +1240,24 @@ function createOllamaNativeFetch(
 
     return baseFetch(input, { ...forwarded, body: JSON.stringify(body) });
   };
+}
+
+/**
+ * Default output budget for Anthropic calls that set no `maxOutputTokens`.
+ * Without it @ai-sdk/anthropic falls back to its own per-model table, which
+ * lags new model ids: unknown ids get 4096 (older SDKs) or the full 128k
+ * (newer ones). Adaptive thinking spends the same budget, so 4096 silently
+ * truncates answers. Explicit per-call values still win.
+ */
+function withAnthropicOutputBudget(
+  model: Parameters<typeof wrapLanguageModel>[0]["model"],
+): ReturnType<typeof wrapLanguageModel> {
+  return wrapLanguageModel({
+    model,
+    middleware: defaultSettingsMiddleware({
+      settings: { maxOutputTokens: config.chat.maxOutputTokensCeiling },
+    }),
+  });
 }
 
 /**

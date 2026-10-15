@@ -326,6 +326,41 @@ describe("ChatProvider retries", () => {
     expect(mocks.clearChatErrors).not.toHaveBeenCalled();
   });
 
+  it("aborts a silently stalled stream and reattaches to the active run", async () => {
+    let status: "ready" | "streaming" = "streaming";
+    const baseUseChat = mocks.useChat.getMockImplementation();
+    mocks.useChat.mockImplementation((options) => ({
+      ...baseUseChat?.(options),
+      status,
+    }));
+    vi.useFakeTimers();
+
+    const { rerender } = render(
+      <ChatProvider>
+        <RegisterChatSession />
+      </ChatProvider>,
+    );
+
+    // No bytes (not even heartbeats) for the stall threshold: the hung request
+    // is aborted client-side, and the run is not reattached until it settles.
+    act(() => {
+      vi.advanceTimersByTime(40_000);
+    });
+    expect(mocks.stop).toHaveBeenCalledTimes(1);
+    expect(mocks.resumeStream).not.toHaveBeenCalled();
+
+    status = "ready";
+    act(() => {
+      rerender(
+        <ChatProvider>
+          <RegisterChatSession />
+        </ChatProvider>,
+      );
+    });
+    expect(mocks.resumeStream).toHaveBeenCalledTimes(1);
+    expect(mocks.stop).toHaveBeenCalledTimes(1);
+  });
+
   it("clears persisted chat errors once a user-message regenerate is issued", async () => {
     const latestSessionRef: { current: ChatSessionSnapshot } = {
       current: undefined,

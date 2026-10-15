@@ -1,0 +1,264 @@
+import { randomUUID } from "node:crypto";
+import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { afterEach, vi } from "vitest";
+import config from "@/config";
+import db, { schema } from "@/database";
+import logger from "@/logging";
+import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
+import OpenAppaPolicyFileModel from "@/models/openappa-policy-file";
+import { guardrailsPolicyService } from "@/services/guardrails-policy";
+import { beforeEach, describe, expect, test } from "@/test";
+import { openappaBatteriesService } from "./batteries";
+
+/** The runtime's log is a process boundary here: each root's opening key is what the test says. */
+const runtime = vi.hoisted(() => ({
+  openings: new Map<string, string>(),
+  unreadable: false,
+}));
+vi.mock("@archestra/openappa-rs", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  listOpenappaOpeningKeys: vi.fn(async (roots: string[]) => {
+    if (runtime.unreadable) throw new Error("no free PostgreSQL connection");
+    return roots.map((root) => ({
+      root,
+      policyFileKey: runtime.openings.get(root) ?? null,
+    }));
+  }),
+}));
+vi.mock("@/logging");
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+describe("annotators kept for conversations that are still active", () => {
+  let organizationId: string;
+  let userId: string;
+
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    config.openappa.enabled = true;
+    config.openappa.keptAnnotatorHorizonDays = 30;
+    runtime.openings.clear();
+    runtime.unreadable = false;
+    vi.mocked(logger.info).mockClear();
+    organizationId = (await makeOrganization()).id;
+    userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test("a renamed annotator stays kept while a conversation under the old policy was active, and says until when", async () => {
+    await declare(urlJudged("a", JUDGE_A));
+    const opening = await openedUnder({ activeDaysAgo: 2 });
+
+    await declare(urlJudged("b", JUDGE_B));
+
+    const effective =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+    expect(effective.content).toContain("a.tool-call");
+    const kept = effective.retainedAnnotators?.kept ?? [];
+    expect(kept).toMatchObject([
+      {
+        name: "a.tool-call",
+        binding: JUDGE_A,
+        openingHashes: [opening.hash],
+        liveRoots: 1,
+        lastActivityAt: opening.activeAt.toISOString(),
+      },
+    ]);
+    expect(effective.retainedAnnotators?.recheckAt).toBe(
+      new Date(opening.activeAt.getTime() + 30 * DAY_MS).toISOString(),
+    );
+    const view =
+      await openappaBatteriesService.effectivePolicyView(organizationId);
+    expect(view).not.toHaveProperty("retainedAnnotators");
+    expect(view.retained?.kept).toEqual([
+      {
+        name: "a.tool-call",
+        binding: JUDGE_A,
+        liveRoots: 1,
+        lastActivityAt: opening.activeAt,
+        retiresAt: new Date(opening.activeAt.getTime() + 30 * DAY_MS),
+      },
+    ]);
+  });
+
+  test("an annotator no conversation needed within the horizon is no longer kept, and that is logged once", async () => {
+    await declare(urlJudged("a", JUDGE_A));
+    const opening = await openedUnder({ activeDaysAgo: 31 });
+
+    await declare(urlJudged("b", JUDGE_B));
+
+    const effective =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+    expect(effective.content).not.toContain("a.tool-call");
+    expect(effective.retainedAnnotators).toMatchObject({
+      kept: [],
+      inactive: [
+        {
+          name: "a.tool-call",
+          binding: JUDGE_A,
+          openingHashes: [opening.hash],
+        },
+      ],
+      recheckAt: null,
+    });
+    const retiredLines = () =>
+      vi
+        .mocked(logger.info)
+        .mock.calls.filter(
+          ([, message]) =>
+            message ===
+            "OpenAPPA no longer keeps annotators no conversation needed within the horizon",
+        );
+    expect(retiredLines()).toHaveLength(1);
+
+    await OpenAppaEffectivePolicyModel.invalidate(organizationId);
+    await openappaBatteriesService.getEffectivePolicy(organizationId);
+    expect(retiredLines()).toHaveLength(1);
+  });
+
+  test("the first read after the last conversation's horizon ends retires the annotator, although nothing else changed", async () => {
+    await declare(urlJudged("a", JUDGE_A));
+    await openedUnder({ activeDaysAgo: 29 });
+    await declare(urlJudged("b", JUDGE_B));
+    const kept =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+    expect(kept.content).toContain("a.tool-call");
+
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.now() + 2 * DAY_MS);
+    const retired =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+    expect(retired.installFingerprint).toBe(kept.installFingerprint);
+    expect(retired.content).not.toContain("a.tool-call");
+    expect(
+      retired.retainedAnnotators?.inactive.map(({ name }) => name),
+    ).toEqual(["a.tool-call"]);
+  });
+
+  test("a conversation under a composition that carried the name without routing to it does not keep it", async () => {
+    await declare(urlJudged("a", JUDGE_A));
+    await openedUnder({ activeDaysAgo: 40 });
+    await declare(urlJudged("b", JUDGE_B));
+    // The idle policy is gone from the composition; open a session under the
+    // composition that carried it a moment before.
+    config.openappa.keptAnnotatorHorizonDays = 0;
+    await OpenAppaEffectivePolicyModel.invalidate(organizationId);
+    const carried =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+    expect(carried.content).toContain("a.tool-call");
+    config.openappa.keptAnnotatorHorizonDays = 30;
+    await openedUnder({ activeDaysAgo: 0, content: carried.content });
+
+    await OpenAppaEffectivePolicyModel.invalidate(organizationId);
+    const effective =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+    expect(effective.content).not.toContain("a.tool-call");
+  });
+
+  test("activity that cannot be read keeps every candidate and looks again within the hour", async () => {
+    await declare(urlJudged("a", JUDGE_A));
+    await openedUnder({ activeDaysAgo: 31 });
+    runtime.unreadable = true;
+    // A conversation whose opening this process has not recorded yet.
+    await activity({ root: randomUUID(), at: new Date() });
+
+    await declare(urlJudged("b", JUDGE_B));
+
+    const effective =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+    expect(effective.content).toContain("a.tool-call");
+    expect(effective.retainedAnnotators?.livenessKnown).toBe(false);
+    const record = effective.retainedAnnotators;
+    expect(
+      new Date(record?.recheckAt ?? 0).getTime() -
+        new Date(record?.checkedAt ?? 0).getTime(),
+    ).toBe(60 * 60 * 1000);
+  });
+
+  test("a horizon of 0 keeps the annotator however long its conversations are idle", async () => {
+    config.openappa.keptAnnotatorHorizonDays = 0;
+    await declare(urlJudged("a", JUDGE_A));
+    await openedUnder({ activeDaysAgo: 400 });
+
+    await declare(urlJudged("b", JUDGE_B));
+
+    const effective =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+    expect(effective.content).toContain("a.tool-call");
+    expect(effective.retainedAnnotators?.recheckAt).toBeNull();
+  });
+
+  /**
+   * Store the effective policy as the runtime does when a conversation opens
+   * under it, with one operation `activeDaysAgo` days ago.
+   */
+  async function openedUnder(params: {
+    activeDaysAgo: number;
+    content?: string;
+  }) {
+    const content =
+      params.content ??
+      (await openappaBatteriesService.getEffectivePolicy(organizationId))
+        .content;
+    const hash = await OpenAppaPolicyFileModel.store(content);
+    const root = randomUUID();
+    runtime.openings.set(root, hash);
+    const activeAt = new Date(
+      Math.floor((Date.now() - params.activeDaysAgo * DAY_MS) / 1000) * 1000,
+    );
+    await activity({ root, at: activeAt });
+    return { hash, root, activeAt };
+  }
+
+  /** One completed operation of a conversation of `root`, as the runtime records it. */
+  async function activity(params: { root: string; at: Date }) {
+    await db.insert(schema.openappaOperationsTable).values({
+      organizationId,
+      sessionId: `session-${params.root}`,
+      operationId: randomUUID(),
+      root: params.root,
+      status: "complete",
+      input: {},
+      decision: {},
+      createdAt: params.at,
+    });
+  }
+
+  async function declare(content: string) {
+    const latest = await guardrailsPolicyService.get(organizationId);
+    await guardrailsPolicyService.update({
+      organizationId,
+      userId,
+      content,
+      expectedRevision: latest.revision,
+    });
+    await openappaBatteriesService.recompile(organizationId);
+  }
+});
+
+const JUDGE_A = "https://judge-a.test/annotate";
+const JUDGE_B = "https://judge-b.test/annotate";
+
+/** A root whose one URL-bound annotator `<prefix>.tool-call` judges every tool. */
+function urlJudged(prefix: string, url: string): string {
+  const name = `${prefix}.tool-call`;
+  return `[policy]
+version = 2
+
+[[policy.annotator]]
+name = "${name}"
+ranks = ["suspicious", "trusted"]
+audiences = ["self"]
+marks = []
+
+[[policy.tool]]
+name = "*"
+annotator = "${name}"
+
+[externals.annotators."${name}"]
+url = "${url}"
+`;
+}

@@ -8,6 +8,7 @@ import {
   useEffectivePolicy,
   usePolicyDeclarations,
 } from "@/lib/openappa-batteries.query";
+import { formatDate } from "@/lib/utils/date-time";
 import { BATTERY_STATUS } from "./battery-status";
 import { POLICY_EDITOR_OPTIONS } from "./policy-editor-options";
 
@@ -31,8 +32,14 @@ export function EffectivePolicyView() {
         onRetry={() => effective.refetch()}
       />
     );
-  const { content, contentHash, rootRevision, lastError, composition } =
-    effective.data;
+  const {
+    content,
+    contentHash,
+    rootRevision,
+    lastError,
+    composition,
+    retained,
+  } = effective.data;
   const { served, refusal } = composition;
   const hash = contentHash.slice(0, 12);
   // A battery the host holds back folds in as the empty stub, which the
@@ -99,6 +106,38 @@ export function EffectivePolicyView() {
           </InlineNotice>
         </div>
       )}
+      {retained &&
+        served.kind !== "root_only" &&
+        (retained.kept.length > 0 || retained.inactive.length > 0) && (
+          <div className="border-b px-4 py-3">
+            <InlineNotice
+              variant="info"
+              data-testid="effective-policy-retained"
+            >
+              <span className="font-medium">
+                Kept for conversations that started under an earlier policy
+              </span>
+              <InlineNoticeText>
+                {retained.kept.map((annotator) => (
+                  <span key={annotator.name} className="block">
+                    {keptLine(annotator, retained.horizonDays)}
+                  </span>
+                ))}
+                {retained.inactive.length > 0 && (
+                  <span className="block">
+                    {`No longer kept, no conversation used ${retained.inactive.map(({ name }) => name).join(", ")} in ${retained.horizonDays} days.`}
+                  </span>
+                )}
+                {!retained.livenessKnown && (
+                  <span className="block">
+                    Conversation activity could not be read, so each is kept
+                    until the next check.
+                  </span>
+                )}
+              </InlineNoticeText>
+            </InlineNotice>
+          </div>
+        )}
       <Editor
         height="min(50vh, 560px)"
         language="ini"
@@ -127,4 +166,27 @@ export function EffectivePolicyView() {
 /** How a refused attempt is named: its revision, or the latest one for a row marked stale. */
 function refused(revision: number | null): string {
   return revision === null ? "The latest revision" : `Revision ${revision}`;
+}
+
+/** One kept annotator: what answers it, who still needs it, and until when. */
+function keptLine(
+  annotator: {
+    name: string;
+    binding: string;
+    liveRoots: number;
+    retiresAt: string | null;
+  },
+  horizonDays: number,
+): string {
+  const conversations =
+    annotator.liveRoots === 1
+      ? "1 active conversation"
+      : `${annotator.liveRoots} active conversations`;
+  const until =
+    horizonDays === 0
+      ? "kept while a policy that needs it is stored"
+      : annotator.retiresAt
+        ? `kept until ${formatDate({ date: annotator.retiresAt, dateFormat: "MMM d, yyyy" })} unless one is active again`
+        : "kept until activity can be read";
+  return `${annotator.name} (${annotator.binding}): ${conversations}, ${until}.`;
 }

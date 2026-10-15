@@ -2064,11 +2064,13 @@ export function parseOpenAppaConfig({
   yellEnabled,
   offerSigningSecret,
   postgresMaxConnections,
+  keptAnnotatorHorizonDays,
   authSecret,
 }: {
   yellEnabled?: string;
   offerSigningSecret?: string;
   postgresMaxConnections?: string;
+  keptAnnotatorHorizonDays?: string;
   authSecret?: string;
 } = {}) {
   const dedicated = offerSigningSecret ?? "";
@@ -2095,8 +2097,30 @@ export function parseOpenAppaConfig({
     postgresMaxConnections: parseOpenAppaPostgresMaxConnections(
       postgresMaxConnections,
     ),
+    keptAnnotatorHorizonDays: parseKeptAnnotatorHorizonDays(
+      keptAnnotatorHorizonDays,
+    ),
   };
 }
+
+/**
+ * Days without activity after which an annotator kept for conversations that
+ * started under an earlier policy is no longer kept. 0 keeps it for as long
+ * as a stored opening policy names it.
+ */
+function parseKeptAnnotatorHorizonDays(envValue?: string): number {
+  const value = envValue?.trim();
+  if (value === undefined || value === "")
+    return DEFAULT_KEPT_ANNOTATOR_HORIZON_DAYS;
+  if (!/^\d+$/.test(value) || Number(value) > MAX_KEPT_ANNOTATOR_HORIZON_DAYS)
+    throw new Error(
+      `ARCHESTRA_OPENAPPA_KEPT_ANNOTATOR_HORIZON_DAYS must be a whole number of days from 0 to ${MAX_KEPT_ANNOTATOR_HORIZON_DAYS}`,
+    );
+  return Number(value);
+}
+
+const DEFAULT_KEPT_ANNOTATOR_HORIZON_DAYS = 30;
+const MAX_KEPT_ANNOTATOR_HORIZON_DAYS = 3650;
 
 function deriveOfferSigningSecret(authSecret: string | undefined): string {
   if (!authSecret) return "";
@@ -2313,6 +2337,8 @@ const openappa = parseOpenAppaConfig({
   offerSigningSecret: process.env.ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET,
   postgresMaxConnections:
     process.env.ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS,
+  keptAnnotatorHorizonDays:
+    process.env.ARCHESTRA_OPENAPPA_KEPT_ANNOTATOR_HORIZON_DAYS,
   authSecret: authSessionSecret,
 });
 const llmProxyPlugins = parseLlmProxyPlugins(

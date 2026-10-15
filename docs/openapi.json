@@ -339027,6 +339027,103 @@
                         "refusal"
                       ],
                       "additionalProperties": false
+                    },
+                    "retained": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "horizonDays": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "livenessKnown": {
+                          "type": "boolean"
+                        },
+                        "kept": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "binding": {
+                                "type": "string"
+                              },
+                              "liveRoots": {
+                                "type": "integer",
+                                "minimum": -9007199254740991,
+                                "maximum": 9007199254740991
+                              },
+                              "lastActivityAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "retiresAt": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "binding",
+                              "liveRoots",
+                              "lastActivityAt",
+                              "retiresAt"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "inactive": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "binding": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "binding"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "dropped": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "reason"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "horizonDays",
+                        "livenessKnown",
+                        "kept",
+                        "inactive",
+                        "dropped"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -339038,7 +339135,8 @@
                     "compiledAt",
                     "lastError",
                     "lastErrorAt",
-                    "composition"
+                    "composition",
+                    "retained"
                   ],
                   "additionalProperties": false
                 }

@@ -201,6 +201,13 @@ export declare function inspectOpenappaPolicyTests(input: string): Promise<strin
  */
 export declare function listBundledOpenappaBatteries(): Promise<Array<BatteryPackage>>
 
+/**
+ * The opening policy key of each root, read from its first stored batch alone,
+ * in the order asked. A root the runtime cannot open answers no key rather than
+ * failing the call; a transport failure fails it.
+ */
+export declare function listOpenappaOpeningKeys(roots: Array<string>): Promise<Array<OpenappaOpeningKey>>
+
 export declare function listPeerMessages(input: string, policy: DispatchPolicy): Promise<string>
 
 /**
@@ -236,6 +243,16 @@ export interface OfferReviewOutput {
    * values cannot.
    */
   arguments?: string
+}
+
+/** The policy file key one root opened under, as its opening record names it. */
+export interface OpenappaOpeningKey {
+  root: string
+  /**
+   * Absent when the root has no opening record this build can read: no first
+   * batch, or one that does not open with a `TrajectoryOpened` record.
+   */
+  policyFileKey?: string
 }
 
 export interface OpenappaStatus {

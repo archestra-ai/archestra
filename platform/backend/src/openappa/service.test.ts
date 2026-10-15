@@ -130,6 +130,7 @@ beforeEach(async ({ makeOrganization }) => {
     yellEnabled: false,
     offerSigningSecret: "test-offer-signing-secret-32chars",
     postgresMaxConnections: 10,
+    keptAnnotatorHorizonDays: 30,
   };
   await GuardrailsDeploymentModel.setEnabled(true);
   vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(

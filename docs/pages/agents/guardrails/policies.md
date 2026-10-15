@@ -53,7 +53,7 @@ requires = { trust = "trusted", audience = { contains = ["public"] } }
 
 What to know:
 
-- Changes apply to new conversations. Running ones keep the policy they started with.
+- Changes apply to new conversations. Running ones keep the policy they started with. A renamed or removed annotator stays available to them while one of them was active in the last 30 days ([`ARCHESTRA_OPENAPPA_KEPT_ANNOTATOR_HORIZON_DAYS`](/docs/reference/configuration)). **Effective** lists what it keeps.
 - A change that fails keeps the last valid policy running. **Effective** shows the error.
 - Changing the policy needs [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update). Turning enforcement on or off needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
 

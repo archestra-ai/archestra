@@ -116,7 +116,36 @@ export const openappaEffectivePoliciesTable = pgTable(
     // `contentHash` equals `content_hash`, so a build that does not write it
     // leaves a value nobody reads. See src/openappa/composition-view.ts.
     served: jsonb("served").$type<unknown>(),
+    // Which annotators the content keeps for conversations that started under
+    // earlier policies, how recently those conversations were active, and
+    // when to check again. Trusted only while its `contentHash` equals
+    // `content_hash`, like `served`. See src/openappa/retired-annotators.ts.
+    retainedAnnotators: jsonb("retained_annotators").$type<unknown>(),
   },
+);
+
+// The opening policy each runtime root opened under, as its first stored
+// batch names it: filled the first time a recomposition asks whether any
+// conversation under a kept annotator's policy is still active. A root's
+// opening never changes, so a row is written once.
+export const openappaRootOpeningsTable = pgTable(
+  "openappa_root_openings",
+  {
+    root: text().primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    policyFileKey: text("policy_file_key").notNull(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("openappa_root_openings_org_key_idx").on(
+      table.organizationId,
+      table.policyFileKey,
+    ),
+  ],
 );
 
 // Which runtime credential key fills a helper variable, organization-wide. A

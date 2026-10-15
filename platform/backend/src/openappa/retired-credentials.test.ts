@@ -31,6 +31,9 @@ describe("retained annotator credential availability", () => {
 
   beforeEach(async ({ makeOrganization, makeAdmin, makeMember }) => {
     config.openappa.enabled = true;
+    // Retention itself is under test: a stored opening keeps its names
+    // whatever its conversations last did (kept-liveness.test.ts covers that).
+    config.openappa.keptAnnotatorHorizonDays = 0;
     organizationId = (await makeOrganization()).id;
     userId = (await makeAdmin()).id;
     await makeMember(userId, organizationId, { role: "admin" });
@@ -78,6 +81,7 @@ describe("retained annotator credential availability", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    config.openappa.keptAnnotatorHorizonDays = 30;
   });
 
   test("a dispatch read inside the freshness window reads neither the ledger nor the secret store", async () => {
@@ -302,6 +306,10 @@ name = "other.judge"
 [[policy.tool]]
 name = "mcp/files/read"
 annotator = "jev.tool-call"
+
+[[policy.tool]]
+name = "mcp/files/write"
+annotator = "other.judge"
 
 [externals.jev]
 token_env = "${VARIABLE}"

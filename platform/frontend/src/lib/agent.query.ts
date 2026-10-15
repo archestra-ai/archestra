@@ -150,6 +150,14 @@ export function useAgentOptions(
   } = {},
 ) {
   const filters = { excludeBuiltIn: true, ...params.filters };
+  if (
+    filters.agentTypes?.length === 1 &&
+    (filters.agentType === undefined ||
+      filters.agentType === filters.agentTypes[0])
+  ) {
+    filters.agentType = filters.agentTypes[0];
+    delete filters.agentTypes;
+  }
   return useQuery({
     queryKey: ["agents", "options", filters],
     queryFn: async () => {

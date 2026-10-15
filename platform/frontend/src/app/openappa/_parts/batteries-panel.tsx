@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useEffect, useState } from "react";
+import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import {
   openRowOnPlainClick,
@@ -888,6 +889,7 @@ function CredentialsSection({
   pending: boolean;
 }) {
   const { data: canRead } = useHasPermissions({ credential: ["read"] });
+  const canSeeSettings = useSettingsAreaAccess() === true;
   const listable = canRead === true;
   const available = useRuntimeCredentials(listable);
   const { refetch } = available;
@@ -907,12 +909,14 @@ function CredentialsSection({
           : "Changing a key takes permission to update guardrails and credentials."
       }
       action={
-        <Button asChild variant="link" size="sm" className="h-auto p-0">
-          <Link href="/settings/credentials" target="_blank" rel="noreferrer">
-            <span>Manage credentials</span>
-            <ExternalLink className="size-3.5" />
-          </Link>
-        </Button>
+        canSeeSettings ? (
+          <Button asChild variant="link" size="sm" className="h-auto p-0">
+            <Link href="/settings/credentials" target="_blank" rel="noreferrer">
+              <span>Manage credentials</span>
+              <ExternalLink className="size-3.5" />
+            </Link>
+          </Button>
+        ) : null
       }
     >
       {bindable && available.isSuccess && options.length === 0 && (

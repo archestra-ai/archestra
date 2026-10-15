@@ -9,6 +9,7 @@ import { useModelsWithApiKeys } from "@/lib/llm-models.query";
 import { useOrganization } from "@/lib/organization.query";
 import { ConnectorEmbeddingModelNotice } from "./connector-embedding-model-notice";
 
+vi.mock("@/app/_parts/use-settings-area-access");
 vi.mock("@/lib/llm-models.query");
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/auth/auth.query");

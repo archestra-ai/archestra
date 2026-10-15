@@ -14,6 +14,7 @@ import {
   type FieldScopeValue,
 } from "@/components/field-scope-select";
 import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
+import { useCredentialsPageHref } from "@/components/settings-link";
 import { StandardFormDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -468,6 +469,7 @@ function CredentialBindingEditor({
   onCreate?: () => void;
 }) {
   const reserved = options.find((option) => option.id === draft.credentialId);
+  const credentialsHref = useCredentialsPageHref();
   const selection = reserved?.id ?? "one-off";
   return (
     <div className="space-y-2">
@@ -478,7 +480,7 @@ function CredentialBindingEditor({
             ? "Uses a saved credential. New executions use its current value."
             : "Provide a value for this resource."}{" "}
           <Link
-            href="/settings/credentials"
+            href={credentialsHref}
             className="font-medium text-foreground underline underline-offset-4"
           >
             Manage credentials

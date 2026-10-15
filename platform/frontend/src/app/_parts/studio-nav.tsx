@@ -107,7 +107,8 @@ export function isNavItemPermitted(
 ): boolean {
   if (item.permissionUrls) {
     // No `?? true` fallback here: these URLs are asserted to be in
-    // requiredPagePermissionsMap, so a typo should hide the item, not
+    // requiredPagePermissionsMap (or are `/settings`, which
+    // `useNavPermissionMap` adds), so a typo should hide the item, not
     // silently show it to everyone.
     return item.permissionUrls.some((url) => permissionMap[url] === true);
   }
@@ -310,24 +311,10 @@ export const contentNavGroups: NavGroup[] = [
         icon: Settings,
         customIsActive: (pathname: string) => pathname.startsWith("/settings"),
         // /settings is a landing page that forwards to the first permitted
-        // tab; show the item when the user can see any settings page.
-        permissionUrls: [
-          "/settings/appearance",
-          "/settings/auth",
-          "/settings/service-accounts",
-          "/settings/agents",
-          "/settings/llm",
-          "/settings/mcp",
-          "/settings/skills",
-          "/settings/knowledge",
-          "/settings/environments",
-          "/settings/users",
-          "/settings/teams",
-          "/settings/roles",
-          "/settings/credentials",
-          "/settings/identity-providers",
-          "/settings/secrets",
-        ],
+        // tab. Whether the reader sees the area at all is its own rule
+        // (`canSeeSettingsArea`), which the navigation permission map carries
+        // under this key.
+        permissionUrls: ["/settings"],
       },
     ],
   },

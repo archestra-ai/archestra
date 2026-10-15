@@ -2,7 +2,7 @@
 title: Credentials and Secrets
 description: Save credentials once, reuse them across integrations, and configure encrypted secrets storage
 order: 1
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -37,7 +37,7 @@ Every credential definition has a name, description, type, and owner policy. Its
 
 **Each user** means every person connects their own private value. Agent Runtime uses the person acting on the run. MCP servers use the owner of a personal installation. Another user's value is never substituted.
 
-With Agent Runtime enabled, **Account → Credentials** appears when a personal credential is available. Installed Claude Code agents also make the page available.
+People who can open **Settings → Credentials** connect their own values, and add credentials only they can use, there. Everyone else does it under **Personal Settings → Credentials** (click your name in the sidebar). That page lists every personal credential they can see and, with Agent Runtime enabled, their Claude Code subscription.
 
 **The organization** means an administrator connects one shared value. Scheduled skill, plugin, and Knowledge syncs use organization credentials.
 
@@ -59,8 +59,8 @@ Each recipient gets a level:
 
 What to know:
 
-- Opening **Settings → Credentials** needs [`credential:read`](/docs/reference/permissions#credential:read). Adding one needs [`credential:create`](/docs/reference/permissions#credential:create), and its creator gets **Full access**.
-- A new credential is shared with **Everyone in the organization** at **Can use**, and admins and editors have **Full access** to every credential. Remove the **Everyone** grant to keep a credential to a team. A creator without **Full access** on every credential cannot share it with everyone, so their new credential starts with them alone.
+- Opening **Settings → Credentials** needs [`credential:read`](/docs/reference/permissions#credential:read) and one of these: a role that can add, change, or delete credentials; **Can update** or **Full access** on an organization credential; or access to another Settings page. Owning a personal credential, including one you added, does not open it.
+- Anyone can add a credential that only they can use. Sharing one, or adding an organization credential, needs [`credential:create`](/docs/reference/permissions#credential:create): the new credential starts shared with **Everyone in the organization** at **Can use** (remove that grant to keep it to a team), or with its creator alone if they lack **Full access** on every credential. The creator gets **Full access**, and so do admins and editors on every credential.
 - Attaching a credential to an MCP server or Agent takes **Can use** on it. Once attached, its organization value works for anyone who can use that server or Agent. A personal value needs **Can use**. Without it, the MCP server's **Install** button is disabled and the Agent's chat says "You don't have access", both asking you to get an admin to share it. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
 
 ## Secrets Storage

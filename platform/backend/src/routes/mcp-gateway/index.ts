@@ -1385,7 +1385,8 @@ function runtimeTokenMatchesRun(params: {
     case "oauthClient":
       return (
         params.tokenAuth.oauthClientId === params.run.actorId ||
-        params.tokenAuth.isOrganizationToken
+        params.tokenAuth.isOrganizationToken ||
+        Boolean(params.tokenAuth.isSystemServiceAccount)
       );
     case "organization":
     case "system":

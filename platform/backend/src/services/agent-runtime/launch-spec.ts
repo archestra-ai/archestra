@@ -371,7 +371,9 @@ export async function buildAgentRunLaunchSpec(params: {
             name: `agent-run-${params.runId}`,
             expiresIn: deadline,
           })
-        : params.actor.kind === "system" || params.actor.kind === "organization"
+        : params.actor.kind === "system" ||
+            params.actor.kind === "organization" ||
+            params.actor.kind === "oauthClient"
           ? // Work with no user behind it acts as the built-in system account.
             await ServiceAccountModel.createSystemRunToken({
               organizationId: params.organizationId,

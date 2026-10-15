@@ -609,14 +609,16 @@ function tokenOwnsActor(
   // Before the team check: an account acting for a team carries its teamId
   // but is never the team.
   if (token.serviceAccountId) {
-    // The built-in system account runs the host's system and organization
-    // runs; the signed binding, not the key alone, names the workload.
+    // The built-in system account runs the host's system, organization, and
+    // application runs, as the organization token did; the signed binding,
+    // not the key alone, names the workload.
     if (token.isSystemServiceAccount) {
       return (
         claims.organizationId === organizationId &&
         ((claims.actorKind === "system" && claims.actorId === "system") ||
           (claims.actorKind === "organization" &&
-            claims.actorId === organizationId))
+            claims.actorId === organizationId) ||
+          claims.actorKind === "oauthClient")
       );
     }
     return (

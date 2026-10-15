@@ -2170,7 +2170,7 @@ describe("APPA feature boundary", () => {
     });
   }
 
-  test("marks a runtime value held only for the engine's open-call reason as busy", async () => {
+  test("marks a runtime value held as busy only when the binding says so", async () => {
     const child = {
       ...session,
       session_id: "runtime",
@@ -2181,6 +2181,7 @@ describe("APPA feature boundary", () => {
         decision: "block",
         reason:
           "the child has a call still open; report its outcome before the child ends",
+        busy: true,
       }),
     );
     await expect(
@@ -2195,12 +2196,12 @@ describe("APPA feature boundary", () => {
         "the child has a call still open; report its outcome before the child ends",
       busy: true,
     });
-    // A ruling that merely quotes the reason is still a ruling.
+    // The text alone does not make a hold busy: the binding decides.
     native.dispatchHook.mockResolvedValueOnce(
       JSON.stringify({
         decision: "block",
         reason:
-          "denied: the child has a call still open; report its outcome before the child ends",
+          "the child has a call still open; report its outcome before the child ends",
       }),
     );
     await expect(

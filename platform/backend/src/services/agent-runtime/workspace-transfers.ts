@@ -7,6 +7,7 @@ import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import { AgentRunModel, AgentWorkspaceModel } from "@/models";
+import { reportAgentRuntimePendingExport } from "@/observability/metrics/agent-runtime";
 import {
   addressRuntimeChild,
   type OpenAppaSession,
@@ -893,6 +894,7 @@ async function discardSnapshot(params: {
       timeoutMs: CONTROL_TIMEOUT_MS,
     })
     .catch((error) => {
+      reportAgentRuntimePendingExport("discard_failed");
       logger.warn(
         { err: error, transferId: params.transferId },
         "Could not discard a pinned runtime export snapshot",

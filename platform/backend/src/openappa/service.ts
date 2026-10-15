@@ -136,6 +136,9 @@ const NativeDecisionSchema = z
     z.object({
       decision: z.literal("block"),
       feedback: z.string().optional(),
+      // Set by the binding on a child return held only because the child
+      // has a call open: retryable, not a ruling.
+      busy: z.literal(true).optional(),
       ...ResultDecisionFields,
     }),
     z.object({
@@ -226,14 +229,6 @@ type ChildEndOutcome =
       /** Held only because the child has a tool call open. */
       busy?: true;
     };
-
-/**
- * The engine's reason for a child return while the child has a call open
- * (`EventError::ChildDispatchOpen`). The binding test that holds a return over
- * an open call pins this exact text.
- */
-const CHILD_CALL_OPEN_REASON =
-  "the child has a call still open; report its outcome before the child ends";
 
 let native: Promise<typeof import("@archestra/openappa-rs")> | undefined;
 const capturedActivation = new AsyncLocalStorage<GuardrailsV2Activation>();
@@ -2224,9 +2219,8 @@ async function crossChildValue(params: {
       decision: "replace",
       content: decisionMessage(decision),
       crossed: false,
-      // ChildDispatchOpen has this exact engine reason. Only the exact text
-      // marks a hold as retryable; a quoted fragment stays a ruling.
-      ...(decision.reason === CHILD_CALL_OPEN_REASON ? { busy: true } : {}),
+      // The binding marks the one retryable hold, an open call in the child.
+      ...(decision.busy ? { busy: true } : {}),
     };
   }
   if (decision.decision === "refuse") {

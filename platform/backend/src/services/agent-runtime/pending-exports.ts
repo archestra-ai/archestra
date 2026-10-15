@@ -661,7 +661,12 @@ function held<T extends PendingEntry>(entry: T, reason: string): T {
   return { ...entry, state: "held", decidedAt: Date.now(), reason };
 }
 
-/** What crossed for a read the drain admitted, from the runtime's own store. */
+/**
+ * What crossed for a read the drain admitted, from the runtime's own store.
+ * `loadChildReturns` lists admitted values newest first, so the first match
+ * is the latest crossing of this entry; every crossing of it carried the same
+ * pinned bytes.
+ */
 async function admittedRead(entry: PendingRead): Promise<string | undefined> {
   const prefix = readOperationPrefix(entry);
   const [latest] = (
@@ -716,6 +721,7 @@ async function discardPinned(entry: {
     .discardExport({ actor: entry.actor, taskId: entry.taskId, transferId })
     .catch((error) => {
       // The in-pod sweep removes the pin later; this only says it stayed.
+      reportAgentRuntimePendingExport("discard_failed");
       logger.warn(
         { err: error, taskId: entry.taskId, transferId },
         "Could not discard a protected file pinned for an Agent Runtime",

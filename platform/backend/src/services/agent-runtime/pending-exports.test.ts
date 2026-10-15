@@ -17,6 +17,7 @@ import {
   AgentWorkspaceModel,
 } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import * as agentRuntimeMetrics from "@/observability/metrics/agent-runtime";
 import { openappaActor } from "@/openappa/actor";
 import * as openappa from "@/openappa/service";
 import { kubernetesAgentRuntimeBackendDriver as backend } from "@/services/agent-runtime/backends/kubernetes";
@@ -435,6 +436,47 @@ describe("files pinned while their runtime is mid-call", () => {
     expect(pod.discarded).toEqual(["pinned-1"]);
   });
 
+  test("a pin the pod cannot release is counted, and the file still reaches the parent", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    });
+    const pod = fakePod("final report");
+    vi.spyOn(workspaceFiles, "accessAgentWorkspaceFile").mockResolvedValue(
+      fileResult("final report"),
+    );
+    const crossing = vi
+      .spyOn(openappa, "returnRuntimeValue")
+      .mockResolvedValueOnce(BUSY);
+    const counted = vi.spyOn(
+      agentRuntimeMetrics,
+      "reportAgentRuntimePendingExport",
+    );
+    await readFile(seeded);
+    crossing.mockImplementation(async ({ value }) => ({
+      kind: "admitted",
+      value,
+    }));
+    pod.discardFails = true;
+
+    await pendingExports.drain(seeded.child);
+
+    // A crossed read releases its pin; this one stays for the in-pod sweep.
+    expect(pod.discarded).toEqual([]);
+    expect(counted).toHaveBeenCalledWith("discard_failed");
+    const served = await readFile(seeded);
+    expect(served.structuredContent).toMatchObject({ content: "final report" });
+  });
+
   test("a pinned file the runtime's requests fail to read three times is released with a refusal", async ({
     makeAgent,
     makeMember,
@@ -676,6 +718,7 @@ function fakePod(content: string | Buffer) {
     rewrite(next: string) {
       bytes = Buffer.from(next);
     },
+    discardFails: false,
   };
   vi.spyOn(backend, "runWorkspaceTransferCommand").mockImplementation(
     async ({ args }) => {
@@ -690,7 +733,10 @@ function fakePod(content: string | Buffer) {
           ino: "1",
         };
       }
-      if (args[0] === "discard") state.discarded.push(args[1]);
+      if (args[0] === "discard") {
+        if (state.discardFails) throw new Error("helper unavailable");
+        state.discarded.push(args[1]);
+      }
       return {};
     },
   );

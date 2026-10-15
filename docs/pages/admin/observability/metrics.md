@@ -128,7 +128,7 @@ LLM and MCP metrics carry trace exemplars, so a Grafana panel can link a data po
 | <span id="agent_runtime_steers_total"></span>`agent_runtime_steers_total` | Counter | `steer_mode` | Steering messages delivered into running sessions |
 | <span id="agent_runtime_completion_deliveries_total"></span>`agent_runtime_completion_deliveries_total` | Counter | `interface`, `outcome` | Final replies delivered to `chatops` or `email` |
 | <span id="agent_runtime_crossing_refusals_total"></span>`agent_runtime_crossing_refusals_total` | Counter | `reason` | Runtime tool calls [Guardrails](/docs/agents/guardrails) refused or held at the runtime boundary |
-| <span id="agent_runtime_pending_exports_total"></span>`agent_runtime_pending_exports_total` | Counter | `outcome` | Protected runtime files pinned while their runtime was mid-call (`pinned`), and how each pin ended (`admitted` or `held`) |
+| <span id="agent_runtime_pending_exports_total"></span>`agent_runtime_pending_exports_total` | Counter | `outcome` | Protected runtime files pinned while their runtime was mid-call (`pinned`), and how each pin ended (`admitted` or `held`). `discard_failed` counts pins the backend could not release; the runtime removes those within 6 hours |
 | <span id="agent_runtime_health_tasks"></span>`agent_runtime_health_tasks` | Gauge | `agent_id`, `backend`, `condition` | Current task counts per condition |
 | <span id="agent_runtime_health_age_seconds"></span>`agent_runtime_health_age_seconds` | Gauge | `agent_id`, `backend`, `condition` | Age of the oldest task per condition |
 | <span id="agent_runtime_health_collection_timestamp_seconds"></span>`agent_runtime_health_collection_timestamp_seconds` | Gauge | | Time of the last health snapshot |

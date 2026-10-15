@@ -39,8 +39,15 @@ export type AgentRuntimeCrossingRefusalReason =
   | "held"
   | "altered"
   | "withheld";
-/** What became of a file Guardrails pinned because its runtime was mid-call. */
-type AgentRuntimePendingExportOutcome = "pinned" | "admitted" | "held";
+/**
+ * What became of a file Guardrails pinned because its runtime was mid-call.
+ * `discard_failed` counts a pinned snapshot the backend could not release.
+ */
+type AgentRuntimePendingExportOutcome =
+  | "pinned"
+  | "admitted"
+  | "held"
+  | "discard_failed";
 
 let agentRunStartsTotal: client.Counter<string>;
 let agentRunTerminationsTotal: client.Counter<string>;
@@ -95,7 +102,7 @@ export function initializeAgentRuntimeMetrics(): void {
 
   agentRuntimePendingExportsTotal = new client.Counter({
     name: "agent_runtime_pending_exports_total",
-    help: "Total protected runtime files pinned while their runtime was mid-call, and how each pin ended (pinned, admitted, held)",
+    help: "Total protected runtime files pinned while their runtime was mid-call, and how each pin ended (pinned, admitted, held); discard_failed counts pinned snapshots the backend could not release",
     labelNames: ["outcome"],
   });
 

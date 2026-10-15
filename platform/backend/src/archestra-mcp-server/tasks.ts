@@ -435,7 +435,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_READ_WORKSPACE_FILE_SHORT_NAME,
     title: "Read Workspace File",
     description:
-      "Read a file from your Agent Runtime's retained workspace using a run ID. Use this when you need the contents yourself — to quote, review or edit them. To hand a file to the user or save it locally, prefer transfer_workspace_file: its bytes move directly and never enter the conversation, so a large file costs no tokens and is not truncated. Paths are relative to /home/node/workspace, not the conversation's skill sandbox. Returns UTF-8 text by default or base64 for binary downloads; maximum 4 MiB. A suspended workspace wakes automatically. Shared transcript access does not grant file access. Under Guardrails, a read while the runtime is in the middle of a tool call returns status \"pending\" with no content: call again with the same arguments after that tool call finishes.",
+      "Read a file from your Agent Runtime's retained workspace using a run ID. Use this when you need the contents yourself — to quote, review or edit them. To hand a file to the user or save it locally, prefer transfer_workspace_file: its bytes move directly and never enter the conversation, so a large file costs no tokens and is not truncated. Paths are relative to /home/node/workspace, not the conversation's skill sandbox. Returns UTF-8 text by default or base64 for binary downloads; maximum 4 MiB. A suspended workspace wakes automatically. Shared transcript access does not grant file access. A read made while the runtime is in the middle of a tool call can return status \"pending\" with no content: call again with the same arguments after that tool call finishes.",
     schema: z.object({
       task_id: z.string().uuid(),
       path: z.string().min(1).max(4096),
@@ -518,7 +518,7 @@ const registry = defineArchestraTools([
       "The runtime copy is pinned when you authorize a download, so a still-running agent cannot corrupt it. " +
       "An upload refuses rather than overwrite a destination that changed since you authorized it. " +
       "Use read_workspace_file instead only when you need to read a file's contents. " +
-      'Under Guardrails, a download authorized while the runtime is in the middle of a tool call returns status "pending" and no command: call again with the same arguments after that tool call finishes. ' +
+      'A download made while the runtime is in the middle of a tool call can return status "pending" and no command: call again with the same arguments after that tool call finishes. ' +
       "Without a shell, fall back to read_workspace_file and write_workspace_file, which are capped at 4 MiB.",
     schema: z.object({
       task_id: z.string().uuid().describe("From start_run or list_runs."),

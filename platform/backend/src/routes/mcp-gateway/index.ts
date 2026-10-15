@@ -22,6 +22,7 @@ import {
   resolveRuntimeSessionForWorkspace,
 } from "@/services/agent-runtime/runtime-identity";
 import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
+import { enforceMcpGatewayRateLimit } from "@/services/route-rate-limit";
 import {
   AgentRunAttentionStateSchema,
   type AgentRunRecord,
@@ -937,6 +938,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
         }),
         body: z.record(z.string(), z.unknown()),
       },
+      onRequest: enforceMcpGatewayRateLimit,
     },
     async (request, reply) => {
       const { profileId, token } =

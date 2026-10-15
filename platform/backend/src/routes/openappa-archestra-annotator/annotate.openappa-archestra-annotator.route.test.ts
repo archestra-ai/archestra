@@ -219,6 +219,30 @@ describe("archestra annotator", () => {
     expect(tagged.length).toBeGreaterThan(request.system.length);
   });
 
+  test("does not blame the format for a request the tagged answer rejects too", async () => {
+    await useDefaultModel({ provider: "openai", modelId: "gpt-4o-mini" });
+    let calls = 0;
+    const sent = answerAt(`/v1/openai/${agentId}/chat/completions`, () =>
+      calls++ < 2
+        ? HttpResponse.json(
+            { error: { message: "Input too long.", type: "invalid_request" } },
+            { status: 400 },
+          )
+        : completion('{"rank":"trusted"}'),
+    );
+
+    const first = await annotate(bearer());
+    const second = await annotate(bearer());
+
+    expect(first.statusCode).toBe(502);
+    expect(second.json()).toEqual({ rank: "trusted" });
+    expect(sent.map(({ body }) => "response_format" in body)).toEqual([
+      true,
+      false,
+      true,
+    ]);
+  });
+
   test("keeps asking for the format after one answer that did not parse", async () => {
     await useDefaultModel({ provider: "openai", modelId: "gpt-4o-mini" });
     let structured = 0;
@@ -340,7 +364,7 @@ describe("archestra annotator", () => {
     ]);
   });
 
-  test("answers unattributed when the attribution names no session, or a user outside its organization", async ({
+  test("answers unattributed when the attribution names no session, and without a user who left the organization", async ({
     makeUser,
   }) => {
     await useDefaultModel({
@@ -373,7 +397,7 @@ describe("archestra annotator", () => {
     expect(outside.json()).toEqual({ rank: "trusted" });
     expect(sent.map(({ user, session }) => ({ user, session }))).toEqual([
       { user: null, session: null },
-      { user: null, session: null },
+      { user: null, session: "conversation" },
     ]);
   });
 

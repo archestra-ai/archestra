@@ -140,28 +140,45 @@ class OpenAppaArchestraAnnotator {
       });
       return marked as SystemModelMessage;
     };
+    const refusalKey = JSON.stringify([
+      selection.provider,
+      selection.modelName,
+      selection.baseUrl,
+      request.schema,
+    ]);
     try {
+      const structured = await structuredAnswer({
+        model,
+        refusalKey,
+        system: cached(request.system),
+        request,
+        maxOutputTokens: budget,
+      });
       const answer =
-        (await structuredAnswer({
-          model,
-          modelKey: `${selection.provider}/${selection.modelName}@${selection.baseUrl ?? "default"}`,
-          system: cached(request.system),
-          request,
-          maxOutputTokens: budget,
-        })) ??
-        (await taggedAnswer({
-          model,
-          system: cached(
-            `${request.system}\n\nThe annotation is one JSON object that matches this JSON schema:\n${JSON.stringify(request.schema)}`,
-          ),
-          request,
-          // A fraction of the budget, so the truncation retry's extra room
-          // still fits under the model's real output cap.
-          maxOutputTokens:
-            budget === undefined
-              ? undefined
-              : Math.floor(budget / TRUNCATION_RETRY_FACTOR),
-        }));
+        structured.kind === "answered"
+          ? structured.answer
+          : await taggedAnswer({
+              model,
+              system: cached(
+                `${request.system}\n\nThe annotation is one JSON object that matches this JSON schema:\n${JSON.stringify(request.schema)}`,
+              ),
+              request,
+              // A fraction of the budget, so the truncation retry's extra room
+              // still fits under the model's real output cap.
+              maxOutputTokens:
+                budget === undefined
+                  ? undefined
+                  : Math.floor(budget / TRUNCATION_RETRY_FACTOR),
+            });
+      // The same input went through without the format, so the rejection was
+      // about the format, not this request.
+      if (structured.kind === "refused") {
+        structuredOutputRefusals.set(refusalKey, true);
+        logger.info(
+          { provider: selection.provider, model: selection.modelName },
+          "OpenAPPA archestra annotator: the model refused structured output; using tagged answers",
+        );
+      }
       if (answer === null)
         return {
           kind: "failed",
@@ -205,8 +222,9 @@ export const openappaArchestraAnnotator = new OpenAppaArchestraAnnotator();
 
 /**
  * The session row the runtime's attribution names, with its user when that
- * user still belongs to the session's organization. Anything else leaves the
- * call unattributed, as a consult made off a session is.
+ * user still belongs to the session's organization; a service account has no
+ * users row to name. No matching row leaves the call unattributed, as a
+ * consult made off a session is.
  */
 async function sessionOwner(
   attribution: ConsultAttribution | undefined,
@@ -215,18 +233,15 @@ async function sessionOwner(
   const session = await OpenAppaSessionModel.findByTrajectory(attribution);
   if (!session) return { kind: "unattributed" };
   const caller = callerUserId(session.callerId);
-  // A service account has no users row to attribute to; its session still counts.
-  const userId = caller && !isServiceAccountUserId(caller) ? caller : undefined;
-  if (
-    userId &&
-    !(await MemberModel.getByUserId(userId, session.organizationId))
-  )
-    return { kind: "unattributed" };
+  const member =
+    caller && !isServiceAccountUserId(caller)
+      ? await MemberModel.getByUserId(caller, session.organizationId)
+      : undefined;
   return {
     kind: "session",
     organizationId: session.organizationId,
     sessionId: clientSessionId(session.sessionId),
-    userId,
+    userId: member?.userId,
   };
 }
 
@@ -264,10 +279,10 @@ type AnnotationCall = {
 };
 
 /**
- * Model endpoints that refused the structured-output format for a schema, so
- * later consults go straight to the tagged answer instead of paying for a
- * refused call each time. Entries expire, so a provider that gains support is
- * tried again.
+ * Model endpoints that refused the structured-output format for a schema while
+ * taking the same input as a tagged answer, so later consults go straight to
+ * the tagged answer instead of paying for a refused call each time. Entries
+ * expire, so a provider that gains support is tried again.
  */
 const structuredOutputRefusals = new LRUCacheManager<true>({
   maxSize: 256,
@@ -276,15 +291,20 @@ const structuredOutputRefusals = new LRUCacheManager<true>({
 
 /**
  * The answer under the provider's structured-output format, which carries the
- * schema instead of the prompt. Null when the provider refused the format or
- * answered outside it, so the caller falls back to the tagged answer; any
- * other failure propagates unchanged.
+ * schema instead of the prompt. `refused`: the provider rejected the request.
+ * `fallback`: the format is known to be refused, or this answer fell outside
+ * it. Either way the caller falls back to the tagged answer; authentication,
+ * rate and cost limits propagate unchanged.
  */
 async function structuredAnswer(
-  call: AnnotationCall & { modelKey: string },
-): Promise<Record<string, unknown> | null> {
-  const refusalKey = JSON.stringify([call.modelKey, call.request.schema]);
-  if (structuredOutputRefusals.get(refusalKey)) return null;
+  call: AnnotationCall & { refusalKey: string },
+): Promise<
+  | { kind: "answered"; answer: Record<string, unknown> }
+  | { kind: "refused" }
+  | { kind: "fallback" }
+> {
+  if (structuredOutputRefusals.get(call.refusalKey))
+    return { kind: "fallback" };
   try {
     const { output } = await generateText({
       model: call.model,
@@ -293,38 +313,19 @@ async function structuredAnswer(
       output: Output.object({ schema: jsonSchema(call.request.schema) }),
       maxOutputTokens: call.maxOutputTokens,
     });
-    return isPlainObject(output) ? output : null;
+    return isPlainObject(output)
+      ? { kind: "answered", answer: output }
+      : { kind: "fallback" };
   } catch (error) {
-    switch (structuredFailure(error)) {
-      case "refused":
-        structuredOutputRefusals.set(refusalKey, true);
-        logger.info(
-          { model: call.modelKey },
-          "OpenAPPA archestra annotator: the model refused structured output; using tagged answers",
-        );
-        return null;
-      case "unparsed":
-        return null;
-      case "other":
+    if (NoObjectGeneratedError.isInstance(error)) return { kind: "fallback" };
+    if (!APICallError.isInstance(error)) throw error;
+    switch (error.statusCode) {
+      case 400:
+      case 422:
+        return { kind: "refused" };
+      default:
         throw error;
     }
-  }
-}
-
-/**
- * `refused`: the provider rejected the request shape. `unparsed`: this one
- * answer did not parse against the schema. Authentication, rate and cost
- * limits are not about the format.
- */
-function structuredFailure(error: unknown): "refused" | "unparsed" | "other" {
-  if (NoObjectGeneratedError.isInstance(error)) return "unparsed";
-  if (!APICallError.isInstance(error)) return "other";
-  switch (error.statusCode) {
-    case 400:
-    case 422:
-      return "refused";
-    default:
-      return "other";
   }
 }
 

@@ -3,7 +3,7 @@ import path from "node:path";
 
 const IMAGE_BIN = path.resolve(
   import.meta.dirname,
-  "../../../agent_images/bin",
+  "../../../docker_images/agent/bin",
 );
 
 /** Keep real subprocess behavior while shortening frame retention and polling. */

@@ -218,17 +218,18 @@ describe("APPA feature boundary", () => {
         identity: resolution,
         declarations: [
           { name: "dispatch", namespace: "trusted" },
-          { name: "superyell", namespace: "foreign" },
+          { name: "yell", namespace: "foreign" },
         ],
       }),
     ).toEqual([{ name: "dispatch", namespace: "trusted" }]);
   });
   test.for([
-    "yell",
-    "superyell",
-  ] as const)("returns the executed %s result even when ordinary tool output is withheld", async (name) => {
+    true,
+    false,
+  ])("returns the executed yell result even when ordinary tool output is withheld (break the glass %s)", async (breakTheGlassEnabled) => {
+    const name = "yell";
     config.openappa.yellEnabled = true;
-    await GuardrailsDeploymentModel.set({ superyellEnabled: true });
+    await GuardrailsDeploymentModel.set({ breakTheGlassEnabled });
     const originalDispatch = native.dispatchHook.getMockImplementation();
     native.dispatchHook.mockImplementation(async (raw: string) => {
       if (JSON.parse(raw).event === "yell")
@@ -381,50 +382,6 @@ describe("APPA feature boundary", () => {
     expect(decisions).toEqual([{ kind: "allow" }]);
   });
 
-  test("an allowed superyell also has the runtime release the yell it carries, and a denied one does not", async () => {
-    const args = { message: "Turn it off", with_trajectory: true };
-    const ruled = () =>
-      native.dispatchHook.mock.calls.map(([raw]) => {
-        const { operation_id, tool, arguments: carried } = JSON.parse(raw);
-        return { operation_id, tool, arguments: carried };
-      });
-
-    native.dispatchHook.mockResolvedValue(
-      JSON.stringify({ decision: "deny_call", feedback: "needs approval" }),
-    );
-    await evaluateToolCalls(
-      session,
-      [{ id: "super", name: "archestra__superyell", arguments: args }],
-      { canonicalize: (name) => name },
-    );
-    expect(ruled()).toEqual([
-      {
-        operation_id: "call:super",
-        tool: "archestra__superyell",
-        arguments: args,
-      },
-    ]);
-
-    native.dispatchHook.mockClear();
-    native.dispatchHook.mockResolvedValue(
-      JSON.stringify({ decision: "allow_call" }),
-    );
-    const decisions = await evaluateToolCalls(
-      session,
-      [{ id: "super", name: "archestra__superyell", arguments: args }],
-      { canonicalize: (name) => name },
-    );
-    expect(decisions).toEqual([{ kind: "allow" }]);
-    expect(ruled()).toEqual([
-      {
-        operation_id: "call:super",
-        tool: "archestra__superyell",
-        arguments: args,
-      },
-      { operation_id: "call:super~yell", tool: "yell", arguments: args },
-    ]);
-  });
-
   test("retains signed child lineage on the first evaluated tool call", async () => {
     native.dispatchHook.mockResolvedValue(
       JSON.stringify({ decision: "allow_call" }),
@@ -498,6 +455,7 @@ describe("APPA feature boundary", () => {
   test("reports through the authenticated native session after policy checking", async () => {
     config.openappa.yellEnabled = true;
     config.analytics.enabled = true;
+    await GuardrailsDeploymentModel.set({ breakTheGlassEnabled: false });
     const args = { message: "Confusing feedback", with_trajectory: true };
     native.dispatchHook
       .mockResolvedValueOnce(JSON.stringify({ decision: "allow_call" }))
@@ -525,9 +483,10 @@ describe("APPA feature boundary", () => {
     expect(result.content).toEqual([
       {
         type: "text",
-        text: expect.stringContaining("Report saved"),
+        text: "Report recorded for review in Guardrails → Yells.\nGuardrails are unchanged for this session.",
       },
     ]);
+    expect(await startedUnenforced(session)).toBe(false);
     const saved = await OpenAppaYellModel.list({
       organizationId,
       status: "all",
@@ -656,6 +615,7 @@ describe("APPA feature boundary", () => {
   test("a gateway yell reports under the session and call the proxy allowed", async () => {
     config.openappa.yellEnabled = true;
     config.analytics.enabled = true;
+    await GuardrailsDeploymentModel.set({ breakTheGlassEnabled: false });
     const args = { message: "Confusing feedback", with_trajectory: false };
     native.dispatchHook.mockResolvedValue(
       JSON.stringify({
@@ -685,9 +645,10 @@ describe("APPA feature boundary", () => {
     expect(result.content).toEqual([
       {
         type: "text",
-        text: expect.stringContaining("Report saved"),
+        text: "Report recorded for review in Guardrails → Yells.\nGuardrails are unchanged for this session.",
       },
     ]);
+    expect(await startedUnenforced(session)).toBe(false);
     const saved = await OpenAppaYellModel.list({
       organizationId,
       status: "all",
@@ -720,9 +681,10 @@ describe("APPA feature boundary", () => {
     ).rejects.toThrow("requires an authenticated session");
   });
 
-  test("a gateway superyell reports like yell, then takes the session and its children out of OpenAPPA", async () => {
+  test("with break the glass on, a gateway yell reports, then takes the session and its children out of OpenAPPA", async () => {
     config.openappa.yellEnabled = true;
     config.analytics.enabled = true;
+    await GuardrailsDeploymentModel.set({ breakTheGlassEnabled: true });
     const args = {
       message: "Turn it off, it blocks the demo",
       with_trajectory: true,
@@ -733,49 +695,30 @@ describe("APPA feature boundary", () => {
         result: { content: [{ type: "text", text: "Receipt report-2" }] },
       }),
     );
-    const resolution = {
-      canonicalize: (name: string) => name,
-      looseRunToolDispatch: false,
-    };
-    const gateway = {
-      agent: { id: "agent", name: "Assistant" },
-      organizationId,
-    };
-    // A yell with the same arguments does not stand in for the superyell.
     await rememberYellSession({
       session,
       call: { id: "toolu_yell", name: "archestra__yell", arguments: args },
-      resolution,
-    });
-    await expect(
-      executeArchestraTool("archestra__superyell", args, gateway),
-    ).rejects.toThrow("requires an authenticated session");
-    expect(await startedUnenforced(session)).toBe(false);
-
-    await rememberYellSession({
-      session,
-      call: {
-        id: "toolu_super",
-        name: "archestra__superyell",
-        arguments: args,
+      resolution: {
+        canonicalize: (name: string) => name,
+        looseRunToolDispatch: false,
       },
-      resolution,
     });
-    const result = await executeArchestraTool(
-      "archestra__superyell",
-      args,
-      gateway,
-    );
+    const result = await executeArchestraTool("archestra__yell", args, {
+      agent: { id: "agent", name: "Assistant" },
+      organizationId,
+    });
 
     expect(result.content).toEqual([
       {
         type: "text",
-        text: expect.stringMatching(/Report saved[\s\S]*OpenAPPA is off/),
+        text: expect.stringMatching(
+          /Report recorded[\s\S]*Guardrails are now off for this session/,
+        ),
       },
     ]);
     expect(JSON.parse(native.dispatchHook.mock.calls[0][0])).toMatchObject({
       event: "yell",
-      operation_id: "yell:toolu_super",
+      operation_id: "yell:toolu_yell",
       arguments: args,
     });
     const saved = await OpenAppaYellModel.list({
@@ -787,6 +730,7 @@ describe("APPA feature boundary", () => {
       expect.objectContaining({
         message: args.message,
         sessionId: "conversation",
+        superyell: true,
       }),
     ]);
     expect(await startedUnenforced(session)).toBe(true);
@@ -810,45 +754,24 @@ describe("APPA feature boundary", () => {
     );
   });
 
-  test("superyell refuses while Guardrails enforcement is off", async () => {
-    config.openappa.yellEnabled = true;
-    await GuardrailsDeploymentModel.setEnabled(false);
-    const result = await executeArchestraTool(
-      "archestra__superyell",
-      { message: "Turn it off", with_trajectory: false },
-      {
-        agent: { id: "agent", name: "Assistant" },
-        organizationId,
-        userId: "alice",
-        sessionId: "conversation",
-        currentToolCallId: "toolu_super",
-      },
-    );
-    expect(result.isError).toBe(true);
-    expect(await startedUnenforced(session)).toBe(false);
-  });
-
-  test("superyell refuses when an administrator turned it off, while enforcement stays on", async () => {
+  test("a yell never takes a session out while Guardrails enforcement is off", async () => {
     config.openappa.yellEnabled = true;
     await GuardrailsDeploymentModel.set({
-      enabled: true,
-      superyellEnabled: false,
+      enabled: false,
+      breakTheGlassEnabled: true,
     });
     const result = await executeArchestraTool(
-      "archestra__superyell",
+      "archestra__yell",
       { message: "Turn it off", with_trajectory: false },
       {
         agent: { id: "agent", name: "Assistant" },
         organizationId,
         userId: "alice",
         sessionId: "conversation",
-        currentToolCallId: "toolu_super",
+        currentToolCallId: "toolu_yell",
       },
     );
     expect(result.isError).toBe(true);
-    expect(JSON.stringify(result.content)).toContain(
-      "turned off superyell in Guardrails settings",
-    );
     expect(await startedUnenforced(session)).toBe(false);
   });
 
@@ -3296,10 +3219,11 @@ test("dispatch loads the latest saved policy text from the organization database
     results: [],
     canonicalize: (name) => name,
   });
-  expect(native.dispatchHook).toHaveBeenLastCalledWith(expect.any(String), {
-    content,
-    credentials: {},
-  });
+  expect(native.dispatchHook).toHaveBeenLastCalledWith(
+    expect.any(String),
+    { content, credentials: {} },
+    undefined,
+  );
   const updated = `${content}# updated`;
   await GuardrailsPolicyModel.save({
     organizationId: organization.id,
@@ -3313,10 +3237,11 @@ test("dispatch loads the latest saved policy text from the organization database
     results: [],
     canonicalize: (name) => name,
   });
-  expect(native.dispatchHook).toHaveBeenLastCalledWith(expect.any(String), {
-    content: updated,
-    credentials: {},
-  });
+  expect(native.dispatchHook).toHaveBeenLastCalledWith(
+    expect.any(String),
+    { content: updated, credentials: {} },
+    undefined,
+  );
 });
 
 describe("remedy by offer", () => {
@@ -3738,6 +3663,7 @@ describe("remedy by offer", () => {
       organizationId,
       "user:alice|child",
       "offer-1",
+      undefined,
     );
     expect(elicit).not.toHaveBeenCalled();
     const input = JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]);

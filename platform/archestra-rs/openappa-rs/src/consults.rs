@@ -86,8 +86,33 @@ pub(crate) fn store(pg: &crate::Sql<'_>, attribution: Attribution, buffer: &Cons
 fn insert(
     pg: &crate::Sql<'_>,
     attribution: Attribution,
-    columns: Columns,
+    mut columns: Columns,
 ) -> Result<(), PostgresError> {
+    let cipher = pg.0.cipher();
+    for index in 0..columns.id.len() {
+        let context = |field: &str| {
+            appa_eventlog::encryption::field_context(&[
+                "openappa_external_consults",
+                &attribution.organization_id,
+                &attribution.session_id,
+                &columns.id[index],
+                field,
+            ])
+        };
+        columns.request[index] = cipher.seal_json(&context("request"), &columns.request[index])?;
+        columns.answer[index] = columns.answer[index]
+            .as_ref()
+            .map(|value| cipher.seal_json(&context("answer"), value))
+            .transpose()?;
+        columns.raw_response[index] = columns.raw_response[index]
+            .as_ref()
+            .map(|bytes| cipher.seal_bytes(&context("raw_response"), bytes))
+            .transpose()?;
+        columns.diagnostics[index] = columns.diagnostics[index]
+            .as_ref()
+            .map(|bytes| cipher.seal_bytes(&context("diagnostics"), bytes))
+            .transpose()?;
+    }
     pg.with_client(move |client| {
         client
             .execute(

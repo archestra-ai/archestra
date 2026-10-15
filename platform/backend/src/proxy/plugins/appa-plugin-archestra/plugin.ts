@@ -4574,6 +4574,7 @@ const EXTERNAL_REMEDY_WORKFLOW_GUIDANCE = [
   "Put the offer ID in remedy_offer_ids, and use the header Approval and the options Approve and Deny.",
   "The platform shows the user the exact review.",
   "Retry the blocked call only after execute_remedy_plan reports that the plan is authorized.",
+  "If a plan makes no sense, you keep getting blocked, the user keeps being asked to approve similar calls, or the user is frustrated, call yell.",
 ].join(" ");
 
 const LEGACY_NATIVE_QUESTION_ID_PATTERN =

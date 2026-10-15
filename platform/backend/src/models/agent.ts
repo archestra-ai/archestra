@@ -440,7 +440,9 @@ class AgentModel {
       const resource =
         agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent";
       const key = `${agent.organizationId}\u0000${resource}`;
-      byKey.set(key, [...(byKey.get(key) ?? []), agent.id]);
+      const scopes = byKey.get(key);
+      if (scopes) scopes.push(agent.id);
+      else byKey.set(key, [agent.id]);
     }
     const audiences = new Map<string, AgentScope>();
     for (const [key, scopes] of byKey) {
@@ -1034,17 +1036,12 @@ class AgentModel {
 
     // Apply access control filtering for non-agent admins
     if (userId && !isAgentAdmin) {
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-        principals,
+      whereConditions.push(
+        inArray(
+          schema.agentsTable.id,
+          accessibleAgentIdsQuery({ userId, isAgentAdmin: false, principals }),
+        ),
       );
-
-      if (accessibleAgentIds.length === 0) {
-        return [];
-      }
-
-      whereConditions.push(inArray(schema.agentsTable.id, accessibleAgentIds));
     }
 
     const where = and(...whereConditions);
@@ -2235,15 +2232,11 @@ class AgentModel {
       (filters?.status ?? "active") !== "deleted";
     const restrictToAccessible = !isAgentAdmin || isDefaultActiveAllView;
     if (userId && restrictToAccessible) {
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-        principals,
-      );
       whereConditions.push(
-        accessibleAgentIds.length > 0
-          ? inArray(schema.agentsTable.id, accessibleAgentIds)
-          : sql<boolean>`false`,
+        inArray(
+          schema.agentsTable.id,
+          accessibleAgentIdsQuery({ userId, isAgentAdmin: false, principals }),
+        ),
       );
     }
 
@@ -2613,19 +2606,11 @@ class AgentModel {
     const readers =
       principals ??
       (await ResourcePermissionSubjectModel.resolvePrincipals({ userId }));
-    const rows = await db
-      .select({ id: schema.agentsTable.id })
-      .from(schema.agentsTable)
-      .where(
-        and(
-          notDeleted(schema.agentsTable),
-          or(
-            explicitAgentReadCondition(readers),
-            isAgentAdmin ? sql`true` : undefined,
-            organizationLlmProxyCondition(userId),
-          ),
-        ),
-      );
+    const rows = await accessibleAgentIdsQuery({
+      userId,
+      isAgentAdmin,
+      principals: readers,
+    });
 
     return rows.map((row) => row.id);
   }
@@ -4913,6 +4898,35 @@ function agentListFence(principals: GrantPrincipal[]): SQL {
   ) as SQL;
   // SPDX-SnippetEnd
 }
+
+/**
+ * Shared accessible-ID query. List filters embed this exact authorization set
+ * instead of fetching the whole roster and sending its IDs back as parameters,
+ * so selective filters such as pins can narrow the work in the database.
+ */
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+function accessibleAgentIdsQuery(params: {
+  userId: string;
+  isAgentAdmin: boolean;
+  principals: GrantPrincipal[];
+}) {
+  return db
+    .select({ id: schema.agentsTable.id })
+    .from(schema.agentsTable)
+    .where(
+      and(
+        notDeleted(schema.agentsTable),
+        or(
+          explicitAgentReadCondition(params.principals),
+          params.isAgentAdmin ? sql`true` : undefined,
+          organizationLlmProxyCondition(params.userId),
+        ),
+      ),
+    );
+}
+// SPDX-SnippetEnd
 
 /**
  * The organization's LLM Proxy, for a member of that organization. A proxy has

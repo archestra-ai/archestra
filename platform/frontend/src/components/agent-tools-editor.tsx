@@ -1437,8 +1437,6 @@ function requiredToolReason(toolName: string) {
       return "Always available so agents can apply an offered remedy.";
     case "yell":
       return "Always available so agents can report confusing OpenAPPA decisions.";
-    case "superyell":
-      return "Always available so a person can approve turning OpenAPPA off for one session.";
     default:
       return "Always available for OpenAPPA recovery.";
   }

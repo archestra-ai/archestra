@@ -1020,16 +1020,16 @@ Required RBAC permission: [`app:read`](/docs/reference/permissions#app:read)
 | `get_project` | Read one project's context in a single call: its metadata, its instructions (the `instructions.md` that steers every chat in the project), the files it owns, and the apps linked into it that you ca... | [`project:read`](/docs/reference/permissions#project:read) † |
 | `link_app_to_project` | Link an existing app into a project so it is listed with the project's files and chats. | [`project:read`](/docs/reference/permissions#project:read) |
 | `unlink_app_from_project` | Remove an app's link from a project. | [`project:read`](/docs/reference/permissions#project:read) |
-| `create_schedule_trigger` | Schedule an agent from chat, Slack, or Teams. | [`scheduledTask:create`](/docs/reference/permissions#scheduledTask:create) † |
-| `update_schedule_trigger` | Edit a scheduled task. | [`scheduledTask:update`](/docs/reference/permissions#scheduledTask:update) † |
-| `delete_schedule_trigger` | Delete a scheduled task and its run history. | [`scheduledTask:delete`](/docs/reference/permissions#scheduledTask:delete) † |
-| `list_schedule_triggers` | List the scheduled agent triggers the caller can see: which agent each one runs, its cron expression and timezone, whether it is enabled, and when it last fired. | [`scheduledTask:read`](/docs/reference/permissions#scheduledTask:read) |
-| `get_schedule_trigger` | Read one scheduled agent trigger, including the message template sent to the agent on every run. | [`scheduledTask:read`](/docs/reference/permissions#scheduledTask:read) † |
-| `list_schedule_trigger_runs` | List a scheduled task's run history, newest first: whether each run was due or manual, how it ended, when it started and completed, its failure text, and the chat conversation holding its transcript. | [`scheduledTask:read`](/docs/reference/permissions#scheduledTask:read) † |
-| `get_schedule_trigger_run` | Read one run of a scheduled task, including its full error text. | [`scheduledTask:read`](/docs/reference/permissions#scheduledTask:read) † |
-| `enable_schedule_trigger` | Enable a scheduled task so it is picked up again when due. | [`scheduledTask:update`](/docs/reference/permissions#scheduledTask:update) † |
-| `disable_schedule_trigger` | Disable a scheduled task so it stops firing, leaving its configuration and run history intact. | [`scheduledTask:update`](/docs/reference/permissions#scheduledTask:update) † |
-| `run_schedule_trigger_now` | Start a scheduled task immediately, outside its cron schedule. | [`scheduledTask:create`](/docs/reference/permissions#scheduledTask:create) † |
+| `create_schedule_trigger` | Schedule an agent from chat, Slack, or Teams. | [`project:create`](/docs/reference/permissions#project:create) † |
+| `update_schedule_trigger` | Edit a scheduled task. | [`project:update`](/docs/reference/permissions#project:update) † |
+| `delete_schedule_trigger` | Delete a scheduled task and its run history. | [`project:delete`](/docs/reference/permissions#project:delete) † |
+| `list_schedule_triggers` | List the scheduled agent triggers the caller can see: which agent each one runs, its cron expression and timezone, whether it is enabled, and when it last fired. | [`project:read`](/docs/reference/permissions#project:read) |
+| `get_schedule_trigger` | Read one scheduled agent trigger, including the message template sent to the agent on every run. | [`project:read`](/docs/reference/permissions#project:read) † |
+| `list_schedule_trigger_runs` | List a scheduled task's run history, newest first: whether each run was due or manual, how it ended, when it started and completed, its failure text, and the chat conversation holding its transcript. | [`project:read`](/docs/reference/permissions#project:read) † |
+| `get_schedule_trigger_run` | Read one run of a scheduled task, including its full error text. | [`project:read`](/docs/reference/permissions#project:read) † |
+| `enable_schedule_trigger` | Enable a scheduled task so it is picked up again when due. | [`project:update`](/docs/reference/permissions#project:update) † |
+| `disable_schedule_trigger` | Disable a scheduled task so it stops firing, leaving its configuration and run history intact. | [`project:update`](/docs/reference/permissions#project:update) † |
+| `run_schedule_trigger_now` | Start a scheduled task immediately, outside its cron schedule. | [`project:create`](/docs/reference/permissions#project:create) † |
 
 † This tool enforces an additional access requirement beyond its RBAC permission — see its details below.
 
@@ -1175,9 +1175,9 @@ Required RBAC permission: [`project:read`](/docs/reference/permissions#project:r
 
 #### create_schedule_trigger
 
-Required RBAC permission: [`scheduledTask:create`](/docs/reference/permissions#scheduledTask:create)
+Required RBAC permission: [`project:create`](/docs/reference/permissions#project:create)
 
-Additional access requirement: Requires an acting user. Omitting `project_id` also requires [`project:create`](/docs/reference/permissions#project:create); it creates a private project with the task prompt as its instructions. Repeating the same new-project task returns the existing schedule. An existing project must be accessible to the caller.
+Additional access requirement: Requires an acting user. Omitting `project_id` creates a private project with the task prompt as its instructions. Repeating the same new-project task returns the existing schedule. An existing project must be accessible to the caller.
 
 ##### Input
 
@@ -1212,9 +1212,9 @@ Additional access requirement: Requires an acting user. Omitting `project_id` al
 
 #### update_schedule_trigger
 
-Required RBAC permission: [`scheduledTask:update`](/docs/reference/permissions#scheduledTask:update)
+Required RBAC permission: [`project:update`](/docs/reference/permissions#project:update)
 
-Additional access requirement: Requires a user token. Only the schedule actor or a scheduled-task administrator can change or run it. Project membership alone permits reading.
+Additional access requirement: Requires a user token. Only the schedule actor or someone with organization-wide Projects **Can update** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
 
 ##### Input
 
@@ -1249,9 +1249,9 @@ Additional access requirement: Requires a user token. Only the schedule actor or
 
 #### delete_schedule_trigger
 
-Required RBAC permission: [`scheduledTask:delete`](/docs/reference/permissions#scheduledTask:delete)
+Required RBAC permission: [`project:delete`](/docs/reference/permissions#project:delete)
 
-Additional access requirement: Requires a user token. Only the schedule actor or a scheduled-task administrator can change or run it. Project membership alone permits reading.
+Additional access requirement: Requires a user token. Only the schedule actor or someone with organization-wide Projects **Full access** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
 
 ##### Input
 
@@ -1267,7 +1267,7 @@ Additional access requirement: Requires a user token. Only the schedule actor or
 
 #### list_schedule_triggers
 
-Required RBAC permission: [`scheduledTask:read`](/docs/reference/permissions#scheduledTask:read)
+Required RBAC permission: [`project:read`](/docs/reference/permissions#project:read)
 
 ##### Input
 
@@ -1276,7 +1276,7 @@ Required RBAC permission: [`scheduledTask:read`](/docs/reference/permissions#sch
 | `project_id` | `string` | No | Only schedules of this project. Shows every member's schedules for it, so long as the caller can access the project. |
 | `enabled` | `boolean` | No | Only enabled (true) or only disabled (false) schedules. |
 | `agent_id` | `string` | No | Only schedules that run this agent. |
-| `include_all_users` | `boolean` | No | Include other members' schedules. Ignored unless the caller holds organization-wide scheduled-task access. |
+| `include_all_users` | `boolean` | No | Include other members' schedules. Ignored unless the caller holds organization-wide project access. |
 | `limit` | `integer` | No | How many rows to return, newest first (1-100, default 25). |
 | `cursor` | `string` | No | Pass pagination.nextCursor from the previous response to read the next page. Keep the same filters; omit for the newest page. |
 
@@ -1304,9 +1304,9 @@ Required RBAC permission: [`scheduledTask:read`](/docs/reference/permissions#sch
 
 #### get_schedule_trigger
 
-Required RBAC permission: [`scheduledTask:read`](/docs/reference/permissions#scheduledTask:read)
+Required RBAC permission: [`project:read`](/docs/reference/permissions#project:read)
 
-Additional access requirement: Requires a user token. The caller must be the schedule actor, a project member, or a scheduled-task administrator.
+Additional access requirement: Requires a user token. The caller must be the schedule actor, a project member, or someone with organization-wide Projects **Can read** access.
 
 ##### Input
 
@@ -1334,9 +1334,9 @@ Additional access requirement: Requires a user token. The caller must be the sch
 
 #### list_schedule_trigger_runs
 
-Required RBAC permission: [`scheduledTask:read`](/docs/reference/permissions#scheduledTask:read)
+Required RBAC permission: [`project:read`](/docs/reference/permissions#project:read)
 
-Additional access requirement: Requires a user token. The caller must be the schedule actor, a project member, or a scheduled-task administrator.
+Additional access requirement: Requires a user token. The caller must be the schedule actor, a project member, or someone with organization-wide Projects **Can read** access.
 
 ##### Input
 
@@ -1356,6 +1356,14 @@ Additional access requirement: Requires a user token. The caller must be the sch
 | `pagination.nextCursor` | `string \| null` | Yes |  |
 | `pagination.hasNext` | `boolean` | Yes |  |
 | `runs` | `object[]` | Yes | Matching runs, newest first. |
+| `runs[].blocked_by` | `object \| null` | Yes | Why this tick was skipped, including the blocking run and its frozen deadline. |
+| `runs[].blocked_by.phase` | `"starting" \| "running" \| "stopping"` | Yes |  |
+| `runs[].blocked_by.runId` | `string \| null` | Yes |  |
+| `runs[].blocked_by.runtimeTaskId` | `string \| null` | Yes |  |
+| `runs[].blocked_by.startedAt` | `string` | Yes |  |
+| `runs[].blocked_by.elapsedSeconds` | `integer` | Yes |  |
+| `runs[].blocked_by.deadline` | `string \| null` | Yes |  |
+| `runs[].blocked_by.maximumDurationSeconds` | `integer \| null` | Yes |  |
 | `runs[].id` | `string` | Yes | The run's id — pass it to get_schedule_trigger_run. |
 | `runs[].trigger_id` | `string` | Yes | Id of the schedule this run belongs to. |
 | `runs[].run_kind` | `"due" \| "manual"` | Yes | `due` = fired by the schedule; `manual` = started by a person. |
@@ -1369,9 +1377,9 @@ Additional access requirement: Requires a user token. The caller must be the sch
 
 #### get_schedule_trigger_run
 
-Required RBAC permission: [`scheduledTask:read`](/docs/reference/permissions#scheduledTask:read)
+Required RBAC permission: [`project:read`](/docs/reference/permissions#project:read)
 
-Additional access requirement: Requires a user token. The caller must be the schedule actor, a project member, or a scheduled-task administrator.
+Additional access requirement: Requires a user token. The caller must be the schedule actor, a project member, or someone with organization-wide Projects **Can read** access.
 
 ##### Input
 
@@ -1384,6 +1392,14 @@ Additional access requirement: Requires a user token. The caller must be the sch
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
+| `blocked_by` | `object \| null` | Yes | Why this tick was skipped, including the blocking run and its frozen deadline. |
+| `blocked_by.phase` | `"starting" \| "running" \| "stopping"` | Yes |  |
+| `blocked_by.runId` | `string \| null` | Yes |  |
+| `blocked_by.runtimeTaskId` | `string \| null` | Yes |  |
+| `blocked_by.startedAt` | `string` | Yes |  |
+| `blocked_by.elapsedSeconds` | `integer` | Yes |  |
+| `blocked_by.deadline` | `string \| null` | Yes |  |
+| `blocked_by.maximumDurationSeconds` | `integer \| null` | Yes |  |
 | `id` | `string` | Yes | The run's id — pass it to get_schedule_trigger_run. |
 | `trigger_id` | `string` | Yes | Id of the schedule this run belongs to. |
 | `run_kind` | `"due" \| "manual"` | Yes | `due` = fired by the schedule; `manual` = started by a person. |
@@ -1397,9 +1413,9 @@ Additional access requirement: Requires a user token. The caller must be the sch
 
 #### enable_schedule_trigger
 
-Required RBAC permission: [`scheduledTask:update`](/docs/reference/permissions#scheduledTask:update)
+Required RBAC permission: [`project:update`](/docs/reference/permissions#project:update)
 
-Additional access requirement: Requires a user token. Only the schedule actor or a scheduled-task administrator can change or run it. Project membership alone permits reading.
+Additional access requirement: Requires a user token. Only the schedule actor or someone with organization-wide Projects **Can update** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
 
 ##### Input
 
@@ -1426,9 +1442,9 @@ Additional access requirement: Requires a user token. Only the schedule actor or
 
 #### disable_schedule_trigger
 
-Required RBAC permission: [`scheduledTask:update`](/docs/reference/permissions#scheduledTask:update)
+Required RBAC permission: [`project:update`](/docs/reference/permissions#project:update)
 
-Additional access requirement: Requires a user token. Only the schedule actor or a scheduled-task administrator can change or run it. Project membership alone permits reading.
+Additional access requirement: Requires a user token. Only the schedule actor or someone with organization-wide Projects **Can update** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
 
 ##### Input
 
@@ -1455,9 +1471,9 @@ Additional access requirement: Requires a user token. Only the schedule actor or
 
 #### run_schedule_trigger_now
 
-Required RBAC permission: [`scheduledTask:create`](/docs/reference/permissions#scheduledTask:create)
+Required RBAC permission: [`project:create`](/docs/reference/permissions#project:create)
 
-Additional access requirement: Requires a user token. Only the schedule actor or a scheduled-task administrator can change or run it. Project membership alone permits reading.
+Additional access requirement: Requires a user token. Only the schedule actor or someone with organization-wide Projects **Can use** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
 
 ##### Input
 
@@ -1469,6 +1485,14 @@ Additional access requirement: Requires a user token. Only the schedule actor or
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
+| `blocked_by` | `object \| null` | Yes | Why this tick was skipped, including the blocking run and its frozen deadline. |
+| `blocked_by.phase` | `"starting" \| "running" \| "stopping"` | Yes |  |
+| `blocked_by.runId` | `string \| null` | Yes |  |
+| `blocked_by.runtimeTaskId` | `string \| null` | Yes |  |
+| `blocked_by.startedAt` | `string` | Yes |  |
+| `blocked_by.elapsedSeconds` | `integer` | Yes |  |
+| `blocked_by.deadline` | `string \| null` | Yes |  |
+| `blocked_by.maximumDurationSeconds` | `integer \| null` | Yes |  |
 | `id` | `string` | Yes | The run's id — pass it to get_schedule_trigger_run. |
 | `trigger_id` | `string` | Yes | Id of the schedule this run belongs to. |
 | `run_kind` | `"due" \| "manual"` | Yes | `due` = fired by the schedule; `manual` = started by a person. |
@@ -2942,8 +2966,8 @@ Required RBAC permission: `update` on the MCP gateway (granted per item)
 | `list_openappa_consults` | List the external consults OpenAPPA recorded for one session, newest first: every annotator, context provider, authority, sanitizer and audience source it asked, with the outcome, the HTTP status, ... | [`openappaDiagnostics:read`](/docs/reference/permissions#openappaDiagnostics:read) |
 | `create_guardrails_repository` | Create a private policy repository from the OpenAPPA configuration template, seed it with the current policy and battery declarations, and start Git sync. | [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) |
 | `connect_guardrails_repository` | Make a policy file in an existing GitHub repository or GitLab project the organization's OpenAPPA policy source, pull it now, and keep it in sync. | [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) |
-| `yell` | Send feedback about OpenAPPA, such as a confusing block, remedy or ruling, or the user's complaint, with a diagnostic archive for review in the Guardrails Yells tab. | None (no additional RBAC permission required) |
-| `superyell` | Do what yell does, then turn OpenAPPA off for this session, after the person running it approves. | None (no additional RBAC permission required) |
+| `sync_guardrails_repository` | Pull the policy file from the connected Git repository now instead of waiting for the next scheduled sync, so a merged policy or validation pull request takes effect. | [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) |
+| `yell` | Send feedback about OpenAPPA, with a diagnostic archive for review in the Guardrails Yells tab. | None (no additional RBAC permission required) |
 | `get_guardrails_policy` | Read organization.appa.toml and its revision before changing guardrails. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `inspect_guardrails_server` | Inspect one caller-readable MCP catalog's stored tools and current policy coverage. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `list_guardrails_battery_fits` | List the batteries that fit the MCP servers you can see and are not declared yet, or only those fitting one server when mcpServerId is a catalog ID. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
@@ -3067,19 +3091,14 @@ Required RBAC permission: [`organizationSettings:update`](/docs/reference/permis
 | `interval` | `"15m" \| "1h" \| "1d"` | No |  |
 
 
+#### sync_guardrails_repository
+
+Required RBAC permission: [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update)
+
+This tool takes no arguments.
+
+
 #### yell
-
-Required RBAC permission: None (no additional RBAC permission required)
-
-##### Input
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `message` | `string` | Yes |  |
-| `with_trajectory` | `boolean` | Yes |  |
-
-
-#### superyell
 
 Required RBAC permission: None (no additional RBAC permission required)
 

@@ -230,6 +230,10 @@ export function useUpdateSlackChatOpsConfig() {
       toast.success("Slack configuration updated");
       queryClient.invalidateQueries({ queryKey: ["chatops", "status"] });
       queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
+      // The router bot is listed with the agent bots.
+      queryClient.invalidateQueries({
+        queryKey: ["chatops", "slack-agent-bots"],
+      });
     },
     onError: (error) => {
       console.error("Slack config update error:", error);
@@ -296,6 +300,44 @@ export function useJoinSlackAgentBotChannel(agentId: string) {
       toast.success("The bot joined the channel");
       queryClient.invalidateQueries({
         queryKey: ["chatops", "slack-agent-bots", agentId, "channels"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
+    },
+  });
+}
+
+export function useSlackRouterBotChannels(enabled: boolean) {
+  return useQuery({
+    queryKey: ["chatops", "slack-router-bot", "channels"],
+    enabled,
+    queryFn: async () => {
+      const { data, error } =
+        await archestraApiSdk.listSlackRouterBotChannels();
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+  });
+}
+
+export function useJoinSlackRouterBotChannel() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (channelId: string) => {
+      const { data, error } = await archestraApiSdk.joinSlackRouterBotChannel({
+        path: { channelId },
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    onSuccess: (data) => {
+      if (!data?.success) return;
+      toast.success("The bot joined the channel");
+      queryClient.invalidateQueries({
+        queryKey: ["chatops", "slack-router-bot", "channels"],
       });
       queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
     },
@@ -495,6 +537,31 @@ export function useCreateSlackAgentBotApp() {
       queryClient.invalidateQueries({
         queryKey: ["chatops", "slack-agent-bots"],
       });
+    },
+  });
+}
+
+export function useCreateSlackRouterBotApp() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (
+      body: archestraApiTypes.CreateSlackRouterBotAppData["body"],
+    ) => {
+      const { data, error } = await archestraApiSdk.createSlackRouterBotApp({
+        body,
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["chatops", "slack-agent-bots"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["chatops", "status"] });
     },
   });
 }

@@ -114,7 +114,7 @@ export function ConsultsTable() {
   if (isLoadingError) {
     return (
       <QueryLoadError
-        title="Couldn't load guardrail consults"
+        title="Couldn't load Guardrails consults"
         onRetry={() => refetch()}
       />
     );
@@ -192,10 +192,13 @@ export function ConsultsTable() {
         manualPagination
         isLoading={isFetching}
         hasActiveFilters={hasFilters}
-        emptyMessage="No guardrail consults recorded yet. Annotator and authority calls will appear here as they happen."
+        emptyMessage="No Guardrails consults recorded yet. Annotator and authority calls will appear here as they happen."
         filteredEmptyMessage="No consults match your filters"
         onClearFilters={clearFilters}
         onRowClick={(row) => setSelected(row)}
+        getRowClassName={(row) =>
+          row.consult.id === selected?.consult.id ? "bg-muted" : undefined
+        }
       />
 
       <ConsultDetailSheet view={selected} onClose={() => setSelected(null)} />

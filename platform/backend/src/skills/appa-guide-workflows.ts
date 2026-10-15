@@ -112,6 +112,28 @@ export const REQUESTS_WORKFLOW = `# Explain, review, and investigate
 
 None of these previews or publishes anything. When the operator then picks a change, continue with \`references/adjust.md\`. If the operator said they want no changes or only a report, leave out the closing change question, the numbered changes, and offers to draft a change for the rest of the conversation, until they ask for one.
 
+## Explain how OpenAPPA works
+
+When the operator asks what OpenAPPA or Guardrails is or how it works, without asking about their policy, answer from this section alone: read nothing, and do not mention this deployment's policy, batteries, enforcement, or that nothing changed. Write for a DevOps engineer who has never heard of OpenAPPA. Use the answer below almost word for word: short sentences and everyday words, keeping OpenAPPA's terms (label, trust, audience, rule, human approval, sanitizer, authority, subagent, battery) and explaining each where it first appears. Avoid "trajectory", "delta", "composition", "catch-all", "TOML", "rule pack", "fork", and rule field names.
+
+OpenAPPA checks every tool call your AI agent makes, like reading email, posting to Slack, or pushing code, before it runs.
+
+1. **Data gets a label.** Everything the agent reads gets two tags:
+   - **Trust**: is it trusted, or could an outsider have influenced it (a web page, a GitHub issue, a meeting transcript)?
+   - **Audience**: who may see it: only you, your organization, or the public?
+2. **Each tool has a rule.** The rule says what the label must be for the call to go through.
+   - Sending a Slack message might need trusted data that is safe for your organization.
+   - Publishing to a public GitHub repository must not include internal data.
+   - A risky admin change might need human approval.
+3. **OpenAPPA decides.** It allows the call, asks you to approve that exact call, or blocks it and explains what did not match.
+4. **Ways to continue safely.**
+   - A **sanitizer** cleans data, for example removing private details, so it can go to a wider audience.
+   - An **authority** is a person or team allowed to approve a call that would otherwise be blocked.
+   - A **subagent** can read sensitive data on its own; only its checked or cleaned answer comes back to the main agent.
+5. **Batteries are ready-made rules** for common services like GitHub, Slack, or Grain, so you don't write every rule yourself. Your own rules take priority over them.
+
+End with one sentence offering to help understand and improve the current policy, such as checking which tools it covers. Do not ask what to change.
+
 ## Explain
 
 Read the policy with \`archestra__get_guardrails_policy\` and answer in plain language. Do not say agents or data are protected beyond what specific rules cover.

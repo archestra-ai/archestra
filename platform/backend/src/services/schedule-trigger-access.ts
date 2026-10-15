@@ -28,7 +28,7 @@ export async function findAccessibleScheduleTriggerOrThrow(params: {
   }
 
   // A trigger of a soft-deleted project is hidden and paused with it — 404 for
-  // everyone (actor and scheduledTask:admin included), or run-now could still
+  // everyone (actor and project oversight included), or run-now could still
   // execute into the hidden project past the due-picker's pause. `findById`
   // excludes soft-deleted projects, so a retained trigger resolves to no project.
   const project = trigger.projectId
@@ -43,13 +43,14 @@ export async function findAccessibleScheduleTriggerOrThrow(params: {
     return trigger;
   }
 
-  // Reading every scheduled task (a grant at `*`) reaches any trigger, incl.
-  // ones inside a project. Project oversight of schedules rides this grant —
-  // there is no separate project path here.
+  // Organization-wide project oversight reaches schedules too. A read grant
+  // permits inspection only; writes and execution need their own action.
+  // A grant on one shared project never permits acting as another user.
   if (
-    await isScheduledTaskAdmin({
+    await hasProjectScheduleOversight({
       userId: params.userId,
       organizationId: params.organizationId,
+      action: params.access,
     })
   ) {
     return trigger;
@@ -101,26 +102,30 @@ export async function findAccessibleScheduleTriggerRunOrThrow(params: {
   return run;
 }
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 /**
- * Whether the caller holds `scheduledTask` at `*` — the org-wide oversight
- * grant that reaches every member's schedules.
+ * Whether organization-wide Projects authority reaches this schedule action.
  */
-export async function isScheduledTaskAdmin(params: {
+export async function hasProjectScheduleOversight(params: {
   userId: string;
   organizationId: string;
+  action?: ScheduleTriggerAccess;
 }): Promise<boolean> {
   return await ResourcePermissions.allows({
     userId: params.userId,
     organizationId: params.organizationId,
-    resource: "scheduledTask",
+    resource: "project",
     scope: "*",
-    action: "read",
+    action: params.action ?? "read",
   });
 }
+// SPDX-SnippetEnd
 
 /**
  * Records a manual run and queues its execution. Callers authorize first
- * (`access: "mutate"`); this only performs the side effect.
+ * (`access: "use"`); this only performs the side effect.
  */
 export async function startManualScheduleTriggerRun(params: {
   trigger: ScheduleTrigger;
@@ -156,11 +161,11 @@ export async function startManualScheduleTriggerRun(params: {
  * `read` — viewing the trigger and its runs. Project members qualify, so a
  * project's schedules are visible to everyone who can see the project.
  *
- * `mutate` — anything that changes the trigger or causes it to execute (update,
+ * `update`, `delete`, `use` — changing the trigger or executing it (update,
  * delete, enable/disable, run-now, minting a run conversation). Project
  * membership is NOT enough: a scheduled run executes as `trigger.actorUserId`
  * against that actor's agent and credentials, so letting a project member
  * rewrite or fire another member's schedule would let them act as that actor.
- * Restricted to the actor themselves or a `scheduledTask:admin`.
+ * Restricted to the actor themselves or the corresponding organization-wide Project grant.
  */
-type ScheduleTriggerAccess = "read" | "mutate";
+type ScheduleTriggerAccess = "read" | "update" | "delete" | "use";

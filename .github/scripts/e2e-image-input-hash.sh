@@ -22,13 +22,13 @@ case "$kind" in
   platform)
     {
       printf 'context\n'
-      git ls-tree "HEAD:platform" | awk -F '\t' '$2 != "e2e-tests" && $2 != "docs-screenshots"'
+      git ls-tree -r "HEAD:platform" | awk -F '\t' '$2 !~ /^e2e-tests\// && $2 !~ /^tools\/docs-screenshots\//'
       definition
     } | git hash-object --stdin
     ;;
   mcp-base)
     {
-      printf 'context %s\n' "$(git rev-parse HEAD:platform/mcp_server_docker_image)"
+      printf 'context %s\n' "$(git rev-parse HEAD:platform/docker_images/mcp_server)"
       definition
     } | git hash-object --stdin
     ;;

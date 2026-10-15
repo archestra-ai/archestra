@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { chatOpsManager } from "@/agents/chatops/chatops-manager";
+import { slackAppFactory } from "@/agents/chatops/slack-app-factory";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -33,8 +34,31 @@ const { authTestMock } = vi.hoisted(() => ({
 vi.mock("@slack/web-api", () => ({
   WebClient: class {
     auth = { test: authTestMock };
+    tooling = {
+      tokens: {
+        rotate: () =>
+          Promise.resolve({
+            ok: true,
+            token: "xoxe.xoxp-rotated",
+            refresh_token: "xoxe-next",
+            exp: Math.floor(Date.now() / 1000) + 12 * 3600,
+          }),
+      },
+    };
     apps = {
       connections: { open: () => Promise.resolve({ ok: true }) },
+      manifest: {
+        create: () =>
+          Promise.resolve({
+            ok: true,
+            app_id: "A_ROUTER",
+            credentials: {
+              client_id: "client-1",
+              client_secret: "client-secret",
+              signing_secret: "signing-secret",
+            },
+          }),
+      },
     };
   },
 }));
@@ -263,6 +287,69 @@ describe("Slack agent bots", () => {
     expect(JSON.stringify(row)).not.toContain("xoxb-secret");
   });
 
+  describe("creating the router bot", () => {
+    const createRouter = () =>
+      app.inject({
+        method: "POST",
+        url: "/api/chatops/config/slack/router/app",
+        payload: { appName: "archestra", connectionMode: "socket" },
+      });
+
+    test("creates its Slack app with the person's token and records it without secrets", async () => {
+      await slackAppFactory.saveConfigToken({
+        userId: user.id,
+        accessToken: "xoxe.xoxp-pasted",
+        refreshToken: "xoxe-1",
+      });
+
+      const response = await createRouter();
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        appId: "A_ROUTER",
+        installMode: "manual",
+        installUrl: "https://api.slack.com/apps/A_ROUTER/oauth",
+      });
+      expect(await ChatOpsConfigModel.getSlackConfig()).toEqual(
+        expect.objectContaining({ appId: "A_ROUTER", enabled: false }),
+      );
+
+      const rows = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.resourceId, organizationId));
+      const row = rows.find(
+        (candidate) =>
+          (candidate.after as { slack?: { hasAppId?: boolean } } | null)?.slack
+            ?.hasAppId,
+      );
+      expect(row).toBeDefined();
+      expect(JSON.stringify(row)).not.toContain("client-secret");
+      expect(JSON.stringify(row)).not.toContain("signing-secret");
+    });
+
+    test("is refused while a router bot is connected", async () => {
+      await ChatOpsConfigModel.saveSlackConfig({
+        enabled: true,
+        botToken: "xoxb-main",
+        signingSecret: "",
+        appId: "A_MAIN",
+        connectionMode: "socket",
+        appLevelToken: "xapp-main",
+      });
+      await slackAppFactory.saveConfigToken({
+        userId: user.id,
+        accessToken: "xoxe.xoxp-pasted",
+        refreshToken: "xoxe-1",
+      });
+
+      const response = await createRouter();
+
+      expect(response.statusCode).toBe(400);
+      expect((await ChatOpsConfigModel.getSlackConfig())?.appId).toBe("A_MAIN");
+    });
+  });
+
   describe("converting the channel-routed Slack app", () => {
     async function connectMainApp(connectionMode: "socket" | "webhook") {
       await ChatOpsConfigModel.saveSlackConfig({
@@ -312,6 +399,11 @@ describe("Slack agent bots", () => {
 
       expect(list.json().unassignedApp).toEqual({
         appId: "A_MAIN",
+        handle: null,
+        connected: false,
+        installed: true,
+        needsAppLevelToken: false,
+        createdBy: null,
         connectionMode: "socket",
         agentUsage: [
           { agentId: support.id, agentName: "Support", bindings: 2 },
@@ -398,6 +490,7 @@ describe("Slack agent bots", () => {
         return { channelName: `name-${channelId}` };
       });
       const bot = {
+        isConfigured: () => true,
         getWorkspaceId: () => "T1",
         getWorkspaceName: () => "Acme",
         getMissingScopes: () => options.missingScopes ?? [],
@@ -527,6 +620,56 @@ describe("Slack agent bots", () => {
         channelName: "name-C2",
       });
       expect((await owner("C9"))?.agentId).toBe(coding.id);
+
+      const rows = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.resourceType, "chatOpsBinding"));
+      expect(rows.length).toBeGreaterThan(0);
+    });
+
+    test("the router bot lists its channels and joins one without picking an agent for it", async ({
+      makeInternalAgent,
+    }) => {
+      const coding = await makeInternalAgent({ organizationId });
+      await ChatOpsChannelBindingModel.create({
+        organizationId,
+        provider: "slack",
+        channelId: "C9",
+        workspaceId: "T1",
+        agentId: coding.id,
+      });
+      const { joinChannel } = fakeBot();
+
+      const list = await app.inject({
+        method: "GET",
+        url: "/api/chatops/config/slack/router/channels",
+      });
+      expect(list.statusCode).toBe(200);
+      expect(
+        list.json().channels.map((c: { channelId: string }) => c.channelId),
+      ).toEqual(["C1", "C4", "C2"]);
+
+      const join = (channelId: string) =>
+        app.inject({
+          method: "POST",
+          url: `/api/chatops/config/slack/router/channels/${channelId}/join`,
+        });
+      expect((await join("C2")).statusCode).toBe(200);
+      expect((await join("C9")).statusCode).toBe(200);
+
+      expect(joinChannel.mock.calls.map(([id]) => id)).toEqual(["C2", "C9"]);
+      const binding = async (channelId: string) =>
+        await ChatOpsChannelBindingModel.findByChannel({
+          provider: "slack",
+          channelId,
+          workspaceId: "T1",
+        });
+      expect(await binding("C2")).toMatchObject({
+        agentId: null,
+        channelName: "name-C2",
+      });
+      expect((await binding("C9"))?.agentId).toBe(coding.id);
 
       const rows = await db
         .select()

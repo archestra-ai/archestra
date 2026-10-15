@@ -7,6 +7,7 @@ import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import OrganizationModel from "@/models/organization";
 import { generateTaggedText } from "@/utils/generate-tagged-text";
 import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
+import type { OpenappaEncryptedChat } from "./encrypted-chat";
 
 /** The prompt the runtime's `builtin = "archestra"` annotator renders. */
 type ArchestraAnnotationRequest = {
@@ -31,8 +32,11 @@ type ArchestraAnnotationOutcome =
 class OpenAppaArchestraAnnotator {
   async annotate(
     request: ArchestraAnnotationRequest,
+    encryptedChat: OpenappaEncryptedChat | null = null,
   ): Promise<ArchestraAnnotationOutcome> {
-    const organization = await OrganizationModel.getFirst();
+    const organization = encryptedChat
+      ? await OrganizationModel.getById(encryptedChat.organizationId)
+      : await OrganizationModel.getFirst();
     if (!organization)
       return { kind: "unconfigured", reason: "No organization exists yet." };
     const agent = await AgentModel.getBuiltInAgent(
@@ -63,6 +67,13 @@ class OpenAppaArchestraAnnotator {
       modelName: selection.modelName,
       source: "guardrail:annotator",
       internalCall: true,
+      ...(encryptedChat
+        ? {
+            sessionId: encryptedChat.audit.conversationId,
+            userId: encryptedChat.userId,
+            encryptedChatKey: encryptedChat.audit.dek,
+          }
+        : {}),
       baseUrl: selection.baseUrl,
       chatApiKeyId: selection.chatApiKeyId,
     });
@@ -92,12 +103,12 @@ class OpenAppaArchestraAnnotator {
         key ? ` with key "${key.name}" (${key.id})` : ""
       }`;
       const reason =
-        apiError && status !== undefined
+        !encryptedChat && apiError && status !== undefined
           ? `The model call failed: ${call} was rejected upstream with ${status}: ${upstreamMessage(apiError)}`
           : `The model call failed: ${call}.`;
       logger.warn(
         {
-          err: error,
+          err: encryptedChat ? undefined : error,
           provider: selection.provider,
           model: selection.modelName,
           chatApiKeyId: selection.chatApiKeyId,

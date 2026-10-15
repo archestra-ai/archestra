@@ -260,7 +260,7 @@ describe("schedule trigger MCP tools", () => {
     ).toMatchObject({ projectId: null });
   });
 
-  test("requires project:create only when making a new project", async ({
+  test("uses project:create for schedules in both new and existing projects", async ({
     makeCustomRole,
   }) => {
     const project = await projectService.create({
@@ -277,7 +277,7 @@ describe("schedule trigger MCP tools", () => {
       content: "Keep existing instructions.",
     });
     const role = await makeCustomRole(organizationId, {
-      permission: { scheduledTask: ["create"] },
+      permission: { project: ["read"] },
     });
     await MemberModel.updateRole(userId, organizationId, role.role);
     const args = {
@@ -293,6 +293,22 @@ describe("schedule trigger MCP tools", () => {
     );
     expect(denied.isError).toBe(true);
     expect(textOf(denied)).toContain("project:create");
+    const deniedExisting = await executeArchestraTool(
+      getArchestraToolFullName("create_schedule_trigger"),
+      { ...args, project_id: project.id },
+      context,
+    );
+    expect(deniedExisting.isError).toBe(true);
+    const creator = await makeCustomRole(organizationId, {
+      permission: { project: ["create"] },
+    });
+    await MemberModel.updateRole(userId, organizationId, creator.role);
+    const createdNew = await executeArchestraTool(
+      getArchestraToolFullName("create_schedule_trigger"),
+      args,
+      context,
+    );
+    expect(createdNew.isError, textOf(createdNew)).toBe(false);
     const created = await executeArchestraTool(
       getArchestraToolFullName("create_schedule_trigger"),
       { ...args, project_id: project.id },
@@ -311,7 +327,7 @@ describe("schedule trigger MCP tools", () => {
       }),
     ).toEqual({ content: "Keep existing instructions." });
     expect(await projectService.list({ organizationId, userId })).toHaveLength(
-      1,
+      2,
     );
   });
 
@@ -631,7 +647,7 @@ describe("schedule trigger MCP tools", () => {
     const created = await createProjectSchedule();
     const id = created.structuredContent?.id as string;
     const role = await makeCustomRole(organizationId, {
-      permission: { scheduledTask: ["read"] },
+      permission: { project: ["read"] },
     });
     await MemberModel.updateRole(userId, organizationId, role.role);
     for (const name of [
@@ -656,7 +672,7 @@ describe("schedule trigger MCP tools", () => {
     makeCustomRole,
   }) => {
     const role = await makeCustomRole(organizationId, {
-      permission: { scheduledTask: ["read"] },
+      permission: { project: ["read"] },
     });
     await MemberModel.updateRole(userId, organizationId, role.role);
     const readTools = [LIST_TRIGGERS, GET_TRIGGER, LIST_RUNS, GET_RUN];
@@ -1174,15 +1190,24 @@ describe("schedule trigger MCP tools", () => {
         organizationId,
         agentId: agent.id,
         actorUserId: userId,
+        enabled: true,
       });
-      const skipped = await makeScheduleTriggerRun(trigger.id, {
-        runKind: "due",
+      const blockedBy = {
+        phase: "running" as const,
+        runId: "16100000-0000-4000-8000-000000000001",
+        runtimeTaskId: "16100000-0000-4000-8000-000000000002",
+        startedAt: "2030-01-01T00:00:00.000Z",
+        elapsedSeconds: 3600,
+        deadline: "2030-01-01T04:00:00.000Z",
+        maximumDurationSeconds: 14400,
+      };
+      const skipped = await ScheduleTriggerRunModel.recordDueRun({
+        trigger,
+        now: new Date(),
+        skip: { blockedBy, error: "Previous run still in progress" },
       });
-      await ScheduleTriggerRunModel.markCompleted({
-        runId: skipped.id,
-        status: "failed",
-        error: "Previous run still in progress",
-      });
+      expect(skipped).not.toBeNull();
+      if (!skipped) throw new Error("Expected a recorded skip");
       await makeScheduleTriggerRun(trigger.id, { runKind: "manual" });
 
       const result = await executeArchestraTool(
@@ -1203,8 +1228,16 @@ describe("schedule trigger MCP tools", () => {
         run_kind: "due",
         status: "failed",
         error: "Previous run still in progress",
+        blocked_by: blockedBy,
       });
       expect(failed?.completed_at).not.toBeNull();
+      const detail = await executeArchestraTool(
+        GET_RUN,
+        { schedule_trigger_id: trigger.id, run_id: skipped.id },
+        context,
+      );
+      expect(detail.isError).toBe(false);
+      expect(detail.structuredContent).toMatchObject({ blocked_by: blockedBy });
     });
 
     test("filters runs by status", async ({
@@ -1483,7 +1516,7 @@ describe("schedule trigger MCP tools", () => {
   });
 
   describe("RBAC", () => {
-    test("a role without scheduledTask permissions cannot read schedules", async ({
+    test("a role without project permissions cannot read schedules", async ({
       makeScheduleTrigger,
       makeCustomRole,
     }) => {
@@ -1506,7 +1539,7 @@ describe("schedule trigger MCP tools", () => {
       }
     });
 
-    test("a read-only scheduledTask role cannot start a run", async ({
+    test("a read-only project role cannot start a run", async ({
       makeScheduleTrigger,
       makeCustomRole,
     }) => {
@@ -1516,7 +1549,7 @@ describe("schedule trigger MCP tools", () => {
         actorUserId: userId,
       });
       const role = await makeCustomRole(organizationId, {
-        permission: { scheduledTask: ["read"] },
+        permission: { project: ["read"] },
       });
       await MemberModel.updateRole(userId, organizationId, role.role);
 

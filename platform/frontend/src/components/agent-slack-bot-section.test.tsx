@@ -9,11 +9,14 @@ import {
 } from "@/lib/chatops/chatops.query";
 import {
   useJoinSlackAgentBotChannel,
+  useJoinSlackRouterBotChannel,
   useSlackAgentBotChannels,
   useSlackAgentBots,
+  useSlackRouterBotChannels,
 } from "@/lib/chatops/chatops-config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { AgentSlackBotSection } from "./agent-slack-bot-section";
+import { SlackBotEditDialog } from "./slack-bot-edit-dialog";
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
@@ -24,8 +27,10 @@ vi.mock("@/lib/chatops/chatops.query", () => ({
 }));
 vi.mock("@/lib/chatops/chatops-config.query", () => ({
   useJoinSlackAgentBotChannel: vi.fn(),
+  useJoinSlackRouterBotChannel: vi.fn(),
   useSlackAgentBotChannels: vi.fn(),
   useSlackAgentBots: vi.fn(),
+  useSlackRouterBotChannels: vi.fn(),
 }));
 
 const join = vi.fn();
@@ -84,7 +89,7 @@ function setup(params: {
   vi.mocked(useAllChatOpsBindings).mockReturnValue({
     data: { bindings: params.bindings ?? [] },
   } as unknown as ReturnType<typeof useAllChatOpsBindings>);
-  vi.mocked(useSlackAgentBotChannels).mockReturnValue({
+  const channels = {
     data: {
       workspaceId: "T1",
       canJoin: true,
@@ -92,7 +97,13 @@ function setup(params: {
     },
     isLoading: false,
     isError: false,
-  } as unknown as ReturnType<typeof useSlackAgentBotChannels>);
+  };
+  vi.mocked(useSlackAgentBotChannels).mockReturnValue(
+    channels as unknown as ReturnType<typeof useSlackAgentBotChannels>,
+  );
+  vi.mocked(useSlackRouterBotChannels).mockReturnValue(
+    channels as unknown as ReturnType<typeof useSlackRouterBotChannels>,
+  );
 }
 
 beforeEach(() => {
@@ -113,6 +124,10 @@ beforeEach(() => {
     mutate: join,
     isPending: false,
   } as unknown as ReturnType<typeof useJoinSlackAgentBotChannel>);
+  vi.mocked(useJoinSlackRouterBotChannel).mockReturnValue({
+    mutate: join,
+    isPending: false,
+  } as unknown as ReturnType<typeof useJoinSlackRouterBotChannel>);
   vi.mocked(useUpdateChatOpsBinding).mockReturnValue({
     mutate: update,
     mutateAsync: update,
@@ -264,6 +279,56 @@ describe("AgentSlackBotSection", () => {
     await userEvent.click(within(row).getByRole("button", { name: "Add bot" }));
 
     expect(join).toHaveBeenCalledWith("C3");
+  });
+
+  it("shows the router bot's channels with the agent that answers in each by default", async () => {
+    setup({
+      bindings: [binding("C1", "a2")],
+      channels: [
+        {
+          channelId: "C1",
+          channelName: "eng",
+          isPrivate: false,
+          isMember: true,
+        },
+        {
+          channelId: "C2",
+          channelName: "random",
+          isPrivate: false,
+          isMember: true,
+        },
+        {
+          channelId: "C3",
+          channelName: "sales",
+          isPrivate: false,
+          isMember: false,
+        },
+      ],
+    });
+
+    render(
+      <SlackBotEditDialog
+        open
+        onOpenChange={() => {}}
+        agentId={null}
+        handle="archestra_all"
+        appId="A_ROUTER"
+        installed
+        reinstallUrl={null}
+      />,
+    );
+
+    expect(
+      within(screen.getByRole("listitem", { name: "eng" })).getByText(
+        "Default agent: Coding",
+      ),
+    ).toBeVisible();
+    expect(
+      within(screen.getByRole("listitem", { name: "random" })).getByText(
+        /No default agent yet/,
+      ),
+    ).toBeVisible();
+    expect(screen.queryByRole("listitem", { name: "sales" })).toBeNull();
   });
 
   it("says assigned channels have no bot until the agent gets one", () => {

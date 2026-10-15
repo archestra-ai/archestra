@@ -27,6 +27,18 @@ export type ScheduleTriggerRunStatus = z.infer<
   typeof ScheduleTriggerRunStatusSchema
 >;
 
+/** Frozen when a tick is skipped; later config changes must not rewrite history. */
+export const ScheduleRunBlockerSchema = z.object({
+  phase: z.enum(["starting", "running", "stopping"]),
+  runId: z.string().uuid().nullable(),
+  runtimeTaskId: z.string().uuid().nullable(),
+  startedAt: z.string().datetime(),
+  elapsedSeconds: z.number().int().nonnegative(),
+  deadline: z.string().datetime().nullable(),
+  maximumDurationSeconds: z.number().int().positive().nullable(),
+});
+export type ScheduleRunBlocker = z.infer<typeof ScheduleRunBlockerSchema>;
+
 export const ScheduleTriggerActorSummarySchema = z.object({
   id: z.string(),
   name: z.string().nullable(),
@@ -88,11 +100,13 @@ export const UpdateScheduleTriggerSchema = createUpdateSchema(
 const selectRunExtendedFields = {
   runKind: ScheduleTriggerRunKindSchema,
   status: ScheduleTriggerRunStatusSchema,
+  blockedBy: ScheduleRunBlockerSchema.nullable(),
 };
 
 const insertRunExtendedFields = {
   runKind: ScheduleTriggerRunKindSchema,
   status: ScheduleTriggerRunStatusSchema.optional(),
+  blockedBy: ScheduleRunBlockerSchema.nullable().optional(),
 };
 
 export const SelectScheduleTriggerRunSchema = createSelectSchema(

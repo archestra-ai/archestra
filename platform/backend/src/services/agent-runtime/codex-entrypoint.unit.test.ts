@@ -17,7 +17,7 @@ import { agentRuntimeFailureReason } from "./failure-reason";
 const execFileAsync = promisify(execFile);
 const ENTRYPOINT = path.resolve(
   import.meta.dirname,
-  "../../../../agent_images/bin/archestra-codex",
+  "../../../../docker_images/agent/bin/archestra-codex",
 );
 
 describe("Codex image entrypoint", () => {

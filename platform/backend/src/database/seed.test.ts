@@ -154,7 +154,7 @@ describe("syncBuiltInAgents", () => {
     const originalToolIds = await AgentToolModel.findToolIdsByAgent(
       agent?.id ?? "",
     );
-    expect(originalToolIds).toHaveLength(29);
+    expect(originalToolIds).toHaveLength(30);
     const [resolveYellTool] = await ToolModel.findBuiltInToolIdsByNames([
       archestraMcpBranding.getToolName("resolve_openappa_yell"),
     ]);
@@ -423,7 +423,7 @@ Be neurodiversity friendly.
     ).toHaveLength(1);
     expect(
       await AgentToolModel.findToolIdsByAgent(agent?.id ?? ""),
-    ).toHaveLength(29);
+    ).toHaveLength(30);
     await syncOpenAppaConfigAgentCapabilities();
     expect(
       (
@@ -540,7 +540,7 @@ Be neurodiversity friendly.
     const managedToolIds = (
       await AgentToolModel.findToolIdsByAgent(guidedAgentId)
     ).sort();
-    expect(managedToolIds).toHaveLength(29);
+    expect(managedToolIds).toHaveLength(30);
     expect((await AgentToolModel.findToolIdsByAgent(agentId)).sort()).toEqual(
       managedToolIds,
     );
@@ -586,7 +586,7 @@ Be neurodiversity friendly.
     expect(await ToolModel.findBuiltInToolIdsByNames(sandboxToolNames)).toEqual(
       [],
     );
-    expect(await AgentToolModel.findToolIdsByAgent(agentId)).toHaveLength(26);
+    expect(await AgentToolModel.findToolIdsByAgent(agentId)).toHaveLength(27);
 
     config.skillsSandbox.enabled = true;
     await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
@@ -596,7 +596,7 @@ Be neurodiversity friendly.
       await ToolModel.findBuiltInToolIdsByNames(sandboxToolNames);
     expect(sandboxToolIds).toHaveLength(3);
     const assigned = await AgentToolModel.findToolIdsByAgent(agentId);
-    expect(assigned).toHaveLength(29);
+    expect(assigned).toHaveLength(30);
     expect(assigned).toEqual(expect.arrayContaining(sandboxToolIds));
   });
 

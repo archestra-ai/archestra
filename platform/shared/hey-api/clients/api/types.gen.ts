@@ -34308,7 +34308,7 @@ export type GetBootstrapResponses = {
         };
         scopedCapabilities: Array<{
             organizationId: string;
-            resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
+            resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
             scope: '*' | string;
             action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec';
         }>;
@@ -39833,6 +39833,14 @@ export type ListSlackAgentBotsResponses = {
         workspaceName: string | null;
         unassignedApp: {
             appId: string;
+            handle: string | null;
+            connected: boolean;
+            installed: boolean;
+            needsAppLevelToken: boolean;
+            createdBy: {
+                id: string;
+                name: string | null;
+            } | null;
             connectionMode: 'webhook' | 'socket';
             agentUsage: Array<{
                 agentId: string;
@@ -40398,6 +40406,97 @@ export type CreateSlackAgentBotAppResponses = {
 
 export type CreateSlackAgentBotAppResponse = CreateSlackAgentBotAppResponses[keyof CreateSlackAgentBotAppResponses];
 
+export type CreateSlackRouterBotAppData = {
+    body: {
+        appName: string;
+        connectionMode: 'webhook' | 'socket';
+    };
+    path?: never;
+    query?: never;
+    url: '/api/chatops/config/slack/router/app';
+};
+
+export type CreateSlackRouterBotAppErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type CreateSlackRouterBotAppError = CreateSlackRouterBotAppErrors[keyof CreateSlackRouterBotAppErrors];
+
+export type CreateSlackRouterBotAppResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        appId: string;
+        installUrl: string;
+        installMode: 'oauth' | 'manual';
+    };
+};
+
+export type CreateSlackRouterBotAppResponse = CreateSlackRouterBotAppResponses[keyof CreateSlackRouterBotAppResponses];
+
 export type ListSlackAgentBotChannelsData = {
     body?: never;
     path: {
@@ -40582,6 +40681,188 @@ export type JoinSlackAgentBotChannelResponses = {
 };
 
 export type JoinSlackAgentBotChannelResponse = JoinSlackAgentBotChannelResponses[keyof JoinSlackAgentBotChannelResponses];
+
+export type ListSlackRouterBotChannelsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chatops/config/slack/router/channels';
+};
+
+export type ListSlackRouterBotChannelsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListSlackRouterBotChannelsError = ListSlackRouterBotChannelsErrors[keyof ListSlackRouterBotChannelsErrors];
+
+export type ListSlackRouterBotChannelsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        workspaceId: string | null;
+        canJoin: boolean;
+        channels: Array<{
+            channelId: string;
+            channelName: string | null;
+            description: string | null;
+            isPrivate: boolean;
+            isMember: boolean;
+        }>;
+    };
+};
+
+export type ListSlackRouterBotChannelsResponse = ListSlackRouterBotChannelsResponses[keyof ListSlackRouterBotChannelsResponses];
+
+export type JoinSlackRouterBotChannelData = {
+    body?: never;
+    path: {
+        channelId: string;
+    };
+    query?: never;
+    url: '/api/chatops/config/slack/router/channels/{channelId}/join';
+};
+
+export type JoinSlackRouterBotChannelErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type JoinSlackRouterBotChannelError = JoinSlackRouterBotChannelErrors[keyof JoinSlackRouterBotChannelErrors];
+
+export type JoinSlackRouterBotChannelResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type JoinSlackRouterBotChannelResponse = JoinSlackRouterBotChannelResponses[keyof JoinSlackRouterBotChannelResponses];
 
 export type UpdateTelegramChatOpsConfigData = {
     body: {
@@ -48427,7 +48708,7 @@ export type GetGuardrailsDeploymentResponses = {
     200: {
         enabled: boolean;
         unsupportedClientAction: 'bypass' | 'block';
-        superyellEnabled: boolean;
+        breakTheGlassEnabled: boolean;
         featureEnabled: boolean;
         active: boolean;
     };
@@ -48439,7 +48720,7 @@ export type UpdateGuardrailsDeploymentData = {
     body: {
         enabled?: boolean;
         unsupportedClientAction?: 'bypass' | 'block';
-        superyellEnabled?: boolean;
+        breakTheGlassEnabled?: boolean;
     };
     path?: never;
     query?: never;
@@ -48521,7 +48802,7 @@ export type UpdateGuardrailsDeploymentResponses = {
     200: {
         enabled: boolean;
         unsupportedClientAction: 'bypass' | 'block';
-        superyellEnabled: boolean;
+        breakTheGlassEnabled: boolean;
         featureEnabled: boolean;
         active: boolean;
     };
@@ -105633,6 +105914,15 @@ export type RunScheduleTriggerNowResponses = {
         startedAt: string | null;
         completedAt: string | null;
         error: string | null;
+        blockedBy: {
+            phase: 'starting' | 'running' | 'stopping';
+            runId: string | null;
+            runtimeTaskId: string | null;
+            startedAt: string;
+            elapsedSeconds: number;
+            deadline: string | null;
+            maximumDurationSeconds: number | null;
+        } | null;
         artifact: string | null;
         createdAt: string;
     };
@@ -105738,6 +106028,15 @@ export type GetScheduleTriggerRunsResponses = {
             startedAt: string | null;
             completedAt: string | null;
             error: string | null;
+            blockedBy: {
+                phase: 'starting' | 'running' | 'stopping';
+                runId: string | null;
+                runtimeTaskId: string | null;
+                startedAt: string;
+                elapsedSeconds: number;
+                deadline: string | null;
+                maximumDurationSeconds: number | null;
+            } | null;
             artifact: string | null;
             createdAt: string;
         }>;
@@ -105848,6 +106147,15 @@ export type GetScheduleTriggerRunResponses = {
         startedAt: string | null;
         completedAt: string | null;
         error: string | null;
+        blockedBy: {
+            phase: 'starting' | 'running' | 'stopping';
+            runId: string | null;
+            runtimeTaskId: string | null;
+            startedAt: string;
+            elapsedSeconds: number;
+            deadline: string | null;
+            maximumDurationSeconds: number | null;
+        } | null;
         artifact: string | null;
         createdAt: string;
     };
@@ -112942,6 +113250,127 @@ export type GetOverviewStatisticsResponses = {
 };
 
 export type GetOverviewStatisticsResponse = GetOverviewStatisticsResponses[keyof GetOverviewStatisticsResponses];
+
+export type GetCostStatisticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+    };
+    url: '/api/statistics/costs';
+};
+
+export type GetCostStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetCostStatisticsError = GetCostStatisticsErrors[keyof GetCostStatisticsErrors];
+
+export type GetCostStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        models: Array<{
+            model: string;
+            requests: number;
+            inputTokens: number;
+            outputTokens: number;
+            cacheReadTokens: number;
+            cost: number;
+            percentage: number;
+            timeSeries: Array<{
+                timestamp: string;
+                value: number;
+                requests?: number;
+                inputTokens?: number;
+                outputTokens?: number;
+                cacheReadTokens?: number;
+                billedCost?: number;
+                subscriptionCost?: number;
+            }>;
+        }>;
+        costSavings: {
+            totalBaselineCost: number;
+            totalActualCost: number;
+            totalSavings: number;
+            totalSubscriptionCost: number;
+            totalCacheSavings: number;
+            timeSeries: Array<{
+                timestamp: string;
+                baselineCost: number;
+                actualCost: number;
+                cacheSavings: number;
+                subscriptionCost: number;
+            }>;
+        };
+        activeUsers: number;
+    };
+};
+
+export type GetCostStatisticsResponse = GetCostStatisticsResponses[keyof GetCostStatisticsResponses];
 
 export type GetCostSavingsStatisticsData = {
     body?: never;
@@ -120168,7 +120597,7 @@ export type UpdateIdentityProviderResponse = UpdateIdentityProviderResponses[key
 export type SearchInitialPermissionSubjectsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
     };
     query?: {
         query?: string;
@@ -120353,7 +120782,7 @@ export type GetScopedCapabilitiesResponses = {
      */
     200: Array<{
         organizationId: string;
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
         scope: '*' | string;
         action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec';
     }>;
@@ -120364,7 +120793,7 @@ export type GetScopedCapabilitiesResponse = GetScopedCapabilitiesResponses[keyof
 export type SearchResourcePermissionSubjectsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
         scope: '*' | string;
     };
     query?: {
@@ -120472,7 +120901,7 @@ export type SearchResourcePermissionSubjectsResponse = SearchResourcePermissionS
 export type GetResourcePermissionsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
         scope: '*' | string;
     };
     query?: never;
@@ -120552,7 +120981,7 @@ export type GetResourcePermissionsResponses = {
      * Default Response
      */
     200: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
         scope: '*' | string;
         name: string;
         ownerId: string | null;
@@ -120645,7 +121074,7 @@ export type UpdateResourcePermissionsData = {
         }>;
     };
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
         scope: '*' | string;
     };
     query?: never;
@@ -120725,7 +121154,7 @@ export type UpdateResourcePermissionsResponses = {
      * Default Response
      */
     200: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
         scope: '*' | string;
         name: string;
         ownerId: string | null;

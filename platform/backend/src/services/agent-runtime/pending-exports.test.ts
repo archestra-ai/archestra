@@ -402,6 +402,81 @@ describe("files pinned while their runtime is mid-call", () => {
     expect(pod.discarded).toEqual(["pinned-2"]);
   });
 
+  test("a pinned version that changed in the pod is dropped and the current file read instead", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    });
+    const pod = fakePod("first draft");
+    vi.spyOn(workspaceFiles, "accessAgentWorkspaceFile")
+      .mockResolvedValueOnce(fileResult("first draft"))
+      .mockResolvedValueOnce(fileResult("final draft"));
+    vi.spyOn(openappa, "returnRuntimeValue")
+      .mockResolvedValueOnce(BUSY)
+      .mockImplementation(async ({ value }) => ({ kind: "admitted", value }));
+    await readFile(seeded);
+    // Same length, other bytes: the pin no longer holds what was pinned.
+    pod.rewrite("final draft");
+
+    const served = await readFile(seeded);
+
+    expect(served.isError).not.toBe(true);
+    expect(served.structuredContent).toMatchObject({ content: "final draft" });
+    expect(served.structuredContent).not.toHaveProperty("pinned_at");
+    expect(pod.discarded).toEqual(["pinned-1"]);
+  });
+
+  test("a pinned file the runtime's requests fail to read three times is released with a refusal", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    });
+    const pod = fakePod("unreadable");
+    vi.spyOn(workspaceFiles, "accessAgentWorkspaceFile").mockResolvedValue(
+      fileResult("unreadable"),
+    );
+    const crossing = vi
+      .spyOn(openappa, "returnRuntimeValue")
+      .mockResolvedValue(BUSY);
+    await readFile(seeded);
+    pod.failRead("pinned-1");
+
+    await pendingExports.drain(seeded.child);
+    await pendingExports.drain(seeded.child);
+    expect(pod.discarded).toEqual([]);
+    await pendingExports.drain(seeded.child);
+    expect(pod.discarded).toEqual(["pinned-1"]);
+    // Every attempt failed before anything reached the guardrail.
+    expect(crossing).toHaveBeenCalledTimes(1);
+
+    const refused = await readFile(seeded);
+    expect(refused.isError).toBe(true);
+    expect(JSON.stringify(refused.content)).toContain(
+      "could not be read from the runtime. Call the tool again",
+    );
+    const again = await readFile(seeded);
+    expect(again.structuredContent).toMatchObject({ status: "pending" });
+    expect(pod.snapshots).toBe(2);
+  });
+
   test("a download pinned while busy is ticketed from its snapshot after the drain", async ({
     makeAgent,
     makeMember,
@@ -589,13 +664,17 @@ type Seeded = Awaited<ReturnType<typeof seededRun>>;
  * and records which were discarded.
  */
 function fakePod(content: string | Buffer) {
-  const bytes = Buffer.isBuffer(content) ? content : Buffer.from(content);
+  let bytes = Buffer.isBuffer(content) ? content : Buffer.from(content);
   const state = {
     snapshots: 0,
     discarded: [] as string[],
     failing: new Set<string>(),
     failRead(id: string) {
       state.failing.add(id);
+    },
+    /** The file changes under its pins: they now serve these bytes. */
+    rewrite(next: string) {
+      bytes = Buffer.from(next);
     },
   };
   vi.spyOn(backend, "runWorkspaceTransferCommand").mockImplementation(

@@ -53,6 +53,14 @@ export class ProtectedExportBusy extends Error {
   }
 }
 
+/** The pinned snapshot no longer holds the pinned version; the next call pins afresh. */
+export class PinnedVersionGone extends ApiError {
+  constructor(message: string) {
+    super(409, message);
+    this.name = "PinnedVersionGone";
+  }
+}
+
 type WorkspaceTransferTicket = {
   id: string;
   direction: WorkspaceTransferDirection;
@@ -243,7 +251,7 @@ class WorkspaceTransferTickets {
       createHash("sha256").update(bytes).digest("hex") !==
       params.snapshot.sha256
     )
-      throw new ApiError(409, PINNED_VERSION_CHANGED);
+      throw new PinnedVersionGone(PINNED_VERSION_CHANGED);
     return bytes;
   }
 
@@ -591,6 +599,8 @@ const SNAPSHOT_MISMATCH =
 const PINNED_VERSION_CHANGED =
   "The pinned version of this file changed or is gone";
 
+const PINNED_EXPORT_RESIZED = "The pinned export changed size";
+
 /** A drain runs inside the runtime's own model request, so a slow pod is given up on fast. */
 const DRAIN_READ_TIMEOUT_MS = 15 * 1000;
 
@@ -839,12 +849,12 @@ async function readSnapshotRange(params: {
     const bytes = Buffer.isBuffer(piece) ? piece : Buffer.from(piece);
     seen += bytes.length;
     if (seen > params.length)
-      throw new ApiError(409, "The pinned export changed size");
+      throw new PinnedVersionGone(PINNED_EXPORT_RESIZED);
     parts.push(bytes);
   }
   await range.completed;
   if (seen !== params.length)
-    throw new ApiError(409, "The pinned export changed size");
+    throw new PinnedVersionGone(PINNED_EXPORT_RESIZED);
   return Buffer.concat(parts);
 }
 

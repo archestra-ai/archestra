@@ -20,6 +20,7 @@ import { authorizeAgentWorkspaceAccess } from "./workspace-files";
 import {
   nextProtectedChunkBytes,
   operationNonce,
+  PinnedVersionGone,
   ProtectedExportBusy,
   type ProtectedExportProgress,
   workspaceTransferTickets,
@@ -220,7 +221,7 @@ class PendingExports {
     try {
       step = await advanceRead(entry, { drain: false });
     } catch (error) {
-      if (!pinnedVersionGone(error)) throw error;
+      if (!(error instanceof PinnedVersionGone)) throw error;
       await this.remove(child, name, entry);
       await discardPinned(entry);
       return undefined;
@@ -268,7 +269,7 @@ class PendingExports {
       try {
         step = await advanceDownload(current, { drain: false });
       } catch (error) {
-        if (!pinnedVersionGone(error)) throw error;
+        if (!(error instanceof PinnedVersionGone)) throw error;
         await this.remove(child, name, entry);
         await discardPinned(entry);
         return undefined;
@@ -720,16 +721,6 @@ async function discardPinned(entry: {
         "Could not discard a protected file pinned for an Agent Runtime",
       );
     });
-}
-
-/** The pinned version changed or was swept; the next call pins the current one. */
-function pinnedVersionGone(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    /pinned (version of this file changed or is gone|export changed size)/.test(
-      error.message,
-    )
-  );
 }
 
 /**

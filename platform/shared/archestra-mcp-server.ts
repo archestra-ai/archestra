@@ -1191,6 +1191,21 @@ export function isAlwaysExposedArchestraToolShortName(
   return ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
 }
 
+// These tools need an internal chat and its open app; external MCP clients
+// cannot use them, whether called directly or through run_tool.
+const CHAT_ONLY_ARCHESTRA_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
+  TOOL_RENDER_APP_SHORT_NAME,
+  TOOL_COPY_FILE_SHORT_NAME,
+]);
+
+export function isChatOnlyArchestraToolShortName(
+  shortName: string | null,
+): boolean {
+  return (
+    shortName !== null && CHAT_ONLY_ARCHESTRA_TOOL_SHORT_NAMES.has(shortName)
+  );
+}
+
 export function buildElicitationMandateInstruction(params?: {
   askUserToolName?: string;
   nativeQuestionToolName?: string;

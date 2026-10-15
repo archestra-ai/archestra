@@ -6,6 +6,7 @@ import {
   hasArchestraTokenPrefix,
   isAgentTool,
   isAlwaysExposedArchestraToolShortName,
+  isChatOnlyArchestraToolShortName,
   isImplicitOpenAppaReadToolShortName,
   isSkillTool,
   isYellToolShortName,
@@ -17,7 +18,6 @@ import {
   platformExecutedAs,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_CANCEL_RUN_SHORT_NAME,
-  TOOL_COPY_FILE_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_GET_RUN_SHORT_NAME,
@@ -26,7 +26,6 @@ import {
   TOOL_LIST_SKILLS_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
-  TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_START_RUN_SHORT_NAME,
@@ -285,18 +284,6 @@ type ResolvedArchestraToken =
       >["serviceAccount"];
     };
 
-/**
- * Archestra built-ins whose effect exists only on the internal chat surface, so
- * an external MCP client is never offered them: `render_app` mounts an app from
- * its own result, which only Archestra's chat does, and `copy_file` exchanges
- * files with the app the user has open there — off that surface there is
- * neither a conversation nor an open app, and every call can only refuse.
- */
-const CHAT_ONLY_ARCHESTRA_SHORT_NAMES = new Set<string>([
-  TOOL_RENDER_APP_SHORT_NAME,
-  TOOL_COPY_FILE_SHORT_NAME,
-]);
-
 const TOKEN_AUTH_CACHE_TTL_MS = 30_000;
 const TOKEN_AUTH_CACHE_MAX_ENTRIES = 1_000;
 const tokenAuthCache = new LRUCacheManager<TokenAuthResult | null>({
@@ -527,6 +514,7 @@ export async function buildAgentMcpToolList(params: {
   );
   const exposureFiltered = filterExposedTools({
     toolExposureMode: agent.toolExposureMode ?? "full",
+    internalChat: agent.agentType === "agent",
     advertiseUiResourceTools: surface.advertiseUiTools,
     autoToolMode: agent.accessAllTools,
     tools: candidateTools.filter((t) => permittedNames.has(t.name)),
@@ -537,9 +525,7 @@ export async function buildAgentMcpToolList(params: {
         // A null short name is not an Archestra built-in at all, so it is
         // never one of the chat-only ones.
         const shortName = archestraMcpBranding.getToolShortName(tool.name);
-        return (
-          shortName === null || !CHAT_ONLY_ARCHESTRA_SHORT_NAMES.has(shortName)
-        );
+        return !isChatOnlyArchestraToolShortName(shortName);
       });
 
   // Resolve the backing catalogs of the advertised tools once: their names
@@ -2594,16 +2580,28 @@ async function resolveArchestraToken(
  */
 function filterExposedTools(params: {
   toolExposureMode: ToolExposureMode;
+  internalChat: boolean;
   advertiseUiResourceTools: boolean;
   autoToolMode: boolean;
   tools: McpListToolCandidate[];
 }) {
-  const { toolExposureMode, advertiseUiResourceTools, autoToolMode, tools } =
-    params;
+  const {
+    toolExposureMode,
+    internalChat,
+    advertiseUiResourceTools,
+    autoToolMode,
+    tools,
+  } = params;
   return tools.filter((tool) => {
+    const shortName = archestraMcpBranding.getToolShortName(tool.name);
     // `search_and_run_only` hides every tool behind search_tools/run_tool, but
-    // the meta tools themselves and the always-exposed skill path must stay
-    // top-level. UI-providing tools (app launch tools, external ext-apps tools)
+    // the meta tools and session controls stay top-level. Internal chat also
+    // keeps its skill/file/runtime path and policy tools: its system prompt
+    // derives skill activation and file guidance from those declarations.
+    // External clients discover these capabilities with search_tools instead.
+    // Remedy controls must remain direct because run_tool refuses them; run
+    // lifecycle controls and ask_user retain their existing client contracts.
+    // UI-providing tools (app launch tools, external ext-apps tools)
     // stay too, on two conditions. First, only on a surface that advertises
     // them: an MCP Apps host renders a UI from a tool DEFINITION listed at
     // discovery time, so a gateway must keep it top-level; the chat surface
@@ -2618,9 +2616,11 @@ function filterExposedTools(params: {
     return toolExposureMode === "search_and_run_only"
       ? isArchestraMetaTool(tool.name) ||
           (openappaEnabled() &&
-            isOpenappaTool(archestraMcpBranding.getToolShortName(tool.name))) ||
+            isOpenappaTool(shortName) &&
+            (internalChat || ALWAYS_LOADED_SHORT_NAMES.has(shortName ?? ""))) ||
           isTaskControlTool(tool.name) ||
-          isAlwaysExposedTool(tool.name) ||
+          (isAlwaysExposedTool(tool.name) &&
+            (internalChat || shortName === TOOL_ASK_USER_SHORT_NAME)) ||
           (advertiseUiResourceTools &&
             !autoToolMode &&
             providesUiResource(tool))

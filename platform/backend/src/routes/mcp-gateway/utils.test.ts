@@ -1702,7 +1702,10 @@ describe("createAgentServer tools/list", () => {
     ).toBe(false);
   });
 
-  test("lists APPA notice, remedy and inbox tools for an unassigned agent when OpenAPPA is enabled", async ({
+  test.for([
+    "agent",
+    "mcp_gateway",
+  ] as const)("%s keeps APPA session controls directly available", async (agentType, {
     makeAgent,
     makeMember,
     makeOrganization,
@@ -1719,7 +1722,7 @@ describe("createAgentServer tools/list", () => {
     await makeMember(user.id, org.id, { role: "admin" });
     const agent = await makeAgent({
       organizationId: org.id,
-      agentType: "agent",
+      agentType,
       toolExposureMode: "search_and_run_only",
     });
 
@@ -1787,11 +1790,14 @@ describe("createAgentServer tools/list", () => {
       "preview_guardrails_policy_change",
       "get_guardrails_policy_change_status",
     ] as const) {
-      expect(
-        response.tools.find(
-          (tool) => tool.name === archestraMcpBranding.getToolName(policyTool),
-        )?.annotations,
-      ).toMatchObject({ readOnlyHint: true });
+      const policy = response.tools.find(
+        (tool) => tool.name === archestraMcpBranding.getToolName(policyTool),
+      );
+      if (agentType === "agent") {
+        expect(policy?.annotations).toMatchObject({ readOnlyHint: true });
+      } else {
+        expect(policy).toBeUndefined();
+      }
     }
     expect(names).not.toContain(
       archestraMcpBranding.getToolName("update_guardrails_policy"),
@@ -2164,7 +2170,10 @@ describe("createAgentServer tools/list", () => {
     );
   });
 
-  test("keeps assigned skill and sandbox runtime tools top-level in search_and_run_only", async ({
+  test.for([
+    "agent",
+    "mcp_gateway",
+  ] as const)("%s keeps its skill and runtime exposure consistent", async (agentType, {
     makeAgent,
     makeMember,
     makeOrganization,
@@ -2181,6 +2190,7 @@ describe("createAgentServer tools/list", () => {
     try {
       const agent = await makeAgent({
         organizationId: org.id,
+        agentType,
         toolExposureMode: "search_and_run_only",
       });
       await seedAndAssignArchestraTools(agent.id);
@@ -2213,18 +2223,22 @@ describe("createAgentServer tools/list", () => {
       });
       const names = new Set(response.tools.map((tool) => tool.name));
 
-      // meta tools and the skill/sandbox runtime path stay top-level
+      // Session primitives remain directly available on both surfaces.
       for (const exposed of [
         TOOL_ASK_USER_FULL_NAME,
         TOOL_SEARCH_TOOLS_FULL_NAME,
         TOOL_RUN_TOOL_FULL_NAME,
+      ]) {
+        expect(names.has(exposed)).toBe(true);
+      }
+      for (const runtimeTool of [
         TOOL_LIST_SKILLS_FULL_NAME,
         TOOL_LOAD_SKILL_FULL_NAME,
         TOOL_RUN_COMMAND_FULL_NAME,
         TOOL_DOWNLOAD_FILE_FULL_NAME,
         TOOL_UPLOAD_FILE_FULL_NAME,
       ]) {
-        expect(names.has(exposed)).toBe(true);
+        expect(names.has(runtimeTool)).toBe(agentType === "agent");
       }
       // authoring + unrelated tools remain hidden behind search_tools/run_tool
       for (const hidden of [

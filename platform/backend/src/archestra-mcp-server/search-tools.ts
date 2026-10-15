@@ -1,10 +1,12 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   isAlwaysExposedArchestraToolShortName,
+  isChatOnlyArchestraToolShortName,
   isImplicitOpenAppaReadToolShortName,
   isRequiredOpenAppaToolShortName,
   isYellToolShortName,
   parseFullToolName,
+  TOOL_ASK_USER_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
@@ -17,6 +19,7 @@ import safeRegex from "safe-regex2";
 import { z } from "zod";
 import logger from "@/logging";
 import {
+  AgentModel,
   ConversationEnabledToolModel,
   InternalMcpCatalogModel,
   McpServerModel,
@@ -403,11 +406,16 @@ async function getSearchableTools(params: {
 }): Promise<SearchCandidate[]> {
   const { agentId, conversationId, organizationId, userId } = params;
   const delegatedRun = isAppaDelegatedRun(agentId, params.delegationChain);
+  const agent = await AgentModel.findGatewayAgentById(agentId);
   // Per-agent exclusions (Auto-tool mode): loaded once per search and applied
   // to BOTH the assigned contribution and the discoverable widening below.
   // Empty (no-op) unless the agent's accessAllTools setting is on.
   const { tools: agentTools, exclusionSets } =
-    await agentToolExclusionsService.getFilteredMcpToolsByAgent(agentId);
+    await agentToolExclusionsService.getFilteredMcpToolsByAgent(
+      agentId,
+      undefined,
+      agent ?? undefined,
+    );
   // An assigned tool is searchable only when the user can see its MCP server.
   const assignedTools = await filterToolsByCallerCatalogAccess(agentTools, {
     userId,
@@ -456,7 +464,11 @@ async function getSearchableTools(params: {
   const filteredTools = searchSpace.filter(
     (tool) =>
       permittedNames.has(tool.name) &&
-      !isExcludedFromSearchResults(tool.name, assignedNames) &&
+      !isExcludedFromSearchResults({
+        toolName: tool.name,
+        assignedNames,
+        keepRuntimeToolsTopLevel: agent?.agentType === "agent",
+      }) &&
       !tool.name.startsWith("agent__"),
   );
 
@@ -1335,27 +1347,38 @@ function visitSchema(
   }
 }
 
-// search_tools only runs in search_and_run_only mode, where the meta tools and
-// the always-exposed runtime tools (skills + sandbox) are already
-// top-level — returning them as results would be redundant noise. But "always-exposed" only
-// holds once a tool is assigned: an unassigned sandbox tool the user can reach
-// via agent:read is NOT top-level, so surface it here so the model can
-// discover and run it. Meta tools are never useful as results.
-function isExcludedFromSearchResults(
-  toolName: string,
-  assignedNames: Set<string>,
-): boolean {
+// Internal chat keeps assigned skill/file/runtime tools top-level; gateways
+// defer them, so their assigned capabilities must remain searchable. Unassigned
+// runtime tools reachable through Auto mode are searchable on either surface.
+// The dispatch pair and the directly available question tool are never useful
+// as search results.
+function isExcludedFromSearchResults(params: {
+  toolName: string;
+  assignedNames: Set<string>;
+  keepRuntimeToolsTopLevel: boolean;
+}): boolean {
+  const { toolName, assignedNames, keepRuntimeToolsTopLevel } = params;
   const shortName = archestraMcpBranding.getToolShortName(toolName);
   if (shortName == null) {
     return false;
   }
   if (
-    shortName === TOOL_SEARCH_TOOLS_SHORT_NAME ||
-    shortName === TOOL_RUN_TOOL_SHORT_NAME
+    !keepRuntimeToolsTopLevel &&
+    isChatOnlyArchestraToolShortName(shortName)
   ) {
     return true;
   }
-  if (isAlwaysExposedArchestraToolShortName(shortName)) {
+  if (
+    shortName === TOOL_SEARCH_TOOLS_SHORT_NAME ||
+    shortName === TOOL_RUN_TOOL_SHORT_NAME ||
+    shortName === TOOL_ASK_USER_SHORT_NAME
+  ) {
+    return true;
+  }
+  if (
+    keepRuntimeToolsTopLevel &&
+    isAlwaysExposedArchestraToolShortName(shortName)
+  ) {
     return assignedNames.has(toolName);
   }
   return false;

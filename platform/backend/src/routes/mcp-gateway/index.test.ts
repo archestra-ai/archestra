@@ -7,9 +7,6 @@ import {
   slugify,
   TOOL_ASK_USER_FULL_NAME,
   TOOL_CANCEL_RUN_FULL_NAME,
-  TOOL_DELETE_FILE_FULL_NAME,
-  TOOL_DOWNLOAD_FILE_FULL_NAME,
-  TOOL_EDIT_FILE_FULL_NAME,
   TOOL_GET_RUN_FULL_NAME,
   TOOL_LIST_RUNS_FULL_NAME,
   TOOL_LIST_SKILLS_FULL_NAME,
@@ -18,11 +15,9 @@ import {
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SAVE_FILE_FULL_NAME,
-  TOOL_SEARCH_FILES_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
   TOOL_STEER_RUN_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
-  TOOL_UPLOAD_FILE_FULL_NAME,
 } from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
@@ -39,6 +34,7 @@ import {
   AppModel,
   McpServerModel,
   McpToolCallModel,
+  ProjectModel,
   TeamTokenModel,
   ToolModel,
   UserTokenModel,
@@ -778,7 +774,7 @@ describe("MCP Gateway (stateless mode)", () => {
     // built-ins like load_skill normally stay top-level in tools/list.
     const agent = await makeAgent({
       organizationId: org.id,
-      agentType: "mcp_gateway",
+      agentType: "agent",
       accessAllTools: true,
     });
     await seedAndAssignArchestraTools(agent.id);
@@ -1414,8 +1410,6 @@ describe("MCP Gateway (stateless mode)", () => {
     expect(toolNames.sort()).toEqual(
       [
         TOOL_ASK_USER_FULL_NAME,
-        TOOL_LIST_SKILLS_FULL_NAME,
-        TOOL_LOAD_SKILL_FULL_NAME,
         TOOL_RUN_TOOL_FULL_NAME,
         TOOL_SEARCH_TOOLS_FULL_NAME,
       ].sort(),
@@ -1423,7 +1417,7 @@ describe("MCP Gateway (stateless mode)", () => {
     expect(toolNames).not.toContain(TOOL_TODO_WRITE_FULL_NAME);
   });
 
-  test("keeps sandbox runtime tools top-level in tools/list when the sandbox runtime is enabled", async ({
+  test("defers runtime tools while preserving file and skill workflows through search/run", async ({
     makeAgent,
     makeMember,
     makeOrganization,
@@ -1482,30 +1476,72 @@ describe("MCP Gateway (stateless mode)", () => {
       const toolNames = response
         .json()
         .result.tools.map((tool: { name: string }) => tool.name);
-      // App tools are deliberately absent: in search_and_run_only mode the
-      // whole app surface is reached through search_tools/run_tool. Task
-      // lifecycle controls stay top-level because delegated work is durable.
+      // Capability tools are deferred; session controls remain directly callable.
       expect(toolNames.sort()).toEqual(
         [
           TOOL_ASK_USER_FULL_NAME,
           TOOL_CANCEL_RUN_FULL_NAME,
-          TOOL_DELETE_FILE_FULL_NAME,
-          TOOL_DOWNLOAD_FILE_FULL_NAME,
-          TOOL_EDIT_FILE_FULL_NAME,
           TOOL_GET_RUN_FULL_NAME,
-          TOOL_LIST_SKILLS_FULL_NAME,
           TOOL_LIST_RUNS_FULL_NAME,
-          TOOL_LOAD_SKILL_FULL_NAME,
-          TOOL_READ_FILE_FULL_NAME,
-          TOOL_RUN_COMMAND_FULL_NAME,
           TOOL_RUN_TOOL_FULL_NAME,
-          TOOL_SAVE_FILE_FULL_NAME,
-          TOOL_SEARCH_FILES_FULL_NAME,
           TOOL_SEARCH_TOOLS_FULL_NAME,
           TOOL_STEER_RUN_FULL_NAME,
-          TOOL_UPLOAD_FILE_FULL_NAME,
         ].sort(),
       );
+
+      const call = async (name: string, args: Record<string, unknown>) => {
+        const result = await callMcpTool({
+          app,
+          agentId: agent.id,
+          token: token.value,
+          name,
+          arguments: args,
+        });
+        expect(result.statusCode).toBe(200);
+        expect(result.json().result.isError).not.toBe(true);
+        return result.json().result;
+      };
+      const discovery = await call(TOOL_SEARCH_TOOLS_FULL_NAME, {
+        query: "^archestra__(list_skills|save_file|read_file|run_command)$",
+        mode: "regex",
+      });
+      expect(
+        discovery.structuredContent.tools.map(
+          (tool: { toolName: string }) => tool.toolName,
+        ),
+      ).toEqual(
+        expect.arrayContaining([
+          TOOL_LIST_SKILLS_FULL_NAME,
+          TOOL_SAVE_FILE_FULL_NAME,
+          TOOL_READ_FILE_FULL_NAME,
+          TOOL_RUN_COMMAND_FULL_NAME,
+        ]),
+      );
+      await call(TOOL_RUN_TOOL_FULL_NAME, {
+        tool_name: TOOL_LIST_SKILLS_FULL_NAME,
+      });
+      const project = await ProjectModel.create({
+        organizationId: org.id,
+        userId: adminUser.id,
+        name: "Gateway workflow",
+        description: null,
+      });
+      const saved = await call(TOOL_RUN_TOOL_FULL_NAME, {
+        tool_name: TOOL_SAVE_FILE_FULL_NAME,
+        tool_args: {
+          filename: "note.txt",
+          content: "Gateway file round trip",
+          project_id: project.id,
+        },
+      });
+      const read = await call(TOOL_RUN_TOOL_FULL_NAME, {
+        tool_name: TOOL_READ_FILE_FULL_NAME,
+        tool_args: {
+          id: saved.structuredContent.fileId,
+          project_id: project.id,
+        },
+      });
+      expect(JSON.stringify(read.content)).toContain("Gateway file round trip");
     } finally {
       (config.skillsSandbox as { enabled: boolean }).enabled =
         originalSandboxEnabled;

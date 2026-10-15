@@ -1435,6 +1435,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOverviewStatistics]: {
     llmCost: ["read"],
   },
+  [RouteId.GetCostStatistics]: {
+    llmCost: ["read"],
+  },
   [RouteId.GetCostSavingsStatistics]: {
     llmCost: ["read"],
   },

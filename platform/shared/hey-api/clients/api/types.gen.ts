@@ -112943,6 +112943,127 @@ export type GetOverviewStatisticsResponses = {
 
 export type GetOverviewStatisticsResponse = GetOverviewStatisticsResponses[keyof GetOverviewStatisticsResponses];
 
+export type GetCostStatisticsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeframe?: '5m' | '15m' | '30m' | '1h' | '24h' | '7d' | '30d' | '90d' | '12m' | 'all' | string;
+    };
+    url: '/api/statistics/costs';
+};
+
+export type GetCostStatisticsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetCostStatisticsError = GetCostStatisticsErrors[keyof GetCostStatisticsErrors];
+
+export type GetCostStatisticsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        models: Array<{
+            model: string;
+            requests: number;
+            inputTokens: number;
+            outputTokens: number;
+            cacheReadTokens: number;
+            cost: number;
+            percentage: number;
+            timeSeries: Array<{
+                timestamp: string;
+                value: number;
+                requests?: number;
+                inputTokens?: number;
+                outputTokens?: number;
+                cacheReadTokens?: number;
+                billedCost?: number;
+                subscriptionCost?: number;
+            }>;
+        }>;
+        costSavings: {
+            totalBaselineCost: number;
+            totalActualCost: number;
+            totalSavings: number;
+            totalSubscriptionCost: number;
+            totalCacheSavings: number;
+            timeSeries: Array<{
+                timestamp: string;
+                baselineCost: number;
+                actualCost: number;
+                cacheSavings: number;
+                subscriptionCost: number;
+            }>;
+        };
+        activeUsers: number;
+    };
+};
+
+export type GetCostStatisticsResponse = GetCostStatisticsResponses[keyof GetCostStatisticsResponses];
+
 export type GetCostSavingsStatisticsData = {
     body?: never;
     path?: never;

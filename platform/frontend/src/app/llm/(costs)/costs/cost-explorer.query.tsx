@@ -9,10 +9,6 @@ import { useEffect, useMemo } from "react";
 import { useSetCostsAction } from "@/app/llm/(costs)/layout";
 import { useStatisticsTimeRange } from "@/components/time-range-picker/statistics-time-range";
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
-import {
-  useCostSavingsStatistics,
-  useModelStatistics,
-} from "@/lib/statistics.query";
 import { throwOnApiError } from "@/lib/utils/api";
 
 export type ToolCallUsageDimension = NonNullable<
@@ -231,6 +227,30 @@ async function collectPages<
   }
   return { ...first, data: rows };
 }
+/** Shared by headline tiles and the default chart; TanStack deduplicates callers. */
+export function useCostStatistics({
+  timeframe,
+  enabled,
+}: {
+  timeframe: StatisticsTimeFrame;
+  enabled: boolean;
+}) {
+  return useQuery({
+    queryKey: ["statistics", "costs", timeframe],
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getCostStatistics({
+        query: { timeframe },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      if (!data) throw new Error("No cost statistics response received");
+      return data;
+    },
+    enabled,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  });
+}
+
 export function useKpis({
   timeframe,
   enabled,
@@ -238,13 +258,11 @@ export function useKpis({
   timeframe: StatisticsTimeFrame;
   enabled: boolean;
 }) {
-  const savings = useCostSavingsStatistics({ timeframe, enabled });
-  const models = useModelStatistics({ timeframe, enabled });
-  const users = useUserUsageWithSeries({ timeframe, limit: 50, enabled });
+  const statistics = useCostStatistics({ timeframe, enabled });
 
   return useMemo(() => {
-    const ts = savings.data?.timeSeries ?? [];
-    const modelRows = models.data ?? [];
+    const ts = statistics.data?.costSavings.timeSeries ?? [];
+    const modelRows = statistics.data?.models ?? [];
     const byTimestamp = new Map<string, { requests: number; tokens: number }>();
     for (const model of modelRows) {
       for (const point of model.timeSeries) {
@@ -267,15 +285,13 @@ export function useKpis({
     const tokens = buckets.map(
       (bucket) => byTimestamp.get(bucket)?.tokens ?? 0,
     );
-    const people = (users.data?.data ?? []).filter((u) => u.requests > 0);
-    const rangeDays = Math.max(1, users.data?.data[0]?.timeSeries?.length ?? 1);
     return {
       billed: {
-        value: savings.data?.totalActualCost ?? 0,
+        value: statistics.data?.costSavings.totalActualCost ?? 0,
         series: ts.map((p) => p.actualCost),
       },
       subscription: {
-        value: savings.data?.totalSubscriptionCost ?? 0,
+        value: statistics.data?.costSavings.totalSubscriptionCost ?? 0,
         series: ts.map((p) => p.subscriptionCost ?? 0),
       },
       requests: {
@@ -291,17 +307,13 @@ export function useKpis({
         series: tokens,
       },
       people: {
-        value: people.length,
-        avgActiveDays: people.length
-          ? people.reduce((a, u) => a + u.activeDays, 0) / people.length
-          : 0,
-        rangeBuckets: rangeDays,
+        value: statistics.data?.activeUsers ?? 0,
       },
-      isCostPending: savings.isPending,
-      isUsagePending: models.isPending,
-      isPeoplePending: users.isPending,
+      isCostPending: statistics.isPending,
+      isUsagePending: statistics.isPending,
+      isPeoplePending: statistics.isPending,
     };
-  }, [savings.data, savings.isPending, models.data, models.isPending, users]);
+  }, [statistics.data, statistics.isPending]);
 }
 
 export const formatCost = (n: number) =>

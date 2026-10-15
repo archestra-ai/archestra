@@ -13,7 +13,7 @@ import { test } from "../fixtures";
  */
 import {
   assertMobileCostLegend,
-  modelStatistics,
+  costStatistics,
 } from "../utils/cost-chart-legend.mjs";
 
 // A phone. The legend fits on one row at desktop widths, so the regression is
@@ -24,8 +24,8 @@ test("cost chart legends wrap instead of overflowing on a phone", async ({
   page,
   goToPage,
 }) => {
-  await page.route("**/api/statistics/models*", (route) =>
-    route.fulfill({ json: modelStatistics }),
+  await page.route("**/api/statistics/costs*", (route) =>
+    route.fulfill({ json: costStatistics }),
   );
 
   await goToPage(page, "/llm/costs?timeframe=24h");

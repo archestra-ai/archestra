@@ -235,7 +235,6 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_WHOAMI_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   "yell",
-  "superyell",
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
@@ -455,7 +454,6 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   whoami: "identity",
   execute_remedy_plan: "openappa",
   yell: "openappa",
-  superyell: "openappa",
   get_remedy_plans: "openappa",
   list_peer_messages: "openappa",
   read_peer_message: "openappa",
@@ -825,16 +823,14 @@ export const REQUIRED_OPENAPPA_TOOL_SHORT_NAMES = [
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   "yell",
-  "superyell",
 ] as const satisfies readonly ArchestraToolShortName[];
 
 /**
- * The OpenAPPA feedback tools. superyell sends the same report as yell, then
- * turns OpenAPPA off for the session, so both are offered and refused alike.
+ * The OpenAPPA feedback tool. With break the glass on, a yell also turns
+ * OpenAPPA off for the session that sends it.
  */
 export const YELL_TOOL_SHORT_NAMES = [
   "yell",
-  "superyell",
 ] as const satisfies readonly ArchestraToolShortName[];
 export type YellToolShortName = (typeof YELL_TOOL_SHORT_NAMES)[number];
 

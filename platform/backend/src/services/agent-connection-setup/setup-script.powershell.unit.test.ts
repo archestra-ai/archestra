@@ -629,7 +629,6 @@ exit 0
               "list_peer_messages",
               "read_peer_message",
               "yell",
-              "superyell",
               "ask_user",
             ].map((name) => [
               `${mcp.toolPrefix}${name}`,

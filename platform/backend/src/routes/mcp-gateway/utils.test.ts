@@ -1777,7 +1777,6 @@ describe("createAgentServer tools/list", () => {
       "get_remedy_plans",
       "list_peer_messages",
       "read_peer_message",
-      "superyell",
       "yell",
     ]);
     for (const inboxTool of [
@@ -1807,7 +1806,7 @@ describe("createAgentServer tools/list", () => {
     );
   });
 
-  test("hides superyell, and keeps yell, when an administrator turns superyell off", async ({
+  test("keeps yell when an administrator turns break the glass off", async ({
     makeAgent,
     makeMember,
     makeOrganization,
@@ -1817,7 +1816,7 @@ describe("createAgentServer tools/list", () => {
     config.openappa.enabled = true;
     await GuardrailsDeploymentModel.set({
       enabled: true,
-      superyellEnabled: false,
+      breakTheGlassEnabled: false,
     });
     onTestFinished(() => {
       config.openappa.enabled = previousEnabled;
@@ -1852,7 +1851,6 @@ describe("createAgentServer tools/list", () => {
       params: {},
     });
     const names = response.tools.map((tool) => tool.name);
-    expect(names).not.toContain(archestraMcpBranding.getToolName("superyell"));
     expect(names).toContain(archestraMcpBranding.getToolName("yell"));
   });
 

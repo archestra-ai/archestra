@@ -6,7 +6,6 @@ import {
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
-  type YellToolShortName,
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -74,9 +73,9 @@ import {
 } from "@/services/agent-runtime/runtime-identity";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import {
+  breakTheGlassActiveIn,
   firstPolicyRefusal,
   getGuardrailsDeployment,
-  SUPERYELL_DISABLED_MESSAGE,
   turnOnForFirstPolicy,
 } from "@/services/guardrails-deployment";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
@@ -526,44 +525,32 @@ const registry = defineArchestraTools([
     shortName: "yell",
     title: "Report OpenAPPA feedback",
     description:
-      "Send feedback about OpenAPPA, such as a confusing block, remedy or ruling, or the user's complaint, with a diagnostic archive for review in the Guardrails Yells tab. When deployment analytics is enabled, also forwards the report to the shared OpenAPPA reporting service. with_trajectory includes this session's policy decisions, never raw prompts, tool arguments, or outputs. Your message is sent verbatim: say what about OpenAPPA was confusing or wrong. When a call was blocked, report the block; never put the blocked call's content (such as a task you could not file) in its place, and do not include secrets, personal data, or task content. This does not change policy or grant permission.",
+      "Send feedback about OpenAPPA, with a diagnostic archive for review in the Guardrails Yells tab. Call it when a remedy plan makes no sense, you keep getting blocked, the user keeps being asked to approve similar calls, or the user is frustrated. When an administrator turned on break the glass in Guardrails settings, the report also turns OpenAPPA off for this session, so its calls are no longer checked; the result says which happened. When deployment analytics is enabled, also forwards the report to the shared OpenAPPA reporting service. with_trajectory includes this session's policy decisions, never raw prompts, tool arguments, or outputs. Your message is sent verbatim: say what about OpenAPPA was confusing or wrong. When a call was blocked, report the block; never put the blocked call's content (such as a task you could not file) in its place, and do not include secrets, personal data, or task content.",
     schema: YellArgumentsSchema,
     async handler({ args, context }) {
-      const identity = await yellIdentity({ shortName: "yell", args, context });
+      const identity = await yellIdentity({ args, context });
+      const breakTheGlass = breakTheGlassActiveIn(
+        await getGuardrailsDeployment(),
+      );
       const report = await executeYell({
         session: identity.session,
         toolCallId: identity.callId,
         args,
+        brokeTheGlass: breakTheGlass,
       });
-      await rememberYellResult({ ...identity, result: report });
-      return report;
-    },
-  }),
-  defineArchestraTool({
-    shortName: "superyell",
-    title: "Report OpenAPPA feedback and turn it off for this session",
-    description:
-      "Do what yell does, then turn OpenAPPA off for this session, after the person running it approves. The report is sent first, the same way yell sends it. Then the session's label resets and OpenAPPA stops checking its calls, and the calls of the children it starts afterwards. Other sessions are not affected. Call it only when the user asks to turn OpenAPPA off for this session. Your message is sent verbatim and is what the person approving reads: say what about OpenAPPA was wrong and why it should be off. Do not include secrets, personal data, or task content.",
-    schema: YellArgumentsSchema,
-    async handler({ args, context }) {
-      const deployment = await getGuardrailsDeployment();
-      if (!deployment.active)
-        return errorResult("Guardrails enforcement is off");
-      if (!deployment.superyellEnabled)
-        return errorResult(SUPERYELL_DISABLED_MESSAGE);
-      const identity = await yellIdentity({
-        shortName: "superyell",
-        args,
-        context,
-      });
-      const report = await executeYell({
-        session: identity.session,
-        toolCallId: identity.callId,
-        args,
-        superyell: true,
-      });
-      // The person approved turning OpenAPPA off, so a report that failed to
-      // send does not keep it on.
+      if (!breakTheGlass) {
+        const result = report.isError
+          ? report
+          : successResult(
+              [...textParts(report), YELL_RESULT_GUARDRAILS_UNCHANGED].join(
+                "\n",
+              ),
+            );
+        await rememberYellResult({ ...identity, result });
+        return result;
+      }
+      // Break the glass turns OpenAPPA off even when the report failed to
+      // send: the agent is stuck either way.
       await superyellSession(identity.session);
       logger.warn(
         {
@@ -572,15 +559,10 @@ const registry = defineArchestraTools([
           userId: context.userId,
           reported: !report.isError,
         },
-        "OpenAPPA turned off for a session by an approved superyell",
+        "OpenAPPA turned off for a session by a yell with break the glass on",
       );
       const result = successResult(
-        [
-          ...report.content.flatMap((part) =>
-            part.type === "text" ? [part.text] : [],
-          ),
-          "OpenAPPA is off for this session. Its label is reset, and its calls are no longer checked.",
-        ].join("\n"),
+        [...textParts(report), YELL_RESULT_GUARDRAILS_OFF].join("\n"),
       );
       await rememberYellResult({ ...identity, result });
       return result;
@@ -1452,6 +1434,19 @@ function organization(context: ArchestraContext): string {
 const PREVIEW_APPROVAL_INSTRUCTION =
   "Nothing is saved yet. In this same turn, summarize in 2-4 short bullets what the change does to agents and tools (not the TOML), then ask the user to approve it with the ask_user tool, or the client's own question tool. Do not end the turn without that question, even when the user said not to publish until they approve: the question is how they approve. After approval, call update_guardrails_policy with the same edits or content and expectedRevision.";
 
+/** What a yell tells the agent when break the glass is off. */
+const YELL_RESULT_GUARDRAILS_UNCHANGED =
+  "Guardrails are unchanged for this session.";
+/** What a yell tells the agent when break the glass turned OpenAPPA off. */
+const YELL_RESULT_GUARDRAILS_OFF =
+  "Guardrails are now off for this session: its label is reset, and its calls are no longer checked.";
+
+function textParts(result: CallToolResult): string[] {
+  return result.content.flatMap((part) =>
+    part.type === "text" ? [part.text] : [],
+  );
+}
+
 const YELL_LIST_LIMIT = 20;
 const YELL_MESSAGE_LIMIT = 300;
 const CONSULT_LIST_LIMIT = 50;
@@ -1920,12 +1915,11 @@ function peerExecution(params: {
 }
 
 /**
- * The session and call a yell or superyell reports under. A Chat or runtime
+ * The session and call a yell reports under. A Chat or runtime
  * call knows both; an external client's call through the MCP gateway does
  * not, so the proxy left them when it allowed the call.
  */
 async function yellIdentity(params: {
-  shortName: YellToolShortName;
   args: YellArguments;
   context: ArchestraContext;
 }): Promise<{ session: OpenAppaSession; callId: string }> {
@@ -1943,7 +1937,6 @@ async function yellIdentity(params: {
       : context.organizationId
         ? await recallYellSession({
             organizationId: context.organizationId,
-            shortName: params.shortName,
             args: params.args,
           })
         : undefined;
@@ -1951,7 +1944,7 @@ async function yellIdentity(params: {
     logger.warn(
       {
         agentId: context.agentId,
-        tool: params.shortName,
+        tool: "yell",
         hasSession: Boolean(known),
         hasToolCallId: Boolean(context.currentToolCallId),
       },

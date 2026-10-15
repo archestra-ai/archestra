@@ -171975,7 +171975,7 @@
                         "block"
                       ]
                     },
-                    "superyellEnabled": {
+                    "breakTheGlassEnabled": {
                       "type": "boolean"
                     },
                     "featureEnabled": {
@@ -171988,7 +171988,7 @@
                   "required": [
                     "enabled",
                     "unsupportedClientAction",
-                    "superyellEnabled",
+                    "breakTheGlassEnabled",
                     "featureEnabled",
                     "active"
                   ],
@@ -172259,7 +172259,7 @@
                       "block"
                     ]
                   },
-                  "superyellEnabled": {
+                  "breakTheGlassEnabled": {
                     "type": "boolean"
                   }
                 }
@@ -172285,7 +172285,7 @@
                         "block"
                       ]
                     },
-                    "superyellEnabled": {
+                    "breakTheGlassEnabled": {
                       "type": "boolean"
                     },
                     "featureEnabled": {
@@ -172298,7 +172298,7 @@
                   "required": [
                     "enabled",
                     "unsupportedClientAction",
-                    "superyellEnabled",
+                    "breakTheGlassEnabled",
                     "featureEnabled",
                     "active"
                   ],

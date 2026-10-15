@@ -28,34 +28,32 @@ export async function isGuardrailsV2Active(): Promise<boolean> {
   return (await readGuardrailsV2Activation()) === "active";
 }
 export async function getGuardrailsDeployment() {
-  const { enabled, unsupportedClientAction, superyellEnabled } =
+  const { enabled, unsupportedClientAction, breakTheGlassEnabled } =
     await GuardrailsDeploymentModel.get();
   return {
     enabled,
     unsupportedClientAction,
-    superyellEnabled,
+    breakTheGlassEnabled,
     featureEnabled: enterpriseTier.isOpenappaActive(),
     active: enterpriseTier.isOpenappaActive() && enabled,
   };
 }
 
-export const SUPERYELL_DISABLED_MESSAGE =
-  "An administrator turned off superyell in Guardrails settings, so OpenAPPA cannot be turned off for this session. Use yell to report the problem instead.";
-
 /**
- * Whether agents are offered superyell and may run it: enforcement is on and
- * an administrator has not turned superyell off in Guardrails settings.
+ * Whether a yell also turns OpenAPPA off for the session that sends it:
+ * enforcement is on and an administrator left break the glass on in
+ * Guardrails settings.
  */
-export async function isSuperyellAvailable(): Promise<boolean> {
-  return superyellAvailableIn(await getGuardrailsDeployment());
+export async function isBreakTheGlassActive(): Promise<boolean> {
+  return breakTheGlassActiveIn(await getGuardrailsDeployment());
 }
 
-/** isSuperyellAvailable for a caller that already read the deployment. */
-export function superyellAvailableIn(deployment: {
+/** isBreakTheGlassActive for a caller that already read the deployment. */
+export function breakTheGlassActiveIn(deployment: {
   active: boolean;
-  superyellEnabled: boolean;
+  breakTheGlassEnabled: boolean;
 }): boolean {
-  return deployment.active && deployment.superyellEnabled;
+  return deployment.active && deployment.breakTheGlassEnabled;
 }
 
 /**
@@ -69,7 +67,7 @@ export function superyellAvailableIn(deployment: {
 export async function setGuardrailsDeployment(update: {
   enabled?: boolean;
   unsupportedClientAction?: UnsupportedAppaClientAction;
-  superyellEnabled?: boolean;
+  breakTheGlassEnabled?: boolean;
 }) {
   if (update.enabled && enterpriseTier.isOpenappaActive()) {
     const refusals = await refusedPolicies();

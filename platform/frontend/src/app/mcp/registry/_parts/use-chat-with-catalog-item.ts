@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { fetchInternalAgents, useCreateProfile } from "@/lib/agent.query";
+import { fetchInternalAgentOptions, useCreateProfile } from "@/lib/agent.query";
 import { useBulkAssignTools } from "@/lib/agent-tools.query";
 import { useSession } from "@/lib/auth/auth.query";
 import { fetchCatalogTools } from "@/lib/mcp/internal-mcp-catalog.query";
@@ -35,7 +35,7 @@ export function useChatWithCatalogItem() {
     const agentName = item.name;
     try {
       // Get or create: check if a personal agent with this name already exists for the current user
-      const existingAgents = await fetchInternalAgents();
+      const existingAgents = await fetchInternalAgentOptions();
       const existing = existingAgents?.find(
         (a) => a.name === agentName && a.authorId === currentUserId,
       );

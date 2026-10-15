@@ -226,6 +226,7 @@ import {
 } from "./agent-form.utils";
 
 type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
+type AgentOption = archestraApiTypes.GetAgentOptionsResponses["200"][number];
 type ToolExposureMode = Agent["toolExposureMode"];
 type MissingCredentialBehavior = Agent["missingCredentialBehavior"];
 type A2aRemoteAgent =
@@ -336,7 +337,7 @@ function AgentToolsList({ agentId }: { agentId: string }) {
 
 // Single subagent pill with popover
 interface SubagentPillProps {
-  agent: Agent;
+  agent: AgentOption;
   isSelected: boolean;
   onToggle: (agentId: string) => void;
   readOnly?: boolean;
@@ -439,7 +440,7 @@ interface SubagentsEditorProps {
   agentId?: string;
   readOnly: boolean;
   localMode: "all" | "selected";
-  availableAgents: Agent[];
+  availableAgents: AgentOption[];
   selectedAgentIds: string[];
   onSelectionChange: (ids: string[]) => void;
   disabledAgentIds: string[];

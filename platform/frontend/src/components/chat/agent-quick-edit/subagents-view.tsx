@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OverlappedIcons } from "@/components/ui/overlapped-icons";
-import { useInternalAgents } from "@/lib/agent.query";
+import { useInternalAgentOptions } from "@/lib/agent.query";
 import {
   useAgentDelegations,
   useAllProfileTools,
@@ -34,11 +34,12 @@ export function SubagentsView({
   agentName: string;
   onBack: () => void;
 }) {
-  const { data: allAgents = [] } = useInternalAgents();
+  const { data: allAgents = [] } = useInternalAgentOptions();
   const { data: delegations = [], isSuccess: delegationsLoaded } =
     useAgentDelegations(agentId);
   const syncDelegations = useSyncAgentDelegations();
   const [search, setSearch] = useState("");
+  const [pageIndex, setPageIndex] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const seededRef = useRef(false);
 
@@ -78,6 +79,16 @@ export function SubagentsView({
       );
   }, [allAgents, agentId, search]);
 
+  const pageCount = Math.max(
+    1,
+    Math.ceil(candidates.length / SUBAGENTS_PAGE_SIZE),
+  );
+  const page = Math.min(pageIndex, pageCount - 1);
+  const visibleCandidates = candidates.slice(
+    page * SUBAGENTS_PAGE_SIZE,
+    (page + 1) * SUBAGENTS_PAGE_SIZE,
+  );
+
   const adding = [...selected].filter((id) => !saved.has(id));
   const removing = [...saved].filter((id) => !selected.has(id));
   const hasChanges = adding.length > 0 || removing.length > 0;
@@ -114,11 +125,26 @@ export function SubagentsView({
             placeholder="Search agents"
             aria-label="Search agents"
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setPageIndex(0);
+            }}
             className="pl-9"
             autoFocus
           />
         </div>
+        {search && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setSearch("");
+              setPageIndex(0);
+            }}
+          >
+            Clear search
+          </Button>
+        )}
       </div>
       <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-5 pt-1 pb-4">
         {!delegationsLoaded ? (
@@ -131,7 +157,7 @@ export function SubagentsView({
             No agents match "{search}"
           </p>
         ) : (
-          candidates.map((agent) => {
+          visibleCandidates.map((agent) => {
             const checked = selected.has(agent.id);
             return (
               <Label
@@ -177,6 +203,32 @@ export function SubagentsView({
           <ExternalLink className="size-3" />
         </a>
       </div>
+      {pageCount > 1 && (
+        <nav
+          aria-label="Subagent pages"
+          className="flex items-center justify-between gap-2 px-5 py-2"
+        >
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page === 0}
+            onClick={() => setPageIndex(page - 1)}
+          >
+            Previous agents
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            Page {page + 1} of {pageCount}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page + 1 === pageCount}
+            onClick={() => setPageIndex(page + 1)}
+          >
+            Next agents
+          </Button>
+        </nav>
+      )}
       <QuickEditFooter>
         <span className="text-xs text-muted-foreground">
           {changeSummary(selected.size, adding.length, removing.length)}
@@ -248,3 +300,5 @@ function AgentToolAvatars({ agentId }: { agentId: string }) {
     />
   );
 }
+
+const SUBAGENTS_PAGE_SIZE = 20;

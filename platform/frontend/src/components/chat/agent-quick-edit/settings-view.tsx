@@ -49,7 +49,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  useInternalAgents,
+  useInternalAgentOptions,
   useSwitchAgentAccess,
   useUpdateProfile,
 } from "@/lib/agent.query";
@@ -908,7 +908,7 @@ function SubagentsSection({
   const agentId = agent.id;
   const accessAll = agent.accessAllSubagents ?? false;
   const { data: delegations = [], isPending } = useAgentDelegations(agentId);
-  const { data: allAgents = [] } = useInternalAgents();
+  const { data: allAgents = [] } = useInternalAgentOptions();
   const { data: subagentExclusions } = useAgentSubagentExclusions(
     accessAll ? agentId : undefined,
   );
@@ -925,10 +925,7 @@ function SubagentsSection({
   if (accessAll) {
     const excluded = new Set(subagentExclusions?.excludedSubagentIds ?? []);
     const reachable = allAgents.filter(
-      (candidate) =>
-        candidate.id !== agentId &&
-        !candidate.builtIn &&
-        !excluded.has(candidate.id),
+      (candidate) => candidate.id !== agentId && !excluded.has(candidate.id),
     );
     return (
       <section className="space-y-2">

@@ -26,7 +26,7 @@ vi.mock("@/lib/schedule-trigger.query", () => ({
 }));
 
 vi.mock("@/lib/agent.query", () => ({
-  useProfiles: vi.fn(() => ({ data: [] })),
+  useAgentOptions: vi.fn(() => ({ data: [] })),
 }));
 
 vi.mock("@/lib/hooks/use-dialog-url-param", () => ({
@@ -42,7 +42,7 @@ vi.mock("@/components/scheduled-tasks/use-resolve-run-chat", () => ({
 }));
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useProfiles } from "@/lib/agent.query";
+import { useAgentOptions } from "@/lib/agent.query";
 import {
   useHasPermissions,
   useScopedCapabilities,
@@ -392,7 +392,7 @@ describe("ProjectSchedulesSection default agent", () => {
     vi.mocked(useUpdateScheduleTrigger).mockReturnValue(
       idleMutation as unknown as ReturnType<typeof useUpdateScheduleTrigger>,
     );
-    vi.mocked(useProfiles).mockReturnValue({
+    vi.mocked(useAgentOptions).mockReturnValue({
       data: [
         {
           id: "agent-1",
@@ -408,7 +408,7 @@ describe("ProjectSchedulesSection default agent", () => {
           scope: "org",
         },
       ],
-    } as unknown as ReturnType<typeof useProfiles>);
+    } as unknown as ReturnType<typeof useAgentOptions>);
   });
 
   /** The dialog has several comboboxes (cron, timezone); scope to the agent's. */

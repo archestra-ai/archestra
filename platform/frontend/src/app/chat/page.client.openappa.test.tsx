@@ -123,7 +123,7 @@ const server = setupServer(
     HttpResponse.json({ defaultAgentId: null }),
   ),
   http.get("/api/members/default-model", () => HttpResponse.json(null)),
-  http.get("/api/agents/all", () => HttpResponse.json([agent])),
+  http.get("/api/agents/chat-roster", () => HttpResponse.json([agent])),
   http.get(`/api/agents/${agent.id}`, () => HttpResponse.json(agent)),
   http.get("/api/agents/credential-readiness", () => HttpResponse.json([])),
   http.get("/api/chat/conversations", () => HttpResponse.json([])),
@@ -257,7 +257,9 @@ test.each([
     ) as unknown as ReturnType<typeof useSearchParams>,
   );
   server.use(
-    http.get("/api/agents/all", () => HttpResponse.json([agent, otherAgent])),
+    http.get("/api/agents/chat-roster", () =>
+      HttpResponse.json([agent, otherAgent]),
+    ),
     http.get(`/api/agents/${otherAgent.id}`, () =>
       HttpResponse.json(otherAgent),
     ),
@@ -296,7 +298,7 @@ test("a fresh stack selects My Assistant while hiding APPA Keeper from the picke
     new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
   );
   server.use(
-    http.get("/api/agents/all", () =>
+    http.get("/api/agents/chat-roster", () =>
       HttpResponse.json([agent, otherAgent, personal]),
     ),
     http.get(`/api/agents/${personal.id}`, () => HttpResponse.json(personal)),
@@ -345,7 +347,9 @@ test("a saved configuration-agent conversation accepts a normal follow-up withou
   );
   const updates: unknown[] = [];
   server.use(
-    http.get("/api/agents/all", () => HttpResponse.json([agent, otherAgent])),
+    http.get("/api/agents/chat-roster", () =>
+      HttpResponse.json([agent, otherAgent]),
+    ),
     http.get(`/api/agents/${otherAgent.id}`, () =>
       HttpResponse.json(otherAgent),
     ),
@@ -414,3 +418,116 @@ function renderChat(routeConversationId?: string) {
     </QueryClientProvider>,
   );
 }
+
+test("a thin roster waits for selected settings before an automatic chat launch", async () => {
+  let release: (() => void) | undefined;
+  const ready = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let detailRequests = 0;
+  const roster = {
+    id: agent.id,
+    organizationId: agent.organizationId,
+    name: agent.name,
+    scope: agent.scope,
+    authorId: agent.authorId,
+    agentType: agent.agentType,
+    builtIn: agent.builtIn,
+    builtInAgentConfig: agent.builtInAgentConfig,
+    icon: agent.icon,
+    description: agent.description,
+    runtime: agent.runtime,
+    modelId: agent.modelId,
+    llmApiKeyId: agent.llmApiKeyId,
+  };
+  server.use(
+    http.get("/api/agents/chat-roster", () => HttpResponse.json([roster])),
+    http.get(`/api/agents/${agent.id}`, async () => {
+      detailRequests++;
+      await ready;
+      return HttpResponse.json(agent);
+    }),
+  );
+  renderChat();
+  await waitFor(() => expect(detailRequests).toBeGreaterThan(0));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(createBodies).toEqual([]);
+  release?.();
+  await waitFor(() => expect(sent).toHaveLength(1), { timeout: 5000 });
+  expect(createBodies[0]).toMatchObject({
+    agentId: agent.id,
+    modelId: "test-model",
+    chatApiKeyId: "test-llm-key",
+  });
+});
+
+test("selected settings provide suggested prompts without loading catalogue-wide prompts", async () => {
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams({ agentId: otherAgent.id }) as ReturnType<
+      typeof useSearchParams
+    >,
+  );
+  let defaultsRequested = 0;
+  server.use(
+    http.get("/api/agents/chat-roster", () =>
+      HttpResponse.json([
+        {
+          id: otherAgent.id,
+          name: otherAgent.name,
+          scope: "org",
+          authorId: otherAgent.authorId,
+          agentType: "agent",
+          builtIn: false,
+          builtInAgentConfig: null,
+          icon: null,
+          description: null,
+          runtime: null,
+          modelId: "test-model",
+          llmApiKeyId: "test-llm-key",
+        },
+      ]),
+    ),
+    http.get(`/api/agents/${otherAgent.id}`, () =>
+      HttpResponse.json({
+        ...otherAgent,
+        suggestedPrompts: [
+          {
+            summaryTitle: "Inspect selected agent",
+            prompt: "Inspect my selected agent.",
+          },
+        ],
+      }),
+    ),
+    http.get(`/api/agents/${otherAgent.id}/default-suggested-prompts`, () => {
+      defaultsRequested++;
+      return HttpResponse.json([]);
+    }),
+  );
+  renderChat();
+  expect(
+    await screen.findByRole("button", { name: "Inspect selected agent" }),
+  ).toBeVisible();
+  expect(defaultsRequested).toBe(0);
+});
+
+test("selected settings failures hold automatic sends until retry succeeds", async () => {
+  let available = false;
+  server.use(
+    http.get(`/api/agents/${agent.id}`, () => {
+      return !available
+        ? HttpResponse.json(
+            { error: { message: "Settings unavailable", type: "api_error" } },
+            { status: 503 },
+          )
+        : HttpResponse.json(agent);
+    }),
+  );
+  renderChat();
+  expect(
+    await screen.findByText("Could not load the selected agent’s settings."),
+  ).toBeVisible();
+  expect(createBodies).toEqual([]);
+  available = true;
+  await userEvent.click(screen.getByRole("button", { name: /^Retry$/ }));
+  await waitFor(() => expect(sent).toHaveLength(1), { timeout: 5000 });
+});

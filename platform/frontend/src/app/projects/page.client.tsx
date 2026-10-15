@@ -47,7 +47,7 @@ import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Textarea } from "@/components/ui/textarea";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
-import { useInternalAgents } from "@/lib/agent.query";
+import { useInternalAgentOptions } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { BulkRangeSelectionScope } from "@/lib/bulk-range-selection-context";
@@ -572,7 +572,7 @@ function CreateProjectDialog({
   // A new project is unshared and you are its owner, so anything you can run
   // qualifies. Sharing it later narrows the offer (and drops a pin the new
   // audience cannot reach) in the edit dialog.
-  const { data: accessibleAgents = [] } = useInternalAgents({
+  const { data: accessibleAgents = [] } = useInternalAgentOptions({
     enabled: open && canReadAgents === true,
   });
   const icon = form.watch("icon");

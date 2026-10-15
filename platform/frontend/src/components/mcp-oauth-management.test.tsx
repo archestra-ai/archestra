@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useProfiles } from "@/lib/agent.query";
+import { useAgentOptions } from "@/lib/agent.query";
 import {
   useHasPermissions,
   useScopedCapabilities,
@@ -20,7 +20,7 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useLlmProviderApiKeys: () => ({ data: [] }),
 }));
-vi.mock("@/lib/agent.query", () => ({ useProfiles: vi.fn() }));
+vi.mock("@/lib/agent.query", () => ({ useAgentOptions: vi.fn() }));
 vi.mock("@/lib/oauth-clients.query", () => ({
   useCreateOauthClient: vi.fn(),
   useDeleteOauthClient: vi.fn(),
@@ -75,8 +75,8 @@ beforeEach(() => {
   vi.mocked(useSession).mockReturnValue({
     data: { user: { id: "user-1" } },
   } as ReturnType<typeof useSession>);
-  vi.mocked(useProfiles).mockReturnValue({ data: [] } as ReturnType<
-    typeof useProfiles
+  vi.mocked(useAgentOptions).mockReturnValue({ data: [] } as ReturnType<
+    typeof useAgentOptions
   >);
   vi.mocked(useAllOauthClients).mockReturnValue({
     data: [

@@ -273,3 +273,54 @@ test("stale suite versions yield recoverable conflicts and write nothing", async
   expect(await GuardrailsPolicyModel.findLatest(organization.id)).toBeNull();
   expect(await OpenAppaPolicyTestsModel.find(organization.id)).toBeNull();
 });
+
+test("a policy preview replays the saved validations against the proposed policy without recording a run", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+  seedAndAssignArchestraTools,
+}) => {
+  const organization = await makeOrganization();
+  const user = await makeUser();
+  await makeMember(user.id, organization.id, { role: "admin" });
+  const agent = await makeAgent({ organizationId: organization.id });
+  await seedAndAssignArchestraTools(agent.id);
+  await GuardrailsPolicyModel.save({
+    organizationId: organization.id,
+    content: candidatePolicy,
+    contentHash: createHash("sha256").update(candidatePolicy).digest("hex"),
+    updatedBy: user.id,
+    expectedRevision: 0,
+  });
+  await OpenAppaPolicyTestsModel.saveLocal({
+    organizationId: organization.id,
+    files: [existing, regression],
+    expectedVersion: "empty",
+  });
+  // Dropping the trust requirement lets mail go out after a suspicious read.
+  const loosened = candidatePolicy.replace(
+    "requires = { trust = 'trusted' }\n",
+    "",
+  );
+  const preview = await executeArchestraTool(
+    "archestra__preview_guardrails_policy_change",
+    { content: loosened, expectedRevision: 1 },
+    {
+      organizationId: organization.id,
+      userId: user.id,
+      agent: { id: agent.id, name: agent.name },
+    },
+  );
+  expect(preview.isError, JSON.stringify(preview.content)).not.toBe(true);
+  expect(preview.structuredContent?.validations).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ path: existing.path, status: "passed" }),
+      expect.objectContaining({ path: regression.path, status: "failed" }),
+    ]),
+  );
+  expect(
+    (await GuardrailsPolicyModel.findLatest(organization.id))?.content,
+  ).toBe(candidatePolicy);
+  expect(await OpenAppaPolicyTestsModel.listRuns(organization.id)).toEqual([]);
+});

@@ -100,6 +100,7 @@ import {
 } from "@/services/openappa-policy-change";
 import {
   getOpenAppaPolicyTests,
+  replaySavedValidations,
   runOpenAppaPolicyTests,
 } from "@/services/openappa-policy-tests";
 import {
@@ -791,7 +792,7 @@ const registry = defineArchestraTools([
     title: "Preview OpenAPPA policy change",
     annotations: { readOnlyHint: true },
     description:
-      "Validate a proposed change to organization.appa.toml and return its unified `diff` and `changed` line counts. This saves nothing. Read the current policy and pass its revision as expectedRevision. To change an existing policy, send `edits`: only the text being replaced and its replacement. To insert rules, replace an anchor line with the new rules followed by that same anchor line. Send `content` only for a first policy or a full rewrite. Check `diff` and `changed` to confirm only the intended lines change. Explain what the change does and its warnings to the user, then publish with update_guardrails_policy using the same edits or content and expectedRevision; show the diff when the user asks.",
+      "Validate a proposed change to organization.appa.toml and return its unified `diff` and `changed` line counts. This saves nothing. Read the current policy and pass its revision as expectedRevision. To change an existing policy, send `edits`: only the text being replaced and its replacement. To insert rules, replace an anchor line with the new rules followed by that same anchor line. Send `content` only for a first policy or a full rewrite. Check `diff` and `changed` to confirm only the intended lines change. `validations` replays the saved validations against the proposed policy, without recording a run: pass/fail/cannot-run per file, or null when there are none. Explain what the change does, its warnings and any validation it fails to the user, then publish with update_guardrails_policy using the same edits or content and expectedRevision; show the diff when the user asks.",
     schema: ProposedGuardrailsPolicySchema,
     handler: ({ args, context }) =>
       refusalAsResult(async () => {
@@ -819,10 +820,25 @@ const registry = defineArchestraTools([
           organizationId,
           previous: before.content,
         });
-        const sync = await getAppaGithubSync(organizationId);
+        const [sync, validations] = await Promise.all([
+          getAppaGithubSync(organizationId),
+          // Replay the saved validations against the unsaved policy, so the
+          // user sees which checks the change breaks before approving it.
+          validation.valid
+            ? replaySavedValidations({
+                organizationId,
+                userId,
+                proposedPolicy: {
+                  content: after,
+                  expectedRevision: before.revision,
+                },
+              })
+            : null,
+        ]);
         const delivery = sync.source?.interval ? "pull_request" : "revision";
         return policyChangeResult({
           stage: "preview",
+          validations,
           delivery,
           // Whether publishing this turns enforcement on: only the first saved
           // policy does, and only for an administrator (see turnOnForFirstPolicy).
@@ -1429,7 +1445,7 @@ function organization(context: ArchestraContext): string {
 }
 
 const PREVIEW_APPROVAL_INSTRUCTION =
-  "Nothing is saved yet. In this same turn, summarize in 2-4 short bullets what the change does to agents and tools (not the TOML), then ask the user to approve it with the ask_user tool, or the client's own question tool. Do not end the turn without that question, even when the user said not to publish until they approve: the question is how they approve. After approval, call update_guardrails_policy with the same edits or content and expectedRevision.";
+  "Nothing is saved yet. In this same turn, summarize in 2-4 short bullets what the change does to agents and tools (not the TOML), and name any saved validation in `validations` that failed or could not run, then ask the user to approve it with the ask_user tool, or the client's own question tool. Do not end the turn without that question, even when the user said not to publish until they approve: the question is how they approve. After approval, call update_guardrails_policy with the same edits or content and expectedRevision.";
 
 /** What a yell tells the agent when break the glass is off. */
 const YELL_RESULT_GUARDRAILS_UNCHANGED =

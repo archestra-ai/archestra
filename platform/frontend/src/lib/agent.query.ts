@@ -487,7 +487,7 @@ export function useProfile(
      * resolve on the first render and the rest fetch immediately, rather than
      * one round trip later.
      *
-     * Safe because findCachedAgent excludes the compact chat roster; the
+     * Safe because findCachedAgent excludes compact and tool-free rosters; the
      * remaining list endpoints serialise whole agents with the same
      * `SelectAgentSchema` this route returns. `initialDataUpdatedAt` carries
      * the list's age across, so a stale row still revalidates on its normal
@@ -935,8 +935,10 @@ function findCachedAgent(
       continue;
     // A list fetched without tools would seed a detail with no tools, which
     // reads as "this agent has none" until the seed goes stale.
-    const params = query.queryKey[2] as { includeTools?: boolean } | undefined;
-    if (params?.includeTools === false) continue;
+    const params = query.queryKey[2] as
+      | { includeTools?: boolean; view?: string }
+      | undefined;
+    if (params?.includeTools === false || params?.view === "chat") continue;
     const cached: unknown = query.state.data;
     const rows = Array.isArray(cached)
       ? cached

@@ -298,14 +298,19 @@ describe("agent detail", () => {
   });
 
   it.each([
-    "options",
-    "chat-roster",
-  ])("never seeds an editing form from %s metadata", async (kind) => {
+    { kind: "options", filters: {} },
+    { kind: "chat-roster", filters: "v2" },
+    { kind: "all", filters: { includeTools: false } },
+    { kind: "all", filters: { includeTools: true, view: "chat" } },
+  ])("never seeds an editing form from $kind metadata ($filters)", async ({
+    kind,
+    filters,
+  }) => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
     queryClient.setQueryData(
-      ["agents", kind, kind === "chat-roster" ? "v2" : {}],
+      ["agents", kind, filters],
       [{ id: "agent-1", name: "Only a name" }],
     );
     let finish: ((value: never) => void) | undefined;
@@ -333,36 +338,23 @@ describe("agent detail", () => {
     expect(result.current.data?.tools).toEqual([{ id: "tool-1" }]);
   });
 
-  it("fetches the agent's tools instead of trusting a list fetched without them", async () => {
+  it("still seeds an editing form from a fresh full roster", () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    // The roster every picker loads: complete agents except for their tools.
+    const agent = {
+      id: "agent-1",
+      name: "Full agent",
+      systemPrompt: "Configured prompt",
+      tools: [{ id: "tool-1" }],
+    };
     queryClient.setQueryData(
-      [
-        "agents",
-        "all",
-        { agentType: "agent", excludeBuiltIn: true, includeTools: false },
-      ],
-      [{ id: "agent-1", name: "Agent", tools: [] }],
+      ["agents", "all", { includeTools: true }],
+      [agent],
     );
-    sdk.getAgent.mockResolvedValue({
-      data: {
-        id: "agent-1",
-        name: "Agent",
-        tools: [{ id: "tool-1", catalogId: "catalog-1" }],
-      },
-      error: undefined,
-    } as never);
-
     const { result } = setup(() => useProfile("agent-1"), queryClient);
-
-    await waitFor(() =>
-      expect(result.current.data?.tools).toEqual([
-        { id: "tool-1", catalogId: "catalog-1" },
-      ]),
-    );
-    expect(sdk.getAgent).toHaveBeenCalledWith({ path: { id: "agent-1" } });
+    expect(result.current.data).toEqual(agent);
+    expect(sdk.getAgent).not.toHaveBeenCalled();
   });
 });
 

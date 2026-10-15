@@ -311,7 +311,10 @@ async function transcribePage(params: {
             ],
           },
         ],
-        maxOutputTokens: OCR_MAX_OUTPUT_TOKENS,
+        maxOutputTokens: Math.min(
+          OCR_MAX_OUTPUT_TOKENS,
+          ocr.config.maxOutputTokens,
+        ),
         maxRetries: 1,
         abortSignal: AbortSignal.timeout(OCR_REQUEST_TIMEOUT_MS),
       }),

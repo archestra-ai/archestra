@@ -10,6 +10,7 @@ import {
   type SupportedProvider,
   SupportedProvidersSchema,
 } from "@archestra/shared";
+import { resolveAgentMaxOutputTokens } from "@/agents/agent-output-budget";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config, { getProviderEnvApiKey } from "@/config";
 import logger from "@/logging";
@@ -457,6 +458,32 @@ export async function resolveAgentLlmOrDefault(params: {
   }
 
   return resolveDefaultLlmSelection(params);
+}
+
+/**
+ * Output-token budget for a one-off call on `modelName`: the model's real
+ * output ceiling from the catalog, clamped by the operator ceiling, or a safe
+ * fallback when the catalog does not know the model. Never exceeds the model's
+ * known cap, so a provider that forwards `max_tokens` unchanged never rejects
+ * the request.
+ */
+export async function resolveModelOutputBudget(params: {
+  provider: SupportedProvider;
+  modelName: string;
+}): Promise<number> {
+  const model = await ModelModel.findByProviderAndModelId(
+    params.provider,
+    params.modelName,
+  );
+  return resolveAgentMaxOutputTokens({
+    outputLength: model ? ModelModel.resolveEffectiveOutputLength(model) : null,
+    contextLength: model
+      ? ModelModel.resolveEffectiveContextLength(model)
+      : null,
+    ceiling: config.chat.maxOutputTokensCeiling,
+    rateMeteredCeiling: config.chat.rateMeteredMaxOutputTokensCeiling,
+    provider: params.provider,
+  });
 }
 
 /**

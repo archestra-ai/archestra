@@ -6,7 +6,10 @@ import AgentModel from "@/models/agent";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import OrganizationModel from "@/models/organization";
 import { generateTaggedText } from "@/utils/generate-tagged-text";
-import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
+import {
+  resolveAgentLlmOrDefault,
+  resolveModelOutputBudget,
+} from "@/utils/llm-resolution";
 import type { OpenappaEncryptedChat } from "./encrypted-chat";
 
 /** The prompt the runtime's `builtin = "archestra"` annotator renders. */
@@ -77,13 +80,21 @@ class OpenAppaArchestraAnnotator {
       baseUrl: selection.baseUrl,
       chatApiKeyId: selection.chatApiKeyId,
     });
+    // Half the model's budget, so the truncation retry's doubled room still
+    // fits under the model's real output cap.
+    const maxOutputTokens = Math.floor(
+      (await resolveModelOutputBudget({
+        provider: selection.provider,
+        modelName: selection.modelName,
+      })) / 2,
+    );
     try {
       const text = await generateTaggedText({
         model,
         tag: "annotation",
         system: `${request.system}\n\nThe annotation is one JSON object that matches this JSON schema:\n${JSON.stringify(request.schema)}`,
         prompt: request.input,
-        maxOutputTokens: ANNOTATION_MAX_OUTPUT_TOKENS,
+        maxOutputTokens,
       });
       const answer = text === null ? null : parseObject(text);
       if (answer === null)
@@ -124,12 +135,6 @@ class OpenAppaArchestraAnnotator {
 }
 
 export const openappaArchestraAnnotator = new OpenAppaArchestraAnnotator();
-
-/**
- * Room for the annotation plus the thinking models do by default. Explicit so
- * a truncated first attempt is retried with more room, not the same ceiling.
- */
-const ANNOTATION_MAX_OUTPUT_TOKENS = 16_384;
 
 /**
  * What the upstream said, from the `error.message` every provider body and

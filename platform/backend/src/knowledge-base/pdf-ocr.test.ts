@@ -64,6 +64,7 @@ function ocrContext(
     modelName: "mock-vision",
     provider: "anthropic",
     llmModel: model as never,
+    maxOutputTokens: 16_384,
   };
   return {
     config: ocrConfig,

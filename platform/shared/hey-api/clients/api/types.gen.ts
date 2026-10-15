@@ -22114,6 +22114,9 @@ export type GetMyAgentRunsData = {
     query?: {
         limit?: number;
         offset?: number;
+        search?: string;
+        pinned?: boolean;
+        sort?: 'started' | 'recent' | 'pinned';
     };
     url: '/api/agent-runs';
 };

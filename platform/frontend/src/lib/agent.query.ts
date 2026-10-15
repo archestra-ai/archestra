@@ -138,6 +138,7 @@ export function useAgentOptions(
   return useQuery({
     queryKey: ["agents", "options", filters],
     queryFn: async () => {
+      if (filters.ids?.length === 0) return [];
       const { data, error } = await getAgentOptions({ query: filters });
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];

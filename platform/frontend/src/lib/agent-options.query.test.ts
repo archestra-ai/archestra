@@ -6,6 +6,7 @@ import { setupServer } from "msw/node";
 import { createElement, type ReactNode } from "react";
 import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
 import {
+  useAgentOptions,
   useDelegationTargetAgents,
   useOrgScopedAgents,
   useProfile,
@@ -97,6 +98,30 @@ it("uses compact organization options for the default-agent selector", async () 
     excludeBuiltIn: "true",
     scope: "org",
   });
+  hook.unmount();
+  queryClient.clear();
+});
+
+it("treats an explicitly empty ID selection as empty without requesting the whole roster", async () => {
+  let requests = 0;
+  server.use(
+    http.get(`${API_ORIGIN}/api/agents/options`, () => {
+      requests++;
+      return HttpResponse.json([{ id: "unrequested-agent" }]);
+    }),
+  );
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const wrapper = ({ children }: { children: ReactNode }) =>
+    createElement(QueryClientProvider, { client: queryClient }, children);
+  const hook = renderHook(
+    () => useAgentOptions({ filters: { ids: [] }, enabled: true }),
+    { wrapper },
+  );
+  await waitFor(() => expect(hook.result.current.isSuccess).toBe(true));
+  expect(hook.result.current.data).toEqual([]);
+  expect(requests).toBe(0);
   hook.unmount();
   queryClient.clear();
 });

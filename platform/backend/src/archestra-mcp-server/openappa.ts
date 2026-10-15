@@ -62,6 +62,7 @@ import {
 import { superyellSession } from "@/openappa/unenforced";
 import {
   recallYellSession,
+  rememberYellResult,
   type YellArguments,
   YellArgumentsSchema,
 } from "@/openappa/yell-session";
@@ -536,11 +537,13 @@ const registry = defineArchestraTools([
     schema: YellArgumentsSchema,
     async handler({ args, context }) {
       const identity = await yellIdentity({ shortName: "yell", args, context });
-      return executeYell({
+      const report = await executeYell({
         session: identity.session,
         toolCallId: identity.callId,
         args,
       });
+      await rememberYellResult({ ...identity, result: report });
+      return report;
     },
   }),
   defineArchestraTool({
@@ -578,7 +581,7 @@ const registry = defineArchestraTools([
         },
         "OpenAPPA turned off for a session by an approved superyell",
       );
-      return successResult(
+      const result = successResult(
         [
           ...report.content.flatMap((part) =>
             part.type === "text" ? [part.text] : [],
@@ -586,6 +589,8 @@ const registry = defineArchestraTools([
           "OpenAPPA is off for this session. Its label is reset, and its calls are no longer checked.",
         ].join("\n"),
       );
+      await rememberYellResult({ ...identity, result });
+      return result;
     },
   }),
   defineArchestraTool({

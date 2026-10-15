@@ -41,6 +41,7 @@ import {
 } from "@/openappa/failure";
 import { unservedAnnotator } from "@/openappa/retired-annotators";
 import { captureYellReport } from "@/openappa/yell-receiver";
+import { readYellResult } from "@/openappa/yell-session";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import type { ToolNameCanonicalizer } from "@/routes/proxy/utils/gateway-tool-names";
 import {
@@ -959,6 +960,21 @@ export async function processProxyResults(params: {
   });
   const updates: Record<string, ProcessedToolResult> = {};
   for (const result of params.results) {
+    const reportingName = archestraMcpBranding.getToolShortName(
+      params.canonicalize(result.name, result.namespace),
+    );
+    const reportingResult = ["yell", "superyell", "run_tool"].some(
+      (name) => name === reportingName,
+    )
+      ? await readYellResult(params.session, result.id)
+      : undefined;
+    if (reportingResult !== undefined) {
+      updates[result.id] = {
+        content: reportingResult,
+        outputSource: "runtime",
+      };
+      continue;
+    }
     if (params.trustedChat && isSeededAppRenderToolResult(result.content))
       continue;
     // The runtime released no question call, so it would withhold the answer.

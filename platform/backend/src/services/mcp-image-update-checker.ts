@@ -1,4 +1,5 @@
 import { usesMutableImageTag } from "@archestra/shared/mcp-image-pull-policy";
+import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
@@ -11,6 +12,11 @@ import {
 import { containerRegistryClient } from "@/services/container-registry";
 import { refreshCatalogImage } from "@/services/mcp-image-refresh";
 import type { InternalMcpCatalog, McpServer } from "@/types";
+
+// Above the class: its field initializer reads them when the singleton below
+// is constructed, before the bottom-of-file constants exist.
+const ROLLED_OUT_DIGESTS_MAX_ENTRIES = 10_000;
+const ROLLED_OUT_DIGEST_TTL_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Rolls local MCP servers onto a new image when their mutable tag (`:latest`
@@ -31,6 +37,10 @@ import type { InternalMcpCatalog, McpServer } from "@/types";
  * registry failure — unreachable, auth refused, rate-limited — skips that
  * catalog until the next sweep and never stops the rest.
  *
+ * A digest is rolled out at most once per install (per replica, for a day):
+ * if a registry reports digests that never match what the pod records, the
+ * checker logs it instead of restarting the server every sweep.
+ *
  * Multiple replicas: each catalog's check-and-refresh runs under a cluster
  * lease, so only one replica acts on it; the others skip it. Sweeps start
  * after a random delay so replicas do not hit registries in lockstep.
@@ -39,6 +49,11 @@ class McpImageUpdateChecker {
   private intervalId: NodeJS.Timeout | null = null;
   private pendingSweep: NodeJS.Timeout | null = null;
   private sweepInProgress = false;
+  // serverId -> registry digest this replica last rolled the install out to.
+  private readonly rolledOutDigests = new LRUCacheManager<string>({
+    maxSize: ROLLED_OUT_DIGESTS_MAX_ENTRIES,
+    defaultTtl: ROLLED_OUT_DIGEST_TTL_MS,
+  });
 
   start(): void {
     const intervalMinutes =
@@ -132,7 +147,8 @@ class McpImageUpdateChecker {
         const candidates = catalog.multitenant
           ? installs.slice(0, 1)
           : installs;
-        const outdated: McpServer[] = [];
+        const outdated: Array<{ server: McpServer; registryDigest: string }> =
+          [];
         for (const server of candidates) {
           // SPDX-SnippetBegin
           // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -161,8 +177,9 @@ class McpImageUpdateChecker {
             dockerConfigs,
             digestLookups,
           });
-          if (registryDigest !== running.digest) {
-            logger.info(
+          if (registryDigest === running.digest) continue;
+          if (this.rolledOutDigests.get(server.id) === registryDigest) {
+            logger.warn(
               {
                 catalogId: catalog.id,
                 serverId: server.id,
@@ -170,19 +187,33 @@ class McpImageUpdateChecker {
                 runningDigest: running.digest,
                 registryDigest,
               },
-              "MCP server image tag points at a new image; rolling it out",
+              "MCP server still reports a different image digest after a rollout to it; not restarting again",
             );
-            outdated.push(server);
+            continue;
           }
+          logger.info(
+            {
+              catalogId: catalog.id,
+              serverId: server.id,
+              image: running.image,
+              runningDigest: running.digest,
+              registryDigest,
+            },
+            "MCP server image tag points at a new image; rolling it out",
+          );
+          outdated.push({ server, registryDigest });
         }
         if (outdated.length === 0) return;
 
         lease.throwIfLost();
+        for (const { server, registryDigest } of outdated) {
+          this.rolledOutDigests.set(server.id, registryDigest);
+        }
         await refreshCatalogImage(
           catalog,
           catalog.multitenant
             ? undefined
-            : { serverIds: outdated.map((server) => server.id) },
+            : { serverIds: outdated.map(({ server }) => server.id) },
         );
       },
     );

@@ -76,6 +76,29 @@ describe("mcpImageUpdateChecker.checkAll", () => {
     );
   });
 
+  // A registry whose digest never matches what the pod records (e.g. a
+  // per-platform digest) must not turn into a restart every sweep.
+  test("rolls out a given registry digest only once", async ({
+    makeInternalMcpCatalog,
+    makeMcpServer,
+    makeUser,
+  }) => {
+    await makeLocalInstall({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeUser,
+      image: `${REGISTRY}/acme/mismatch:latest`,
+    });
+    serveRegistryDigest("acme/mismatch", NEW_DIGEST);
+    runningImage(`${REGISTRY}/acme/mismatch:latest`);
+
+    await mcpImageUpdateChecker.checkAll();
+    // The pod comes back still reporting the old digest.
+    await mcpImageUpdateChecker.checkAll();
+
+    expect(McpServerRuntimeManager.restartServer).toHaveBeenCalledTimes(1);
+  });
+
   test("leaves an install alone when the registry still serves the running digest", async ({
     makeInternalMcpCatalog,
     makeMcpServer,

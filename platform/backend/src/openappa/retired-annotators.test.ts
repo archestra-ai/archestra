@@ -110,6 +110,47 @@ describe("annotators earlier opening policies declare", () => {
     expect(vi.mocked(logger.warn)).not.toHaveBeenCalled();
   });
 
+  test("a session that opened under the previous composition while the next was stored keeps its annotator within a minute", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const { organizationId, userId } = await admin({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    });
+    await declare({ organizationId, userId, content: urlJudged("a", JUDGE_A) });
+    const previous =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+    await declare({ organizationId, userId, content: urlJudged("b", JUDGE_B) });
+    expect(
+      (await openappaBatteriesService.readForDispatch(organizationId)).policy
+        .content,
+    ).not.toContain("a.tool-call");
+
+    // The session's opening lands after the composition that dropped its annotator.
+    await OpenAppaPolicyFileModel.store(previous.content);
+    expect(
+      (await openappaBatteriesService.readForDispatch(organizationId)).policy
+        .content,
+    ).not.toContain("a.tool-call");
+
+    const now = performance.now();
+    const clock = vi.spyOn(performance, "now").mockReturnValue(now + 61_000);
+    try {
+      const kept = (
+        await openappaBatteriesService.readForDispatch(organizationId)
+      ).policy;
+      expect(kept.lastError).toBeNull();
+      expect(kept.content).toContain("a.tool-call");
+      expect(kept.content).toContain(JUDGE_A);
+      expect(kept.content).toContain(JUDGE_B);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   test("a corrupt snapshot is logged by hash without blocking valid old bindings", async ({
     makeOrganization,
     makeUser,

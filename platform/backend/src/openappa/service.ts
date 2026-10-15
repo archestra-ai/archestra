@@ -30,7 +30,11 @@ import {
   normalizeCommandExecutionArguments,
 } from "@/openappa/command-normalization";
 import { currentTrajectory } from "@/openappa/current-trajectory";
-import { helperUrlBase, openappaDeclarations } from "@/openappa/declarations";
+import {
+  helperUrlBase,
+  openappaDeclarations,
+  type UnreadableCredential,
+} from "@/openappa/declarations";
 import {
   declareExistingInstalls,
   seedCredentialBindings,
@@ -583,16 +587,53 @@ async function effectivePolicy(
   organizationId: string,
 ): Promise<DispatchPolicy> {
   try {
-    const rawContent = (
-      await openappaBatteriesService.getEffectivePolicy(organizationId)
-    ).content;
+    const { policy, readable } =
+      await openappaBatteriesService.readForDispatch(organizationId);
+    let unreadable: UnreadableCredential[] = [];
+    let dispatch: DispatchPolicy | null = null;
+    try {
+      dispatch = await openappaDeclarations.dispatchPolicy({
+        organizationId,
+        content: expandCommandExecutionPolicyRules(policy.content),
+        onUnreadable: (found) => {
+          unreadable = found;
+        },
+      });
+    } catch (error) {
+      if (!retainedKeyLost({ unreadable, readable })) throw error;
+    }
+    if (dispatch && !retainedKeyLost({ unreadable, readable })) return dispatch;
+    // A credential the policy was composed to read is unreadable now. Compose
+    // again first, as a fresh read would have: a kept annotator that needed it
+    // is dropped, so its sessions are told to start a new conversation instead
+    // of failing their consults on a key that is not set.
+    logger.info(
+      { organizationId, keys: unreadable.map(({ key }) => key) },
+      "OpenAPPA composes again before a dispatch: a credential the served policy reads cannot be read",
+    );
+    const recompiled = await openappaBatteriesService.recompile(organizationId);
     return await openappaDeclarations.dispatchPolicy({
       organizationId,
-      content: expandCommandExecutionPolicyRules(rawContent),
+      content: expandCommandExecutionPolicyRules(recompiled.content),
     });
   } catch (error) {
     throw openappaFailure(error);
   }
+}
+
+/**
+ * Whether a key the served policy's retirement inputs held readable cannot be
+ * read now. With no snapshot to compare against, any unreadable key counts.
+ */
+function retainedKeyLost(params: {
+  unreadable: UnreadableCredential[];
+  readable: ReadonlySet<string> | null;
+}): boolean {
+  const { unreadable, readable } = params;
+  return (
+    unreadable.length > 0 &&
+    (readable === null || unreadable.some(({ key }) => readable.has(key)))
+  );
 }
 
 /** One policy read shared by a batch of dispatches, taken by the first of them. */

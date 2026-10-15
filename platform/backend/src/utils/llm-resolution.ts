@@ -121,30 +121,48 @@ export async function resolveConversationLlmSelectionForAgent(params: {
     OrganizationModel.getById(organizationId),
   ]);
 
-  const configuredLevels: ModelSelection[] = [
-    { modelId: params.explicitModelId, apiKeyId: params.explicitApiKeyId },
-    ...(includeMemberChatDefault
-      ? [
-          {
-            modelId: member?.defaultModelId,
-            apiKeyId: member?.defaultChatApiKeyId,
-          },
-        ]
-      : []),
-    { modelId: agent.modelId, apiKeyId: agent.llmApiKeyId },
-    {
-      modelId: organization?.defaultModelId,
-      apiKeyId: organization?.defaultLlmApiKeyId,
-    },
-  ];
-
-  const [levels, availableModels] = await Promise.all([
-    filterLinkedModelSelectionLevels(configuredLevels),
-    getAvailableRankedModels({
-      organizationId,
-      userId,
+  const memberLevel: ModelSelection | null = includeMemberChatDefault
+    ? {
+        modelId: member?.defaultModelId,
+        apiKeyId: member?.defaultChatApiKeyId,
+      }
+    : null;
+  const organizationLevel: ModelSelection = {
+    modelId: organization?.defaultModelId,
+    apiKeyId: organization?.defaultLlmApiKeyId,
+  };
+  const availableModels = await getAvailableRankedModels({
+    organizationId,
+    userId,
+  });
+  // The member and organization defaults name a key somebody chose; the acting
+  // user may not be allowed to use it. The send path would never run through
+  // it anyway (it falls back to a key the user may use), so resolve to that
+  // key now and store what will actually be used. Explicit picks are not
+  // re-paired: they are validated by the caller and refused when unusable.
+  const [usableMemberLevel, usableOrganizationLevel] = await Promise.all([
+    memberLevel
+      ? toUsableDefaultLevel({
+          level: memberLevel,
+          agentApiKeyId: agent.llmApiKeyId,
+          availableModels,
+        })
+      : null,
+    toUsableDefaultLevel({
+      level: organizationLevel,
+      agentApiKeyId: agent.llmApiKeyId,
+      availableModels,
     }),
   ]);
+
+  const configuredLevels: ModelSelection[] = [
+    { modelId: params.explicitModelId, apiKeyId: params.explicitApiKeyId },
+    ...(usableMemberLevel ? [usableMemberLevel] : []),
+    { modelId: agent.modelId, apiKeyId: agent.llmApiKeyId },
+    usableOrganizationLevel,
+  ];
+
+  const levels = await filterLinkedModelSelectionLevels(configuredLevels);
 
   const resolved = resolveModelSelection({ levels, availableModels });
 
@@ -574,6 +592,35 @@ async function getAvailableRankedModels(params: {
   return LlmProviderApiKeyModelLinkModel.getRankedModelsForApiKeys(
     keys.map((key) => key.id),
   );
+}
+
+/**
+ * A member/organization default level as the acting user can run it: kept
+ * when its key is one they may use or the agent's own key (used through the
+ * agent); otherwise its model paired with a key they may use that serves it,
+ * or no level at all. A per-user provider model (e.g. GitHub Copilot) is kept
+ * as is — its key is dropped later and the user's own credential resolved at
+ * send time.
+ */
+async function toUsableDefaultLevel(params: {
+  level: ModelSelection;
+  agentApiKeyId: string | null;
+  availableModels: Awaited<ReturnType<typeof getAvailableRankedModels>>;
+}): Promise<ModelSelection> {
+  const { level, agentApiKeyId, availableModels } = params;
+  if (!isCompleteModelSelection(level)) return level;
+  if (level.apiKeyId === agentApiKeyId) return level;
+  if (availableModels.some((m) => m.apiKeyId === level.apiKeyId)) {
+    return level;
+  }
+  const model = await ModelModel.findById(level.modelId);
+  if (model && providerRequiresPerUserCredential(model.provider)) {
+    return level;
+  }
+  const usable = availableModels.find((m) => m.modelId === level.modelId);
+  return usable
+    ? { modelId: level.modelId, apiKeyId: usable.apiKeyId }
+    : { modelId: null, apiKeyId: null };
 }
 
 async function filterLinkedModelSelectionLevels(

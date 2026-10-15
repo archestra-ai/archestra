@@ -155,7 +155,16 @@ test.for([
     overlapping.find((candidate) => candidate.id !== run.id),
   ).toMatchObject({
     status: "failed",
-    error: "Skipped: previous run was still in progress",
+    error: expect.stringContaining(
+      `Skipped: run ${run.id} was still in progress`,
+    ),
+    blockedBy: {
+      runId: run.id,
+      runtimeTaskId: taskId,
+      phase: "running",
+      maximumDurationSeconds: 72 * 3600,
+      deadline: expect.any(String),
+    },
   });
   await ScheduleTriggerModel.update(trigger.id, { enabled: false });
 

@@ -41,6 +41,7 @@ import {
   AgentVersionModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
+  LlmProviderApiKeyModel,
   MemberModel,
   OrganizationModel,
   ProjectModel,
@@ -2652,6 +2653,21 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           400,
           "The default model and API key must be set together",
         );
+      }
+
+      // A default runs new chats on any agent, so it needs a key the member
+      // may use; an agent's own key is usable only through that agent.
+      if (body.chatApiKeyId) {
+        const apiKey = await LlmProviderApiKeyModel.findById(body.chatApiKeyId);
+        if (!apiKey || apiKey.organizationId !== organizationId) {
+          throw new ApiError(
+            400,
+            "The selected model or API key no longer exists",
+          );
+        }
+        if (!(await LlmProviderApiKeyModel.canUseKey(apiKey, user.id, []))) {
+          throw new ApiError(403, "You do not have access to this API key");
+        }
       }
 
       try {

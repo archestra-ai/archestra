@@ -309,6 +309,7 @@ const TOOL_AUDIT_SPECS: Record<string, ArchestraToolAuditSpec> = {
   create_schedule_trigger: {
     resourceType: "scheduleTrigger",
     action: "scheduleTrigger.created",
+    recordWhen: (result) => result.structuredContent?.created !== false,
     idFromResult: (s) => str(s?.id),
     fetchById: (id, orgId) => ScheduleTriggerModel.findByIdForAudit(id, orgId),
   },

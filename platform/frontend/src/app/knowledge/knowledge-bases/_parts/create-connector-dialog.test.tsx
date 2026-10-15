@@ -9,6 +9,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import { connectorSupportsAutoSync } from "./connector-dialog-config";
 import { CreateConnectorDialog } from "./create-connector-dialog";
 
@@ -58,6 +59,7 @@ Element.prototype.releasePointerCapture = vi.fn();
 
 const mockMutateAsync = vi.fn();
 
+vi.mock("@/app/_parts/use-settings-area-access");
 vi.mock("next/navigation");
 
 const mockStartGoogleDriveOAuth = vi.fn();
@@ -142,6 +144,7 @@ async function renderGithubConfigureStep() {
 describe("CreateConnectorDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useSettingsAreaAccess).mockReturnValue(true);
     mockUseFeature.mockImplementation(() => true);
     vi.mocked(useRouter).mockReturnValue({
       push: vi.fn(),
@@ -1393,6 +1396,14 @@ describe("CreateConnectorDialog", () => {
       ).toHaveAttribute("href", "/settings/credentials");
     });
 
+    it("names credential management without linking a reader who cannot open Settings", async () => {
+      vi.mocked(useSettingsAreaAccess).mockReturnValue(false);
+      await renderGithubConfigureStep();
+      expect(screen.getByText("Manage credentials")).toBeVisible();
+      expect(
+        screen.queryByRole("link", { name: /Manage credentials/ }),
+      ).not.toBeInTheDocument();
+    });
     it("moves Google Drive's requirement to the mode picker when one account authorizes", async () => {
       mockUseFeature.mockImplementation((key: string) =>
         key === "kbGoogleDriveOAuth"

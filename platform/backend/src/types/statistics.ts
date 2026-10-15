@@ -484,6 +484,14 @@ export const CostSavingsStatisticsSchema = z.object({
   ),
 });
 
+export const CostStatisticsSchema = z.object({
+  models: z.array(ModelStatisticsSchema),
+  costSavings: CostSavingsStatisticsSchema,
+  /** Active users in the range; self-scoped without member:read. No roster is returned. */
+  activeUsers: z.number(),
+});
+export type CostStatistics = z.infer<typeof CostStatisticsSchema>;
+
 const BaseTimeSeriesDataSchema = z.object({
   timeBucket: z.string(),
   requests: z.number(),

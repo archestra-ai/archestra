@@ -18,6 +18,146 @@ import OrganizationModel from "./organization";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 describe("resource permission policy persistence", () => {
+  test("grant SQL preserves wildcard, object, subject, action and organization boundaries", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const foreign = await makeOrganization();
+    const first = await makeAgent({ organizationId: org.id });
+    const second = await makeAgent({ organizationId: org.id });
+    const wildcardOnly = await makeAgent({ organizationId: org.id });
+    const third = await makeAgent({ organizationId: foreign.id });
+    const subject = { type: "role" as const, id: "query-reader" };
+    const replace = async (params: {
+      organizationId: string;
+      scope: string;
+      grants: ResourcePermissionGrant[];
+    }) => {
+      const key = { ...params, resource: "agent" as const };
+      const policy = await ResourcePermissionPolicyModel.find(key);
+      await ResourcePermissionPolicyModel.replace({
+        ...key,
+        revision: policy?.revision ?? 0,
+      });
+    };
+    await replace({
+      organizationId: org.id,
+      scope: "*",
+      grants: [{ subject, actions: ["read"] }],
+    });
+    await replace({
+      organizationId: org.id,
+      scope: first.id,
+      grants: [{ subject, actions: ["use"] }],
+    });
+    await replace({
+      organizationId: org.id,
+      scope: second.id,
+      grants: [
+        { subject, actions: ["read"] },
+        { subject: { type: "role", id: "another-reader" }, actions: ["use"] },
+      ],
+    });
+    await replace({
+      organizationId: org.id,
+      scope: wildcardOnly.id,
+      grants: [],
+    });
+    await replace({
+      organizationId: foreign.id,
+      scope: third.id,
+      grants: [{ subject, actions: ["use"] }],
+    });
+    const find = async (
+      action: "read" | "use",
+      includeWildcard = true,
+      subjects: PermissionSubject[] = [subject],
+    ) => {
+      const rows = await db
+        .select({ id: schema.agentsTable.id })
+        .from(schema.agentsTable)
+        .where(
+          and(
+            eq(schema.agentsTable.organizationId, org.id),
+            ResourcePermissionPolicyModel.grantCondition({
+              organizationId: org.id,
+              resource: "agent",
+              scopeColumn: schema.agentsTable.id,
+              action,
+              includeWildcard,
+              subjects,
+            }),
+          ),
+        );
+      return rows.map((row) => row.id).sort();
+    };
+    expect(await find("read")).toEqual(
+      [first.id, second.id, wildcardOnly.id].sort(),
+    );
+    expect(await find("read", false)).toEqual([first.id, second.id].sort());
+    expect(await find("use")).toEqual([first.id]);
+    expect(await find("use", false)).toEqual([first.id]);
+    expect(await find("read", true, [])).toEqual([]);
+    await replace({ organizationId: org.id, scope: "*", grants: [] });
+    expect(await find("read")).toEqual([first.id, second.id].sort());
+  });
+
+  test("subject lookup retains only UUID and wildcard scopes belonging to the caller organization", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const foreign = await makeOrganization();
+    const subject = { type: "role" as const, id: "scope-reader" };
+    const valid = "ABCDEF12-3456-7890-ABCD-EF1234567890";
+    const invalid = [
+      "teams:*",
+      "teams:00000000-0000-4000-8000-000000000001",
+      "not-a-uuid",
+      `${valid}0`,
+      `${valid}\n`,
+      "GBCDEF12-3456-7890-ABCD-EF1234567890",
+    ];
+    for (const scope of ["*", valid, ...invalid]) {
+      const key = { organizationId: org.id, resource: "agent" as const, scope };
+      const policy = await ResourcePermissionPolicyModel.find(key);
+      await ResourcePermissionPolicyModel.replace({
+        ...key,
+        revision: policy?.revision ?? 0,
+        grants: [{ subject, actions: ["read"] }],
+      });
+    }
+    await ResourcePermissionPolicyModel.replace({
+      organizationId: foreign.id,
+      resource: "agent",
+      scope: valid,
+      revision: 0,
+      grants: [{ subject, actions: ["read"] }],
+    });
+    expect(
+      (
+        await ResourcePermissionPolicyModel.findForSubjects({
+          organizationId: org.id,
+          subjects: [subject],
+        })
+      )
+        .map((policy) => policy.scope)
+        .sort(),
+    ).toEqual(["*", valid].sort());
+    expect(
+      await ResourcePermissionPolicyModel.findForSubjects({
+        organizationId: org.id,
+        subjects: [],
+      }),
+    ).toEqual([]);
+    expect(
+      await ResourcePermissionPolicyModel.findForSubjects({
+        organizationId: org.id,
+        subjects: [{ type: "role", id: "unrelated-reader" }],
+      }),
+    ).toEqual([]);
+  });
+
   test("batch policy lookup accepts more scopes than the PostgreSQL parameter limit", async ({
     makeOrganization,
   }) => {

@@ -1510,15 +1510,29 @@ describe("getChatMcpTools approval-gated execution idempotency (#5132)", () => {
 
   test("concurrent duplicate executes dispatch once; the loser fails closed without re-dispatching", async () => {
     const { baseParams } = await setupApprovalGatedTool();
-    let releaseGateway = () => {};
+    // The winner's dispatch may reach the gateway either side of the release
+    // signal (pre-dispatch policy evaluation can run past the loser's dedup),
+    // so gate on a flag plus a captured settler rather than assuming the
+    // gateway was entered before release — only the winner ever dispatches.
+    let gatewayReleased = false;
+    let settleWinner: (() => void) | null = null;
+    const releaseGateway = () => {
+      gatewayReleased = true;
+      settleWinner?.();
+    };
     vi.mocked(mcpClient.executeToolCallForOwner).mockImplementation(
       () =>
         new Promise((resolve) => {
-          releaseGateway = () =>
+          const settle = () =>
             resolve({
               content: [{ type: "text", text: "Ticket created: TICKET-1" }],
               isError: false,
             } as never);
+          if (gatewayReleased) {
+            settle();
+          } else {
+            settleWinner = settle;
+          }
         }),
     );
 

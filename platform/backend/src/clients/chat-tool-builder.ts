@@ -412,8 +412,9 @@ export function buildMcpGatewayTool(params: {
               toolInput: toolArguments ?? {},
               organizationId: ctx.organizationId,
               contextIsTrusted,
-              sensitiveContextOrigin:
-                sensitiveContextOriginFromBoundary(unsafeContextBoundary),
+              sensitiveContextOrigin: sensitiveContextOriginFromBoundary(
+                unsafeContextBoundary,
+              ),
               enforceApprovalRequired: false,
             });
             if (policyBlock) {

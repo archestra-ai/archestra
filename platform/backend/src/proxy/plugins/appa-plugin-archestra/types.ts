@@ -148,6 +148,14 @@ export type AppaClientAdapter = {
    */
   readonly pendingServersTool?: string;
   /**
+   * What the person does when this client sends a request without the
+   * gateway's tools: where to see the gateway's state in the client, how to
+   * sign in to it, and whether to resend or start a new session. Shown with a
+   * denial the proxy cannot turn into a remedy. `serverName` is the gateway
+   * as the client lists it.
+   */
+  gatewayToolsHint?(serverName: string): string;
+  /**
    * Reads the trajectory identity the client itself puts on the wire: the id
    * it keeps stable across a resumed or compacted conversation, so a resume
    * reopens the same OpenAPPA root. A fork or an out-of-band summarizer gets a

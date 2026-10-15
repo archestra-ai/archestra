@@ -42,6 +42,8 @@ If a request is refused:
 
 - **"Guardrails do not recognize this client":** unrecognized clients are blocked. [Connect the client](/docs/agents/guardrails/clients#connect-a-client) so that Guardrails check it. Or allow unrecognized clients, which needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
 - **"This runtime is bound to a different session":** another session started the run. Continue it from that session.
+- **"This runtime is bound to a Guardrails session, and this call carried no proof of its source":** the call reached Archestra without the proof the LLM Proxy attaches to a connected client's runtime calls, for example on the first call after Guardrails were turned on. Retry it from the conversation that started the run. If the client is not connected, [connect it](/docs/agents/guardrails/clients#connect-a-client).
+- **"The protected file could not be admitted":** Guardrails held the file's bytes from your session. The ruling after the message says why and names any plan that lets them through.
 
 ## Pass a Credential
 

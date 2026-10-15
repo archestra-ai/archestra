@@ -2,7 +2,7 @@
 title: Claude Desktop
 description: Route Claude Desktop's inference and tools through Archestra
 order: 2
-lastUpdated: 2026-10-13
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -19,7 +19,7 @@ MCP sign-in requires HTTPS, including local deployments. Use a trusted local HTT
 
 Connecting the LLM Proxy switches Desktop to third-party inference mode. That mode keeps its own conversation history, so your Claude.ai conversations do not appear there at first. See [Import Conversations](#import-conversations) to bring them over, and [Revert](#revert) before switching. Tools-only setup does not require third-party inference.
 
-Open **Connect** and select **Claude Desktop**. To pick another gateway, model, or platform, click **Change** on its line. The platform defaults to your detected operating system. Finish active Desktop tasks before installing. Download the installer and open the `.mcpb` file in normal Claude Desktop. Confirm installation in Desktop’s native dialog. The setup helper opens your browser for sign-in and restart confirmation. You can remove the helper from Desktop’s Extensions settings afterward.
+Open **Connect** and select **Claude Desktop**. To pick another gateway, model, or platform, click **Change** on its line. The platform defaults to your detected operating system. Finish active Desktop tasks before installing. Click **Prepare installer**, then **Download installer**, and open the `.mcpb` file in normal Claude Desktop. Confirm installation in Desktop’s native dialog. The setup helper opens your browser for sign-in and restart confirmation. You can remove the helper from Desktop’s Extensions settings afterward.
 
 The **Advanced: terminal setup** option requires Python 3.9+ and Claude Code for subscription sign-in. It remains available for existing third-party profiles that cannot install Desktop extensions.
 

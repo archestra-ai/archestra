@@ -935,27 +935,9 @@ export default class ResourcePermissionPolicyModel {
     return rows.map((row) => row.scope).filter((scope) => scope !== "*");
   }
 
-  /**
-   * Whether the object in `scopeColumn` has a policy that grants read to the
-   * team in `teamColumn`. The join condition that replaces joining through a
-   * retired team assignment table.
-   */
-  static grantsReadToTeamColumn(params: {
-    organizationId: SQLWrapper;
-    resource: ScopedResource | SQLWrapper;
-    scopeColumn: SQLWrapper;
-    teamColumn: SQLWrapper;
-  }) {
-    return sql<boolean>`EXISTS (
-      SELECT 1 FROM resource_permission_policies team_policy,
-        jsonb_array_elements(team_policy.grants) team_entry
-      WHERE team_policy.organization_id = ${params.organizationId}
-        AND team_policy.resource = ${params.resource}
-        AND team_policy.scope = ${params.scopeColumn}::text
-        AND (team_entry->'actions') ? 'read'
-        AND team_entry->'subject'->>'type' = 'team'
-        AND team_entry->'subject'->>'id' = ${params.teamColumn}::text
-    )`;
+  /** The direct team-read grant predicate shared by team attribution queries. */
+  static teamReadGrantCondition(entry: SQLWrapper) {
+    return sql`(${entry}->'actions') ? 'read' AND ${entry}->'subject'->>'type' = 'team'`;
   }
 
   /**

@@ -1,4 +1,12 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { archestraApiSdk } from "@archestra/shared";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock ResizeObserver which is used by Radix UI components
@@ -63,9 +71,25 @@ vi.mock("@/lib/chat/chat.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/agent-runtime.query", () => ({
-  useMyAgentRuns: mockUseMyAgentRuns,
-}));
+let useRealRunsQuery = false;
+vi.mock("@archestra/shared", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@archestra/shared")>();
+  return {
+    ...actual,
+    archestraApiSdk: { ...actual.archestraApiSdk, getMyAgentRuns: vi.fn() },
+  };
+});
+vi.mock("@/lib/agent-runtime.query", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/agent-runtime.query")>();
+  return {
+    useMyAgentRuns: (...args: Parameters<typeof actual.useMyAgentRuns>) =>
+      useRealRunsQuery
+        ? // biome-ignore lint/correctness/useHookAtTopLevel: Test implementation is selected before mounting.
+          actual.useMyAgentRuns(...args)
+        : mockUseMyAgentRuns(...args),
+  };
+});
 
 vi.mock("@/lib/agent.query", () => ({
   useAgentOptions: mockUseAgentOptions,
@@ -222,6 +246,7 @@ describe("ConversationSearchPalette", () => {
       isLoading: false,
       isFetching: false,
     });
+    useRealRunsQuery = false;
     mockUseMyAgentRuns.mockReturnValue({
       data: [],
       isLoading: false,
@@ -373,6 +398,63 @@ describe("ConversationSearchPalette", () => {
     expect(screen.getByLabelText("Encrypted chat")).toBeInTheDocument();
     // The lock replaces the chat-bubble glyph rather than sitting next to it.
     expect(row.querySelector(".lucide-message-circle")).toBeNull();
+  });
+
+  it("loads more matching runs during search without a misleading browse paging action", async () => {
+    useRealRunsQuery = true;
+    vi.mocked(useFeature).mockImplementation(
+      (feature) => feature === "agentRuntime",
+    );
+    const makeRun = (taskId: string, title: string) => ({
+      taskId,
+      title,
+      state: "TASK_STATE_COMPLETED",
+      startedAt: "2020-01-01T00:00:00Z",
+      stateChangedAt: "2020-01-01T00:00:00Z",
+      endedAt: "2020-01-01T00:00:00Z",
+    });
+    vi.mocked(archestraApiSdk.getMyAgentRuns).mockImplementation(
+      async ({ query } = {}) =>
+        ({
+          data: {
+            data: query?.pinned
+              ? []
+              : [
+                  query?.offset
+                    ? makeRun("older", "Report older")
+                    : makeRun("current", "Report current"),
+                ],
+            pagination: { hasNext: !query?.pinned && !query?.offset },
+          },
+          error: undefined,
+        }) as never,
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConversationSearchPalette {...defaultProps} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByText("Report current")).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("More runs")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByTestId("command-input"), {
+      target: { value: "Report" },
+    });
+    await waitFor(() =>
+      expect(screen.getByText("More runs")).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("Report older")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("More runs"));
+    await waitFor(() =>
+      expect(screen.getByText("Report older")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByText("Report older"));
+    expect(mockRouterPush).toHaveBeenCalledWith("/chat/runs/older");
+    queryClient.clear();
   });
 
   it("lists Agent Runtime sessions in the browse view and opens one", () => {

@@ -151,6 +151,7 @@ async function makeGuardHome(params: {
   await writeFile(
     curlStub,
     `#!/bin/sh
+printf '%s\\n' "$*" >> "$HOME/curl-calls.log"
 case "$*" in *" -o "*) exit ${params.curlExitCode};; esac
 printf '%s' '${params.curlBody ?? '{"mcp":"ok","llm":"ok"}'}'
 exit ${params.curlExitCode}
@@ -179,6 +180,7 @@ exit 0
     env: {
       ...process.env,
       HOME: home,
+      CLAUDE_CONFIG_DIR: "",
       PATH: `${bin}:${process.env.PATH}`,
     } as Record<string, string>,
   };
@@ -213,7 +215,7 @@ async function runGuardNonInteractive(params: {
  * the input queue until the guard reads it — during the retry ladder or at
  * the combined down prompt.
  */
-const PTY_DRIVER = `import os, pty, select, sys
+const PTY_DRIVER = `import os, pty, select, sys, time
 guard = sys.argv[1]
 keys = sys.argv[2]
 pid, master = os.forkpty()
@@ -222,6 +224,7 @@ if pid == 0:
 if keys:
     os.write(master, keys.encode())
 out = b""
+notice_seen = None
 while True:
     try:
         r, _, _ = select.select([master], [], [], 30)
@@ -237,8 +240,20 @@ while True:
     if not chunk:
         break
     out += chunk
-os.waitpid(pid, 0)
+    if notice_seen is None and b"Continuing in 6 seconds" in out:
+        notice_seen = time.monotonic()
+        if len(sys.argv) > 3 and sys.argv[3] == "dismiss-notice":
+            os.write(master, b"x")
+_, status = os.waitpid(pid, 0)
 sys.stdout.buffer.write(out)
+if len(sys.argv) > 3 and sys.argv[3] == "check-notice":
+    assert notice_seen is not None, "update notice missing"
+    assert time.monotonic() - notice_seen >= 0.8, "type-ahead dismissed unread update steps"
+    assert os.waitstatus_to_exitcode(status) == 0, "guard did not exit successfully"
+if len(sys.argv) > 3 and sys.argv[3] == "dismiss-notice":
+    assert notice_seen is not None, "update notice missing"
+    assert time.monotonic() - notice_seen < 3, "fresh key did not dismiss the update notice"
+    assert os.waitstatus_to_exitcode(status) == 0, "guard did not exit successfully"
 `;
 
 async function runGuardInteractive(params: {
@@ -247,13 +262,24 @@ async function runGuardInteractive(params: {
   curlBody?: string;
   skipFileContent?: string;
   keys: string;
+  checkNoticeDuration?: boolean;
+  dismissNotice?: boolean;
 }): Promise<{ output: string; guardHome: GuardHome }> {
   const guardHome = await makeGuardHome(params);
   const driver = path.join(guardHome.dir, "pty.py");
   await writeFile(driver, PTY_DRIVER, "utf8");
   const { stdout } = await execFileAsync(
     "python3",
-    [driver, guardHome.guardFile, params.keys],
+    [
+      driver,
+      guardHome.guardFile,
+      params.keys,
+      params.dismissNotice
+        ? "dismiss-notice"
+        : params.checkNoticeDuration
+          ? "check-notice"
+          : "",
+    ],
     { env: guardHome.env, timeout: 60_000 },
   );
   return { output: stdout, guardHome };
@@ -380,8 +406,8 @@ describe("renderStartupGuardScript", () => {
     expect(script).toContain("version_is_stale");
     expect(script).toContain(`'"guardVersion":'`);
     expect(script).toContain('-gt "$GUARD_FORMAT_VERSION"');
-    // interactive offers a timed, non-blocking [U] that prints the re-run steps
-    expect(script).toContain("[U]");
+    // Interactive runs show the steps without another keypress.
+    expect(script).not.toContain("[U]");
     expect(script).toContain("/connection page and pick");
     expect(script).toContain('read -rs -n 1 -t "$RECONFIG_WAIT" key');
   });
@@ -685,7 +711,7 @@ describe("renderStartupGuardScript", () => {
   test("non-interactive run nudges an update only when the instance reports a strictly newer guard version", async () => {
     // Remotes healthy; the instance reports a guard format one past the one
     // this guard was stamped with.
-    const { stdout, stderr } = await runGuardNonInteractive({
+    const { stdout, stderr, guardHome } = await runGuardNonInteractive({
       script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
       curlExitCode: 0,
       curlBody: `{"mcp":"ok","llm":"ok","guardVersion":${STARTUP_GUARD_FORMAT_VERSION + 1}}`,
@@ -693,6 +719,11 @@ describe("renderStartupGuardScript", () => {
     expect(stdout).toBe("");
     expect(stderr).toContain("a newer Archestra setup for claude is available");
     expect(stderr).toContain("/connection");
+    expect(
+      (await readFile(path.join(guardHome.home, "curl-calls.log"), "utf8"))
+        .trim()
+        .split("\n"),
+    ).toHaveLength(1);
   });
 
   test("non-interactive run stays silent when the instance reports the same guard version", async () => {
@@ -881,7 +912,7 @@ describe("renderStartupGuardScript", () => {
     expect(existsSync(guardHome.guardFile)).toBe(true);
   });
 
-  test("interactive, all healthy but the instance reports a newer guard version: shows the advisory and the [U] offer", async () => {
+  test("interactive, all healthy but the instance reports a newer guard version: automatically shows the reason and update steps", async () => {
     const { output, guardHome } = await runGuardInteractive({
       script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
       curlExitCode: 0,
@@ -889,21 +920,29 @@ describe("renderStartupGuardScript", () => {
       keys: "",
     });
     expect(output).toContain("a newer Archestra setup is available");
-    expect(output).toContain("[U]");
-    // the steps are only shown once [U] is pressed
-    expect(output).not.toContain("/connection page and pick");
+    expect(output).toContain(
+      "Your installed startup check is older than this deployment.",
+    );
+    expect(output).toContain("/connection page and pick Claude Code");
+    expect(output).not.toContain("[U]");
     // purely advisory: nothing disconnected, guard stays installed
     expect(output).not.toContain("Disconnected");
     expect(existsSync(guardHome.guardFile)).toBe(true);
     expect(existsSync(guardHome.skipFile)).toBe(false);
   });
 
-  test("interactive, stale: pressing [U] prints the /connection re-run steps and still launches", async () => {
+  test.each([
+    "u",
+    "U",
+    "uu",
+    "UU",
+  ])("interactive, stale: an early %s cannot hide the automatic update steps", async (key) => {
     const { output, guardHome } = await runGuardInteractive({
       script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
       curlExitCode: 0,
       curlBody: `{"mcp":"ok","llm":"ok","guardVersion":${STARTUP_GUARD_FORMAT_VERSION + 1}}`,
-      keys: "U",
+      keys: key,
+      checkNoticeDuration: true,
     });
     expect(output).toContain(
       "To update, re-run the Archestra connection setup",
@@ -914,6 +953,57 @@ describe("renderStartupGuardScript", () => {
     expect(output).not.toContain("Disconnected");
     expect(existsSync(guardHome.guardFile)).toBe(true);
     expect(existsSync(guardHome.skipFile)).toBe(false);
+  });
+
+  test("interactive, stale: a fresh key dismisses the automatic notice", async () => {
+    await runGuardInteractive({
+      script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT).replace(
+        "-t 6 key",
+        "-t 4 key",
+      ),
+      curlExitCode: 0,
+      curlBody: `{"mcp":"ok","llm":"ok","guardVersion":${STARTUP_GUARD_FORMAT_VERSION + 1}}`,
+      keys: "",
+      dismissNotice: true,
+    });
+  });
+
+  test.each([
+    "c",
+    "C",
+  ])("interactive, stale: %s opens reconfigure and still shows the update steps after leaving", async (key) => {
+    const { output, guardHome } = await runGuardInteractive({
+      script: renderStartupGuardScript(CTX, CLAUDE_CODE_GUARD_CLIENT),
+      curlExitCode: 0,
+      curlBody: `{"mcp":"ok","llm":"ok","guardVersion":${STARTUP_GUARD_FORMAT_VERSION + 1}}`,
+      keys: `${key}\r`,
+      checkNoticeDuration: true,
+    });
+    expect(output).toContain("/connection page and pick Claude Code");
+    expect(output).not.toContain("Disconnected");
+    expect(existsSync(guardHome.skipFile)).toBe(false);
+  });
+
+  test.each([
+    "Archestra",
+    "Archestra Staging",
+    "Acme AI",
+  ])("interactive branding: %s only draws its own brand", async (appName) => {
+    const { output } = await runGuardInteractive({
+      script: renderStartupGuardScript(
+        { ...CTX, appName },
+        CLAUDE_CODE_GUARD_CLIENT,
+      ),
+      curlExitCode: 0,
+      curlBody: `{"mcp":"ok","llm":"ok","guardVersion":${STARTUP_GUARD_FORMAT_VERSION}}`,
+      keys: "",
+    });
+    expect(output).toContain(appName);
+    expect(output.includes("⣾⣿⣿⣿⣿⣷")).toBe(appName !== "Acme AI");
+    expect(output.includes("Secure access to your AI tools")).toBe(
+      appName !== "Acme AI",
+    );
+    expect(output).not.toContain("Update available");
   });
 
   test("interactive, disconnecting the last remote uninstalls the guard: no update nag for a guard that's gone", async () => {

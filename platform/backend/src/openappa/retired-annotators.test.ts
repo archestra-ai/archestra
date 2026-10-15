@@ -18,6 +18,9 @@ vi.mock("@/logging");
 describe("annotators earlier opening policies declare", () => {
   beforeEach(() => {
     config.openappa.enabled = true;
+    // Retention itself is under test: a stored opening keeps its names
+    // whatever its conversations last did (kept-liveness.test.ts covers that).
+    config.openappa.keptAnnotatorHorizonDays = 0;
     vi.mocked(logger.warn).mockClear();
     vi.mocked(logger.error).mockClear();
   });
@@ -554,6 +557,10 @@ version = 2
 [[policy.annotator]]
 name = "x.judge"
 builtin = "no-such-builtin"
+
+[[policy.tool]]
+name = "mcp/x/tool"
+annotator = "x.judge"
 `);
 
     await declare({ organizationId, userId, content: urlJudged("b", JUDGE_B) });

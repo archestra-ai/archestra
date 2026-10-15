@@ -1049,6 +1049,39 @@ pub async fn read_openappa_opening_policy(root: String) -> napi::Result<Option<S
     .map_err(error)?
 }
 
+/// The policy file key each root's first stored batch names, in the order given:
+/// none for a batch that does not open a root this build can read. The host reads
+/// the batches; only this decoding knows how the runtime encodes them.
+#[napi(js_name = "openappaOpeningKeys")]
+pub fn openappa_opening_keys(batches: Vec<napi::bindgen_prelude::Buffer>) -> Vec<Option<String>> {
+    batches
+        .iter()
+        .map(|batch| opening_policy_file_key(batch))
+        .collect()
+}
+
+/// The policy file key a root's first batch names, read the way the event log
+/// encodes it: a bare array of facts, or a host record holding `facts`, whose
+/// first fact is `TrajectoryOpened`. None for anything else.
+fn opening_policy_file_key(payload: &[u8]) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_slice(payload).ok()?;
+    let facts = match &value {
+        serde_json::Value::Array(_) => &value,
+        serde_json::Value::Object(row) => row.get("facts")?,
+        _ => return None,
+    };
+    let key = facts
+        .get(0)?
+        .get("TrajectoryOpened")?
+        .get("policy_file_key")?
+        .as_str()?;
+    (key.len() == 64
+        && key
+            .bytes()
+            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f')))
+    .then(|| key.to_owned())
+}
+
 /// Read the current label of a started session without mutating its trajectory.
 #[napi(js_name = "getOpenappaStatus")]
 pub async fn get_openappa_status(
@@ -4815,5 +4848,50 @@ mod stored_approved_output_tests {
             stored_approved_output(&long, &decision("another text")),
             long
         );
+    }
+}
+
+#[cfg(test)]
+mod opening_key_tests {
+    use super::opening_policy_file_key;
+
+    const KEY: &str = "9f2c0a5b1e7d4c3a8b6f0e1d2c3b4a5968778695a4b3c2d1e0f9a8b7c6d5e4f3";
+
+    #[test]
+    fn reads_the_key_from_a_bare_batch_and_from_a_host_record() {
+        let opened =
+            format!(r#"{{"TrajectoryOpened":{{"trajectory":"r","policy_file_key":"{KEY}"}}}}"#);
+        assert_eq!(
+            opening_policy_file_key(format!("[{opened}]").as_bytes()).as_deref(),
+            Some(KEY)
+        );
+        assert_eq!(
+            opening_policy_file_key(format!(r#"{{"facts":[{opened}],"host":{{}}}}"#).as_bytes())
+                .as_deref(),
+            Some(KEY)
+        );
+    }
+
+    #[test]
+    fn answers_no_key_for_anything_that_does_not_open_a_root() {
+        for payload in [
+            "".to_string(),
+            "[".to_string(),
+            "\"not a batch\"".to_string(),
+            "[]".to_string(),
+            r#"[{"CallRecorded":{}}]"#.to_string(),
+            r#"[{"TrajectoryOpened":{"policy_file_key":"ABCDEF"}}]"#.to_string(),
+            format!(
+                r#"[{{"TrajectoryOpened":{{"policy_file_key":"{}"}}}}]"#,
+                KEY.to_uppercase()
+            ),
+            r#"{"host":{}}"#.to_string(),
+        ] {
+            assert_eq!(
+                opening_policy_file_key(payload.as_bytes()),
+                None,
+                "{payload}"
+            );
+        }
     }
 }

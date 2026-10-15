@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -230,6 +230,95 @@ describe("McpCatalogForm enterprise gating", () => {
       "aria-pressed",
       "true",
     );
+  });
+
+  it("shows a details-only editor what describes the server, not what it connects to", async () => {
+    render(
+      <McpCatalogForm
+        mode="edit"
+        onSubmit={vi.fn()}
+        detailsOnly
+        initialValues={
+          {
+            id: "catalog-1",
+            name: "Remote MCP",
+            description: "",
+            icon: null,
+            serverType: "remote",
+            serverUrl: "https://mcp.example.com",
+            oauthConfig: null,
+            userConfig: {},
+            enterpriseManagedConfig: null,
+            localConfig: null,
+            deploymentSpecYaml: null,
+            labels: [],
+          } as never
+        }
+      />,
+    );
+
+    expect(screen.getByLabelText(/^Name/)).toBeInTheDocument();
+    // The connection stays in the form, so its checks are unchanged; it is
+    // just not shown.
+    expect(
+      screen.getByRole("heading", { name: "Connection" }).closest("section"),
+    ).toHaveClass("hidden");
+    await userEvent.click(screen.getByRole("button", { name: /^Advanced/ }));
+    expect(
+      screen.getByRole("heading", { name: "Environment" }).closest("section"),
+    ).toHaveClass("hidden");
+    expect(
+      screen.getByRole("heading", { name: "Labels" }).closest("section"),
+    ).not.toHaveClass("hidden");
+  });
+
+  it("saves a details-only description change without offering a restart", async () => {
+    const onSubmit = vi.fn();
+    const localItem = {
+      id: "catalog-1",
+      name: "notes",
+      description: "",
+      icon: null,
+      serverType: "local",
+      serverUrl: null,
+      oauthConfig: null,
+      userConfig: {},
+      enterpriseManagedConfig: null,
+      localConfig: {
+        dockerImage: "ghcr.io/acme/notes:1",
+        command: "node",
+        arguments: ["cli.js", "--headless"],
+        transportType: "stdio",
+        environment: [
+          {
+            key: "MODE",
+            type: "plain_text",
+            value: "fast",
+            promptOnInstallation: false,
+          },
+        ],
+      },
+      deploymentSpecYaml: null,
+      labels: [],
+    } as never;
+    render(
+      <McpCatalogForm
+        mode="edit"
+        onSubmit={onSubmit}
+        detailsOnly
+        affectedServerCount={1}
+        initialValues={localItem}
+        footer={() => <button type="submit">Save</button>}
+      />,
+    );
+
+    await userEvent.type(screen.getByLabelText(/^Description/), "Mine");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(
+      screen.queryByRole("button", { name: /Save and restart/ }),
+    ).toBeNull();
   });
 
   it("disables browser autofill for MCP config forms and secret fields", () => {

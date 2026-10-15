@@ -1,8 +1,10 @@
 import type { IncomingMessage } from "node:http";
 import { PassThrough } from "node:stream";
-import type {
-  ClientWebSocketMessage,
-  McpDeploymentStatusEntry,
+import {
+  type ClientWebSocketMessage,
+  EDITOR_ROLE_NAME,
+  type McpDeploymentStatusEntry,
+  MEMBER_ROLE_NAME,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 // SPDX-SnippetBegin
@@ -2860,6 +2862,87 @@ describe("websocket MCP exec", () => {
       }),
     );
     expect(service.mcpExecSubscriptions.has(ws)).toBe(false);
+  });
+
+  test("refuses a shell to a member and opens one for an editor", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+  }) => {
+    const org = await makeOrganization();
+    const member = await makeUser();
+    await makeMember(member.id, org.id, { role: MEMBER_ROLE_NAME });
+    const editor = await makeUser();
+    await makeMember(editor.id, org.id, { role: EDITOR_ROLE_NAME });
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    // Both can see these installations; only the right to manage
+    // installations opens a shell in one.
+    const memberServer = await makeMcpServer({
+      scope: "org",
+      catalogId: catalog.id,
+      ownerId: member.id,
+    });
+    const editorServer = await makeMcpServer({
+      scope: "org",
+      catalogId: catalog.id,
+      ownerId: editor.id,
+    });
+    const execIntoMcpServer = vi
+      .spyOn(McpServerRuntimeManager, "execIntoMcpServer")
+      .mockResolvedValue({
+        k8sWs: makeMockK8sWs(),
+        podName: "mcp-test-pod-abc123",
+      });
+    vi.spyOn(McpServerRuntimeManager, "getExecCommand").mockReturnValue(
+      "kubectl exec -it ...",
+    );
+    const connect = (userId: string) => {
+      const ws = {
+        readyState: WS.OPEN,
+        send: vi.fn(),
+        close: vi.fn(),
+        on: vi.fn(),
+      } as unknown as WS;
+      service.clientContexts.set(ws, {
+        userId,
+        organizationId: org.id,
+        userIsMcpServerAdmin: false,
+      });
+      return ws;
+    };
+    const sent = (ws: WS) =>
+      (ws.send as ReturnType<typeof vi.fn>).mock.calls.map((call) =>
+        JSON.parse(call[0] as string),
+      );
+
+    const memberWs = connect(member.id);
+    await service.handleMessage(
+      { type: "subscribe_mcp_exec", payload: { serverId: memberServer.id } },
+      memberWs,
+    );
+    expect(sent(memberWs)).toEqual([
+      {
+        type: "mcp_exec_error",
+        payload: {
+          serverId: memberServer.id,
+          error: "Opening a shell needs permission to manage MCP servers.",
+        },
+      },
+    ]);
+    expect(service.mcpExecSubscriptions.has(memberWs)).toBe(false);
+    expect(execIntoMcpServer).not.toHaveBeenCalled();
+
+    const editorWs = connect(editor.id);
+    await service.handleMessage(
+      { type: "subscribe_mcp_exec", payload: { serverId: editorServer.id } },
+      editorWs,
+    );
+    expect(sent(editorWs)).toContainEqual(
+      expect.objectContaining({ type: "mcp_exec_started" }),
+    );
+    expect(service.mcpExecSubscriptions.has(editorWs)).toBe(true);
   });
 
   test("allows MCP server admin to exec and creates subscription", async ({

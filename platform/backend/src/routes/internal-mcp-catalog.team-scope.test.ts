@@ -129,6 +129,7 @@ describe("internal MCP catalog — team-scope RBAC", () => {
       const teammate = await makeUser();
       await makeMember(teammate.id, organizationId, { role: MEMBER_ROLE_NAME });
       const team = await makeTeam(organizationId, author.id);
+      await makeTeamMember(team.id, author.id);
       await makeTeamMember(team.id, teammate.id);
 
       currentUser = author;
@@ -150,20 +151,30 @@ describe("internal MCP catalog — team-scope RBAC", () => {
     });
   }
 
-  test("an author may share with a team they neither belong to nor administer", async ({
+  test("an author shares with a team only once they belong to it", async ({
     makeUser,
     makeMember,
     makeTeam,
+    makeTeamMember,
   }) => {
-    // Team membership used to bound whom an editor could share with. Grants
-    // are bounded by what the caller holds on the item instead: an author
-    // holds Full access, so any team in the organization is a valid recipient.
+    // Full access on one item does not reach every team: adding each of them
+    // would make the item close to org-wide, which takes Full access on every
+    // entry. Someone who manages only this item shares it with their teams.
     const editor = await makeUser();
     await makeMember(editor.id, organizationId, { role: EDITOR_ROLE_NAME });
     const otherTeam = await makeTeam(organizationId, editor.id); // not a member
 
     currentUser = editor;
     const created = await post(remotePayload());
+    const refused = await share(created.json().id, [
+      { subject: { type: "team", id: otherTeam.id }, actions: USE },
+    ]);
+    expect(refused.statusCode, refused.body).toBe(403);
+    expect(refused.json().error.message).toBe(
+      "Only someone with Full access to every MCP registry entry can share it with a team they are not in.",
+    );
+
+    await makeTeamMember(otherTeam.id, editor.id);
     const shared = await share(created.json().id, [
       { subject: { type: "team", id: otherTeam.id }, actions: USE },
     ]);
@@ -440,6 +451,7 @@ describe("internal MCP catalog — team-scope RBAC", () => {
     const teammate = await makeUser();
     await makeMember(teammate.id, organizationId, { role: MEMBER_ROLE_NAME });
     const team = await makeTeam(organizationId, editor.id);
+    await makeTeamMember(team.id, editor.id);
     await makeTeamMember(team.id, teammate.id);
 
     currentUser = editor;

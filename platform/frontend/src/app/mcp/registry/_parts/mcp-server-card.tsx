@@ -319,18 +319,26 @@ export function McpServerCard({
   const isInstalledForViewer =
     isMcpServerInstalledForViewer(allServersForCatalog);
 
+  // A member's Usage would list only their own agents, so the server page
+  // drops it for them; the card's summary of it and its link go too.
+  const { data: showsAgentUsage } = useHasPermissions({
+    mcpServerInstallation: ["update"],
+  });
   // The distinct agents that can reach this catalog item, across every install
   // of it — the audience affected if those installs go away. Shared with the
   // detail page's Usage tab so both surfaces count the same way.
-  const { data: autoModeAgents } = useAutoModeAgents();
+  const { data: autoModeAgents } = useAutoModeAgents({
+    enabled: !!showsAgentUsage,
+  });
   const {
     assigned: assignedAgents,
     autoOnly: autoModeOnlyAgents,
-    total: totalAgentCount,
+    total: usageTotal,
   } = deriveAgentUsage({
     serversForCatalog: allServersForCatalog,
     autoModeAgents,
   });
+  const totalAgentCount = showsAgentUsage ? usageTotal : 0;
 
   // The most recent personal install for this catalog item, if any.
   const uninstallInstalls: UninstallServerInstall[] = (() => {

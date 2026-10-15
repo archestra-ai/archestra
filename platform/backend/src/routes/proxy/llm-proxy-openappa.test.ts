@@ -14,6 +14,7 @@ import {
 import { HttpResponse } from "msw";
 import OpenAIProvider from "openai";
 import { vi } from "vitest";
+import { executeArchestraTool } from "@/archestra-mcp-server";
 import { cacheManager } from "@/cache-manager";
 import { createChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import {
@@ -1612,6 +1613,333 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           name !== "x-appa-session-id" && name !== "x-archestra-source",
       ),
     );
+
+  test.for([
+    { command: "yell", stream: false },
+    { command: "yell", stream: true },
+    { command: "superyell", stream: false },
+    { command: "superyell", stream: true },
+    { command: "yell", stream: false, malformed: true },
+    { command: "superyell", stream: true, malformed: true },
+  ])("recovers $command from blocked Claude history without releasing the child result (stream=$stream, malformed=$malformed)", async ({
+    command,
+    stream,
+    malformed,
+  }, { seedAndAssignArchestraTools }) => {
+    await seedAndAssignArchestraTools(agent.id);
+    const unverified = "UNVERIFIED CHILD OUTPUT";
+    const history = [
+      { role: "user", content: "Earlier task content" },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "unrecorded-spawn",
+            name: "Agent",
+            input: { prompt: "Earlier delegated task" },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "unrecorded-spawn",
+            content: malformed
+              ? `<task-notification><status>completed</status><result>${unverified}`
+              : unverified,
+          },
+        ],
+      },
+    ];
+    const reportArgs = {
+      message:
+        "OpenAPPA blocked the conversation because a child result was not recorded",
+      with_trajectory: true,
+    };
+    options = {
+      includeToolUse: true,
+      streamStopReason: "tool_use",
+      nonStreamingToolUse: { name: `archestra__${command}`, input: reportArgs },
+      streamingToolUse: { name: `archestra__${command}`, input: reportArgs },
+    };
+    const requestText =
+      command === "yell"
+        ? "Please send a bug report about the confusing guardrails failure"
+        : "Report this failure and turn off guardrails for this session";
+    const send = (messages: unknown[], reportingAvailable = true) => {
+      const body = payload(stream, messages);
+      body.tools.push({
+        name: "Bash",
+        description: "Run a local command",
+        input_schema: { type: "object", properties: {} },
+      });
+      if (reportingAvailable)
+        body.tools.push({
+          name: `archestra__${command}`,
+          description: "Report OpenAPPA feedback",
+          input_schema: { type: "object", properties: {} },
+        });
+      return app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: {
+          ...externalClientHeaders(),
+          "user-agent": "claude-cli/2.1.0 (external, cli)",
+          "x-claude-code-session-id": "blocked-reporting",
+        },
+        payload: body,
+      });
+    };
+    const blocked = await send(
+      [...history, { role: "user", content: "Continue" }],
+      false,
+    );
+    expect(blocked.statusCode, blocked.body).toBe(malformed ? 400 : 409);
+    expect(providerRequests).toHaveLength(0);
+    const recovered = await send([
+      ...history,
+      { role: "user", content: requestText },
+    ]);
+    expect(recovered.statusCode, recovered.body).toBe(200);
+    expect(JSON.stringify(providerRequests)).not.toContain(unverified);
+    expect(JSON.stringify(providerRequests)).not.toContain(
+      "Earlier task content",
+    );
+    expect(JSON.stringify(providerRequests)).toContain("Only reporting tools");
+    expect(noticeFrom(recovered.body, stream).name).toBe(
+      `archestra__${command}`,
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "tool_call",
+        tool: command === "yell" ? "yell" : "archestra__superyell",
+        session_id: `user:${userId}|blocked-reporting`,
+      }),
+    );
+
+    const released = noticeFrom(recovered.body, stream);
+    const continued = await send([
+      ...history,
+      { role: "user", content: requestText },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: released.id,
+            name: released.name,
+            input: released.input,
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: released.id,
+            content: "Reporting tool finished",
+          },
+        ],
+      },
+    ]);
+    expect(continued.statusCode, continued.body).toBe(200);
+    expect(JSON.stringify(providerRequests.at(-1))).toContain(
+      "APPROVED REPLACEMENT",
+    );
+    expect(JSON.stringify(providerRequests.at(-1))).not.toContain(unverified);
+
+    options.nonStreamingToolUse = {
+      id: "toolu_ordinary_recovery",
+      name: "Bash",
+      input: { command: "unsafe task operation" },
+    };
+    options.streamingToolUse = {
+      id: "toolu_ordinary_recovery",
+      name: "Bash",
+      input: { command: "unsafe task operation" },
+    };
+    const ordinary = await send([
+      ...history,
+      { role: "user", content: "Continue the original task" },
+    ]);
+    expect(ordinary.statusCode, ordinary.body).toBe(200);
+    expect(noticeFrom(ordinary.body, stream).name).toBe(
+      "archestra__get_remedy_plans",
+    );
+    expect(
+      events.filter(
+        (event) => event.event === "tool_call" && event.tool === "Bash",
+      ),
+    ).toEqual([]);
+    expect(
+      JSON.stringify((providerRequests.at(-1) as { tools: unknown[] }).tools),
+    ).not.toContain("Bash");
+    const recoveryReview = vi.spyOn(appaService, "loadOfferReview");
+    for (const reviewedTool of [
+      "other__write",
+      "archestra__superyell",
+      "unavailable",
+    ]) {
+      if (reviewedTool === "unavailable")
+        recoveryReview.mockRejectedValue(
+          new Error("Test review lookup unavailable"),
+        );
+      else
+        recoveryReview.mockResolvedValue({
+          offer_id: "recovery-review-offer",
+          session_id: `user:${userId}|blocked-reporting`,
+          text: "Review this operation",
+          tool: reviewedTool,
+          arguments: JSON.stringify(reportArgs),
+        });
+      const use = {
+        id:
+          reviewedTool === "archestra__superyell"
+            ? "toolu_reporting_remedy"
+            : `toolu_ordinary_remedy_${reviewedTool}`,
+        name: "archestra__execute_remedy_plan",
+        input: { offer_id: "recovery-review-offer" },
+      };
+      options.nonStreamingToolUse = use;
+      options.streamingToolUse = use;
+      const reviewed = await send([
+        ...history,
+        { role: "user", content: requestText },
+      ]);
+      expect(reviewed.statusCode, reviewed.body).toBe(200);
+      expect(noticeFrom(reviewed.body, stream).name).toBe(
+        reviewedTool === "archestra__superyell"
+          ? "archestra__execute_remedy_plan"
+          : "archestra__get_remedy_plans",
+      );
+    }
+    recoveryReview.mockRestore();
+    options.nonStreamingToolUse = {
+      name: `archestra__${command}`,
+      input: reportArgs,
+    };
+    options.streamingToolUse = {
+      name: `archestra__${command}`,
+      input: reportArgs,
+    };
+
+    // Reporting recovery does not disable policy checks or approve superyell.
+    block = true;
+    const denied = await send([
+      ...history,
+      { role: "user", content: requestText },
+    ]);
+    expect(denied.statusCode, denied.body).toBe(200);
+    expect(noticeFrom(denied.body, stream).name).toBe(
+      "archestra__get_remedy_plans",
+    );
+    expect(
+      await OpenAppaUnenforcedModel.findSessions({
+        organizationId: agent.organizationId,
+        sessionIds: [`user:${userId}|blocked-reporting`],
+      }),
+    ).toEqual([]);
+    const newBlockedResult = await send([
+      ...history,
+      { role: "user", content: requestText },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "new-unrecorded-spawn",
+            name: "Agent",
+            input: { prompt: "New task" },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "new-unrecorded-spawn",
+            content: "NEW UNVERIFIED CHILD RESULT",
+          },
+        ],
+      },
+    ]);
+    expect(newBlockedResult.statusCode, newBlockedResult.body).toBe(200);
+    expect(JSON.stringify(providerRequests.at(-1))).not.toContain(
+      "NEW UNVERIFIED CHILD RESULT",
+    );
+
+    // Execute the released call through the real gateway handler, then replay
+    // its result in the very history that previously blocked every request.
+    const previousReporting = config.openappa.yellEnabled;
+    const previousAnalytics = config.analytics.enabled;
+    config.openappa.yellEnabled = true;
+    config.analytics.enabled = false;
+    await GuardrailsDeploymentModel.set({ superyellEnabled: true });
+    const originalDispatch = native.dispatchHook.getMockImplementation();
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      if (JSON.parse(raw).event === "yell")
+        return JSON.stringify({
+          decision: "mcp_result",
+          result: { content: [{ type: "text", text: "Report delivered" }] },
+        });
+      if (!originalDispatch) throw new Error("Missing native mock");
+      return originalDispatch(raw);
+    });
+    block = false;
+    try {
+      const execution = await executeArchestraTool(
+        released.name,
+        released.input,
+        {
+          agent: { id: agent.id, name: agent.name },
+          organizationId: agent.organizationId,
+          userId,
+        },
+      );
+      expect(execution.isError).not.toBe(true);
+      const actualResult = execution.content
+        .flatMap((part) => (part.type === "text" ? [part.text] : []))
+        .join("\n");
+      const returned = await send([
+        ...history,
+        { role: "user", content: requestText },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: released.id,
+              name: released.name,
+              input: released.input,
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: released.id,
+              content: actualResult,
+            },
+          ],
+        },
+      ]);
+      expect(returned.statusCode, returned.body).toBe(200);
+      expect(JSON.stringify(providerRequests.at(-1))).toContain(
+        JSON.stringify(actualResult).slice(1, -1),
+      );
+    } finally {
+      config.openappa.yellEnabled = previousReporting;
+      config.analytics.enabled = previousAnalytics;
+    }
+  });
 
   test("bypasses Guardrails v2 for an unsupported client by default", async () => {
     const response = await app.inject({
@@ -8274,6 +8602,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         id: string;
         parent?: string;
         messages: unknown[];
+        reporting?: boolean;
       }) =>
         app.inject({
           method: "POST",
@@ -8294,6 +8623,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
               "task",
               "archestra__execute_remedy_plan",
               "archestra__get_remedy_plans",
+              ...(params.reporting
+                ? ["archestra__yell", "archestra__superyell"]
+                : []),
             ].map((name) => ({
               type: "function",
               function: {
@@ -8419,6 +8751,31 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       });
       expect(unsigned.statusCode, unsigned.body).toBe(409);
       expect(providerRequests).toHaveLength(0);
+      for (const command of ["yell", "superyell"]) {
+        const recovery = await send({
+          id: "oc-return-root",
+          reporting: true,
+          messages: [
+            { role: "user", content: "Delegate the report" },
+            { role: "assistant", content: null, tool_calls: [spawnCall] },
+            { role: "user", content: framedReturn.replace(carrier, rawMarker) },
+            {
+              role: "user",
+              content:
+                command === "yell"
+                  ? "Please report the broken request"
+                  : "Please report this and turn off these checks for this session",
+            },
+          ],
+        });
+        expect(recovery.statusCode, recovery.body).toBe(200);
+        expect(JSON.stringify(providerRequests.at(-1))).not.toContain(
+          rawMarker,
+        );
+        expect(JSON.stringify(providerRequests.at(-1))).toContain(
+          "Only reporting tools",
+        );
+      }
     });
 
     test.each([
@@ -10107,6 +10464,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         thread: string;
         parent?: string;
         input: unknown[];
+        reporting?: boolean;
       }) =>
         app.inject({
           method: "POST",
@@ -10129,7 +10487,24 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             stream: true,
             prompt_cache_key: params.thread,
             input: params.input,
-            tools,
+            tools: [
+              ...tools,
+              ...(params.reporting
+                ? [
+                    {
+                      type: "namespace",
+                      name: "mcp__namespace_gateway",
+                      tools: ["archestra__yell", "archestra__superyell"].map(
+                        (name) => ({
+                          type: "function",
+                          name,
+                          parameters: { type: "object", properties: {} },
+                        }),
+                      ),
+                    },
+                  ]
+                : []),
+            ],
           },
         });
 
@@ -10325,6 +10700,46 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         "matches several subagents",
       );
       expect(providerRequests).toHaveLength(0);
+      for (const command of ["yell", "superyell"]) {
+        const recovery = await send({
+          thread: "return-root",
+          reporting: true,
+          input: [
+            ...(mailbox
+              ? [mailboxReturn(rawMarker)]
+              : [
+                  {
+                    type: "function_call",
+                    call_id: "call_unverified_wait",
+                    name: "wait_agent",
+                    namespace,
+                    arguments: JSON.stringify({ ids: ["unknown-child"] }),
+                  },
+                  {
+                    type: "function_call_output",
+                    call_id: "call_unverified_wait",
+                    output: JSON.stringify({
+                      status: { "unknown-child": { completed: rawMarker } },
+                    }),
+                  },
+                ]),
+            {
+              role: "user",
+              content:
+                command === "yell"
+                  ? "Please report the broken request"
+                  : "Please report this and turn off these checks for this session",
+            },
+          ],
+        });
+        expect(recovery.statusCode, recovery.body).toBe(200);
+        expect(JSON.stringify(providerRequests.at(-1))).not.toContain(
+          rawMarker,
+        );
+        expect(JSON.stringify(providerRequests.at(-1))).toContain(
+          "Only reporting tools",
+        );
+      }
       crossingScenario = "normal";
 
       // A crossed return for one child cannot authorize an unsigned sibling

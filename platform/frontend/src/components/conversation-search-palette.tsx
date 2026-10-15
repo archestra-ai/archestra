@@ -3,10 +3,14 @@ import { useDebounce } from "@uidotdev/usehooks";
 import {
   AppWindow,
   Bot,
+  Boxes,
+  Database,
+  FolderKanban,
   type LucideIcon,
   MessageCircle,
   Pencil,
   Pin,
+  Puzzle,
   Route,
   Sparkles,
   UsersRound,
@@ -66,9 +70,14 @@ import { conversationHref } from "@/lib/chat/conversation-href";
 import { getDateBucketLabel } from "@/lib/chat/group-conversations-by-date";
 import { buildPinnedSidebarItems } from "@/lib/chat/pinned-sidebar-items";
 import { useFeature } from "@/lib/config/config.query";
+import { useEnvironments } from "@/lib/environment.query";
 import { usePlatform } from "@/lib/hooks/use-platform";
+import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import { usePlugins } from "@/lib/plugins/plugin.query";
+import { useProjects } from "@/lib/projects/projects.query";
 import { useSkillsList } from "@/lib/skills/skill.query";
+import { useTeams } from "@/lib/teams/team.query";
 
 /**
  * Extracts all text content from messages for preview purposes.
@@ -267,6 +276,41 @@ export function ConversationSearchPalette({
       toastOnError: false,
     },
   );
+  const { data: canReadKnowledgeBases } = useHasPermissions({
+    knowledgeSource: ["read"],
+  });
+  const { data: canReadPlugins } = useHasPermissions({ plugin: ["read"] });
+  // The environments page is gated on update, not read, so match that.
+  const { data: canUpdateEnvironments } = useHasPermissions({
+    environment: ["update"],
+  });
+  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
+  // Projects, knowledge bases and teams are searched by the server; plugins
+  // and environments are small lists, fetched once and matched here.
+  const { data: projectsPage } = useProjects({
+    search: debouncedSearch,
+    enabled: open && isAuthenticated && isSearchingEntities,
+  });
+  const { data: knowledgeBases = [] } = useKnowledgeBases({
+    query: { search: debouncedSearch },
+    enabled:
+      open &&
+      isAuthenticated &&
+      canReadKnowledgeBases === true &&
+      isSearchingEntities,
+  });
+  const { data: teams = [] } = useTeams({
+    name: debouncedSearch,
+    enabled:
+      open && isAuthenticated && canReadTeams === true && isSearchingEntities,
+  });
+  const { data: plugins = [] } = usePlugins(
+    open && isAuthenticated && canReadPlugins === true,
+  );
+  const { data: environmentList } = useEnvironments(
+    open && isAuthenticated && canUpdateEnvironments === true,
+  );
+  const environments = environmentList?.environments ?? [];
   const { data: skills = [] } = useSkillsList(
     { search: debouncedSearch },
     {
@@ -332,13 +376,37 @@ export function ConversationSearchPalette({
   // Skills are already filtered by the server's search, so no local pass.
   const matchingSkills = isSearchingEntities ? skills : [];
   const matchingApps = isSearchingEntities ? (appsPage?.data ?? []) : [];
+  const matchingProjects = isSearchingEntities ? (projectsPage ?? []) : [];
+  const matchingKnowledgeBases = isSearchingEntities ? knowledgeBases : [];
+  const matchingTeams = isSearchingEntities ? teams : [];
+
+  const matchingPlugins = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
+    if (!normalizedQuery) return [];
+    return plugins.filter((plugin) =>
+      plugin.displayName.toLocaleLowerCase().includes(normalizedQuery),
+    );
+  }, [searchQuery, plugins]);
+
+  const matchingEnvironments = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
+    if (!normalizedQuery) return [];
+    return environments.filter((environment) =>
+      environment.name.toLocaleLowerCase().includes(normalizedQuery),
+    );
+  }, [searchQuery, environments]);
 
   const hasEntityMatches =
     matchingSettingsTabs.length > 0 ||
     matchingAgents.length > 0 ||
     matchingMcpCatalogItems.length > 0 ||
     matchingSkills.length > 0 ||
-    matchingApps.length > 0;
+    matchingApps.length > 0 ||
+    matchingProjects.length > 0 ||
+    matchingKnowledgeBases.length > 0 ||
+    matchingPlugins.length > 0 ||
+    matchingEnvironments.length > 0 ||
+    matchingTeams.length > 0;
 
   // The server searches run titles. Filter cached pins too while their
   // independent browse feed is disabled during search.
@@ -802,7 +870,7 @@ export function ConversationSearchPalette({
       open={open}
       onOpenChange={onOpenChange}
       title="Search or navigate"
-      description="Search chats, agents, apps, skills, MCP servers and pages"
+      description="Search chats, pages, and the names of your agents, apps, projects and more"
       className="max-w-2xl"
       shouldFilter={false}
       value={selectedValue}
@@ -885,6 +953,72 @@ export function ConversationSearchPalette({
                     href: `/apps?search=${encodeURIComponent(app.name)}`,
                     label: app.name,
                     icon: AppWindow,
+                  }),
+                )}
+              </CommandGroup>
+            )}
+
+            {matchingProjects.length > 0 && (
+              <CommandGroup heading="Projects">
+                {matchingProjects.map((project) =>
+                  renderLinkItem({
+                    key: `project-${project.id}`,
+                    href: `/projects/${project.id}`,
+                    label: project.name,
+                    icon: FolderKanban,
+                  }),
+                )}
+              </CommandGroup>
+            )}
+
+            {matchingKnowledgeBases.length > 0 && (
+              <CommandGroup heading="Knowledge Bases">
+                {matchingKnowledgeBases.map((knowledgeBase) =>
+                  renderLinkItem({
+                    key: `knowledge-base-${knowledgeBase.id}`,
+                    // No per-base page exists; the list is where a base opens.
+                    href: "/knowledge/knowledge-bases",
+                    label: knowledgeBase.name,
+                    icon: Database,
+                  }),
+                )}
+              </CommandGroup>
+            )}
+
+            {matchingPlugins.length > 0 && (
+              <CommandGroup heading="Plugins">
+                {matchingPlugins.map((plugin) =>
+                  renderLinkItem({
+                    key: `plugin-${plugin.id}`,
+                    href: `/plugins/${plugin.id}`,
+                    label: plugin.displayName,
+                    icon: Puzzle,
+                  }),
+                )}
+              </CommandGroup>
+            )}
+
+            {matchingEnvironments.length > 0 && (
+              <CommandGroup heading="Environments">
+                {matchingEnvironments.map((environment) =>
+                  renderLinkItem({
+                    key: `environment-${environment.id}`,
+                    href: "/settings/environments",
+                    label: environment.name,
+                    icon: Boxes,
+                  }),
+                )}
+              </CommandGroup>
+            )}
+
+            {matchingTeams.length > 0 && (
+              <CommandGroup heading="Teams">
+                {matchingTeams.map((team) =>
+                  renderLinkItem({
+                    key: `team-${team.id}`,
+                    href: "/settings/teams",
+                    label: team.name,
+                    icon: UsersRound,
                   }),
                 )}
               </CommandGroup>

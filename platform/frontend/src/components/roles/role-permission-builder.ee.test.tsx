@@ -238,12 +238,11 @@ it("shows Manage access without adding an invalid action to the role", async () 
   expect(onChange).toHaveBeenLastCalledWith({ app: ["read", "create"] });
 });
 
-it("distinguishes organization-wide scheduled access from individual environment grants", async () => {
+it("offers individual environment grants and knowledge permission shortcuts", async () => {
   const user = userEvent.setup();
   render(
     <RolePermissionBuilder
       permission={{
-        scheduledTask: ["read"],
         environment: ["read"],
         knowledgeSource: ["read"],
       }}
@@ -252,11 +251,6 @@ it("distinguishes organization-wide scheduled access from individual environment
       readOnly
     />,
   );
-  expect(
-    screen.getByRole("button", {
-      name: "Scheduled Tasks Manage access: set for all items",
-    }),
-  ).toHaveTextContent("All items");
   await user.click(screen.getByRole("button", { name: "Administration" }));
   expect(
     screen.getByRole("button", {

@@ -15,7 +15,7 @@ from pathlib import Path
 ENTRY_ANCHOR = "def main():\n"
 ENTRY_PATCH = (
     "def main():\n"
-    "    # Archestra image patch: see agent_images/patches/hermes-tui-mcp-discovery.py\n"
+    "    # Archestra image patch: see docker_images/agent/patches/hermes-tui-mcp-discovery.py\n"
     "    if __name__ == \"__main__\":\n"
     "        sys.modules[\"tui_gateway.entry\"] = sys.modules[__name__]\n"
 )

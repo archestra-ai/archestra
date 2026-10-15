@@ -22,7 +22,7 @@ container cannot retain a previous image after its tag moves.
 Build a target from `platform/`:
 
 ```bash
-docker build -f agent_images/Dockerfile --target agent-codex -t agent-codex:dev .
+docker build -f docker_images/agent/Dockerfile --target agent-codex -t agent-codex:dev .
 ```
 
 Tilt pulls the public GAR images by default. Set

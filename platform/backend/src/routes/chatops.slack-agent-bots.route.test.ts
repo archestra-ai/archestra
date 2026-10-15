@@ -490,6 +490,7 @@ describe("Slack agent bots", () => {
         return { channelName: `name-${channelId}` };
       });
       const bot = {
+        isConfigured: () => true,
         getWorkspaceId: () => "T1",
         getWorkspaceName: () => "Acme",
         getMissingScopes: () => options.missingScopes ?? [],
@@ -619,6 +620,56 @@ describe("Slack agent bots", () => {
         channelName: "name-C2",
       });
       expect((await owner("C9"))?.agentId).toBe(coding.id);
+
+      const rows = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.resourceType, "chatOpsBinding"));
+      expect(rows.length).toBeGreaterThan(0);
+    });
+
+    test("the router bot lists its channels and joins one without picking an agent for it", async ({
+      makeInternalAgent,
+    }) => {
+      const coding = await makeInternalAgent({ organizationId });
+      await ChatOpsChannelBindingModel.create({
+        organizationId,
+        provider: "slack",
+        channelId: "C9",
+        workspaceId: "T1",
+        agentId: coding.id,
+      });
+      const { joinChannel } = fakeBot();
+
+      const list = await app.inject({
+        method: "GET",
+        url: "/api/chatops/config/slack/router/channels",
+      });
+      expect(list.statusCode).toBe(200);
+      expect(
+        list.json().channels.map((c: { channelId: string }) => c.channelId),
+      ).toEqual(["C1", "C4", "C2"]);
+
+      const join = (channelId: string) =>
+        app.inject({
+          method: "POST",
+          url: `/api/chatops/config/slack/router/channels/${channelId}/join`,
+        });
+      expect((await join("C2")).statusCode).toBe(200);
+      expect((await join("C9")).statusCode).toBe(200);
+
+      expect(joinChannel.mock.calls.map(([id]) => id)).toEqual(["C2", "C9"]);
+      const binding = async (channelId: string) =>
+        await ChatOpsChannelBindingModel.findByChannel({
+          provider: "slack",
+          channelId,
+          workspaceId: "T1",
+        });
+      expect(await binding("C2")).toMatchObject({
+        agentId: null,
+        channelName: "name-C2",
+      });
+      expect((await binding("C9"))?.agentId).toBe(coding.id);
 
       const rows = await db
         .select()

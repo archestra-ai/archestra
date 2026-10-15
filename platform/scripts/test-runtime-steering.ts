@@ -1,4 +1,4 @@
-/** Run with pnpm exec tsx standalone-scripts/test-runtime-steering.ts IMAGE.
+/** Run with pnpm exec tsx scripts/test-runtime-steering.ts IMAGE.
  * Exercises the production command against a real Codex TUI in a runtime image.
  * Only the model HTTP boundary is stubbed; no credentials or external API calls.
  */

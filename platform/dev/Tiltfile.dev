@@ -62,7 +62,7 @@ if build_agent_catalog_images_locally:
     docker_build(
       image_ref,
       '..',
-      dockerfile='../agent_images/Dockerfile',
+      dockerfile='../docker_images/agent/Dockerfile',
       target=image_name,
       # Sandboxes are created dynamically by the backend, outside
       # Tilt's image-reference injection. Keep their stable local tag current

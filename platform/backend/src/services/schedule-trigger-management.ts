@@ -168,7 +168,7 @@ export async function updateScheduleTrigger(params: {
     id,
     userId,
     organizationId,
-    access: "mutate",
+    access: "update",
   });
   const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
     userId,

@@ -45,7 +45,6 @@ export const resources = [
   "llmVirtualKey",
   "llmModel",
   "organizationSettings",
-  "scheduledTask",
   /**
    * Better-auth access control resource - needed for organization role management
    * See: https://github.com/better-auth/better-auth/issues/2336#issuecomment-2820620809
@@ -106,7 +105,6 @@ export const resourceLabels: Record<Resource, string> = {
   auditLog: "Audit Log",
   accessPolicies: "Access Policies",
   organizationSettings: "Organization Settings",
-  scheduledTask: "Scheduled Tasks",
 };
 
 export const resourceDescriptions: Record<Resource, string> = {
@@ -121,8 +119,7 @@ export const resourceDescriptions: Record<Resource, string> = {
   log: "LLM proxy and MCP tool-call logs, with separate own and organization-wide visibility",
   chat: "Chat conversations",
   project:
-    "Projects — shared collections of chats, Agent Runtime runs, and files",
-  scheduledTask: "Scheduled agent tasks that run on a schedule",
+    "Projects — shared collections of chats, schedules, Agent Runtime runs, and files",
   llmProviderApiKey: "LLM provider API keys and their visibility",
   llmVirtualKey: "LLM virtual keys and their visibility",
   llmModel: "LLM model catalog entries and chat capabilities",
@@ -165,7 +162,7 @@ export const internalResources: Resource[] = ["organization", "invitation"];
  * Used in both the create/edit role dialog and the account permissions display.
  */
 export const resourceCategories: Record<string, Resource[]> = {
-  Agents: ["agent", "skill", "plugin", "app", "scheduledTask"],
+  Agents: ["agent", "skill", "plugin", "app"],
   MCP: ["mcpGateway", "mcpRegistry", "mcpServerInstallation"],
   LLM: [
     "llmProxy",

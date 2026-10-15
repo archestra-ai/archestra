@@ -122,8 +122,8 @@ jobs:
             use-build-action: true
           - name: MCP Server Base
             runner: ubuntu-latest
-            context: ./platform/mcp_server_docker_image
-            dockerfile: ./platform/mcp_server_docker_image/Dockerfile
+            context: ./platform/docker_images/mcp_server
+            dockerfile: ./platform/docker_images/mcp_server/Dockerfile
             artifact-name: mcp-server-base-docker-image
             tarball-name: mcp-server-base-image.tar.gz
             local-tag-prefix: mcp-server-base

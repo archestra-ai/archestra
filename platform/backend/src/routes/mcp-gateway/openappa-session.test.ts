@@ -880,7 +880,7 @@ async function claudeWrapperHeaders(params: {
   await chmod(stub, 0o755);
   const script = join(
     process.cwd(),
-    "../agent_images/bin/archestra-claude-code",
+    "../docker_images/agent/bin/archestra-claude-code",
   );
   const result = spawnSync(script, [], {
     encoding: "utf8",

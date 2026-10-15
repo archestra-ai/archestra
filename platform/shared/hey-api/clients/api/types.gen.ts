@@ -34308,7 +34308,7 @@ export type GetBootstrapResponses = {
         };
         scopedCapabilities: Array<{
             organizationId: string;
-            resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
+            resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
             scope: '*' | string;
             action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec';
         }>;
@@ -40681,6 +40681,188 @@ export type JoinSlackAgentBotChannelResponses = {
 };
 
 export type JoinSlackAgentBotChannelResponse = JoinSlackAgentBotChannelResponses[keyof JoinSlackAgentBotChannelResponses];
+
+export type ListSlackRouterBotChannelsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chatops/config/slack/router/channels';
+};
+
+export type ListSlackRouterBotChannelsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type ListSlackRouterBotChannelsError = ListSlackRouterBotChannelsErrors[keyof ListSlackRouterBotChannelsErrors];
+
+export type ListSlackRouterBotChannelsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        workspaceId: string | null;
+        canJoin: boolean;
+        channels: Array<{
+            channelId: string;
+            channelName: string | null;
+            description: string | null;
+            isPrivate: boolean;
+            isMember: boolean;
+        }>;
+    };
+};
+
+export type ListSlackRouterBotChannelsResponse = ListSlackRouterBotChannelsResponses[keyof ListSlackRouterBotChannelsResponses];
+
+export type JoinSlackRouterBotChannelData = {
+    body?: never;
+    path: {
+        channelId: string;
+    };
+    query?: never;
+    url: '/api/chatops/config/slack/router/channels/{channelId}/join';
+};
+
+export type JoinSlackRouterBotChannelErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type JoinSlackRouterBotChannelError = JoinSlackRouterBotChannelErrors[keyof JoinSlackRouterBotChannelErrors];
+
+export type JoinSlackRouterBotChannelResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type JoinSlackRouterBotChannelResponse = JoinSlackRouterBotChannelResponses[keyof JoinSlackRouterBotChannelResponses];
 
 export type UpdateTelegramChatOpsConfigData = {
     body: {
@@ -120415,7 +120597,7 @@ export type UpdateIdentityProviderResponse = UpdateIdentityProviderResponses[key
 export type SearchInitialPermissionSubjectsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
     };
     query?: {
         query?: string;
@@ -120600,7 +120782,7 @@ export type GetScopedCapabilitiesResponses = {
      */
     200: Array<{
         organizationId: string;
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
         scope: '*' | string;
         action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec';
     }>;
@@ -120611,7 +120793,7 @@ export type GetScopedCapabilitiesResponse = GetScopedCapabilitiesResponses[keyof
 export type SearchResourcePermissionSubjectsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
         scope: '*' | string;
     };
     query?: {
@@ -120719,7 +120901,7 @@ export type SearchResourcePermissionSubjectsResponse = SearchResourcePermissionS
 export type GetResourcePermissionsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
         scope: '*' | string;
     };
     query?: never;
@@ -120799,7 +120981,7 @@ export type GetResourcePermissionsResponses = {
      * Default Response
      */
     200: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
         scope: '*' | string;
         name: string;
         ownerId: string | null;
@@ -120892,7 +121074,7 @@ export type UpdateResourcePermissionsData = {
         }>;
     };
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
         scope: '*' | string;
     };
     query?: never;
@@ -120972,7 +121154,7 @@ export type UpdateResourcePermissionsResponses = {
      * Default Response
      */
     200: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'oauthClient' | 'environment' | 'serviceAccount' | 'credential';
         scope: '*' | string;
         name: string;
         ownerId: string | null;

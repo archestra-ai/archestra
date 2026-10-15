@@ -394,7 +394,7 @@ WITH RECURSIVE effective_teams(organization_id, user_id, team_id) AS (
     OR NOT EXISTS (SELECT 1 FROM resource_permission_policies p
       WHERE p.organization_id = o.id AND (p.resource = r.resource OR (r.resource IN ('mcpOauthClient','llmOauthClient') AND p.resource = 'oauthClient')) AND p.scope = '*' AND p.legacy_sharing_migrated)
   )
-), relative_entries AS (
+), relative_entries AS MATERIALIZED (
   SELECT p.organization_id, p.resource, g->'subject'->>'type' AS subject_type,
     g->'subject'->>'id' AS subject_id, action
   FROM resource_permission_policies p CROSS JOIN LATERAL jsonb_array_elements(p.grants) g
@@ -446,6 +446,11 @@ WITH RECURSIVE effective_teams(organization_id, user_id, team_id) AS (
 ), anchored AS (
   SELECT DISTINCT p.organization_id, p.resource, p.scope, et.user_id
   FROM resource_permission_policies p JOIN objects o USING (organization_id, resource, scope)
+  -- Filter to migration sources before expanding policies and team membership.
+  -- After cutover the materialized source is empty, so the recursive team and
+  -- member scans are never needed on subsequent starts.
+  JOIN (SELECT DISTINCT organization_id, resource FROM relative_entries) needed
+    USING (organization_id, resource)
   CROSS JOIN LATERAL jsonb_array_elements(p.grants) g
   JOIN effective_teams et ON et.organization_id = p.organization_id
     AND g->'subject'->>'type' = 'team' AND et.team_id = g->'subject'->>'id'

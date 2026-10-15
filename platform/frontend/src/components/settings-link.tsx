@@ -19,7 +19,8 @@ export function SettingsLink({
 }: ComponentProps<typeof Link> & { fallback?: ReactNode }) {
   const canSeeSettings = useSettingsAreaAccess();
   const href = typeof props.href === "string" ? props.href : "";
-  if (isSettingsAreaPath(new URL(href, "http://localhost").pathname)) {
+  // Hrefs may carry a query, e.g. `?permissions=all`.
+  if (isSettingsAreaPath(href.split(/[?#]/, 1)[0])) {
     if (canSeeSettings !== true) {
       return fallback !== undefined ? fallback : <span>{children}</span>;
     }

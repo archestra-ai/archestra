@@ -119,6 +119,8 @@ export function needsOrganizationCredentials(params: {
     params.capabilities.some(
       (grant) => grant.scope !== "*" && isManageGrant(grant, "credential"),
     ) &&
+    // Without organization credential ids, no single credential grant
+    // counts: this asks whether anything else already opens Settings.
     !canSeeSettingsArea(params)
   );
 }

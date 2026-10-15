@@ -121,6 +121,14 @@ describe("POST /api/credentials", () => {
     });
     expect(shared.statusCode).toBe(403);
 
+    // Leaving the scope to schema defaults is refused too.
+    const unscoped = await create({
+      key: "unscoped-token",
+      name: "Unscoped token",
+      kind: "secret",
+    });
+    expect(unscoped.statusCode).toBe(403);
+
     const githubApp = await create({
       key: "repository-app",
       name: "Repository app",

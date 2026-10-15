@@ -164,9 +164,11 @@ const runtimeCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "create",
       );
       if (!canCreateShared) {
+        // Both flags must be sent, so a schema default never decides who
+        // can reach the credential.
         const personalOnly =
-          (definitionInput.allowPersonal ?? true) &&
-          !(definitionInput.allowOrganization ?? false) &&
+          definitionInput.allowPersonal === true &&
+          definitionInput.allowOrganization === false &&
           !initialGrants?.length;
         if (!personalOnly)
           throw new ApiError(

@@ -12,6 +12,8 @@ const config: KnipConfig = {
     "src/standalone-scripts/**/*.ts!",
     // Container/Helm entrypoint; referenced outside the TypeScript module graph.
     "scripts/migrate-with-lock.mjs!",
+    // Operator-run concurrent DDL, also shipped in the production image.
+    "scripts/create-statistics-index.mjs!",
     // GitHub Actions runs these CLIs to propose stable client version updates.
     "scripts/update-codex-models-client-version.mjs!",
     "scripts/update-grok-client-version.mjs!",

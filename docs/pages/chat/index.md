@@ -61,7 +61,7 @@ Keep a chat's saved content encrypted with a key held by its originating browser
 
 To enable encrypted chats and recover them if browser storage is lost, the deployment operator configures key escrow; see [Key Escrow for Encrypted Chats](/docs/admin/security/content-encryption#key-escrow).
 
-Fresh encrypted chats cannot run while **Guardrails enforcement** is active: Archestra returns `409` because encrypted OpenAPPA policy storage is unsupported, before calling the model. Use a standard chat for governed work.
+Encrypted chats support [Guardrails enforcement](/docs/agents/guardrails). OpenAPPA checks tool calls and encrypts stored trajectory and annotation content with the conversation key. A governed request requires the matching browser key and the chat's escrow record before it can reach the model.
 
 Select the lock icon in the composer, or press `Option+I` (or `Alt+I` on Windows/Linux), before sending your first message. Your browser generates a unique AES key client-side and retains it locally. Archestra encrypts conversation messages, attachments, logs, and error outputs with that key before saving them to the database.
 

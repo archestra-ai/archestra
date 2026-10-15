@@ -109,6 +109,7 @@ import { toConversationApiMessages } from "@/models/conversation";
 import { reportChatMessageFeedback } from "@/observability/metrics/chat";
 import { reportQuoteVerification } from "@/observability/metrics/rag";
 import { startActiveChatSpan } from "@/observability/tracing";
+import { enterOpenappaEncryptedChat } from "@/openappa/encrypted-chat";
 import { chatOpenAppaSession, getOpenappaStatus } from "@/openappa/service";
 import { startedUnenforced } from "@/openappa/unenforced";
 import { mcpGatewayTaskRunner } from "@/routes/mcp-gateway/tasks";
@@ -435,13 +436,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      if ((await isGuardrailsV2Active()) && conversation.encryptedChat) {
-        throw new ApiError(
-          409,
-          "OpenAPPA does not yet support encrypted policy storage for encrypted chats",
-        );
-      }
-
       // Check if the agent was deleted
       if (!conversation.agentId || !conversation.agent) {
         throw new ApiError(
@@ -508,6 +502,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         encryptedChatKey && encryptedChatKeyInfo?.hasEscrow
           ? encryptedChatKey
           : null;
+      if (
+        encryptedChatKey &&
+        !encryptedChatAudit &&
+        (await isGuardrailsV2Active())
+      )
+        throw new ApiError(
+          409,
+          "Encrypted chat escrow is required for policy storage",
+        );
+      enterOpenappaEncryptedChat(
+        encryptedChatAudit
+          ? { organizationId, userId: user.id, audit: encryptedChatAudit }
+          : null,
+      );
       // Gate uploaded attachments before any bytes are persisted: anything
       // within the attachment storage cap is accepted — a file the model can't
       // ingest, or one too big for the sandbox, still lands in the
@@ -2546,7 +2554,18 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       if (!conversation) throw new ApiError(404, "Conversation not found");
-      if (conversation.encryptedChat) return reply.send(null);
+      const keyInfo = conversation.encryptedChat
+        ? await ConversationModel.getEncryptedChatKeyInfo(id)
+        : null;
+      const access = keyInfo
+        ? resolveEncryptedChatAccess({ request, conversation: keyInfo })
+        : null;
+      if (access?.state === "locked") return reply.send(null);
+      enterOpenappaEncryptedChat(
+        access?.state === "unlocked" && keyInfo?.hasEscrow
+          ? { organizationId, userId: user.id, audit: access.key }
+          : null,
+      );
       if (!(await isGuardrailsV2Active())) return reply.send(null);
       // A superyelled conversation is out of OpenAPPA: its label no longer
       // applies.

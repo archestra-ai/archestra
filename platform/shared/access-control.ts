@@ -1435,6 +1435,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOverviewStatistics]: {
     llmCost: ["read"],
   },
+  [RouteId.GetCostStatistics]: {
+    llmCost: ["read"],
+  },
   [RouteId.GetCostSavingsStatistics]: {
     llmCost: ["read"],
   },
@@ -1521,6 +1524,9 @@ export const requiredEndpointPermissionsMap: Partial<
     organizationSettings: ["update"],
   },
   [RouteId.CreateSlackAgentBotApp]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.CreateSlackRouterBotApp]: {
     organizationSettings: ["update"],
   },
   [RouteId.MigrateSlackApps]: {

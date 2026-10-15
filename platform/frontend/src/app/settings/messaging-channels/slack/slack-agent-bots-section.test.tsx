@@ -8,12 +8,14 @@ import { useAllChatOpsBindings } from "@/lib/chatops/chatops.query";
 import {
   useConvertSlackAppToAgentBot,
   useCreateSlackAgentBotApp,
+  useCreateSlackRouterBotApp,
   useDeleteSlackAgentBot,
   useMigrateSlackApps,
   useSaveSlackAppConfigToken,
   useSlackAgentBotChannels,
   useSlackAgentBots,
   useUpdateSlackAgentBot,
+  useUpdateSlackChatOpsConfig,
 } from "@/lib/chatops/chatops-config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { SlackAgentBotsSection } from "./slack-agent-bots-section";
@@ -29,12 +31,14 @@ vi.mock("@/lib/agent.query", () => ({ useInternalAgents: vi.fn() }));
 vi.mock("@/lib/chatops/chatops-config.query", () => ({
   useConvertSlackAppToAgentBot: vi.fn(),
   useCreateSlackAgentBotApp: vi.fn(),
+  useCreateSlackRouterBotApp: vi.fn(),
   useDeleteSlackAgentBot: vi.fn(),
   useMigrateSlackApps: vi.fn(),
   useSaveSlackAppConfigToken: vi.fn(),
   useSlackAgentBotChannels: vi.fn(),
   useSlackAgentBots: vi.fn(),
   useUpdateSlackAgentBot: vi.fn(),
+  useUpdateSlackChatOpsConfig: vi.fn(),
 }));
 vi.mock("@/lib/chatops/chatops.query", () => ({
   useAllChatOpsBindings: vi.fn(),
@@ -78,6 +82,7 @@ function setup(params: {
   bots: ReturnType<typeof bot>[];
   canCreateApps?: boolean;
   searchParams?: string;
+  routerBot?: Record<string, unknown> | null;
 }) {
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams(params.searchParams ?? "") as unknown as ReturnType<
@@ -89,7 +94,7 @@ function setup(params: {
       bots: params.bots,
       canCreateApps: params.canCreateApps ?? true,
       oneClickInstall: false,
-      unassignedApp: null,
+      unassignedApp: params.routerBot ?? null,
       workspaceName: "Acme",
     },
     isLoading: false,
@@ -138,9 +143,11 @@ beforeEach(() => {
   for (const hook of [
     useConvertSlackAppToAgentBot,
     useCreateSlackAgentBotApp,
+    useCreateSlackRouterBotApp,
     useDeleteSlackAgentBot,
     useMigrateSlackApps,
     useUpdateSlackAgentBot,
+    useUpdateSlackChatOpsConfig,
   ]) {
     vi.mocked(hook).mockReturnValue(mutation() as never);
   }
@@ -263,6 +270,112 @@ describe("SlackAgentBotsSection", () => {
     expect(
       screen.getByRole("link", { name: /Collaborators page/ }),
     ).toHaveAttribute("href", "https://api.slack.com/apps/A_a1/collaborators");
+  });
+
+  it("keeps the router bot next to agent bots, and converting it is an opt-in that says what goes away", async () => {
+    const convert = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useConvertSlackAppToAgentBot).mockReturnValue(
+      mutation(convert) as never,
+    );
+    setup({
+      bots: [bot("a1", "Marketing")],
+      routerBot: {
+        appId: "A_MAIN",
+        handle: "archestra",
+        connected: true,
+        installed: true,
+        needsAppLevelToken: false,
+        createdBy: null,
+        connectionMode: "socket",
+        agentUsage: [{ agentId: "a3", agentName: "Sales", bindings: 4 }],
+      },
+    });
+
+    expect(screen.getByText("@archestra")).toBeVisible();
+    expect(screen.getByText("@archestra_marketing")).toBeVisible();
+    expect(convert).not.toHaveBeenCalled();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "More actions for @archestra" }),
+    );
+    await userEvent.click(
+      screen.getByRole("menuitem", { name: "Convert to an agent's bot…" }),
+    );
+    const dialog = screen.getByRole("dialog", {
+      name: "Convert to an agent's bot",
+    });
+    expect(dialog).toHaveTextContent(
+      "People can no longer pick their own agent with /select-agent",
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Convert" }));
+    expect(convert).toHaveBeenCalledWith("a3");
+  });
+
+  it("creates the router bot from the person's token, then asks for the tokens Slack does not hand over", async () => {
+    const create = vi.fn().mockResolvedValue({
+      appId: "A_ROUTER",
+      installUrl: "https://api.slack.com/apps/A_ROUTER/oauth",
+      installMode: "manual",
+    });
+    vi.mocked(useCreateSlackRouterBotApp).mockReturnValue(
+      mutation(create) as never,
+    );
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
+    setup({ bots: [bot("a1", "Marketing")] });
+
+    expect(screen.getByText("No router bot")).toBeVisible();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Add router bot" }),
+    );
+    expect(screen.getByLabelText("Slack name")).toHaveValue("archestra");
+    await userEvent.click(screen.getByRole("button", { name: "Create bot" }));
+
+    expect(create).toHaveBeenCalledWith({
+      appName: "archestra",
+      connectionMode: "socket",
+    });
+    expect(openSpy).toHaveBeenCalledWith(
+      "https://api.slack.com/apps/A_ROUTER/oauth",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    expect(
+      screen.getByRole("dialog", { name: "Finish the router bot" }),
+    ).toBeVisible();
+    expect(screen.getByLabelText("Bot User OAuth Token")).toBeVisible();
+    expect(screen.getByLabelText("App-Level Token")).toBeVisible();
+    openSpy.mockRestore();
+  });
+
+  it("finishing the router bot switches it on with its tokens", async () => {
+    const save = vi.fn().mockResolvedValue({ success: true });
+    vi.mocked(useUpdateSlackChatOpsConfig).mockReturnValue(
+      mutation(save) as never,
+    );
+    setup({
+      bots: [],
+      routerBot: {
+        appId: "A_ROUTER",
+        handle: null,
+        connected: false,
+        installed: false,
+        needsAppLevelToken: false,
+        createdBy: null,
+        connectionMode: "webhook",
+        agentUsage: [],
+      },
+    });
+
+    expect(screen.getByText(/Not installed/)).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Finish setup" }));
+    await userEvent.type(
+      screen.getByLabelText("Bot User OAuth Token"),
+      "xoxb-1",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    expect(save).toHaveBeenCalledWith({ botToken: "xoxb-1", enabled: true });
   });
 
   it("after a one-click install, asks the creator to give their team access", () => {

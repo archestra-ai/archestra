@@ -3296,10 +3296,11 @@ test("dispatch loads the latest saved policy text from the organization database
     results: [],
     canonicalize: (name) => name,
   });
-  expect(native.dispatchHook).toHaveBeenLastCalledWith(expect.any(String), {
-    content,
-    credentials: {},
-  });
+  expect(native.dispatchHook).toHaveBeenLastCalledWith(
+    expect.any(String),
+    { content, credentials: {} },
+    undefined,
+  );
   const updated = `${content}# updated`;
   await GuardrailsPolicyModel.save({
     organizationId: organization.id,
@@ -3313,10 +3314,11 @@ test("dispatch loads the latest saved policy text from the organization database
     results: [],
     canonicalize: (name) => name,
   });
-  expect(native.dispatchHook).toHaveBeenLastCalledWith(expect.any(String), {
-    content: updated,
-    credentials: {},
-  });
+  expect(native.dispatchHook).toHaveBeenLastCalledWith(
+    expect.any(String),
+    { content: updated, credentials: {} },
+    undefined,
+  );
 });
 
 describe("remedy by offer", () => {
@@ -3738,6 +3740,7 @@ describe("remedy by offer", () => {
       organizationId,
       "user:alice|child",
       "offer-1",
+      undefined,
     );
     expect(elicit).not.toHaveBeenCalled();
     const input = JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]);

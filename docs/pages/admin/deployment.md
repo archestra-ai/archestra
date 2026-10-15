@@ -90,6 +90,20 @@ For Knowledge Base vector storage, PostgreSQL must have the pgvector extension a
 
 Set `archestra.database.connectionBudget` to size query pools across peak web and worker pods, including rollout overlap. Leave room in PostgreSQL for other clients and reserved connections. Each peak pod needs at least 13 budgeted connections; the chart rejects smaller budgets. A fixed `archestra.database.poolMax` or [`ARCHESTRA_DATABASE_POOL_MAX`](/docs/reference/configuration#ARCHESTRA_DATABASE_POOL_MAX) overrides budget sizing. Complete one rollout before starting another.
 
+### Cost Statistics Index
+
+For large interaction histories, an optional covering index reduces database reads for Costs statistics. It adds index storage and maintenance work to interaction inserts.
+
+After the database migrations finish, run this command once from `/app/backend` in the application container during a database maintenance window:
+
+```bash
+node scripts/create-statistics-index.mjs
+```
+
+The command uses [`ARCHESTRA_DATABASE_URL`](/docs/reference/configuration#ARCHESTRA_DATABASE_URL). Connect directly to PostgreSQL or through session pooling, using credentials that can create indexes. Transaction pooling is unsupported.
+
+The build runs concurrently with interaction writes and consumes database I/O while it scans. It stops after a five-second lock wait or a thirty-minute statement timeout. Rerunning preserves a valid index and rebuilds an invalid index left by an interrupted build. Successful output reports `created`, `already_valid`, or `rebuilt_invalid`.
+
 ### Scaling
 
 `archestra.replicaCount` controls web replicas. `archestra.worker.replicaCount` controls separate workers. Enabling `archestra.horizontalPodAutoscaler.enabled` replaces the web replica setting; the default HPA range is 2–10 pods. Worker replicas remain manual. Increase database connection capacity alongside replicas.

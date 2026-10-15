@@ -134,25 +134,13 @@ describe("encrypted chat routes", () => {
       expect((await readEncryptedChatRow(id)).encrypted_chat).toBe(true);
     });
 
-    test("refuses an encrypted chat before saving it when Guardrails enforcement is active", async () => {
+    test("creates an encrypted chat while Guardrails enforcement remains active", async () => {
       config.openappa.enabled = true;
       await GuardrailsDeploymentModel.setEnabled(true);
-
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/chat/conversations",
-        headers: dekHeader(),
-        payload: { agentId, encryptedChat: true },
-      });
-
-      expect(response.statusCode).toBe(409);
-      expect(response.json().error.message).toContain(
-        "encrypted policy storage",
-      );
-      const rows = await db.execute(
-        sql`SELECT id FROM conversations WHERE encrypted_chat = true`,
-      );
-      expect(rows.rows).toHaveLength(0);
+      const id = await createEncryptedChatConversation();
+      const row = await readEncryptedChatRow(id);
+      expect(row.encrypted_chat).toBe(true);
+      expect(row.encrypted_chat_escrow).not.toBeNull();
       expect(await GuardrailsDeploymentModel.isEnabled()).toBe(true);
     });
 

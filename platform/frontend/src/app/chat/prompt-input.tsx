@@ -36,8 +36,8 @@ import {
   PromptInputTextarea,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
+import { ChatComposerSecurity } from "@/components/chat/chat-composer-security";
 import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
-import { OpenappaSessionStatus } from "@/components/chat/openappa-session-status";
 import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
 import { SubscriptionReconnectNotice } from "@/components/subscription-reconnect-notice";
 import { Button } from "@/components/ui/button";
@@ -958,6 +958,19 @@ const PromptInputContent = ({
     ],
   );
 
+  const privacyDetails = (
+    <span>
+      Use this mode for highly sensitive work. This chat is private from the
+      team running {appName}: your messages are encrypted with a key stored in
+      this browser, so you can't open the chat anywhere else. A backup key is
+      held in escrow in case it's ever needed. Keep in mind that{" "}
+      {currentProvider
+        ? `${providerCatalog.label(currentProvider)}, your LLM provider,`
+        : "your LLM provider"}{" "}
+      still sees the conversation.
+    </span>
+  );
+
   // EncryptedChat/runtime "drawer": a slim strip tucked against the composer,
   // carrying the explanation that used to live in the toggle's tooltip.
   // Paired with the dashed composer border so an encrypted chat is
@@ -979,7 +992,7 @@ const PromptInputContent = ({
         becomes its live terminal when ready.
       </span>
     </div>
-  ) : encryptedChatActive ? (
+  ) : encryptedChatActive && !conversationId ? (
     <div
       data-testid={E2eTestId.EncryptedChatNotice}
       className={cn(
@@ -988,18 +1001,165 @@ const PromptInputContent = ({
       )}
     >
       <EncryptedChatIcon className="size-3.5" />
-      <span>
-        Use this mode for highly sensitive work. This chat is private from the
-        team running {appName}: your messages are encrypted with a key stored in
-        this browser, so you can't open the chat anywhere else. A backup key is
-        held in escrow in case it's ever needed. Keep in mind that{" "}
-        {currentProvider
-          ? `${providerCatalog.label(currentProvider)}, your LLM provider,`
-          : "your LLM provider"}{" "}
-        still sees the conversation.
-      </span>
+      {privacyDetails}
     </div>
   ) : null;
+
+  const composer = (
+    <PromptInput
+      globalDrop
+      multiple
+      onSubmit={handleWrappedSubmit}
+      accept={showFileUploadButton ? undefined : "application/x-empty"}
+      maxFileSize={storageByteLimit}
+      onError={handleFileError}
+      className={cn(
+        "[&_[data-slot=input-group]]:!ring-0 [&:has([data-slot=input-group-control]:focus-visible)_[data-slot=input-group]]:!border-input",
+        runtimeMode &&
+          "[&_[data-slot=input-group]]:border-primary/50 [&_[data-slot=input-group]]:bg-primary/[0.025] [&_[data-slot=input-group]]:!ring-0 [&:has([data-slot=input-group-control]:focus-visible)_[data-slot=input-group]]:!border-primary",
+        encryptedChatActive &&
+          !conversationId &&
+          // The dashed border replaces the composer's ring outright (both
+          // at once read as two competing outlines). !important because the
+          // ring and focus border are has-[]-variant classes on the
+          // InputGroup that otherwise win on specificity; focus feedback
+          // comes from brightening the dashes instead.
+          "[&_[data-slot=input-group]]:border-dashed [&_[data-slot=input-group]]:border-muted-foreground/60 [&_[data-slot=input-group]]:!ring-0 [&:has([data-slot=input-group-control]:focus-visible)_[data-slot=input-group]]:!border-muted-foreground",
+      )}
+    >
+      {/* File attachments display - shown inline above textarea */}
+      <PromptInputAttachments className="px-3 pt-2 pb-0">
+        {(attachment) => <PromptInputAttachment data={attachment} />}
+      </PromptInputAttachments>
+      <PromptInputBody className="relative block w-full">
+        <PromptInputTextarea
+          placeholder={placeholder}
+          ref={textareaRef}
+          // Keep empty composers stable: sizing to a long placeholder moves
+          // the hovered suggestion and repeatedly toggles its preview.
+          className={cn(
+            "px-4",
+            isPreviewingSuggestion &&
+              "field-sizing-fixed h-16 overflow-hidden placeholder:text-transparent",
+          )}
+          autoFocus
+          disabled={composerLocked}
+          // In a live conversation, Enter during a stream submits and the
+          // submit handler queues the message. On the new-chat composer
+          // (no conversation to queue into yet) Enter stays blocked while
+          // the conversation is being created.
+          disableEnterSubmit={isResponseInFlight && !conversationId}
+          onKeyDown={handleTextareaKeyDown}
+          data-testid={E2eTestId.ChatPromptTextarea}
+        />
+        {isPreviewingSuggestion && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-4 top-3 line-clamp-2 whitespace-pre-wrap text-base leading-5 text-muted-foreground [overflow-wrap:anywhere] md:text-sm"
+          >
+            {placeholderPreview}
+          </div>
+        )}
+      </PromptInputBody>
+      <PromptInputFooter ref={footerRef}>
+        <ChatPromptInputTools
+          isNarrow={isNarrow}
+          toolbarRef={toolbarRef}
+          selectedModel={selectedModel}
+          onModelChange={onModelChange}
+          conversationId={conversationId}
+          currentConversationChatApiKeyId={currentConversationChatApiKeyId}
+          currentProvider={currentProvider}
+          initialApiKeyId={initialApiKeyId}
+          onApiKeyChange={onApiKeyChange}
+          onProviderChange={onProviderChange}
+          allowFileUploads={allowFileUploads}
+          encryptedChat={encryptedChat}
+          onEncryptedChatChange={onEncryptedChatChange}
+          sandboxAvailable={sandboxAvailable}
+          isModelsLoading={isModelsLoading}
+          tokensUsed={tokensUsed}
+          cachedTokens={cachedTokens}
+          maxContextLength={maxContextLength}
+          agentLlmApiKeyId={agentLlmApiKeyId}
+          selectorAgentId={selectorAgentId}
+          onAgentChange={onAgentChange}
+          modelSource={modelSource}
+          toolsUnavailable={toolsUnavailable}
+          notRecommendedForAgents={notRecommendedForAgents}
+          runtimeMode={runtimeMode}
+          onResetModelOverride={onResetModelOverride}
+          thinkingEffort={thinkingEffort}
+          onThinkingEffortChange={onThinkingEffortChange}
+          agentRequiresPerUserConnect={agentRequiresPerUserConnect}
+          subscriptionConnectRequired={subscriptionConnectRequired}
+          subscriptionProvider={subscriptionProvider}
+          onSubscriptionConnect={requestSubscriptionConnect}
+          subscriptionConnectRequest={subscriptionConnectRequest}
+          agentModelDisplayName={agentModelDisplayName}
+          textareaRef={textareaRef}
+          contextWindow={contextWindow}
+          lastCompaction={lastCompaction}
+          onCompactConversation={compactConversation}
+          isContextCompacting={isContextCompacting}
+        />
+        {/* shrink-0: the send/mic cluster is a fixed unit and must never
+              compress. When the toolbar runs out of room the collapse hook
+              folds the inline tools into a menu (freeing space for the pinned
+              recorder pill) rather than squeezing the send button. */}
+        <div ref={trailingRef} className="flex shrink-0 items-center gap-2">
+          {!runtimeMode && (
+            <PromptInputSpeechButton
+              textareaRef={textareaRef}
+              onTranscriptionChange={handleTranscriptionChange}
+            />
+          )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <PromptInputSubmit
+                className="!h-8"
+                aria-label={
+                  isResponseInFlight && onStop && !isQueueingSubmit
+                    ? "Stop"
+                    : "Submit"
+                }
+                status={submitStatus}
+                disabled={
+                  composerLocked || subscriptionConnectRequired || sendDisabled
+                }
+                onClick={(event) => {
+                  // While a response is in-flight the button shows Stop; a
+                  // click stops the stream instead of submitting the form
+                  // (which would queue the typed text — see onStop docs).
+                  // With a queueable draft the button is a Send button, so
+                  // the click must submit (and queue) instead; Esc stops.
+                  if (onStop && isResponseInFlight && !isQueueingSubmit) {
+                    event.preventDefault();
+                    onStop();
+                  }
+                }}
+              />
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              {subscriptionConnectRequired ? (
+                <span>
+                  Connect the subscription or choose another credential
+                </span>
+              ) : isResponseInFlight && onStop && !isQueueingSubmit ? (
+                <span className="flex items-center gap-1.5">
+                  Stop <Kbd>Esc</Kbd>
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5">
+                  Send <Kbd>Enter</Kbd>
+                </span>
+              )}
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      </PromptInputFooter>
+    </PromptInput>
+  );
 
   return (
     <div className="relative">
@@ -1105,168 +1265,22 @@ const PromptInputContent = ({
           </PromptInputCommand>
         </div>
       )}
-      {!drawerBelow && drawer}
-      {conversationId && !runtimeMode && (
-        <OpenappaSessionStatus
+      {conversationId && !runtimeMode ? (
+        <ChatComposerSecurity
           key={conversationId}
           conversationId={conversationId}
-        />
+          encrypted={encryptedChatActive}
+          privacyDetails={privacyDetails}
+        >
+          {composer}
+        </ChatComposerSecurity>
+      ) : (
+        <>
+          {!drawerBelow && drawer}
+          {composer}
+          {drawerBelow && drawer}
+        </>
       )}
-      <PromptInput
-        globalDrop
-        multiple
-        onSubmit={handleWrappedSubmit}
-        accept={showFileUploadButton ? undefined : "application/x-empty"}
-        maxFileSize={storageByteLimit}
-        onError={handleFileError}
-        className={cn(
-          "[&_[data-slot=input-group]]:!ring-0 [&:has([data-slot=input-group-control]:focus-visible)_[data-slot=input-group]]:!border-input",
-          runtimeMode &&
-            "[&_[data-slot=input-group]]:border-primary/50 [&_[data-slot=input-group]]:bg-primary/[0.025] [&_[data-slot=input-group]]:!ring-0 [&:has([data-slot=input-group-control]:focus-visible)_[data-slot=input-group]]:!border-primary",
-          encryptedChatActive &&
-            // The dashed border replaces the composer's ring outright (both
-            // at once read as two competing outlines). !important because the
-            // ring and focus border are has-[]-variant classes on the
-            // InputGroup that otherwise win on specificity; focus feedback
-            // comes from brightening the dashes instead.
-            "[&_[data-slot=input-group]]:border-dashed [&_[data-slot=input-group]]:border-muted-foreground/60 [&_[data-slot=input-group]]:!ring-0 [&:has([data-slot=input-group-control]:focus-visible)_[data-slot=input-group]]:!border-muted-foreground",
-        )}
-      >
-        {/* File attachments display - shown inline above textarea */}
-        <PromptInputAttachments className="px-3 pt-2 pb-0">
-          {(attachment) => <PromptInputAttachment data={attachment} />}
-        </PromptInputAttachments>
-        <PromptInputBody className="relative block w-full">
-          <PromptInputTextarea
-            placeholder={placeholder}
-            ref={textareaRef}
-            // Keep empty composers stable: sizing to a long placeholder moves
-            // the hovered suggestion and repeatedly toggles its preview.
-            className={cn(
-              "px-4",
-              isPreviewingSuggestion &&
-                "field-sizing-fixed h-16 overflow-hidden placeholder:text-transparent",
-            )}
-            autoFocus
-            disabled={composerLocked}
-            // In a live conversation, Enter during a stream submits and the
-            // submit handler queues the message. On the new-chat composer
-            // (no conversation to queue into yet) Enter stays blocked while
-            // the conversation is being created.
-            disableEnterSubmit={isResponseInFlight && !conversationId}
-            onKeyDown={handleTextareaKeyDown}
-            data-testid={E2eTestId.ChatPromptTextarea}
-          />
-          {isPreviewingSuggestion && (
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-x-4 top-3 line-clamp-2 whitespace-pre-wrap text-base leading-5 text-muted-foreground [overflow-wrap:anywhere] md:text-sm"
-            >
-              {placeholderPreview}
-            </div>
-          )}
-        </PromptInputBody>
-        <PromptInputFooter ref={footerRef}>
-          <ChatPromptInputTools
-            isNarrow={isNarrow}
-            toolbarRef={toolbarRef}
-            selectedModel={selectedModel}
-            onModelChange={onModelChange}
-            conversationId={conversationId}
-            currentConversationChatApiKeyId={currentConversationChatApiKeyId}
-            currentProvider={currentProvider}
-            initialApiKeyId={initialApiKeyId}
-            onApiKeyChange={onApiKeyChange}
-            onProviderChange={onProviderChange}
-            allowFileUploads={allowFileUploads}
-            encryptedChat={encryptedChat}
-            onEncryptedChatChange={onEncryptedChatChange}
-            sandboxAvailable={sandboxAvailable}
-            isModelsLoading={isModelsLoading}
-            tokensUsed={tokensUsed}
-            cachedTokens={cachedTokens}
-            maxContextLength={maxContextLength}
-            agentLlmApiKeyId={agentLlmApiKeyId}
-            selectorAgentId={selectorAgentId}
-            onAgentChange={onAgentChange}
-            modelSource={modelSource}
-            toolsUnavailable={toolsUnavailable}
-            notRecommendedForAgents={notRecommendedForAgents}
-            runtimeMode={runtimeMode}
-            onResetModelOverride={onResetModelOverride}
-            thinkingEffort={thinkingEffort}
-            onThinkingEffortChange={onThinkingEffortChange}
-            agentRequiresPerUserConnect={agentRequiresPerUserConnect}
-            subscriptionConnectRequired={subscriptionConnectRequired}
-            subscriptionProvider={subscriptionProvider}
-            onSubscriptionConnect={requestSubscriptionConnect}
-            subscriptionConnectRequest={subscriptionConnectRequest}
-            agentModelDisplayName={agentModelDisplayName}
-            textareaRef={textareaRef}
-            contextWindow={contextWindow}
-            lastCompaction={lastCompaction}
-            onCompactConversation={compactConversation}
-            isContextCompacting={isContextCompacting}
-          />
-          {/* shrink-0: the send/mic cluster is a fixed unit and must never
-              compress. When the toolbar runs out of room the collapse hook
-              folds the inline tools into a menu (freeing space for the pinned
-              recorder pill) rather than squeezing the send button. */}
-          <div ref={trailingRef} className="flex shrink-0 items-center gap-2">
-            {!runtimeMode && (
-              <PromptInputSpeechButton
-                textareaRef={textareaRef}
-                onTranscriptionChange={handleTranscriptionChange}
-              />
-            )}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <PromptInputSubmit
-                  className="!h-8"
-                  aria-label={
-                    isResponseInFlight && onStop && !isQueueingSubmit
-                      ? "Stop"
-                      : "Submit"
-                  }
-                  status={submitStatus}
-                  disabled={
-                    composerLocked ||
-                    subscriptionConnectRequired ||
-                    sendDisabled
-                  }
-                  onClick={(event) => {
-                    // While a response is in-flight the button shows Stop; a
-                    // click stops the stream instead of submitting the form
-                    // (which would queue the typed text — see onStop docs).
-                    // With a queueable draft the button is a Send button, so
-                    // the click must submit (and queue) instead; Esc stops.
-                    if (onStop && isResponseInFlight && !isQueueingSubmit) {
-                      event.preventDefault();
-                      onStop();
-                    }
-                  }}
-                />
-              </TooltipTrigger>
-              <TooltipContent side="top">
-                {subscriptionConnectRequired ? (
-                  <span>
-                    Connect the subscription or choose another credential
-                  </span>
-                ) : isResponseInFlight && onStop && !isQueueingSubmit ? (
-                  <span className="flex items-center gap-1.5">
-                    Stop <Kbd>Esc</Kbd>
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1.5">
-                    Send <Kbd>Enter</Kbd>
-                  </span>
-                )}
-              </TooltipContent>
-            </Tooltip>
-          </div>
-        </PromptInputFooter>
-      </PromptInput>
-      {drawerBelow && drawer}
       <SensitiveDataConfirmDialog
         open={sensitiveDataDialogOpen}
         onConfirm={handleSensitiveDataConfirm}

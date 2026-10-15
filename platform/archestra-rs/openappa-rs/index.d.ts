@@ -121,13 +121,24 @@ export interface ComposePolicyInput {
   memberRosters?: Record<string, Record<string, string>>
 }
 
+/**
+ * Transient key material supplied separately from the serializable hook input.
+ * The host validates conversation ownership, escrow and fingerprint first.
+ */
+export interface ContentEncryption {
+  key: Buffer
+  scope: string
+  /** Opaque capability for this dispatch's authenticated loopback annotator. */
+  annotatorContext?: string
+}
+
 export interface CredentialDeclaration {
   variable: string
   key: string
   line: number
 }
 
-export declare function dispatchHook(input: string, policy: DispatchPolicy): Promise<string>
+export declare function dispatchHook(input: string, policy: DispatchPolicy, encryption?: ContentEncryption | undefined | null): Promise<string>
 
 /**
  * The effective policy of the dispatching organization, with the values the host
@@ -157,13 +168,13 @@ export declare function editOpenappaPolicy(content: string, edits: Array<PolicyE
  * Executes a remedy for the proxy-stamped trajectory, resolving that session
  * from PostgreSQL. The caller, when present, is the receipt spender.
  */
-export declare function executeRemedyByOffer(input: string, policy: DispatchPolicy): Promise<string>
+export declare function executeRemedyByOffer(input: string, policy: DispatchPolicy, encryption?: ContentEncryption | undefined | null): Promise<string>
 
 /** The upstream pin and host replay boundary version stored with each run. */
 export declare function getOpenappaReplayEngineVersion(): string
 
 /** Read the current label of a started session without mutating its trajectory. */
-export declare function getOpenappaStatus(organizationId: string, sessionId: string): Promise<OpenappaStatus | null>
+export declare function getOpenappaStatus(organizationId: string, sessionId: string, encryption?: ContentEncryption | undefined | null): Promise<OpenappaStatus | null>
 
 export interface HelperBindingInput {
   /**
@@ -222,7 +233,7 @@ export declare function loadChildReturns(organizationId: string, parentSessionId
  * Loads the review entry for an offer from the retained DenyCall in PostgreSQL.
  * Session routing comes from the proxy-stamped current trajectory; no offer-owner lookup.
  */
-export declare function loadOfferReview(organizationId: string, sessionId: string, offerId: string): Promise<OfferReviewOutput | null>
+export declare function loadOfferReview(organizationId: string, sessionId: string, offerId: string, encryption?: ContentEncryption | undefined | null): Promise<OfferReviewOutput | null>
 
 export interface OfferReviewOutput {
   offerId: string
@@ -291,7 +302,7 @@ export interface PolicyEditInput {
  * The policy text the runtime stored when `root` opened. Absent when the root
  * has no log. This is the opening document, not an error message.
  */
-export declare function readOpenappaOpeningPolicy(root: string): Promise<string | null>
+export declare function readOpenappaOpeningPolicy(root: string, encryption?: ContentEncryption | undefined | null): Promise<string | null>
 
 export declare function readPeerMessage(input: string, policy: DispatchPolicy): Promise<string>
 

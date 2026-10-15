@@ -1,3 +1,4 @@
+import { enterOpenappaEncryptedChat } from "@/openappa/encrypted-chat";
 /**
  * Generic LLM Proxy Handler
  *
@@ -1328,12 +1329,10 @@ export async function handleLLMProxy<
   // turns on: the sessions that start now, and the calls governed sessions make.
   // The records hold ids only, so they cover encrypted chats too.
   const appaObserving = appaFeatureEnabled && !appaActive;
-  // An encrypted chat that started while enforcement was off, or that a
-  // person superyelled, stays out of OpenAPPA, so the encrypted storage
-  // OpenAPPA lacks does not matter to it.
+  // A redacted audit context cannot retain an enforceable trajectory safely.
   if (
     appaActive &&
-    isEncryptedChatSession &&
+    encryptedChat.kind === "redact" &&
     !(
       sessionId &&
       (await startedUnenforced({
@@ -1344,9 +1343,18 @@ export async function handleLLMProxy<
   ) {
     throw new ApiError(
       409,
-      "OpenAPPA does not yet support encrypted policy storage for encrypted chats",
+      "Encrypted chat key and escrow are required for policy storage",
     );
   }
+  enterOpenappaEncryptedChat(
+    encryptedChat.kind === "encrypt" && userId
+      ? {
+          organizationId: resolvedAgent.organizationId,
+          userId,
+          audit: encryptedChat.audit,
+        }
+      : null,
+  );
 
   const attributedAppId = await resolveAttributedAppId(request, resolvedAgent);
 
@@ -1851,6 +1859,7 @@ export async function handleLLMProxy<
         appaActive &&
         !installerSetupBypass &&
         !delegatedRun &&
+        !(platformLoopback && internalCall) &&
         !unsupportedClient
       ) {
         appaCallerId = callerId;

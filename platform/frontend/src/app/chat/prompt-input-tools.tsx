@@ -11,7 +11,7 @@ import {
   type ThinkingEffortSetting,
 } from "@archestra/shared";
 import { MoreVerticalIcon, PaperclipIcon } from "lucide-react";
-import { memo, useCallback, useEffect, useState } from "react";
+import { memo, useCallback, useEffect } from "react";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import {
   PromptInputButton,
@@ -51,7 +51,6 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
 import { useFeature } from "@/lib/config/config.query";
-import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
@@ -258,45 +257,31 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   // when the instance has encrypted chats enabled.
   const encryptedChatFeature = useFeature("encryptedChatEnabled");
   const encryptedChatEnabled = encryptedChatFeature ?? false;
-  const { data: guardrailsDeployment } = useGuardrailsDeployment({
-    anyMember: true,
-  });
-  const encryptedChatUnavailable = guardrailsDeployment?.active === true;
-  const [encryptedChatHintOpen, setEncryptedChatHintOpen] = useState(false);
   const { altKey } = usePlatform();
   const appName = useAppName();
   const encryptedChatComposer =
     !runtimeMode && !conversationId && !!onEncryptedChatChange;
-  const showEncryptedChatToggle =
-    encryptedChatComposer &&
-    encryptedChatEnabled &&
-    (!encryptedChatUnavailable || encryptedChat);
+  const showEncryptedChatToggle = encryptedChatComposer && encryptedChatEnabled;
   // When the instance has not enabled encrypted chats, the lock stays in the
   // same spot as a pointer to the feature: it explains what it does and how an
   // administrator turns it on. Only on an explicit `false`, so it does not
   // flash in place of the real toggle while the config is still loading.
   const showEncryptedChatSetupHint =
-    encryptedChatComposer &&
-    !showEncryptedChatToggle &&
-    (encryptedChatFeature === false || encryptedChatUnavailable);
+    encryptedChatComposer && encryptedChatFeature === false;
 
   // Files staged before the toggle survive it: an encrypted chat stores its
   // attachments sealed under the conversation key, so the first message can
   // carry them just as an unencrypted one would.
   const toggleEncryptedChat = useCallback(() => {
-    if (encryptedChatUnavailable && !encryptedChat) {
-      setEncryptedChatHintOpen(true);
-      return;
-    }
     onEncryptedChatChange?.(!encryptedChat);
-  }, [encryptedChat, onEncryptedChatChange, encryptedChatUnavailable]);
+  }, [encryptedChat, onEncryptedChatChange]);
 
   // While the toggle is on screen, Alt+I toggles the draft in place: the
   // global shortcut dispatches this cancelable event before navigating and
   // claiming it (preventDefault) suppresses the navigation — see
   // useConversationSearch.
   useEffect(() => {
-    if (!encryptedChatComposer || !encryptedChatEnabled) return;
+    if (!showEncryptedChatToggle) return;
     const handleShortcut = (event: Event) => {
       event.preventDefault();
       toggleEncryptedChat();
@@ -310,7 +295,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
         ENCRYPTED_CHAT_DRAFT_SHORTCUT_EVENT,
         handleShortcut,
       );
-  }, [encryptedChatComposer, encryptedChatEnabled, toggleEncryptedChat]);
+  }, [showEncryptedChatToggle, toggleEncryptedChat]);
 
   // RBAC: the full chat view shows the agent picker and provider settings;
   // without it, chat is the simpler view.
@@ -630,20 +615,13 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
       )}
 
       {showEncryptedChatSetupHint && (
-        <Popover
-          open={encryptedChatHintOpen}
-          onOpenChange={setEncryptedChatHintOpen}
-        >
+        <Popover>
           <PopoverTrigger asChild>
             <Button
               type="button"
               variant="ghost"
               size="icon-sm"
-              aria-label={
-                encryptedChatUnavailable
-                  ? "Encrypted chat (unavailable)"
-                  : "Encrypted chat (not set up)"
-              }
+              aria-label="Encrypted chat (not set up)"
               data-testid={E2eTestId.EncryptedChatSetupHint}
               className="text-muted-foreground"
             >
@@ -656,45 +634,36 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             className="w-96 space-y-2 text-sm"
           >
             <p className="font-medium">Encrypted chats</p>
-            {encryptedChatUnavailable ? (
-              <p className="text-muted-foreground">
-                Encrypted chats are unavailable while Guardrails enforcement is
-                on. Start a regular chat to keep Guardrails protection.
-              </p>
-            ) : (
-              <>
-                <p className="text-muted-foreground">
-                  Some conversations shouldn&apos;t be visible to the team that
-                  runs {appName} — for example, sensitive discussions among
-                  senior management. Yet the company still needs a way to audit
-                  them in an emergency.
-                </p>
-                <p className="text-muted-foreground">
-                  Encrypted chats solve this. Each chat is encrypted with a key
-                  kept in the user&apos;s browser, and a backup of that key is
-                  locked with an escrow key held by a trusted group, such as the
-                  CISO&apos;s office. People can then work with sensitive data
-                  with more peace of mind.
-                </p>
-                <p className="text-muted-foreground">
-                  To turn it on, generate an escrow key pair, hand the private
-                  key to that group, and set{" "}
-                  <code className="break-all rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">
-                    ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY
-                  </code>{" "}
-                  on the deployment.
-                </p>
-                <ExternalDocsLink
-                  href={getDocsUrl(
-                    DocsPage.PlatformSecurityContentEncryption,
-                    "key-escrow",
-                  )}
-                  className="underline decoration-dotted underline-offset-4 hover:decoration-solid"
-                >
-                  Learn how to enable it
-                </ExternalDocsLink>
-              </>
-            )}
+            <p className="text-muted-foreground">
+              Some conversations shouldn&apos;t be visible to the team that runs{" "}
+              {appName} — for example, sensitive discussions among senior
+              management. Yet the company still needs a way to audit them in an
+              emergency.
+            </p>
+            <p className="text-muted-foreground">
+              Encrypted chats solve this. Each chat is encrypted with a key kept
+              in the user&apos;s browser, and a backup of that key is locked
+              with an escrow key held by a trusted group, such as the
+              CISO&apos;s office. People can then work with sensitive data with
+              more peace of mind.
+            </p>
+            <p className="text-muted-foreground">
+              To turn it on, generate an escrow key pair, hand the private key
+              to that group, and set{" "}
+              <code className="break-all rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">
+                ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY
+              </code>{" "}
+              on the deployment.
+            </p>
+            <ExternalDocsLink
+              href={getDocsUrl(
+                DocsPage.PlatformSecurityContentEncryption,
+                "key-escrow",
+              )}
+              className="underline decoration-dotted underline-offset-4 hover:decoration-solid"
+            >
+              Learn how to enable it
+            </ExternalDocsLink>
           </PopoverContent>
         </Popover>
       )}

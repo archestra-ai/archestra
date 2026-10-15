@@ -89,11 +89,9 @@ for (;;) {
       throw error;
     }
     if (error.code !== "EEXIST") throw error;
-    if (Date.now() - started > (process.platform === "win32" ? 30000 : 6000)) throw new Error("Managed runtime installation lock timed out");
+    // A live owner may release the lock after mkdir observes EEXIST.
     try { check(lock); } catch (inspection) {
-      // The owner can release the lock between mkdir and inspection.
-      if (inspection.code === "ENOENT") continue;
-      throw inspection;
+      if (inspection.code !== "ENOENT") throw inspection;
     }
     try {
       const pid = Number(fs.readFileSync(path.join(lock, "pid"), "utf8"));
@@ -103,6 +101,7 @@ for (;;) {
         }
       }
     } catch {}
+    if (Date.now() - started > (process.platform === "win32" ? 30000 : 6000)) throw new Error("Managed runtime installation lock timed out");
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
   }
 }

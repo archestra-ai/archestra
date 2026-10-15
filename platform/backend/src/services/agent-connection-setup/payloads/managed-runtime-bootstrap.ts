@@ -68,11 +68,9 @@ async function locked(root, callback) {
         throw error;
       }
       if (error.code !== "EEXIST") throw error;
-      if (Date.now() - started > (process.platform === "win32" ? 30000 : 6000)) throw new Error("Managed runtime launch lock timed out");
+      // A live owner may release the lock after mkdir observes EEXIST.
       try { owned(lock, true); } catch (inspection) {
-        // The owner can release the lock between mkdir and inspection.
-        if (inspection.code === "ENOENT") continue;
-        throw inspection;
+        if (inspection.code !== "ENOENT") throw inspection;
       }
       // Never steal a live lock, including slow starts. Dead processes leave no writer.
       try {
@@ -83,6 +81,7 @@ async function locked(root, callback) {
           }
         }
       } catch {}
+      if (Date.now() - started > (process.platform === "win32" ? 30000 : 6000)) throw new Error("Managed runtime launch lock timed out");
       await sleep(50);
     }
   }

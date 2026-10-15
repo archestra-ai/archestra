@@ -3858,6 +3858,13 @@
       "when": 1792062478553,
       "tag": "0550_lethal_joshua_kane",
       "breakpoints": true
+    },
+    {
+      "idx": 551,
+      "version": "7",
+      "when": 1792078567225,
+      "tag": "0551_remove-scheduled-task-permissions",
+      "breakpoints": true
     }
   ]
 }

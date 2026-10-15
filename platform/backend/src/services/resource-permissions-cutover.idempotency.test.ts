@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import { sql } from "drizzle-orm";
 
 import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
@@ -20,46 +19,6 @@ import { runScopedResourcePermissionCutover } from "./resource-permissions-cutov
  * on every restart. These tests pin that no statement does.
  */
 describe("cutover idempotency", () => {
-  test("retires schedule-only authority without granting access to projects", async ({
-    makeOrganization,
-    makeCustomRole,
-  }) => {
-    const org = await makeOrganization();
-    const role = await makeCustomRole(org.id, {
-      permission: {
-        project: ["read"],
-        scheduledTask: ["read", "create", "update", "delete", "admin"],
-      },
-    });
-    await db.execute(sql`INSERT INTO resource_permission_policies (organization_id, resource, scope, grants, legacy_sharing_migrated)
-      VALUES (${org.id}, 'scheduledTask', '*', ${JSON.stringify([{ subject: { type: "role", id: role.id }, actions: ["read", "use", "update", "delete", "manage-permissions"] }])}::jsonb, true)`);
-    const key = {
-      organizationId: org.id,
-      resource: "project" as const,
-      scope: "*",
-    };
-    const before = await ResourcePermissionPolicyModel.find(key);
-    await runScopedResourcePermissionCutover();
-    const first = await ResourcePermissionPolicyModel.find(key);
-    expect(first).toEqual(before);
-    expect(
-      (
-        await db.execute(
-          sql`SELECT resource FROM resource_permission_policies WHERE resource = 'scheduledTask'`,
-        )
-      ).rows,
-    ).toEqual([]);
-    expect(
-      (
-        await db.execute<{ permission: string }>(
-          sql`SELECT permission FROM organization_role WHERE id = ${role.id}`,
-        )
-      ).rows.map((row) => JSON.parse(row.permission)),
-    ).toEqual([{ project: ["read"] }]);
-    await runScopedResourcePermissionCutover();
-    expect(await ResourcePermissionPolicyModel.find(key)).toEqual(first);
-  });
-
   test("an unconverted session policy settles after one run and never moves again", async ({
     makeOrganization,
     makeUser,

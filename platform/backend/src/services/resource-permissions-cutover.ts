@@ -37,12 +37,6 @@ export async function runScopedResourcePermissionCutover(
       SESSION_SHARING_CONVERSION,
       ...ROLE_RETIREMENT_STATEMENTS,
       EXTERNAL_AGENT_AUTHORITY,
-      // Schedules inherit Projects. Do not promote schedule-only authority
-      // into access to project files, instructions or other members' sessions.
-      sql`DELETE FROM resource_permission_policies WHERE resource = 'scheduledTask'`,
-      sql`UPDATE organization_role
-          SET permission = (permission::jsonb - 'scheduledTask')::text
-          WHERE permission::jsonb ? 'scheduledTask'`,
     ])
       await tx.execute(statement);
     await widenGrantsToPresets(tx);

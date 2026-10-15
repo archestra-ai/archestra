@@ -154406,7 +154406,7 @@
                     "properties": {
                       "skillIds": {
                         "minItems": 1,
-                        "maxItems": 500,
+                        "maxItems": 1111,
                         "type": "array",
                         "items": {
                           "type": "string",
@@ -424364,7 +424364,7 @@
                 "type": "object",
                 "properties": {
                   "skillIds": {
-                    "maxItems": 500,
+                    "maxItems": 1111,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -424833,7 +424833,7 @@
                 "type": "object",
                 "properties": {
                   "skillIds": {
-                    "maxItems": 500,
+                    "maxItems": 1111,
                     "type": "array",
                     "items": {
                       "type": "string",

@@ -2043,7 +2043,7 @@ describe("a setup over a delivery limit on the approval page", () => {
 
   it("explains too many shared skills and connects once skills are off", async () => {
     allSkillsMock.mockReturnValue({
-      data: Array.from({ length: 501 }, (_, index) => ({
+      data: Array.from({ length: 1112 }, (_, index) => ({
         id: `skill-${index}`,
         name: `skill-${index}`,
         scope: "org",
@@ -2051,7 +2051,7 @@ describe("a setup over a delivery limit on the approval page", () => {
       })),
     });
     const message =
-      "501 skills are shared with you, but one setup can include at most 500. Turn skills off in Setup options to connect without them.";
+      "1,112 skills are shared with you, but one setup can include at most 1,111. Turn skills off in Setup options to connect without them.";
     const user = userEvent.setup();
     const { finish } = renderApproval();
     try {

@@ -50,6 +50,8 @@ async function restore(pg, fixture) {
       )
     ).rows.map((row) => row.column_name);
     const where = columns.map((column) => (column === 'root' ? 'root = $1' : 'organization_id = $2'));
+    // A table keyed by only one of the two columns leaves the other parameter unused, and
+    // PostgreSQL refuses a parameter whose type it cannot infer; the casts type both.
     await pg.query(`DELETE FROM ${table} WHERE (${where.join(' OR ')}) AND $1::text IS NOT NULL AND $2::text IS NOT NULL`, [
       fixture.root,
       fixture.organization_id,

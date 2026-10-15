@@ -39,6 +39,7 @@ const {
   getAgentCredentialReadiness,
   getAgentDefaultSuggestedPrompts,
   getAgents,
+  getAgentOptions,
   getDefaultMcpGateway,
   getAgent,
   importAgent,
@@ -65,7 +66,8 @@ const internalAgentsQuery = {
   limit: AGENT_PAGE_SIZE,
 } as const;
 
-const chatAgentsQuery = internalAgentsQuery;
+// The chat roster keeps the system chat assistant that chat selection offers.
+const chatAgentsQuery = { ...internalAgentsQuery, view: "chat" } as const;
 
 /** One page of agents, with the server-side name search applied. */
 async function fetchAgentPage(
@@ -95,6 +97,7 @@ export function useAgentSearch(params: {
 }) {
   const query = {
     limit: AGENT_PAGE_SIZE,
+    view: "chat" as const,
     name: params.name?.trim() || undefined,
     agentType: params.agentType,
     scope: params.scope,
@@ -163,6 +166,25 @@ export function useProfiles(
     queryFn: () => fetchAgentPage(filters),
     initialData: params?.initialData,
     enabled: params?.enabled,
+  });
+}
+
+/** Names and presentation data only; fetch a resource before editing it. */
+export function useAgentOptions(
+  params: {
+    filters?: archestraApiTypes.GetAgentOptionsData["query"];
+    enabled?: boolean;
+  } = {},
+) {
+  const filters = { excludeBuiltIn: true, ...params.filters };
+  return useQuery({
+    queryKey: ["agents", "options", filters],
+    queryFn: async () => {
+      const { data, error } = await getAgentOptions({ query: filters });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+    enabled: params.enabled,
   });
 }
 
@@ -958,10 +980,11 @@ function findCachedAgent(
   for (const query of queryClient
     .getQueryCache()
     .findAll({ queryKey: ["agents"] })) {
-    // The chat roster deliberately carries a partial Agent wire shape. It is
+    // Chat and selector rosters deliberately carry partial Agent data. It is
     // enough to paint and initialize chat, but must never seed an editing form
     // as though it came from the full detail endpoint.
-    if (query.queryKey[1] === "chat-roster") continue;
+    if (["chat-roster", "options"].includes(String(query.queryKey[1])))
+      continue;
     // A list fetched without tools would seed a detail with no tools, which
     // reads as "this agent has none" until the seed goes stale.
     const params = query.queryKey[2] as { includeTools?: boolean } | undefined;

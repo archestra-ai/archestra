@@ -26,7 +26,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { describeKey } from "@/components/virtual-key-badge";
-import { useProfiles } from "@/lib/agent.query";
+import { useAgentOptions } from "@/lib/agent.query";
 import { typeRole } from "@/lib/design/type-scale";
 import { useInteraction } from "@/lib/interactions/interaction.query";
 import { formatDate } from "@/lib/utils/date-time";
@@ -67,7 +67,12 @@ function LogDetail({
     initialData: initialData?.interaction,
   });
 
-  const { data: agents } = useProfiles();
+  const { data: agents } = useAgentOptions({
+    filters: {
+      ids: dynamicInteraction?.profileId ? [dynamicInteraction.profileId] : [],
+    },
+    enabled: !!dynamicInteraction?.profileId,
+  });
 
   // Header first, content second: this page owns its own chrome now, so the
   // loading and failure states keep the title and the way back rather than

@@ -1,15 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import type { ScopedResource } from "@archestra/shared";
-import {
-  and,
-  eq,
-  inArray,
-  isNull,
-  or,
-  type SQL,
-  type SQLWrapper,
-  sql,
-} from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import type { AgentAccessContext, LabelWithDetails } from "@/types";
@@ -365,18 +356,39 @@ class AgentTeamModel {
     });
   }
 
-  /**
-   * Whether the `agents` row's own policy grants read to the team in
-   * `teamColumn`: the join condition for per-team views such as statistics.
-   */
-  static grantsReadToTeamColumn(teamColumn: SQLWrapper): SQL {
-    const table = schema.agentsTable;
-    return ResourcePermissionPolicyModel.grantsReadToTeamColumn({
-      organizationId: table.organizationId,
-      resource: sql`CASE WHEN ${table.agentType} = 'mcp_gateway' THEN 'mcpGateway' ELSE 'agent' END`,
-      scopeColumn: table.id,
-      teamColumn,
-    });
+  /** Object-local team read assignments, with EXISTS set semantics. */
+  static readAssignments(organizationId: string) {
+    const agent = schema.agentsTable;
+    const policy = schema.resourcePermissionPoliciesTable;
+    return db
+      .selectDistinct({
+        agentId: sql<string>`${agent.id}`.as("agent_id"),
+        teamId: sql<string>`${schema.teamsTable.id}`.as("team_id"),
+      })
+      .from(agent)
+      .innerJoin(
+        policy,
+        and(
+          eq(policy.organizationId, agent.organizationId),
+          eq(
+            policy.resource,
+            sql`CASE WHEN ${agent.agentType} = 'mcp_gateway' THEN 'mcpGateway' ELSE 'agent' END`,
+          ),
+          eq(policy.scope, sql`${agent.id}::text`),
+        ),
+      )
+      .innerJoin(
+        sql`jsonb_array_elements(${policy.grants}) AS team_grant`,
+        ResourcePermissionPolicyModel.teamReadGrantCondition(sql`team_grant`),
+      )
+      .innerJoin(
+        schema.teamsTable,
+        eq(schema.teamsTable.id, sql`team_grant->'subject'->>'id'`),
+      )
+      .where(
+        and(eq(agent.organizationId, organizationId), isNull(agent.deletedAt)),
+      )
+      .as("agent_team_read_assignments");
   }
 }
 

@@ -391,6 +391,8 @@ class StatisticsModel {
     const { timeframe, organizationId } = params;
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
 
+    const teamAssignments = AgentTeamModel.readAssignments(organizationId);
+
     // Base query for team statistics
     // Use stored cost from interactions instead of recalculating with average prices
     const query = db
@@ -413,16 +415,20 @@ class StatisticsModel {
           notDeleted(schema.agentsTable),
         ),
       )
-      // A credential billed to a team charges only that team; everything else
-      // is shared by the teams the LLM proxy or agent is granted to.
+      // Resolve grants once per agent/team instead of probing every candidate
+      // team for each interaction. Explicit billing teams bypass sharing.
+      .leftJoin(
+        teamAssignments,
+        and(
+          isNull(schema.interactionsTable.billingTeamId),
+          eq(teamAssignments.agentId, schema.agentsTable.id),
+        ),
+      )
       .innerJoin(
         schema.teamsTable,
-        or(
-          eq(schema.interactionsTable.billingTeamId, schema.teamsTable.id),
-          and(
-            isNull(schema.interactionsTable.billingTeamId),
-            AgentTeamModel.grantsReadToTeamColumn(schema.teamsTable.id),
-          ),
+        eq(
+          schema.teamsTable.id,
+          sql`COALESCE(${schema.interactionsTable.billingTeamId}, ${teamAssignments.teamId})`,
         ),
       )
       .where(
@@ -467,22 +473,22 @@ class StatisticsModel {
     const teamAgentCounts = await db
       .select({
         teamId: schema.teamsTable.id,
-        agentCount: sql<number>`CAST(COUNT(DISTINCT ${schema.agentsTable.id}) AS INTEGER)`,
+        agentCount: sql<number>`CAST(COUNT(DISTINCT ${teamAssignments.agentId}) AS INTEGER)`,
       })
       .from(schema.teamsTable)
       .leftJoin(
-        schema.agentsTable,
-        and(
-          eq(
-            schema.agentsTable.organizationId,
-            schema.teamsTable.organizationId,
-          ),
-          notDeleted(schema.agentsTable),
-          AgentTeamModel.grantsReadToTeamColumn(schema.teamsTable.id),
-        ),
+        teamAssignments,
+        eq(teamAssignments.teamId, schema.teamsTable.id),
       )
       .where(eq(schema.teamsTable.organizationId, organizationId))
       .groupBy(schema.teamsTable.id);
+
+    const membersByTeam = new Map(
+      teamMemberCounts.map((row) => [row.teamId, row.memberCount]),
+    );
+    const agentsByTeam = new Map(
+      teamAgentCounts.map((row) => [row.teamId, row.agentCount]),
+    );
 
     // Aggregate data by team
     const teamMap = new Map<string, TeamStatistics>();
@@ -492,11 +498,8 @@ class StatisticsModel {
       const cost = Number(row.cost) || 0;
 
       if (!teamMap.has(row.teamId)) {
-        const memberCount =
-          teamMemberCounts.find((t) => t.teamId === row.teamId)?.memberCount ||
-          0;
-        const agentCount =
-          teamAgentCounts.find((t) => t.teamId === row.teamId)?.agentCount || 0;
+        const memberCount = membersByTeam.get(row.teamId) ?? 0;
+        const agentCount = agentsByTeam.get(row.teamId) ?? 0;
 
         teamMap.set(row.teamId, {
           teamId: row.teamId,
@@ -536,6 +539,8 @@ class StatisticsModel {
     const { timeframe, organizationId } = params;
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
 
+    const teamAssignments = AgentTeamModel.readAssignments(organizationId);
+
     // Use stored cost from interactions instead of recalculating with average prices
     const query = db
       .select({
@@ -562,8 +567,12 @@ class StatisticsModel {
         ),
       )
       .leftJoin(
+        teamAssignments,
+        eq(teamAssignments.agentId, schema.agentsTable.id),
+      )
+      .leftJoin(
         schema.teamsTable,
-        AgentTeamModel.grantsReadToTeamColumn(schema.teamsTable.id),
+        eq(teamAssignments.teamId, schema.teamsTable.id),
       )
       .where(
         and(

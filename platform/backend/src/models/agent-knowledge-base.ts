@@ -4,6 +4,7 @@ import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { AgentKnowledgeBase } from "@/types";
 import { agentKnowledgeSourcesCache } from "./agent-knowledge-sources-cache";
 import AgentVersionModel from "./agent-version";
+import { idArrayCondition } from "./id-array-condition";
 
 class AgentKnowledgeBaseModel {
   static async findByAgent(agentId: string): Promise<AgentKnowledgeBase[]> {
@@ -170,7 +171,7 @@ class AgentKnowledgeBaseModel {
       )
       .where(
         and(
-          inArray(schema.agentKnowledgeBasesTable.agentId, agentIds),
+          idArrayCondition(schema.agentKnowledgeBasesTable.agentId, agentIds),
           notDeleted(schema.knowledgeBasesTable),
         ),
       );

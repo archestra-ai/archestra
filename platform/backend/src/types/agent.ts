@@ -364,6 +364,23 @@ export const SelectAgentSchema = AgentRowSchema.extend({
   lastUsedAt: z.date().nullable().optional(),
 });
 
+/** Fields rendered by resource pickers; editing loads the individual resource. */
+export const AgentOptionSchema = SelectAgentSchema.pick({
+  id: true,
+  name: true,
+  slug: true,
+  agentType: true,
+  icon: true,
+  scope: true,
+  authorId: true,
+  authorName: true,
+  authorEmail: true,
+  isPersonalGateway: true,
+  runtime: true,
+  description: true,
+  teams: true,
+});
+
 /** Paginated Agents-surface row with the current user's pin marker. */
 export const AgentListItemSchema = SelectAgentSchema.extend({
   pinnedAt: z.date().nullable(),

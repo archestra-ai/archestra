@@ -47,7 +47,7 @@ import {
   SHORTCUT_SEARCH,
   SHORTCUT_SIDEBAR,
 } from "@/consts";
-import { useProfiles } from "@/lib/agent.query";
+import { useAgentOptions } from "@/lib/agent.query";
 import { useMyAgentRuns } from "@/lib/agent-runtime.query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -210,11 +210,30 @@ export function ConversationSearchPalette({
   });
 
   // Agent Runtime sessions live in the same sidebar timeline as chats,
-  // so the palette lists them too (searched client-side by title — they have
-  // no message bodies for the backend conversation search to match).
+  // so the palette lists them too. Server-side title search reaches older
+  // pages without loading the entire history.
   const runtimeEnabled = useFeature("agentRuntime") === true;
-  const { data: runs = [] } = useMyAgentRuns(
-    open && isAuthenticated && canReadConversation === true && runtimeEnabled,
+  const runsEnabled =
+    open && isAuthenticated && canReadConversation === true && runtimeEnabled;
+  const runsQuery = useMyAgentRuns(
+    runsEnabled,
+    debouncedSearch.trim()
+      ? { search: debouncedSearch.trim() }
+      : { pinned: false },
+  );
+  const pinnedRunsQuery = useMyAgentRuns(
+    runsEnabled && !debouncedSearch.trim(),
+    { pinned: true },
+  );
+  const runs = useMemo(
+    () => [
+      ...new Map(
+        [...(runsQuery.data ?? []), ...(pinnedRunsQuery.data ?? [])].map(
+          (run) => [run.taskId, run],
+        ),
+      ).values(),
+    ],
+    [runsQuery.data, pinnedRunsQuery.data],
   );
 
   const navigationDestinations = useNavigationDestinations();
@@ -230,7 +249,7 @@ export function ConversationSearchPalette({
   const { data: canReadMcpRegistry } = useHasPermissions({
     mcpRegistry: ["read"],
   });
-  const { data: agents = [] } = useProfiles({
+  const { data: agents = [] } = useAgentOptions({
     enabled: open && isAuthenticated && canReadAgents === true,
   });
   const { data: mcpCatalogItems = [] } = useInternalMcpCatalog({
@@ -251,7 +270,8 @@ export function ConversationSearchPalette({
   // Show skeleton during typing or initial fetch
   const isSearching = searchQuery.trim().length > 0;
   const isTyping = searchQuery !== debouncedSearch;
-  const isSearchingAndFetching = isSearching && (isTyping || isFetching);
+  const isSearchingAndFetching =
+    isSearching && (isTyping || isFetching || runsQuery.isLoading);
   // Until chats and permissions arrive, the browse view holds a skeleton in
   // place of its lists, so the palette opens at its final height and does not
   // swap rows in one at a time.
@@ -307,8 +327,8 @@ export function ConversationSearchPalette({
     matchingMcpCatalogItems.length > 0 ||
     matchingSkills.length > 0;
 
-  // The conversation search runs on the backend; run sessions carry no
-  // message bodies, so their titles are matched here instead.
+  // The server searches run titles. Filter cached pins too while their
+  // independent browse feed is disabled during search.
   const matchingRuns = useMemo(() => {
     const normalizedQuery = debouncedSearch.trim().toLocaleLowerCase();
     if (!normalizedQuery) return [];
@@ -957,6 +977,28 @@ export function ConversationSearchPalette({
               </>
             )}
           </>
+        )}
+        {isSearching && runsQuery.hasNextPage && (
+          <CommandGroup heading="Runs">
+            <CommandItem
+              value="load-more-runs"
+              disabled={runsQuery.isFetchingNextPage}
+              onSelect={() => void runsQuery.fetchNextPage()}
+            >
+              More runs
+            </CommandItem>
+          </CommandGroup>
+        )}
+        {pinnedRunsQuery.hasNextPage && !isSearching && (
+          <CommandGroup heading="Pinned runs">
+            <CommandItem
+              value="load-more-pinned-runs"
+              disabled={pinnedRunsQuery.isFetchingNextPage}
+              onSelect={() => void pinnedRunsQuery.fetchNextPage()}
+            >
+              More pinned runs
+            </CommandItem>
+          </CommandGroup>
         )}
       </CommandList>
 

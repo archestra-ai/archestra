@@ -68,7 +68,7 @@ import {
   type SortingQuery,
   type UpdateAgent,
 } from "@/types";
-import { chunkIdsForInList, isUniqueConstraintError } from "@/utils/db";
+import { isUniqueConstraintError } from "@/utils/db";
 import { escapeLikePattern } from "@/utils/sql-search";
 import { isUuid } from "@/utils/uuid";
 import A2aRemoteAgentModel from "./a2a-remote-agent";
@@ -88,6 +88,7 @@ import AgentToolModel from "./agent-tool";
 import AgentUserModel from "./agent-user";
 import AgentVersionModel from "./agent-version";
 import CreatedByModel from "./created-by";
+import { idArrayCondition } from "./id-array-condition";
 import { latestCreatedAtByKey } from "./latest-created-at";
 import McpToolCallModel from "./mcp-tool-call";
 import OrganizationModel from "./organization";
@@ -123,6 +124,8 @@ type AgentListFilters = {
    * them: they have no author and are listed only to agent admins.
    */
   includeBuiltIn?: boolean;
+  /** `chat` keeps the system chat assistant in the list for chat selection. */
+  view?: "chat";
   labels?: Record<string, string[]>;
   status?: AgentRecordStatus;
   providerApiKeyId?: string;
@@ -960,7 +963,8 @@ class AgentModel {
        * the full Agent wire shape for compatibility, but fields the chat does
        * not consume are empty and oversized embedded icons are omitted.
        */
-      view?: "chat";
+      view?: "chat" | "options";
+      ids?: string[];
     },
   ): Promise<Agent[]> {
     // Tools are attached afterwards as slim refs via one batched query:
@@ -1011,6 +1015,8 @@ class AgentModel {
     }
 
     const isChatView = options?.view === "chat";
+    const isOptionsView = options?.view === "options";
+    const isCompactView = isChatView || isOptionsView;
     const builtInName = sql<string>`coalesce(${schema.agentsTable.builtInAgentConfig}->>'name', '')`;
     // Chat exposes its system assistant through the same authorized roster;
     // platform subagents remain excluded from ordinary chat selection.
@@ -1044,14 +1050,19 @@ class AgentModel {
       );
     }
 
+    if (options?.ids !== undefined) {
+      whereConditions.push(
+        idArrayCondition(schema.agentsTable.id, options.ids),
+      );
+    }
+
     const where = and(...whereConditions);
-    const rows =
-      options?.view === "chat"
-        ? await db
-            .select(CHAT_AGENT_ROW_COLUMNS)
-            .from(schema.agentsTable)
-            .where(where)
-        : await db.select().from(schema.agentsTable).where(where);
+    const rows = isCompactView
+      ? await db
+          .select(CHAT_AGENT_ROW_COLUMNS)
+          .from(schema.agentsTable)
+          .where(where)
+      : await db.select().from(schema.agentsTable).where(where);
 
     const agents: Agent[] = rows.map((agent) => ({
       ...agent,
@@ -1069,30 +1080,26 @@ class AgentModel {
     // avoid N+1. Chat starts from scalar configuration plus a few small
     // relation lists; editing fetches the individual full agent on demand.
     const [toolRows, teamsMap, usersMap, labelsMap] = await Promise.all([
-      agentIds.length > 0 && options?.includeTools !== false && !isChatView
-        ? Promise.all(
-            chunkIdsForInList(agentIds).map((batch) =>
-              db
-                .select({
-                  agentId: schema.agentToolsTable.agentId,
-                  tool: agentToolRefColumns,
-                })
-                .from(schema.agentToolsTable)
-                .innerJoin(
-                  schema.toolsTable,
-                  eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-                )
-                .where(inArray(schema.agentToolsTable.agentId, batch)),
-            ),
-          ).then((batches) => batches.flat())
+      agentIds.length > 0 && options?.includeTools !== false && !isCompactView
+        ? db
+            .select({
+              agentId: schema.agentToolsTable.agentId,
+              tool: agentToolRefColumns,
+            })
+            .from(schema.agentToolsTable)
+            .innerJoin(
+              schema.toolsTable,
+              eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+            )
+            .where(idArrayCondition(schema.agentToolsTable.agentId, agentIds))
         : Promise.resolve([]),
       isChatView
         ? Promise.resolve(new Map())
         : AgentTeamModel.getTeamDetailsForAgents(agentIds),
-      isChatView
+      isCompactView
         ? Promise.resolve(new Map())
         : AgentUserModel.getUserDetailsForAgents(agentIds),
-      isChatView
+      isCompactView
         ? Promise.resolve(new Map())
         : AgentLabelModel.getLabelsForAgents(agentIds),
     ]);
@@ -1112,10 +1119,18 @@ class AgentModel {
     await Promise.all([
       AgentModel.populateGrantedScope(agents),
       isChatView ? Promise.resolve() : AgentModel.populateAuthorNames(agents),
-      AgentModel.populateKnowledgeBaseIds(agents),
-      AgentModel.populateConnectorIds(agents),
-      AgentModel.populateSuggestedPrompts(agents),
-      AgentModel.populateResolvedLlm(agents),
+      isOptionsView
+        ? Promise.resolve()
+        : AgentModel.populateKnowledgeBaseIds(agents),
+      isOptionsView
+        ? Promise.resolve()
+        : AgentModel.populateConnectorIds(agents),
+      isOptionsView
+        ? Promise.resolve()
+        : AgentModel.populateSuggestedPrompts(agents),
+      isOptionsView
+        ? Promise.resolve()
+        : AgentModel.populateResolvedLlm(agents),
     ]);
     AgentModel.filterUnavailableKnowledgeTools(agents);
 
@@ -1176,7 +1191,7 @@ class AgentModel {
           schema.toolsTable,
           eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
         )
-        .where(inArray(schema.agentToolsTable.agentId, agentIds)),
+        .where(idArrayCondition(schema.agentToolsTable.agentId, agentIds)),
     ]);
 
     // Group tools by agent
@@ -1369,7 +1384,7 @@ class AgentModel {
           schema.toolsTable,
           eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
         )
-        .where(inArray(schema.agentToolsTable.agentId, agentIds)),
+        .where(idArrayCondition(schema.agentToolsTable.agentId, agentIds)),
     ]);
 
     // Group tools by agent
@@ -2125,6 +2140,8 @@ class AgentModel {
 
     const includeBuiltIn =
       filters?.includeBuiltIn === true && isAgentAdmin && !filters?.scope;
+    const chatAssistant =
+      filters?.view === "chat" && enterpriseTier.isOpenappaActive();
     if (filters?.scope === "built_in") {
       whereConditions.push(eq(schema.agentsTable.builtIn, true));
     } else if (
@@ -2137,9 +2154,23 @@ class AgentModel {
         eq(schema.agentsTable.builtIn, false),
       );
     } else if (!includeBuiltIn) {
-      whereConditions.push(eq(schema.agentsTable.builtIn, false));
+      // Chat selection keeps the system assistant visible to every member; the
+      // platform's other built-in agents stay hidden.
+      if (chatAssistant) {
+        whereConditions.push(
+          or(
+            eq(schema.agentsTable.builtIn, false),
+            eq(
+              sql<string>`coalesce(${schema.agentsTable.builtInAgentConfig}->>'name', '')`,
+              BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+            ),
+          ) as SQL,
+        );
+      } else {
+        whereConditions.push(eq(schema.agentsTable.builtIn, false));
+      }
     }
-    if (!isAgentAdmin) {
+    if (!isAgentAdmin && !chatAssistant) {
       whereConditions.push(eq(schema.agentsTable.builtIn, false));
     }
     if (filters?.teamIds?.length) {

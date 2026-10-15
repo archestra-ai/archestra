@@ -21,6 +21,7 @@ export const RouteId = {
   // Agent Routes
   GetAgents: "getAgents",
   GetAgentCatalog: "getAgentCatalog",
+  GetAgentOptions: "getAgentOptions",
   GetAgentCredentialReadiness: "getAgentCredentialReadiness",
   CreateAgent: "createAgent",
   CloneAgent: "cloneAgent",

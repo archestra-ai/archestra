@@ -56,21 +56,6 @@ export function chunkForBulkStatement<T>(rows: T[]): T[][] {
 }
 
 /**
- * Split an id list into batches for `inArray` lookups.
- *
- * Each id is one bind parameter, and Postgres caps a statement at 65535 of
- * them. A bulk read over every agent in an organization exceeds that cap, so
- * such reads query one batch at a time and merge the results.
- */
-export function chunkIdsForInList<T>(ids: T[]): T[][] {
-  const chunks: T[][] = [];
-  for (let i = 0; i < ids.length; i += BULK_STATEMENT_MAX_ROWS) {
-    chunks.push(ids.slice(i, i + BULK_STATEMENT_MAX_ROWS));
-  }
-  return chunks;
-}
-
-/**
  * Check if an error (or its cause) is a PostgreSQL foreign-key constraint
  * violation. Drizzle wraps database errors, so the cause chain is walked.
  */

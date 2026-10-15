@@ -482,6 +482,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         toolCallIds: [...runtimeSpawns],
       },
     );
+    // A call whose annotator gave no answer never ran, and the runtime has no
+    // record of it. Its result is the notice the client ran in its place, so
+    // it is answered with that notice instead of being ruled on as a call.
+    const unansweredNotices = new Map<string, string>();
+    for (const answer of results) {
+      const notice = await cacheManager.get<string>(
+        unansweredNoticeKey({ session: governed, callId: answer.id }),
+      );
+      if (typeof notice === "string") unansweredNotices.set(answer.id, notice);
+    }
     // The runtime withholds the output of a spawn that failed. What the gateway
     // recorded about the launch is not that output, so it is restored after.
     const failedLaunchResults: Record<string, string> = {};
@@ -491,7 +501,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           !binding.adapter?.isChildHandbackTool?.(result.name) &&
           !binding.adapter?.isRelayTool?.(result.name) &&
           !isPeerInboxResult(binding, result.name, result.namespace) &&
-          !childReturns.ignored.has(result.id),
+          !childReturns.ignored.has(result.id) &&
+          !unansweredNotices.has(result.id),
       )
       // An answer to an issued question is recognized as the very result the
       // client sent, so a result nothing rewrote goes on as that object.
@@ -549,6 +560,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         binding.returnContract = text;
       },
     });
+    for (const [id, notice] of unansweredNotices)
+      result.toolResultUpdates[id] = {
+        content: notice,
+        outputSource: "runtime",
+        denied: true,
+      };
     for (const answer of toolResults) {
       // Read, not consumed: the client sends this result on every later
       // request, and the model must read the same text each time.
@@ -1307,6 +1324,17 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const decisionById = new Map(
       rest.map((call, index) => [call.id, decisions[index]]),
     );
+    for (const [id, decision] of decisionById) {
+      // Only the notice of this call runs. The runtime holds no record of the
+      // call, so the result the client sends back is answered from here and
+      // never ruled on as a call that ran.
+      if (decision.kind === "deny" && decision.unanswered)
+        await cacheManager.set(
+          unansweredNoticeKey({ session, callId: id }),
+          decision.feedback,
+          TimeInMs.Day,
+        );
+    }
     for (const [id, feedback] of notLoaded) {
       decisionById.set(id, { kind: "deny", feedback });
       // The runtime holds no record of this call, so the result the client
@@ -2061,6 +2089,15 @@ function waitFailure(wait: CommonToolResult): string {
       ? wait.content
       : JSON.stringify(wait.content);
   return ` The wait itself failed, and the client reported:\n${reported}\n`;
+}
+
+function unansweredNoticeKey(params: {
+  session: OpenAppaSession;
+  callId: string;
+}): AllowedCacheKey {
+  return `${CacheKey.OpenAppaUnansweredAnnotationNotice}-${Buffer.from(
+    `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.callId)}`,
+  ).toString("base64url")}`;
 }
 
 function notLoadedRulingKey(params: {

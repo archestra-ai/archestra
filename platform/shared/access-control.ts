@@ -602,6 +602,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // based on agentType (agent, mcp_gateway, llm_proxy map to agent, mcpGateway, llmProxy resources)
   [RouteId.GetAgents]: {},
   [RouteId.GetAgentCatalog]: {},
+  [RouteId.GetAgentOptions]: {},
   [RouteId.GetAgentCredentialReadiness]: {},
   [RouteId.GetAgent]: {},
   // Agent read access is checked in the handler (requireReadableAgent).

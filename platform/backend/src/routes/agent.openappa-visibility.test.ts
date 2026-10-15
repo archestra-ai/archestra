@@ -14,7 +14,7 @@ describe("system chat agent visibility", () => {
     await app.register(chatRoutes);
   });
 
-  const chatRosterUrl = "/api/agents?agentType=agent";
+  const chatRosterUrl = "/api/agents?agentType=agent&view=chat";
 
   test("the system policy assistant uses the built-in management category and the normal chat roster", async ({
     makeMember,

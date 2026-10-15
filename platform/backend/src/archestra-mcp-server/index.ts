@@ -322,13 +322,14 @@ export async function executeArchestraTool(
   const runtimeProof = args?.[RUNTIME_TOOL_PROOF_ARGUMENT];
   let proofAccepted = false;
   if (runtimeProof !== undefined) {
+    // The proof is for the gateway only; the tool runs without it either way.
+    const { [RUNTIME_TOOL_PROOF_ARGUMENT]: _proof, ...original } = args ?? {};
     const admitted = await admitRuntimeProof({
       proof: runtimeProof,
       toolName,
       args: args ?? {},
       context,
     });
-    const { [RUNTIME_TOOL_PROOF_ARGUMENT]: _proof, ...original } = args ?? {};
     if (admitted.kind === "accepted") {
       context = {
         ...context,

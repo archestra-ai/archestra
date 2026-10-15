@@ -65,6 +65,8 @@ class OpenAppaSpawnCorrelationModel {
         ${JSON.stringify({ event: "runtime_dispatch", tool_call_id: params.toolCallId, observed: true })}::jsonb,
         '{"decision":"ack"}'::jsonb
       FROM ${sessions} AS source
+      -- A call record has no caller of its own: its session id is the
+      -- caller-scoped one, so matching this caller's session row scopes it.
       JOIN ${unenforcedCalls} AS made
         ON made.organization_id = source.organization_id
         AND made.session_id = source.session_id

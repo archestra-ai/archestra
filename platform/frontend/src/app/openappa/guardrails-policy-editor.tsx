@@ -24,6 +24,7 @@ import { BATTERY_STATUS, batteriesHref } from "./_parts/battery-status";
 import {
   batteryWorks,
   compositionNotice,
+  compositionOf,
   enforcedStatus,
 } from "./_parts/composition-view";
 import { EffectivePolicyView } from "./_parts/effective-policy-view";
@@ -93,7 +94,7 @@ export function GuardrailsPolicyEditor({
               effective.data &&
               (effective.data.lastError !== null ? (
                 <span className="text-xs font-medium">
-                  {servedHeading(effective.data.composition)}
+                  {servedHeading(compositionOf(effective.data))}
                 </span>
               ) : (
                 <span className="text-xs text-muted-foreground">
@@ -247,7 +248,7 @@ function CompositionSummary({
   declarations: PolicyDeclarations | null | undefined;
 }) {
   if (!declarations) return null;
-  const { served } = declarations.composition;
+  const { served } = compositionOf(declarations);
   if (served.kind === "root_only")
     return (
       <output

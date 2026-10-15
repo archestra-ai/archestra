@@ -5,6 +5,43 @@ import type {
 import { formatDate } from "@/lib/utils/date-time";
 import { BATTERY_STATUS, type EnforcedStatus } from "./battery-status";
 
+type Composition = PolicyDeclarations["composition"];
+
+/**
+ * What is served and what was refused, as the response says. A backend from
+ * before that record sends only `lastError`: then a refusal may still serve
+ * an earlier composition, of a revision it does not name.
+ */
+export function compositionOf(source: {
+  composition?: Composition;
+  lastError: string | null;
+  rootRevision: number;
+}): Composition {
+  if (source.composition) return source.composition;
+  return source.lastError === null
+    ? {
+        served: {
+          kind: "current",
+          rootRevision: source.rootRevision,
+          composedAt: "",
+        },
+        refusal: null,
+      }
+    : {
+        served: {
+          kind: "previous",
+          rootRevision: null,
+          composedAt: null,
+          batteries: null,
+        },
+        refusal: {
+          message: source.lastError,
+          at: "",
+          rootRevision: source.rootRevision,
+        },
+      };
+}
+
 /**
  * How the composition the runtime enforces holds a battery the current text
  * declares. A refused text keeps an earlier composition enforced, so its
@@ -15,7 +52,7 @@ export function enforcedStatus(
   declarations: PolicyDeclarations,
   battery: PolicyBattery,
 ): EnforcedStatus {
-  const { served } = declarations.composition;
+  const { served } = compositionOf(declarations);
   if (served.kind === "current") return battery.status;
   if (served.kind === "root_only") return "refused";
   if (served.batteries === null) return battery.status;
@@ -30,7 +67,7 @@ export function nowStatus(
   declarations: PolicyDeclarations,
   battery: PolicyBattery,
 ): PolicyBattery["status"] | null {
-  if (declarations.composition.served.kind !== "previous") return null;
+  if (compositionOf(declarations).served.kind !== "previous") return null;
   const held = battery.served;
   if (!held || held.status === battery.status) return null;
   return BATTERY_STATUS[battery.status].severity === "ok"
@@ -56,7 +93,7 @@ export function batteryWorks(
 export function servedRevision(
   declarations: PolicyDeclarations,
 ): number | null {
-  const { served, refusal } = declarations.composition;
+  const { served, refusal } = compositionOf(declarations);
   return served.kind === "previous" &&
     served.rootRevision !== null &&
     served.rootRevision !== refusal?.rootRevision
@@ -71,7 +108,7 @@ export function servedRevision(
 export function servedOnly(
   declarations: PolicyDeclarations,
 ): { name: string; status: PolicyBattery["status"] }[] {
-  const { served } = declarations.composition;
+  const { served } = compositionOf(declarations);
   if (served.kind !== "previous" || served.batteries === null) return [];
   const declared = new Set(declarations.batteries.map(({ name }) => name));
   return served.batteries
@@ -85,7 +122,7 @@ export function compositionNotice(declarations: PolicyDeclarations): {
   title: string;
   body: string;
 } | null {
-  const { served, refusal } = declarations.composition;
+  const { served, refusal } = compositionOf(declarations);
   if (served.kind === "current" || !refusal) return null;
   const until = declarations.managedInGithub
     ? "until a pull from the repository composes"

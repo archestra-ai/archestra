@@ -1020,8 +1020,11 @@ export function ChatPageContent({
   // refresh) still decides the first paint.
   const hasAnyApiKey =
     chatApiKeys.length > 0 &&
+    // The usable list has not settled yet: keep the composer.
     (isLoadingUsableApiKeys ||
+      // A key the viewer may use.
       usableChatApiKeys.length > 0 ||
+      // Or the agent's own key, which works through the agent.
       Boolean(activeSelectionAgent?.llmApiKeyId));
   const isAgentSubscriptionMetadataPending = Boolean(
     activeSelectionAgent?.llmApiKeyId && isActiveAgentCredentialPending,

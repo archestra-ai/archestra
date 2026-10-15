@@ -115,11 +115,9 @@ export function NewChatComposer({
     isRuntimeMode,
   );
 
-  const agentLlmApiKeyId = (
-    internalAgents.find((a) => a.id === agentId) as
-      | Record<string, unknown>
-      | undefined
-  )?.llmApiKeyId as string | null | undefined;
+  const agentLlmApiKeyId = internalAgents.find(
+    (a) => a.id === agentId,
+  )?.llmApiKeyId;
   // Keys shared only to read cannot run a chat; the agent's own key can.
   const hasNoUsableKey =
     !isRuntimeMode &&

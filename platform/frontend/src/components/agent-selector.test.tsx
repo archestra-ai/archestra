@@ -369,7 +369,9 @@ it("keeps large selector lists bounded while retaining later choices and full-li
   expect(screen.getByRole("combobox")).toHaveTextContent("Agent 204");
   await user.click(screen.getByRole("combobox"));
   expect(screen.getAllByRole("option")).toHaveLength(100);
-  await user.click(screen.getByRole("button", { name: "Next agents" }));
+  screen.getByRole("button", { name: "Next agents" }).focus();
+  await user.keyboard("{Enter}");
+  expect(select).not.toHaveBeenCalled();
   expect(screen.getAllByRole("option")).toHaveLength(100);
   expect(screen.getByRole("option", { name: /Agent 100/ })).toBeInTheDocument();
   await user.type(screen.getByPlaceholderText("Search agents..."), "204");

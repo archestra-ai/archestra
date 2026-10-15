@@ -279,12 +279,12 @@ function SingleAgentSelector({
               />
             )}
           </CommandList>
-          <AgentSelectorPagination
-            page={page}
-            total={total}
-            onPageChange={setPage}
-          />
         </Command>
+        <AgentSelectorPagination
+          page={page}
+          total={total}
+          onPageChange={setPage}
+        />
       </PopoverContent>
     </Popover>
   );
@@ -493,12 +493,12 @@ function MultiAgentSelector({
               />
             )}
           </CommandList>
-          <AgentSelectorPagination
-            page={page}
-            total={total}
-            onPageChange={setPage}
-          />
         </Command>
+        <AgentSelectorPagination
+          page={page}
+          total={total}
+          onPageChange={setPage}
+        />
         {createAction && (
           <div className="border-t p-1">
             <Button

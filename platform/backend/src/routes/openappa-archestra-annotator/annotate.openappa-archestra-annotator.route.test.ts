@@ -66,19 +66,22 @@ describe("archestra annotator", () => {
     );
   });
 
-  test("answers with the organization default model's object, through the LLM proxy", async ({
-    makeSecret,
-    makeLlmProviderApiKey,
-  }) => {
-    const secret = await makeSecret({ secret: { apiKey: "openai-key" } });
+  const useDefaultModel = async (
+    makeSecret: Parameters<Parameters<typeof test>[1]>[0]["makeSecret"],
+    makeLlmProviderApiKey: Parameters<
+      Parameters<typeof test>[1]
+    >[0]["makeLlmProviderApiKey"],
+    params: { provider: "openai" | "openrouter"; modelId: string },
+  ) => {
+    const secret = await makeSecret({ secret: { apiKey: "provider-key" } });
     const key = await makeLlmProviderApiKey(organizationId, secret.id, {
-      provider: "openai",
-      name: "OpenAI",
+      provider: params.provider,
+      name: "Provider",
     });
     const model = await ModelModel.create({
-      externalId: "openai/gpt-4o-mini",
-      provider: "openai",
-      modelId: "gpt-4o-mini",
+      externalId: `${params.provider}/${params.modelId}`,
+      provider: params.provider,
+      modelId: params.modelId,
       contextLength: 128_000,
       inputModalities: ["text"],
       outputModalities: ["text"],
@@ -92,62 +95,139 @@ describe("archestra annotator", () => {
       .update(schema.organizationsTable)
       .set({ defaultModelId: model.id, defaultLlmApiKeyId: key.id })
       .where(eq(schema.organizationsTable.id, organizationId));
+  };
 
-    let sent: Record<string, unknown> | undefined;
-    let source: string | null = null;
-    let provenInternal = false;
+  type SentRequest = {
+    body: Record<string, unknown>;
+    source: string | null;
+    internal: boolean;
+  };
+  const answerAt = (
+    path: string,
+    answer: (body: Record<string, unknown>) => Response,
+  ): SentRequest[] => {
+    const sent: SentRequest[] = [];
     server.use(
       http.post(
-        `http://127.0.0.1:${config.api.port}/v1/openai/${agentId}/chat/completions`,
+        `http://127.0.0.1:${config.api.port}${path}`,
         async ({ request: proxied }) => {
-          sent = (await proxied.json()) as Record<string, unknown>;
-          source = proxied.headers.get(SOURCE_HEADER);
-          provenInternal = takeInternalCall(
-            Object.fromEntries(proxied.headers),
-          );
-          return HttpResponse.json({
-            id: "chatcmpl-1",
-            object: "chat.completion",
-            created: 0,
-            model: "gpt-4o-mini",
-            choices: [
-              {
-                index: 0,
-                message: {
-                  role: "assistant",
-                  content: '<annotation>{"rank":"trusted"}</annotation>',
-                },
-                finish_reason: "stop",
-              },
-            ],
-            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+          const body = (await proxied.json()) as Record<string, unknown>;
+          sent.push({
+            body,
+            source: proxied.headers.get(SOURCE_HEADER),
+            internal: takeInternalCall(Object.fromEntries(proxied.headers)),
           });
+          return answer(body);
         },
       ),
+    );
+    return sent;
+  };
+  const completion = (content: string) =>
+    HttpResponse.json({
+      id: "chatcmpl-1",
+      object: "chat.completion",
+      created: 0,
+      model: "model",
+      choices: [
+        {
+          index: 0,
+          message: { role: "assistant", content },
+          finish_reason: "stop",
+        },
+      ],
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+    });
+  const systemOf = (body: Record<string, unknown>) =>
+    (body.messages as Array<{ role: string; content: unknown }>)[0];
+
+  test("answers under the provider's structured-output format, through the LLM proxy", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    await useDefaultModel(makeSecret, makeLlmProviderApiKey, {
+      provider: "openai",
+      modelId: "gpt-4o-mini",
+    });
+    const sent = answerAt(`/v1/openai/${agentId}/chat/completions`, () =>
+      completion('{"rank":"trusted"}'),
     );
 
     const response = await annotate(bearer());
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ rank: "trusted" });
-    // Archestra's usual call: no sampling override and no provider-strict
-    // schema; the schema reaches the model as text.
-    expect(sent).toMatchObject({ model: "gpt-4o-mini" });
-    expect(sent).not.toHaveProperty("temperature");
-    expect(sent).not.toHaveProperty("response_format");
+    expect(sent).toHaveLength(1);
+    const [{ body, source, internal }] = sent;
+    expect(body).toMatchObject({
+      model: "gpt-4o-mini",
+      response_format: {
+        type: "json_schema",
+        json_schema: { schema: request.schema },
+      },
+    });
+    expect(body).not.toHaveProperty("temperature");
     // The catalog has no output cap for this model, so the provider's default
     // stands and a long prompt keeps whatever window it leaves.
-    expect(sent).not.toHaveProperty("max_tokens");
-    expect(sent).not.toHaveProperty("max_completion_tokens");
-    const [system, user] = sent?.messages as Array<{
-      role: string;
-      content: string;
-    }>;
-    expect(system.content).toContain(request.system);
-    expect(system.content).toContain(JSON.stringify(request.schema));
-    expect(user).toEqual({ role: "user", content: request.input });
+    expect(body).not.toHaveProperty("max_tokens");
+    expect(body).not.toHaveProperty("max_completion_tokens");
+    // The schema travels as the format, not as prompt text.
+    expect(systemOf(body)).toEqual({ role: "system", content: request.system });
     expect(source).toBe("guardrail:annotator");
-    expect(provenInternal).toBe(true);
+    expect(internal).toBe(true);
+  });
+
+  test("falls back to a tagged answer for a model that refuses the format, and stops asking it", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    await useDefaultModel(makeSecret, makeLlmProviderApiKey, {
+      provider: "openai",
+      modelId: "gpt-refuses-schemas",
+    });
+    const sent = answerAt(`/v1/openai/${agentId}/chat/completions`, (body) =>
+      "response_format" in body
+        ? HttpResponse.json(
+            { error: { message: "Invalid schema.", type: "invalid_request" } },
+            { status: 400 },
+          )
+        : completion('<annotation>{"rank":"suspicious"}</annotation>'),
+    );
+
+    const first = await annotate(bearer());
+    const second = await annotate(bearer());
+
+    expect(first.json()).toEqual({ rank: "suspicious" });
+    expect(second.json()).toEqual({ rank: "suspicious" });
+    expect(sent.map(({ body }) => "response_format" in body)).toEqual([
+      true,
+      false,
+      false,
+    ]);
+    const tagged = systemOf(sent[1].body).content as string;
+    expect(tagged.startsWith(request.system)).toBe(true);
+    expect(tagged.length).toBeGreaterThan(request.system.length);
+  });
+
+  test("marks the constant system prompt as a cache breakpoint for Claude through OpenRouter", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    await useDefaultModel(makeSecret, makeLlmProviderApiKey, {
+      provider: "openrouter",
+      modelId: "anthropic/claude-sonnet-5",
+    });
+    const sent = answerAt(`/v1/openrouter/${agentId}/chat/completions`, () =>
+      completion('{"rank":"trusted"}'),
+    );
+
+    const response = await annotate(bearer());
+
+    expect(response.json()).toEqual({ rank: "trusted" });
+    expect(systemOf(sent[0].body)).toMatchObject({
+      role: "system",
+      cache_control: { type: "ephemeral" },
+    });
   });
 
   test("names the key and the upstream rejection when the model call fails", async ({

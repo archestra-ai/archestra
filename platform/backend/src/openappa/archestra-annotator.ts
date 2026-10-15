@@ -1,10 +1,24 @@
 import { BUILT_IN_AGENT_IDS } from "@archestra/shared";
-import { APICallError } from "ai";
-import { createLLMModel, isApiKeyRequired } from "@/clients/llm-client";
+import {
+  APICallError,
+  generateText,
+  jsonSchema,
+  NoObjectGeneratedError,
+  Output,
+  type SystemModelMessage,
+} from "ai";
+import { LRUCacheManager } from "@/cache-manager";
+import { isAnthropicNativeEndpoint } from "@/clients/anthropic-endpoint";
+import {
+  createLLMModel,
+  isApiKeyRequired,
+  type LLMModel,
+} from "@/clients/llm-client";
 import logger from "@/logging";
 import AgentModel from "@/models/agent";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import OrganizationModel from "@/models/organization";
+import { applyPromptCacheBreakpoints } from "@/routes/chat/normalization/apply-prompt-cache";
 import {
   generateTaggedText,
   TRUNCATION_RETRY_FACTOR,
@@ -84,8 +98,6 @@ class OpenAppaArchestraAnnotator {
       baseUrl: selection.baseUrl,
       chatApiKeyId: selection.chatApiKeyId,
     });
-    // A fraction of the model's budget, so the truncation retry's extra room
-    // still fits under the model's real output cap.
     const budget = defaultMaxOutputTokens(
       selection.provider,
       await resolveModelOutputBudget({
@@ -93,19 +105,44 @@ class OpenAppaArchestraAnnotator {
         modelName: selection.modelName,
       }),
     );
-    const maxOutputTokens =
-      budget === undefined
-        ? undefined
-        : Math.floor(budget / TRUNCATION_RETRY_FACTOR);
-    try {
-      const text = await generateTaggedText({
-        model,
-        tag: "annotation",
-        system: `${request.system}\n\nThe annotation is one JSON object that matches this JSON schema:\n${JSON.stringify(request.schema)}`,
-        prompt: request.input,
-        maxOutputTokens,
+    // The runtime's system prompt is identical across consults of one
+    // annotator, so a breakpoint after it turns every later consult's prompt
+    // into a cache read.
+    const cached = (content: string): SystemModelMessage => {
+      const [marked] = applyPromptCacheBreakpoints({
+        provider: selection.provider,
+        model: selection.modelName,
+        messages: [{ role: "system", content }],
+        anthropicNativeEndpoint: isAnthropicNativeEndpoint({
+          provider: selection.provider,
+          model: selection.modelName,
+          baseUrl: selection.baseUrl,
+        }),
       });
-      const answer = text === null ? null : parseObject(text);
+      return marked as SystemModelMessage;
+    };
+    try {
+      const answer =
+        (await structuredAnswer({
+          model,
+          modelKey: `${selection.provider}/${selection.modelName}`,
+          system: cached(request.system),
+          request,
+          maxOutputTokens: budget,
+        })) ??
+        (await taggedAnswer({
+          model,
+          system: cached(
+            `${request.system}\n\nThe annotation is one JSON object that matches this JSON schema:\n${JSON.stringify(request.schema)}`,
+          ),
+          request,
+          // A fraction of the budget, so the truncation retry's extra room
+          // still fits under the model's real output cap.
+          maxOutputTokens:
+            budget === undefined
+              ? undefined
+              : Math.floor(budget / TRUNCATION_RETRY_FACTOR),
+        }));
       if (answer === null)
         return {
           kind: "failed",
@@ -145,6 +182,88 @@ class OpenAppaArchestraAnnotator {
 
 export const openappaArchestraAnnotator = new OpenAppaArchestraAnnotator();
 
+// === Internal ===
+
+type AnnotationCall = {
+  model: LLMModel;
+  system: SystemModelMessage;
+  request: ArchestraAnnotationRequest;
+  maxOutputTokens: number | undefined;
+};
+
+/**
+ * Models that refused the structured-output format, so later consults go
+ * straight to the tagged answer instead of paying for a refused call each
+ * time. Entries expire, so a provider that gains support is tried again.
+ */
+const structuredOutputRefusals = new LRUCacheManager<true>({
+  maxSize: 256,
+  defaultTtl: 60 * 60 * 1000,
+});
+
+/**
+ * The answer under the provider's structured-output format, which carries the
+ * schema instead of the prompt. Null when the provider refused the format or
+ * answered outside it, so the caller falls back to the tagged answer; any
+ * other failure propagates unchanged.
+ */
+async function structuredAnswer(
+  call: AnnotationCall & { modelKey: string },
+): Promise<Record<string, unknown> | null> {
+  if (structuredOutputRefusals.get(call.modelKey)) return null;
+  try {
+    const { output } = await generateText({
+      model: call.model,
+      system: call.system,
+      prompt: call.request.input,
+      output: Output.object({ schema: jsonSchema(call.request.schema) }),
+      maxOutputTokens: call.maxOutputTokens,
+    });
+    return isPlainObject(output) ? output : null;
+  } catch (error) {
+    if (!refusesStructuredOutput(error)) throw error;
+    structuredOutputRefusals.set(call.modelKey, true);
+    logger.info(
+      { model: call.modelKey },
+      "OpenAPPA archestra annotator: the model refused structured output; using tagged answers",
+    );
+    return null;
+  }
+}
+
+/**
+ * A rejected request shape or an answer that does not parse against the
+ * schema. Authentication, rate and cost limits are not about the format.
+ */
+function refusesStructuredOutput(error: unknown): boolean {
+  if (NoObjectGeneratedError.isInstance(error)) return true;
+  if (!APICallError.isInstance(error)) return false;
+  switch (error.statusCode) {
+    case 400:
+    case 422:
+      return true;
+    default:
+      return false;
+  }
+}
+
+async function taggedAnswer(
+  call: AnnotationCall,
+): Promise<Record<string, unknown> | null> {
+  const text = await generateTaggedText({
+    model: call.model,
+    tag: "annotation",
+    system: call.system,
+    prompt: call.request.input,
+    maxOutputTokens: call.maxOutputTokens,
+  });
+  return text === null ? null : parseObject(text);
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * What the upstream said, from the `error.message` every provider body and
  * Archestra's own error envelope carry, else the status text.
@@ -174,9 +293,7 @@ function upstreamMessage(error: APICallError): string {
 function parseObject(text: string): Record<string, unknown> | null {
   try {
     const value: unknown = JSON.parse(text);
-    return typeof value === "object" && value !== null && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : null;
+    return isPlainObject(value) ? value : null;
   } catch {
     return null;
   }

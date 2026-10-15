@@ -166,14 +166,170 @@ APPA_PROVIDER_JEV_API_KEY = "other-key"
     expect(conflicts).toEqual(["a.tool-call"]);
   });
 
-  test("redeclaring a name with a different URL is refused before redirecting old sessions", () => {
-    const { refusal } = retire({
-      openings: [opening("a1", URL_BOUND)],
+  test("redeclaring a name with a different URL is reported as a rebinding, not kept or refused", () => {
+    const { kept, dropped, rebound } = retire({
+      openings: [
+        opening("a1", URL_BOUND),
+        opening("a2", URL_BOUND.replace("judge-a.test", "judge-a0.test")),
+      ],
       composed: URL_BOUND.replace("judge-a.test", "judge-a2.test"),
     });
-    expect(refusal).toEqual([
-      'annotator "a.tool-call" is used by earlier sessions with a different binding. Use a new annotator name to keep their original binding.',
+    expect(kept).toEqual([]);
+    expect(dropped).toEqual([]);
+    expect(rebound).toEqual([
+      {
+        name: "a.tool-call",
+        current: "http://judge-a2.test/annotate",
+        earlier: [
+          "http://judge-a.test/annotate",
+          "http://judge-a0.test/annotate",
+        ],
+      },
     ]);
+  });
+
+  test("the earlier bindings of a rebound name are listed once each, in hash order", () => {
+    const { rebound } = retire({
+      openings: [
+        opening("c3", URL_BOUND),
+        opening("b2", URL_BOUND.replace("judge-a.test", "judge-a0.test")),
+        opening("a1", URL_BOUND),
+      ],
+      composed: URL_BOUND.replace("judge-a.test", "judge-a2.test"),
+    });
+    expect(rebound).toEqual([
+      {
+        name: "a.tool-call",
+        current: "http://judge-a2.test/annotate",
+        earlier: [
+          "http://judge-a.test/annotate",
+          "http://judge-a0.test/annotate",
+        ],
+      },
+    ]);
+  });
+
+  test("a builtin whose credential changed is reported with the credential that differs", () => {
+    const { rebound } = retire({
+      openings: [opening("a1", JEV_BOUND)],
+      composed: JEV_BOUND.replace('"jev-key"', '"other-key"'),
+      readable: ["jev-key", "other-key"],
+    });
+    expect(rebound).toEqual([
+      {
+        name: "jev.tool-call",
+        current: 'builtin "jev" with APPA_PROVIDER_JEV_API_KEY = "other-key"',
+        earlier: ['builtin "jev" with APPA_PROVIDER_JEV_API_KEY = "jev-key"'],
+      },
+    ]);
+  });
+
+  test("two retired snapshots of one helper are one binding, kept at the install that answers and at this host", () => {
+    const gone = hostHelped({ install: "install-9", port: 9000 });
+    const alive = hostHelped({ install: "install-1", port: 3000 }).replace(
+      "APPA_ARCHESTRA_BRIDGE_TOKEN",
+      "APPA_ARCHESTRA_HELPER_TOKEN",
+    );
+    const { kept, dropped, conflicts } = retire({
+      // Hash order would pick the gone install last; the live one is kept.
+      openings: [opening("a1", alive), opening("b2", gone)],
+      composed: JUDGED_BY_B,
+    });
+    expect(conflicts).toEqual([]);
+    expect(dropped).toEqual([]);
+    expect(
+      kept.map(({ name, binding, externals }) => ({
+        name,
+        binding,
+        externals,
+      })),
+    ).toEqual([
+      {
+        name: "a.tool-call",
+        binding: `${HELPER_BASE}install-1/a.tool-call`,
+        externals: [
+          {
+            path: ["annotators", "a.tool-call"],
+            table: {
+              url: `${HELPER_BASE}install-1/a.tool-call`,
+              token_env: "APPA_ARCHESTRA_BRIDGE_TOKEN",
+            },
+          },
+        ],
+      },
+    ]);
+  });
+
+  test("a table with more than the host writes for its helpers is its own binding", () => {
+    const served = hostHelped({ install: "install-2", port: 9000 });
+    const authored = `${served}timeout_ms = 1\n`;
+    expect(
+      retire({ openings: [opening("a1", authored)], composed: served }).rebound,
+    ).toHaveLength(1);
+    expect(
+      retire({ openings: [opening("a1", served)], composed: authored }).rebound,
+    ).toHaveLength(1);
+  });
+
+  test("a host helper served under another install id, port or token variable is the same binding", () => {
+    const served = hostHelped({ install: "install-2", port: 9000 });
+    for (const earlier of [
+      hostHelped({ install: "install-1", port: 9000 }),
+      hostHelped({ install: "install-2", port: 3000 }),
+      hostHelped({ install: "install-2", port: 9000 }).replace(
+        "APPA_ARCHESTRA_BRIDGE_TOKEN",
+        "APPA_ARCHESTRA_HELPER_TOKEN",
+      ),
+    ]) {
+      const { kept, dropped, rebound } = retire({
+        openings: [opening("a1", earlier)],
+        composed: served,
+      });
+      expect({ kept, dropped, rebound }).toEqual({
+        kept: [],
+        dropped: [],
+        rebound: [],
+      });
+      expect(
+        unservedAnnotator({
+          opening: earlier,
+          served,
+          helperBase: HELPER_BASE,
+        }),
+      ).toBeNull();
+    }
+  });
+
+  test("a host helper that names another external, or a URL elsewhere, is a rebinding", () => {
+    const served = hostHelped({ install: "install-2", port: 9000 });
+    const otherExternal = hostHelped({
+      install: "install-1",
+      port: 9000,
+    }).replace("install-1/a.tool-call", "install-1/other.tool-call");
+    const elsewhere = served.replace("127.0.0.1:9000", "judge-a.test");
+    for (const earlier of [otherExternal, elsewhere]) {
+      expect(
+        retire({ openings: [opening("a1", earlier)], composed: served })
+          .rebound,
+      ).toEqual([
+        {
+          name: "a.tool-call",
+          current: `${HELPER_BASE}install-2/a.tool-call`,
+          earlier: [
+            earlier === otherExternal
+              ? `${HELPER_BASE}install-1/other.tool-call`
+              : "http://judge-a.test/api/openappa/helpers/install-2/a.tool-call",
+          ],
+        },
+      ]);
+      expect(
+        unservedAnnotator({
+          opening: earlier,
+          served,
+          helperBase: HELPER_BASE,
+        }),
+      ).toBe("a.tool-call");
+    }
   });
 
   test("changing a shared profile cannot silently redirect a renamed old annotator", () => {
@@ -309,17 +465,34 @@ function opening(hash: string, content: string) {
   return parsed;
 }
 
+/** `URL_BOUND` answered by this host's helper of `install` on `port`, as the host composes it. */
+function hostHelped(params: { install: string; port: number }): string {
+  const base = HELPER_BASE.replace(":9000", `:${params.port}`);
+  return URL_BOUND.replace(
+    "http://judge-a.test/annotate",
+    `${base}${params.install}/a.tool-call`,
+  ).concat('token_env = "APPA_ARCHESTRA_BRIDGE_TOKEN"\n');
+}
+
 describe("unservedAnnotator", () => {
   test("names an opening annotator the served policy no longer answers", () => {
-    expect(unservedAnnotator({ opening: URL_BOUND, served: JUDGED_BY_B })).toBe(
-      "a.tool-call",
-    );
+    expect(
+      unservedAnnotator({
+        opening: URL_BOUND,
+        served: JUDGED_BY_B,
+        helperBase: HELPER_BASE,
+      }),
+    ).toBe("a.tool-call");
   });
 
   test("does not name an annotator whose binding is unchanged", () => {
-    expect(unservedAnnotator({ opening: URL_BOUND, served: URL_BOUND })).toBe(
-      null,
-    );
+    expect(
+      unservedAnnotator({
+        opening: URL_BOUND,
+        served: URL_BOUND,
+        helperBase: HELPER_BASE,
+      }),
+    ).toBe(null);
   });
 
   test("does not invalidate a new session for an unused retained declaration", () => {
@@ -333,6 +506,7 @@ describe("unservedAnnotator", () => {
       unservedAnnotator({
         opening: openingPolicy ?? "",
         served: JUDGED_BY_B,
+        helperBase: HELPER_BASE,
       }),
     ).toBeNull();
   });
@@ -348,6 +522,7 @@ function retire(params: {
     composed: params.composed,
     readable: new Set(params.readable ?? ["jev-key"]),
     helperBase: HELPER_BASE,
+    helperTokenEnv: "APPA_ARCHESTRA_BRIDGE_TOKEN",
     installs: new Set(["install-1"]),
   });
 }

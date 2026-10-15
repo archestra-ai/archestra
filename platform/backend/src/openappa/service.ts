@@ -30,7 +30,7 @@ import {
   normalizeCommandExecutionArguments,
 } from "@/openappa/command-normalization";
 import { currentTrajectory } from "@/openappa/current-trajectory";
-import { openappaDeclarations } from "@/openappa/declarations";
+import { helperUrlBase, openappaDeclarations } from "@/openappa/declarations";
 import {
   declareExistingInstalls,
   seedCredentialBindings,
@@ -559,7 +559,9 @@ async function missingOpeningAnnotator(
     });
     if (!root) return null;
     const opening = await (await binding()).readOpenappaOpeningPolicy(root);
-    return opening === null ? null : unservedAnnotator({ opening, served });
+    return opening === null
+      ? null
+      : unservedAnnotator({ opening, served, helperBase: helperUrlBase("") });
   } catch (error) {
     logger.warn(
       { err: error },

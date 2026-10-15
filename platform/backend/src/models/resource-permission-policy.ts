@@ -32,6 +32,52 @@ import type { GrantPrincipal } from "./resource-permission-subject";
 import RoleCompositionModel from "./role-composition";
 
 export default class ResourcePermissionPolicyModel {
+  /** Bound application memory while upgrading a large legacy policy catalog. */
+  static async listForPresetUpgrade(params: {
+    tx: Transaction;
+    after?: { organizationId: string; resource: string; scope: string };
+  }) {
+    const table = schema.resourcePermissionPoliciesTable;
+    return params.tx
+      .select({
+        organizationId: table.organizationId,
+        resource: table.resource,
+        scope: table.scope,
+        grants: table.grants,
+      })
+      .from(table)
+      .where(
+        params.after
+          ? sql`(${table.organizationId}, ${table.resource}, ${table.scope}) >
+        (${params.after.organizationId}, ${params.after.resource}, ${params.after.scope})`
+          : undefined,
+      )
+      .orderBy(table.organizationId, table.resource, table.scope)
+      .limit(100);
+  }
+
+  static async updatePresetUpgradePolicy(params: {
+    tx: Transaction;
+    policy: { organizationId: string; resource: ScopedResource; scope: string };
+    grants: ResourcePermissionGrant[];
+  }): Promise<void> {
+    const table = schema.resourcePermissionPoliciesTable;
+    await params.tx
+      .update(table)
+      .set({
+        grants: params.grants,
+        revision: sql`${table.revision} + 1`,
+        updatedAt: sql`now()`,
+      })
+      .where(
+        and(
+          eq(table.organizationId, params.policy.organizationId),
+          eq(table.resource, params.policy.resource),
+          eq(table.scope, params.policy.scope),
+        ),
+      );
+  }
+
   /**
    * Whether a policy puts an object within reach of the organization at large,
    * for a principal that carries no role of its own — a shared credential, an

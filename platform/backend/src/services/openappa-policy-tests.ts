@@ -333,6 +333,50 @@ async function evaluateOpenAppaPolicyTests(
     },
   };
 }
+/**
+ * Replays the saved validations against an unsaved policy, without recording
+ * a run, so a policy preview shows which checks the change would break. Null
+ * when there are no saved validations or they cannot be read or replayed: the
+ * policy preview must not fail because of its checks.
+ */
+export async function replaySavedValidations(params: {
+  organizationId: string;
+  userId: string;
+  proposedPolicy: { content: string; expectedRevision: number };
+}) {
+  if (!enterpriseTier.isOpenappaActive()) return null;
+  try {
+    const collection = await loadPolicyTestCollection(
+      params.organizationId,
+      params.userId,
+    );
+    if (collection.error || !collection.files.length) return null;
+    return await replayOpenAppaDraft(
+      {
+        ...params,
+        files: collection.files,
+        sourceVersion: collection.version,
+        directory: collection.directory,
+      },
+      collection,
+    );
+  } catch (error) {
+    logger.warn(
+      { err: error, organizationId: params.organizationId },
+      "Could not replay saved validations for a policy preview",
+    );
+    return null;
+  }
+}
+
+/** Replays draft files without recording a run, reusing an already-loaded suite. */
+export async function replayOpenAppaDraft(
+  params: Parameters<typeof evaluateOpenAppaPolicyTests>[0],
+  collection: PolicyTestCollection,
+) {
+  const { result } = await evaluateOpenAppaPolicyTests(params, collection);
+  return result.files;
+}
 export async function previewOpenAppaPolicyTest(
   params: Parameters<typeof evaluateOpenAppaPolicyTests>[0] & {
     userId: string;

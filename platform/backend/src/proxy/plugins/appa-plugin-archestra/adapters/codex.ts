@@ -35,6 +35,10 @@ const LAUNCH_TASK_NAME = /^[A-Za-z0-9_.:@/-]{1,512}$/;
 export class AppaCodexAdapter implements AppaClientAdapter {
   readonly id = "codex" as const;
   readonly trajectoryPrefix = "codex";
+  // A running Codex session does not pick up a sign-in or a config change.
+  gatewayToolsHint(serverName: string): string {
+    return `Run codex mcp login ${serverName} and finish the sign-in in your browser. If "${serverName}" is not in your Codex config, connect Codex again. Then start a new session.`;
+  }
   // Codex advertises request_user_input even when Default mode cannot run it.
   // Keep ask_user on the gateway so Codex shows an MCP elicitation form.
   readonly nativeQuestion = {

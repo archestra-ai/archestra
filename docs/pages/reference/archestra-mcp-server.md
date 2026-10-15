@@ -2977,8 +2977,8 @@ Required RBAC permission: `update` on the MCP gateway (granted per item)
 | `bind_guardrails_credential` | Bind one battery credential variable to a runtime credential key, or pass key null to unbind it. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
 | `get_openappa_policy_tests` | Read the authoritative .appa validation files, their version, configured directory and accepted Git commit. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `run_openappa_policy_tests` | Replay saved validations offline against the current policy and record the result in validation run history. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
-| `preview_openappa_validation_change` | Preview a patch of .appa validation files: checks each changed file's syntax and, when policyContent is given, the proposed policy. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
-| `publish_openappa_validation_change` | Publish the exact validation patch explained after preview_openappa_validation_change, only when the user authorized saving it. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
+| `preview_guardrails_validation_change` | Validate a proposed change to the .appa validation files and replay it. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
+| `update_guardrails_validation` | Save a change to the .appa validation files. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
 | `get_guardrails_policy_change_status` | Check the review state of an OpenAPPA policy pull request and whether Git sync has processed the merged policy. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `get_remedy_plans` | Read why the organization's guardrails policy blocked a tool call, and which remedy plans the policy offers. | None (no additional RBAC permission required) |
 | `execute_remedy_plan` | Apply a remedy plan that the organization's guardrails policy offers for a blocked call. | None (no additional RBAC permission required) |
@@ -3211,7 +3211,7 @@ Required RBAC permission: [`openappaPolicy:update`](/docs/reference/permissions#
 | `path` | `string` | No | A saved validation file's path, as get_openappa_policy_tests lists it. Omit to run every saved validation. |
 
 
-#### preview_openappa_validation_change
+#### preview_guardrails_validation_change
 
 Required RBAC permission: [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read)
 
@@ -3226,10 +3226,9 @@ Required RBAC permission: [`openappaPolicy:read`](/docs/reference/permissions#op
 | `changes.upsert[].path` | `string` | Yes |  |
 | `changes.upsert[].content` | `string` | Yes |  |
 | `changes.delete` | `string[]` | No |  |
-| `policyContent` | `string \| null` | No | Complete proposed root policy, only when the user explicitly requested a policy change. Omit or pass null for validation-only work. Never use an empty string, whitespace, or a copy of the current policy as a placeholder. |
 
 
-#### publish_openappa_validation_change
+#### update_guardrails_validation
 
 Required RBAC permission: [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update)
 
@@ -3244,7 +3243,6 @@ Required RBAC permission: [`openappaPolicy:update`](/docs/reference/permissions#
 | `changes.upsert[].path` | `string` | Yes |  |
 | `changes.upsert[].content` | `string` | Yes |  |
 | `changes.delete` | `string[]` | No |  |
-| `policyContent` | `string \| null` | No | Complete proposed root policy, only when the user explicitly requested a policy change. Omit or pass null for validation-only work. Never use an empty string, whitespace, or a copy of the current policy as a placeholder. |
 | `title` | `string` | No |  |
 | `summary` | `string` | No |  |
 

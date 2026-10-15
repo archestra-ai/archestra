@@ -80102,6 +80102,10 @@ export type GetMcpServersData = {
     path?: never;
     query?: {
         catalogId?: string;
+        /**
+         * Include per-install agent usage (default true). False returns empty assignedAgents for status-only lists.
+         */
+        includeAssignedAgents?: boolean;
         assignmentScope?: 'personal' | 'team' | 'org';
         assignmentTeamIds?: Array<string>;
         /**

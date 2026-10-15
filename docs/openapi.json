@@ -306653,6 +306653,15 @@
           },
           {
             "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "includeAssignedAgents",
+            "required": false,
+            "description": "Include per-install agent usage (default true). False returns empty assignedAgents for status-only lists."
+          },
+          {
+            "schema": {
               "type": "string",
               "enum": [
                 "personal",

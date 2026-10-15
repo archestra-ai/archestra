@@ -154,7 +154,11 @@ describe("implicit OpenAPPA policy read tools", () => {
     };
 
     const names = await listed({ agentId: agent.id, organizationId, userId });
-    expect(names).toEqual(expect.arrayContaining(READ));
+    for (const read of READ) {
+      expect(names.includes(read)).toBe(
+        surface.agentType === "agent" || surface.toolExposureMode === "full",
+      );
+    }
     for (const write of WRITE) expect(names).not.toContain(write);
 
     const found = await searched(context);

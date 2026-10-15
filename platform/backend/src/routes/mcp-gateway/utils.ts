@@ -2,11 +2,15 @@ import { createHash } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import {
   ARCHESTRA_MCP_CATALOG_ID,
+  ARCHESTRA_TOOL_GROUPS,
   extractMcpExecutedAs,
+  getArchestraToolGroupId,
   hasArchestraTokenPrefix,
   isAgentTool,
   isAlwaysExposedArchestraToolShortName,
+  isChatOnlyArchestraToolShortName,
   isImplicitOpenAppaReadToolShortName,
+  isRunControlArchestraToolShortName,
   isSkillTool,
   isYellToolShortName,
   MCP_EXECUTED_AS_META_KEY,
@@ -16,17 +20,12 @@ import {
   parseFullToolName,
   platformExecutedAs,
   TOOL_ASK_USER_SHORT_NAME,
-  TOOL_CANCEL_RUN_SHORT_NAME,
-  TOOL_COPY_FILE_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
-  TOOL_GET_RUN_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
-  TOOL_LIST_RUNS_SHORT_NAME,
   TOOL_LIST_SKILLS_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
-  TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_START_RUN_SHORT_NAME,
@@ -285,18 +284,6 @@ type ResolvedArchestraToken =
       >["serviceAccount"];
     };
 
-/**
- * Archestra built-ins whose effect exists only on the internal chat surface, so
- * an external MCP client is never offered them: `render_app` mounts an app from
- * its own result, which only Archestra's chat does, and `copy_file` exchanges
- * files with the app the user has open there — off that surface there is
- * neither a conversation nor an open app, and every call can only refuse.
- */
-const CHAT_ONLY_ARCHESTRA_SHORT_NAMES = new Set<string>([
-  TOOL_RENDER_APP_SHORT_NAME,
-  TOOL_COPY_FILE_SHORT_NAME,
-]);
-
 const TOKEN_AUTH_CACHE_TTL_MS = 30_000;
 const TOKEN_AUTH_CACHE_MAX_ENTRIES = 1_000;
 const tokenAuthCache = new LRUCacheManager<TokenAuthResult | null>({
@@ -527,6 +514,7 @@ export async function buildAgentMcpToolList(params: {
   );
   const exposureFiltered = filterExposedTools({
     toolExposureMode: agent.toolExposureMode ?? "full",
+    internalChat: agent.agentType === "agent",
     advertiseUiResourceTools: surface.advertiseUiTools,
     autoToolMode: agent.accessAllTools,
     tools: candidateTools.filter((t) => permittedNames.has(t.name)),
@@ -537,9 +525,7 @@ export async function buildAgentMcpToolList(params: {
         // A null short name is not an Archestra built-in at all, so it is
         // never one of the chat-only ones.
         const shortName = archestraMcpBranding.getToolShortName(tool.name);
-        return (
-          shortName === null || !CHAT_ONLY_ARCHESTRA_SHORT_NAMES.has(shortName)
-        );
+        return !isChatOnlyArchestraToolShortName(shortName);
       });
 
   // Resolve the backing catalogs of the advertised tools once: their names
@@ -619,6 +605,9 @@ export async function buildAgentMcpToolList(params: {
         ? buildSearchToolsDescription({
             mcpTools,
             advertisedToolNames: permittedTools.map((tool) => tool.name),
+            availableBuiltInToolNames: candidateTools
+              .filter((tool) => tool.builtIn && permittedNames.has(tool.name))
+              .map((tool) => tool.name),
             agentId,
             userId: tokenAuth?.userId,
             organizationId: tokenAuth?.organizationId,
@@ -2594,16 +2583,30 @@ async function resolveArchestraToken(
  */
 function filterExposedTools(params: {
   toolExposureMode: ToolExposureMode;
+  internalChat: boolean;
   advertiseUiResourceTools: boolean;
   autoToolMode: boolean;
   tools: McpListToolCandidate[];
 }) {
-  const { toolExposureMode, advertiseUiResourceTools, autoToolMode, tools } =
-    params;
+  const {
+    toolExposureMode,
+    internalChat,
+    advertiseUiResourceTools,
+    autoToolMode,
+    tools,
+  } = params;
   return tools.filter((tool) => {
+    const shortName = archestraMcpBranding.getToolShortName(tool.name);
     // `search_and_run_only` hides every tool behind search_tools/run_tool, but
-    // the meta tools themselves and the always-exposed skill path must stay
-    // top-level. UI-providing tools (app launch tools, external ext-apps tools)
+    // the meta tools and session controls stay top-level. Internal chat also
+    // keeps its skill/file/runtime path and policy tools: its system prompt
+    // derives skill activation and file guidance from those declarations.
+    // External clients discover these capabilities with search_tools instead.
+    // OpenAPPA session/peer-message controls and ask_user remain direct: their
+    // proxy proofs, approval UI and remedy dispatch have dedicated contracts.
+    // Run lifecycle controls use the normal search/run path on gateways;
+    // their handlers still enforce runtime proofs and actor ownership.
+    // UI-providing tools (app launch tools, external ext-apps tools)
     // stay too, on two conditions. First, only on a surface that advertises
     // them: an MCP Apps host renders a UI from a tool DEFINITION listed at
     // discovery time, so a gateway must keep it top-level; the chat surface
@@ -2618,9 +2621,11 @@ function filterExposedTools(params: {
     return toolExposureMode === "search_and_run_only"
       ? isArchestraMetaTool(tool.name) ||
           (openappaEnabled() &&
-            isOpenappaTool(archestraMcpBranding.getToolShortName(tool.name))) ||
-          isTaskControlTool(tool.name) ||
-          isAlwaysExposedTool(tool.name) ||
+            isOpenappaTool(shortName) &&
+            (internalChat || ALWAYS_LOADED_SHORT_NAMES.has(shortName ?? ""))) ||
+          (internalChat && isTaskControlTool(tool.name)) ||
+          (isAlwaysExposedTool(tool.name) &&
+            (internalChat || shortName === TOOL_ASK_USER_SHORT_NAME)) ||
           (advertiseUiResourceTools &&
             !autoToolMode &&
             providesUiResource(tool))
@@ -2872,6 +2877,7 @@ const SEARCH_TOOLS_DESCRIPTION_MAX_SERVER_DESCRIPTION_LENGTH = 200;
 async function buildSearchToolsDescription(params: {
   mcpTools: McpToolForSearchDescription[];
   advertisedToolNames: string[];
+  availableBuiltInToolNames: string[];
   agentId: string;
   userId?: string;
   organizationId?: string;
@@ -2903,20 +2909,12 @@ async function buildSearchToolsDescription(params: {
     toolNames: params.advertisedToolNames,
     lookups,
   });
-  const runtimeInstruction = params.advertisedToolNames.some(
+  const runtimeInstruction = params.availableBuiltInToolNames.some(
     (name) =>
       archestraMcpBranding.getToolShortName(name) === TOOL_STEER_RUN_SHORT_NAME,
   )
     ? `For requests such as "hand this work over to ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}" or "spin this up in ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}", discover Agent Runtime tools here and load the Agent Runtime Handoff skill before transferring work. Discover an agent with list_agents; use start_run only when this work has no runtime session. Otherwise steer_run reuses its saved session. "Bring it back" or "resume locally" means retrieve changes and context, stop remote editing, and continue in the local client.`
     : null;
-  const baseDescription = [
-    searchTool.description,
-    knowledgeInstruction,
-    runtimeInstruction,
-  ]
-    .filter(Boolean)
-    .join(" ");
-
   // Mirror search_tools' actual search space: the catalogs backing the
   // assigned tools, widened by the dynamically discoverable ones when the
   // agent's "access all tools" setting is on (getUnassignedDiscoverableTools
@@ -2928,6 +2926,38 @@ async function buildSearchToolsDescription(params: {
     organizationId,
     lookups,
   });
+
+  // Describe only reachable, deferred built-ins. Assigned/implicit candidates
+  // already passed caller access, exclusions and RBAC; Auto-mode discovery
+  // needs its own RBAC filter. Use catalog provenance so an upstream tool
+  // cannot advertise a built-in capability merely by copying its name.
+  const dynamicBuiltIns = discoverableTools.filter(
+    (tool) => tool.catalogId === ARCHESTRA_MCP_CATALOG_ID,
+  );
+  const permittedDynamicNames = await filterToolNamesByPermission(
+    dynamicBuiltIns.map((tool) => tool.name),
+    userId,
+    organizationId,
+    lookups,
+  );
+  const builtInSummary = summarizeDeferredBuiltIns({
+    availableNames: [
+      ...params.availableBuiltInToolNames,
+      ...dynamicBuiltIns
+        .filter((tool) => permittedDynamicNames.has(tool.name))
+        .map((tool) => tool.name),
+    ],
+    advertisedNames: params.advertisedToolNames,
+    hasKnowledgeSources: knowledgeInstruction !== null,
+  });
+  const baseDescription = [
+    searchTool.description,
+    builtInSummary,
+    knowledgeInstruction,
+    runtimeInstruction,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   const catalogIds = [
     ...new Set(
@@ -2978,6 +3008,50 @@ async function buildSearchToolsDescription(params: {
   return `${baseDescription} Available MCP servers for this gateway include: ${catalogSummaries.join(", ")}${remainingText}. Use this tool first when the user names one of these servers or asks for capabilities that may be provided by connected MCP servers.`;
 }
 
+function summarizeDeferredBuiltIns(params: {
+  availableNames: string[];
+  advertisedNames: string[];
+  hasKnowledgeSources: boolean;
+}): string | null {
+  const advertised = new Set(params.advertisedNames);
+  const deferredShortNames = new Set<string>(
+    params.availableNames
+      .filter((name) => !advertised.has(name) && !isArchestraMetaTool(name))
+      .flatMap((name) => {
+        const shortName = archestraMcpBranding.getToolShortName(name);
+        // Search also omits the knowledge-query tool when this caller has no
+        // usable sources, even when the tool itself is assigned and RBAC-safe.
+        return shortName &&
+          !isChatOnlyArchestraToolShortName(shortName) &&
+          (params.hasKnowledgeSources ||
+            shortName !== TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME)
+          ? [shortName]
+          : [];
+      }),
+  );
+  const groupIds = new Set(
+    [...deferredShortNames].flatMap((shortName) =>
+      shortName ? [getArchestraToolGroupId(shortName)] : [],
+    ),
+  );
+  const labels = ARCHESTRA_TOOL_GROUPS.filter((group) =>
+    groupIds.has(group.id),
+  ).map((group) =>
+    group.id === "openappa" ? "Guardrails policy and diagnostics" : group.label,
+  );
+  if (labels.length === 0) return null;
+  const examples = [
+    ["read_file", "read file"],
+    ["load_skill", "load skill"],
+    ["run_command", "run command"],
+    ["list_runs", "list runs"],
+    ["get_guardrails_policy", "get guardrails policy"],
+  ].flatMap(([shortName, query]) =>
+    deferredShortNames.has(shortName) ? [`'${query}'`] : [],
+  );
+  return `Available built-in capabilities to discover: ${labels.join(", ")}.${examples.length > 0 ? ` Search by action, for example ${examples.join(", ")}.` : ""} Use run_tool with the returned tool name and arguments.`;
+}
+
 // One-line, length-capped rendering of a catalog's own description for
 // embedding in the search_tools description. Collapses control/format
 // characters (bidi overrides, and conservatively ZWJ/ZWNJ) alongside
@@ -3019,12 +3093,8 @@ function isArchestraMetaTool(toolName: string) {
 }
 
 function isTaskControlTool(toolName: string) {
-  const shortName = archestraMcpBranding.getToolShortName(toolName);
-  return (
-    shortName === TOOL_GET_RUN_SHORT_NAME ||
-    shortName === TOOL_LIST_RUNS_SHORT_NAME ||
-    shortName === TOOL_STEER_RUN_SHORT_NAME ||
-    shortName === TOOL_CANCEL_RUN_SHORT_NAME
+  return isRunControlArchestraToolShortName(
+    archestraMcpBranding.getToolShortName(toolName),
   );
 }
 

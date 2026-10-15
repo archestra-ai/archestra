@@ -2397,6 +2397,28 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
+      // A default runs new chats on any agent, so it needs a key the member
+      // may use; an agent's own key is usable only through that agent.
+      if (body.chatApiKeyId) {
+        const apiKey = await LlmProviderApiKeyModel.findById(body.chatApiKeyId);
+        if (!apiKey || apiKey.organizationId !== organizationId) {
+          throw new ApiError(
+            400,
+            "The selected model or API key no longer exists",
+          );
+        }
+        const userTeamIds = await TeamModel.getUserTeamIds(user.id);
+        const canUseKey =
+          apiKey.scope === "org" ||
+          (apiKey.scope === "personal" && apiKey.userId === user.id) ||
+          (apiKey.scope === "team" &&
+            apiKey.teamId !== null &&
+            userTeamIds.includes(apiKey.teamId));
+        if (!canUseKey) {
+          throw new ApiError(403, "You do not have access to this API key");
+        }
+      }
+
       try {
         await MemberModel.setDefaultModelSelection({
           userId: user.id,

@@ -37,6 +37,7 @@ vi.mock("@/components/agent-runtime-credential-prompt", () => ({
 }));
 
 vi.mock("@/lib/agent-runtime.query", () => ({
+  runtimePreflightDisabledReason: () => undefined,
   useAgentRuntimePreflight: () => ({
     data: { ready: true, missing: [], misconfigured: [] },
     isPending: false,
@@ -90,7 +91,7 @@ vi.mock("@/lib/llm-models.query", () => ({
 }));
 
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
-  useLlmProviderApiKeys: () => ({ data: [] }),
+  useAvailableLlmProviderApiKeys: () => ({ data: [] }),
 }));
 
 vi.mock("@/lib/organization.query", () => ({

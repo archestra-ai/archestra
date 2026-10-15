@@ -38,6 +38,18 @@ export function useAgentRuntimePreflight(agentId: string, enabled = true) {
   });
 }
 
+/** Why a runtime agent's Send is blocked by its preflight, if it is. */
+export function runtimePreflightDisabledReason(preflight: {
+  isPending: boolean;
+  data?: { ready: boolean } | null;
+}): string | undefined {
+  if (preflight.isPending) return "Checking the agent's credentials…";
+  if (preflight.data?.ready !== true) {
+    return "Connect the credentials this agent needs";
+  }
+  return undefined;
+}
+
 export function useAgentRuns(agentId: string, enabled = true) {
   return useQuery({
     queryKey: ["agents", agentId, "runs"],

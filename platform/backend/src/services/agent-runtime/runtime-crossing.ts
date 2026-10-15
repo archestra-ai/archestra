@@ -33,11 +33,21 @@ export type RuntimeCrossing = {
   spawn: boolean;
 };
 
-class RuntimeCrossingRefusal extends Error {
+/**
+ * A refusal the caller is meant to read. Tool handlers surface it verbatim
+ * through `crossingRefusal`; HTTP routes answer it as a conflict rather than
+ * an internal error, because nothing on the server went wrong.
+ */
+class RuntimeCrossingRefusal extends ApiError {
   constructor(message: string) {
-    super(message);
+    super(409, message);
     this.name = "RuntimeCrossingRefusal";
   }
+}
+
+/** Shared with protected transfers so a held export refuses the same way a held read does. */
+export function runtimeCrossingRefusal(message: string): Error {
+  return new RuntimeCrossingRefusal(message);
 }
 
 function crossingFromContext(

@@ -5,6 +5,7 @@ import {
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_START_RUN_FULL_NAME,
   TOOL_STEER_RUN_FULL_NAME,
+  TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
   TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import { HttpResponse, http } from "msw";
@@ -53,6 +54,9 @@ useMswServer(
 const PARENT = "user:parent|conversation";
 const TOOL_WRITE_WORKSPACE_FILE_FULL_NAME = archestraMcpBranding.getToolName(
   TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
+);
+const TOOL_TRANSFER_WORKSPACE_FILE_FULL_NAME = archestraMcpBranding.getToolName(
+  TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
 );
 const OTHER = "user:parent|other-session";
 
@@ -1061,6 +1065,59 @@ test("a protected export above the inline size crosses chunk by chunk and is ser
       }
     })(),
   ).rejects.toThrow("no longer matches its admitted bytes");
+});
+
+test("the transfer tool reports a held export with the Guardrails ruling, not an internal error", async ({
+  makeAgent,
+  makeMember,
+  makeOrganization,
+  makeUser,
+  seedAndAssignArchestraTools,
+}) => {
+  await GuardrailsDeploymentModel.setEnabled(true);
+  config.openappa.enabled = true;
+  const seeded = await seededRun({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  });
+  const bytes = Buffer.from("progress while a tool runs");
+  vi.spyOn(backend, "runWorkspaceTransferCommand").mockResolvedValue({
+    transfer_id: "busy",
+    path: "reports/progress.md",
+    size: bytes.length,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    mtime_ns: "1",
+    ino: "1",
+  });
+  vi.spyOn(backend, "readWorkspaceTransferRange").mockResolvedValue({
+    stdout: Readable.from([bytes]),
+    completed: Promise.resolve(),
+  });
+  vi.spyOn(openappa, "returnRuntimeValue").mockResolvedValue({
+    kind: "held",
+    reason:
+      "the child has a call still open; report its outcome before the child ends",
+  });
+
+  const result = await executeArchestraTool(
+    TOOL_TRANSFER_WORKSPACE_FILE_FULL_NAME,
+    {
+      task_id: seeded.task.id,
+      direction: "download",
+      path: "reports/progress.md",
+      local_path: "/tmp/progress.md",
+    },
+    seeded.context,
+  );
+
+  expect(result.isError).toBe(true);
+  const text = JSON.stringify(result.content);
+  expect(text).toContain("Guardrails ruling: the child has a call still open");
+  expect(text).toContain("No download ticket was issued");
+  expect(text).not.toContain("internal error");
 });
 
 test("a held protected export names the Guardrails ruling and issues no ticket", async ({

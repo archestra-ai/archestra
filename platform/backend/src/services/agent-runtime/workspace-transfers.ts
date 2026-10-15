@@ -22,7 +22,7 @@ import {
 import { sanitizeUploadFilename } from "@/utils/upload-filename";
 import { resolveAgentRuntimeBackendDriver } from "./backends";
 import { AGENT_RUNTIME_ATTACHMENTS_DIR } from "./runtime-contract";
-import { heldFileRefusal } from "./runtime-crossing";
+import { heldFileRefusal, runtimeCrossingRefusal } from "./runtime-crossing";
 import { authorizeAgentWorkspaceAccess } from "./workspace-files";
 
 /** Long enough for a person to notice a failure and retry, short enough that a
@@ -502,14 +502,12 @@ async function crossExportValue(params: {
     value: params.value,
   });
   if (result.kind !== "admitted") {
-    throw new ApiError(
-      409,
+    throw runtimeCrossingRefusal(
       `${heldFileRefusal(result.reason)}\n\nNo download ticket was issued.`,
     );
   }
   if (result.value !== params.value) {
-    throw new ApiError(
-      409,
+    throw runtimeCrossingRefusal(
       "The pinned file was not admitted unchanged. No download ticket was issued.",
     );
   }

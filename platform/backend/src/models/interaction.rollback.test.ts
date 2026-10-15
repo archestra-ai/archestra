@@ -1426,6 +1426,9 @@ describe("InteractionModel", () => {
       const admin = await makeAdmin();
       const agent = await makeAgent({ name: "Agent" });
       const baseTime = Date.now();
+      // A consult quotes the call it judges, here a title-generation request.
+      const judged =
+        '{"tool":"Task","prompt":"Please write a 5-10 word title"}';
       const turn = (params: {
         sessionId: string;
         content: string;
@@ -1467,7 +1470,7 @@ describe("InteractionModel", () => {
         });
       await turn({
         sessionId: "guardrail-only",
-        content: "annotate that call",
+        content: judged,
         source: "guardrail:annotator",
         seconds: 8,
       });
@@ -1483,7 +1486,7 @@ describe("InteractionModel", () => {
       };
 
       expect(await preview("mixed")).toEqual(["turn 4"]);
-      expect(await preview("guardrail-only")).toEqual(["annotate that call"]);
+      expect(await preview("guardrail-only")).toEqual([judged]);
       const detail = await InteractionModel.findAllPaginated(
         { limit: 100, offset: 0 },
         undefined,

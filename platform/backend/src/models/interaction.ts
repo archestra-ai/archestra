@@ -102,6 +102,12 @@ const SESSION_SCAN_BATCH_ROWS = 500;
 const SESSION_SCAN_MAX_ROWS = 20_000;
 
 /**
+ * How many of a session's newest rows a preview lookup reads past guardrail
+ * calls; a longer run keeps the turn the sample found.
+ */
+const GUARDRAIL_SKIP_SCAN_ROWS = 200;
+
+/**
  * Session totals keyed by filter set (see getSessions). Per-pod and in-process
  * on purpose: the value is cheap to recompute on a miss, so it is not worth a
  * round-trip to the distributed cache to share it between pods. Bounded well
@@ -2185,6 +2191,9 @@ class InteractionModel {
       let claudeCodeTitle: string | null | undefined;
 
       for (const interaction of windowRows) {
+        // A guardrail consult quotes the call it judges, so the content
+        // markers below say nothing about the consult itself.
+        const isGuardrail = isGuardrailSource(interaction.source);
         const isOpenCodeSideTurn =
           isOpenCodeFamilySessionSource(interaction.sessionSource) &&
           computeRequestType(
@@ -2194,7 +2203,11 @@ class InteractionModel {
           ) === "subagent";
 
         // Check for title generation request (Claude Code)
-        if (interaction.isTitleGeneration && claudeCodeTitle === undefined) {
+        if (
+          !isGuardrail &&
+          interaction.isTitleGeneration &&
+          claudeCodeTitle === undefined
+        ) {
           // Extract title from response
           const response = interaction.response as {
             content?: Array<{ text?: string }>;
@@ -2206,9 +2219,10 @@ class InteractionModel {
         // Skip if this is not a "main" interaction
         if (
           !lastMainInteraction &&
-          !isOpenCodeSideTurn &&
-          !interaction.isPromptSuggestion &&
-          !interaction.isTitleGeneration
+          (isGuardrail ||
+            (!isOpenCodeSideTurn &&
+              !interaction.isPromptSuggestion &&
+              !interaction.isTitleGeneration))
         ) {
           // Check if request has valid content - support both OpenAI/Anthropic and Gemini formats
           // We accept any interaction that has a valid request structure, not just text content.
@@ -2242,8 +2256,7 @@ class InteractionModel {
             hasGeminiContent ||
             isLogContentNotStored(interaction.request)
           ) {
-            if (isGuardrailSource(interaction.source))
-              guardrailTip ??= interaction;
+            if (isGuardrail) guardrailTip ??= interaction;
             else lastMainInteraction = interaction;
           }
         }
@@ -2409,6 +2422,13 @@ class InteractionModel {
          ORDER BY created_at ASC NULLS FIRST, id ASC
          LIMIT ${oldest})`
         : sql``;
+    const newestFrom = skipGuardrails
+      ? sql`(SELECT * FROM interactions
+             WHERE session_id = keys.key
+             ORDER BY created_at DESC NULLS LAST, id DESC
+             LIMIT ${GUARDRAIL_SKIP_SCAN_ROWS}) recent
+           WHERE source IS NULL OR source NOT LIKE 'guardrail:%'`
+      : sql`interactions WHERE session_id = keys.key`;
     const sessionlessBranch =
       uuidKeys.length > 0
         ? sql`
@@ -2453,9 +2473,7 @@ class InteractionModel {
       CROSS JOIN LATERAL (
         (SELECT id, session_id, session_source, source, thread_id, request, type, created_at,
                 encrypted_chat_conversation_id
-         FROM interactions
-         WHERE session_id = keys.key
-           ${skipGuardrails ? sql`AND (source IS NULL OR source NOT LIKE 'guardrail:%')` : sql``}
+         FROM ${newestFrom}
          ORDER BY created_at DESC NULLS LAST, id DESC
          LIMIT ${newest})
         ${oldestBranch}

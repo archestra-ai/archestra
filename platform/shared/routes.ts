@@ -718,6 +718,7 @@ export const RouteId = {
   GetAppStatistics: "getAppStatistics",
   GetSkillStatistics: "getSkillStatistics",
   GetOverviewStatistics: "getOverviewStatistics",
+  GetCostStatistics: "getCostStatistics",
   GetCostSavingsStatistics: "getCostSavingsStatistics",
   GetMcpToolCallUsage: "getMcpToolCallUsage",
   GetAppUsage: "getAppUsage",

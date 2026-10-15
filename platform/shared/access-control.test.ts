@@ -377,7 +377,7 @@ describe("buildForbiddenErrorMessage", () => {
         missingPermissions: { project: ["read"] },
       }),
     ).toBe(
-      "You don't have permission to upload project files. Missing permission: project:read (View projects and your own sessions inside them).",
+      "You don't have permission to upload project files. Missing permission: project:read (View projects, their schedules, and your own sessions inside them).",
     );
   });
 
@@ -396,7 +396,7 @@ describe("buildForbiddenErrorMessage", () => {
       "agent:read (Open Agents, and use the code sandboxes and files of agents you can use)",
     );
     expect(message).toContain(
-      "project:read (View projects and your own sessions inside them)",
+      "project:read (View projects, their schedules, and your own sessions inside them)",
     );
     expect(message.indexOf("agent:read")).toBeLessThan(
       message.indexOf("project:read"),

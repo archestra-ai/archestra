@@ -1074,7 +1074,6 @@ export const resourcePluralNames: Record<ScopedResource, string> = {
   mcpOauthClient: "OAuth clients",
   llmOauthClient: "OAuth clients",
   environment: "environments",
-  scheduledTask: "scheduled tasks",
   log: "LLM and MCP logs",
   auditLog: "audit logs",
   serviceAccount: "service accounts",

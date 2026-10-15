@@ -10,7 +10,7 @@ import type { User } from "@/types";
  * GET /api/schedule-triggers/:id/runs — project-member access.
  *
  * A user who is a member of the project a schedule belongs to (but is NOT the
- * trigger's actorUserId and does NOT have scheduledTask:admin) must be able to
+ * trigger's actorUserId and does NOT have project:admin) must be able to
  * list that schedule's runs. This covers the project run-history UX.
  */
 describe("GET /api/schedule-triggers/:id/runs — project member access", () => {
@@ -42,7 +42,7 @@ describe("GET /api/schedule-triggers/:id/runs — project member access", () => 
     await app.close();
   });
 
-  test("a project member (not the actor, no scheduledTask:admin) can list runs of a project schedule", async ({
+  test("a project member (not the actor, no project:admin) can list runs of a project schedule", async ({
     makeUser,
     makeMember,
     makeAgent,
@@ -78,7 +78,7 @@ describe("GET /api/schedule-triggers/:id/runs — project member access", () => 
     });
     const run = await makeScheduleTriggerRun(trigger.id, { organizationId });
 
-    // actingUser is NOT the actor/owner and has no scheduledTask:admin.
+    // actingUser is NOT the actor/owner and has no project:admin.
     const response = await app.inject({
       method: "GET",
       url: `/api/schedule-triggers/${trigger.id}/runs`,

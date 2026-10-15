@@ -198,7 +198,6 @@ describe("resource permission routes", () => {
     "agent",
     "mcpGateway",
     "skill",
-    "scheduledTask",
     "log",
     "auditLog",
   ] as const)("%s rejects retired team-relative scope", async (resource) => {

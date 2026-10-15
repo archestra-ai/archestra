@@ -1,6 +1,6 @@
 {
-  "id": "42f2c67e-c124-4a96-a2d4-ffa83e09641d",
-  "prevId": "320a754b-49f9-4581-bd5e-c7d2bf43ec61",
+  "id": "18dcb955-3025-4f4b-84e5-847d326a0a33",
+  "prevId": "2e184408-b05c-4845-bef0-9bc2fc53788b",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -21535,12 +21535,6 @@
           "notNull": true,
           "default": false
         },
-        "secret_id": {
-          "name": "secret_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "last_used_at": {
           "name": "last_used_at",
           "type": "timestamp",
@@ -21606,22 +21600,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "service_account_tokens_platform_token_unique_idx": {
-          "name": "service_account_tokens_platform_token_unique_idx",
-          "columns": [
-            {
-              "expression": "service_account_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"service_account_tokens\".\"secret_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -21631,19 +21609,6 @@
           "tableTo": "service_accounts",
           "columnsFrom": [
             "service_account_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "service_account_tokens_secret_id_secret_id_fk": {
-          "name": "service_account_tokens_secret_id_secret_id_fk",
-          "tableFrom": "service_account_tokens",
-          "tableTo": "secret",
-          "columnsFrom": [
-            "secret_id"
           ],
           "columnsTo": [
             "id"
@@ -21705,13 +21670,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "is_system": {
-          "name": "is_system",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "created_by": {
           "name": "created_by",
@@ -21788,22 +21746,6 @@
             }
           ],
           "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "service_accounts_organization_id_system_unique_idx": {
-          "name": "service_accounts_organization_id_system_unique_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"service_accounts\".\"is_system\"",
           "concurrently": false,
           "method": "btree",
           "with": {}

@@ -331,7 +331,6 @@ describe("cutover idempotency", () => {
         "serviceAccount",
         "credential",
         "oauthClient",
-        "scheduledTask",
       ]),
     );
 

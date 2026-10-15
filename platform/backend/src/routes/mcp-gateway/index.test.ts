@@ -727,7 +727,7 @@ describe("MCP Gateway (stateless mode)", () => {
       const restrictedRole =
         scenario === "no create permission"
           ? await makeCustomRole(org.id, {
-              permission: { agent: ["read"], project: ["create"] },
+              permission: { agent: ["read"], project: ["read"] },
             })
           : null;
       await makeMember(user.id, org.id, {

@@ -2166,6 +2166,48 @@ describe("APPA feature boundary", () => {
     });
   }
 
+  test("marks a runtime value held only for the engine's open-call reason as busy", async () => {
+    const child = {
+      ...session,
+      session_id: "runtime",
+      parent_id: session.session_id,
+    };
+    native.dispatchHook.mockResolvedValueOnce(
+      JSON.stringify({
+        decision: "block",
+        reason:
+          "the child has a call still open; report its outcome before the child ends",
+      }),
+    );
+    await expect(
+      returnRuntimeValue({
+        session: child,
+        operationId: "file-read:busy",
+        value: "progress",
+      }),
+    ).resolves.toEqual({
+      kind: "held",
+      reason:
+        "the child has a call still open; report its outcome before the child ends",
+      busy: true,
+    });
+    // A ruling that merely quotes the reason is still a ruling.
+    native.dispatchHook.mockResolvedValueOnce(
+      JSON.stringify({
+        decision: "block",
+        reason:
+          "denied: the child has a call still open; report its outcome before the child ends",
+      }),
+    );
+    await expect(
+      returnRuntimeValue({
+        session: child,
+        operationId: "file-read:ruled",
+        value: "progress",
+      }),
+    ).resolves.not.toHaveProperty("busy");
+  });
+
   test("withholds a runtime value with an open call instead of ending the child", async () => {
     native.dispatchHook.mockResolvedValue(
       JSON.stringify({

@@ -9,6 +9,7 @@ import { verifyRuntimeToolProof } from "@/openappa/runtime-tool-claims";
 import * as service from "@/openappa/service";
 import { LlmProxyPluginRegistry } from "@/proxy/plugins/registry";
 import { resolveGatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
+import { pendingExports } from "@/services/agent-runtime/pending-exports";
 import { expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { AgentRuntimeSchema } from "@/types/agent-runtime";
@@ -477,6 +478,67 @@ describe("protected runtime protocol", () => {
       value: "Unapproved report",
     });
     expect(ended).not.toHaveBeenCalled();
+  });
+
+  test("releases a file its parent pinned while the runtime was mid-call on the runtime's next request", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const context = request(org.id, true);
+    const { session: runtime } = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    vi.spyOn(service, "startRuntimeChild").mockResolvedValue({});
+    const returned = vi
+      .spyOn(service, "returnRuntimeValue")
+      .mockResolvedValueOnce({
+        kind: "held",
+        reason:
+          "the child has a call still open; report its outcome before the child ends",
+        busy: true,
+      });
+    const read = vi.fn(async () => ({
+      metadata: { path: "progress.md" },
+      content: "step 2 of 3",
+    }));
+    const parentRead = () =>
+      pendingExports.crossRead({
+        child: runtime,
+        actor: { kind: "user", id: "owner", organizationId: org.id },
+        taskId: randomUUID(),
+        path: "progress.md",
+        encoding: "utf8",
+        operationId: "call-read",
+        read,
+      });
+    await expect(parentRead()).resolves.toMatchObject({ kind: "pending" });
+
+    // The runtime's next model request: its results are in, nothing is open.
+    returned.mockImplementationOnce(async ({ value }) => ({
+      kind: "admitted",
+      value,
+    }));
+    const plugin = new AppaPluginArchestra([]);
+    await plugin.onSessionInit(context);
+    await plugin.onBeforeModel({
+      ...context,
+      request: { messages: [{ role: "user", content: "continue" }] },
+    });
+    expect(returned).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        session: runtime,
+        value: "step 2 of 3",
+        operationId: expect.stringMatching(/^file-read:/),
+      }),
+    );
+
+    await expect(parentRead()).resolves.toEqual({
+      kind: "content",
+      metadata: { path: "progress.md" },
+      content: "step 2 of 3",
+    });
+    expect(read).toHaveBeenCalledOnce();
+    expect(returned).toHaveBeenCalledTimes(2);
   });
 });
 

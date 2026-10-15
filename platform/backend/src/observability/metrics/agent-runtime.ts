@@ -25,12 +25,30 @@ type AgentRunTerminationOutcome =
   | "expired_idle";
 type AgentRunCompletionInterface = "chatops" | "email";
 type AgentRunCompletionDeliveryOutcome = "success" | "failed";
+/** Why Guardrails refused or held a call that crosses into or out of a runtime. */
+export type AgentRuntimeCrossingRefusalReason =
+  | "client_blocked"
+  | "proof_missing"
+  | "different_session"
+  | "unparented"
+  | "unverified_session"
+  | "other_organization"
+  | "not_a_spawn"
+  | "unbindable"
+  | "address_refused"
+  | "held"
+  | "altered"
+  | "withheld";
+/** What became of a file Guardrails pinned because its runtime was mid-call. */
+type AgentRuntimePendingExportOutcome = "pinned" | "admitted" | "held";
 
 let agentRunStartsTotal: client.Counter<string>;
 let agentRunTerminationsTotal: client.Counter<string>;
 let agentRuntimeProvisionDurationSeconds: client.Histogram<string>;
 let agentRuntimeSteersTotal: client.Counter<string>;
 let agentRuntimeCompletionDeliveriesTotal: client.Counter<string>;
+let agentRuntimeCrossingRefusalsTotal: client.Counter<string>;
+let agentRuntimePendingExportsTotal: client.Counter<string>;
 
 let initialized = false;
 
@@ -69,7 +87,31 @@ export function initializeAgentRuntimeMetrics(): void {
     labelNames: ["interface", "outcome"],
   });
 
+  agentRuntimeCrossingRefusalsTotal = new client.Counter({
+    name: "agent_runtime_crossing_refusals_total",
+    help: "Total runtime tool calls Guardrails refused or held at the runtime boundary, by reason",
+    labelNames: ["reason"],
+  });
+
+  agentRuntimePendingExportsTotal = new client.Counter({
+    name: "agent_runtime_pending_exports_total",
+    help: "Total protected runtime files pinned while their runtime was mid-call, and how each pin ended (pinned, admitted, held)",
+    labelNames: ["outcome"],
+  });
+
   logger.debug("Agent Runtime metrics initialized");
+}
+
+export function reportAgentRuntimeCrossingRefusal(
+  reason: AgentRuntimeCrossingRefusalReason,
+): void {
+  agentRuntimeCrossingRefusalsTotal?.inc({ reason });
+}
+
+export function reportAgentRuntimePendingExport(
+  outcome: AgentRuntimePendingExportOutcome,
+): void {
+  agentRuntimePendingExportsTotal?.inc({ outcome });
 }
 
 export function reportAgentRuntimeStarted(): void {

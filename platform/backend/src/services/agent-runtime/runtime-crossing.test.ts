@@ -31,6 +31,7 @@ import * as openappa from "@/openappa/service";
 import { kubernetesAgentRuntimeBackendDriver as backend } from "@/services/agent-runtime/backends/kubernetes";
 import * as workspaceFiles from "@/services/agent-runtime/workspace-files";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { useMswServer } from "@/test/msw";
 import type { Agent, ResolvedAgentRuntime } from "@/types";
 import { ApiError } from "@/types";
@@ -40,6 +41,8 @@ import { crossRuntimeFile, crossRuntimeOutput } from "./runtime-crossing";
 import { runtimeOpenAppaSession } from "./runtime-identity";
 import * as startTask from "./start-task";
 import { workspaceTransferTickets } from "./workspace-transfers";
+
+setupTestCacheManager();
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle helper.
 useMswServer(
@@ -1019,13 +1022,19 @@ test("a protected export above the inline size crosses chunk by chunk and is ser
   expect(minted.ticket).not.toHaveProperty("admittedBytes");
   // Every byte crossed as content, in order, each chunk naming its digest.
   expect(crossing.mock.calls.map((call) => call[0].operationId)).toEqual([
-    `file-export:big-export:${sha256}:0/2`,
-    `file-export:big-export:${sha256}:1/2`,
+    `file-export:big-export:${sha256}:0/2:1`,
+    `file-export:big-export:${sha256}:1/2:1`,
   ]);
+  // Bytes that are not text cross as base64; text crosses as text, so a rule
+  // that reads content sees what the file says.
+  expect(JSON.parse(crossing.mock.calls[0][0].value)).toMatchObject({
+    encoding: "base64",
+  });
   const tail = JSON.parse(crossing.mock.calls[1][0].value);
   expect(tail).toMatchObject({
     path: "report.bin",
-    encoding: "base64",
+    encoding: "utf8",
+    content: "tail!",
     sha256,
     chunk: {
       index: 1,
@@ -1033,7 +1042,6 @@ test("a protected export above the inline size crosses chunk by chunk and is ser
       sha256: createHash("sha256").update("tail!").digest("hex"),
     },
   });
-  expect(Buffer.from(tail.content, "base64").toString()).toBe("tail!");
   // The snapshot stays pinned: it is what the download is served from.
   expect(backend.runWorkspaceTransferCommand).not.toHaveBeenCalledWith(
     expect.objectContaining({ args: ["discard", "big"] }),
@@ -1098,8 +1106,7 @@ test("the transfer tool reports a held export with the Guardrails ruling, not an
   });
   vi.spyOn(openappa, "returnRuntimeValue").mockResolvedValue({
     kind: "held",
-    reason:
-      "the child has a call still open; report its outcome before the child ends",
+    reason: "ruling-sentinel: allowed readers would narrow",
   });
 
   const result = await executeArchestraTool(
@@ -1115,7 +1122,9 @@ test("the transfer tool reports a held export with the Guardrails ruling, not an
 
   expect(result.isError).toBe(true);
   const text = JSON.stringify(result.content);
-  expect(text).toContain("Guardrails ruling: the child has a call still open");
+  expect(text).toContain(
+    "Guardrails ruling: ruling-sentinel: allowed readers would narrow",
+  );
   expect(text).toContain("No download ticket was issued");
   expect(text).not.toContain("internal error");
 });

@@ -135,6 +135,7 @@ import type {
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import { collectDeclaredToolNames } from "@/routes/proxy/utils/declared-tool-names";
 import type { ToolNameResolution } from "@/routes/proxy/utils/gateway-tool-names";
+import { pendingExports } from "@/services/agent-runtime/pending-exports";
 import { readGuardrailsV2Activation } from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
 import type {
@@ -658,6 +659,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         session: this.governedSession(binding),
         request: context.request,
       });
+      if (binding.runtimeSessionId === binding.session.session_id) {
+        // A runtime has no tool call open here: its results are in and its
+        // next calls are not out. Files its parent pinned while it was busy
+        // can cross now.
+        await pendingExports.drain(this.governedSession(binding));
+      }
     }
     if (binding?.compaction) return;
     if (binding?.adapter?.id === "codex") {

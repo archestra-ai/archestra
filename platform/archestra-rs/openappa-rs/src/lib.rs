@@ -4906,9 +4906,12 @@ mod runtime_child_tests {
         let HookDecision::Block { reason } = blocked else {
             panic!("an open call must hold the return, got {blocked:?}");
         };
-        assert!(
-            reason.contains("call still open"),
-            "held reason was {reason}"
+        // The host matches this exact text (CHILD_CALL_OPEN_REASON in
+        // backend/src/openappa/service.ts) to keep a busy runtime's file as a
+        // pending export instead of refusing it. Change both together.
+        assert_eq!(
+            reason,
+            "the child has a call still open; report its outcome before the child ends"
         );
         assert!(runtime.audit(&root).unwrap().iter().all(|entry| {
             entry.trajectory != child.0 || !matches!(entry.event, AuditEvent::ChildReturn { .. })

@@ -222,7 +222,17 @@ type ChildEndOutcome =
       decision: "replace";
       content: string;
       crossed: boolean;
+      /** Held only because the child has a tool call open. */
+      busy?: true;
     };
+
+/**
+ * The engine's reason for a child return while the child has a call open
+ * (`EventError::ChildDispatchOpen`). The binding test that holds a return over
+ * an open call pins this exact text.
+ */
+const CHILD_CALL_OPEN_REASON =
+  "the child has a call still open; report its outcome before the child ends";
 
 let native: Promise<typeof import("@archestra/openappa-rs")> | undefined;
 const capturedActivation = new AsyncLocalStorage<GuardrailsV2Activation>();
@@ -1522,13 +1532,20 @@ export async function endChild(params: {
   return crossChildValue({ ...params, event: "child_end" });
 }
 
-/** Cross a value without ending the runtime or settling its pending calls. */
+/**
+ * Cross a value without ending the runtime or settling its pending calls.
+ *
+ * `busy` marks the one hold that is not a ruling: the child has a tool call
+ * open, so its label is not settled and nothing can cross until that call
+ * reports. The same value can cross once the child is idle again.
+ */
 export async function returnRuntimeValue(params: {
   session: OpenAppaSession;
   operationId: string;
   value: string;
 }): Promise<
-  { kind: "admitted"; value: string } | { kind: "held"; reason: string }
+  | { kind: "admitted"; value: string }
+  | { kind: "held"; reason: string; busy?: true }
 > {
   const outcome = await crossChildValue({
     session: params.session,
@@ -1539,8 +1556,9 @@ export async function returnRuntimeValue(params: {
   if (outcome.decision === "release") {
     return { kind: "admitted", value: params.value };
   }
-  return outcome.crossed
-    ? { kind: "admitted", value: outcome.content }
+  if (outcome.crossed) return { kind: "admitted", value: outcome.content };
+  return outcome.busy
+    ? { kind: "held", reason: outcome.content, busy: true }
     : { kind: "held", reason: outcome.content };
 }
 
@@ -2177,6 +2195,9 @@ async function crossChildValue(params: {
       decision: "replace",
       content: decisionMessage(decision),
       crossed: false,
+      // ChildDispatchOpen has this exact engine reason. Only the exact text
+      // marks a hold as retryable; a quoted fragment stays a ruling.
+      ...(decision.reason === CHILD_CALL_OPEN_REASON ? { busy: true } : {}),
     };
   }
   if (decision.decision === "refuse") {

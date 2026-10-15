@@ -152,6 +152,13 @@ export const CacheKey = {
   EncryptedChatSession: "encrypted-chat-session-v2",
   /** Arguments behind a Slack approval's "View arguments" button (a button value is capped at 2,000 chars) */
   SlackApprovalArguments: "chatops-slack-approval-arguments",
+  /**
+   * Protected runtime files pinned for a parent session while their runtime
+   * was mid-call, one entry per runtime session. Any replica serving the
+   * runtime's next request releases them; any replica serving the parent's
+   * next call reads them.
+   */
+  AgentRuntimePendingExports: "agent-runtime-pending-exports-v1",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];

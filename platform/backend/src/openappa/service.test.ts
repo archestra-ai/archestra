@@ -700,6 +700,30 @@ describe("APPA feature boundary", () => {
     expect(await startedUnenforced(session)).toBe(false);
   });
 
+  test("superyell refuses when an administrator turned it off, while enforcement stays on", async () => {
+    config.openappa.yellEnabled = true;
+    await GuardrailsDeploymentModel.set({
+      enabled: true,
+      superyellEnabled: false,
+    });
+    const result = await executeArchestraTool(
+      "archestra__superyell",
+      { message: "Turn it off", with_trajectory: false },
+      {
+        agent: { id: "agent", name: "Assistant" },
+        organizationId,
+        userId: "alice",
+        sessionId: "conversation",
+        currentToolCallId: "toolu_super",
+      },
+    );
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(
+      "turned off superyell in Guardrails settings",
+    );
+    expect(await startedUnenforced(session)).toBe(false);
+  });
+
   test("a gateway yell finds only the platform's yell, in its organization, with its arguments", async () => {
     config.openappa.yellEnabled = true;
     config.analytics.enabled = true;
@@ -838,7 +862,7 @@ describe("APPA feature boundary", () => {
       {
         kind: "deny",
         feedback: "[appa] a call is already outstanding",
-        offers: [],
+        offers: undefined,
         recorded: true,
       },
     ]);
@@ -1149,7 +1173,7 @@ describe("APPA feature boundary", () => {
         {
           kind: "deny",
           feedback: "Policy denied",
-          offers: [],
+          offers: undefined,
           recorded: true,
         },
         { kind: "allow" },
@@ -1633,6 +1657,50 @@ describe("APPA feature boundary", () => {
     expect(native.dispatchHook).not.toHaveBeenCalled();
   });
 
+  test("releases authorized control and notice aliases but evaluates foreign namespaces", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "deny_call", feedback: "Foreign" }),
+    );
+    const controlAliases = ["mcp__gateway", "mcp__legacy"].map((namespace) => ({
+      name: "archestra__execute_remedy_plan",
+      namespace,
+    }));
+    const noticeAliases = ["mcp__gateway", "mcp__legacy"].map((namespace) => ({
+      name: "archestra__get_remedy_plans",
+      namespace,
+    }));
+    const calls = [
+      ...controlAliases,
+      ...noticeAliases,
+      { name: "archestra__execute_remedy_plan", namespace: "mcp__foreign" },
+    ].map((member, index) => ({
+      ...member,
+      id: `alias-${index}`,
+      arguments: {},
+    }));
+    const decisions = await evaluateToolCalls(session, calls, {
+      canonicalize: () => "archestra__execute_remedy_plan",
+      control: controlAliases[0],
+      controlAliases,
+      notice: noticeAliases[0],
+      noticeAliases,
+    });
+    expect(decisions).toEqual([
+      { kind: "control" },
+      { kind: "control" },
+      { kind: "allow" },
+      { kind: "allow" },
+      {
+        kind: "deny",
+        feedback: "Foreign",
+        offers: undefined,
+        recorded: true,
+        review: undefined,
+      },
+    ]);
+    expect(native.dispatchHook).toHaveBeenCalledTimes(1);
+  });
+
   test("releases the control call only in the namespace its tool was declared in", async () => {
     // Codex calls a namespace member by its bare name. A server beside the
     // gateway can declare a member spelled like the control tool; its call is
@@ -1661,7 +1729,12 @@ describe("APPA feature boundary", () => {
 
     expect(decisions).toEqual([
       { kind: "control" },
-      { kind: "deny", feedback: "Not declared", offers: [], recorded: true },
+      {
+        kind: "deny",
+        feedback: "Not declared",
+        offers: undefined,
+        recorded: true,
+      },
     ]);
     expect(
       native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
@@ -1703,7 +1776,12 @@ describe("APPA feature boundary", () => {
     );
     expect(decisions).toEqual([
       { kind: "allow" },
-      { kind: "deny", feedback: "Not declared", offers: [], recorded: true },
+      {
+        kind: "deny",
+        feedback: "Not declared",
+        offers: undefined,
+        recorded: true,
+      },
     ]);
     expect(
       native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
@@ -1746,7 +1824,12 @@ describe("APPA feature boundary", () => {
     );
 
     expect(decisions).toEqual([
-      { kind: "deny", feedback: "Not declared", offers: [], recorded: true },
+      {
+        kind: "deny",
+        feedback: "Not declared",
+        offers: undefined,
+        recorded: true,
+      },
     ]);
     expect(
       native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
@@ -2349,7 +2432,7 @@ describe("APPA feature boundary", () => {
       {
         kind: "deny",
         feedback: "Parent policy denied",
-        offers: [],
+        offers: undefined,
         recorded: true,
       },
     ]);

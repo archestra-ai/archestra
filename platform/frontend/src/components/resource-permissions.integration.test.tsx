@@ -568,11 +568,6 @@ it("lets someone who cannot make an entry org-wide lower an everyone grant, but 
   );
   const user = userEvent.setup();
   renderEditor();
-  // The field names only the recipients the server will offer: no everyone,
-  // no roles, and no service accounts for someone who cannot see them.
-  expect(
-    await screen.findByRole("combobox", { name: "Add access" }),
-  ).toHaveTextContent("Add access: a team or a person…");
   await user.click(
     await screen.findByRole("combobox", {
       name: "Permission for Everyone in the organization",

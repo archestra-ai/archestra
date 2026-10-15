@@ -28,7 +28,7 @@ You need a Kubernetes cluster, Helm 3 or later, and `kubectl` access. Self-hoste
 Pin the chart version and review its defaults:
 
 ```bash
-export ARCHESTRA_VERSION="1.4.0-rc.39" # x-release-please-version
+export ARCHESTRA_VERSION="1.4.0-rc.42" # x-release-please-version
 helm show values \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --version "$ARCHESTRA_VERSION" > values.yaml
@@ -150,6 +150,14 @@ Pin an exact chart version or image tag from [GitHub Releases](https://github.co
 2. Read release notes for migration requirements.
 3. Test the selected version in staging.
 4. Apply the Helm upgrade above and check rollout and migration Job status.
+
+During shutdown, Archestra stops accepting new model requests and gives active requests up to 60 seconds to finish. Requests that outlast this window can still lose their connection. The Helm chart sets `archestra.terminationGracePeriodSeconds` to 120; keep it at least this high so the container can finish shutdown.
+
+For Docker, use `docker stop --time 120` or set Compose's `stop_grace_period: 120s`. A shorter host deadline can kill the container before requests finish.
+
+The proxy retries a provider connection failure at most twice before receiving the first response chunk. It does not retry provider error responses, timeouts, or failures after output starts. Recovery after partial output depends on your client's retry policy.
+
+Gemini is excluded from these proxy retries because its SDK can report an interrupted error response as a connection failure.
 
 Rolling back a container image does not reverse database migrations. Restore a compatible database backup when required by the release's rollback procedure.
 
@@ -290,3 +298,12 @@ Claude Code, Codex, Copilot CLI, OpenCode, and Kilo Code refresh these instructi
 - **Other clients:** Cursor’s User Rules and Claude Desktop’s organization instructions still need a setup update.
 
 Setup reads `/connect.md`, `/llms.txt`, and the setup endpoints under `/api/client-connections` and `/api/connection-setups/script` without a session. A proxy in front of Archestra that requires login for every URL must let these through. It must also allow `/v1/connection-instructions`; this endpoint checks the installation’s read-only credential and current access.
+
+
+## Upgrade OAuth Clients
+
+Deploy the unified OAuth Clients release to all replicas together, with the older replicas stopped before the updated application starts. Mixed versions and rolling back to the older authorization model are unsupported. Back up the database before the upgrade.
+
+Existing client IDs, secrets, provider keys, gateway assignments, and issued tokens carry over. MCP clients retain MCP Gateway and A2A access; LLM clients retain LLM Proxy access. The upgrade combines each custom role action and wildcard grant across the two former client resources. A read grant never becomes edit or delete, and grants on individual clients keep their scope. See [OAuth client access control](/docs/admin/access-control#oauth-clients).
+
+After the upgrade, open **Settings → OAuth Clients** and check the clients' capabilities and permissions. Request tokens with the scopes the application needs. Repeat startups preserve permission changes made after the upgrade.

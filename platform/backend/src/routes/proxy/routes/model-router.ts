@@ -14,11 +14,12 @@ import {
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { isAzureOpenAiFirstPartyModelName } from "@/clients/azure-url";
 import { getProviderConfiguredBaseUrl } from "@/config";
 import logger from "@/logging";
 import {
-  LlmOauthClientModel,
+  ManagedOauthClientModel as LlmOauthClientModel,
   LlmProviderApiKeyModel,
   MemberModel,
   OAuthAccessTokenModel,
@@ -26,10 +27,14 @@ import {
   TeamModel,
   VirtualApiKeyModel,
 } from "@/models";
+import AgentTeamModel from "@/models/agent-team";
 import { collectDelegationMarkers } from "@/openappa/delegation";
 import { setCollectedDelegationMarkers } from "@/routes/proxy/utils/delegation-markers";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
+import { resolveOauthClientProviderMappings } from "@/services/oauth-client-providers";
+import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import { resolveVirtualKeyProviderMappings } from "@/services/virtual-key-providers";
 import type { GatewayAgent, LLMProvider } from "@/types";
@@ -125,6 +130,7 @@ type ModelRouterUserProviderKey = Awaited<
 
 type ModelRouterVirtualKeyAuth = {
   authMethod: "virtual_key";
+  serviceAccountId?: string;
   organizationId: string;
   virtualKeyId: string;
   virtualKeyIsPersonal: boolean;
@@ -137,6 +143,7 @@ type ModelRouterVirtualKeyAuth = {
 
 type ModelRouterOAuthClientAuth = {
   authMethod: "oauth_client_credentials";
+  serviceAccountId?: string;
   organizationId: string;
   billingTeamId: string | null;
   /** In preference order; see `selectMappedProviderKey`. */
@@ -150,6 +157,7 @@ type ModelRouterOAuthClientAuth = {
 
 type ModelRouterUserOAuthAuth = {
   authMethod: "oauth_user";
+  serviceAccountId?: never;
   organizationId: string;
   userId: string;
   /** In preference order; see `selectMappedProviderKey`. */
@@ -841,7 +849,11 @@ async function listModels(params: { auth: ModelRouterAuth }) {
       .filter((mapping) => modelRouterSupportedProviders.has(mapping.provider))
       .map((mapping) => mapping.providerApiKeyId),
     userId:
-      params.auth.authMethod === "oauth_user" ? params.auth.userId : undefined,
+      params.auth.authMethod === "oauth_user"
+        ? params.auth.userId
+        : params.auth.serviceAccountId
+          ? serviceAccountUserId(params.auth.serviceAccountId)
+          : undefined,
     includeEmbeddings: true,
   });
 
@@ -878,6 +890,31 @@ async function ensureModelRouterAgentAccess(params: {
       "Model Router virtual key cannot access this Agent.",
     );
   }
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  if (
+    params.auth.serviceAccountId &&
+    !(params.agent.agentType === "llm_proxy" && params.agent.isDefault)
+  ) {
+    const userId = serviceAccountUserId(params.auth.serviceAccountId);
+    if (
+      !(await AgentTeamModel.userHasAgentAccess({
+        userId,
+        agentId: params.agent.id,
+        action: "use",
+        isAgentAdmin: await ResourcePermissions.allows({
+          userId,
+          organizationId: params.agent.organizationId,
+          resource: "agent",
+          scope: "*",
+          action: "update",
+        }),
+      }))
+    )
+      throw new ApiError(403, "Service account cannot access this Agent.");
+  }
+  // SPDX-SnippetEnd
   if (params.auth.authMethod === "oauth_user") {
     const member = await MemberModel.getByUserId(
       params.auth.userId,
@@ -912,6 +949,11 @@ async function getModelRouterAuth(
   });
   try {
     const resolved = await validateVirtualApiKeyToken(bearerToken);
+    if (resolved.virtualKey.createdByServiceAccountId)
+      await resolveOauthServiceAccount({
+        serviceAccountId: resolved.virtualKey.createdByServiceAccountId,
+        organizationId: resolved.virtualKey.organizationId,
+      });
     const mappings = await resolveVirtualKeyProviderMappings(
       resolved.virtualKey.id,
     );
@@ -932,6 +974,8 @@ async function getModelRouterAuth(
         resolved.virtualKey,
       ),
       virtualKeyAuthorId: resolved.virtualKey.authorId,
+      serviceAccountId:
+        resolved.virtualKey.createdByServiceAccountId ?? undefined,
       billingTeamId: resolved.virtualKey.billingTeamId,
       providerApiKeys: mappings,
     };
@@ -1036,6 +1080,7 @@ async function applyModelRouterAuthOverride(params: {
     authenticated: true,
     source: "model_router",
     authMethod: params.auth.authMethod,
+    serviceAccountId: params.auth.serviceAccountId,
     virtualKeyId:
       params.auth.authMethod === "virtual_key"
         ? params.auth.virtualKeyId
@@ -1077,6 +1122,15 @@ async function getModelRouterOAuthClientAuth(
   if (!accessToken.scopes?.some((scope) => scope === LLM_PROXY_OAUTH_SCOPE)) {
     throw new ApiError(403, "Access token is missing Model Router scope.");
   }
+  const managedClient = await LlmOauthClientModel.findByClientId(
+    accessToken.clientId,
+  );
+  if (managedClient?.disabled) {
+    throw new ApiError(401, "LLM OAuth client is disabled.");
+  }
+  if (managedClient && !managedClient.scopes.includes(LLM_PROXY_OAUTH_SCOPE)) {
+    throw new ApiError(403, "OAuth client no longer grants LLM proxy access.");
+  }
   if (accessToken.userId) {
     return getModelRouterUserOAuthAuth({ accessToken });
   }
@@ -1091,8 +1145,14 @@ async function getModelRouterOAuthClientAuth(
     throw new ApiError(401, "LLM OAuth client is disabled.");
   }
 
+  if (oauthClient.serviceAccountId)
+    await resolveOauthServiceAccount({
+      serviceAccountId: oauthClient.serviceAccountId,
+      organizationId: oauthClient.organizationId,
+    });
+  const mappings = await resolveOauthClientProviderMappings(oauthClient);
   const providerApiKeys = await LlmProviderApiKeyModel.findByIds(
-    oauthClient.providerApiKeys.map((mapping) => mapping.providerApiKeyId),
+    mappings.map((mapping) => mapping.providerApiKeyId),
   );
   const providerApiKeysById = new Map(
     providerApiKeys.map((apiKey) => [apiKey.id, apiKey]),
@@ -1100,6 +1160,7 @@ async function getModelRouterOAuthClientAuth(
 
   return {
     authMethod: "oauth_client_credentials",
+    serviceAccountId: oauthClient.serviceAccountId ?? undefined,
     organizationId: oauthClient.organizationId,
     billingTeamId: oauthClient.billingTeamId,
     oauthClient: {
@@ -1107,7 +1168,7 @@ async function getModelRouterOAuthClientAuth(
       name: oauthClient.name,
       clientId: oauthClient.clientId,
     },
-    providerApiKeys: oauthClient.providerApiKeys.map((mapping) => {
+    providerApiKeys: mappings.map((mapping) => {
       const apiKey = providerApiKeysById.get(mapping.providerApiKeyId);
       if (!apiKey) {
         throw new ApiError(

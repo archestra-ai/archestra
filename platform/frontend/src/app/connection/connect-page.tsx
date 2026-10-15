@@ -84,6 +84,7 @@ import {
   type ConnectPageSkill,
   type ConnectPlugin,
   type ConnectServer,
+  gatewayServerName,
   useConnectPageData,
   welcomePrompt,
 } from "./connect-page-data";
@@ -554,7 +555,7 @@ function Tile({
         active
           ? // The muted tint is layered over the card fill, so the page's
             // dots never show through a selected tile.
-            "border-primary bg-linear-to-b from-muted/40 to-muted/40 font-semibold text-foreground ring-1 ring-primary"
+            "border-primary bg-linear-to-b from-muted/40 to-muted/40 font-semibold text-foreground ring-1 ring-inset ring-primary"
           : "text-muted-foreground hover:bg-linear-to-b hover:from-muted/50 hover:to-muted/50 hover:text-foreground",
       )}
     >
@@ -664,6 +665,12 @@ function ConnectArea({
         keptPlugins.length === 0),
   );
 
+  const serverName = gatewayServerName({
+    client,
+    gateway: data.gateway,
+    appName: data.appName,
+    tools: choices.tools && data.partsFor(client).tools,
+  });
   // After copying: the status card under the band. A changed pick or choice
   // sends it back to idle, except once connected.
   const setupKey = [
@@ -673,6 +680,7 @@ function ConnectArea({
     download,
     ...leftOutParts,
     data.gateway?.id,
+    serverName,
     ...keptPlugins.map((p) => p.id),
   ].join();
   const [run, setRun] = useState<AfterConnectRun>({
@@ -680,11 +688,12 @@ function ConnectArea({
     key: setupKey,
     client,
     script,
+    serverName,
   });
   const phase =
     run.phase === "connected" || run.key === setupKey ? run.phase : "idle";
   const setPhase = (next: AfterConnectPhase) =>
-    setRun({ phase: next, key: setupKey, client, script });
+    setRun({ phase: next, key: setupKey, client, script, serverName });
   // Only a copied prompt or command starts it: Manual setup and Claude
   // Desktop's download have nothing to copy.
   const startWaiting = () => {
@@ -815,7 +824,15 @@ function ConnectArea({
         phase={phase}
         client={run.client}
         script={run.script}
-        welcome={origin ? welcomePrompt(origin, data.appName) : null}
+        welcome={
+          origin
+            ? welcomePrompt({
+                origin,
+                appName: data.appName,
+                serverName: run.serverName,
+              })
+            : null
+        }
         // n8n has no agent to follow up with; "everything left out" has
         // nothing to follow up on.
         showLink={

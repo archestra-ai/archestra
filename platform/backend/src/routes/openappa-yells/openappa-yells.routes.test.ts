@@ -58,7 +58,11 @@ describe("OpenAPPA yells", () => {
   });
   const record = (
     message: string,
-    overrides: { organizationId?: string; callerId?: string } = {},
+    overrides: {
+      organizationId?: string;
+      callerId?: string;
+      superyell?: boolean;
+    } = {},
   ) =>
     OpenAppaYellModel.record({
       organizationId,
@@ -101,6 +105,25 @@ describe("OpenAPPA yells", () => {
     ).not.toHaveProperty("archive");
   });
 
+  test("flags superyells and counts the unresolved ones", async () => {
+    const superyell = await record("Turn it off", { superyell: true });
+    await record("Confusing block");
+    const resolved = await record("Resolved one", { superyell: true });
+    await OpenAppaYellModel.setResolved({
+      id: resolved.id,
+      organizationId,
+      userId: user.id,
+      resolved: true,
+    });
+    const list = (await app.inject({ url: "/api/openappa/yells" })).json();
+    expect(
+      list.data.find((row: { id: string }) => row.id === superyell.id),
+    ).toMatchObject({ superyell: true });
+    expect(
+      (await app.inject({ url: "/api/openappa/yells/summary" })).json(),
+    ).toEqual({ unresolved: 2, superyells: 1 });
+  });
+
   test("lists and counts only the active organization's reports and paginates search", async ({
     makeOrganization,
   }) => {
@@ -126,7 +149,7 @@ describe("OpenAPPA yells", () => {
     expect(next.json().pagination.hasNext).toBe(false);
     expect(
       (await app.inject({ url: "/api/openappa/yells/summary" })).json(),
-    ).toEqual({ unresolved: 3 });
+    ).toEqual({ unresolved: 3, superyells: 0 });
   });
 
   test("resolves and reopens reports with a non-secret audit diff", async () => {
@@ -145,7 +168,7 @@ describe("OpenAPPA yells", () => {
     });
     expect(
       (await app.inject({ url: "/api/openappa/yells/summary" })).json(),
-    ).toEqual({ unresolved: 0 });
+    ).toEqual({ unresolved: 0, superyells: 0 });
     expect(
       (await app.inject({ url: "/api/openappa/yells?status=resolved" })).json()
         .data,
@@ -174,7 +197,7 @@ describe("OpenAPPA yells", () => {
     });
     expect(
       (await app.inject({ url: "/api/openappa/yells/summary" })).json(),
-    ).toEqual({ unresolved: 1 });
+    ).toEqual({ unresolved: 1, superyells: 0 });
   });
 
   test("a diagnostics reader can read all organization reports but cannot resolve them", async ({
@@ -221,7 +244,7 @@ describe("OpenAPPA yells", () => {
     expect(list.json().data).toHaveLength(2);
     expect(
       (await app.inject({ url: "/api/openappa/yells/summary" })).json(),
-    ).toEqual({ unresolved: 2 });
+    ).toEqual({ unresolved: 2, superyells: 0 });
     const agent = await makeAgent({ organizationId, accessAllTools: true });
     const context = {
       agent,
@@ -369,7 +392,7 @@ describe("OpenAPPA yells", () => {
     });
     expect(
       (await app.inject({ url: "/api/openappa/yells/summary" })).json(),
-    ).toEqual({ unresolved: 0 });
+    ).toEqual({ unresolved: 0, superyells: 0 });
     await vi.waitFor(async () => {
       const rows = await db
         .select()
@@ -394,7 +417,7 @@ describe("OpenAPPA yells", () => {
     });
     expect(
       (await app.inject({ url: "/api/openappa/yells/summary" })).json(),
-    ).toEqual({ unresolved: 1 });
+    ).toEqual({ unresolved: 1, superyells: 0 });
 
     const memberWith = async (permission: "read" | "update") => {
       const role = await makeCustomRole(organizationId, {
@@ -412,7 +435,7 @@ describe("OpenAPPA yells", () => {
     ).rejects.toThrow("permission to read yells");
     expect(
       (await app.inject({ url: "/api/openappa/yells/summary" })).json(),
-    ).toEqual({ unresolved: 1 });
+    ).toEqual({ unresolved: 1, superyells: 0 });
   });
 
   test("keeps reports with missing users and non-user callers visible", async () => {

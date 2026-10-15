@@ -28,6 +28,8 @@ export const openappaYellsTable = pgTable(
     archive: bytea("archive"),
     message: text("message").notNull(),
     withTrajectory: boolean("with_trajectory").notNull(),
+    // Sent through superyell, which also turned guardrails off for the session.
+    superyell: boolean("superyell").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

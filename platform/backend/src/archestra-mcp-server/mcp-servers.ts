@@ -1,4 +1,5 @@
 import {
+  ImagePullPolicySchema,
   isBuiltInCatalogId,
   ResourcePermissionGrantSchema,
   redactCatalogToolArguments,
@@ -254,6 +255,9 @@ const McpConfigToolSchema = z
       .array(ImagePullSecretSchema)
       .optional()
       .describe("[Local] Image pull secrets for private registries."),
+    imagePullPolicy: ImagePullPolicySchema.optional().describe(
+      "[Local] Kubernetes imagePullPolicy for the server container. Unset uses Always for :latest or untagged images and IfNotPresent otherwise.",
+    ),
     deploymentSpecYaml: z
       .string()
       .optional()
@@ -1008,6 +1012,7 @@ async function handleEditMcpConfig(
       "httpPath",
       "nodePort",
       "imagePullSecrets",
+      "imagePullPolicy",
     ] as const;
     for (const field of localFields) {
       if (args[field] !== undefined) {
@@ -1183,6 +1188,7 @@ async function handleCreateMcpServer(
       "httpPath",
       "nodePort",
       "imagePullSecrets",
+      "imagePullPolicy",
     ] as const;
     const localConfig: Record<string, unknown> = {};
     for (const field of localConfigFields) {

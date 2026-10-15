@@ -179,8 +179,9 @@ import {
 import {
   carriesConnectionSetupReference,
   connectionProxySetupContext,
-  verifyConnectionProxySetupContext,
+  readVerifiedConnectionProxySetup,
 } from "@/services/connection-proxy-setup-context";
+import { claimConnectionSetupConversation } from "@/services/connection-setup-conversation-claim";
 import { nativeSetupClientFromProvenance } from "@/services/connection-setup-scope";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
@@ -225,16 +226,24 @@ import {
   calculateInteractionCosts,
   calculateUsageCost,
   handleError,
+  isRetryableUpstreamConnectionFailure,
   planDispatchModeToolCallRewrites,
   recordBlockedToolCallMetrics,
   shouldForwardAnthropicBeta,
   toSpanUserInfo,
   toToolCallBlock,
+  upstreamErrorMessage,
   withProviderToolCallIds,
   withSessionContext,
 } from "./llm-proxy-helpers";
 import { StreamKeepAlive } from "./stream-keepalive";
+import {
+  openUpstreamWithRetry,
+  withFirstChunk,
+} from "./upstream-connection-retry";
 import * as utils from "./utils";
+import { resolveClientGatewayBindings } from "./utils/client-gateway-bindings";
+import { consumeClientRuntimeEvidence } from "./utils/client-runtime-evidence";
 import {
   type EncryptedChatAuditDisposition,
   redactEncryptedChatInteraction,
@@ -301,6 +310,7 @@ export interface LLMProxyContext<TRequest> {
   /** Team the authenticating credential's spend is charged to. */
   billingTeamId?: string;
   userId?: string;
+  serviceAccountId?: string;
   resolvedUser?: { id: string; email: string; name: string } | null;
   virtualKeyId?: string;
   passthroughVirtualKeyId?: string;
@@ -354,6 +364,7 @@ export type LLMProxyAuthOverride = {
     clientId: string;
   };
   userId?: string;
+  serviceAccountId?: string;
   /** Team the authenticating credential's spend is charged to. */
   billingTeamId?: string;
 };
@@ -659,6 +670,7 @@ export async function handleLLMProxy<
   provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>,
 ): Promise<FastifyReply> {
   const streamTiming: StreamTiming = { requestReceivedAt: Date.now() };
+  const clientRuntimeEvidence = consumeClientRuntimeEvidence(request);
   const internalCall = takeInternalCall(request.headers);
   const headers = request.headers as unknown as THeaders;
   const agentId = (request.params as { agentId?: string }).agentId;
@@ -778,6 +790,7 @@ export async function handleLLMProxy<
     );
   // The X-Archestra-User-Id header is an unauthenticated hint; it does not
   // participate in the cross-credential user-consistency check below.
+  let serviceAccountId = authOverride?.serviceAccountId;
   let userId = (await utils.headers.userId.getUser(headersForExtraction))
     ?.userId;
   let resolvedUser = userId ? await UserModel.getById(userId) : null;
@@ -1082,6 +1095,7 @@ export async function handleLLMProxy<
       authMethod = oauthResult.authMethod;
       authenticatedApp = oauthResult.authenticatedApp;
       billingTeamId ??= oauthResult.billingTeamId;
+      serviceAccountId = oauthResult.serviceAccountId;
       if (oauthResult.userId) {
         oauthUserId = oauthResult.userId;
         userId = oauthResult.userId;
@@ -1112,6 +1126,7 @@ export async function handleLLMProxy<
       perKeyChatApiKeyId = virtualResult.chatApiKeyId;
       wasVirtualKeyResolved = true;
       virtualKeyId = virtualResult.virtualKeyId;
+      serviceAccountId = virtualResult.serviceAccountId;
       billingTeamId ??= virtualResult.billingTeamId;
       // A personal standard virtual key identifies its owner; include it in the
       // cross-credential consistency check.
@@ -1259,6 +1274,17 @@ export async function handleLLMProxy<
   // whose author is the acting user (Codex ChatGPT subscription, Claude Code
   // virtual key). Consistency with any other authenticated identity was just
   // asserted, so this can never disagree with them.
+  if (serviceAccountId && authenticatedUserId) {
+    throw new ApiError(
+      401,
+      "Credentials identify both a user and a service account.",
+    );
+  }
+  if (serviceAccountId) {
+    // A caller-supplied user hint cannot change the credential's principal.
+    userId = undefined;
+    resolvedUser = null;
+  }
   if (!userId && regularVirtualKeyUserId) {
     userId = regularVirtualKeyUserId;
     resolvedUser = await UserModel.getById(userId);
@@ -1386,11 +1412,17 @@ export async function handleLLMProxy<
 
     // Identifies which declared tools the platform gateway served after
     // verifying attestations with the organization key.
+    const clientBindings = await resolveClientGatewayBindings({
+      evidence: clientRuntimeEvidence,
+      organizationId: resolvedAgent.organizationId,
+      llmProxyId: resolvedAgent.id,
+    });
     const toolIdentity =
       await utils.gatewayToolNames.resolveGatewayToolIdentity({
         organizationId: resolvedAgent.organizationId,
         declarations: gatewayToolDeclarations,
         internalChat: isInternalChat,
+        clientBindings,
       });
 
     // Persist tools declared by client (only for llm_proxy agents)
@@ -1543,23 +1575,26 @@ export async function handleLLMProxy<
     let appaIdentity: AppaSessionIdentity = {};
     let hasNativeClientSession = false;
     const approvedProxySetupContext = connectionProxySetupContext(request.raw);
-    const approvedProxySetup =
-      !!approvedProxySetupContext &&
-      [virtualKeyId, passthroughVirtualKeyId].some(
-        (keyId) =>
-          !!keyId &&
-          verifyConnectionProxySetupContext({
-            token: approvedProxySetupContext,
-            organizationId: resolvedAgent.organizationId,
-            virtualApiKeyId: keyId,
-            proxyAgentId: resolvedAgent.id,
-            secret: config.auth.secret,
-          }),
-      );
+    let verifiedProxySetup: ReturnType<typeof readVerifiedConnectionProxySetup>;
+    if (approvedProxySetupContext) {
+      for (const keyId of [virtualKeyId, passthroughVirtualKeyId]) {
+        if (!keyId) continue;
+        verifiedProxySetup = readVerifiedConnectionProxySetup({
+          token: approvedProxySetupContext,
+          organizationId: resolvedAgent.organizationId,
+          virtualApiKeyId: keyId,
+          proxyAgentId: resolvedAgent.id,
+          secret: config.auth.secret,
+        });
+        if (verifiedProxySetup) break;
+      }
+    }
+    const approvedProxySetup = verifiedProxySetup !== undefined;
     // The setup URL stays in the client's settings for the whole window, so
-    // sessions started after the setup send it too. Only the conversation
-    // that ran the installer holds the setup reference the installer printed.
-    const installerConversation =
+    // sessions started after the setup send it too. The reference must be in
+    // this request, and the first well-formed native conversation to present
+    // it owns the exemption until the token expires.
+    const carriesReference =
       approvedProxySetup &&
       !!approvedProxySetupContext &&
       carriesConnectionSetupReference({
@@ -1567,6 +1602,16 @@ export async function handleLLMProxy<
         requestBody: body,
         secret: config.auth.secret,
       });
+    const installerConversation =
+      carriesReference &&
+      verifiedProxySetup !== undefined &&
+      (await claimConnectionSetupConversation({
+        organizationId: verifiedProxySetup.organizationId,
+        setupId: verifiedProxySetup.setupId,
+        expiresAt: verifiedProxySetup.expiresAt,
+        headers: headersForExtraction,
+        requestBody: body,
+      }));
     const installerSetupBypass = appaActive && installerConversation;
     if (installerSetupBypass) {
       logger.info(
@@ -2129,6 +2174,7 @@ export async function handleLLMProxy<
                 organizationId: resolvedAgent.organizationId,
                 declarations: state.tools,
                 internalChat: isInternalChat,
+                clientBindings,
               });
             threadRecord = {
               organizationId: resolvedAgent.organizationId,
@@ -2363,12 +2409,13 @@ export async function handleLLMProxy<
 
     // Start with the credential-derived billing mode. Anthropic OAuth requests
     // can refine this after the upstream response identifies paid overage.
-    let billingMode = utils.resolveInteractionBillingMode({
+    const credentialBillingMode = utils.resolveInteractionBillingMode({
       isSubscriptionCredential:
         openAiCodexPassthrough !== undefined ||
         provider.isSubscriptionCredential?.(apiKey) === true,
       autodetectEnabled: config.llmCost.subscriptionAutodetect,
     });
+    let billingMode = credentialBillingMode;
 
     // Create client with observability (each provider handles metrics internally)
     const abortSignal =
@@ -2388,7 +2435,8 @@ export async function handleLLMProxy<
       onResponseHeaders: (responseHeaders) => {
         if (providerName === "anthropic") {
           billingMode = utils.refineAnthropicBillingModeFromHeaders({
-            billingMode,
+            // A retry's response must not inherit a failed attempt's overage.
+            billingMode: credentialBillingMode,
             headers: responseHeaders,
           });
         }
@@ -2500,6 +2548,7 @@ export async function handleLLMProxy<
       authenticatedApp,
       billingTeamId,
       userId,
+      serviceAccountId,
       resolvedUser,
       virtualKeyId,
       passthroughVirtualKeyId,
@@ -2561,7 +2610,10 @@ export async function handleLLMProxy<
     }
     // Persist failed interactions so they appear in LLM logs
     try {
-      const errorMessage = provider.extractErrorMessage(lifecycleError);
+      const errorMessage = upstreamErrorMessage(
+        lifecycleError,
+        provider.extractErrorMessage,
+      );
       // Provider errors routinely echo the prompt back.
       logger.info(
         {
@@ -2575,6 +2627,7 @@ export async function handleLLMProxy<
         externalAgentId,
         runId,
         userId,
+        serviceAccountId,
         virtualKeyId,
         passthroughVirtualKeyId,
         appId: attributedAppId,
@@ -2708,6 +2761,7 @@ async function handleStreaming<
     authenticatedApp,
     billingTeamId,
     userId,
+    serviceAccountId,
     virtualKeyId,
     passthroughVirtualKeyId,
     resolvedUser,
@@ -2870,6 +2924,7 @@ async function handleStreaming<
         externalAgentId,
         runId,
         userId,
+        serviceAccountId,
         virtualKeyId,
         passthroughVirtualKeyId,
         appId,
@@ -2887,6 +2942,7 @@ async function handleStreaming<
         model: actualModel,
         inputTokens: 0,
         outputTokens: 0,
+        toolCallBlock,
       };
       await persistProxyInteraction(record, encryptedChat);
     } catch (interactionError) {
@@ -2937,7 +2993,22 @@ async function handleStreaming<
         if (pluginRegistry && pluginContext) {
           await pluginRegistry.onBeforeModel({ ...pluginContext, request });
         }
-        const stream = await provider.executeStream(client, request);
+        const stream = await openUpstreamWithRetry({
+          open: async () =>
+            withFirstChunk(await provider.executeStream(client, request)),
+          // Gemini's SDK loses the HTTP status when an error body is cut off;
+          // that is indistinguishable from a transport failure, so don't retry.
+          isRetryable: (error) =>
+            providerName !== "gemini" &&
+            isRetryableUpstreamConnectionFailure(error),
+          shouldContinue: () => !reply.raw.destroyed,
+          onRetry: (event) =>
+            logUpstreamRetry({
+              ...event,
+              provider: providerName,
+              model: actualModel,
+            }),
+        });
         billingMode = getBillingMode();
 
         // Record request duration at stream establishment for providers whose
@@ -3139,6 +3210,7 @@ async function handleStreaming<
           source,
         });
       }
+      toolCallBlock = toToolCallBlock(null, hostedHold.blocked);
       const heldEvents = streamAdapter.formatHeldHostedToolCallsSSE(
         hostedHold.notices,
       );
@@ -3204,7 +3276,10 @@ async function handleStreaming<
         "Proxy plugin tool-call ruling",
       );
 
-      toolCallBlock = toToolCallBlock(toolInvocationRefusal);
+      toolCallBlock = toToolCallBlock(
+        toolInvocationRefusal,
+        policyOutcome.blocked,
+      );
     }
 
     await recordGovernedThreadResponse({
@@ -3478,7 +3553,10 @@ async function handleStreaming<
     // rejecting the request, or a mid-stream failure once SSE headers and
     // content are already on the wire) still has to reach interaction history.
     if (!streamAdapter.state.usage) {
-      const errorMessage = provider.extractErrorMessage(lifecycleError);
+      const errorMessage = upstreamErrorMessage(
+        lifecycleError,
+        provider.extractErrorMessage,
+      );
       // Provider errors routinely echo the prompt back.
       logger.info(
         { profileId: agent.id, ...(suppressContent ? {} : { errorMessage }) },
@@ -3598,6 +3676,7 @@ async function handleStreaming<
           billingTeamId,
           runId,
           userId,
+          serviceAccountId,
           virtualKeyId,
           passthroughVirtualKeyId,
           appId,
@@ -3671,6 +3750,7 @@ async function handleNonStreaming<
     authenticatedApp,
     billingTeamId,
     userId,
+    serviceAccountId,
     virtualKeyId,
     passthroughVirtualKeyId,
     resolvedUser,
@@ -3735,7 +3815,20 @@ async function handleNonStreaming<
         if (pluginRegistry && pluginContext) {
           await pluginRegistry.onBeforeModel({ ...pluginContext, request });
         }
-        result = await provider.execute(client, request);
+        result = await openUpstreamWithRetry({
+          open: () => provider.execute(client, request),
+          // See the streaming path: Gemini cannot safely classify this boundary.
+          isRetryable: (error) =>
+            providerName !== "gemini" &&
+            isRetryableUpstreamConnectionFailure(error),
+          shouldContinue: () => !reply.raw.destroyed,
+          onRetry: (event) =>
+            logUpstreamRetry({
+              ...event,
+              provider: providerName,
+              model: actualModel,
+            }),
+        });
         if (ctx.connectionVerification) assertVerificationResponse(result);
         billingMode = getBillingMode();
       } catch (error) {
@@ -3890,6 +3983,8 @@ async function handleNonStreaming<
 
   // Let the proxy plugins rule on the response's tool calls
   let rewrittenToolCalls: AccumulatedToolCall[] | null = null;
+  let blockedToolCalls: readonly { reason: string }[] =
+    hostedHold?.blocked ?? [];
   if (toolCalls.length === 0) {
     await recordGovernedThreadResponse({
       context: ctx.pluginContext,
@@ -3936,6 +4031,7 @@ async function handleNonStreaming<
       held: !!hostedHold,
     });
     // Record metrics for tool calls substituted with denial notices.
+    blockedToolCalls = policyOutcome.blocked;
     for (const blocked of policyOutcome.blocked) {
       recordBlockedToolCallMetrics({
         allToolCallNames: [blocked.name],
@@ -4039,6 +4135,7 @@ async function handleNonStreaming<
         billingTeamId,
         runId,
         userId,
+        serviceAccountId,
         virtualKeyId,
         passthroughVirtualKeyId,
         appId,
@@ -4052,7 +4149,7 @@ async function handleNonStreaming<
         actualModel,
         usage,
         costs,
-        toolCallBlock: toToolCallBlock(toolInvocationRefusal),
+        toolCallBlock: toToolCallBlock(toolInvocationRefusal, []),
       });
       await persistProxyInteraction(refusalRecord, encryptedChat);
 
@@ -4183,6 +4280,7 @@ async function handleNonStreaming<
       billingTeamId,
       runId,
       userId,
+      serviceAccountId,
       virtualKeyId,
       passthroughVirtualKeyId,
       appId,
@@ -4208,6 +4306,7 @@ async function handleNonStreaming<
       actualModel,
       usage,
       costs,
+      toolCallBlock: toToolCallBlock(null, blockedToolCalls),
     });
     await persistProxyInteraction(record, encryptedChat);
     responsePersisted = true;
@@ -4690,6 +4789,19 @@ function firstHeaderValue(
   value: string | string[] | undefined,
 ): string | undefined {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function logUpstreamRetry(params: {
+  attempt: number;
+  delayMs: number;
+  provider: string;
+  model: string;
+}): void {
+  const { attempt, delayMs, provider, model } = params;
+  logger.warn(
+    { attempt, delayMs, provider, model },
+    "Retrying upstream connection before receiving model output",
+  );
 }
 
 function normalizeVirtualKeyCandidate(

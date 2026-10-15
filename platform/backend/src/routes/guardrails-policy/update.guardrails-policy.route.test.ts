@@ -884,7 +884,7 @@ describe("guardrails policy authoring", () => {
     ).rejects.toMatchObject({ code: -32601 });
   });
 
-  test("a member can read and validate but cannot save policies through either API", async ({
+  test("a built-in member can neither read, validate, nor save policies through either API", async ({
     makeUser,
     makeMember,
     makeSession,
@@ -896,34 +896,35 @@ describe("guardrails policy authoring", () => {
       response: { user, session },
       headers: new Headers(),
     } as never);
-    expect(
-      (await app.inject({ method: "GET", url: "/api/guardrails-policy" }))
-        .statusCode,
-    ).toBe(200);
-    expect(
-      (
-        await app.inject({
-          method: "PUT",
-          url: "/api/guardrails-policy",
-          payload: { content, expectedRevision: 0 },
-        })
-      ).statusCode,
-    ).toBe(403);
-    expect(
-      (
-        await app.inject({
-          method: "POST",
-          url: "/api/guardrails-policy/validate",
-          payload: { content },
-        })
-      ).statusCode,
-    ).toBe(200);
-    const denied = await executeArchestraTool(
-      "archestra__update_guardrails_policy",
-      { content, expectedRevision: 0 },
-      { organizationId: orgId, userId: user.id, agent: { id: "a", name: "A" } },
-    );
-    expect(denied.isError).toBe(true);
+    for (const [method, url, payload] of [
+      ["GET", "/api/guardrails-policy", undefined],
+      ["PUT", "/api/guardrails-policy", { content, expectedRevision: 0 }],
+      ["POST", "/api/guardrails-policy/validate", { content }],
+    ] as const) {
+      expect((await app.inject({ method, url, payload })).statusCode).toBe(403);
+    }
+    const context = {
+      organizationId: orgId,
+      userId: user.id,
+      agent: { id: "a", name: "A" },
+    };
+    for (const [tool, args, required] of [
+      ["archestra__get_guardrails_policy", {}, "openappaPolicy:read"],
+      [
+        "archestra__validate_guardrails_policy",
+        { content },
+        "openappaPolicy:read",
+      ],
+      [
+        "archestra__update_guardrails_policy",
+        { content, expectedRevision: 0 },
+        "openappaPolicy:update",
+      ],
+    ] as const) {
+      const denied = await executeArchestraTool(tool, args, context);
+      expect(denied.isError, tool).toBe(true);
+      expect(JSON.stringify(denied.content)).toContain(`requires ${required}`);
+    }
     expect(await GuardrailsPolicyModel.findLatest(orgId)).toBeNull();
   });
 });

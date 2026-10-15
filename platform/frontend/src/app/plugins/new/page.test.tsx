@@ -281,7 +281,7 @@ describe("NewPluginPage", () => {
         "No marketplace file. These are its plugin folders.",
       ),
     ).toBeVisible();
-    await user.click(screen.getByRole("button", { name: /^Import/ }));
+    await user.click(screen.getByRole("button", { name: /^Import(?: \(|$)/ }));
 
     expect(importMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -362,7 +362,9 @@ describe("NewPluginPage", () => {
     expect(await screen.findByText("Imported")).toBeVisible();
     expect(screen.getByText(/0 of 0 selected/)).toBeVisible();
     expect(screen.getByText(/1 imported/)).toBeVisible();
-    expect(screen.getByRole("button", { name: /^Import/ })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /^Import(?: \(|$)/ }),
+    ).toBeDisabled();
     expect(
       screen.queryByRole("combobox", { name: "Select platforms" }),
     ).not.toBeInTheDocument();
@@ -404,6 +406,8 @@ describe("NewPluginPage", () => {
       }),
     );
 
+    await screen.findByText("hook-plugin");
+    await user.click(screen.getByRole("button", { name: "Import settings" }));
     expect(
       await screen.findByRole("combobox", { name: "Select platforms" }),
     ).toBeVisible();
@@ -411,11 +415,6 @@ describe("NewPluginPage", () => {
     const platforms = screen.getByRole("combobox", {
       name: "Select platforms",
     });
-    const search = screen.getByPlaceholderText("Search by name or description");
-    expect(
-      platforms.compareDocumentPosition(search) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
     expect(screen.getByText("1 file")).toBeVisible();
     expect(screen.queryByText("plugins/hook-plugin")).not.toBeInTheDocument();
     expect(
@@ -483,11 +482,11 @@ describe("NewPluginPage", () => {
         `${PLUGIN_MARKETPLACE_IMPORT_LIMIT} of 101 selected · ${PLUGIN_MARKETPLACE_IMPORT_LIMIT} max per import`,
       ),
     ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Import settings" }));
     expect(
-      screen.getByText(
-        `Import up to ${PLUGIN_MARKETPLACE_IMPORT_LIMIT} plugins at a time. Finish this import, reopen the marketplace, and select the next batch. Imported plugins will be marked and excluded from the next batch.`,
-      ),
+      screen.getByText("Import this batch, then reopen for the next."),
     ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Import settings" }));
 
     const first = screen.getByRole("checkbox", { name: "Deselect plugin-0" });
     const next = screen.getByRole("checkbox", {
@@ -547,7 +546,7 @@ describe("NewPluginPage", () => {
     await user.click(
       screen.getByRole("combobox", { name: "Permission for Member" }),
     );
-    await user.click(screen.getByRole("option", { name: "Can edit" }));
+    await user.click(screen.getByRole("option", { name: "Can update" }));
     expect(create).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Create plugin" }));
     expect(create).toHaveBeenCalledWith(

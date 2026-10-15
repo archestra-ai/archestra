@@ -23,6 +23,8 @@ export const ScopedResourceSchema = z.enum([
   "externalAgent",
   // An OAuth client registration. Its tokens never consult these grants: they
   // decide who can see and manage the registration, not what it reaches.
+  "oauthClient",
+  // Retained only for decoding old policies during the startup conversion.
   "mcpOauthClient",
   "llmOauthClient",
   // Deploying into an environment is `use` on that environment.
@@ -50,6 +52,8 @@ export const ScopedResourceSchema = z.enum([
 export const ManagedResourceSchema = ScopedResourceSchema.exclude([
   "log",
   "auditLog",
+  "mcpOauthClient",
+  "llmOauthClient",
 ]);
 
 /** Resources with no individual object policy. Logs use role actions instead. */
@@ -109,6 +113,7 @@ export const scopedResourceNouns: Record<ScopedResource, string> = {
   llmVirtualKey: "virtual key",
   llmProviderApiKey: "provider key",
   externalAgent: "external agent",
+  oauthClient: "OAuth client",
   mcpOauthClient: "OAuth client",
   llmOauthClient: "OAuth client",
   environment: "environment",
@@ -261,9 +266,9 @@ export function canDelegateScopedPermissions(params: {
 }
 
 export const resourcePermissionPresets = {
-  view: { label: "Can view", actions: ["read"] },
+  view: { label: "Can read", actions: ["read"] },
   use: { label: "Can use", actions: ["read", "use"] },
-  edit: { label: "Can edit", actions: ["read", "use", "update"] },
+  edit: { label: "Can update", actions: ["read", "use", "update"] },
   manage: {
     label: "Full access",
     actions: ["read", "use", "update", "delete", "manage-permissions"],
@@ -303,10 +308,14 @@ export function resourcePermissionPresetsFor(
   // Nothing is done "with" an OAuth client registration: its tokens are
   // checked against the client's own configuration, never against a grant.
   // So there is no `use` to offer, only seeing, editing, and the rest.
-  if (resource === "mcpOauthClient" || resource === "llmOauthClient") {
+  if (
+    resource === "oauthClient" ||
+    resource === "mcpOauthClient" ||
+    resource === "llmOauthClient"
+  ) {
     return {
       view: resourcePermissionPresets.view,
-      edit: { label: "Can edit", actions: ["read", "update"] },
+      edit: { label: "Can update", actions: ["read", "update"] },
       manage: {
         label: "Full access",
         actions: ["read", "update", "delete", "manage-permissions"],

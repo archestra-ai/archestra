@@ -15,6 +15,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import db, { schema } from "@/database";
 import {
@@ -27,6 +28,7 @@ import {
   OAuthClientModel,
   VirtualApiKeyModel,
 } from "@/models";
+import ServiceAccountModel from "@/models/service-account";
 import {
   type AppaDelegationMarker,
   mintDelegationMarker,
@@ -42,6 +44,7 @@ import {
   expect,
   test,
 } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import {
   type AnthropicStubOptions,
   createAnthropicTestClient,
@@ -74,6 +77,8 @@ import {
   zhipuaiAdapterFactory,
 } from "../adapters";
 import modelRouterProxyRoutes from "./model-router";
+
+setupTestCacheManager();
 
 function createFastifyApp() {
   const app = Fastify().withTypeProvider<ZodTypeProvider>();
@@ -1592,6 +1597,98 @@ describe("model router proxy routes", () => {
     ]);
     expect(chatResponse.statusCode).toBe(404);
     expect(chatResponse.json().error.message).toContain("not available");
+  });
+
+  test.for([
+    "oauth",
+    "virtual_key",
+  ] as const)("attributes %s Model Router spend to its account and rejects disabled accounts", async (credentialKind, {
+    makeAgent,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeServiceAccount,
+  }) => {
+    const app = createFastifyApp();
+    await app.register(authRoutes);
+    await app.register(modelRouterProxyRoutes);
+    const provider = "openai";
+    const modelId = "gpt-5.4";
+    await upsertModel({ provider, modelId });
+    const org = await makeOrganization();
+    const account = await makeServiceAccount(org.id);
+    const secret = await makeSecret({ secret: { apiKey: "sk-openai" } });
+    const key = await makeLlmProviderApiKey(org.id, secret.id, { provider });
+    await linkAllProviderModelsToApiKey(provider, key.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "llm_proxy",
+    });
+    const mappings: {
+      provider: SupportedProvider;
+      providerApiKeyId: string;
+    }[] = [{ provider, providerApiKeyId: key.id }];
+    let credential: string;
+    if (credentialKind === "oauth") {
+      const client = await LlmOauthClientModel.create({
+        organizationId: org.id,
+        authorId: crypto.randomUUID(),
+        name: "worker",
+        serviceAccountId: account.id,
+        providerApiKeys: mappings,
+      });
+      const minted = await app.inject({
+        method: "POST",
+        url: "/api/auth/oauth2/token",
+        payload: {
+          grant_type: "client_credentials",
+          client_id: client.oauthClient.clientId,
+          client_secret: client.clientSecret,
+          scope: LLM_PROXY_OAUTH_SCOPE,
+        },
+      });
+      expect(minted.statusCode, minted.body).toBe(200);
+      credential = minted.json().access_token;
+    } else {
+      credential = (
+        await VirtualApiKeyModel.create({
+          organizationId: org.id,
+          name: "worker",
+          authorId: serviceAccountUserId(account.id),
+          ...accessGrants("personal"),
+          providerApiKeys: mappings,
+        })
+      ).value;
+    }
+    const call = () =>
+      app.inject({
+        method: "POST",
+        url: `/v1/model-router/${agent.id}/chat/completions`,
+        headers: { authorization: `Bearer ${credential}` },
+        payload: {
+          model: `${provider}:${modelId}`,
+          messages: [{ role: "user", content: "Hello" }],
+        },
+      });
+    const accepted = await call();
+    expect(accepted.statusCode, accepted.body).toBe(200);
+    const rows = await InteractionModel.findAllPaginated({
+      limit: 10,
+      offset: 0,
+    });
+    expect(rows.data).toEqual([
+      expect.objectContaining({ serviceAccountId: account.id, userId: null }),
+    ]);
+    await ServiceAccountModel.update(account.id, org.id, { disabled: true });
+    const rejected = await call();
+    expect(rejected.statusCode, rejected.body).toBe(401);
+    const listed = await app.inject({
+      method: "GET",
+      url: "/v1/model-router/models",
+      headers: { authorization: `Bearer ${credential}` },
+    });
+    expect(listed.statusCode, listed.body).toBe(401);
+    await app.close();
   });
 
   test("routes requests authenticated with an LLM OAuth client access token issued from client credentials", async ({

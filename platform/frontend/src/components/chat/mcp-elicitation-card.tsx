@@ -15,6 +15,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { QuestionMarkdown } from "@/components/chat/question-markdown";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils/tailwind";
@@ -54,6 +55,7 @@ export function McpElicitationCard({
   groupId,
   members,
   terminalIncomplete = false,
+  onTypeAnswer,
 }: {
   /** Choice requests only (see `isChoiceElicitationRequest`), oldest first. */
   requests: ChatMcpElicitationRequest[];
@@ -62,6 +64,8 @@ export function McpElicitationCard({
   members?: AskUserGroupMember[];
   /** The stream ended after this mounted group had live requests but no result. */
   terminalIncomplete?: boolean;
+  /** Moves focus to the chat composer, which takes a lone question's typed answer. */
+  onTypeAnswer?: () => void;
 }) {
   const [valuesById, setValuesById] = useState<
     Record<string, Record<string, unknown>>
@@ -565,13 +569,17 @@ export function McpElicitationCard({
         }
         submitsOnPick={answersOnClick(question)}
         other={
-          // The chat composer takes a lone question's typed answer.
-          otherField && singlePick && !answersOnClick(question)
-            ? {
-                selected: otherOpen,
-                onSelect: () => setOtherOpen({ question, open: true }),
-              }
-            : undefined
+          !otherField || !singlePick
+            ? undefined
+            : answersOnClick(question)
+              ? // The chat composer takes a lone question's typed answer.
+                onTypeAnswer
+                ? { selected: false, onSelect: onTypeAnswer }
+                : undefined
+              : {
+                  selected: otherOpen,
+                  onSelect: () => setOtherOpen({ question, open: true }),
+                }
         }
       />
     ));
@@ -729,7 +737,7 @@ export function McpElicitationCard({
               <AnswerSummary members={settledMembers} label="Saved answers" />
             </div>
           ) : null}
-          <div className="flex min-w-0 flex-col gap-3 px-4 pb-3 pt-4 [&>p:first-child]:font-medium">
+          <div className="flex min-w-0 flex-col gap-3 px-4 pb-3 pt-4">
             <ElicitationMessage request={activeQuestion.request} />
             {renderFields(activeQuestion)}
           </div>
@@ -819,12 +827,11 @@ function ElicitationMessage({
   request: ChatMcpElicitationRequest;
 }) {
   return (
-    <p
+    <QuestionMarkdown
       id={questionMessageId(request.id)}
-      className="whitespace-pre-wrap text-sm leading-6 text-foreground [overflow-wrap:anywhere]"
-    >
-      {request.message}
-    </p>
+      className="font-medium"
+      text={request.message}
+    />
   );
 }
 
@@ -888,13 +895,46 @@ function AnswerSummary({
 }
 
 /**
- * The choices the agent offered, so the reply reads in context. Picked ones
+ * The choices the agent offered, folded behind a link: the reply bubble
+ * already shows the pick, so the full list is context on demand. Picked ones
  * carry a check; the rest stay muted.
  */
 function OfferedOptions({ member }: { member: AskUserGroupMember }) {
+  const [expanded, setExpanded] = useState(false);
   if (member.options.length === 0) return null;
   const selected =
     member.outcome?.status === "answered" ? member.outcome.selected : [];
+  const count = member.options.length;
+  return (
+    <div className="flex min-w-0 flex-col items-start gap-1.5">
+      <Button
+        type="button"
+        variant="link"
+        size="xs"
+        className="h-auto px-0 text-muted-foreground"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((current) => !current)}
+      >
+        <span>
+          {expanded
+            ? "Hide options"
+            : `Show ${count} ${count === 1 ? "option" : "options"}`}
+        </span>
+      </Button>
+      {expanded ? (
+        <OfferedOptionList member={member} selected={selected} />
+      ) : null}
+    </div>
+  );
+}
+
+function OfferedOptionList({
+  member,
+  selected,
+}: {
+  member: AskUserGroupMember;
+  selected: string[];
+}) {
   return (
     <ul aria-label="Offered options" className="flex flex-wrap gap-1.5">
       {member.options.map((option) => {
@@ -925,16 +965,15 @@ function AnsweredQuestionText({ question }: { question: string }) {
   const isLong = question.length > LONG_QUESTION_CHARACTERS;
   return (
     <div className="flex min-w-0 flex-col items-start gap-1">
-      <p
+      <QuestionMarkdown
         className={cn(
           // Same reading type as assistant prose (MessageContent): the
           // question is the agent talking, so it should not read as UI chrome.
-          "whitespace-pre-wrap text-[0.9375rem] leading-relaxed text-foreground [overflow-wrap:anywhere]",
+          "text-[0.9375rem] leading-relaxed",
           isLong && !expanded && "line-clamp-3",
         )}
-      >
-        {question}
-      </p>
+        text={question}
+      />
       {isLong ? (
         <Button
           type="button"

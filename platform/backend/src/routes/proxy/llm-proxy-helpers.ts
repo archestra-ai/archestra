@@ -479,6 +479,7 @@ export function buildInteractionRecord(params: {
   billingTeamId?: string;
   runId?: string;
   userId?: string;
+  serviceAccountId?: string;
   virtualKeyId?: string;
   passthroughVirtualKeyId?: string;
   /** MCP App whose runtime made this call; only app-runtime completions set it. */
@@ -509,6 +510,7 @@ export function buildInteractionRecord(params: {
     billingTeamId: params.billingTeamId,
     runId: params.runId,
     userId: params.userId,
+    serviceAccountId: params.serviceAccountId,
     virtualKeyId: params.virtualKeyId,
     passthroughVirtualKeyId: params.passthroughVirtualKeyId,
     appId: params.appId,
@@ -587,18 +589,24 @@ export function withProviderToolCallIds<T>(
  * already carry the event, but neither can be joined to a session's rows after
  * the fact, which is what triaging one of these actually requires.
  *
- * Returns undefined when nothing was blocked, so the column stays NULL on the
- * overwhelming majority of rows.
+ * A turn that still runs can have calls replaced by denial notices; those
+ * count too. Returns undefined when nothing was blocked, so the column stays
+ * NULL on the overwhelming majority of rows.
  */
 export function toToolCallBlock(
   refusal: LlmProxyToolCallRefusal | null,
+  blocked: readonly { reason: string }[],
 ): ToolCallBlock | undefined {
-  if (!refusal) {
-    return undefined;
+  if (refusal) {
+    return {
+      reason: refusal.reason,
+      blockedToolCallCount: refusal.allToolCallNames.length,
+    };
   }
+  if (blocked.length === 0) return undefined;
   return {
-    reason: refusal.reason,
-    blockedToolCallCount: refusal.allToolCallNames.length,
+    reason: [...new Set(blocked.map((call) => call.reason))].join("\n"),
+    blockedToolCallCount: blocked.length,
   };
 }
 
@@ -651,6 +659,42 @@ export function withSessionContext<T>(
   return otelContext.with(ctx, fn);
 }
 
+/**
+ * The error message the proxy records and reports for an upstream failure:
+ * a transport failure's own description (see classifyUpstreamTransportFailure),
+ * else what the provider adapter extracts from the error.
+ */
+export function upstreamErrorMessage(
+  error: unknown,
+  extractErrorMessage: (error: unknown) => string,
+): string {
+  if (explicitHttpStatus(error) === undefined && !isClientAbortError(error)) {
+    const transportFailure = classifyUpstreamTransportFailure(error);
+    if (transportFailure) return transportFailure.message;
+  }
+  return extractErrorMessage(error);
+}
+
+/**
+ * Identifies connection failures eligible for retry. Errors with an HTTP
+ * status, provider error payload, client abort, or timeout are excluded.
+ * The caller limits retries to failures before the first response chunk.
+ */
+export function isRetryableUpstreamConnectionFailure(error: unknown): boolean {
+  if (
+    error instanceof ApiError ||
+    explicitHttpStatus(error) !== undefined ||
+    isClientAbortError(error) ||
+    hasUpstreamErrorPayload(error)
+  ) {
+    return false;
+  }
+  const code = classifyUpstreamTransportFailure(error)?.code;
+  return (
+    code === "upstream_connection_closed" || code === "upstream_unreachable"
+  );
+}
+
 export function handleError(
   error: unknown,
   reply: FastifyReply,
@@ -673,30 +717,12 @@ export function handleError(
 
   // Extract status code from error, checking multiple common property names
   // and ensuring the value is a valid number (not undefined/null)
-  let statusCode: number = 500;
-  let hasExplicitStatus = false;
-  if (error instanceof Error) {
-    const errorObj = error as Error & {
-      status?: number;
-      statusCode?: number;
-      $metadata?: { httpStatusCode?: number };
-    };
-    if (typeof errorObj.status === "number") {
-      statusCode = errorObj.status;
-      hasExplicitStatus = true;
-    } else if (typeof errorObj.statusCode === "number") {
-      statusCode = errorObj.statusCode;
-      hasExplicitStatus = true;
-    } else if (typeof errorObj.$metadata?.httpStatusCode === "number") {
-      // AWS SDK errors (Bedrock) carry the HTTP status on $metadata, so
-      // without this a throttling 429 or provider 503 surfaced as a 500.
-      statusCode = errorObj.$metadata.httpStatusCode;
-      hasExplicitStatus = true;
-    }
-  }
+  const explicitStatus = explicitHttpStatus(error);
+  const hasExplicitStatus = explicitStatus !== undefined;
+  let statusCode: number = explicitStatus ?? 500;
 
   // Some SDK transport and streaming failures do not carry an HTTP status.
-  let isClassifiedTransportFailure = false;
+  let transportFailure: UpstreamTransportFailure | undefined;
   if (!hasExplicitStatus) {
     if (isClientAbortError(error)) {
       // The proxy client disconnected and the disconnect was propagated to
@@ -707,19 +733,19 @@ export function handleError(
       // instead of a crash of ours.
       statusCode = 499;
     } else {
-      const upstreamStatus = classifyTransientUpstreamError(error);
-      if (upstreamStatus !== undefined) {
-        statusCode = upstreamStatus;
-        // A status-less SDK connection/timeout failure ("Connection error.",
-        // "fetch failed", ETIMEDOUT) is by definition the upstream being
-        // unreachable, not a crash of ours — but it carries neither a parsed
-        // provider body nor response headers, so the provider-shape check
-        // below cannot mark it. Mark it here so error tracking drops the
-        // relay while clients still get the mapped 502/504.
-        isClassifiedTransportFailure = true;
+      // A status-less SDK connection/timeout failure ("Connection error.",
+      // "fetch failed", ETIMEDOUT, a stream "terminated" by the other side)
+      // is by definition the upstream failing, not a crash of ours — but it
+      // carries neither a parsed provider body nor response headers, so the
+      // provider-shape check below cannot mark it. Classify it here so error
+      // tracking drops the relay while clients still get the mapped 502/504.
+      transportFailure = classifyUpstreamTransportFailure(error);
+      if (transportFailure) {
+        statusCode = transportFailure.status;
       }
     }
   }
+  const isClassifiedTransportFailure = transportFailure !== undefined;
 
   // The internal code preserves overload semantics after streaming starts.
   // Any non-ApiError 503 in the proxy's catch is the provider saying it is
@@ -742,13 +768,7 @@ export function handleError(
     hasProviderHttpErrorShape(error) &&
     (hasExplicitStatus || hasUpstreamErrorPayload(error));
 
-  const extractedMessage = extractErrorMessage(error);
-  const errorMessage =
-    isClassifiedTransportFailure &&
-    (extractedMessage === "Connection error." ||
-      extractedMessage === "fetch failed")
-      ? "Could not connect to the model provider. Check its credentials and network access, then retry."
-      : extractedMessage;
+  const errorMessage = transportFailure?.message ?? extractErrorMessage(error);
   const adapterInternalCode = extractInternalCode(error);
   const internalCode =
     adapterInternalCode ??
@@ -813,10 +833,17 @@ export function handleError(
         // upstreamBody, not upstreamPassthroughBody: the status (200) is
         // already sent, so the status checks of the passthrough do not apply,
         // and the type and details are all the client has to go on.
+        // A transport failure has no provider body: frame it as a server
+        // error with its own code, so a client that classifies by type
+        // (the AI SDK's Responses parser, OpenCode, Kilo Code) treats it as
+        // retryable like the provider's own 5xx instead of a final API error.
         type:
+          transportFailure?.type ??
           (upstreamBody !== undefined && error instanceof Error
             ? nestedProviderErrorType(error)
-            : undefined) ?? "api_error",
+            : undefined) ??
+          "api_error",
+        ...(transportFailure ? { code: transportFailure.code } : {}),
         message: errorMessage,
         ...(upstreamBody !== undefined
           ? providerErrorDetails(upstreamBody)
@@ -907,6 +934,104 @@ function isClientAbortError(error: unknown): boolean {
     error.name === "APIUserAbortError" ||
     /\boperation was aborted\.?$/i.test(error.message)
   );
+}
+
+/**
+ * A status-less transport failure with the status, error type, code and
+ * message the proxy reports for it. A bare undici "terminated" (the upstream
+ * closed its socket mid-stream) or "fetch failed" tells a client nothing;
+ * the message names what happened and keeps the cause ("other side closed").
+ */
+interface UpstreamTransportFailure {
+  status: 502 | 503 | 504 | 529;
+  type: "server_error";
+  code:
+    | "upstream_connection_closed"
+    | "upstream_unreachable"
+    | "upstream_timeout"
+    | "upstream_overloaded";
+  message: string;
+}
+
+function classifyUpstreamTransportFailure(
+  error: unknown,
+): UpstreamTransportFailure | undefined {
+  const status = classifyTransientUpstreamError(error);
+  if (status === undefined || !(error instanceof Error)) return undefined;
+  const causes = collectCauseMessages(error);
+  const detail = causes.length > 0 ? ` (${causes.join(": ")})` : "";
+  const text = [error.message, ...causes].join(" ");
+  if (status === 503 || status === 529) {
+    return {
+      status,
+      type: "server_error",
+      code: "upstream_overloaded",
+      message: error.message,
+    };
+  }
+  if (status === 504) {
+    return {
+      status,
+      type: "server_error",
+      code: "upstream_timeout",
+      message: `The model provider did not finish the response in time${detail}. Retry the request.`,
+    };
+  }
+  if (
+    /terminated|other side closed|socket hang up|connection (?:reset|closed|aborted)|ECONNRESET|UND_ERR_SOCKET/i.test(
+      text,
+    )
+  ) {
+    return {
+      status,
+      type: "server_error",
+      code: "upstream_connection_closed",
+      message: `The model provider closed the connection before the response finished${detail}. Retry the request.`,
+    };
+  }
+  return {
+    status,
+    type: "server_error",
+    code: "upstream_unreachable",
+    message:
+      "Could not connect to the model provider. Check its credentials and network access, then retry.",
+  };
+}
+
+/** Messages down the `cause` chain, innermost last, without the error's own. */
+function collectCauseMessages(error: Error): string[] {
+  const messages: string[] = [];
+  const seen = new Set<unknown>([error]);
+  let cause: unknown = error.cause;
+  while (cause && typeof cause === "object" && !seen.has(cause)) {
+    seen.add(cause);
+    const message = (cause as { message?: unknown }).message;
+    if (typeof message === "string" && message && message !== error.message) {
+      messages.push(message);
+    }
+    cause = (cause as { cause?: unknown }).cause;
+  }
+  return messages;
+}
+
+/**
+ * The HTTP status an SDK error carries, checking the common property names.
+ * AWS SDK errors (Bedrock) carry it on `$metadata`, so without that check a
+ * throttling 429 or provider 503 surfaced as a 500.
+ */
+function explicitHttpStatus(error: unknown): number | undefined {
+  if (!(error instanceof Error)) return undefined;
+  const errorObj = error as Error & {
+    status?: number;
+    statusCode?: number;
+    $metadata?: { httpStatusCode?: number };
+  };
+  if (typeof errorObj.status === "number") return errorObj.status;
+  if (typeof errorObj.statusCode === "number") return errorObj.statusCode;
+  if (typeof errorObj.$metadata?.httpStatusCode === "number") {
+    return errorObj.$metadata.httpStatusCode;
+  }
+  return undefined;
 }
 
 /**

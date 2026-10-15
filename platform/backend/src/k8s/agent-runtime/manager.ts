@@ -32,6 +32,7 @@ import {
 import McpDeploymentLeaseModel, {
   ClusterLeaseHeldError,
 } from "@/models/mcp-deployment-lease";
+import ServiceAccountModel from "@/models/service-account";
 import { reportAgentRuntimeSteer } from "@/observability/metrics/agent-runtime";
 import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
 import { agentRuntimeFailureReason } from "@/services/agent-runtime/failure-reason";
@@ -709,7 +710,7 @@ class AgentRuntimeManager {
         (await this.hasRetainedTerminal(session)),
     );
     if (!retainCredentials) {
-      await this.revokeVirtualKey(session);
+      await this.revokeRunCredentials(session);
     }
     const clients = this.requireClients();
     // Keep the names for continuation's inherited-env unset list, but prevent
@@ -758,7 +759,7 @@ class AgentRuntimeManager {
   }
 
   async stopRun(session: AgentRunRecord): Promise<"suspended" | undefined> {
-    await this.revokeVirtualKey(session);
+    await this.revokeRunCredentials(session);
     const pod = await this.findPod(session);
     if (pod?.status?.phase !== "Running" || !pod.metadata?.name) {
       await this.suspendWorkspace(session);
@@ -1259,7 +1260,7 @@ class AgentRuntimeManager {
   async teardown(session: AgentRunRecord): Promise<void> {
     // The key outlives the pod otherwise: a finished session's API key would
     // keep working, still charging the person it acted as.
-    await this.revokeVirtualKey(session);
+    await this.revokeRunCredentials(session);
     await this.deleteWorkspace(session);
   }
 
@@ -1646,7 +1647,14 @@ class AgentRuntimeManager {
     }
   }
 
-  private async revokeVirtualKey(session: AgentRunRecord): Promise<void> {
+  private async revokeRunCredentials(session: AgentRunRecord): Promise<void> {
+    if (session.actorKind === "serviceAccount" && session.gatewayTokenId) {
+      await ServiceAccountModel.deleteToken({
+        serviceAccountId: session.actorId,
+        organizationId: session.organizationId,
+        tokenId: session.gatewayTokenId,
+      });
+    }
     if (!session.virtualApiKeyId) return;
     try {
       await VirtualApiKeyModel.delete(session.virtualApiKeyId);

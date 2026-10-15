@@ -1,4 +1,12 @@
-import { boolean, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
+import serviceAccountsTable from "./service-account";
 import usersTable from "./user";
 
 const oauthClient = pgTable("oauth_client", {
@@ -22,6 +30,10 @@ const oauthClient = pgTable("oauth_client", {
   userId: text("user_id").references(() => usersTable.id, {
     onDelete: "cascade",
   }),
+  serviceAccountId: uuid("service_account_id").references(
+    () => serviceAccountsTable.id,
+    { onDelete: "cascade" },
+  ),
   referenceId: text("reference_id"),
   redirectUris: text("redirect_uris").array().notNull(),
   postLogoutRedirectUris: text("post_logout_redirect_uris").array(),

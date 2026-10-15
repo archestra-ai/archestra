@@ -53,6 +53,7 @@ export function ResourceListActions({
     if (!open && linked) {
       const next = new URLSearchParams(params.toString());
       next.delete("permissions");
+      if (resource === "oauthClient") next.delete("permissionResource");
       router.replace(`${pathname}${next.size ? `?${next}` : ""}`, {
         scroll: false,
       });

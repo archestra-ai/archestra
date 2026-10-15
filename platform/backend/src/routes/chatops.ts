@@ -32,6 +32,7 @@ import {
   SLACK_DEFAULT_CONNECTION_MODE,
   TELEGRAM_LINK_CODE_TTL_MS,
 } from "@/agents/chatops/constants";
+import { resolveMSTeamsUserEmail } from "@/agents/chatops/ms-teams-user";
 import { slackAppFactory } from "@/agents/chatops/slack-app-factory";
 import {
   buildAgentFooter,
@@ -407,12 +408,11 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
               return;
             }
 
-            // Team-channel auto-reply gate: in channels the bot stays quiet
-            // until @mentioned, then keeps replying to that thread without
-            // further mentions, unless the channel opted into answering every
-            // message. Group chats and DMs always reply (no gate). Runs before
-            // sender resolution so we don't do Graph lookups for the many
-            // un-mentioned channel messages the bot now receives.
+            // Gate before sender resolution: ambient conversation must not
+            // invoke an agent or onboard people who did not address the bot.
+            // Channel threads stay active after a mention; flat group chats
+            // require a mention on each request unless answer-all is enabled.
+            // Personal DMs continue to answer every message.
             //
             // A mute command (e.g. "@bot mute") ends the sticky behavior early —
             // honored both when the bot is mentioned and when the thread is
@@ -462,6 +462,24 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
               });
               if (!gate.proceed) return;
               addressed = gate.addressed;
+            } else if (
+              context.activity.conversation?.conversationType === "groupChat"
+            ) {
+              addressed = provider.wasBotMentioned(context.activity);
+              if (
+                !addressed &&
+                !(await isChannelAnswerAllEnabled({
+                  provider: "ms-teams",
+                  channelId: message.channelId,
+                  workspaceId: message.workspaceId,
+                }))
+              ) {
+                await chatOpsManager.recordAmbientMessage({
+                  provider,
+                  message,
+                });
+                return;
+              }
             }
 
             // Attach TurnContext so the provider can send typing indicators
@@ -3459,7 +3477,8 @@ async function resolveAndVerifySenderForMSTeams(params: {
   try {
     const member = await TeamsInfo.getMember(context, context.activity.from.id);
     if (member?.email || member?.userPrincipalName) {
-      message.senderEmail = member.email || member.userPrincipalName;
+      message.senderEmail =
+        (await resolveMSTeamsUserEmail(member)) ?? undefined;
     }
   } catch (error) {
     logger.debug(

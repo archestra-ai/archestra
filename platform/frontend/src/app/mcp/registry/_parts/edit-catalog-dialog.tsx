@@ -60,8 +60,7 @@ interface EditCatalogContentProps {
   keepOpenOnSave?: boolean;
   /**
    * Called once the update has landed. The setup wizard uses it to advance to
-   * the next step, so the user is not left on a screen whose CTA the success
-   * toast covers.
+   * the next step.
    */
   onSaved?: () => void;
   /** Called when form dirty state changes */

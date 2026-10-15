@@ -2,8 +2,8 @@
 title: Guardrails
 description: Stop agents from leaking data, with OpenAPPA policies on every tool call
 order: 1
-alpha: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-13
+beta: "Policy syntax and behavior may change as OpenAPPA evolves."
+lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -35,7 +35,7 @@ Restrictions only add up. A trusted read never restores lost trust, and an appro
 
 ## Turn On Guardrails
 
-You need [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) to write the policy, and [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) to turn enforcement on or off. **Guardrails** appears under **Agents** in the sidebar.
+You need [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) to write the policy, and [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) to turn enforcement on or off. **Guardrails** appears under **Agents** in the sidebar for anyone with [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) or [`openappaDiagnostics:read`](/docs/reference/permissions#openappaDiagnostics:read).
 
 1. Go to **Guardrails** and click **Create my policy**. A chat with the configuration agent opens.
 2. The agent drafts a starting policy from your tools and explains what it allows and blocks.
@@ -48,7 +48,7 @@ What to know:
 
 - The starting policy covers only Archestra's own tools. Every other tool runs without restrictions. The [code sandbox](/docs/agents#code-sandbox) tool [`run_command`](/docs/reference/archestra-mcp-server#run_command) is labeled by your organization's default model before each command, so reading a credentials file narrows who can see the result. A policy you already saved keeps its own rules. Next, [cover your other tools](/docs/agents/guardrails/policies#policy-coverage).
 - Enforcement applies to sessions that start while it is on. Start a new session after you turn it on.
-- **Settings → Guardrails** holds three settings: **Enforce the policy**, which you can switch once a policy exists; **Other clients**, for [unrecognized clients](/docs/agents/guardrails/clients#unrecognized-clients); and Git sync.
+- **Settings → Guardrails** holds four settings: **Enforce the policy**, which you can switch once a policy exists; **Allow superyell**, which lets an agent turn Guardrails off for its own session after a person approves (on by default); **Other clients**, for [unrecognized clients](/docs/agents/guardrails/clients#unrecognized-clients); and Git sync.
 
 ## Validations
 

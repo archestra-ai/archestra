@@ -25,6 +25,7 @@ export const InsertOpenAppaYellSchema = createInsertSchema(
   toolCallId: true,
   message: true,
   withTrajectory: true,
+  superyell: true,
 });
 export type InsertOpenAppaYell = z.infer<typeof InsertOpenAppaYellSchema>;
 export const OpenAppaYellQuerySchema = CursorQuerySchema.extend({

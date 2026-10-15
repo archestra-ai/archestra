@@ -18,7 +18,9 @@ export const ADMIN_PASSWORD =
   process.env.ARCHESTRA_AUTH_ADMIN_PASSWORD ?? "password";
 
 /** docs/assets: markdown embeds `/docs/<path>` resolve to `docs/assets/<path>`. */
-export const DOCS_ASSETS_DIR = path.resolve(__dirname, "../../../docs/assets");
+export const DOCS_ASSETS_DIR = process.env.DOCS_SCREENSHOTS_OUTPUT
+  ? path.resolve(process.env.DOCS_SCREENSHOTS_OUTPUT)
+  : path.resolve(__dirname, "../../../docs/assets");
 
 /** Comma-separated shot ids (or id prefixes) to capture; empty captures everything. */
 export const ONLY = (process.env.DOCS_SCREENSHOTS_ONLY ?? "")

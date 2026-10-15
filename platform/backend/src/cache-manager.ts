@@ -30,6 +30,8 @@ export const CacheKey = {
   WebhookRateLimit: "webhook-rate-limit",
   /** OAuth flow state during authentication */
   OAuthState: "oauth-state",
+  /** Token endpoint requests, before verifying client credentials. */
+  OAuthTokenRateLimit: "oauth-token-rate-limit",
   /** MCP Gateway session state */
   McpSession: "mcp-session",
   /** Legacy HTTP+SSE stream records for the MCP Gateway */
@@ -68,6 +70,8 @@ export const CacheKey = {
   OpenAppaRemedyToolsMissing: "openappa-remedy-tools-missing",
   /** Ruling on a call to a tool the client had not loaded, answered on that call's result */
   OpenAppaNotLoadedRuling: "openappa-not-loaded-ruling",
+  /** Host clarification appended to a runtime-confirmed denied call's result. */
+  OpenAppaDeniedCallClarification: "openappa-denied-call-clarification",
   /** Sessions whose client already waited once for the gateway remedy tools to load */
   OpenAppaRemedyToolsAwaited: "openappa-remedy-tools-awaited",
   /** OpenAI credentials that cannot generate reasoning summaries (unverified org) */
@@ -80,6 +84,8 @@ export const CacheKey = {
   VirtualKeyRateLimit: "virtual-key-rate-limit",
   /** Connection-setup script token brute-force rate limiting per IP */
   ConnectionSetupScriptRateLimit: "connection-setup-script-rate-limit",
+  /** First native conversation to present a verified setup reference */
+  ConnectionSetupConversation: "connection-setup-conversation",
   /** Archestra VAF Add On package proxy rate limiting per IP */
   MfilesVafAddOnPackageRateLimit: "mfiles-vaf-add-on-package-rate-limit",
   /** Resolved release pin (package URL + ref) for the Archestra VAF Add On installer */

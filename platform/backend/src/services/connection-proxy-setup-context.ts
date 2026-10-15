@@ -71,14 +71,18 @@ export function issueConnectionProxySetupContext(params: IssueParams): string {
   return token;
 }
 
-/** True only for this org, presented key, proxy, secret, and exact window. */
-export function verifyConnectionProxySetupContext(
+/**
+ * Verified setup scope and expiry for this org, presented key, proxy,
+ * secret, and exact window. Undefined when any check fails. Does not touch
+ * the database.
+ */
+export function readVerifiedConnectionProxySetup(
   params: VerifyParams,
-): boolean {
+): { setupId: string; organizationId: string; expiresAt: number } | undefined {
   try {
-    return claimsMatch(params);
+    return verifiedScope(params);
   } catch {
-    return false;
+    return undefined;
   }
 }
 
@@ -104,11 +108,11 @@ export function connectionSetupReference(params: {
 }
 
 /**
- * True when the request comes from the conversation that ran the installer:
- * its body holds the setup reference of the setup the context names. A
- * session started after the setup has no such text, so the setup URL in its
- * settings exempts nothing. Call only for a context that
- * `verifyConnectionProxySetupContext` accepted.
+ * True when the body holds the setup reference of the setup the context
+ * names. A session started after the setup has no such text, so the setup
+ * URL in its settings exempts nothing. Holding the reference does not by
+ * itself exempt the request. Call only for a context that
+ * `readVerifiedConnectionProxySetup` accepted.
  */
 export function carriesConnectionSetupReference(params: {
   token: string;
@@ -151,46 +155,54 @@ export function connectionProxySetupContext(
 
 const capabilities = new WeakMap<IncomingMessage, string>();
 
-function claimsMatch(params: VerifyParams): boolean {
+function verifiedScope(
+  params: VerifyParams,
+): { setupId: string; organizationId: string; expiresAt: number } | undefined {
   if (
     !params.secret ||
     !hasCompleteScope(params) ||
     !params.token.startsWith(PREFIX) ||
     params.token.length > MAX_TOKEN_LENGTH
   ) {
-    return false;
+    return undefined;
   }
   const parts = params.token.slice(PREFIX.length).split(".");
-  if (parts.length !== 2) return false;
+  if (parts.length !== 2) return undefined;
   const [payload, encodedSignature] = parts;
-  if (!payload || !encodedSignature) return false;
+  if (!payload || !encodedSignature) return undefined;
   const received = decodeCanonicalBase64Url(encodedSignature);
   const payloadBytes = decodeCanonicalBase64Url(payload);
-  if (!received || !payloadBytes) return false;
+  if (!received || !payloadBytes) return undefined;
   const expected = signature(payload, params.secret);
   if (
     received.length !== expected.length ||
     !timingSafeEqual(received, expected)
   ) {
-    return false;
+    return undefined;
   }
   const parsed = JSON.parse(payloadBytes.toString("utf8")) as unknown;
-  if (!isRecord(parsed)) return false;
+  if (!isRecord(parsed)) return undefined;
   const now = Date.now();
   const issuedAt = readInteger(parsed, "issuedAt");
   const expiresAt = readInteger(parsed, "expiresAt");
-  return (
-    parsed.aud === "connection-proxy-setup" &&
-    readRequiredString(parsed, "organizationId") === params.organizationId &&
-    readRequiredString(parsed, "virtualApiKeyId") === params.virtualApiKeyId &&
-    readRequiredString(parsed, "proxyAgentId") === params.proxyAgentId &&
-    readRequiredString(parsed, "setupId") !== undefined &&
-    issuedAt !== undefined &&
-    expiresAt !== undefined &&
-    issuedAt <= now &&
-    expiresAt > now &&
-    expiresAt - issuedAt === CONNECTION_SETUP_WINDOW_MS
-  );
+  const setupId = readRequiredString(parsed, "setupId");
+  const organizationId = readRequiredString(parsed, "organizationId");
+  if (
+    parsed.aud !== "connection-proxy-setup" ||
+    organizationId !== params.organizationId ||
+    readRequiredString(parsed, "virtualApiKeyId") !== params.virtualApiKeyId ||
+    readRequiredString(parsed, "proxyAgentId") !== params.proxyAgentId ||
+    setupId === undefined ||
+    organizationId === undefined ||
+    issuedAt === undefined ||
+    expiresAt === undefined ||
+    issuedAt > now ||
+    expiresAt <= now ||
+    expiresAt - issuedAt !== CONNECTION_SETUP_WINDOW_MS
+  ) {
+    return undefined;
+  }
+  return { setupId, organizationId, expiresAt };
 }
 
 function setupIdOf(token: string): string | undefined {

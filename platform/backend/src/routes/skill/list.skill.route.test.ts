@@ -28,6 +28,92 @@ const PUBLISH_TO_ORGANIZATION = [
 describe("GET /api/skills", () => {
   const ctx = useSkillRouteTestApp(skillRoutes);
 
+  test("skillIds filters exact accessible rows before pagination and counting", async ({
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: MEMBER_ROLE_NAME,
+    });
+    const imported = await Promise.all(
+      ["import-first", "import-second", "older-same-repo"].map((name) =>
+        seedImportedSkill({
+          organizationId: ctx.organizationId,
+          name,
+          sourceRef: `example/skills@main:skills/${name}`,
+          access: "org",
+        }),
+      ),
+    );
+    const otherOrg = await makeOrganization();
+    const foreign = await seedImportedSkill({
+      organizationId: otherOrg.id,
+      name: "foreign",
+      sourceRef: "example/skills@main:skills/foreign",
+      access: "org",
+    });
+    const owner = await makeUser();
+    const privateSkill = await seedImportedSkill({
+      organizationId: ctx.organizationId,
+      authorId: owner.id,
+      name: "other-personal",
+      sourceRef: "example/skills@main:skills/private",
+      access: "personal",
+    });
+    const skillIds = [
+      imported[0].id,
+      imported[1].id,
+      foreign.id,
+      privateSkill.id,
+    ];
+    const params = new URLSearchParams({
+      skillIds: skillIds.join(","),
+      limit: "1",
+      sortBy: "name",
+      sortDirection: "asc",
+    });
+    const first = await ctx.app.inject({
+      method: "GET",
+      url: `/api/skills?${params}`,
+    });
+    expect(first.statusCode, first.body).toBe(200);
+    expect(first.json().data.map((skill: { id: string }) => skill.id)).toEqual([
+      imported[0].id,
+    ]);
+    expect(first.json().pagination).toMatchObject({
+      total: 2,
+      totalPages: 2,
+      hasNext: true,
+    });
+    params.set("offset", "1");
+    const second = await ctx.app.inject({
+      method: "GET",
+      url: `/api/skills?${params}`,
+    });
+    expect(second.json().data.map((skill: { id: string }) => skill.id)).toEqual(
+      [imported[1].id],
+    );
+    const cleared = await ctx.app.inject({ method: "GET", url: "/api/skills" });
+    expect(
+      cleared
+        .json()
+        .data.map((skill: { id: string }) => skill.id)
+        .sort(),
+    ).toEqual(imported.map((skill) => skill.id).sort());
+    const empty = await ctx.app.inject({
+      method: "GET",
+      url: `/api/skills?skillIds=${foreign.id}`,
+    });
+    expect(empty.json().data).toEqual([]);
+    expect(empty.json().pagination.total).toBe(0);
+    const malformed = await ctx.app.inject({
+      method: "GET",
+      url: "/api/skills?skillIds=not-an-id",
+    });
+    expect(malformed.statusCode).toBe(400);
+  });
+
   test("forAgentId restricts the list to the agent's environment", async ({
     makeAgent,
     makeMember,

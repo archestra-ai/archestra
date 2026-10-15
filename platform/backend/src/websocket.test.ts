@@ -27,11 +27,12 @@ import {
 } from "@/models";
 import AgentModel from "@/models/agent";
 import { agentRunTranscriptStore } from "@/services/agent-runtime/transcript-store";
+import { type PgClient, PostgresNotifyHub } from "@/services/pg-notify-hub";
 import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { shareForTest } from "@/test/sharing";
 import { grantRoleEverywhere } from "@/test/wildcard-grants";
-import websocketService from "@/websocket";
+import websocketService, { WebSocketService } from "@/websocket";
 
 interface WebSocketClientContext {
   userId: string;
@@ -2118,6 +2119,94 @@ describe("websocket MCP deployment statuses shared poller", () => {
     }
   });
 
+  test("an installation status change reaches a subscriber after the deployment state it was decided on", async ({
+    makeOrganization,
+    makeUser,
+    makeMcpServer,
+    makeInternalMcpCatalog,
+    makeTeam,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const catalog = await makeInternalMcpCatalog({
+      serverType: "local",
+      organizationId: org.id,
+    });
+    const mcpServer = await makeMcpServer({
+      scope: "team",
+      catalogId: catalog.id,
+      ownerId: user.id,
+      teamId: team.id,
+    });
+
+    vi.spyOn(McpServerRuntimeManager, "refreshAllStates").mockResolvedValue(
+      undefined,
+    );
+    // The reinstall stopped the old deployment: the subscriber's last push
+    // is the restart gap.
+    let summary: typeof McpServerRuntimeManager.statusSummary = {
+      status: "running",
+      mcpServers: {},
+    };
+    vi.spyOn(
+      McpServerRuntimeManager,
+      "statusSummary",
+      "get",
+    ).mockImplementation(() => summary);
+
+    const ws = makeWs();
+    service.clientContexts.set(ws, {
+      userId: user.id,
+      organizationId: org.id,
+      userIsMcpServerAdmin: true,
+    });
+    const previousWss = service.wss;
+    service.wss = { clients: new Set([ws]) };
+    await subscribe(ws);
+    const sent = () =>
+      (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
+        ([raw]) => JSON.parse(raw) as { type: string; payload: never },
+      );
+    expect(sent()).toHaveLength(1);
+
+    try {
+      // The new pod is ready and the reinstall reports success before any
+      // watch event has pushed the running state.
+      summary = {
+        status: "running",
+        mcpServers: {
+          [mcpServer.id]: {
+            state: "running",
+            message: "Deployment is running",
+            error: null,
+            serverName: "test-server",
+            deploymentName: `mcp-${mcpServer.id}`,
+            namespace: "default",
+          },
+        },
+      };
+      websocketService.broadcastMcpInstallationStatus(
+        mcpServer.id,
+        "success",
+        null,
+      );
+
+      const [, deployment, installation] = sent();
+      expect(deployment).toMatchObject({
+        type: "mcp_deployment_statuses",
+        payload: { statuses: { [mcpServer.id]: { state: "running" } } },
+      });
+      expect(installation).toMatchObject({
+        type: "mcp_installation_status",
+        payload: { serverId: mcpServer.id, status: "success" },
+      });
+    } finally {
+      service.wss = previousWss;
+      service.unsubscribeMcpDeploymentStatuses(ws);
+    }
+  });
+
   test("poll ticks skip the K8s refresh while watch streams are healthy and state is fresh", async ({
     makeOrganization,
     makeUser,
@@ -3598,3 +3687,182 @@ describe("websocket deployment metrics", () => {
   });
 });
 // SPDX-SnippetEnd
+
+describe("cross-replica MCP status delivery", () => {
+  /**
+   * Postgres is the process boundary: each replica's listener connection is a
+   * fake that routes `pg_notify` to every connection LISTENing on the
+   * channel, including the sender's own, as the real server does.
+   */
+  class FakePostgres {
+    private readonly listeners = new Map<string, Set<FakeConnection>>();
+
+    connect(): PgClient {
+      return new FakeConnection(this);
+    }
+
+    listen(channel: string, connection: FakeConnection) {
+      const set = this.listeners.get(channel) ?? new Set();
+      set.add(connection);
+      this.listeners.set(channel, set);
+    }
+
+    listenerCount(channel: string) {
+      return this.listeners.get(channel)?.size ?? 0;
+    }
+
+    notify(channel: string, payload: string) {
+      for (const connection of this.listeners.get(channel) ?? []) {
+        queueMicrotask(() =>
+          connection.emit("notification", { channel, payload }),
+        );
+      }
+    }
+  }
+
+  class FakeConnection implements PgClient {
+    private readonly handlers = new Map<
+      string,
+      ((...args: unknown[]) => void)[]
+    >();
+
+    constructor(private readonly server: FakePostgres) {}
+
+    async connect() {}
+
+    async end() {
+      this.emit("end");
+    }
+
+    async query(text: string, values?: unknown[]) {
+      const listen = text.match(/^LISTEN "(.+)"$/);
+      if (listen) {
+        this.server.listen(listen[1], this);
+      } else if (values) {
+        this.server.notify(String(values[0]), String(values[1]));
+      }
+      return undefined;
+    }
+
+    on(event: string, listener: (...args: unknown[]) => void) {
+      this.handlers.set(event, [...(this.handlers.get(event) ?? []), listener]);
+      return this;
+    }
+
+    emit(event: string, ...args: unknown[]) {
+      for (const listener of this.handlers.get(event) ?? []) {
+        listener(...args);
+      }
+    }
+  }
+
+  type ReplicaInternals = {
+    wss: { clients: Set<WS> } | null;
+    clientContexts: Map<WS, WebSocketClientContext>;
+  };
+
+  async function startReplicas() {
+    const postgres = new FakePostgres();
+    const replicas = [new WebSocketService(), new WebSocketService()].map(
+      (replica) => {
+        const send = vi.fn();
+        const client = { readyState: WS.OPEN, send } as unknown as WS;
+        const internals = replica as unknown as ReplicaInternals;
+        internals.wss = { clients: new Set([client]) };
+        internals.clientContexts.set(client, {
+          userId: "user-1",
+          organizationId: "org-1",
+          userIsMcpServerAdmin: false,
+        });
+        replica.enableCrossReplicaDelivery(
+          new PostgresNotifyHub("postgres://test", () => postgres.connect()),
+        );
+        return { replica, internals, send };
+      },
+    );
+    await vi.waitFor(() =>
+      expect(postgres.listenerCount("websocket_mcp_events")).toBe(2),
+    );
+    return replicas;
+  }
+
+  function stopReplicas(
+    replicas: { replica: WebSocketService; internals: ReplicaInternals }[],
+  ) {
+    for (const { replica, internals } of replicas) {
+      // The fake server has no real sockets to close.
+      internals.wss = null;
+      replica.stop();
+    }
+  }
+
+  const sentMessages = (send: ReturnType<typeof vi.fn>) =>
+    send.mock.calls.map(([raw]) => JSON.parse(raw as string));
+
+  test("an install status from one replica reaches clients on every replica exactly once", async () => {
+    const replicas = await startReplicas();
+    const [origin, other] = replicas;
+
+    try {
+      origin.replica.broadcastMcpInstallationStatus(
+        "server-1",
+        "error",
+        "pod failed",
+      );
+
+      const expected = {
+        type: "mcp_installation_status",
+        payload: { serverId: "server-1", status: "error", error: "pod failed" },
+      };
+      // The installing replica's own clients do not wait on the round trip.
+      expect(sentMessages(origin.send)).toEqual([expected]);
+      await vi.waitFor(() =>
+        expect(sentMessages(other.send)).toEqual([expected]),
+      );
+      // Let the origin's own echo arrive; it must not deliver a duplicate.
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(sentMessages(origin.send)).toEqual([expected]);
+    } finally {
+      stopReplicas(replicas);
+    }
+  });
+
+  test("an uninstall from one replica reaches only the affected organization on another", async () => {
+    const replicas = await startReplicas();
+    const [origin, other] = replicas;
+    const foreignSend = vi.fn();
+    const foreignClient = {
+      readyState: WS.OPEN,
+      send: foreignSend,
+    } as unknown as WS;
+    other.internals.wss?.clients.add(foreignClient);
+    other.internals.clientContexts.set(foreignClient, {
+      userId: "user-2",
+      organizationId: "org-2",
+      userIsMcpServerAdmin: false,
+    });
+
+    try {
+      origin.replica.broadcastMcpServersChanged({
+        organizationId: "org-1",
+        serverIds: ["server-1"],
+      });
+
+      await vi.waitFor(() =>
+        expect(sentMessages(other.send)).toEqual([
+          {
+            type: "mcp_servers_changed",
+            payload: {
+              change: "uninstalled",
+              serverIds: ["server-1"],
+              catalogIds: [],
+            },
+          },
+        ]),
+      );
+      expect(foreignSend).not.toHaveBeenCalled();
+    } finally {
+      stopReplicas(replicas);
+    }
+  });
+});

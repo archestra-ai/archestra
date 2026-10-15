@@ -2,7 +2,7 @@
 title: Access Control
 description: Assign roles and share resources with users, teams, and service accounts
 order: 2
-lastUpdated: 2026-10-12
+lastUpdated: 2026-10-14
 ---
 
 Roles control which sections a person can open and which kinds of resources they can create. Resource grants control which individual agents, gateways, skills, apps, models, and credentials they can reach. Configure both when giving someone access.
@@ -35,7 +35,7 @@ Service accounts can create resources within their assigned permissions. Creator
 
 ### Available Permissions
 
-Look up every role action in the [permission reference](/docs/reference/permissions#available-permissions).
+Look up every role action in the [permission reference](/docs/reference/permissions#available-permissions). Actions marked **Per object** are controlled by resource grants, not a separate role permission. **Manage access** lets a recipient change who can access the item and their permission levels. **N/A** means there is no separate permission for that action.
 
 ## Granular Access Control
 
@@ -43,25 +43,29 @@ A resource grant names a recipient and the actions they can perform. Recipients 
 
 Granular access control is an Enterprise feature, including the [small-team allowance](/docs/get-started/pricing-model). When entitlement ends, existing grants remain enforced. You can revoke or reduce grants. Adding or expanding them requires entitlement.
 
-To share a resource, add recipients in its permissions, next to its other settings. One field adds everyone in the organization, a role, a team, a person, or a service account. Each recipient gets its own level: **Can view**, **Can use**, **Can edit**, or **Full access**. A new recipient starts at **Can use** when you may grant it. Save, then confirm the recipient appears with the intended level.
+To share a resource, add recipients in its permissions, next to its other settings. One field adds everyone in the organization, a role, a team, a person, or a service account. Each recipient gets its own level: **Can read**, **Can use**, **Can update**, or **Full access**. A new recipient starts at **Can use** when you may grant it. Save, then confirm the recipient appears with the intended level.
 
-Sharing with everyone or a role makes a resource Org-wide, which takes **Full access** on every resource of that kind or [`accessPolicies:update`](/docs/reference/permissions#accessPolicies:update). By default, Admin and Platform Admin hold this for every kind, and Editor for models and credentials. Without it, the field does not offer everyone or the roles, but you can still lower or remove such a grant.
+Sharing with everyone or a role makes a resource Org-wide. That takes **Full access** on every resource of that kind, or [`accessPolicies:update`](/docs/reference/permissions#accessPolicies:update). By default, Admin and Platform Admin hold it for every kind, and Editor for models and credentials. Without it:
 
-For grants covering every object of a kind, open the resource list's **More actions** menu beside **Create** or **Add**, then choose **Permissions**. Global policy administration requires [`accessPolicies:read`](/docs/reference/permissions#accessPolicies:read) to view or [`accessPolicies:update`](/docs/reference/permissions#accessPolicies:update) to edit. An individual resource requires `manage-permissions` on that resource.
+- You share with people and with the teams you belong to, not with everyone, a role, or another team.
+- You can still lower or remove such a grant.
+- Service accounts appear in the field only with [`serviceAccount:read`](/docs/reference/permissions#serviceAccount:read).
 
-At least one recipient must keep **Full access** in the permissions for every object of a kind. Without it, nobody can edit, delete, or share objects that other people created, so **Save** stays off until one recipient has it.
+For grants covering every object of a kind, open **Permissions** beside **Create** or **Add** on the resource list. These grants also cover other people's objects. Global policy administration requires [`accessPolicies:read`](/docs/reference/permissions#accessPolicies:read) to view or [`accessPolicies:update`](/docs/reference/permissions#accessPolicies:update) to edit. An individual resource requires `manage-permissions` on that resource.
+
+Keep at least one recipient with **Manage access**, either through **Full access** or a custom level. **Save** is disabled if you remove the last recipient who can change this policy.
 
 ### Actions And Scopes
 
-**Can view** permits reading. **Can use** permits execution. **Can edit** permits configuration changes. **Full access** also includes deletion and permission management. Editing does not imply execution or sharing.
+**Can read** permits reading. **Can use** adds execution. **Can update** adds configuration changes. **Full access** also includes deletion and **Manage access**, which lets the recipient change other people's grants. OAuth clients omit execution from these levels.
 
-MCP registry entries add **Full access + deploy**, which permits deployment specification, service account, and secret-source changes. Admin and Platform Admin receive this access by default. The creator's ordinary Full access does not include deployment changes. OAuth client registrations have no **Can use** preset.
+MCP registry entries add **Full access + deploy**, which permits deployment specification, service account, and secret-source changes. Admin and Platform Admin receive this access by default. The creator's ordinary Full access does not include deployment changes. Changing what an entry runs or connects to, such as its image, command, URL, or authentication, takes **Full access + deploy** or [`mcpRegistry:create`](/docs/reference/permissions#mcpRegistry:create). OAuth client registrations have no **Can use** preset.
 
 A grant applies to one resource or to `*`: every current and future resource of that kind in the organization. Actions and scopes stay paired. Giving someone read access to all entries and edit access to one entry lets them edit only that entry.
 
 ### Sharing Level
 
-Every shared resource shows how far it reaches: **Personal**, **Team-wide**, or **Org-wide**. A typical resource starts Personal while you build it, becomes Team-wide when you add a team, and Org-wide when you add everyone. The level follows the resource's own grants that include **Can view** or more:
+Every shared resource shows how far it reaches: **Personal**, **Team-wide**, or **Org-wide**. A typical resource starts Personal while you build it, becomes Team-wide when you add a team, and Org-wide when you add everyone. The level follows the resource's own grants that include **Can read** or more:
 
 | Level | Set by |
 | --- | --- |
@@ -151,7 +155,9 @@ Deploying into an [environment](/docs/admin/environments#deploy-permissions) req
 
 ### OAuth Clients
 
-MCP and LLM OAuth clients have separate grants. **Can edit** permits reconfiguration and secret rotation. **Full access** also permits deletion and sharing. These grants govern client management. Tokens reach only what the client configuration allows.
+One **OAuth Clients** resource governs clients with any combination of MCP Gateway, A2A, and LLM Proxy capabilities. Role permissions [`oauthClient:read`](/docs/reference/permissions#oauthClient:read) and [`oauthClient:create`](/docs/reference/permissions#oauthClient:create) control listing and creation. **Can update** permits reconfiguration and secret rotation. **Full access** also permits deletion and sharing. These grants govern client management. Tokens reach only the enabled capabilities and configured resources; management grants do not themselves authorize API calls.
+
+During an upgrade, each action from the former MCP and LLM client permissions carries over to OAuth Clients. A role with MCP client **read** and LLM client **create** gets OAuth Client **read** and **create**, not edit or delete. A wildcard **Can update** grant reaches all OAuth clients; a grant on one client stays on that client.
 
 ### Visibility-Scoped Credentials
 
@@ -159,7 +165,7 @@ Provider keys and virtual keys can have personal, team, or organization scope. P
 
 ### Saved Credentials
 
-[Credentials](/docs/admin/security/credentials#who-can-manage-a-credential) take grants like any other resource. **Can use** lets a person connect their own value or bind the credential to a guardrails battery. Editing or deleting a credential needs **Can edit** or **Full access** on it, not a role permission.
+[Credentials](/docs/admin/security/credentials#who-can-manage-a-credential) take grants like any other resource. **Can use** lets a person connect their own value or bind the credential to a guardrails battery. Updating a credential requires **Can update**; deleting it requires **Full access**. These are grants on the credential, not role permissions.
 
 ### Models
 

@@ -36,10 +36,10 @@ describe("OpenCode family", () => {
       "configFile",
       "dir",
       "guardEnvVar",
-      "icon",
       "id",
       "label",
       "manualConfigFile",
+      "mark",
       "oauth",
       "sessionSource",
       "stateName",
@@ -114,7 +114,8 @@ describe("OpenCode family", () => {
       value: "kilo",
       label: "Kilo Code",
       provider: "openai",
-      icon: "/icons/kilo.png",
+      icon: undefined,
+      mark: OPENCODE_FAMILY.kilo.mark,
     });
   });
 });

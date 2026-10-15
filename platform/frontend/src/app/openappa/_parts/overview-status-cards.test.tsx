@@ -132,7 +132,7 @@ beforeEach(() => {
       HttpResponse.json(null),
     ),
     http.get(`${api}/openappa/yells/summary`, () =>
-      HttpResponse.json({ unresolved: 0 }),
+      HttpResponse.json({ unresolved: 0, superyells: 0 }),
     ),
     http.get(`${api}/openappa/policy-tests/runs`, () => HttpResponse.json([])),
   );
@@ -346,7 +346,7 @@ test("a failed sync says so and links to the sync settings", async () => {
   };
   show();
   expect(await screen.findByText("Sync failed")).toBeVisible();
-  expect(screen.getByText("example/policies")).toBeVisible();
+  expect(screen.getByRole("link", { name: "example/policies" })).toBeVisible();
   expect(screen.getByRole("link", { name: /Sync settings/ })).toHaveAttribute(
     "href",
     "/settings/guardrails",
@@ -368,11 +368,13 @@ test("shows the initial merge link while sync waits for setup", async () => {
   ).toBeVisible();
 });
 
-test("a connected sync names its repository", async () => {
+test("a connected sync links to its repository", async () => {
   sync = { ...sync, hasPolicy: true, source };
   show();
   expect(await screen.findByText("Connected")).toBeInTheDocument();
-  expect(screen.getByText("example/policies")).toBeInTheDocument();
+  expect(
+    screen.getByRole("link", { name: "example/policies" }),
+  ).toHaveAttribute("href", "https://github.com/example/policies");
   expect(screen.getByRole("link", { name: /Sync settings/ })).toHaveAttribute(
     "href",
     "/settings/guardrails",

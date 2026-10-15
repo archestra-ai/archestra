@@ -2,7 +2,7 @@
 title: Costs & Limits
 description: Track LLM spend by team, agent, model, and person, and set usage limits
 order: 3
-lastUpdated: 2026-10-13
+lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -40,12 +40,15 @@ To tie proxy traffic to a person, use a credential that names one. See [Authenti
 
 ### Your Own Usage
 
-Click your name in the sidebar, then **My Usage**. It shows your billed spend, requests, tokens, and active days, by model and by client.
+Click your name in the sidebar, then **My Usage**, to compare your model and client activity without access to company-wide costs.
 
-![My Usage for the last 30 days: spend, requests, tokens, and active days, with the models and clients used](/docs/automated_screenshots/llm-proxy_my-usage.webp)
+1. Choose a saved view or use **Show** and **by** to select a metric and grouping. Click rows to compare their totals in the chart.
+2. Choose **Time → Pivot** to compare time buckets. For model or client tokens, choose **split by → Input / output**, then **Pivot**.
+3. Use **Token mix**, **Context size**, or **Costliest sessions** to inspect those breakdowns. **Copy as CSV** exports the selected table.
 
-- **Where your tokens went** splits fresh input, cache reads, cache writes, and output.
-- **Costliest sessions** lists your most expensive sessions.
+- The **Tokens** summary counts input and output; **Token mix** also includes cache reads and writes.
+- Subscription estimates and context list-price values are not additional bills. Sessions show only the costliest returned sessions; elapsed minutes are not active working time.
+- Model and client totals are independent breakdowns. A model-by-client pivot is unavailable.
 
 <span id="usage-limits"></span>
 

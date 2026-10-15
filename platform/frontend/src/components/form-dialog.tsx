@@ -38,6 +38,8 @@ export type FormDialogProps = {
    * and outside-click both still work).
    */
   headerAction?: React.ReactNode;
+  /** Metadata on the right of the title and description, before the close button. */
+  headerExtra?: React.ReactNode;
   size?: DialogSize;
   children: React.ReactNode;
   preventCloseOnInteractOutside?: boolean;
@@ -72,6 +74,7 @@ export function FormDialog({
   description,
   titleAdornment,
   headerAction,
+  headerExtra,
   size = "medium",
   children,
   preventCloseOnInteractOutside,
@@ -127,6 +130,32 @@ export function FormDialog({
     </DialogTitle>
   );
 
+  const headerContent = (
+    <>
+      {titleAdornment ? (
+        <div className="flex items-center gap-2">
+          {titleElement}
+          {titleAdornment}
+        </div>
+      ) : (
+        titleElement
+      )}
+      {displayedDescription && (
+        <DialogDescription>
+          <span
+            key={
+              typeof displayedDescription === "string"
+                ? displayedDescription
+                : "node"
+            }
+          >
+            {displayedDescription}
+          </span>
+        </DialogDescription>
+      )}
+    </>
+  );
+
   return (
     <>
       <Dialog open={open} onOpenChange={guard.handleOpenChange}>
@@ -160,26 +189,15 @@ export function FormDialog({
             <DialogHeader
               className={cn(headerAction && "pr-36", headerClassName)}
             >
-              {titleAdornment ? (
-                <div className="flex items-center gap-2">
-                  {titleElement}
-                  {titleAdornment}
+              {!view && headerExtra ? (
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                  <div className="min-w-0 space-y-1.5">{headerContent}</div>
+                  <div className="min-w-0 shrink-0 sm:mr-6 sm:pt-0.5">
+                    {headerExtra}
+                  </div>
                 </div>
               ) : (
-                titleElement
-              )}
-              {displayedDescription && (
-                <DialogDescription>
-                  <span
-                    key={
-                      typeof displayedDescription === "string"
-                        ? displayedDescription
-                        : "node"
-                    }
-                  >
-                    {displayedDescription}
-                  </span>
-                </DialogDescription>
+                headerContent
               )}
             </DialogHeader>
             <FormDialogViewContext.Provider

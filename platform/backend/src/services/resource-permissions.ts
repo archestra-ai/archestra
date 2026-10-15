@@ -963,7 +963,7 @@ export class ResourcePermissions {
     if (!manages(current?.grants ?? [])) return;
     throw new ApiError(
       400,
-      "At least one recipient must keep Full access. Without it, nobody can edit, delete, or share these items.",
+      "At least one recipient must keep Manage access so someone can continue changing who can access these items.",
       PERMISSIONS_LOCKOUT_CODE,
     );
   }
@@ -1110,7 +1110,10 @@ export class ResourcePermissions {
 }
 
 type ManagedScopedPermission = ScopedPermission & {
-  resource: Exclude<ScopedResource, "log" | "auditLog">;
+  resource: Exclude<
+    ScopedResource,
+    "log" | "auditLog" | "mcpOauthClient" | "llmOauthClient"
+  >;
 };
 
 type PermissionContext = {

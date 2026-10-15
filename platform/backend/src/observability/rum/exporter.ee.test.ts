@@ -39,9 +39,12 @@ vi.mock("@opentelemetry/sdk-logs", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("@opentelemetry/sdk-logs")>();
   class InMemoryBatchLogRecordProcessor extends actual.SimpleLogRecordProcessor {
-    constructor(_exporter: unknown, batchConfig: unknown) {
+    constructor({
+      exporter: _exporter,
+      ...batchConfig
+    }: { exporter: unknown }) {
       const logExporter = new actual.InMemoryLogRecordExporter();
-      super(logExporter);
+      super({ exporter: logExporter });
       captured.logExporter = logExporter;
       captured.batchConfig = batchConfig;
     }

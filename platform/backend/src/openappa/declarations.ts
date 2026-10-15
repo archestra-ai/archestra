@@ -27,6 +27,10 @@ import type {
 } from "@/types/openappa-batteries";
 import { mapWithConcurrency } from "@/utils/concurrency";
 import { archestraAudience } from "./archestra-audience";
+import { type DeployedBattery, declaredCredentials } from "./battery-target";
+
+/** How each resolved entry deploys here, by its `include` spelling. */
+export type DeployedEntries = ReadonlyMap<string, DeployedBattery>;
 
 /** One `include` entry, classified by its spelling and resolved to its bytes. */
 export type EntryResolution = {
@@ -84,6 +88,9 @@ type BoundPolicy = {
  * key the `[credentials]` table binds to that variable.
  */
 type Grant = { battery: string; variable: string; key: string };
+
+/** A bound runtime credential whose value could not be read for a dispatch. */
+export type UnreadableCredential = { variable: string; key: string };
 
 /** The grants `next` holds that `previous` did not, key changes included. */
 export function addedGrants(
@@ -255,7 +262,9 @@ class OpenAppaDeclarations {
         ]),
       );
     const read = new Set(
-      resolution.entries.flatMap((entry) => entry.battery?.credentials ?? []),
+      resolution.entries.flatMap((entry) =>
+        entry.battery ? declaredCredentials(entry.battery) : [],
+      ),
     );
     const filling = bindings.filter(
       (binding) =>
@@ -362,17 +371,25 @@ class OpenAppaDeclarations {
    */
   composeInputs(params: {
     entries: readonly EntryResolution[];
-    /** The helper endpoint for a battery, or null to compose it as the stub. */
-    helpers: (entry: EntryResolution) => HelperBindingInput | null | "stub";
+    deployed: DeployedEntries;
+    /** The helper endpoint for a battery, null when it runs none, or the stub. */
+    helpers: (
+      entry: EntryResolution,
+      deployed: DeployedBattery,
+    ) => HelperBindingInput | null | "stub";
   }): ComposeBatteryInput[] {
     return params.entries.map((entry) => {
-      const helpers = entry.battery ? params.helpers(entry) : "stub";
-      return helpers === "stub" || !entry.battery
+      const deployed = params.deployed.get(entry.entry);
+      const helpers = deployed ? params.helpers(entry, deployed) : "stub";
+      return helpers === "stub" || !deployed
         ? { entry: entry.entry, name: entry.name, policy: STUB_POLICY }
         : {
             entry: entry.entry,
             name: entry.name,
-            policy: entry.battery.policy,
+            policy: deployed.basePolicy,
+            ...(deployed.target
+              ? { targetPolicy: deployed.target.policy }
+              : {}),
             ...(helpers === null ? {} : { helpers }),
           };
     });
@@ -389,17 +406,21 @@ class OpenAppaDeclarations {
   async composeForCheck(params: {
     root: string;
     resolution: PolicyResolution;
+    deployed: DeployedEntries;
     held?: ReadonlySet<string>;
+    memberRosters?: Record<string, Record<string, string>>;
   }): Promise<ComposedPolicy> {
     const native = await loadNative();
     const tokenEnv = this.publishBridgeToken();
     return native.composeOpenappaPolicy({
       root: params.root,
+      memberRosters: params.memberRosters,
       batteries: this.composeInputs({
         entries: params.resolution.entries,
-        helpers: (entry) => {
+        deployed: params.deployed,
+        helpers: (entry, deployed) => {
           if (params.held?.has(entry.name)) return "stub";
-          return entry.battery && entry.battery.externals.length > 0
+          return deployed.externals.length > 0
             ? { urlBase: helperUrlBase(CHECKED_HELPER_OWNER), tokenEnv }
             : null;
         },
@@ -413,11 +434,13 @@ class OpenAppaDeclarations {
    * `token_env`, resolved for the organization now, so a value set, rotated or
    * removed since the last dispatch reaches this one. A variable with no
    * binding or no organization value is left out; a bound one that cannot be
-   * resolved rejects.
+   * resolved rejects. `onUnreadable` hears, before either outcome, of every
+   * bound variable whose value could not be read.
    */
   async dispatchPolicy(params: {
     organizationId: string;
     content: string;
+    onUnreadable?: (unreadable: UnreadableCredential[]) => void;
   }): Promise<DispatchPolicy> {
     const { organizationId, content } = params;
     const contentHash = createHash("sha256").update(content).digest("hex");
@@ -430,49 +453,60 @@ class OpenAppaDeclarations {
     const keys = new Map(
       declarations.credentials.map(({ variable, key }) => [variable, key]),
     );
-    const resolved = await Promise.all(
-      declarations.runtimeCredentials.map(async (variable) => {
-        const key = keys.get(variable);
-        if (!key) return null;
-        try {
-          const value = await resolveCredentialValue({
-            organizationId,
-            credentialId: key,
-            scope: "organization",
-          });
-          return value === null ? null : ([variable, value] as const);
-        } catch (error) {
-          // A bound credential that cannot be read fails the dispatch rather
-          // than running it as though the credential were unset. Only a
-          // refused binding is the organization's to fix; any other failure
-          // stays retryable.
-          logger.warn(
-            { organizationId, variable, error },
-            "OpenAPPA runtime credential could not be resolved",
-          );
-          if (error instanceof ApiError && error.statusCode === 400)
-            throw new OpenappaCredentialError(variable, error);
-          throw error;
-        }
-      }),
-    );
-    return {
-      content,
-      credentials: Object.fromEntries(
-        resolved.filter((entry) => entry !== null),
+    const bound = declarations.runtimeCredentials.flatMap((variable) => {
+      const key = keys.get(variable);
+      return key ? [{ variable, key }] : [];
+    });
+    const outcomes = await Promise.allSettled(
+      bound.map(({ key }) =>
+        resolveCredentialValue({
+          organizationId,
+          credentialId: key,
+          scope: "organization",
+        }),
       ),
-    };
+    );
+    const credentials: Record<string, string> = {};
+    const unreadable: UnreadableCredential[] = [];
+    const failures: { variable: string; error: unknown }[] = [];
+    outcomes.forEach((outcome, index) => {
+      const { variable, key } = bound[index];
+      if (outcome.status === "fulfilled") {
+        if (outcome.value === null) unreadable.push({ variable, key });
+        else credentials[variable] = outcome.value;
+        return;
+      }
+      logger.warn(
+        { organizationId, variable, error: outcome.reason },
+        "OpenAPPA runtime credential could not be resolved",
+      );
+      unreadable.push({ variable, key });
+      failures.push({ variable, error: outcome.reason });
+    });
+    if (unreadable.length > 0) params.onUnreadable?.(unreadable);
+    const [failed] = failures;
+    if (failed) {
+      // A bound credential that cannot be read fails the dispatch rather than
+      // running it as though the credential were unset. Only a refused
+      // binding is the organization's to fix; any other failure stays
+      // retryable.
+      if (failed.error instanceof ApiError && failed.error.statusCode === 400)
+        throw new OpenappaCredentialError(failed.variable, failed.error);
+      throw failed.error;
+    }
+    return { content, credentials };
   }
 
   /**
    * Every grant a resolution holds: resolved batteries × declared variables × the
-   * table, and the root's own readers.
+   * table, and the root's own readers. A battery is granted what any target it
+   * may deploy as reads, since which one it takes moves without a policy write.
    */
   grants(resolution: PolicyResolution): Grant[] {
     const grants: Grant[] = [];
     for (const entry of resolution.entries) {
       if (!entry.battery) continue;
-      for (const variable of entry.battery.credentials) {
+      for (const variable of declaredCredentials(entry.battery)) {
         const key = resolution.credentials[variable];
         if (key) grants.push({ battery: entry.name, variable, key });
       }

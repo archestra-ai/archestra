@@ -466,6 +466,56 @@ test("cancellation wins over a successful in-flight result read", async ({
   ).resolves.toEqual({ outcome: "aborted" });
 });
 
+test.for([
+  403, 503,
+])("persists a readable HTTP %i connection failure when a recovered run ends", async (status, {
+  run,
+}) => {
+  server.use(
+    http.get(
+      `${origin}/api/v1/namespaces/test/secrets/:name`,
+      () => new HttpResponse(null, { status: 404 }),
+    ),
+    http.delete(
+      `${origin}/api/v1/namespaces/test/secrets/:name`,
+      () => new HttpResponse(null, { status: 404 }),
+    ),
+    http.get(sandboxUrl, () =>
+      HttpResponse.json({
+        metadata: { labels: { [AGENT_RUNTIME_TASK_LABEL]: run.taskId } },
+        spec: {},
+        status: {},
+      }),
+    ),
+  );
+  let observations = 0;
+  vi.spyOn(Exec.prototype, "exec").mockImplementation(async (...args) => {
+    if ((args[3] as string[]).join(" ").includes("read-turn-result")) {
+      observations++;
+      // The real SDK handshake shape is covered by exec-handshake.unit.test.
+      throw {
+        message: `Unexpected server response: ${status}`,
+        target: { authorization: "synthetic-private-token" },
+      };
+    }
+    args[8]?.({ status: "Success" });
+    return socket();
+  });
+  const lifecycle = new A2AManager({ taskMode: "full" });
+  const reason = `Agent Runtime exec connection failed (HTTP ${status})`;
+  await expect(
+    lifecycle.adoptAgentRun({ taskId: run.taskId, session: run }),
+  ).rejects.toThrow(reason);
+  expect(await A2ATaskModel.findById(run.taskId)).toMatchObject({
+    state: "TASK_STATE_FAILED",
+    statusReason: reason,
+  });
+  expect(observations).toBe(1);
+  expect(
+    (await AgentRunModel.findByTaskId(run.taskId))?.endedAt,
+  ).toBeInstanceOf(Date);
+});
+
 test("an already canceled monitor makes no requests", async ({ run }) => {
   const exec = completeExec();
   let requests = 0;

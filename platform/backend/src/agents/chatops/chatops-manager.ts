@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   ChatErrorCode,
   DEFAULT_APP_NAME,
@@ -28,6 +28,8 @@ import {
   TeamModel,
   UserModel,
 } from "@/models";
+import A2ATaskApprovalRequestModel from "@/models/a2a/task-approval-request";
+import ChatOpsUserAdmissionModel from "@/models/chatops-user-admission";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { RouteCategory } from "@/observability/tracing";
 import {
@@ -66,9 +68,10 @@ import {
   extractMessageFromSendMessageResult,
 } from "../a2a/a2a-helper";
 import { A2AContextManager } from "../a2a/a2a-model-manager";
-import type {
-  A2AArchestraApprovalRequest,
-  A2AProtocolSendMessageResponse,
+import {
+  type A2AArchestraApprovalRequest,
+  A2AProtocolRole,
+  type A2AProtocolSendMessageResponse,
 } from "../a2a/a2a-protocol";
 import {
   buildWelcomeMessage,
@@ -875,6 +878,69 @@ export class ChatOpsManager {
      */
     announceAccessErrors?: boolean;
   }): Promise<ChatOpsProcessingResult> {
+    let admissionId: string | null = null;
+    try {
+      return await this.processMessageWithAdmission(params, (id) => {
+        admissionId = id;
+      });
+    } finally {
+      if (admissionId) await ChatOpsUserAdmissionModel.release(admissionId);
+    }
+  }
+
+  /**
+   * Keep ambient group text in an already established session without treating
+   * it as an agent request. No identity lookup, provisioning, session creation,
+   * tools, typing indicator or reply is performed for passive traffic.
+   */
+  async recordAmbientMessage(params: {
+    provider: ChatOpsProvider;
+    message: IncomingChatMessage;
+  }): Promise<void> {
+    const { provider, message } = params;
+    if (!usesServerSideSessions(provider, message) || !message.text.trim()) {
+      return;
+    }
+    const binding = await ChatOpsChannelBindingModel.findByChannel({
+      provider: provider.providerId,
+      channelId: message.channelId,
+      workspaceId: message.workspaceId,
+    });
+    if (!binding?.agentId) return;
+    const mapping = await ChatOpsThreadContextModel.findByThread({
+      provider: provider.providerId,
+      channelId: message.channelId,
+      workspaceId: message.workspaceId ?? null,
+      threadId: message.threadId ?? message.channelId,
+    });
+    if (!mapping) return;
+    const context = await A2AContextModel.findById(mapping.contextId);
+    if (!context) return;
+    if (
+      !(await ChatOpsProcessedMessageModel.tryMarkAsProcessed(
+        processedMessageKey(provider, message),
+      ))
+    ) {
+      return;
+    }
+
+    const id = randomUUID();
+    const text = `[${CHATOPS_PROVIDER_LABELS[provider.providerId]} group message from ${message.senderName}; background context, not a request to the assistant]\n${message.text}`;
+    await A2AContextManager.addMessageToContext({
+      context,
+      message: {
+        messageId: id,
+        role: A2AProtocolRole.User,
+        parts: [{ text }],
+      },
+      uiMessage: { id, role: "user", parts: [{ type: "text", text }] },
+    });
+  }
+
+  private async processMessageWithAdmission(
+    params: Parameters<ChatOpsManager["processMessage"]>[0],
+    onPendingUserAdmission: (id: string) => void,
+  ): Promise<ChatOpsProcessingResult> {
     const {
       message,
       provider,
@@ -980,6 +1046,7 @@ export class ChatOpsManager {
     );
 
     const authResult = await this.validateUserAccess({
+      onPendingUserAdmission,
       message,
       provider,
       agentId: agentToUse.id,
@@ -1641,6 +1708,7 @@ export class ChatOpsManager {
    * 3. Check user has team-based access to the agent
    */
   private async validateUserAccess(params: {
+    onPendingUserAdmission: (id: string) => void;
     message: IncomingChatMessage;
     provider: ChatOpsProvider;
     agentId: string;
@@ -1715,8 +1783,19 @@ export class ChatOpsManager {
         error: "Failed to auto-provision user",
       };
     }
-    const user = provisioned.user;
-    if (provisioned.invitationId !== null) {
+    let user = provisioned.user;
+    if (provider.providerId === "ms-teams") {
+      const admission = await ChatOpsUserAdmissionModel.acquire(userEmail);
+      if (!admission)
+        return {
+          success: false,
+          error: "User identity changed; please try again.",
+        };
+      user = admission.user;
+      if (admission.admissionId)
+        params.onPendingUserAdmission(admission.admissionId);
+    }
+    if (provisioned.invitationId !== null && user.id === provisioned.user.id) {
       // Send welcome message (non-blocking)
       this.sendAutoProvisionWelcome({
         provider,
@@ -2825,6 +2904,12 @@ export class ChatOpsManager {
       });
 
       for (const approvalRequest of approvalRequests) {
+        await A2ATaskApprovalRequestModel.attachChatReviewer({
+          taskId: task.id,
+          approvalId: approvalRequest.approvalId,
+          userId: reviewer.userId,
+          channelId: message.channelId,
+        });
         // `run_tool` is a meta wrapper; show the user the underlying tool and
         // its arguments rather than the opaque wrapper name.
         const { toolName, toolInput } = resolveRunToolTarget({
@@ -3144,18 +3229,26 @@ export class ChatOpsManager {
     decision: ChatOpsApprovalDecision,
     updateApprovalRequestCallback?: () => Promise<void> | void,
   ): Promise<void> {
+    let admissionId: string | null = null;
     try {
       const email =
         decision.approverEmail ??
         (await provider.getUserEmail(decision.userId));
 
-      const user = await UserModel.findByEmail(email?.toLowerCase() || "");
+      let user = await UserModel.findByEmail(email?.toLowerCase() || "");
       if (!user) {
         logger.error(
           { userId: decision.userId, email },
           "[ChatOps] Could not resolve user for approval decision",
         );
         return;
+      }
+
+      if (provider.providerId === "ms-teams" && email) {
+        const admission = await ChatOpsUserAdmissionModel.acquire(email);
+        if (!admission) return;
+        user = admission.user;
+        admissionId = admission.admissionId;
       }
 
       const binding = await ChatOpsChannelBindingModel.findByChannel({
@@ -3195,13 +3288,18 @@ export class ChatOpsManager {
         return;
       }
 
-      if (
-        openappaReview.status === "not_openappa" &&
-        email?.toLowerCase() !==
-          decision.originalMessage.senderEmail?.toLowerCase()
-      ) {
-        // Only initial requester can approve/decline
-        return;
+      if (openappaReview.status === "not_openappa") {
+        const approval =
+          await A2ATaskApprovalRequestModel.findByTaskIdAndApprovalId({
+            taskId: decision.taskId,
+            approvalId: decision.approvalId,
+          });
+        const isRequester = approval?.reviewerUserId
+          ? approval.reviewerUserId === user.id &&
+            approval.chatChannelId === decision.channelId
+          : email?.toLowerCase() ===
+            decision.originalMessage.senderEmail?.toLowerCase();
+        if (!isRequester) return;
       }
       const agentId = provider.pinnedAgentId ?? binding.agentId;
       if (!agentId) {
@@ -3325,6 +3423,8 @@ export class ChatOpsManager {
         message: decision.originalMessage,
         error,
       });
+    } finally {
+      if (admissionId) await ChatOpsUserAdmissionModel.release(admissionId);
     }
   }
 }

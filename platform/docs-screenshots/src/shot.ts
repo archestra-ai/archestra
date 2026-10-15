@@ -16,5 +16,7 @@ export interface Shot {
   prepare?: (page: Page, seed: SeedState) => Promise<void>;
   /** The element to capture; defaults to the whole viewport. */
   target?: (page: Page) => Locator;
+  /** Use the calendar shared with SQL fixtures for date-dependent scenes. */
+  fixedTime?: boolean;
   viewport?: { width: number; height: number };
 }

@@ -809,7 +809,7 @@ function createCohereClient(
         });
 
         if (!response.ok) {
-          const errorText = await response.text();
+          const errorText = await response.text().catch(() => "");
           throw upstreamHttpError(
             `Cohere API error: ${response.status} - ${errorText}`,
             response.status,
@@ -832,7 +832,7 @@ function createCohereClient(
         });
 
         if (!response.ok) {
-          const errorText = await response.text();
+          const errorText = await response.text().catch(() => "");
           throw upstreamHttpError(
             `Error from Cohere API : ${response.status} - ${errorText}`,
             response.status,

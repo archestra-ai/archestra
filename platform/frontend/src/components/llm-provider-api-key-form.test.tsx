@@ -74,6 +74,7 @@ function Harness({
   requiresExactSubscriptionCredential,
   withLabels,
   geminiVertexAiEnabled,
+  bedrockIamAuthEnabled,
 }: {
   existingKeys?: LlmProviderApiKeyResponse[];
   existingKey?: LlmProviderApiKeyResponse;
@@ -84,6 +85,7 @@ function Harness({
   requiresExactSubscriptionCredential?: boolean;
   withLabels?: boolean;
   geminiVertexAiEnabled?: boolean;
+  bedrockIamAuthEnabled?: boolean;
 }) {
   form = useForm<LlmProviderApiKeyFormValues>({
     defaultValues: { ...DEFAULTS, ...defaults },
@@ -92,6 +94,7 @@ function Harness({
     <LlmProviderApiKeyForm
       form={form}
       geminiVertexAiEnabled={geminiVertexAiEnabled}
+      bedrockIamAuthEnabled={bedrockIamAuthEnabled}
       mode="full"
       showConsoleLink={false}
       existingKeys={existingKeys}
@@ -116,6 +119,7 @@ function renderForm(options?: {
   requiresExactSubscriptionCredential?: boolean;
   withLabels?: boolean;
   geminiVertexAiEnabled?: boolean;
+  bedrockIamAuthEnabled?: boolean;
 }) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -130,6 +134,7 @@ function renderForm(options?: {
         progressive={options?.progressive}
         withLabels={options?.withLabels}
         geminiVertexAiEnabled={options?.geminiVertexAiEnabled}
+        bedrockIamAuthEnabled={options?.bedrockIamAuthEnabled}
         allowPersonalSubscriptions={options?.allowPersonalSubscriptions}
         requiresExactSubscriptionCredential={
           options?.requiresExactSubscriptionCredential
@@ -361,9 +366,7 @@ describe("LlmProviderApiKeyForm", () => {
     await user.click(screen.getByLabelText("Provider"));
     const gemini = screen.getByRole("option", { name: /^Gemini/ });
     expect(gemini).toBeDisabled();
-    expect(gemini).toHaveTextContent(
-      /uses Vertex AI credentials.*API key cannot be added here/,
-    );
+    expect(gemini).toHaveTextContent(/Vertex AI.*No API key needed/);
 
     await user.hover(gemini);
     await user.click(gemini);
@@ -390,9 +393,51 @@ describe("LlmProviderApiKeyForm", () => {
     );
     const gemini = screen.getByRole("option", { name: "Gemini" });
     expect(gemini).toBeEnabled();
-    expect(gemini).not.toHaveTextContent(/Vertex AI credentials/);
+    expect(gemini).not.toHaveTextContent(/No API key needed/);
     await user.click(gemini);
     expect(form.getValues("provider")).toBe("gemini");
+  });
+
+  it("explains IAM-managed Bedrock inline and skips it for pointer and keyboard selection", async () => {
+    const user = userEvent.setup();
+    renderForm({
+      bedrockIamAuthEnabled: true,
+      allowPersonalSubscriptions: false,
+      defaults: { provider: "archestra" },
+    });
+
+    await user.click(screen.getByLabelText("Provider"));
+    const bedrock = screen.getByRole("option", { name: /^AWS Bedrock/ });
+    expect(bedrock).toBeDisabled();
+    expect(bedrock).toHaveTextContent(/AWS IAM.*No API key needed/);
+    await user.hover(bedrock);
+    await user.click(bedrock);
+    expect(form.getValues("provider")).toBe("archestra");
+
+    const search = screen.getByPlaceholderText("Search providers...");
+    await user.type(search, "bedrock");
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(form.getValues("provider")).toBe("archestra");
+
+    await user.clear(search);
+    await user.keyboard("{ArrowDown}{Enter}");
+    expect(form.getValues("provider")).toBe("azure");
+  });
+
+  it("allows Bedrock API-key selection when deployment IAM authentication is disabled", async () => {
+    const user = userEvent.setup();
+    renderForm({ bedrockIamAuthEnabled: false });
+
+    await user.click(screen.getByLabelText("Provider"));
+    await user.type(
+      screen.getByPlaceholderText("Search providers..."),
+      "bedrock",
+    );
+    const bedrock = screen.getByRole("option", { name: "AWS Bedrock" });
+    expect(bedrock).toBeEnabled();
+    expect(bedrock).not.toHaveTextContent(/No API key needed/);
+    await user.click(bedrock);
+    expect(form.getValues("provider")).toBe("bedrock");
   });
 
   it("finds the OpenAI-compatible entry by the server the operator runs", async () => {

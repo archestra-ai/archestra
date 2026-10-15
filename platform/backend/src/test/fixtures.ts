@@ -983,6 +983,7 @@ async function makeInteraction(
       | "cacheWriteTokens"
       | "externalAgentId"
       | "userId"
+      | "serviceAccountId"
       | "appId"
       | "source"
       | "createdAt"

@@ -2,7 +2,7 @@
 title: Knowledge (RAG)
 description: Give agents and MCP clients cited answers from connected sources and uploaded documents
 order: 5
-lastUpdated: 2026-10-09
+lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -106,7 +106,7 @@ Who may read each document depends on where it comes from:
 | A connector with **Sync permissions from the source** on | People who can open the document in the source. A private Confluence space stays private. |
 | A file | People with **Can use** on the file |
 
-When the search goes through a Knowledge Base, the person also needs **Can use** on the base. **Can view** lets a person browse a source, but not search it.
+When the search goes through a Knowledge Base, the person also needs **Can use** on the base. **Can read** lets a person browse a source, but not search it.
 
 Set **Can use** in the permissions of each connector, file, or Knowledge Base. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
 

@@ -26,7 +26,7 @@ import {
   OauthTokenRequest,
 } from "@/components/connect-rail";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
-import { CreateOAuthClientDialog } from "@/components/create-oauth-client-dialog";
+import { CreateManagedOAuthClientDialog } from "@/components/create-managed-oauth-client-dialog";
 import {
   type CreatedVirtualKey,
   CreateVirtualKeyDialogWithData,
@@ -66,16 +66,15 @@ import type {
   RequestCredential,
   RequestTarget,
 } from "@/components/virtual-key-request-example";
+import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import config from "@/lib/config/config";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
-import {
-  useCreateLlmOauthClient,
-  useLlmOauthClients,
-} from "@/lib/llm-oauth-clients.query";
+import { useLlmOauthClients } from "@/lib/llm-oauth-clients.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useLlmProxy, useUpdateLlmProxy } from "@/lib/llm-proxy.query";
+import { useCreateOauthClient } from "@/lib/oauth-clients.query";
 import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
 import {
@@ -392,7 +391,7 @@ function ConnectSteps({
     llmVirtualKey: ["create"],
   });
   const { data: canCreateOauth } = useHasPermissions({
-    llmOauthClient: ["create"],
+    oauthClient: ["create"],
   });
 
   const [createKeyType, setCreateKeyType] = useState<VirtualKeyType | null>(
@@ -901,28 +900,29 @@ function OauthClientCreateFlow({
   const { data: providerApiKeys = [] } = useLlmProviderApiKeys({
     enabled: open,
   });
-  const llmCreate = useCreateLlmOauthClient();
+  const llmCreate = useCreateOauthClient();
+  const { data: gateways = [] } = useProfiles({
+    filters: { agentTypes: ["mcp_gateway", "agent"] },
+  });
   const [createdCredentials, setCreatedCredentials] =
     useState<CreatedCredentials | null>(null);
 
   return (
     <>
-      <CreateOAuthClientDialog
+      <CreateManagedOAuthClientDialog
         open={open}
         onOpenChange={onOpenChange}
         defaultClientType="llm"
-        fixedClientType="llm"
-        gateways={[]}
+        gateways={gateways}
         providerApiKeys={providerApiKeys}
         onSubmit={async (values) => {
-          if (values.kind !== "llm") return;
-          const result = await llmCreate.mutateAsync(values.body);
+          const result = await llmCreate.mutateAsync(values);
           if (result) {
             setCreatedCredentials({
               clientId: result.clientId,
               clientSecret: result.clientSecret,
               grantType: result.grantType,
-              oauthScope: LLM_PROXY_OAUTH_SCOPE,
+              oauthScope: result.scopes.join(" "),
             });
             onOpenChange(false);
           }

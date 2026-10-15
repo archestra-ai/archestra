@@ -32,6 +32,120 @@ const policy: ResourcePermissions = {
 };
 const title = "Permissions for all MCP registry entries";
 
+for (const width of [320, 390]) {
+  test(`creation permissions fit a ${width}px import dialog and retain accordion drafts`, async ({
+    page,
+    skillsNewPage,
+    mswControl,
+  }) => {
+    await page.setViewportSize({ width, height: 740 });
+    const team =
+      "Engineering team with a long display name for access management";
+    await mswControl.registerMany([
+      {
+        method: "post",
+        url: "/api/skills/github/discover",
+        body: {
+          repoUrl: "https://github.com/example/skills",
+          ref: "main",
+          skills: [
+            {
+              skillPath: "skills/example",
+              name: "Example skill",
+              description: "An example skill",
+              compatibility: null,
+              allowedTools: null,
+              templated: false,
+              fileCount: 1,
+              exists: false,
+            },
+          ],
+        },
+      },
+      {
+        method: "get",
+        url: "/api/resource-permissions/skill/creation-subjects",
+        body: [{ subject: { type: "team", id: "engineering" }, name: team }],
+      },
+    ]);
+    await skillsNewPage.goto();
+    await skillsNewPage.gitRepositoryCard.click();
+    const source = page.getByRole("dialog", { name: "Import skills" });
+    await source.getByRole("button", { name: /^GitHub/ }).click();
+    await source.getByRole("button", { name: "Continue" }).click();
+    await source
+      .getByPlaceholder("github.com/owner/repo")
+      .fill("example/skills");
+    await source
+      .getByRole("button", { name: "Find skills", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog", {
+      name: "Select skills to import",
+    });
+    const settings = dialog.getByRole("button", {
+      name: "Import settings",
+      exact: true,
+    });
+    await settings.press("Enter");
+    const sync = dialog.getByRole("combobox", { name: "Keep in sync" });
+    await sync.click();
+    await page.getByRole("option", { name: "Every hour", exact: true }).click();
+    const author = dialog.getByTestId("author-grant");
+    const userLabel = await author
+      .getByText("User", { exact: true })
+      .boundingBox();
+    const authorName = await author
+      .getByText("Test Admin", { exact: true })
+      .boundingBox();
+    expect(userLabel?.y).toBeGreaterThanOrEqual(
+      (authorName?.y ?? 0) + (authorName?.height ?? 0),
+    );
+    const add = dialog.getByRole("combobox", {
+      name: "Add access",
+      exact: true,
+    });
+    await add.scrollIntoViewIfNeeded();
+    await expectInsideViewport(page, add);
+    await expect(add).toHaveText("Add access");
+    await add.click();
+    const recipients = page.getByRole("listbox", { name: "Recipients" });
+    await expectInsideViewport(page, recipients);
+    const picker = recipients.locator("..").locator("..");
+    expect((await picker.boundingBox())?.width).toBeCloseTo(
+      (await add.boundingBox())?.width ?? 0,
+      0,
+    );
+    await page.getByRole("option", { name: team, exact: true }).click();
+    const permission = dialog.getByRole("combobox", {
+      name: `Permission for ${team}`,
+    });
+    await permission.click();
+    await page.getByRole("option", { name: "Can update", exact: true }).click();
+    await settings.press("Space");
+    await expect(settings).toHaveAttribute("aria-expanded", "false");
+    await settings.press("Enter");
+    await expect(sync).toHaveText("Every hour");
+    await expect(permission).toHaveText("Can update");
+    await permission.scrollIntoViewIfNeeded();
+    await expectInsideViewport(page, permission);
+    await expectInsideViewport(
+      page,
+      dialog.getByRole("button", { name: `Remove access for ${team}` }),
+    );
+    expect(
+      await dialog
+        .getByText(team, { exact: true })
+        .evaluate((el) => el.scrollWidth <= el.clientWidth),
+    ).toBe(true);
+    expect(
+      await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth),
+    ).toBe(true);
+    await dialog.screenshot({
+      path: `test-results/import-permissions-${width}.png`,
+    });
+  });
+}
+
 async function expectInsideViewport(page: Page, element: Locator) {
   await expect(element).toBeVisible();
   await expect
@@ -134,7 +248,7 @@ test("phone controls stay reachable through the permission handoff confirmation"
     .poll(async () => (await permission.boundingBox())?.height ?? 0)
     .toBeGreaterThanOrEqual(43.99);
   await dialog.getByRole("combobox", { name: "Permission for Admin" }).click();
-  await page.getByRole("option", { name: "Can view", exact: true }).click();
+  await page.getByRole("option", { name: "Can read", exact: true }).click();
   await expect(dialog.getByRole("alert")).toContainText(
     "You won’t be able to edit or delete MCP registry entries that other people created.",
   );
@@ -214,7 +328,7 @@ test("a phone draft cannot remove the last permission manager", async ({
     .getByRole("button", { name: "Remove direct access for Admin" })
     .click();
   await expect(dialog.getByRole("alert")).toContainText(
-    "At least one recipient needs Full access.",
+    "Someone must keep Manage access.",
   );
   const save = dialog.getByRole("button", { name: "Save permissions" });
   await expect(save).toBeDisabled();

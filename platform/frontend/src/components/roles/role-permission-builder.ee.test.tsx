@@ -167,3 +167,111 @@ function Editor({
     />
   );
 }
+
+it("distinguishes object-controlled actions from ungranted role actions", () => {
+  render(
+    <RolePermissionBuilder
+      permission={{ app: ["read", "create"], plugin: ["read"] }}
+      userPermissions={{}}
+      onChange={vi.fn()}
+      readOnly
+    />,
+  );
+  expect(
+    screen.getByLabelText("Apps Update: set in object permissions"),
+  ).toHaveTextContent("Per object");
+  expect(screen.getByText("Plugins Update not granted")).toBeInTheDocument();
+  expect(
+    screen.queryByRole("checkbox", { name: "Apps Update" }),
+  ).not.toBeInTheDocument();
+});
+
+it("links each category to its corresponding all-item permissions without replacing the role editor", async () => {
+  const user = userEvent.setup();
+  render(
+    <RolePermissionBuilder
+      permission={{
+        app: ["read"],
+        oauthClient: ["read"],
+      }}
+      userPermissions={{}}
+      onChange={vi.fn()}
+      readOnly
+    />,
+  );
+  const apps = screen.getByRole("link", {
+    name: "Permissions for all Apps (opens in a new tab)",
+  });
+  expect(apps).toHaveAttribute("href", "/apps?permissions=all");
+  expect(apps).toHaveAttribute("target", "_blank");
+  await user.click(screen.getByRole("button", { name: "Administration" }));
+  expect(
+    screen.getByRole("link", {
+      name: "Permissions for all OAuth Clients (opens in a new tab)",
+    }),
+  ).toHaveAttribute("href", "/settings/oauth-clients?permissions=all");
+});
+
+it("shows Manage access without adding an invalid action to the role", async () => {
+  const user = userEvent.setup();
+  const onChange = vi.fn();
+  render(
+    <RolePermissionBuilder
+      permission={{ app: ["read"] }}
+      userPermissions={{ app: ["read", "create"] }}
+      onChange={onChange}
+    />,
+  );
+  const manage = screen.getByRole("button", {
+    name: "Apps Manage access: set in object permissions",
+  });
+  expect(manage).toHaveTextContent("Per object");
+  await user.hover(manage);
+  expect(await screen.findByRole("tooltip")).toHaveTextContent(
+    "Change who can access the item and their permission levels.",
+  );
+  expect(
+    screen.queryByRole("checkbox", { name: "Apps Manage access" }),
+  ).not.toBeInTheDocument();
+  expect(onChange).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("checkbox", { name: "Apps Create" }));
+  expect(onChange).toHaveBeenLastCalledWith({ app: ["read", "create"] });
+});
+
+it("distinguishes organization-wide scheduled access from individual environment grants", async () => {
+  const user = userEvent.setup();
+  render(
+    <RolePermissionBuilder
+      permission={{
+        scheduledTask: ["read"],
+        environment: ["read"],
+        knowledgeSource: ["read"],
+      }}
+      userPermissions={{}}
+      onChange={vi.fn()}
+      readOnly
+    />,
+  );
+  expect(
+    screen.getByRole("button", {
+      name: "Scheduled Tasks Manage access: set for all items",
+    }),
+  ).toHaveTextContent("All items");
+  await user.click(screen.getByRole("button", { name: "Administration" }));
+  expect(
+    screen.getByRole("button", {
+      name: "Environments Manage access: set in object permissions",
+    }),
+  ).toHaveTextContent("Per object");
+  await user.click(screen.getByRole("button", { name: "Other" }));
+  expect(
+    screen.getByRole("link", {
+      name: "Permissions for all Knowledge Bases (opens in a new tab)",
+    }),
+  ).toHaveAttribute("href", "/knowledge/knowledge-bases?permissions=all");
+  expect(
+    screen.getByRole("link", {
+      name: "Permissions for all Connectors (opens in a new tab)",
+    }),
+  ).toHaveAttribute("href", "/knowledge/connectors?permissions=all");
+});

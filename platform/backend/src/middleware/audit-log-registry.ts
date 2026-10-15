@@ -23,6 +23,7 @@ import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import LimitModel from "@/models/limit";
 import LlmOauthClientModel from "@/models/llm-oauth-client";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import ManagedOauthClientModel from "@/models/managed-oauth-client";
 import McpOauthClientModel from "@/models/mcp-oauth-client";
 import McpServerModel from "@/models/mcp-server";
 import MemberModel from "@/models/member";
@@ -1019,21 +1020,37 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
       BrowserStorageStateModel.findByIdForAudit(id, orgId),
   },
 
+  "/api/oauth-clients": {
+    resourceType: "oauthClient",
+    fetchById: (id, orgId) =>
+      ManagedOauthClientModel.findByIdForAudit(id, orgId),
+  },
+  "/api/oauth-clients/:id": {
+    resourceType: "oauthClient",
+    fetchById: (id, orgId) =>
+      ManagedOauthClientModel.findByIdForAudit(id, orgId),
+  },
+  "/api/oauth-clients/:id/rotate-secret": {
+    resourceType: "oauthClient",
+    action: "oauthClient.rotated",
+    fetchById: (id, orgId) =>
+      ManagedOauthClientModel.findByIdForAudit(id, orgId),
+  },
   "/api/llm-oauth-clients": {
-    resourceType: "llmOauthClient",
+    resourceType: "oauthClient",
     fetchById: (id, orgId) => LlmOauthClientModel.findByIdForAudit(id, orgId),
   },
   "/api/llm-oauth-clients/:id": {
-    resourceType: "llmOauthClient",
+    resourceType: "oauthClient",
     fetchById: (id, orgId) => LlmOauthClientModel.findByIdForAudit(id, orgId),
   },
 
   "/api/mcp-oauth-clients": {
-    resourceType: "mcpOauthClient",
+    resourceType: "oauthClient",
     fetchById: (id, orgId) => McpOauthClientModel.findByIdForAudit(id, orgId),
   },
   "/api/mcp-oauth-clients/:id": {
-    resourceType: "mcpOauthClient",
+    resourceType: "oauthClient",
     fetchById: (id, orgId) => McpOauthClientModel.findByIdForAudit(id, orgId),
   },
 
@@ -1352,13 +1369,13 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
 
   // OAuth client secret rotation — security-critical.
   "/api/llm-oauth-clients/:id/rotate-secret": {
-    resourceType: "llmOauthClient",
-    action: "llmOauthClient.rotated",
+    resourceType: "oauthClient",
+    action: "oauthClient.rotated",
     fetchById: (id, orgId) => LlmOauthClientModel.findByIdForAudit(id, orgId),
   },
   "/api/mcp-oauth-clients/:id/rotate-secret": {
-    resourceType: "mcpOauthClient",
-    action: "mcpOauthClient.rotated",
+    resourceType: "oauthClient",
+    action: "oauthClient.rotated",
     fetchById: (id, orgId) => McpOauthClientModel.findByIdForAudit(id, orgId),
   },
 
@@ -1434,10 +1451,15 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceIdSource: "organizationContext",
     actionByMethod: { DELETE: "virtualApiKey.bulk_deleted" },
   },
-  "/api/llm-oauth-clients/bulk": {
-    resourceType: "llmOauthClient",
+  "/api/oauth-clients/bulk": {
+    resourceType: "oauthClient",
     resourceIdSource: "organizationContext",
-    actionByMethod: { DELETE: "llmOauthClient.bulk_deleted" },
+    actionByMethod: { DELETE: "oauthClient.bulk_deleted" },
+  },
+  "/api/llm-oauth-clients/bulk": {
+    resourceType: "oauthClient",
+    resourceIdSource: "organizationContext",
+    actionByMethod: { DELETE: "oauthClient.bulk_deleted" },
   },
   "/api/llm-models/bulk": {
     resourceType: "llmModel",

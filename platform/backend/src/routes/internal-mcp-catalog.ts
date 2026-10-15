@@ -2118,6 +2118,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         transportType: catalogItem.localConfig?.transportType,
         httpPort: catalogItem.localConfig?.httpPort,
         imagePullSecrets: imagePullSecretsForYaml,
+        imagePullPolicy: catalogItem.localConfig?.imagePullPolicy,
       });
 
       return reply.send({ yaml: yamlTemplate });
@@ -2229,6 +2230,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         transportType: catalogItem.localConfig?.transportType,
         httpPort: catalogItem.localConfig?.httpPort,
         imagePullSecrets: imagePullSecretsForYaml,
+        imagePullPolicy: catalogItem.localConfig?.imagePullPolicy,
       });
 
       return reply.send({ yaml: yamlTemplate });

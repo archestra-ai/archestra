@@ -2,7 +2,7 @@
 // one result: headline, chart, sortable summary or heat-shaded pivot, CSV,
 // and the REST call that returns the same data.
 
-import { ArrowRight, Bookmark, ClipboardCopy, Info, X } from "lucide-react";
+import { ArrowRight, ClipboardCopy, Info, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
@@ -41,6 +41,7 @@ import {
   PivotChart,
   PivotTable,
   QueryChip,
+  Segmented,
   SummaryTable,
 } from "./cost-explorer-parts";
 import { fmtMetric, KpiTile } from "./cost-overview";
@@ -177,10 +178,6 @@ export default function CostExplorer() {
       </div>
       {/* Saved views */}
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="mr-1 inline-flex items-center gap-1 text-muted-foreground text-xs">
-          <Bookmark className="size-3.5" />
-          Views
-        </span>
         {SAVED_VIEWS.filter((v) => canGroup(v.q.group)).map((v) => (
           <UnstyledButton
             key={v.id}
@@ -525,36 +522,6 @@ function MetricNote({
         {note}
       </span>
       {extra && <span className="text-muted-foreground">{extra}</span>}
-    </div>
-  );
-}
-
-function Segmented<T extends string>({
-  value,
-  onChange,
-  items,
-}: {
-  value: T;
-  onChange: (v: T) => void;
-  items: { id: T; label: string }[];
-}) {
-  return (
-    <div className="inline-flex h-7 items-center rounded-md bg-muted p-0.5 text-xs">
-      {items.map((it) => (
-        <UnstyledButton
-          key={it.id}
-          type="button"
-          onClick={() => onChange(it.id)}
-          className={cn(
-            "h-full rounded-[5px] px-2.5 transition-colors",
-            value === it.id
-              ? "bg-background font-medium text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {it.label}
-        </UnstyledButton>
-      ))}
     </div>
   );
 }

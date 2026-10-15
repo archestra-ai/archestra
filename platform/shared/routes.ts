@@ -545,6 +545,16 @@ export const RouteId = {
   DeleteVirtualApiKey: "deleteVirtualApiKey",
   BulkDeleteVirtualApiKeys: "bulkDeleteVirtualApiKeys",
 
+  // Unified OAuth Client Routes
+  GetOauthClients: "getOauthClients",
+  GetOauthClientLabelKeys: "oauthClientLabelKeys",
+  GetOauthClientLabelValues: "oauthClientLabelValues",
+  CreateOauthClient: "createOauthClient",
+  UpdateOauthClient: "updateOauthClient",
+  RotateOauthClientSecret: "rotateOauthClientSecret",
+  DeleteOauthClient: "deleteOauthClient",
+  BulkDeleteOauthClients: "bulkDeleteOauthClients",
+
   // LLM OAuth Client Routes
   GetLlmOauthClients: "getLlmOauthClients",
   GetLlmOauthClientLabelValues: "llmOauthClientLabelValues",
@@ -980,6 +990,7 @@ export const RouteId = {
   CreateConnectionVirtualKey: "createConnectionVirtualKey",
   CreateConnectionPassthroughKey: "createConnectionPassthroughKey",
   GetConnectionInstructions: "getConnectionInstructions",
+  GetConnectionRuntime: "getConnectionRuntime",
   GetConnectionHealth: "getConnectionHealth",
   GetConnectedClients: "getConnectedClients",
   DisconnectConnectedClient: "disconnectConnectedClient",

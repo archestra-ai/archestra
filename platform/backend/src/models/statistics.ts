@@ -83,6 +83,9 @@ class StatisticsModel {
       inArray(a.agentType, ["llm_proxy", "profile"]),
       params.authMethod ? eq(method, params.authMethod) : undefined,
       params.credentialId ? eq(credential, params.credentialId) : undefined,
+      params.serviceAccountId
+        ? eq(i.serviceAccountId, params.serviceAccountId)
+        : undefined,
     );
     const aggregates = {
       requests: sql<number>`COUNT(*)::double precision`,

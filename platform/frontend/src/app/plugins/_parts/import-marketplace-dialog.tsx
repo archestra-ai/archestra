@@ -21,7 +21,7 @@ import {
   type ConnectPlatformOption,
 } from "@/app/connection/platform.utils";
 import { ConnectionPlatformMultiSelect } from "@/app/connection/platform-select";
-import { RepositoryBar, SetupStepper } from "@/components/git/git-setup-chrome";
+import { RepositoryBar } from "@/components/git/git-setup-chrome";
 import {
   gitAuthFields,
   resolveGitRepository,
@@ -30,13 +30,16 @@ import {
   GitSourceStepBody,
   GitSourceStepFooter,
   gitSourceStepDescription,
-  gitSourceStepLabels,
   useGitSourceSteps,
 } from "@/components/git/git-source-steps";
+import {
+  ImportSelectionDialog,
+  ImportSelectionList,
+  ImportSettings,
+} from "@/components/git/import-selection";
 import type { InitialPermissionGrant } from "@/components/initial-resource-permissions";
 import { ResourceAccessSection } from "@/components/resource-access-section";
 import { SearchInput } from "@/components/search-input";
-import { StandardDialog } from "@/components/standard-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -112,8 +115,9 @@ export function ImportMarketplaceDialog({
   const [marketplace, setMarketplace] =
     useState<GithubPluginMarketplace | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const rangeSelection = useRef(new BulkRangeSelectionController()).current;
+  const rangeSelection = useRef(new BulkRangeSelectionController());
   const [search, setSearch] = useState("");
+  const [selectedOnly, setSelectedOnly] = useState(false);
   const [previewEntry, setPreviewEntry] = useState<MarketplaceEntry | null>(
     null,
   );
@@ -165,7 +169,9 @@ export function ImportMarketplaceDialog({
     source.reset();
     setMarketplace(null);
     setSelected(new Set());
+    rangeSelection.current = new BulkRangeSelectionController();
     setSearch("");
+    setSelectedOnly(false);
     setPreviewEntry(null);
     previewPlugin.reset();
     setDiscoverError(null);
@@ -178,6 +184,7 @@ export function ImportMarketplaceDialog({
   const backToDiscover = () => {
     setMarketplace(null);
     setSearch("");
+    setSelectedOnly(false);
     setPreviewEntry(null);
     previewPlugin.reset();
   };
@@ -291,7 +298,7 @@ export function ImportMarketplaceDialog({
             prev.has(entry.key) || prev.size < PLUGIN_MARKETPLACE_IMPORT_LIMIT,
         )
         .map((entry) => entry.key);
-      const next = rangeSelection.update({
+      const next = rangeSelection.current.update({
         current,
         orderedIds,
         targetId: name,
@@ -349,12 +356,13 @@ export function ImportMarketplaceDialog({
     const q = search.trim().toLowerCase();
     return rows.filter(
       (entry) =>
+        (!selectedOnly || selected.has(entry.key)) &&
         clients.some((client) => client.id === entry.clientType) &&
         (!q ||
           entry.name.toLowerCase().includes(q) ||
           entry.description?.toLowerCase().includes(q)),
     );
-  }, [clients, rows, search]);
+  }, [clients, rows, search, selectedOnly, selected]);
 
   const availableClients = useMemo(
     () => marketplaceClientOptions(rows),
@@ -440,7 +448,7 @@ export function ImportMarketplaceDialog({
   const totalUnsupported = countedRows.filter((row) => !row.supported).length;
 
   return (
-    <StandardDialog
+    <ImportSelectionDialog
       open={open}
       onOpenChange={handleClose}
       title={
@@ -463,7 +471,7 @@ export function ImportMarketplaceDialog({
               })
       }
       size="medium"
-      bodyClassName={isSelectStep ? "p-0" : undefined}
+      selecting={isSelectStep}
       footer={
         isAutoDiscovering ? (
           <Button variant="outline" onClick={() => handleClose(false)}>
@@ -532,18 +540,7 @@ export function ImportMarketplaceDialog({
           </div>
         </div>
       ) : isSelectStep ? (
-        <div className="flex flex-col">
-          {autoDiscover ? null : (
-            <div className="px-4 pt-4 pb-3">
-              <SetupStepper
-                steps={gitSourceStepLabels({
-                  provider: source.provider,
-                  last: "Plugins",
-                })}
-                current={3}
-              />
-            </div>
-          )}
+        <div className="flex min-h-0 flex-1 flex-col">
           {marketplace.entries.length === 0 ? (
             <>
               {repositoryBar}
@@ -564,46 +561,24 @@ export function ImportMarketplaceDialog({
             </>
           ) : (
             <>
-              <div className="sticky top-0 z-10 border-b bg-background">
+              <div className="shrink-0 border-b bg-background">
                 {repositoryBar}
                 <div className="space-y-3 px-4 py-3">
-                  {totalImportable > 0 && (
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label htmlFor="marketplace-clients">Clients</Label>
-                        <ConnectionClientMultiSelect
-                          id="marketplace-clients"
-                          ariaLabel="Filter marketplace clients"
-                          value={clients}
-                          onValueChange={handleClientsChange}
-                          options={availableClients}
-                          renderIcon={(client) => (
-                            <PluginClientIcon
-                              clientType={client.id}
-                              size={18}
-                            />
-                          )}
-                        />
-                        <FieldDescription>
-                          The marketplace’s clients start selected. Claude Code
-                          plugins also work in Claude Desktop: add it to import
-                          a copy for Desktop.
-                        </FieldDescription>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="marketplace-platforms">Platforms</Label>
-                        <ConnectionPlatformMultiSelect
-                          id="marketplace-platforms"
-                          value={platforms}
-                          onValueChange={setPlatforms}
-                        />
-                        <FieldDescription>
-                          Applies to every selected plugin. Only supported setup
-                          platforms are available.
-                        </FieldDescription>
-                      </div>
-                    </div>
-                  )}
+                  <div className="space-y-2">
+                    <Label htmlFor="marketplace-clients" className="sr-only">
+                      Clients
+                    </Label>
+                    <ConnectionClientMultiSelect
+                      id="marketplace-clients"
+                      ariaLabel="Filter marketplace clients"
+                      value={clients}
+                      onValueChange={handleClientsChange}
+                      options={availableClients}
+                      renderIcon={(client) => (
+                        <PluginClientIcon clientType={client.id} size={18} />
+                      )}
+                    />
+                  </div>
                   <SearchInput
                     value={search}
                     onSearchChange={setSearch}
@@ -611,23 +586,8 @@ export function ImportMarketplaceDialog({
                     placeholder="Search by name or description"
                     className="relative w-full"
                   />
-                  {selectionLimitReached &&
-                    totalImportable > PLUGIN_MARKETPLACE_IMPORT_LIMIT && (
-                      <InlineNotice>
-                        <AlertTriangle />
-                        <span className="font-medium">
-                          {PLUGIN_MARKETPLACE_IMPORT_LIMIT}-plugin import limit
-                        </span>
-                        <InlineNoticeText>
-                          Import up to {PLUGIN_MARKETPLACE_IMPORT_LIMIT} plugins
-                          at a time. Finish this import, reopen the marketplace,
-                          and select the next batch. Imported plugins will be
-                          marked and excluded from the next batch.
-                        </InlineNoticeText>
-                      </InlineNotice>
-                    )}
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <div className="flex shrink-0 items-center gap-2">
                       <Checkbox
                         id="import-plugins-select-all"
                         checked={
@@ -648,15 +608,41 @@ export function ImportMarketplaceDialog({
                         className="cursor-pointer text-xs font-medium text-muted-foreground select-none hover:text-foreground peer-disabled:cursor-not-allowed peer-disabled:opacity-50 peer-disabled:hover:text-muted-foreground"
                       >
                         {allFilteredSelected
-                          ? "Deselect all"
+                          ? search.trim() || selectedOnly
+                            ? "Deselect visible"
+                            : "Deselect all"
                           : selectionLimitReached && selectedFilteredCount > 0
-                            ? "Clear selected batch"
+                            ? search.trim() || selectedOnly
+                              ? "Deselect visible"
+                              : "Clear batch"
                             : search.trim()
                               ? `Select visible (up to ${PLUGIN_MARKETPLACE_IMPORT_LIMIT})`
                               : `Select up to ${PLUGIN_MARKETPLACE_IMPORT_LIMIT}`}
                       </label>
                     </div>
-                    <span className="text-xs tabular-nums text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant={selectedOnly ? "secondary" : "ghost"}
+                        size="xs"
+                        aria-pressed={selectedOnly}
+                        onClick={() => setSelectedOnly((value) => !value)}
+                      >
+                        <span>Selected ({selected.size})</span>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        disabled={selected.size === 0}
+                        onClick={() => {
+                          setSelected(new Set());
+                          rangeSelection.current =
+                            new BulkRangeSelectionController();
+                        }}
+                      >
+                        <span>Clear selection</span>
+                      </Button>
+                    </div>
+                    <span className="ml-auto text-xs tabular-nums text-muted-foreground">
                       {selected.size} of {totalImportable} selected
                       {totalImportable > PLUGIN_MARKETPLACE_IMPORT_LIMIT &&
                         ` · ${PLUGIN_MARKETPLACE_IMPORT_LIMIT} max per import`}
@@ -667,47 +653,75 @@ export function ImportMarketplaceDialog({
                   </div>
                 </div>
               </div>
-              {filteredEntries.length === 0 ? (
-                <div className="px-4 py-8">
-                  <Empty>
-                    <EmptyHeader>
-                      <EmptyMedia variant="icon">
-                        <SearchX />
-                      </EmptyMedia>
-                      <EmptyTitle>No matches</EmptyTitle>
-                      <EmptyDescription>
-                        No plugins match “{search}”.
-                      </EmptyDescription>
-                    </EmptyHeader>
-                  </Empty>
-                </div>
-              ) : (
-                <ul className="divide-y">
-                  {filteredEntries.map((entry) => (
-                    <MarketplaceEntryRow
-                      key={`${entry.key}:${entry.marketplacePath}:${entry.sourceRepoUrl}:${entry.sourceSubdir}`}
-                      entry={entry}
-                      exists={importedMarketplacePlugins.has(
-                        marketplaceEntryKey(
-                          marketplace.repoUrl,
-                          entry.name,
-                          entry.clientType,
-                        ),
-                      )}
-                      checked={selected.has(entry.key)}
-                      selectionDisabled={
-                        selectionLimitReached && !selected.has(entry.key)
-                      }
-                      onToggle={(range) => toggle(entry.key, range)}
-                      onPreview={() => handlePreview(entry)}
-                    />
-                  ))}
-                </ul>
-              )}
+              <ImportSelectionList label="Plugins to import">
+                {filteredEntries.length === 0 ? (
+                  <div className="px-4 py-8">
+                    <Empty>
+                      <EmptyHeader>
+                        <EmptyMedia variant="icon">
+                          <SearchX />
+                        </EmptyMedia>
+                        <EmptyTitle>No matches</EmptyTitle>
+                        <EmptyDescription>
+                          {selectedOnly
+                            ? "No selected plugins match your search."
+                            : `No plugins match “${search}”.`}
+                        </EmptyDescription>
+                      </EmptyHeader>
+                    </Empty>
+                  </div>
+                ) : (
+                  <ul className="divide-y">
+                    {filteredEntries.map((entry) => (
+                      <MarketplaceEntryRow
+                        key={`${entry.key}:${entry.marketplacePath}:${entry.sourceRepoUrl}:${entry.sourceSubdir}`}
+                        entry={entry}
+                        exists={importedMarketplacePlugins.has(
+                          marketplaceEntryKey(
+                            marketplace.repoUrl,
+                            entry.name,
+                            entry.clientType,
+                          ),
+                        )}
+                        checked={selected.has(entry.key)}
+                        selectionDisabled={
+                          selectionLimitReached && !selected.has(entry.key)
+                        }
+                        onToggle={(range) => toggle(entry.key, range)}
+                        onPreview={() => handlePreview(entry)}
+                      />
+                    ))}
+                  </ul>
+                )}
+              </ImportSelectionList>
             </>
           )}
           {marketplace.entries.length > 0 ? (
-            <div className="space-y-5 border-t px-4 py-4">
+            <ImportSettings>
+              {selectionLimitReached &&
+                totalImportable > PLUGIN_MARKETPLACE_IMPORT_LIMIT && (
+                  <InlineNotice>
+                    <AlertTriangle />
+                    <span className="font-medium">
+                      {PLUGIN_MARKETPLACE_IMPORT_LIMIT}-plugin import limit
+                    </span>
+                    <InlineNoticeText>
+                      Import this batch, then reopen for the next.
+                    </InlineNoticeText>
+                  </InlineNotice>
+                )}
+
+              <div className="space-y-2">
+                <Label htmlFor="marketplace-platforms">Platforms</Label>
+                <ConnectionPlatformMultiSelect
+                  id="marketplace-platforms"
+                  value={platforms}
+                  onValueChange={setPlatforms}
+                />
+                <FieldDescription>
+                  Applies to every selected plugin.
+                </FieldDescription>
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="marketplace-sync-interval">Keep in sync</Label>
                 <FieldDescription>
@@ -737,7 +751,7 @@ export function ImportMarketplaceDialog({
                 grants={initialGrants}
                 onGrantsChange={setInitialGrants}
               />
-            </div>
+            </ImportSettings>
           ) : null}
         </div>
       ) : (
@@ -770,7 +784,7 @@ export function ImportMarketplaceDialog({
           }
         }}
       />
-    </StandardDialog>
+    </ImportSelectionDialog>
   );
 }
 
@@ -844,10 +858,10 @@ function MarketplaceEntryRow({
           />
         )}
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 sm:flex-nowrap">
             <span
               className={cn(
-                "truncate text-sm font-medium",
+                "basis-full truncate text-sm font-medium sm:basis-auto",
                 !entry.supported && "text-muted-foreground",
               )}
             >
@@ -887,7 +901,7 @@ function MarketplaceEntryRow({
         </div>
       </label>
       <div className="flex shrink-0 items-center gap-3">
-        <span className="text-xs tabular-nums text-muted-foreground">
+        <span className="hidden text-xs tabular-nums text-muted-foreground sm:inline">
           {entry.supported && entry.fileCount === 0
             ? "Files checked on import"
             : `${entry.fileCount} ${entry.fileCount === 1 ? "file" : "files"}`}
@@ -902,7 +916,7 @@ function MarketplaceEntryRow({
             aria-label={`Preview ${entry.name}`}
           >
             <Eye className="size-3.5" />
-            Preview
+            <span className="sr-only sm:not-sr-only">Preview</span>
           </Button>
         )}
       </div>

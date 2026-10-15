@@ -74,6 +74,7 @@ import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import {
   firstPolicyRefusal,
   getGuardrailsDeployment,
+  SUPERYELL_DISABLED_MESSAGE,
   turnOnForFirstPolicy,
 } from "@/services/guardrails-deployment";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
@@ -549,8 +550,11 @@ const registry = defineArchestraTools([
       "Do what yell does, then turn OpenAPPA off for this session, after the person running it approves. The report is sent first, the same way yell sends it. Then the session's label resets and OpenAPPA stops checking its calls, and the calls of the children it starts afterwards. Other sessions are not affected. Call it only when the user asks to turn OpenAPPA off for this session. Your message is sent verbatim and is what the person approving reads: say what about OpenAPPA was wrong and why it should be off. Do not include secrets, personal data, or task content.",
     schema: YellArgumentsSchema,
     async handler({ args, context }) {
-      if (!(await getGuardrailsDeployment()).active)
+      const deployment = await getGuardrailsDeployment();
+      if (!deployment.active)
         return errorResult("Guardrails enforcement is off");
+      if (!deployment.superyellEnabled)
+        return errorResult(SUPERYELL_DISABLED_MESSAGE);
       const identity = await yellIdentity({
         shortName: "superyell",
         args,
@@ -560,6 +564,7 @@ const registry = defineArchestraTools([
         session: identity.session,
         toolCallId: identity.callId,
         args,
+        superyell: true,
       });
       // The person approved turning OpenAPPA off, so a report that failed to
       // send does not keep it on.

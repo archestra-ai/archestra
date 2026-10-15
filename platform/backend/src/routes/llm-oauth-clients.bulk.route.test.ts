@@ -131,13 +131,13 @@ describe("DELETE /api/llm-oauth-clients/bulk", () => {
       .from(schema.auditLogsTable)
       .where(
         and(
-          eq(schema.auditLogsTable.action, "llmOauthClient.bulk_deleted"),
+          eq(schema.auditLogsTable.action, "oauthClient.bulk_deleted"),
           eq(schema.auditLogsTable.organizationId, organizationId),
         ),
       );
 
     expect(rows).toHaveLength(1);
-    expect(rows[0].resourceType).toBe("llmOauthClient");
+    expect(rows[0].resourceType).toBe("oauthClient");
     expect(rows[0].before).toMatchObject({
       llmOauthClients: [{ id: client.id, name: "Audited Client" }],
     });

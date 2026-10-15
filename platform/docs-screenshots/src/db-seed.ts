@@ -10,6 +10,7 @@ import {
   KNOWLEDGE_FILES,
   USAGE,
 } from "./dataset";
+import { FIXTURE_TIME } from "./determinism";
 import type { SeedState } from "./seed";
 
 /**
@@ -86,8 +87,8 @@ INSERT INTO member (id, organization_id, user_id, role, created_at) VALUES (${sq
 }
 
 /**
- * Thirty days of model requests, so Costs & Limits and My Usage have numbers
- * to show. Each stream belongs to one person and one agent or coding client.
+ * Thirty fixed calendar days of model requests give Costs & Limits and My Usage
+ * numbers to show. Each stream belongs to one person and one agent or coding client.
  * The rows are tagged with a session prefix, and a rerun replaces them.
  */
 function seedUsage(state: SeedState): void {
@@ -129,12 +130,12 @@ SELECT
   CASE WHEN s.type = 'anthropic:messages' THEN (t.input_tokens * 0.06)::int END,
   t.input_tokens * (1 - 0.9 * s.cache_share) * s.input_price / 1e6 + t.output_tokens * s.output_price / 1e6,
   t.input_tokens * s.cache_share * 0.9 * s.input_price / 1e6,
-  now() - make_interval(days => d, mins => (random() * 1400)::int)
+  ${FIXTURE_TIME_SQL} - make_interval(days => d, mins => (random() * 1400)::int)
 FROM (VALUES
     ${streams}
   ) AS s(stream, user_id, agent_id, client, type, model, billing_mode, auth_method, source, per_day, input_tokens, output_tokens, input_price, output_price, cache_share)
 CROSS JOIN generate_series(0, 29) AS d
-CROSS JOIN LATERAL generate_series(1, greatest(1, (s.per_day * (0.6 + random() * 0.8) * (CASE WHEN extract(isodow FROM now() - make_interval(days => d)) > 5 THEN 0.35 ELSE 1 END))::int)) AS n
+CROSS JOIN LATERAL generate_series(1, greatest(1, (s.per_day * (0.6 + random() * 0.8) * (CASE WHEN extract(isodow FROM ${FIXTURE_TIME_SQL} - make_interval(days => d)) > 5 THEN 0.35 ELSE 1 END))::int)) AS n
 CROSS JOIN LATERAL (SELECT
   (s.input_tokens * (0.4 + random() * 1.2))::int AS input_tokens,
   (s.output_tokens * (0.4 + random() * 1.2))::int AS output_tokens) AS t;
@@ -209,7 +210,7 @@ SELECT l.id, i.model, sum(i.input_tokens), sum(i.output_tokens)
 FROM limits l
 JOIN interactions i ON i.session_id LIKE '${USAGE_SESSION_PREFIX}%'
   AND i.billing_mode = 'metered'
-  AND i.created_at >= date_trunc('month', now())
+  AND i.created_at >= date_trunc('month', ${FIXTURE_TIME_SQL})
 LEFT JOIN agents a ON a.id = i.profile_id
 WHERE l.limit_type = 'token_cost' AND (
   l.entity_type = 'organization'
@@ -217,6 +218,8 @@ WHERE l.limit_type = 'token_cost' AND (
   OR (l.entity_type = 'environment' AND a.environment_id::text = l.entity_id))
 GROUP BY l.id, i.model;`);
 }
+
+const FIXTURE_TIME_SQL = `TIMESTAMPTZ '${FIXTURE_TIME}'`;
 
 const USAGE_SESSION_PREFIX = "docs-usage-";
 

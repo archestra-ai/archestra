@@ -47,6 +47,8 @@ import {
   useResourcePermissions,
   useUpdateResourcePermissions,
 } from "@/lib/resource-permissions.query";
+import { getListPermissionsHref } from "@/lib/resource-permissions-links";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * The permissions block is a list of people and rules, not another field. It
@@ -223,7 +225,7 @@ export function ResourcePermissionsDialog({
         description ??
         (scope !== "*"
           ? `Choose who can access this ${noun} and what they can do.`
-          : `Applies to every ${noun}, including new ones.` +
+          : `Applies to every ${noun}, including other people’s and ones created later.` +
             (ORGANIZATION_WIDE_RESOURCES.has(resource)
               ? ""
               : " Individual permissions can add access, but can’t take away access granted here."))
@@ -445,7 +447,6 @@ function PermissionsEditor({
       scope={policy.scope}
       existingSubjects={fields.map((entry) => entry.subject)}
       disabled={mutation.isPending || !policy.effectiveActions.includes("read")}
-      canShareOrganizationWide={policy.canShareOrganizationWide}
       onPick={(recipient) => {
         const preset = defaultAddedPreset(presetOptions);
         if (preset) append({ ...recipient, actions: preset.actions });
@@ -515,12 +516,19 @@ function PermissionsEditor({
             data-testid={isOwner ? "owner-grant" : undefined}
             className="grid min-h-9 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 px-2.5 py-2 sm:flex sm:gap-2 sm:py-0"
           >
-            <div className="col-span-2 flex min-w-0 flex-1 flex-col items-start gap-x-2 sm:flex-row sm:flex-wrap sm:items-baseline">
+            <div
+              className={cn(
+                "flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-1",
+                !isOwner && "col-span-2 sm:col-auto",
+              )}
+            >
               {memberView && isViewer ? (
-                <p className="font-medium">You</p>
+                <p className="w-full break-words font-medium sm:w-auto">You</p>
               ) : (
                 <>
-                  <p className="break-words font-medium">{grant.name}</p>
+                  <p className="w-full break-words font-medium sm:w-auto">
+                    {grant.name}
+                  </p>
                   <p className="text-xs text-muted-foreground">
                     {subjectLabels[grant.subject.type]}
                   </p>
@@ -532,7 +540,7 @@ function PermissionsEditor({
             {isOwner ? (
               // The owner always keeps their grant: handing the object on is
               // "Make owner" on another person's row, not an edit of this one.
-              <span className="px-2 pr-[3.25rem] text-muted-foreground sm:pr-11">
+              <span className="shrink-0 whitespace-nowrap text-muted-foreground sm:px-2 sm:pr-11">
                 {levelOptions.find(
                   (option) =>
                     option.value === presetFor(grant.actions, policy.resource),
@@ -707,12 +715,11 @@ function PermissionsEditor({
                 <InlineNotice variant="error" className="w-full">
                   <AlertTriangle />
                   <span className="font-medium">
-                    At least one recipient needs Full access.
+                    Someone must keep Manage access.
                   </span>
                   <InlineNoticeText>
-                    Without it, nobody can edit, delete, or share{" "}
-                    {resourcePluralNames[policy.resource]} that other people
-                    created.
+                    Give at least one recipient Full access, or a custom level
+                    that includes Manage access.
                   </InlineNoticeText>
                 </InlineNotice>
               ) : (
@@ -923,7 +930,7 @@ export function InheritedAccessNote({
     byLevel.set(level, [...(byLevel.get(level) ?? []), grant]);
   }
   const noun = scopedResourceNouns[resource];
-  const listPath = listPermissionsPaths[resource];
+  const listHref = getListPermissionsHref(resource);
   const sentences = [...byLevel].map(([level, holders]) => {
     const names = joinNames(holders.map((holder) => holder.name));
     const allRoles = holders.every((holder) => holder.subject.type === "role");
@@ -938,11 +945,11 @@ export function InheritedAccessNote({
       data-testid="inherited-access-note"
     >
       {sentences.join(" ")}
-      {editable && listPath && (
+      {editable && listHref && (
         <>
           {" "}
           <Link
-            href={`${listPath}?permissions=all`}
+            href={listHref}
             className="underline underline-offset-2 hover:text-foreground"
           >
             Edit access to every {noun}
@@ -995,23 +1002,28 @@ export function actionDetail(
 }
 
 export function presetDescription(preset: string, resource: ScopedResource) {
-  if (resource === "mcpOauthClient" || resource === "llmOauthClient") {
+  if (
+    resource === "oauthClient" ||
+    resource === "mcpOauthClient" ||
+    resource === "llmOauthClient"
+  ) {
     // Nothing is used "through" a registration, so the edit level has no use.
-    if (preset === "edit") return "View and edit the client, rotate its secret";
+    if (preset === "edit")
+      return "Read and update the client, including rotating its secret";
     if (preset === "manage")
-      return "Also delete the client and manage permissions";
+      return "Read, update, delete, and change who can access the client";
   }
   if (preset === "use" && resource === "credential")
-    return "View the credential and connect or bind its value";
+    return "Read the credential and connect or bind its value";
   if (preset === "deploy" && resource === "mcpRegistry")
-    return "Also view and change how the server is deployed";
+    return "Also read and update how the server is deployed";
   if (
     preset === "manage" &&
     (resource === "conversation" || resource === "agentRun")
   )
-    return "View the session and manage who can access it";
+    return "Read the session and change who can access it";
   return preset === "manage" && (resource === "log" || resource === "auditLog")
-    ? "View logs and manage who can access them"
+    ? "Read logs and change who can access them"
     : presetDescriptions[preset as keyof typeof resourcePermissionPresets];
 }
 /** @public - shared with initial-resource-permissions.tsx */
@@ -1026,17 +1038,17 @@ const presetDescriptions: Record<
   keyof typeof resourcePermissionPresets,
   string
 > = {
-  view: "View without making changes",
-  use: "View and use the resource",
-  edit: "View, use, and edit the resource",
-  manage: "Also delete the resource and manage permissions",
+  view: "Read without making changes",
+  use: "Read and use the resource",
+  edit: "Read, use, and update the resource",
+  manage: "Read, use, update, delete, and change who can access the resource",
 };
 const actionLabels: Record<ResourcePermissionAction, string> = {
-  read: "View",
+  read: "Read",
   use: "Use",
-  update: "Edit",
+  update: "Update",
   delete: "Delete",
-  "manage-permissions": "Manage permissions",
+  "manage-permissions": "Manage access",
   "configure-deployment-spec": "Configure deployment spec",
 };
 
@@ -1057,8 +1069,9 @@ export const resourcePluralNames: Record<ScopedResource, string> = {
   llmVirtualKey: "virtual keys",
   llmProviderApiKey: "provider keys",
   externalAgent: "external agents",
-  mcpOauthClient: "MCP OAuth clients",
-  llmOauthClient: "LLM OAuth clients",
+  oauthClient: "OAuth clients",
+  mcpOauthClient: "OAuth clients",
+  llmOauthClient: "OAuth clients",
   environment: "environments",
   scheduledTask: "scheduled tasks",
   log: "LLM and MCP logs",
@@ -1075,25 +1088,3 @@ function joinNames(names: string[]) {
   if (names.length < 2) return names.join("");
   return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 }
-
-// List pages whose actions menu opens the type-wide Permissions dialog from
-// `?permissions=all` (see ResourceListActions). A type missing here has no
-// such page, or its dialog is not the page's first kind.
-const listPermissionsPaths: Partial<Record<ScopedResource, string>> = {
-  agent: "/agents",
-  app: "/apps",
-  environment: "/settings/environments",
-  knowledgeBase: "/knowledge/knowledge-bases",
-  knowledgeConnector: "/knowledge/connectors",
-  knowledgeFile: "/knowledge/files",
-  llmModel: "/llm/models",
-  llmOauthClient: "/settings/oauth-clients",
-  llmProviderApiKey: "/llm/model-providers",
-  llmVirtualKey: "/llm/proxy/virtual-keys",
-  mcpGateway: "/mcp/gateways",
-  mcpRegistry: "/mcp/registry",
-  plugin: "/plugins",
-  project: "/projects",
-  serviceAccount: "/settings/service-accounts",
-  skill: "/skills",
-};

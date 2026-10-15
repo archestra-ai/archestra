@@ -12,7 +12,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useListboxNavigation } from "@/lib/hooks/use-listbox-navigation";
 import {
@@ -36,7 +35,6 @@ export function ResourceAccessAddField({
   scope,
   existingSubjects,
   disabled = false,
-  canShareOrganizationWide = true,
   onPick,
 }: {
   resource: ScopedResource;
@@ -45,16 +43,10 @@ export function ResourceAccessAddField({
   /** Recipients that already hold a direct grant, left out of the results. */
   existingSubjects: PermissionSubject[];
   disabled?: boolean;
-  /** False when the server leaves out everyone and the roles for this caller. */
-  canShareOrganizationWide?: boolean;
   onPick: (recipient: PermissionRecipient) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  // The server offers service accounts only to those who may see them.
-  const { data: seesServiceAccounts } = useHasPermissions({
-    serviceAccount: ["read"],
-  });
   const query = useDebouncedValue(search, 250);
   const recipients = usePermissionRecipients({
     resource,
@@ -107,17 +99,12 @@ export function ResourceAccessAddField({
           )}
         >
           <Plus className="size-3.5" aria-hidden="true" />
-          <span className="min-w-0 flex-1 truncate text-left">
-            {addAccessLabel({
-              canShareOrganizationWide,
-              seesServiceAccounts: !!seesServiceAccounts,
-            })}
-          </span>
+          <span className="min-w-0 flex-1 text-left">Add access</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] min-w-72 overflow-hidden p-0"
+        className="max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] max-w-[var(--radix-popover-content-available-width)] overflow-hidden p-0"
       >
         <div className="flex items-center border-b px-3 py-2">
           <Search
@@ -239,18 +226,4 @@ function recipientNote(recipient: PermissionRecipient) {
 
 function subjectKey(subject: PermissionSubject) {
   return `${subject.type}:${subject.id}`;
-}
-
-/** Names only the kinds of recipient the picker will offer this caller. */
-function addAccessLabel(params: {
-  canShareOrganizationWide: boolean;
-  seesServiceAccounts: boolean;
-}): string {
-  const kinds = [
-    ...(params.canShareOrganizationWide ? ["everyone", "a role"] : []),
-    "a team",
-    "a person",
-    ...(params.seesServiceAccounts ? ["a service account"] : []),
-  ];
-  return `Add access: ${kinds.slice(0, -1).join(", ")} or ${kinds.at(-1)}…`;
 }

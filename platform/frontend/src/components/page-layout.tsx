@@ -56,6 +56,7 @@ export function PageLayout({
   minWidth: minWidthKey = "none",
   contentOverflowX = "auto",
   fillContent = false,
+  compactHeader = false,
 }: {
   children: React.ReactNode;
   /**
@@ -81,6 +82,7 @@ export function PageLayout({
      * decide, or every connected channel renders as the open page at once.
      */
     selected?: boolean;
+    onClick?: React.MouseEventHandler<HTMLAnchorElement>;
   }[];
   title: React.ReactNode;
   /**
@@ -136,7 +138,10 @@ export function PageLayout({
   contentOverflowX?: "auto" | "clip";
   /** Let a page's content fill the available app viewport. */
   fillContent?: boolean;
+  /** Tighter header spacing when the page layout is hosted in a dialog. */
+  compactHeader?: boolean;
 }) {
+  const headerSpacing = compactHeader ? COMPACT_HEADER_SPACING : HEADER_SPACING;
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const appName = useAppName();
@@ -217,7 +222,7 @@ export function PageLayout({
               "mx-auto px-6",
               minWidth,
               maxWidth,
-              HEADER_SPACING.top,
+              headerSpacing.top,
             )}
           >
             {/* On phones, the title and actions share a row while the
@@ -232,7 +237,7 @@ export function PageLayout({
                 icon
                   ? "grid-cols-[auto_minmax(0,1fr)_auto] sm:gap-x-4"
                   : "grid-cols-[minmax(0,1fr)_auto] sm:gap-x-6",
-                HEADER_SPACING.bottom,
+                headerSpacing.bottom,
               )}
             >
               {icon && (
@@ -286,7 +291,7 @@ export function PageLayout({
                 <div
                   className={cn(
                     "row-start-1 flex min-w-0 items-center gap-2",
-                    HEADER_SPACING.titleRow,
+                    headerSpacing.titleRow,
                     icon ? "col-start-2" : "col-start-1",
                     maxWidthKey === "wizard"
                       ? "flex-nowrap overflow-hidden"
@@ -311,7 +316,7 @@ export function PageLayout({
                     data-page-description
                     className={cn(
                       "col-span-full row-start-2 text-sm text-muted-foreground",
-                      HEADER_SPACING.description,
+                      headerSpacing.description,
                       maxWidthKey === "wizard" && "hidden sm:line-clamp-1",
                     )}
                   >
@@ -327,7 +332,7 @@ export function PageLayout({
                     // sit in the same spot on every page however long its
                     // description is.
                     "row-start-1 flex items-center justify-self-end self-start",
-                    HEADER_SPACING.titleRow,
+                    headerSpacing.titleRow,
                     icon ? "col-start-3" : "col-start-2",
                     contentOverflowX === "clip" && "max-w-full overflow-x-auto",
                   )}
@@ -346,6 +351,7 @@ export function PageLayout({
                       <Link
                         key={tab.href}
                         href={tab.href}
+                        onClick={tab.onClick}
                         aria-current={isSelected ? "page" : undefined}
                         // Only this copy carries the test id — see the `tabs` prop.
                         data-testid={tab.testId}
@@ -373,6 +379,7 @@ export function PageLayout({
                       <Link
                         key={tab.href}
                         href={tab.href}
+                        onClick={tab.onClick}
                         aria-current={isSelected ? "page" : undefined}
                         className={cn(
                           "relative cursor-pointer pb-1 text-sm font-medium transition-colors hover:text-foreground",
@@ -436,7 +443,10 @@ export function PageLayout({
                                 key={tab.href}
                                 href={tab.href}
                                 aria-current={isSelected ? "page" : undefined}
-                                onClick={() => setOverflowOpen(false)}
+                                onClick={(event) => {
+                                  setOverflowOpen(false);
+                                  tab.onClick?.(event);
+                                }}
                                 className={cn(
                                   "cursor-pointer rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted",
                                   isSelected
@@ -455,7 +465,7 @@ export function PageLayout({
                 </div>
               </>
             )}
-            {!tabs.length && <div className={HEADER_SPACING.bottom} />}
+            {!tabs.length && <div className={headerSpacing.bottom} />}
           </div>
         </div>
         <div
@@ -523,4 +533,11 @@ const MAX_WIDTH_CLASSES = {
   // Wizard and detail pages share this exact header/content column. Padding
   // lives inside the band, so add it back for 5xl content-edge alignment.
   wizard: "max-w-[calc(var(--container-5xl)+3rem)]",
+} as const;
+
+const COMPACT_HEADER_SPACING = {
+  top: "pt-3",
+  bottom: "mb-3",
+  titleRow: "min-h-8",
+  description: "sm:mt-1",
 } as const;

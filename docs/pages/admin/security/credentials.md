@@ -2,7 +2,7 @@
 title: Credentials and Secrets
 description: Save credentials once, reuse them across integrations, and configure encrypted secrets storage
 order: 1
-lastUpdated: 2026-10-13
+lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -48,13 +48,13 @@ Create separate definitions when the same service needs both ownership policies.
 Decide, credential by credential, who sees it, connects to it, and changes its shared value. For example, let the platform team rotate one GitHub App's private key without reaching any other credential.
 
 - **One credential:** click **Edit** on its row, then open **Permissions**.
-- **Every credential:** open **More actions** beside **Add credential**, then choose **Permissions**.
+- **Every credential:** click **Permissions** beside **Add credential**.
 
 Each recipient gets a level:
 
-- **Can view:** sees the credential and where it is used.
+- **Can read:** sees the credential and where it is used.
 - **Can use:** also connects a personal value, and binds it to a [guardrails battery](/docs/agents/guardrails/batteries).
-- **Can edit:** also changes its details and its organization value.
+- **Can update:** also changes its details and its organization value.
 - **Full access:** also deletes it and manages who else can reach it.
 
 What to know:

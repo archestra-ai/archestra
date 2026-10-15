@@ -3,7 +3,7 @@ title: LLM Proxy Authentication
 sidebarTitle: Authentication
 description: How apps, agents, and people sign in to the LLM Proxy, and whose provider key each call uses
 order: 1
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -76,16 +76,16 @@ Use your own subscription or key, and still show up in costs and logs. Claude Co
 
 Use OAuth when your app should get short-lived tokens, not a key that never expires.
 
-Go to **Settings → OAuth Clients → Create OAuth Client**, and pick **LLM Proxy** under **What will it reach?**. Then pick how it signs in:
+Go to **Settings → OAuth Clients → Create OAuth Client**, and select **LLM Proxy** under **What can it access?**. Select **MCP Gateway** or **A2A** as well if the application also needs tools or agents. One client ID and secret covers the selected APIs. Then pick how it signs in:
 
 <span id="getting-an-access-token"></span>
 
 ### Call as the App
 
-For a bot or a nightly job with no person behind it.
+For a bot or a nightly job with no person behind it. Select **Service account (optional)** under **Access → Advanced** to use that account’s permissions and attribute LLM spend to it. Enable **MCP Gateway** or **A2A** on the same client for [shared A2A run ownership](/docs/mcp/authentication/applications#call-as-the-app).
 
-1. Pick **As itself**, then a provider key for each provider.
-2. On **Budget**, pick the team that pays for it. This is optional.
+1. Pick **As itself**. On **Access**, choose **Selected providers** to fix the allowed providers and keys, or **Current and future providers** to follow shared Primary keys automatically. If you enabled tools or agents, select their gateways and agents too.
+2. Under **Advanced → Budget** on the same step, optionally pick the team that pays for it or set a spend cap.
 3. Save the client ID and secret. The secret shows only once.
 4. Get a token. It lasts one hour.
 
@@ -99,9 +99,14 @@ For a bot or a nightly job with no person behind it.
 
 5. Send `Authorization: Bearer <access_token>` on a provider route or the Model Router.
 
-- The billing team's [costs](/docs/llm-proxy/costs-and-limits#track-spending) and [limits](/docs/llm-proxy/costs-and-limits#set-a-budget) count the client's spend. A spend cap on **Budget** limits the client itself.
+- When editing a client, use **Access** to change capabilities and provider keys, and **Budget** to change its payer or spend cap.
+- The billing team's [costs](/docs/llm-proxy/costs-and-limits#track-spending) and [limits](/docs/llm-proxy/costs-and-limits#set-a-budget) count the client's spend. A spend cap limits the client itself.
+- **Current and future providers** uses shared **Primary** keys at request time, including later providers and changes to the Primary key. Personal and subscription keys are excluded. Under **LLM API keys**, you can override the key for a provider. Enabling this mode requires a [**Can use** grant](/docs/admin/access-control#granular-access-control) on all current and future provider keys (`*`); access to each current key separately is insufficient.
+- Existing OAuth clients keep **Selected providers** until you change their mode.
 - Map a metered API key. A personal subscription cannot serve an app.
 - See the [complete example app](https://github.com/archestra-ai/examples/tree/main/model-router-client-credentials).
+
+For a combined client, request a space-separated subset such as `scope=llm:proxy mcp`. See [token scopes](/docs/mcp/authentication/applications#choose-token-scopes) for scope selection and changes to an existing client.
 
 <span id="on-behalf-of-users-authorization-code"></span>
 
@@ -109,7 +114,7 @@ For a bot or a nightly job with no person behind it.
 
 For an app where people sign in. Each call uses that person's provider keys, cost limits, and policies.
 
-1. Pick **For its users**, and add your app's redirect URIs. Each person pays for their own use. A spend cap on **Budget** limits the whole client.
+1. Pick **For its users**. On **Access**, add your app's redirect URIs. Each person pays for their own use. An optional spend cap limits the whole client.
 2. In your app, run the authorization code flow with PKCE. Ask for `scope=llm:proxy`. Add `offline_access` to get a refresh token.
 3. Send the person's access token on a provider route or the Model Router.
 

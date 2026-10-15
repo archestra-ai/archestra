@@ -11,7 +11,10 @@ import {
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
-import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
+import {
+  isGuardrailsV2Active,
+  isSuperyellAvailable,
+} from "@/services/guardrails-deployment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { registerRoutePermissions } from "@/test/route-permissions";
 import routes from "./guardrails-deployment.routes";
@@ -65,6 +68,7 @@ describe("Deployment-wide Guardrails v2 switch", () => {
         expect(response.json()).toEqual({
           enabled,
           unsupportedClientAction: "bypass",
+          superyellEnabled: true,
           featureEnabled,
           active: enabled && featureEnabled,
         });
@@ -106,6 +110,26 @@ describe("Deployment-wide Guardrails v2 switch", () => {
       enabled: true,
       unsupportedClientAction: "bypass",
     });
+  });
+
+  test("administrators can turn superyell off without changing enforcement", async () => {
+    await set(true);
+    const response = await app.inject({
+      method: "PUT",
+      url: "/api/guardrails-deployment",
+      payload: { superyellEnabled: false },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      enabled: true,
+      active: true,
+      superyellEnabled: false,
+    });
+    expect(await isSuperyellAvailable()).toBe(false);
+    await GuardrailsDeploymentModel.set({ superyellEnabled: true });
+    expect(await isSuperyellAvailable()).toBe(true);
+    await set(false);
+    expect(await isSuperyellAvailable()).toBe(false);
   });
 
   test("rejects an unsupported action without changing the saved setting", async () => {

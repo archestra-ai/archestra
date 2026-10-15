@@ -1,6 +1,7 @@
 "use client";
 
 import { forwardRef } from "react";
+import { AdvancedSection } from "@/components/advanced-section";
 import {
   type ProfileLabel,
   ProfileLabels,
@@ -8,8 +9,7 @@ import {
 } from "@/components/agent-labels";
 
 /**
- * Labels at the foot of a form. They used to fold away under "Advanced", but
- * they were its only field, and a collapsible around one field only hides it.
+ * Labels at the foot of a form, optionally folded into Advanced.
  */
 export const AdvancedLabelsSection = forwardRef<
   ProfileLabelsRef,
@@ -17,15 +17,26 @@ export const AdvancedLabelsSection = forwardRef<
     labels: ProfileLabel[];
     onLabelsChange: (labels: ProfileLabel[]) => void;
     className?: string;
+    collapsible?: boolean;
+    disabled?: boolean;
   }
->(function AdvancedLabelsSection({ labels, onLabelsChange, className }, ref) {
-  return (
-    <div className={className}>
+>(function AdvancedLabelsSection(
+  { labels, onLabelsChange, className, collapsible = false, disabled = false },
+  ref,
+) {
+  const content = (
+    <fieldset disabled={disabled} className="min-w-0">
       <ProfileLabels
         ref={ref}
         labels={labels}
         onLabelsChange={onLabelsChange}
       />
-    </div>
+    </fieldset>
+  );
+  if (!collapsible) return <div className={className}>{content}</div>;
+  return (
+    <AdvancedSection keepMounted className={className}>
+      {content}
+    </AdvancedSection>
   );
 });

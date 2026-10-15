@@ -36,6 +36,47 @@ import type { User } from "@/types";
 
 vi.mock("@/auth");
 
+function embeddedRuntimeParams(script: string): Array<Record<string, unknown>> {
+  const marker = "const params = ";
+  const found: Array<Record<string, unknown>> = [];
+  let from = 0;
+  while (from < script.length) {
+    const at = script.indexOf(marker, from);
+    if (at === -1) break;
+    const start = at + marker.length;
+    if (script[start] !== "{") {
+      from = start;
+      continue;
+    }
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    let end = -1;
+    for (let i = start; i < script.length; i++) {
+      const char = script[i];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (char === "\\") escaped = true;
+        else if (char === '"') inString = false;
+        continue;
+      }
+      if (char === '"') inString = true;
+      else if (char === "{") depth++;
+      else if (char === "}") {
+        depth--;
+        if (depth === 0) {
+          end = i + 1;
+          break;
+        }
+      }
+    }
+    if (end === -1) break;
+    found.push(JSON.parse(script.slice(start, end)) as Record<string, unknown>);
+    from = end;
+  }
+  return found;
+}
+
 // cacheManager needs a live PostgreSQL connection that PGlite tests don't
 // have; back it with the canonical Map-backed fake from
 // src/__mocks__/cache-manager.ts so the rate limiter runs for real against an
@@ -48,7 +89,7 @@ import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { clientConnectionService } from "@/services/client-connection";
 import {
   connectionSetupReference,
-  verifyConnectionProxySetupContext,
+  readVerifiedConnectionProxySetup,
 } from "@/services/connection-proxy-setup-context";
 import { grantEverywhere } from "@/test/wildcard-grants";
 
@@ -186,28 +227,35 @@ describe("GET /api/connection-setups/script/:token", () => {
       const passthroughValue = await readVirtualKeyValue(
         passthroughKey?.id as string,
       );
-      // The routing plugin travels base64-encoded in the script.
+      // Managed bootstraps load routes from the installer-written params file.
       const plugins = [
         ...response.body.matchAll(/ARCHESTRA_OC_PLUGIN_CONTENT='([^']+)'/g),
       ].map((match) => Buffer.from(match[1], "base64").toString("utf8"));
       expect(plugins.length).toBeGreaterThan(0);
       for (const plugin of plugins) {
-        expect(plugin).toMatch(
-          /"archestra-anthropic":"http:\/\/localhost:9000\/v1\/connection-setup\/[^"]+\/model-router"/,
+        expect(plugin).not.toContain(passthroughValue);
+        expect(plugin).toContain("runtime.params.routes");
+      }
+      const payloads = embeddedRuntimeParams(response.body);
+      expect(payloads.length).toBeGreaterThan(0);
+      for (const payload of payloads) {
+        const routes = payload.routes as Record<string, string>;
+        const routeHeaders = payload.routeHeaders as Record<
+          string,
+          Record<string, string>
+        >;
+        expect(routes["archestra-anthropic"]).toMatch(
+          /^http:\/\/localhost:9000\/v1\/connection-setup\/[^/]+\/model-router$/,
         );
-        expect(plugin).toMatch(
-          /"anthropic":"http:\/\/localhost:9000\/v1\/connection-setup\/[^"]+\/anthropic\/v1"/,
+        expect(routes.anthropic).toMatch(
+          /^http:\/\/localhost:9000\/v1\/connection-setup\/[^/]+\/anthropic\/v1$/,
         );
-        expect(plugin).toContain('"openai":"http://localhost:9000/v1/');
-        const routesLine = plugin.match(/^const routes = (.*);$/m)?.[1] ?? "";
-        expect(routesLine).toContain('"openai":');
-        expect(routesLine).not.toContain('"google":');
-        expect(plugin).toContain(
-          `"anthropic":{"${VIRTUAL_KEY_HEADER}":"${passthroughValue}"}`,
-        );
-        expect(plugin).not.toContain(
-          `"archestra-anthropic":{"${VIRTUAL_KEY_HEADER}"`,
-        );
+        expect(routes.openai).toContain("http://localhost:9000/v1/");
+        expect(routes).not.toHaveProperty("google");
+        expect(routeHeaders.anthropic).toEqual({
+          [VIRTUAL_KEY_HEADER]: passthroughValue,
+        });
+        expect(routeHeaders["archestra-anthropic"]).toBeUndefined();
       }
     });
   }
@@ -344,23 +392,23 @@ describe("GET /api/connection-setups/script/:token", () => {
           `/connection-setup/${token}/${provider}`,
         );
         expect(
-          verifyConnectionProxySetupContext({
+          readVerifiedConnectionProxySetup({
             token,
             organizationId,
             virtualApiKeyId: setup.virtualApiKeyId,
             proxyAgentId: setup.llmProxyId ?? "",
             secret: config.auth.secret,
           }),
-        ).toBe(true);
+        ).toBeDefined();
         expect(
-          verifyConnectionProxySetupContext({
+          readVerifiedConnectionProxySetup({
             token,
             organizationId,
             virtualApiKeyId: setup.virtualApiKeyId,
             proxyAgentId: "another-proxy",
             secret: config.auth.secret,
           }),
-        ).toBe(false);
+        ).toBeUndefined();
         if (clientId !== "claude-desktop") {
           // The installer prints the reference the proxy looks for in the
           // conversation that ran it, as plain text in its ending.

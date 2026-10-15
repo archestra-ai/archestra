@@ -37,6 +37,18 @@ function tomlBasicString(value: string): string {
 }
 
 /**
+ * Header Codex 0.162.1 writes for `codex mcp add`. A name of letters, digits,
+ * `_`, and `-` stays a bare key (`[mcp_servers.my-gateway]`). Anything else it
+ * accepts (`.`, `:`, `@`, `/`) is a basic string (`[mcp_servers."gw.with.dots"]`).
+ * `mcp add` inserts that table among existing `mcp_servers` entries, not at
+ * the end of the file.
+ */
+function codexMcpServerHeader(serverName: string): string {
+  const bare = /^[A-Za-z0-9_-]+$/.test(serverName);
+  return `[mcp_servers.${bare ? serverName : tomlBasicString(serverName)}]`;
+}
+
+/**
  * Attribution headers Codex sends on every proxied request, emitted as a
  * `[model_providers.<name>.http_headers]` TOML table (Codex's equivalent of
  * Claude Code's ANTHROPIC_CUSTOM_HEADERS), one `"Name" = "Value"` per line:
@@ -66,6 +78,12 @@ const CODEX_HELPER_APPROVALS_NOTICE =
  * Code; other gateway tools keep Codex's question. The tables sit under the
  * gateway's own entry, the way Codex's "Always allow" writes them, so
  * `codex mcp remove` drops them with it and a rerun writes them once.
+ *
+ * `required = true` is inserted into that same server table, immediately
+ * after the header `codex mcp add` wrote. Appending it would land in whatever
+ * table is still open at the end of the file. Codex 0.99 and newer then wait
+ * before `codex exec`'s first request, and that command stops if the gateway
+ * cannot connect. Older Codex ignores the key.
  *
  * @public — asserted by the setup script unit tests, which knip --production ignores.
  */
@@ -101,6 +119,20 @@ fi`);
     sections.push(`say ${sh(`Adding ${ctx.appName} tools as "${ctx.mcp.serverName}"`)}
 cli codex mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true${stale ? `\n${stale}` : ""}
 cli codex mcp add ${sh(ctx.mcp.serverName)} --url ${sh(ctx.mcp.url)}
+umask 077
+arch_header=${sh(codexMcpServerHeader(ctx.mcp.serverName))}
+awk -v header="$arch_header" '
+  $0 == header { found++; print; if (found == 1) pending=1; next }
+  pending && $0 == "required = true" { pending=0 }
+  pending { print "required = true"; pending=0 }
+  { print }
+  END { if (pending) print "required = true"; if (found != 1) exit 1 }
+' "$CONFIG" > "$CONFIG.archestra-required" || {
+  rm -f "$CONFIG.archestra-required"
+  err "Could not mark the gateway required. Codex did not write the expected gateway entry."
+  exit 1
+}
+mv -f "$CONFIG.archestra-required" "$CONFIG"
 cat >> "$CONFIG" <<'ARCHESTRA_TOML'
 
 ${codexHelperApprovalTables(ctx.mcp)}
@@ -209,6 +241,25 @@ if ((Test-Path $arch_config) -and -not (Test-Path ($arch_config + '.archestra-ba
 try { codex mcp remove ${psq(ctx.mcp.serverName)} 2>$null | Out-Null } catch { }${stale ? `\n${stale}` : ""}
 codex mcp add ${psq(ctx.mcp.serverName)} --url ${psq(ctx.mcp.url)}
 if ($LASTEXITCODE -ne 0) { throw 'Could not register the MCP gateway. Fix the error above and re-run setup.' }
+$arch_header = ${psq(codexMcpServerHeader(ctx.mcp.serverName))}
+$arch_lines = @(Get-Content -Path $arch_config)
+$arch_found = 0
+$arch_next = New-Object System.Collections.Generic.List[string]
+$arch_insert = $false
+foreach ($arch_line in $arch_lines) {
+  if ($arch_insert) {
+    if ($arch_line -ne 'required = true') { $arch_next.Add('required = true') }
+    $arch_insert = $false
+  }
+  $arch_next.Add($arch_line)
+  if ($arch_line -ceq $arch_header) {
+    $arch_found++
+    if ($arch_found -eq 1) { $arch_insert = $true }
+  }
+}
+if ($arch_insert) { $arch_next.Add('required = true') }
+if ($arch_found -ne 1) { throw 'Could not mark the gateway required. Codex did not write the expected gateway entry.' }
+Set-Content -Path $arch_config -Encoding utf8 -Value $arch_next
 Add-Content -Path $arch_config -Encoding utf8 -Value @'
 
 ${codexHelperApprovalTables(ctx.mcp)}

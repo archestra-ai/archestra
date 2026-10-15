@@ -22,6 +22,7 @@ import { enterpriseTier } from "@/enterprise-tier";
 import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
 import MemberModel from "@/models/member";
+import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import {
@@ -29,12 +30,20 @@ import {
   normalizeCommandExecutionArguments,
 } from "@/openappa/command-normalization";
 import { currentTrajectory } from "@/openappa/current-trajectory";
-import { openappaDeclarations } from "@/openappa/declarations";
+import {
+  helperUrlBase,
+  openappaDeclarations,
+  type UnreadableCredential,
+} from "@/openappa/declarations";
 import {
   declareExistingInstalls,
   seedCredentialBindings,
 } from "@/openappa/declare-installs";
-import { openappaFailure } from "@/openappa/failure";
+import {
+  OpenappaRetiredAnnotatorError,
+  openappaFailure,
+} from "@/openappa/failure";
+import { unservedAnnotator } from "@/openappa/retired-annotators";
 import { captureYellReport } from "@/openappa/yell-receiver";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import type { ToolNameCanonicalizer } from "@/routes/proxy/utils/gateway-tool-names";
@@ -194,6 +203,9 @@ type ProcessedToolResult = {
   code?: string;
   /** The runtime denied this call, so `content` is its ruling, not an output. */
   denied?: true;
+  /** Current denial metadata; omitted offers are unknown, not an empty list. */
+  offers?: string[];
+  review?: Array<{ offer_id: string; text: string }>;
 };
 type ChildEndOutcome =
   | { decision: "release"; crossed: true }
@@ -278,10 +290,25 @@ export async function declareOpenappaInstalls(): Promise<void> {
   }
 }
 
+/**
+ * Recompose every organization once the declarations are carried over, so a
+ * composition an earlier build stored takes in what this build composes, such
+ * as the member roster. Never rejects: a server starts whatever it finds.
+ */
+export async function recompileAllOnStart(): Promise<void> {
+  if (!openappaEnabled()) return;
+  try {
+    await openappaBatteriesService.recompileAll();
+  } catch (error) {
+    logger.error({ err: error }, "Recomposing the OpenAPPA policies failed");
+  }
+}
+
 export async function executeYell(params: {
   session: OpenAppaSession;
   toolCallId: string;
   args: { message: string; with_trajectory: boolean };
+  superyell?: boolean;
 }): Promise<CallToolResult> {
   if (!openappaYellEnabled()) {
     return {
@@ -296,6 +323,7 @@ export async function executeYell(params: {
     toolCallId: params.toolCallId,
     message: params.args.message,
     withTrajectory: params.args.with_trajectory,
+    superyell: params.superyell ?? false,
   });
   try {
     const result = await captureYellReport({
@@ -432,6 +460,7 @@ async function dispatchWithPrincipal(params: {
         policy,
       ),
     policy,
+    session,
   );
 }
 
@@ -497,6 +526,7 @@ async function withRuntime(
     policy: DispatchPolicy,
   ) => Promise<string>,
   batchPolicy?: DispatchPolicy,
+  session?: OpenAppaSession,
 ) {
   const policy = batchPolicy ?? (await effectivePolicy(organizationId));
   try {
@@ -504,7 +534,44 @@ async function withRuntime(
     const rawResult = await call(module, policy);
     return NativeDecisionSchema.parse(JSON.parse(rawResult));
   } catch (error) {
-    throw openappaFailure(error);
+    throw await dispatchFailure({ session, served: policy.content, error });
+  }
+}
+
+async function dispatchFailure(params: {
+  session?: OpenAppaSession;
+  served: string;
+  error: unknown;
+}): Promise<ApiError> {
+  const missing = await missingOpeningAnnotator(params.session, params.served);
+  return openappaFailure(
+    missing === null
+      ? params.error
+      : new OpenappaRetiredAnnotatorError(missing),
+  );
+}
+
+async function missingOpeningAnnotator(
+  session: OpenAppaSession | undefined,
+  served: string,
+): Promise<string | null> {
+  if (!session) return null;
+  try {
+    const root = await OpenAppaSessionModel.root({
+      organizationId: session.organization_id,
+      sessionId: session.session_id,
+    });
+    if (!root) return null;
+    const opening = await (await binding()).readOpenappaOpeningPolicy(root);
+    return opening === null
+      ? null
+      : unservedAnnotator({ opening, served, helperBase: helperUrlBase("") });
+  } catch (error) {
+    logger.warn(
+      { err: error },
+      "OpenAPPA could not compare the opening policy with the served policy",
+    );
+    return null;
   }
 }
 
@@ -520,16 +587,53 @@ async function effectivePolicy(
   organizationId: string,
 ): Promise<DispatchPolicy> {
   try {
-    const rawContent = (
-      await openappaBatteriesService.getEffectivePolicy(organizationId)
-    ).content;
+    const { policy, readable } =
+      await openappaBatteriesService.readForDispatch(organizationId);
+    let unreadable: UnreadableCredential[] = [];
+    let dispatch: DispatchPolicy | null = null;
+    try {
+      dispatch = await openappaDeclarations.dispatchPolicy({
+        organizationId,
+        content: expandCommandExecutionPolicyRules(policy.content),
+        onUnreadable: (found) => {
+          unreadable = found;
+        },
+      });
+    } catch (error) {
+      if (!retainedKeyLost({ unreadable, readable })) throw error;
+    }
+    if (dispatch && !retainedKeyLost({ unreadable, readable })) return dispatch;
+    // A credential the policy was composed to read is unreadable now. Compose
+    // again first, as a fresh read would have: a kept annotator that needed it
+    // is dropped, so its sessions are told to start a new conversation instead
+    // of failing their consults on a key that is not set.
+    logger.info(
+      { organizationId, keys: unreadable.map(({ key }) => key) },
+      "OpenAPPA composes again before a dispatch: a credential the served policy reads cannot be read",
+    );
+    const recompiled = await openappaBatteriesService.recompile(organizationId);
     return await openappaDeclarations.dispatchPolicy({
       organizationId,
-      content: expandCommandExecutionPolicyRules(rawContent),
+      content: expandCommandExecutionPolicyRules(recompiled.content),
     });
   } catch (error) {
     throw openappaFailure(error);
   }
+}
+
+/**
+ * Whether a key the served policy's retirement inputs held readable cannot be
+ * read now. With no snapshot to compare against, any unreadable key counts.
+ */
+function retainedKeyLost(params: {
+  unreadable: UnreadableCredential[];
+  readable: ReadonlySet<string> | null;
+}): boolean {
+  const { unreadable, readable } = params;
+  return (
+    unreadable.length > 0 &&
+    (readable === null || unreadable.some(({ key }) => readable.has(key)))
+  );
 }
 
 /** One policy read shared by a batch of dispatches, taken by the first of them. */
@@ -757,7 +861,13 @@ async function approveToolResult(params: {
     outputSource,
     ...(reason ? { reason } : {}),
     ...(code ? { code } : {}),
-    ...(decision.decision === "deny_call" ? { denied: true as const } : {}),
+    ...(decision.decision === "deny_call"
+      ? {
+          denied: true as const,
+          offers: decision.offers?.map((offer) => offer.offer_id),
+          review: decision.review,
+        }
+      : {}),
   };
 }
 // SPDX-SnippetEnd
@@ -854,7 +964,7 @@ function isOutputDecision(
 export async function processProxyResults(params: {
   session: OpenAppaSession;
   results: CommonToolResult[];
-  canonicalize: (name: string) => string;
+  canonicalize: ToolNameCanonicalizer;
   /** The proxy verifies that this exact result belongs to an issued question. */
   isUserQuestion?: (result: CommonToolResult) => boolean;
   controlToolName?: string;
@@ -965,8 +1075,10 @@ export async function evaluateToolCalls(
     looseRunToolDispatch?: boolean;
     /** This session's control tool declaration, as the client spells it. */
     control?: DeclaredToolSpelling;
+    controlAliases?: readonly DeclaredToolSpelling[];
     /** This session's notice tool declaration, as the client spells it. */
     notice?: DeclaredToolSpelling;
+    noticeAliases?: readonly DeclaredToolSpelling[];
     /** True for a call that names a child trajectory (Task, spawn_agent, task). */
     isSpawn?: (name: string, namespace?: string) => boolean;
     /** Runtime launches are resolved per call, including run_tool targets. */
@@ -1020,16 +1132,22 @@ export async function evaluateToolCalls(
       // Only the declared control tool itself, in its own namespace: a
       // same-named tool elsewhere is someone else's and is evaluated.
       if (
-        options.control &&
-        call.name === options.control.name &&
-        call.namespace === options.control.namespace
+        (
+          options.controlAliases ?? (options.control ? [options.control] : [])
+        ).some(
+          (member) =>
+            call.name === member.name && call.namespace === member.namespace,
+        )
       ) {
         return { kind: "control" as const };
       }
       if (
-        options.notice &&
-        call.name === options.notice.name &&
-        call.namespace === options.notice.namespace
+        (
+          options.noticeAliases ?? (options.notice ? [options.notice] : [])
+        ).some(
+          (member) =>
+            call.name === member.name && call.namespace === member.namespace,
+        )
       ) {
         return { kind: "allow" as const };
       }
@@ -1119,8 +1237,8 @@ export async function evaluateToolCalls(
         feedback: decisionMessage(decision),
         offers:
           decision.decision === "deny_call"
-            ? (decision.offers ?? [])
-                .map((offer) => offer.offer_id)
+            ? decision.offers
+                ?.map((offer) => offer.offer_id)
                 .filter((id) => id.length > 0)
             : [],
         review:

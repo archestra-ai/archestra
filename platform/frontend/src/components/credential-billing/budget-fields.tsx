@@ -97,8 +97,9 @@ export function BudgetFields({
   /**
    * "inline" is the create dialog's: a "Budget" heading over the payer and
    * two labelled cap fields, with no card around the cap.
+   * "plain" keeps the full labels without the cap card.
    */
-  layout?: "card" | "inline";
+  layout?: "card" | "inline" | "plain";
 }) {
   const teams = useBillableTeams(billingTeamId);
   const team = teams.find((option) => option.id === billingTeamId) ?? null;
@@ -265,7 +266,12 @@ export function BudgetFields({
   return (
     <div className="space-y-5">
       {payer}
-      <fieldset className="space-y-3 rounded-lg border p-4">
+      <fieldset
+        className={cn(
+          "min-w-0 space-y-3",
+          layout === "card" && "rounded-lg border p-4",
+        )}
+      >
         <legend className="sr-only">Spend cap for this {subject}</legend>
         <div className="flex items-center justify-between gap-2">
           <span className="font-medium text-sm">

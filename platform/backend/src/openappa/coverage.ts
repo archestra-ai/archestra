@@ -26,6 +26,11 @@ import type {
 } from "@/types/openappa-coverage";
 import { openappaBatteriesService } from "./batteries";
 import {
+  type DeployedFile,
+  deployedFiles,
+  effectiveToolRules,
+} from "./battery-target";
+import {
   asRecord,
   type ToolEntry,
   toolEntries,
@@ -202,7 +207,7 @@ class OpenAppaCoverageService {
     for (const [catalogId, serverTools] of toolsByCatalog) {
       const battery = fitting.get(catalogId);
       if (battery?.status !== "available") continue;
-      const tools = wouldGovern(battery.policy, serverTools);
+      const tools = wouldGovern(battery.files, serverTools);
       if (tools === 0) continue;
       const entry = available.get(battery.battery) ?? {
         name: battery.battery,
@@ -259,8 +264,8 @@ class OpenAppaCoverageService {
         credentials: battery.credentials,
         benefit: battery.benefit,
         setup: battery.setup,
-        newlyCovered: wouldGovern(battery.policy, serverTools),
-        rules: batteryRules(battery.policy, serverTools),
+        newlyCovered: wouldGovern(battery.files, serverTools),
+        rules: batteryRules(battery.files, serverTools),
       });
     }
     return fits.sort(
@@ -336,9 +341,9 @@ async function listedTools(
  * their server: an install binds every namespace the battery declares to the
  * server, so a rule `mcp/<namespace>/<tool>` names the server's `<tool>`.
  */
-function wouldGovern(policy: string, tools: CoverageTool[]): number {
+function wouldGovern(files: DeployedFile[], tools: CoverageTool[]): number {
   const named = new Set(
-    toolEntries(policy).flatMap((entry) => {
+    effectiveToolRules(files).flatMap(({ entry }) => {
       const spelled = splitSelector(entry.name);
       const canonical =
         spelled.selector === null && CANONICAL_RULE_NAME.exec(spelled.base);
@@ -355,11 +360,11 @@ function wouldGovern(policy: string, tools: CoverageTool[]): number {
  * installed on it, read as the tools table reads it.
  */
 function batteryRules(
-  policy: string,
+  files: DeployedFile[],
   tools: CoverageTool[],
 ): CoverageBatteryFit["rules"] {
   const byName = new Map(tools.map((tool) => [tool.name, tool]));
-  return toolEntries(policy).flatMap((entry) => {
+  return effectiveToolRules(files).flatMap(({ entry }) => {
     const spelled = splitSelector(entry.name);
     const canonical = CANONICAL_RULE_NAME.exec(spelled.base);
     const tool = canonical && byName.get(canonical[2]);
@@ -477,7 +482,7 @@ async function buildReport(
       catalogId,
     }),
   ]);
-  const { resolution, rootContent } = snapshot;
+  const { resolution, rootContent, viewed } = snapshot;
   const refused = snapshot.lastError !== null;
   const statusOf = new Map<string, BatteryInstallStatus>(
     snapshot.batteries.map((battery) => [
@@ -533,12 +538,16 @@ async function buildReport(
   const targets = new Map(
     resolution.aliases.map((alias) => [alias.namespace, alias.servers]),
   );
+  // A base waiting only on its target's credentials composes, and so enforces.
+  const composed = new Set(
+    snapshot.batteries.filter((each) => each.composed).map((each) => each.name),
+  );
   for (const included of resolution.entries) {
     if (!included.battery) continue;
     const status = statusOf.get(included.name) ?? "unavailable";
-    const batteryEntries = toolEntries(included.battery.policy);
-    const batteryHeaderLines = toolHeaderLines(included.battery.policy);
-    for (const [index, entry] of batteryEntries.entries()) {
+    const deployed = viewed.get(included.entry);
+    if (!deployed) continue;
+    for (const { entry, line } of effectiveToolRules(deployedFiles(deployed))) {
       const spelled = splitSelector(entry.name);
       const canonical = CANONICAL_RULE_NAME.exec(spelled.base);
       if (!canonical) continue;
@@ -554,12 +563,9 @@ async function buildReport(
               battery: included.name,
               batteryEntry: included.entry,
               batteryStatus: status,
-              line:
-                batteryHeaderLines.length === batteryEntries.length
-                  ? (batteryHeaderLines[index] ?? null)
-                  : null,
+              line,
             },
-            enforced: !refused && status === "active",
+            enforced: !refused && composed.has(included.name),
           }),
         );
     }
@@ -874,6 +880,7 @@ function candidate(params: {
 }): Candidate {
   const { entry, spelled, match, source, enforced } = params;
   const delta = asRecord(entry.delta) ?? {};
+  const forwards = asRecord(entry.forwards) ?? {};
   const requires = asRecord(entry.requires) ?? {};
   const rule: CoverageRule = {
     ...source,
@@ -882,6 +889,10 @@ function candidate(params: {
     delta: {
       ...(typeof delta.trust === "string" ? { trust: delta.trust } : {}),
       ...optionalList("audience", audience(delta.audience)),
+    },
+    forwards: {
+      ...(typeof forwards.trust === "string" ? { trust: forwards.trust } : {}),
+      ...optionalList("audience", audience(forwards.audience)),
     },
     requires: {
       ...(typeof requires.trust === "string" ? { trust: requires.trust } : {}),
@@ -892,10 +903,12 @@ function candidate(params: {
     enforced,
   };
   const attention = rule.requires.attention ?? [];
-  const requiresAnything = Object.entries(requires).some(
-    ([key, value]) =>
-      !(key === "attention" && Array.isArray(value) && value.length === 0),
-  );
+  // `audience.within` is ignored by the runtime, so it requires nothing.
+  const requiresAnything = Object.entries(requires).some(([key, value]) => {
+    if (key === "attention") return !Array.isArray(value) || value.length > 0;
+    if (key === "audience") return (audience(value)?.length ?? 0) > 0;
+    return true;
+  });
   let kind: Candidate["kind"];
   if (attention.length > 0) kind = "approval";
   else if (requiresAnything) kind = "write";

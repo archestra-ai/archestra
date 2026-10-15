@@ -136,8 +136,8 @@ describe("resolveAuditableRouteConfig", () => {
       ],
       [
         "/api/mcp-oauth-clients/:id/rotate-secret",
-        "mcpOauthClient",
-        "mcpOauthClient.rotated",
+        "oauthClient",
+        "oauthClient.rotated",
       ],
       [
         "/api/service-accounts/:id/tokens/:tokenId",

@@ -111,7 +111,7 @@ it("adds initial access without submitting the resource, excludes duplicates, an
   await user.click(
     screen.getByRole("combobox", { name: "Permission for Editor" }),
   );
-  await user.click(screen.getByRole("option", { name: "Can edit" }));
+  await user.click(screen.getByRole("option", { name: "Can update" }));
   await user.click(screen.getByRole("button", { name: "Create agent" }));
   expect(submit).toHaveBeenLastCalledWith([
     {
@@ -256,7 +256,7 @@ it("keeps creation fields and mixed recipient permissions in one dialog until th
   await user.click(
     screen.getByRole("combobox", { name: "Permission for Support" }),
   );
-  await user.click(screen.getByRole("option", { name: "Can edit" }));
+  await user.click(screen.getByRole("option", { name: "Can update" }));
   await pick(user, "Design");
   expect(screen.getByRole("dialog", { name: "Create virtual key" })).toBe(
     dialog,
@@ -267,7 +267,7 @@ it("keeps creation fields and mixed recipient permissions in one dialog until th
   expect(submit).not.toHaveBeenCalled();
   expect(
     screen.getByRole("combobox", { name: "Permission for Support" }),
-  ).toHaveTextContent("Can edit");
+  ).toHaveTextContent("Can update");
   expect(
     screen.getByRole("combobox", { name: "Permission for Design" }),
   ).toHaveTextContent("Can use");
@@ -287,39 +287,6 @@ it("keeps creation fields and mixed recipient permissions in one dialog until th
       },
     ],
   });
-});
-
-it("names everyone and the roles in the add-access field only for a creator who may add them", () => {
-  const renderForm = () =>
-    render(
-      <QueryClientProvider
-        client={
-          new QueryClient({ defaultOptions: { queries: { retry: false } } })
-        }
-      >
-        <InitialResourcePermissions
-          resource="agent"
-          grants={[]}
-          onChange={vi.fn()}
-        />
-      </QueryClientProvider>,
-    );
-  // Seeing every agent is not enough. It takes Full access on every agent.
-  // This creator may not see service accounts, so the field leaves them out.
-  scopedCapabilities.data = [{ resource: "agent", scope: "*", action: "read" }];
-  const { unmount } = renderForm();
-  expect(
-    screen.getByRole("combobox", { name: "Add access" }),
-  ).toHaveTextContent("Add access: a team or a person…");
-  unmount();
-
-  scopedCapabilities.data = [
-    { resource: "agent", scope: "*", action: "manage-permissions" },
-  ];
-  renderForm();
-  expect(
-    screen.getByRole("combobox", { name: "Add access" }),
-  ).toHaveTextContent("Add access: everyone, a role, a team or a person…");
 });
 
 async function pick(user: ReturnType<typeof userEvent.setup>, name: string) {

@@ -16,6 +16,7 @@ import {
   PLAYWRIGHT_MCP_CATALOG_ID,
   SEEDED_APP_RENDER_META_KEY,
 } from "@archestra/shared";
+import { ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js";
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import config from "@/config";
@@ -1541,7 +1542,11 @@ describe("McpClient", () => {
       );
       expect(options?.capabilities?.elicitation).toBeUndefined();
       expect(mockSetRequestHandler).not.toHaveBeenCalled();
-      expect(mockSetNotificationHandler).not.toHaveBeenCalled();
+      // The only notification the client listens for is tools/list_changed.
+      expect(mockSetNotificationHandler).toHaveBeenCalledExactlyOnceWith(
+        ToolListChangedNotificationSchema,
+        expect.any(Function),
+      );
     });
 
     test("declares elicitation support when a gateway bridge handler is provided", async () => {
@@ -1597,8 +1602,12 @@ describe("McpClient", () => {
       expect(mockSetRequestHandler).toHaveBeenCalledOnce();
       // No notification handler: 2026-07-28 removes
       // `notifications/elicitation/complete`, since under MRTR the client
-      // learns the outcome by retrying the original request.
-      expect(mockSetNotificationHandler).not.toHaveBeenCalled();
+      // learns the outcome by retrying the original request. Only
+      // tools/list_changed is listened for.
+      expect(mockSetNotificationHandler).toHaveBeenCalledExactlyOnceWith(
+        ToolListChangedNotificationSchema,
+        expect.any(Function),
+      );
     });
 
     describe("Secrets caching (N+1 prevention)", () => {
@@ -2364,6 +2373,54 @@ describe("McpClient", () => {
       expect(secondResult.isError).toBe(false);
       expect(mockConnect).toHaveBeenCalledTimes(1);
       expect(mockPing).not.toHaveBeenCalled();
+    });
+
+    test("replaces a recently used client whose transport has closed", async () => {
+      const tool = await ToolModel.createToolIfNotExists({
+        name: "github-mcp-server__closed_transport",
+        description: "Closed transport replacement",
+        parameters: {},
+        catalogId,
+      });
+
+      await AgentToolModel.create(agentId, tool.id, {
+        mcpServerId,
+        credentialResolutionMode: "static",
+      });
+
+      mockConnect.mockResolvedValue(undefined);
+      mockCallTool.mockResolvedValue({
+        content: [{ type: "text", text: "ok" }],
+        isError: false,
+      });
+
+      const toolCall = {
+        id: "call_closed_transport",
+        name: tool.name,
+        arguments: {},
+      };
+
+      const firstResult = await mcpClient.executeToolCallForOwner(
+        toolCall,
+        agentOwner(agentId),
+      );
+      expect(firstResult.isError).toBe(false);
+      expect(mockConnect).toHaveBeenCalledTimes(1);
+
+      // The SDK clears `transport` when the transport closes, for example
+      // after a stdio attach errored or its output ended.
+      const cachedClient = mockCallTool.mock.contexts.at(-1) as {
+        transport?: unknown;
+      };
+      cachedClient.transport = undefined;
+      mockPing.mockRejectedValue(new Error("Not connected"));
+
+      const secondResult = await mcpClient.executeToolCallForOwner(
+        toolCall,
+        agentOwner(agentId),
+      );
+      expect(secondResult.isError).toBe(false);
+      expect(mockConnect).toHaveBeenCalledTimes(2);
     });
 
     describe("Concurrency limiter", () => {

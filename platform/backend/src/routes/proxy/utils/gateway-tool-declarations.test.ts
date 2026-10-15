@@ -25,6 +25,7 @@ describe("extractGatewayToolDeclarations", () => {
         {
           name: "mcp__gw__archestra__run_tool",
           marker: markerOf("archestra__run_tool"),
+          contract: expect.stringMatching(/^[a-f0-9]{64}$/),
         },
         { name: "Bash" },
       ]);
@@ -60,6 +61,7 @@ describe("extractGatewayToolDeclarations", () => {
         {
           name: "gw_archestra__search_tools",
           marker: markerOf("archestra__search_tools"),
+          contract: expect.stringMatching(/^[a-f0-9]{64}$/),
         },
         { name: "gw_github__apply", marker: markerOf("github__apply") },
       ]);
@@ -284,6 +286,62 @@ describe("extractGatewayToolDeclarations", () => {
       ]);
       expect(body.toolConfig.tools[0].toolSpec.description).toBe("Run.");
     });
+  });
+
+  test("contract evidence ignores spelling and property order but retains schema and invocation differences", () => {
+    const schema = {
+      type: "object",
+      properties: { a: { type: "string" }, b: { type: "number" } },
+      required: ["a"],
+    };
+    const declarations = extractGatewayToolDeclarations({
+      tools: [
+        { type: "function", name: "first", parameters: schema, strict: true },
+        {
+          type: "function",
+          name: "second",
+          description: "Different display text",
+          strict: true,
+          parameters: {
+            required: ["a"],
+            properties: { b: { type: "number" }, a: { type: "string" } },
+            type: "object",
+          },
+        },
+        { type: "function", name: "third", parameters: schema, strict: false },
+        {
+          type: "function",
+          name: "fourth",
+          parameters: { ...schema, required: ["b"] },
+          strict: true,
+        },
+      ],
+    });
+    expect(declarations[0].contract).toEqual(expect.any(String));
+    expect(declarations[1].contract).toBe(declarations[0].contract);
+    expect(declarations[2].contract).not.toBe(declarations[0].contract);
+    expect(declarations[3].contract).not.toBe(declarations[0].contract);
+  });
+
+  test("deep schemas cannot collapse to a truncation sentinel", () => {
+    const nested = (leaf: string) => {
+      let value: Record<string, unknown> = { const: leaf };
+      for (let depth = 0; depth < 100; depth++)
+        value = { type: "object", properties: { nested: value } };
+      return value;
+    };
+    const declarations = extractGatewayToolDeclarations({
+      tools: [
+        { name: "first", input_schema: nested("first") },
+        { name: "second", input_schema: nested("second") },
+        { type: "custom", name: "custom", parameters: { type: "object" } },
+        { name: "unknown" },
+      ],
+    });
+    expect(declarations[0].contract).toEqual(expect.any(String));
+    expect(declarations[1].contract).not.toBe(declarations[0].contract);
+    expect(declarations[2].contract).toBeUndefined();
+    expect(declarations[3].contract).toBeUndefined();
   });
 
   test("a description that held only the marker loses its key", () => {

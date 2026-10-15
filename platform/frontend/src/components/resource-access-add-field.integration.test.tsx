@@ -14,10 +14,7 @@ import {
   it,
   vi,
 } from "vitest";
-import { useHasPermissions } from "@/lib/auth/auth.query";
 import { ResourceAccessAddField } from "./resource-access-add-field";
-
-vi.mock("@/lib/auth/auth.query");
 
 const origin = "http://localhost:9000";
 const endpoint = `${origin}/api/resource-permissions/:resource/:scope/subjects`;
@@ -49,12 +46,7 @@ beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn();
   server.listen({ onUnhandledRequest: "error" });
 });
-beforeEach(() => {
-  archestraApiClient.setConfig({ baseUrl: origin });
-  vi.mocked(useHasPermissions).mockReturnValue({
-    data: false,
-  } as ReturnType<typeof useHasPermissions>);
-});
+beforeEach(() => archestraApiClient.setConfig({ baseUrl: origin }));
 afterEach(() => server.resetHandlers());
 afterAll(() => {
   server.close();
@@ -145,21 +137,6 @@ it("offers everyone in the organization until it has a grant", async () => {
     subject: { type: "organization", id: "*" },
     name: "Everyone in the organization",
   });
-});
-
-it("names service accounts only for someone who may see them", () => {
-  vi.mocked(useHasPermissions).mockImplementation(
-    (permissions) =>
-      ({
-        data: permissions.serviceAccount?.includes("read") ?? false,
-      }) as ReturnType<typeof useHasPermissions>,
-  );
-  renderField();
-  expect(
-    screen.getByRole("combobox", { name: "Add access" }),
-  ).toHaveTextContent(
-    "Add access: everyone, a role, a team, a person or a service account…",
-  );
 });
 
 it("shows a retryable error when recipients cannot load", async () => {

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { OPENCODE_FAMILY } from "../opencode-family";
 import {
   ARCHESTRA_CODEX_CONNECTION_ORIGINATOR,
   CLIENT_FILTER_OPTIONS,
@@ -72,7 +73,7 @@ describe("OpenCode client attribution", () => {
     ).toMatchObject({
       filter: "opencode",
       label: "OpenCode",
-      icon: "/icons/opencode.png",
+      mark: OPENCODE_FAMILY.opencode.mark,
     });
   });
 
@@ -83,7 +84,7 @@ describe("OpenCode client attribution", () => {
       expect.objectContaining({
         value: "opencode",
         label: "OpenCode",
-        icon: "/icons/opencode.png",
+        mark: OPENCODE_FAMILY.opencode.mark,
       }),
     );
   });
@@ -112,7 +113,7 @@ describe("Kilo Code client attribution", () => {
     expect(clientForExternalAgentIds(["kilo"])).toMatchObject({
       filter: "kilo",
       label: "Kilo Code",
-      icon: "/icons/kilo.png",
+      mark: OPENCODE_FAMILY.kilo.mark,
     });
     expect(ClientFilterSchema.parse("kilo")).toBe("kilo");
     expect(clientFilterToAgentIds("kilo")).toEqual([KILO_CLIENT_ID]);

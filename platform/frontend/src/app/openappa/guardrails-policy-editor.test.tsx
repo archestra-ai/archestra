@@ -433,7 +433,7 @@ test("the composed view says which annotators it keeps for earlier conversations
     "a.tool-call (https://judge-a.test/annotate): 2 active conversations, kept until Jan 31, 2026 unless one is active again.",
   );
   expect(notice).toHaveTextContent(
-    "No longer kept, no conversation used old.judge in 30 days.",
+    "No longer kept: old.judge, unused by any conversation for 30 days.",
   );
 });
 

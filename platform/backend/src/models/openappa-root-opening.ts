@@ -3,6 +3,7 @@ import db, { schema } from "@/database";
 
 const table = schema.openappaRootOpeningsTable;
 const operations = schema.openappaOperationsTable;
+const events = schema.openappaEventsTable;
 
 /**
  * Which opening policy each runtime root opened under, and which of those
@@ -31,6 +32,20 @@ class OpenAppaRootOpeningModel {
         ),
       );
     return rows.map((row) => row.root);
+  }
+
+  /**
+   * The first stored batch of each root that has one, which names the policy
+   * it opened under. The runtime's binding decodes it; the host does not.
+   */
+  static async openingBatches(
+    roots: readonly string[],
+  ): Promise<{ root: string; payload: Uint8Array }[]> {
+    if (roots.length === 0) return [];
+    return db
+      .select({ root: events.root, payload: events.payload })
+      .from(events)
+      .where(and(eq(events.seq, 0), inArray(events.root, [...roots])));
   }
 
   /** Record roots' openings; a root already recorded keeps its row. */

@@ -109,9 +109,7 @@ export function EffectivePolicyView() {
               variant="info"
               data-testid="effective-policy-retained"
             >
-              <span className="font-medium">
-                Kept for conversations that started under an earlier policy
-              </span>
+              <span className="font-medium">{retainedTitle(retained)}</span>
               <InlineNoticeText>
                 {retained.kept.map((annotator) => (
                   <span key={annotator.name} className="block">
@@ -119,9 +117,7 @@ export function EffectivePolicyView() {
                   </span>
                 ))}
                 {retained.inactive.length > 0 && (
-                  <span className="block">
-                    {`No longer kept, no conversation used ${retained.inactive.map(({ name }) => name).join(", ")} in ${retained.horizonDays} days.`}
-                  </span>
+                  <span className="block">{inactiveLine(retained)}</span>
                 )}
                 {!retained.livenessKnown && (
                   <span className="block">
@@ -184,4 +180,23 @@ function keptLine(
         ? `kept until ${formatDate({ date: annotator.retiresAt, dateFormat: "MMM d, yyyy" })} unless one is active again`
         : "kept until activity can be read";
   return `${annotator.name} (${annotator.binding}): ${conversations}, ${until}.`;
+}
+
+type Retained = {
+  horizonDays: number;
+  kept: unknown[];
+  inactive: { name: string }[];
+};
+
+function retainedTitle(retained: Retained): string {
+  return retained.kept.length > 0
+    ? "Kept for conversations that started under an earlier policy"
+    : "No longer kept for earlier conversations";
+}
+
+/** The annotators no conversation needed within the horizon. */
+function inactiveLine(retained: Retained): string {
+  const names = retained.inactive.map(({ name }) => name).join(", ");
+  const lead = retained.kept.length > 0 ? "No longer kept: " : "";
+  return `${lead}${names}, unused by any conversation for ${retained.horizonDays} days.`;
 }

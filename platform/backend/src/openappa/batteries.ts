@@ -1527,8 +1527,8 @@ class OpenAppaBatteriesService {
   /**
    * When a conversation under each of `keys` was last active within the
    * horizon, and how many were: null when that cannot be read. Roots active
-   * within the horizon whose opening is not recorded yet are looked up in the
-   * runtime's log first, once each.
+   * within the horizon whose opening is not recorded yet are read from their
+   * first stored batch first, once each.
    */
   private async openingActivity(params: {
     organizationId: string;
@@ -1544,13 +1544,17 @@ class OpenAppaBatteriesService {
       });
       const native = await loadNative();
       for (let start = 0; start < unresolved.length; start += ROOT_CHUNK) {
-        const found = await native.listOpenappaOpeningKeys(
-          unresolved.slice(start, start + ROOT_CHUNK),
+        const roots = unresolved.slice(start, start + ROOT_CHUNK);
+        const batches = await OpenAppaRootOpeningModel.openingBatches(roots);
+        // node-postgres reads bytea as a Buffer, PGlite as a bare Uint8Array.
+        const keys = native.openappaOpeningKeys(
+          batches.map(({ payload }) => Buffer.from(payload)),
         );
-        const openings = found.flatMap(({ root, policyFileKey }) =>
-          policyFileKey ? [{ root, policyFileKey }] : [],
-        );
-        const unreadable = found.length - openings.length;
+        const openings = batches.flatMap(({ root }, index) => {
+          const policyFileKey = keys[index];
+          return policyFileKey ? [{ root, policyFileKey }] : [];
+        });
+        const unreadable = roots.length - openings.length;
         // The runtime cannot open such a root either, so it needs nothing kept.
         if (unreadable > 0)
           logger.warn(

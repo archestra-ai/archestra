@@ -10,21 +10,20 @@ import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { beforeEach, describe, expect, test } from "@/test";
 import { openappaBatteriesService } from "./batteries";
 
-/** The runtime's log is a process boundary here: each root's opening key is what the test says. */
-const runtime = vi.hoisted(() => ({
-  openings: new Map<string, string>(),
-  unreadable: false,
-}));
-vi.mock("@archestra/openappa-rs", async (importOriginal) => ({
-  ...(await importOriginal<Record<string, unknown>>()),
-  listOpenappaOpeningKeys: vi.fn(async (roots: string[]) => {
-    if (runtime.unreadable) throw new Error("no free PostgreSQL connection");
-    return roots.map((root) => ({
-      root,
-      policyFileKey: runtime.openings.get(root) ?? null,
-    }));
-  }),
-}));
+/** Reading activity can fail like a storage outage would; otherwise the real decoder runs. */
+const runtime = vi.hoisted(() => ({ unreadable: false }));
+vi.mock("@archestra/openappa-rs", async (importOriginal) => {
+  const actual = await importOriginal<{
+    openappaOpeningKeys: (batches: Buffer[]) => (string | null)[];
+  }>();
+  return {
+    ...actual,
+    openappaOpeningKeys: vi.fn((batches: Buffer[]) => {
+      if (runtime.unreadable) throw new Error("storage unavailable");
+      return actual.openappaOpeningKeys(batches);
+    }),
+  };
+});
 vi.mock("@/logging");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -36,7 +35,6 @@ describe("annotators kept for conversations that are still active", () => {
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     config.openappa.enabled = true;
     config.openappa.keptAnnotatorHorizonDays = 30;
-    runtime.openings.clear();
     runtime.unreadable = false;
     vi.mocked(logger.info).mockClear();
     organizationId = (await makeOrganization()).id;
@@ -205,7 +203,16 @@ describe("annotators kept for conversations that are still active", () => {
         .content;
     const hash = await OpenAppaPolicyFileModel.store(content);
     const root = randomUUID();
-    runtime.openings.set(root, hash);
+    // The root's first batch, as the runtime writes it when the root opens.
+    await db.insert(schema.openappaEventsTable).values({
+      root,
+      seq: 0,
+      payload: Buffer.from(
+        JSON.stringify([
+          { TrajectoryOpened: { trajectory: root, policy_file_key: hash } },
+        ]),
+      ),
+    });
     const activeAt = new Date(
       Math.floor((Date.now() - params.activeDaysAgo * DAY_MS) / 1000) * 1000,
     );

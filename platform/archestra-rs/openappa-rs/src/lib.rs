@@ -1049,70 +1049,15 @@ pub async fn read_openappa_opening_policy(root: String) -> napi::Result<Option<S
     .map_err(error)?
 }
 
-/// The policy file key one root opened under, as its opening record names it.
-#[napi(object)]
-pub struct OpenappaOpeningKey {
-    pub root: String,
-    /// Absent when the root has no opening record this build can read: no first
-    /// batch, or one that does not open with a `TrajectoryOpened` record.
-    pub policy_file_key: Option<String>,
-}
-
-/// Roots one call may ask about. The host asks in chunks well under this.
-const MAX_OPENING_KEY_ROOTS: usize = 10_000;
-/// Roots one lookup names, each a primary-key probe on `(root, seq)`.
-const OPENING_KEY_CHUNK: usize = 1_000;
-
-/// The opening policy key of each root, read from its first stored batch alone,
-/// in the order asked. A root the runtime cannot open answers no key rather than
-/// failing the call; a transport failure fails it.
-#[napi(js_name = "listOpenappaOpeningKeys")]
-pub async fn list_openappa_opening_keys(
-    roots: Vec<String>,
-) -> napi::Result<Vec<OpenappaOpeningKey>> {
-    if roots.len() > MAX_OPENING_KEY_ROOTS {
-        return Err(error("too many roots in one opening key lookup"));
-    }
-    if roots
+/// The policy file key each root's first stored batch names, in the order given:
+/// none for a batch that does not open a root this build can read. The host reads
+/// the batches; only this decoding knows how the runtime encodes them.
+#[napi(js_name = "openappaOpeningKeys")]
+pub fn openappa_opening_keys(batches: Vec<napi::bindgen_prelude::Buffer>) -> Vec<Option<String>> {
+    batches
         .iter()
-        .any(|root| root.is_empty() || root.len() > 1024 || root.chars().any(char::is_control))
-    {
-        return Err(error("invalid root identity"));
-    }
-    if roots.is_empty() {
-        return Ok(Vec::new());
-    }
-    let state = initialized().await?;
-    let leased = state.lease().await?;
-    tokio::task::spawn_blocking(move || {
-        let pg = Sql(&leased.state.store);
-        let asked = roots.clone();
-        let keys = pg
-            .with_client(move |client| {
-                let mut keys = std::collections::HashMap::new();
-                for chunk in asked.chunks(OPENING_KEY_CHUNK) {
-                    let chunk = chunk.to_vec();
-                    for row in client.query(
-                        "SELECT root, payload FROM openappa_events WHERE seq = 0 AND root = ANY($1)",
-                        &[&chunk],
-                    )? {
-                        let payload: Vec<u8> = row.get(1);
-                        keys.insert(row.get::<_, String>(0), opening_policy_file_key(&payload));
-                    }
-                }
-                Ok(keys)
-            })
-            .map_err(error)?;
-        Ok(roots
-            .into_iter()
-            .map(|root| OpenappaOpeningKey {
-                policy_file_key: keys.get(&root).cloned().flatten(),
-                root,
-            })
-            .collect())
-    })
-    .await
-    .map_err(error)?
+        .map(|batch| opening_policy_file_key(batch))
+        .collect()
 }
 
 /// The policy file key a root's first batch names, read the way the event log

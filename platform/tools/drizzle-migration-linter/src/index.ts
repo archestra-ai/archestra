@@ -36,7 +36,7 @@ type Rule = {
 const ALLOW_BREAKING_PATTERN =
   /--[ \t]*drizzle-migration-linter:[ \t]*allow-breaking\b/i;
 const ALLOW_BREAKING_REASON_PATTERN =
-  /--[ \t]*drizzle-migration-linter:[ \t]*reason[ \t]*=[ \t]*(?<reason>\S.*)$/im;
+  /--[ \t]*drizzle-migration-linter:[ \t]*reason[ \t]*=[ \t]*\S/i;
 
 export function lintMigrationSql(
   sql: string,
@@ -363,8 +363,7 @@ function hasAllowBreakingMarker(sql: string): boolean {
 }
 
 function hasAllowBreakingReason(sql: string): boolean {
-  const reason = sql.match(ALLOW_BREAKING_REASON_PATTERN)?.groups?.reason;
-  return typeof reason === "string" && reason.trim().length > 0;
+  return ALLOW_BREAKING_REASON_PATTERN.test(sql);
 }
 
 function getLineForStatement(sql: string, statement: string): number {
@@ -443,7 +442,7 @@ function parseRemoteRef(
 ): { remote: string; branch: string } | null {
   const [remote, ...branchParts] = ref.split("/");
   if (!remote || branchParts.length === 0) return null;
-  if (remote.startsWith("-")) {
+  if (!REMOTE_NAME_PATTERN.test(remote)) {
     throw new Error(`Invalid base ref: ${ref}`);
   }
 
@@ -452,8 +451,14 @@ function parseRemoteRef(
   return { remote, branch };
 }
 
+// Refs and remote names are passed as git argv. Only a conservative character
+// set is accepted, and a leading "-" is rejected so a ref can never be parsed
+// as a git option.
+const REMOTE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const GIT_REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/~^@{}-]*$/;
+
 function assertSafeGitFetchRef(ref: string): void {
-  if (ref.startsWith("-")) {
+  if (!GIT_REF_PATTERN.test(ref) || ref.includes("..")) {
     throw new Error(`Invalid base ref: ${ref}`);
   }
 }

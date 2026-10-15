@@ -1,4 +1,6 @@
+import { lookup } from "node:dns/promises";
 import ipaddr from "ipaddr.js";
+import { Agent as UndiciAgent } from "undici";
 import config from "@/config";
 import {
   isLoopbackAddress,
@@ -21,6 +23,10 @@ export type OutboundUrlRejection =
 type OutboundUrlValidation =
   | { ok: true; url: URL }
   | { ok: false; reason: OutboundUrlRejection };
+
+type PinnedOutboundDispatcher =
+  | { ok: true; dispatcher: UndiciAgent }
+  | { ok: false; reason: "unresolved_host" | "private_or_loopback_host" };
 
 /**
  * Validate a URL the platform is about to fetch on a caller's behalf.
@@ -77,8 +83,62 @@ export function validateOutboundUrl(rawUrl: string): OutboundUrlValidation {
   return { ok: true, url };
 }
 
+/**
+ * Resolve a hostname once, refuse it if any answer is private or reserved, and
+ * return a dispatcher pinned to the first answer.
+ *
+ * Pinning closes the gap where the name could resolve to an internal address
+ * between this check and the connection (DNS rebinding): the socket dials the
+ * address that was checked, and TLS still uses the original hostname for SNI.
+ * Callers must `close()` the dispatcher once the request has completed.
+ */
+export async function createPinnedOutboundDispatcher(params: {
+  hostname: string;
+  /** Defaults to the dev-only loopback relaxation; pass false to always refuse loopback. */
+  allowLoopback?: boolean;
+}): Promise<PinnedOutboundDispatcher> {
+  const normalizedHostname = params.hostname.replace(/^\[(.*)\]$/, "$1");
+  let addresses: { address: string; family: number }[];
+  try {
+    addresses = await lookup(normalizedHostname, {
+      all: true,
+      verbatim: true,
+    });
+  } catch {
+    return { ok: false, reason: "unresolved_host" };
+  }
+  if (addresses.length === 0) {
+    return { ok: false, reason: "unresolved_host" };
+  }
+  const allowed = addresses.every(({ address }) =>
+    isAllowedOutboundAddress(address, { allowLoopback: params.allowLoopback }),
+  );
+  if (!allowed) {
+    return { ok: false, reason: "private_or_loopback_host" };
+  }
+
+  const pinned = addresses[0];
+  return {
+    ok: true,
+    dispatcher: new UndiciAgent({
+      connect: {
+        lookup: (_hostname, options, callback) => {
+          if (options.all) {
+            callback(null, [pinned]);
+            return;
+          }
+          callback(null, pinned.address, pinned.family);
+        },
+      },
+    }),
+  };
+}
+
 /** Reject DNS answers that could route an outbound request into a trusted network. */
-export function isAllowedA2aAddress(address: string): boolean {
+export function isAllowedOutboundAddress(
+  address: string,
+  options: { allowLoopback?: boolean } = {},
+): boolean {
   let parsed: ipaddr.IPv4 | ipaddr.IPv6;
   try {
     parsed = ipaddr.parse(address);
@@ -94,7 +154,8 @@ export function isAllowedA2aAddress(address: string): boolean {
   const range = parsed.range();
   if (range === "unicast") return true;
   const allowLocalTargets =
-    !config.production || config.test.enableE2eTestEndpoints;
+    options.allowLoopback ??
+    (!config.production || config.test.enableE2eTestEndpoints);
   return allowLocalTargets && range === "loopback";
 }
 

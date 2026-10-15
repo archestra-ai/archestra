@@ -86,6 +86,7 @@ import {
   uploadedEntry,
 } from "./declarations";
 import { asRecord, parsePolicyToml } from "./policy-text";
+import { withReportingTool } from "./reporting-tool";
 import {
   type InactiveAnnotator,
   type KeptAnnotator,
@@ -1349,7 +1350,14 @@ class OpenAppaBatteriesService {
     // `undefined`, not the `null` the generated typing spells, so normalize it
     // before deciding whether the runtime refused: an identity test against
     // `null` alone silently stores a refusal as a clean composition.
-    const accepted = result.content ?? null;
+    const composedContent = result.content ?? null;
+    const accepted =
+      composedContent === null
+        ? null
+        : await withReportingTool({
+            composed: composedContent,
+            validate: (text) => native.validateHostedOpenappaPolicy(text),
+          });
     const values = (
       content: string,
       error: string | null,
@@ -2613,8 +2621,9 @@ function heldBackRemedy(battery: HeldBackBattery): string {
 // (v4), rows without retained original annotator bindings (v5), rows a
 // same-name rebinding refused and pinned to an earlier composition (v6), and
 // rows whose retirement suffix covers credential keys but not the stored
-// opening policies (v7), and rows that do not record what they serve (v8).
-const COMPOSITION_VERSION = "v8:";
+// opening policies (v7), rows that do not record what they serve (v8), and
+// rows that leave `yell` to the catch-all (v9).
+const COMPOSITION_VERSION = "v9:";
 
 /**
  * How long a process reuses an organization's retirement snapshot on the

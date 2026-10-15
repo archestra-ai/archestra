@@ -61,7 +61,7 @@ export function IncludeDialog({
   const parts = data.partsFor(client);
   const servers = data.servers.length;
   const tools = data.totalTools;
-  const skills = data.skills.length;
+  const skills = data.totalSkills;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

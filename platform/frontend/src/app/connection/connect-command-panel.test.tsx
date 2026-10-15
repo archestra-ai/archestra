@@ -349,6 +349,17 @@ describe("ConnectCommandPanel", () => {
     expect(createKeyMock).not.toHaveBeenCalled();
   });
 
+  it("prepares a command after switching from download mode without remounting", async () => {
+    const view = renderPanel({ variant: "download" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(createSetupMock).not.toHaveBeenCalled();
+    view.rerender(
+      <ConnectCommandPanel {...renderPanelProps({ variant: "full" })} />,
+    );
+    await waitFor(() => expect(createSetupMock).toHaveBeenCalled());
+    expect(await screen.findByText(COMMAND)).toBeVisible();
+  });
+
   it("keeps the gateway in Desktop downloads while honoring optional exclusions", async () => {
     availableKeysMock.mockReturnValue({ data: [] });
     createSetupMock.mockResolvedValue({
@@ -364,6 +375,14 @@ describe("ConnectCommandPanel", () => {
       variant: "download",
       exclude: ["tools", "skills", "proxy", "plugins"],
     });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(createSetupMock).not.toHaveBeenCalled();
+    expect(allSkillsMock.mock.calls.every(([params]) => !params.enabled)).toBe(
+      true,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Prepare installer" }),
+    );
     const link = await screen.findByRole("link", {
       name: "Download installer",
     });

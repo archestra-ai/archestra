@@ -3,6 +3,7 @@ import {
   OpenappaRetiredAnnotatorError,
   OpenappaRootOnlyError,
   openappaFailure,
+  unansweredAnnotationNotice,
 } from "./failure";
 
 describe("openappaFailure", () => {
@@ -194,5 +195,66 @@ describe("openappaFailure", () => {
     const first = openappaFailure(new Error("unsupported policy: x"));
 
     expect(openappaFailure(first)).toBe(first);
+  });
+});
+
+describe("unansweredAnnotationNotice", () => {
+  test("turns an annotator timeout, as the service receives it, into a retry notice", () => {
+    const failure = openappaFailure(
+      new Error(
+        "OpenAPPA processing interrupted: annotator=archestra.tool-call error=timeout",
+      ),
+    );
+
+    expect(unansweredAnnotationNotice(failure)).toBe(
+      '[appa] Not checked: OpenAPPA could not rule on this call because its annotator "archestra.tool-call" did not answer in time. The call did not run. Make the same call again to retry. If it fails the same way again, stop and tell the user that Guardrails could not check this call.',
+    );
+  });
+
+  test.each([
+    ["unreachable", "could not be reached"],
+    ['non_success status=502 detail="upstream reset"', "returned an error"],
+    ["non_success status=429", "returned an error"],
+  ])("advises one retry when another attempt can succeed: %s", (reason, phrase) => {
+    const notice = unansweredAnnotationNotice(
+      new Error(
+        `OpenAPPA processing interrupted: annotator=github.repository-visibility error=${reason}`,
+      ),
+    );
+
+    expect(notice).toContain(`"github.repository-visibility" ${phrase}.`);
+    expect(notice).toContain("Make the same call again to retry.");
+    expect(notice).not.toContain("upstream reset");
+  });
+
+  test.each([
+    ["unregistered", "is not set up in this deployment"],
+    [
+      'non_success status=409 detail="No LLM provider API key is configured for this organization."',
+      "returned an error",
+    ],
+    ["malformed delta.audience", "returned an answer OpenAPPA could not read"],
+  ])("does not invite a retry that cannot help: %s", (reason, phrase) => {
+    const notice = unansweredAnnotationNotice(
+      new Error(
+        `OpenAPPA processing interrupted: annotator=archestra.tool-call error=${reason}`,
+      ),
+    );
+
+    expect(notice).toContain(`"archestra.tool-call" ${phrase}.`);
+    expect(notice).toContain("Retrying it will not help.");
+    expect(notice).not.toContain("No LLM provider API key");
+    expect(notice).not.toContain("delta.audience");
+  });
+
+  test.each([
+    "private native database error",
+    "OpenAPPA processing interrupted: annotator unavailable",
+    "OpenAPPA processing interrupted: the opening policy is unavailable: the stored policy file compiles to a different identity",
+    "OpenAPPA lost its lease on this operation; retry the request",
+  ])("leaves every other failure to fail the request: %s", (message) => {
+    expect(
+      unansweredAnnotationNotice(openappaFailure(new Error(message))),
+    ).toBe(null);
   });
 });

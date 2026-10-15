@@ -215,9 +215,12 @@ export function ConversationSearchPalette({
   const runtimeEnabled = useFeature("agentRuntime") === true;
   const runsEnabled =
     open && isAuthenticated && canReadConversation === true && runtimeEnabled;
-  const runsQuery = useMyAgentRuns(runsEnabled, {
-    search: debouncedSearch.trim() || undefined,
-  });
+  const runsQuery = useMyAgentRuns(
+    runsEnabled,
+    debouncedSearch.trim()
+      ? { search: debouncedSearch.trim() }
+      : { pinned: false },
+  );
   const pinnedRunsQuery = useMyAgentRuns(
     runsEnabled && !debouncedSearch.trim(),
     { pinned: true },
@@ -975,7 +978,7 @@ export function ConversationSearchPalette({
             )}
           </>
         )}
-        {runsQuery.hasNextPage && (
+        {isSearching && runsQuery.hasNextPage && (
           <CommandGroup heading="Runs">
             <CommandItem
               value="load-more-runs"

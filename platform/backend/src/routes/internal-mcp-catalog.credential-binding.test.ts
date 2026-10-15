@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+
+import { topResourcePermissionPreset } from "@archestra/shared";
 import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
 import { InternalMcpCatalogModel } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { createRuntimeCredentialDefinition } from "@/services/agent-runtime/runtime-credentials";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
@@ -80,6 +83,24 @@ describe("attaching a saved credential to an MCP server", () => {
       access: "personal",
       serverType: "local",
       localConfig: { command: "node" },
+    });
+    // Binding a credential changes what the server runs with. A member, who
+    // cannot add entries to the registry, needs the deploy permission on it.
+    const entry = {
+      organizationId,
+      resource: "mcpRegistry" as const,
+      scope: catalog.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(entry);
+    await ResourcePermissionPolicyModel.replace({
+      ...entry,
+      revision: policy?.revision ?? 0,
+      grants: [
+        {
+          subject: { type: "user", id: member.id },
+          actions: [...topResourcePermissionPreset("mcpRegistry").actions],
+        },
+      ],
     });
     const attach = (credentialId: string) =>
       app.inject({

@@ -18,6 +18,9 @@ vi.mock("@/logging");
 describe("annotators earlier opening policies declare", () => {
   beforeEach(() => {
     config.openappa.enabled = true;
+    // Retention itself is under test: a stored opening keeps its names
+    // whatever its conversations last did (kept-liveness.test.ts covers that).
+    config.openappa.keptAnnotatorHorizonDays = 0;
     vi.mocked(logger.warn).mockClear();
     vi.mocked(logger.error).mockClear();
   });
@@ -108,6 +111,47 @@ describe("annotators earlier opening policies declare", () => {
     expect(effective.lastError).toBeNull();
     expect(effective.content).not.toContain("a.tool-call");
     expect(vi.mocked(logger.warn)).not.toHaveBeenCalled();
+  });
+
+  test("a session that opened under the previous composition while the next was stored keeps its annotator within a minute", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const { organizationId, userId } = await admin({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    });
+    await declare({ organizationId, userId, content: urlJudged("a", JUDGE_A) });
+    const previous =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+    await declare({ organizationId, userId, content: urlJudged("b", JUDGE_B) });
+    expect(
+      (await openappaBatteriesService.readForDispatch(organizationId)).policy
+        .content,
+    ).not.toContain("a.tool-call");
+
+    // The session's opening lands after the composition that dropped its annotator.
+    await OpenAppaPolicyFileModel.store(previous.content);
+    expect(
+      (await openappaBatteriesService.readForDispatch(organizationId)).policy
+        .content,
+    ).not.toContain("a.tool-call");
+
+    const now = performance.now();
+    const clock = vi.spyOn(performance, "now").mockReturnValue(now + 61_000);
+    try {
+      const kept = (
+        await openappaBatteriesService.readForDispatch(organizationId)
+      ).policy;
+      expect(kept.lastError).toBeNull();
+      expect(kept.content).toContain("a.tool-call");
+      expect(kept.content).toContain(JUDGE_A);
+      expect(kept.content).toContain(JUDGE_B);
+    } finally {
+      clock.mockRestore();
+    }
   });
 
   test("a corrupt snapshot is logged by hash without blocking valid old bindings", async ({
@@ -513,6 +557,10 @@ version = 2
 [[policy.annotator]]
 name = "x.judge"
 builtin = "no-such-builtin"
+
+[[policy.tool]]
+name = "mcp/x/tool"
+annotator = "x.judge"
 `);
 
     await declare({ organizationId, userId, content: urlJudged("b", JUDGE_B) });

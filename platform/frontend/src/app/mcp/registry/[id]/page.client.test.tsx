@@ -36,6 +36,7 @@ const {
   useMcpDeploymentStatuses,
   reauthenticateMutateAsync,
   deleteMutateAsync,
+  useResourcePermissions,
   stubs,
 } = vi.hoisted(() => {
   const quiet = () => ({
@@ -54,6 +55,7 @@ const {
     useMcpDeploymentStatuses: vi.fn(),
     reauthenticateMutateAsync: vi.fn(),
     deleteMutateAsync: vi.fn(),
+    useResourcePermissions: vi.fn(),
     stubs: stubbed,
   };
 });
@@ -122,6 +124,14 @@ vi.mock("@/lib/mcp/mcp-server.query", () =>
     },
   ),
 );
+
+vi.mock("@/lib/resource-permissions.query", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/lib/resource-permissions.query")
+  >()),
+  useResourcePermissions: (...args: unknown[]) =>
+    useResourcePermissions(...args),
+}));
 
 vi.mock("@/lib/mcp/use-mcp-server-issues", () => ({
   useMcpServerIssues: vi.fn(() => ({ issuesByCatalog: new Map() })),
@@ -242,6 +252,8 @@ describe("McpCatalogItemDetailPage overview", () => {
     useMcpServers.mockReturnValue({ data: [] });
     useMcpDeploymentStatuses.mockReturnValue({ statuses: {}, state: "ready" });
     reauthenticateMutateAsync.mockResolvedValue({ id: "srv-1" });
+    // Shared with the whole organization unless a test says otherwise.
+    sharedWith("organization");
   });
 
   /** One installed connection for this catalog entry, with no pod reported. */
@@ -785,3 +797,378 @@ describe("McpCatalogItemDetailPage overview", () => {
     expect(overview.getByText("12 available")).toBeInTheDocument();
   });
 });
+describe("McpCatalogItemDetailPage installations", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
+    vi.mocked(useRouter).mockReturnValue({
+      push: vi.fn(),
+      replace: vi.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+    vi.mocked(usePathname).mockReturnValue("/mcp/registry/cat-1");
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as ReturnType<typeof useSearchParams>,
+    );
+    vi.mocked(useAppName).mockReturnValue("Archestra");
+    vi.mocked(useSession).mockReturnValue({
+      data: { user: { id: "u1" } },
+    } as unknown as ReturnType<typeof useSession>);
+    vi.mocked(useMissingPermissions).mockReturnValue({});
+    vi.mocked(useMcpServerIssues).mockReturnValue({
+      issuesByCatalog: new Map(),
+    } as unknown as ReturnType<typeof useMcpServerIssues>);
+    useMcpServers.mockReturnValue({ data: [] });
+    useMcpDeploymentStatuses.mockReturnValue({ statuses: {}, state: "ready" });
+    viewAs("editor");
+    sharedWith("organization");
+  });
+
+  it("shows a member only their own installations, without shared ones or pod details", () => {
+    viewAs("member");
+    installed([teamInstall(), ownInstall()]);
+    renderPage();
+
+    const content = connections();
+    expect(content.queryByText("Shared installations")).toBeNull();
+    expect(content.queryByText("Platform")).toBeNull();
+    expect(
+      content.queryByRole("button", { name: /Add shared installation/ }),
+    ).toBeNull();
+    expect(columnNames(content)).toEqual(["Owner", "Created At", "Action"]);
+    const [row, ...otherRows] = content.getAllByRole("row").slice(1);
+    expect(row).toHaveTextContent("member@example.com");
+    expect(otherRows).toEqual([]);
+    // One's own installation is at most one, so the heading names one, with
+    // neither a count nor an explanation.
+    const heading = screen.getByRole("heading", { name: /Installation/ });
+    expect(heading).toHaveTextContent(/^Installation$/);
+    expect(screen.queryByText(/available only to/)).toBeNull();
+  });
+
+  it("keeps a member's remote server free of shared credential choices", () => {
+    viewAs("member");
+    installed([
+      teamInstall({ serverType: "remote" }),
+      ownInstall({ serverType: "remote" }),
+    ]);
+    renderPage({ serverType: "remote", localConfig: null });
+
+    const content = connections();
+    expect(content.queryByText("Default credential")).toBeNull();
+    expect(content.queryByText("Service accounts")).toBeNull();
+    expect(
+      content.queryByRole("button", { name: /Add service account/ }),
+    ).toBeNull();
+    expect(content.getByText("member@example.com")).toBeVisible();
+  });
+
+  it("keeps the full view for someone who manages installations", () => {
+    installed([teamInstall(), ownInstall()]);
+    renderPage();
+
+    const content = connections();
+    expect(content.getByText("Shared installations")).toBeVisible();
+    expect(content.getByText("Platform")).toBeVisible();
+    expect(columnNames(content)).toContain("Pod");
+    expect(columnNames(content)).toContain("Secret Storage");
+    expect(
+      screen.getByRole("heading", { name: /Installations/ }),
+    ).toHaveTextContent(/^Installations2$/);
+  });
+
+  it("tells a member their server's state without a ratio, and gives them no shell", () => {
+    installed([ownInstall({ canUseCredential: true })]);
+    const { unmount } = renderPage();
+    expect(screen.getByText("1/1 running")).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("link", { name: "Shell" }).length,
+    ).toBeGreaterThan(0);
+    unmount();
+
+    viewAs("member");
+    renderPage();
+    // One's own installation is the only one, so "1/1" could only ever read
+    // 0/1 or 1/1.
+    expect(screen.queryByText(/\d+\/\d+ running/)).toBeNull();
+    expect(screen.getAllByText("Running").length).toBeGreaterThan(0);
+    expect(screen.queryAllByRole("link", { name: "Shell" })).toEqual([]);
+    expect(
+      screen.getAllByRole("link", { name: "Logs" }).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("shows the Permissions tab only to someone who can change them", () => {
+    installed([ownInstall()]);
+    const { unmount } = renderPage();
+    expect(
+      screen.getAllByRole("link", { name: "Permissions" }).length,
+    ).toBeGreaterThan(0);
+    unmount();
+
+    viewAs("member");
+    sharedWith("organization", { canManagePermissions: false });
+    renderPage();
+    expect(screen.queryAllByRole("link", { name: "Permissions" })).toEqual([]);
+  });
+
+  it("keeps Usage for someone who manages installations and drops it for a member", () => {
+    installed([ownInstall()]);
+    const { unmount } = renderPage();
+    expect(
+      screen.getAllByRole("link", { name: /Usage/ }).length,
+    ).toBeGreaterThan(0);
+    unmount();
+
+    viewAs("member");
+    renderPage();
+    expect(screen.queryAllByRole("link", { name: /Usage/ })).toEqual([]);
+  });
+
+  it("keeps the full section for an editor on a server shared with nobody", () => {
+    sharedWith("owner", { canManagePermissions: false });
+    installed([ownInstall()]);
+    renderPage();
+
+    // The one-row layout, but an editor's heading, count and Permissions tab.
+    const heading = screen.getByRole("heading", { name: /Installations/ });
+    expect(heading).toHaveTextContent(/^Installations1$/);
+    expect(
+      screen.getByText(/Running instances of this server/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("link", { name: "Permissions" }).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("keeps the default credential for someone who manages a remote server", () => {
+    installed([teamInstall({ serverType: "remote" })]);
+    renderPage({ serverType: "remote", localConfig: null });
+
+    expect(connections().getByText("Default credential")).toBeVisible();
+    expect(connections().getByText("Service accounts")).toBeVisible();
+  });
+
+  it("shows a personal server's own installation as one row and uninstalls it after confirming", async () => {
+    const user = userEvent.setup();
+    viewAs("member");
+    sharedWith("owner");
+    installed([ownInstall()]);
+    renderPage();
+
+    const content = connections();
+    expect(content.queryByRole("table")).toBeNull();
+    expect(content.getByText("Running")).toBeVisible();
+    expect(content.getByText("Installed Aug 2, 2026")).toBeVisible();
+    expect(content.queryByText("Personal installations")).toBeNull();
+
+    await user.click(content.getByRole("button", { name: "Uninstall" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(deleteMutateAsync).not.toHaveBeenCalled();
+    await user.click(within(dialog).getByRole("button", { name: "Uninstall" }));
+    expect(deleteMutateAsync).toHaveBeenCalledWith({
+      id: "srv-own",
+      name: "internal-tools",
+    });
+  });
+
+  it("offers to install a personal server the viewer has not installed", () => {
+    viewAs("member");
+    sharedWith("owner");
+    renderPage();
+
+    const content = connections();
+    expect(content.queryByRole("table")).toBeNull();
+    expect(content.getByText("Not installed")).toBeVisible();
+    expect(content.getByRole("button", { name: "Install" })).toBeVisible();
+  });
+
+  it.each([
+    ["local", "Installed Aug 2, 2026"],
+    ["remote", "Connected Aug 2, 2026"],
+  ] as const)("states a %s personal installation once when it has no status to add", (serverType, line) => {
+    viewAs("member");
+    sharedWith("owner");
+    useMcpServers.mockReturnValue({ data: [ownInstall({ serverType })] });
+    renderPage(
+      serverType === "remote" ? { serverType, localConfig: null } : {},
+    );
+
+    const row = screen.getByTestId("credential-row");
+    expect(row).toHaveTextContent(new RegExp(`^${line}Uninstall$`));
+  });
+
+  it("says a personal remote server without a connection is not connected", () => {
+    viewAs("member");
+    sharedWith("owner");
+    renderPage({ serverType: "remote", localConfig: null });
+
+    const content = connections();
+    expect(content.getByText("Not connected")).toBeVisible();
+    expect(
+      content.getByRole("button", { name: "Connect my account" }),
+    ).toBeVisible();
+  });
+
+  it("offers re-authentication on a personal connection whose token was rejected", () => {
+    viewAs("member");
+    sharedWith("owner");
+    installed([
+      ownInstall({ serverType: "remote", oauthRefreshError: "refresh_failed" }),
+    ]);
+    renderPage({ serverType: "remote", localConfig: null });
+
+    const content = connections();
+    expect(content.getByText("Needs re-authentication")).toBeVisible();
+    expect(
+      content.getByRole("button", { name: "Re-authenticate" }),
+    ).toBeVisible();
+    expect(content.getByRole("button", { name: "Uninstall" })).toBeVisible();
+  });
+
+  it("keeps the tables on a personal server when someone else has installed it", () => {
+    sharedWith("owner");
+    installed([
+      ownInstall({ id: "srv-other", ownerId: "u2", ownerEmail: "b@x.com" }),
+    ]);
+    renderPage();
+
+    const content = connections();
+    expect(content.getByRole("table")).toBeVisible();
+    expect(content.getByText("b@x.com")).toBeVisible();
+  });
+
+  it.each([
+    "team",
+    "unreadable",
+  ] as const)("keeps the tables when the sharing level is %s", (sharing) => {
+    sharedWith(sharing);
+    installed([ownInstall()]);
+    renderPage();
+
+    expect(connections().getByRole("table")).toBeVisible();
+  });
+
+  it("shows neither layout while the sharing level loads", () => {
+    sharedWith("loading");
+    installed([ownInstall()]);
+    renderPage();
+
+    const content = within(
+      screen
+        .getByRole("heading", { name: /Installations/ })
+        .closest("section") as HTMLElement,
+    );
+    expect(content.queryByRole("table")).toBeNull();
+    expect(content.queryByText("Running")).toBeNull();
+  });
+});
+
+function viewAs(role: "member" | "editor") {
+  vi.mocked(useHasPermissions).mockImplementation(((
+    permissions: Record<string, string[]>,
+  ) => ({
+    // A member may install for themselves but neither manage others'
+    // installations nor edit the catalog.
+    data:
+      role === "editor" ||
+      !(
+        permissions.mcpServerInstallation?.includes("update") ||
+        permissions.mcpRegistry?.includes("update")
+      ),
+  })) as unknown as typeof useHasPermissions);
+}
+
+function sharedWith(
+  audience: "owner" | "team" | "organization" | "unreadable" | "loading",
+  { canManagePermissions = true }: { canManagePermissions?: boolean } = {},
+) {
+  if (audience === "loading") {
+    useResourcePermissions.mockReturnValue({
+      data: undefined,
+      isPending: true,
+    });
+    return;
+  }
+  if (audience === "unreadable") {
+    useResourcePermissions.mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: true,
+    });
+    return;
+  }
+  const subject =
+    audience === "owner"
+      ? { type: "user", id: "u1" }
+      : audience === "team"
+        ? { type: "team", id: "t1" }
+        : { type: "organization", id: "org" };
+  useResourcePermissions.mockReturnValue({
+    data: {
+      grants: [{ subject, actions: ["read", "use"] }],
+      effectiveActions: canManagePermissions
+        ? ["read", "use", "update", "delete", "manage-permissions"]
+        : ["read", "use"],
+    },
+    isPending: false,
+  });
+}
+
+function ownInstall(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "srv-own",
+    catalogId: "cat-1",
+    name: "internal-tools",
+    serverType: "local",
+    ownerId: "u1",
+    ownerEmail: "member@example.com",
+    teamId: null,
+    scope: "personal",
+    secretStorageType: "database",
+    createdAt: "2026-08-02T10:00:00.000Z",
+    assignedAgents: [],
+    ...overrides,
+  };
+}
+
+function teamInstall(overrides: Record<string, unknown> = {}) {
+  return ownInstall({
+    id: "srv-team",
+    ownerId: "u9",
+    ownerEmail: "admin@example.com",
+    teamId: "t1",
+    teamDetails: { teamId: "t1", name: "Platform" },
+    scope: "team",
+    ...overrides,
+  });
+}
+
+function installed(servers: Record<string, unknown>[]) {
+  useMcpServers.mockReturnValue({ data: servers });
+  useMcpDeploymentStatuses.mockReturnValue({
+    statuses: Object.fromEntries(
+      servers.map((server) => [
+        server.id,
+        {
+          state: "running",
+          message: "",
+          error: null,
+          podName: `pod-${server.id}`,
+        },
+      ]),
+    ),
+    state: "ready",
+  });
+}
+
+function connections() {
+  return within(screen.getByTestId("mcp-server-settings-connections-content"));
+}
+
+function columnNames(content: ReturnType<typeof within>) {
+  return content
+    .getAllByRole("columnheader")
+    .map((header: HTMLElement) => header.textContent);
+}

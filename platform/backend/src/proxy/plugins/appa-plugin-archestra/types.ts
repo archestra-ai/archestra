@@ -3,6 +3,7 @@ import type { AppaPreparedRequest } from "@/openappa/request";
 import type { AppaChatSource, OpenAppaSession } from "@/openappa/service";
 import type { AppaSessionIdentity } from "@/openappa/wire";
 import type { GatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
+import type { ApiError } from "@/types/api";
 import type { CommonToolResult } from "@/types/common-llm-format";
 
 export const APPA_PLUGIN_TRUSTED_CONTEXT: unique symbol = Symbol(
@@ -59,6 +60,8 @@ export type AppaTrustedContext = {
    * the new user turn.
    */
   thread?: "create" | "continue";
+  /** Deferred until the adapter has authenticated the unchanged session lineage. */
+  childReturnRefusal?: ApiError;
 };
 
 export type AppaMatchContext = {

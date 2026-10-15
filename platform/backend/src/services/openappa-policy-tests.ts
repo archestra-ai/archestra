@@ -7,6 +7,7 @@ import logger from "@/logging";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import { memberRosters, openappaBatteriesService } from "@/openappa/batteries";
+import { compositionView } from "@/openappa/composition-view";
 import { openappaDeclarations } from "@/openappa/declarations";
 import {
   githubPolicyTestVersion,
@@ -183,6 +184,8 @@ async function evaluateOpenAppaPolicyTests(
     contentHash: string;
     lastError: string | null;
   };
+  /** Set when the stored composition is run: whether an earlier one stays enforced. */
+  let stillEnforced: string | null = null;
   if (params.proposedPolicy) {
     const bound = validation.valid
       ? await openappaDeclarations.resolveWithBindings({
@@ -221,9 +224,19 @@ async function evaluateOpenAppaPolicyTests(
           : null,
     };
   } else {
-    effective = await openappaBatteriesService.getEffectivePolicy(
+    const stored = await openappaBatteriesService.getEffectivePolicy(
       params.organizationId,
     );
+    const { served } = compositionView(stored);
+    // A refusal that keeps an earlier composition still enforces it, so the
+    // run checks what the runtime enforces. Only the root text alone fails.
+    effective =
+      served.kind === "previous" ? { ...stored, lastError: null } : stored;
+    if (served.kind === "previous")
+      stillEnforced =
+        served.rootRevision === null
+          ? `Runs against the earlier composition the runtime still enforces; the latest attempt was refused: ${stored.lastError}`
+          : `Runs against the composition of revision ${served.rootRevision} the runtime still enforces; the latest attempt was refused: ${stored.lastError}`;
   }
   const currentRoot = await guardrailsPolicyService.get(params.organizationId);
   const currentSource = await OpenAppaGithubSyncModel.find(
@@ -246,6 +259,7 @@ async function evaluateOpenAppaPolicyTests(
       "The effective policy could not be composed; resolve the OpenAPPA configuration error first",
     );
   }
+  if (stillEnforced) validation.warnings.push(stillEnforced);
   const native = await import("@archestra/openappa-rs");
   let engineVersion = native.getOpenappaReplayEngineVersion();
   let files: PolicyTestRunResult["files"];

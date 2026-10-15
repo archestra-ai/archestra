@@ -1,11 +1,15 @@
-import { hasArchestraTokenPrefix } from "@archestra/shared";
+import {
+  hasArchestraTokenPrefix,
+  MEMBER_ROLE_NAME,
+  topResourcePermissionPreset,
+} from "@archestra/shared";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import { grantEverywhere } from "@/test/wildcard-grants";
+import { grantEverywhere, grantRoleEverywhere } from "@/test/wildcard-grants";
 import type { User } from "@/types";
 
 describe("POST /api/llm-virtual-keys", () => {
@@ -218,6 +222,13 @@ describe("POST /api/llm-virtual-keys", () => {
     makeUser,
   }) => {
     grantEverywhere(["llmVirtualKey"]);
+    // Sharing with a team one is not in takes Full access on every key.
+    await grantRoleEverywhere({
+      organizationId,
+      resource: "llmVirtualKey",
+      roleId: MEMBER_ROLE_NAME,
+      actions: [...topResourcePermissionPreset("llmVirtualKey").actions],
+    });
 
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
     const parentKey = await makeLlmProviderApiKey(organizationId, secret.id);

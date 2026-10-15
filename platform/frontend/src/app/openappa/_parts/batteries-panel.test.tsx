@@ -37,6 +37,15 @@ type Install = Battery["installs"][number];
 type Declarations =
   archestraApiTypes.GetOpenappaPolicyDeclarationsResponses["200"];
 type PolicyBattery = Declarations["batteries"][number];
+/** The latest revision composed. */
+const CURRENT: Declarations["composition"] = {
+  served: {
+    kind: "current",
+    rootRevision: 3,
+    composedAt: "2026-09-18T12:00:00Z",
+  },
+  refusal: null,
+};
 
 const baseUrl = "http://localhost:9000";
 const catalogId = "5b6d2f1e-3c4a-4d5e-8f6a-7b8c9d0e1f2a";
@@ -79,28 +88,39 @@ const githubBattery = (installs: Install[] = []): Battery => ({
   setup: null,
   installs,
 });
-const declaredGithub = (
-  fields: Partial<PolicyBattery> = {},
+const declaredGithub = (fields: Partial<PolicyBattery> = {}): PolicyBattery =>
+  servedAsDeclared({
+    entry: "github",
+    name: "github",
+    source: "bundled",
+    packageHash: null,
+    status: "missing_credentials",
+    scope: "catalogs",
+    composed: false,
+    line: 4,
+    servers: [{ target: "code", catalogId }],
+    credentials: [
+      {
+        variable: "APPA_PROVIDER_GITHUB_TOKEN",
+        key: null,
+        source: null,
+        readers: ["github"],
+      },
+    ],
+    helpers: ["github_read_repo"],
+    ...fields,
+  });
+/** A declared battery the enforced composition holds as it is declared, unless `served` says otherwise. */
+const servedAsDeclared = (
+  battery: Omit<PolicyBattery, "served"> & {
+    served?: PolicyBattery["served"];
+  },
 ): PolicyBattery => ({
-  entry: "github",
-  name: "github",
-  source: "bundled",
-  packageHash: null,
-  status: "missing_credentials",
-  scope: "catalogs",
-  composed: false,
-  line: 4,
-  servers: [{ target: "code", catalogId }],
-  credentials: [
-    {
-      variable: "APPA_PROVIDER_GITHUB_TOKEN",
-      key: null,
-      source: null,
-      readers: ["github"],
-    },
-  ],
-  helpers: ["github_read_repo"],
-  ...fields,
+  ...battery,
+  served:
+    battery.served === undefined
+      ? { status: battery.status, composed: battery.composed }
+      : battery.served,
 });
 const emptyDeclarations = (
   fields: Partial<Declarations> = {},
@@ -109,6 +129,7 @@ const emptyDeclarations = (
   unusedAliases: [],
   rootRevision: 3,
   lastError: null,
+  composition: CURRENT,
   managedInGithub: false,
   heldPull: null,
   credentialBindings: [],
@@ -379,14 +400,76 @@ test("clicking a battery's row opens its dialog", async () => {
   ).toBeVisible();
 });
 
-test("a failed composition degrades every status and says what broke", async () => {
+test("a refused revision keeps the earlier composition's statuses and says which revision stays enforced", async () => {
   declarations = emptyDeclarations({
-    batteries: [declaredGithub({ status: "active" })],
+    rootRevision: 4,
+    batteries: [
+      declaredGithub({
+        status: "missing_credentials",
+        served: { status: "active", composed: true },
+      }),
+    ],
     lastError: "line 4: unknown battery",
+    composition: {
+      served: {
+        kind: "previous",
+        rootRevision: 3,
+        composedAt: "2026-09-18T12:00:00Z",
+        batteries: [
+          { name: "github", status: "active", composed: true },
+          { name: "jev", status: "active", composed: true },
+        ],
+      },
+      refusal: {
+        message: "line 4: unknown battery",
+        at: "2026-09-18T13:00:00Z",
+        rootRevision: 4,
+      },
+    },
+  });
+  show();
+  const notice = await screen.findByRole("alert");
+  expect(notice).toHaveTextContent("Revision 4 was refused");
+  expect(notice).toHaveTextContent("Revision 3");
+  expect(notice).toHaveTextContent("stays enforced until a revision composes");
+  expect(notice).toHaveTextContent("line 4: unknown battery");
+  const github = await tableRow("github");
+  expect(github).toHaveTextContent("Enforced");
+  expect(github).toHaveTextContent("From revision 3");
+  // The current text would hold it back, so it is not working as it should.
+  expect(github).toHaveTextContent("Now: Needs a credential");
+  // Held by the enforced composition though the text no longer declares it.
+  expect(await tableRow("jev")).toHaveTextContent(
+    "Still enforced from revision 3",
+  );
+});
+
+/** The table row of a battery, found by its name cell. */
+async function tableRow(name: string) {
+  const rows = await screen.findAllByRole("row");
+  const row = rows.find((candidate) =>
+    within(candidate).queryByText(name, { exact: true }),
+  );
+  if (!row) throw new Error(`No row for ${name}`);
+  return row;
+}
+
+test("a refusal with no earlier composition reads every battery as refused and says nothing is enforced", async () => {
+  declarations = emptyDeclarations({
+    batteries: [declaredGithub({ status: "active", served: null })],
+    lastError: "line 4: unknown battery",
+    composition: {
+      served: { kind: "root_only" },
+      refusal: {
+        message: "line 4: unknown battery",
+        at: "2026-09-18T13:00:00Z",
+        rootRevision: 3,
+      },
+    },
   });
   show();
   expect(await screen.findByRole("alert")).toHaveTextContent(
-    "line 4: unknown battery",
+    "Nothing is enforced",
   );
   const row = await entry("github");
   expect(row).toHaveTextContent("Refused by policy");
@@ -694,27 +777,28 @@ const jevBattery = (installs: Install[] = []): Battery => ({
   setup: null,
   installs,
 });
-const declaredJev = (fields: Partial<PolicyBattery> = {}): PolicyBattery => ({
-  entry: "batteries/jev/appa.toml",
-  name: "jev",
-  source: "bundled",
-  packageHash: null,
-  status: "missing_credentials",
-  scope: "organization",
-  composed: true,
-  line: 2,
-  servers: [],
-  credentials: [
-    {
-      variable: "APPA_PROVIDER_JEV_API_KEY",
-      key: null,
-      source: null,
-      readers: ["jev"],
-    },
-  ],
-  helpers: ["jev-annotator.py"],
-  ...fields,
-});
+const declaredJev = (fields: Partial<PolicyBattery> = {}): PolicyBattery =>
+  servedAsDeclared({
+    entry: "batteries/jev/appa.toml",
+    name: "jev",
+    source: "bundled",
+    packageHash: null,
+    status: "missing_credentials",
+    scope: "organization",
+    composed: true,
+    line: 2,
+    servers: [],
+    credentials: [
+      {
+        variable: "APPA_PROVIDER_JEV_API_KEY",
+        key: null,
+        source: null,
+        readers: ["jev"],
+      },
+    ],
+    helpers: ["jev-annotator.py"],
+    ...fields,
+  });
 
 test("an organization battery can be included and removed without an installed server", async () => {
   let body: unknown;

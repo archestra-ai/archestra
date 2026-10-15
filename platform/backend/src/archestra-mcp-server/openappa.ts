@@ -19,6 +19,7 @@ import OpenappaExternalConsultModel from "@/models/openappa-external-consult";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import ToolModel from "@/models/tool";
 import { openappaBatteriesService } from "@/openappa/batteries";
+import { compositionView } from "@/openappa/composition-view";
 import {
   coverageVisibility,
   openappaCoverageService,
@@ -62,6 +63,7 @@ import {
 import { superyellSession } from "@/openappa/unenforced";
 import {
   recallYellSession,
+  rememberYellResult,
   type YellArguments,
   YellArgumentsSchema,
 } from "@/openappa/yell-session";
@@ -528,11 +530,13 @@ const registry = defineArchestraTools([
     schema: YellArgumentsSchema,
     async handler({ args, context }) {
       const identity = await yellIdentity({ shortName: "yell", args, context });
-      return executeYell({
+      const report = await executeYell({
         session: identity.session,
         toolCallId: identity.callId,
         args,
       });
+      await rememberYellResult({ ...identity, result: report });
+      return report;
     },
   }),
   defineArchestraTool({
@@ -570,7 +574,7 @@ const registry = defineArchestraTools([
         },
         "OpenAPPA turned off for a session by an approved superyell",
       );
-      return successResult(
+      const result = successResult(
         [
           ...report.content.flatMap((part) =>
             part.type === "text" ? [part.text] : [],
@@ -578,6 +582,8 @@ const registry = defineArchestraTools([
           "OpenAPPA is off for this session. Its label is reset, and its calls are no longer checked.",
         ].join("\n"),
       );
+      await rememberYellResult({ ...identity, result });
+      return result;
     },
   }),
   defineArchestraTool({
@@ -585,7 +591,7 @@ const registry = defineArchestraTools([
     title: "Read OpenAPPA policy",
     annotations: { readOnlyHint: true },
     description:
-      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; its `include` list names the batteries that compose into enforcement on top of it, `[server_aliases]` points each battery's namespace at the MCP servers it governs, and `effective` shows the composed result the runtime enforces, with one entry per declared battery and the status it composed under. Battery credential variables are bound with bind_guardrails_credential, outside the text, and `effective` lists each bound one under `[credentials]`. A `[credentials]` line in the text overrides that binding; do not add one. `enforcement.active` reports whether deployment enforcement is actually on; healthy composition alone does not prove enforcement. Without Git sync, `delivery.githubSyncSetupUrl` links to where the operator sets it up. Use this read to recover after a lost local publish response, without publishing again. Report any battery whose status is not `active`, and any `effective.error`, to the user. Preserve unrelated rules and comments when editing.",
+      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; its `include` list names the batteries that compose into enforcement on top of it, `[server_aliases]` points each battery's namespace at the MCP servers it governs, and `effective` shows the composed result the runtime enforces, with one entry per declared battery and the status it composed under. Battery credential variables are bound with bind_guardrails_credential, outside the text, and `effective` lists each bound one under `[credentials]`. A `[credentials]` line in the text overrides that binding; do not add one. `enforcement.active` reports whether deployment enforcement is actually on; healthy composition alone does not prove enforcement. Without Git sync, `delivery.githubSyncSetupUrl` links to where the operator sets it up. Use this read to recover after a lost local publish response, without publishing again. `effective.served.kind` says what the runtime opens: `current` (the latest revision), `previous` (the latest attempt was refused and an earlier composition stays enforced; each battery's `served` is how that composition holds it, its `status` what the current text would give it), or `root_only` (nothing ever composed, so governed calls are refused). Report any battery whose status is not `active`, and any `effective.error`, to the user. Preserve unrelated rules and comments when editing.",
     schema: z.strictObject({}),
     async handler({ context }) {
       const organizationId = organization(context);
@@ -1389,13 +1395,23 @@ async function enforced(organizationId: string) {
     openappaBatteriesService.getEffectivePolicy(organizationId),
     openappaBatteriesService.policyDeclarations(organizationId),
   ]);
+  const { served } = compositionView(effective);
   return {
     content: effective.content,
     error: effective.lastError,
+    served:
+      served.kind === "root_only"
+        ? { kind: served.kind }
+        : {
+            kind: served.kind,
+            rootRevision: served.rootRevision,
+            composedAt: served.composedAt,
+          },
     batteries: declarations.batteries.map((battery) => ({
       entry: battery.entry,
       name: battery.name,
       status: battery.status,
+      served: battery.served,
     })),
   };
 }

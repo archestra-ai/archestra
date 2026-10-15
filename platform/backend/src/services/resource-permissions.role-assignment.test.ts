@@ -249,9 +249,15 @@ async function shareWith(params: {
   grant: ResourcePermissionGrant;
 }) {
   const current = await ResourcePermissionPolicyModel.find(params);
-  await ResourcePermissions.updatePolicy({
+  const next = {
     ...params,
     revision: current?.revision ?? 0,
     grants: [...(current?.grants ?? []), params.grant],
-  });
+  };
+  // A member shares their own chat or agent run through the editor. Other
+  // objects they can no longer share with a role themselves, but grants
+  // stored before that rule still exist, so those are written directly.
+  if (params.resource === "conversation" || params.resource === "agentRun")
+    await ResourcePermissions.updatePolicy(next);
+  else expect(await ResourcePermissionPolicyModel.replace(next)).not.toBeNull();
 }

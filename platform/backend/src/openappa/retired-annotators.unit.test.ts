@@ -2,10 +2,131 @@ import { parse as parseToml } from "smol-toml";
 import { describe, expect, test } from "vitest";
 import {
   readOpeningPolicy,
+  retentionRecheckAt,
   retiredAnnotators,
   unservedAnnotator,
   withKeptAnnotators,
 } from "./retired-annotators";
+
+describe("which opening policies still need an annotator", () => {
+  test("a policy that declares a name without routing to it never needs it, so a carried name ends with the conversations that route to it", () => {
+    expect(
+      retire({
+        openings: [opening("p1", URL_BOUND), opening("e2", CARRIED)],
+        composed: JUDGED_BY_B,
+      }).kept.map(({ name, openingHashes }) => ({ name, openingHashes })),
+    ).toEqual([{ name: "a.tool-call", openingHashes: ["p1"] }]);
+    expect(
+      retire({ openings: [opening("e2", CARRIED)], composed: JUDGED_BY_B }),
+    ).toMatchObject({ kept: [], dropped: [], conflicts: [], inactive: [] });
+  });
+
+  test("a policy no conversation was active under lately keeps nothing, and says what it no longer keeps", () => {
+    expect(
+      retire({
+        openings: [opening("p1", URL_BOUND)],
+        composed: JUDGED_BY_B,
+        live: ["e2"],
+      }),
+    ).toMatchObject({
+      kept: [],
+      dropped: [],
+      inactive: [
+        {
+          name: "a.tool-call",
+          binding: "http://judge-a.test/annotate",
+          openingHashes: ["p1"],
+        },
+      ],
+    });
+  });
+
+  test("a name a live policy needs is kept at its binding, whatever an idle policy bound it to", () => {
+    const elsewhere = URL_BOUND.replace(
+      "http://judge-a.test/annotate",
+      "http://judge-c.test/annotate",
+    );
+    const result = retire({
+      openings: [opening("p1", URL_BOUND), opening("p3", elsewhere)],
+      composed: JUDGED_BY_B,
+      live: ["p3"],
+    });
+    expect(result.conflicts).toEqual([]);
+    expect(result.inactive).toEqual([]);
+    expect(
+      result.kept.map(({ binding, openingHashes }) => ({
+        binding,
+        openingHashes,
+      })),
+    ).toEqual([
+      { binding: "http://judge-c.test/annotate", openingHashes: ["p3"] },
+    ]);
+  });
+
+  test("a policy that is idle still counts when the current policy binds its name differently", () => {
+    const rebinding = JUDGED_BY_B.replaceAll("b.tool-call", "a.tool-call");
+    expect(
+      retire({
+        openings: [opening("p1", URL_BOUND)],
+        composed: rebinding,
+        live: [],
+      }).rebound.map(({ name }) => name),
+    ).toEqual(["a.tool-call"]);
+  });
+});
+
+describe("retentionRecheckAt", () => {
+  const now = new Date("2026-10-15T12:00:00.000Z");
+  const daysAgo = (days: number) =>
+    new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+
+  test("checks when the first kept name may lose its last active conversation", () => {
+    expect(
+      retentionRecheckAt({
+        now,
+        horizonDays: 30,
+        livenessKnown: true,
+        kept: [{ lastActivityAt: daysAgo(1) }, { lastActivityAt: daysAgo(5) }],
+      }),
+    ).toEqual(new Date(daysAgo(5).getTime() + 30 * 24 * 60 * 60 * 1000));
+  });
+
+  test("never sooner than an hour, in an hour when activity was not read, and never without a horizon or anything kept", () => {
+    const inAnHour = new Date(now.getTime() + 60 * 60 * 1000);
+    expect(
+      retentionRecheckAt({
+        now,
+        horizonDays: 30,
+        livenessKnown: true,
+        kept: [{ lastActivityAt: daysAgo(30) }],
+      }),
+    ).toEqual(inAnHour);
+    expect(
+      retentionRecheckAt({
+        now,
+        horizonDays: 30,
+        livenessKnown: false,
+        kept: [],
+      }),
+    ).toEqual(inAnHour);
+    expect(
+      retentionRecheckAt({
+        now,
+        horizonDays: 30,
+        livenessKnown: true,
+        kept: [],
+      }),
+    ).toBeNull();
+    expect(
+      retentionRecheckAt({
+        now,
+        horizonDays: 0,
+        livenessKnown: true,
+        kept: [{ lastActivityAt: daysAgo(1) }],
+      }),
+    ).toBeNull();
+  });
+});
 
 describe("retiredAnnotators", () => {
   test("a URL-bound annotator is kept with its externals table", () => {
@@ -32,6 +153,7 @@ describe("retiredAnnotators", () => {
         ],
         credentials: {},
         binding: "http://judge-a.test/annotate",
+        openingHashes: ["a1"],
       },
     ]);
   });
@@ -516,6 +638,7 @@ function retire(params: {
   openings: ReturnType<typeof opening>[];
   composed: string;
   readable?: string[];
+  live?: string[];
 }) {
   return retiredAnnotators({
     openings: params.openings,
@@ -524,5 +647,18 @@ function retire(params: {
     helperBase: HELPER_BASE,
     helperTokenEnv: "APPA_ARCHESTRA_BRIDGE_TOKEN",
     installs: new Set(["install-1"]),
+    live: params.live ? new Set(params.live) : null,
   });
 }
+
+/** `URL_BOUND` carried by a later composition that keeps it without routing to it. */
+const CARRIED = `${JUDGED_BY_B}
+[[policy.annotator]]
+name = "a.tool-call"
+ranks = ["suspicious", "trusted"]
+audiences = ["self", "internal"]
+marks = []
+
+[externals.annotators."a.tool-call"]
+url = "http://judge-a.test/annotate"
+`;

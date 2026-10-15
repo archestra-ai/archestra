@@ -60,7 +60,7 @@ Each recipient gets a level:
 What to know:
 
 - Opening **Settings → Credentials** needs [`credential:read`](/docs/reference/permissions#credential:read). Adding one needs [`credential:create`](/docs/reference/permissions#credential:create), and its creator gets **Full access**.
-- A new credential is shared with **Everyone in the organization** at **Can use**, and admins and editors have **Full access** to every credential. Remove the **Everyone** grant to keep a credential to a team.
+- A new credential is shared with **Everyone in the organization** at **Can use**, and admins and editors have **Full access** to every credential. Remove the **Everyone** grant to keep a credential to a team. A creator without **Full access** on every credential cannot share it with everyone, so their new credential starts with them alone.
 - Attaching a credential to an MCP server or Agent takes **Can use** on it. Once attached, its organization value works for anyone who can use that server or Agent. A personal value needs **Can use**. Without it, the MCP server's **Install** button is disabled and the Agent's chat says "You don't have access", both asking you to get an admin to share it. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
 
 ## Secrets Storage

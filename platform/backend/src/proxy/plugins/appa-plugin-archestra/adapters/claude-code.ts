@@ -51,6 +51,10 @@ const CHILD_PATHS = [
   { prefix: "subagents/agent-", suffix: ".jsonl" },
 ] as const;
 const ASYNC_LAUNCH_STATUS = "Async agent launched successfully.";
+// Claude returns this client status when its handback retries are exhausted.
+// No child output crossed, and SendMessage can still resume the child.
+const NO_HANDBACK_STATUS =
+  "The subagent ended without delivering a report through SubagentHandback, so no report was delivered.";
 /**
  * The Agent tool also acknowledges a teammate and a cloud agent when they
  * start. Like the background launch, these carry no child output: the child
@@ -270,8 +274,11 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
     if (!CHILD_SPAWN_TOOLS.has(localToolName(result.name)) || result.isError)
       return undefined;
     const identifier = childLaunchIdentifier(result.content);
+    const status = launchText(result.content)?.startsWith(NO_HANDBACK_STATUS)
+      ? NO_HANDBACK_STATUS
+      : ASYNC_LAUNCH_STATUS;
     return identifier
-      ? `${ASYNC_LAUNCH_STATUS}\n${identifier.label}: ${identifier.value}`
+      ? `${status}\n${identifier.label}: ${identifier.value}`
       : launchAcknowledgement(result.content);
   }
 
@@ -507,7 +514,12 @@ function childLaunchIdentifier(
   if (record?.status === "async_launched") {
     return launchIdentifierFromRecord(record);
   }
-  if (!text || !text.startsWith(ASYNC_LAUNCH_STATUS)) return undefined;
+  if (
+    !text ||
+    (!text.startsWith(ASYNC_LAUNCH_STATUS) &&
+      !text.startsWith(NO_HANDBACK_STATUS))
+  )
+    return undefined;
   const match =
     /^(agentId|agent_id|taskId|task_id):[ \t]*([^\s()]+)(?:[ \t]+\([^\r\n]*\))?[ \t]*$/im.exec(
       text,

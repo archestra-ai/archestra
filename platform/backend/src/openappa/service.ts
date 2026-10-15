@@ -22,6 +22,7 @@ import { enterpriseTier } from "@/enterprise-tier";
 import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
 import MemberModel from "@/models/member";
+import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { openappaBatteriesService } from "@/openappa/batteries";
@@ -29,18 +30,25 @@ import {
   expandCommandExecutionPolicyRules,
   normalizeCommandExecutionArguments,
 } from "@/openappa/command-normalization";
+import { compositionView } from "@/openappa/composition-view";
 import { currentTrajectory } from "@/openappa/current-trajectory";
-import { helperUrlBase, openappaDeclarations } from "@/openappa/declarations";
+import {
+  helperUrlBase,
+  openappaDeclarations,
+  type UnreadableCredential,
+} from "@/openappa/declarations";
 import {
   declareExistingInstalls,
   seedCredentialBindings,
 } from "@/openappa/declare-installs";
 import {
   OpenappaRetiredAnnotatorError,
+  OpenappaRootOnlyError,
   openappaFailure,
 } from "@/openappa/failure";
 import { unservedAnnotator } from "@/openappa/retired-annotators";
 import { captureYellReport } from "@/openappa/yell-receiver";
+import { readYellResult } from "@/openappa/yell-session";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import type { ToolNameCanonicalizer } from "@/routes/proxy/utils/gateway-tool-names";
 import {
@@ -530,21 +538,49 @@ async function withRuntime(
     const rawResult = await call(module, policy);
     return NativeDecisionSchema.parse(JSON.parse(rawResult));
   } catch (error) {
-    throw await dispatchFailure({ session, served: policy.content, error });
+    throw await dispatchFailure({
+      organizationId,
+      session,
+      served: policy.content,
+      error,
+    });
   }
 }
 
 async function dispatchFailure(params: {
+  organizationId: string;
   session?: OpenAppaSession;
   served: string;
   error: unknown;
 }): Promise<ApiError> {
   const missing = await missingOpeningAnnotator(params.session, params.served);
+  if (missing !== null)
+    return openappaFailure(new OpenappaRetiredAnnotatorError(missing));
   return openappaFailure(
-    missing === null
-      ? params.error
-      : new OpenappaRetiredAnnotatorError(missing),
+    (await rootOnlyRefusal(params.organizationId)) ?? params.error,
   );
+}
+
+/**
+ * When the runtime refuses the served document because it is the root text
+ * alone (no composition ever opened), what was refused, said plainly: the
+ * runtime's own words only name the `include` list it cannot open.
+ */
+async function rootOnlyRefusal(
+  organizationId: string,
+): Promise<OpenappaRootOnlyError | null> {
+  try {
+    const stored = await OpenAppaEffectivePolicyModel.find(organizationId);
+    return stored && compositionView(stored).served.kind === "root_only"
+      ? new OpenappaRootOnlyError(stored.lastError ?? "")
+      : null;
+  } catch (error) {
+    logger.warn(
+      { organizationId, err: error },
+      "OpenAPPA could not read the stored composition after a refused dispatch",
+    );
+    return null;
+  }
 }
 
 async function missingOpeningAnnotator(
@@ -583,16 +619,53 @@ async function effectivePolicy(
   organizationId: string,
 ): Promise<DispatchPolicy> {
   try {
-    const rawContent = (
-      await openappaBatteriesService.getEffectivePolicy(organizationId)
-    ).content;
+    const { policy, readable } =
+      await openappaBatteriesService.readForDispatch(organizationId);
+    let unreadable: UnreadableCredential[] = [];
+    let dispatch: DispatchPolicy | null = null;
+    try {
+      dispatch = await openappaDeclarations.dispatchPolicy({
+        organizationId,
+        content: expandCommandExecutionPolicyRules(policy.content),
+        onUnreadable: (found) => {
+          unreadable = found;
+        },
+      });
+    } catch (error) {
+      if (!retainedKeyLost({ unreadable, readable })) throw error;
+    }
+    if (dispatch && !retainedKeyLost({ unreadable, readable })) return dispatch;
+    // A credential the policy was composed to read is unreadable now. Compose
+    // again first, as a fresh read would have: a kept annotator that needed it
+    // is dropped, so its sessions are told to start a new conversation instead
+    // of failing their consults on a key that is not set.
+    logger.info(
+      { organizationId, keys: unreadable.map(({ key }) => key) },
+      "OpenAPPA composes again before a dispatch: a credential the served policy reads cannot be read",
+    );
+    const recompiled = await openappaBatteriesService.recompile(organizationId);
     return await openappaDeclarations.dispatchPolicy({
       organizationId,
-      content: expandCommandExecutionPolicyRules(rawContent),
+      content: expandCommandExecutionPolicyRules(recompiled.content),
     });
   } catch (error) {
     throw openappaFailure(error);
   }
+}
+
+/**
+ * Whether a key the served policy's retirement inputs held readable cannot be
+ * read now. With no snapshot to compare against, any unreadable key counts.
+ */
+function retainedKeyLost(params: {
+  unreadable: UnreadableCredential[];
+  readable: ReadonlySet<string> | null;
+}): boolean {
+  const { unreadable, readable } = params;
+  return (
+    unreadable.length > 0 &&
+    (readable === null || unreadable.some(({ key }) => readable.has(key)))
+  );
 }
 
 /** One policy read shared by a batch of dispatches, taken by the first of them. */
@@ -959,6 +1032,21 @@ export async function processProxyResults(params: {
   });
   const updates: Record<string, ProcessedToolResult> = {};
   for (const result of params.results) {
+    const reportingName = archestraMcpBranding.getToolShortName(
+      params.canonicalize(result.name, result.namespace),
+    );
+    const reportingResult = ["yell", "superyell", "run_tool"].some(
+      (name) => name === reportingName,
+    )
+      ? await readYellResult(params.session, result.id)
+      : undefined;
+    if (reportingResult !== undefined) {
+      updates[result.id] = {
+        content: reportingResult,
+        outputSource: "runtime",
+      };
+      continue;
+    }
     if (params.trustedChat && isSeededAppRenderToolResult(result.content))
       continue;
     // The runtime released no question call, so it would withhold the answer.

@@ -1611,6 +1611,9 @@ class ToolModel {
     }
   }
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   /**
    * When OpenAPPA is on, every existing agent gets the notice and control
    * tools. New agents inherit them via {@link assignDefaultArchestraToolsToAgent}.
@@ -1625,13 +1628,19 @@ class ToolModel {
         REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
       );
       if (toolIds.length === 0) continue;
-      const agentIds =
-        await AgentModel.findNonBuiltInIdsByOrganizationId(organizationId);
+      const agentIds = await AgentModel.findNonBuiltInIdsMissingToolAssignments(
+        {
+          organizationId,
+          toolIds,
+        },
+      );
       for (const agentId of agentIds) {
         await AgentToolModel.createManyIfNotExists(agentId, toolIds);
       }
     }
   }
+
+  // SPDX-SnippetEnd
 
   /**
    * Assign skill tools to a single agent if its org has opted in

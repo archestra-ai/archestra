@@ -33,6 +33,7 @@ import {
   max,
   ne,
   not,
+  notExists,
   notInArray,
   or,
   type SQL,
@@ -2573,6 +2574,52 @@ class AgentModel {
         ),
       );
 
+    return agents.map((agent) => agent.id);
+  }
+
+  /** Existing agents that still need at least one of the supplied tool assignments. */
+  static async findNonBuiltInIdsMissingToolAssignments(params: {
+    organizationId: string;
+    toolIds: string[];
+  }): Promise<string[]> {
+    if (params.toolIds.length === 0) return [];
+    const agents = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          notDeleted(schema.agentsTable),
+          isNull(schema.agentsTable.builtInAgentConfig),
+          exists(
+            db
+              .select({ id: schema.toolsTable.id })
+              .from(schema.toolsTable)
+              .where(
+                and(
+                  inArray(schema.toolsTable.id, params.toolIds),
+                  notExists(
+                    db
+                      .select({ id: schema.agentToolsTable.id })
+                      .from(schema.agentToolsTable)
+                      .where(
+                        and(
+                          eq(
+                            schema.agentToolsTable.agentId,
+                            schema.agentsTable.id,
+                          ),
+                          eq(
+                            schema.agentToolsTable.toolId,
+                            schema.toolsTable.id,
+                          ),
+                        ),
+                      ),
+                  ),
+                ),
+              ),
+          ),
+        ),
+      );
     return agents.map((agent) => agent.id);
   }
 

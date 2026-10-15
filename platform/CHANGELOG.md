@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.74](https://github.com/archestra-ai/archestra/compare/platform-v1.3.73...platform-v1.3.74) (2026-10-15)
+
+
+### Bug Fixes
+
+* **chat:** enforce tool-call invocation policies on direct external execution ([#8938](https://github.com/archestra-ai/archestra/issues/8938)) ([23db8b0](https://github.com/archestra-ai/archestra/commit/23db8b096608ad4766b7f8079dc7d4492fbc11e5))
+
 ## [1.3.73](https://github.com/archestra-ai/archestra/compare/platform-v1.3.72...platform-v1.3.73) (2026-10-14)
 
 

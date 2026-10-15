@@ -1358,7 +1358,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         id: "deployment",
         enabled: false,
         unsupportedClientAction: "bypass",
-        superyellEnabled: true,
+        breakTheGlassEnabled: true,
       });
 
       const response = await post(continuation("msg_made_elsewhere"));
@@ -1619,10 +1619,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   test.for([
     { command: "yell", stream: false },
     { command: "yell", stream: true },
-    { command: "superyell", stream: false },
-    { command: "superyell", stream: true },
     { command: "yell", stream: false, malformed: true },
-    { command: "superyell", stream: true, malformed: true },
+    { command: "yell", stream: true, malformed: true },
   ])("recovers $command from blocked Claude history without releasing the child result (stream=$stream, malformed=$malformed)", async ({
     command,
     stream,
@@ -1668,9 +1666,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       streamingToolUse: { name: `archestra__${command}`, input: reportArgs },
     };
     const requestText =
-      command === "yell"
-        ? "Please send a bug report about the confusing guardrails failure"
-        : "Report this failure and turn off guardrails for this session";
+      "Please send a bug report about the confusing guardrails failure";
     const send = (messages: unknown[], reportingAvailable = true) => {
       const body = payload(stream, messages);
       body.tools.push({
@@ -1718,7 +1714,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(events).toContainEqual(
       expect.objectContaining({
         event: "tool_call",
-        tool: command === "yell" ? "yell" : "archestra__superyell",
+        tool: "yell",
         session_id: `user:${userId}|blocked-reporting`,
       }),
     );
@@ -1784,7 +1780,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     const recoveryReview = vi.spyOn(appaService, "loadOfferReview");
     for (const reviewedTool of [
       "other__write",
-      "archestra__superyell",
+      "archestra__yell",
       "unavailable",
     ]) {
       if (reviewedTool === "unavailable")
@@ -1801,7 +1797,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         });
       const use = {
         id:
-          reviewedTool === "archestra__superyell"
+          reviewedTool === "archestra__yell"
             ? "toolu_reporting_remedy"
             : `toolu_ordinary_remedy_${reviewedTool}`,
         name: "archestra__execute_remedy_plan",
@@ -1815,7 +1811,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       ]);
       expect(reviewed.statusCode, reviewed.body).toBe(200);
       expect(noticeFrom(reviewed.body, stream).name).toBe(
-        reviewedTool === "archestra__superyell"
+        reviewedTool === "archestra__yell"
           ? "archestra__execute_remedy_plan"
           : "archestra__get_remedy_plans",
       );
@@ -1830,7 +1826,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       input: reportArgs,
     };
 
-    // Reporting recovery does not disable policy checks or approve superyell.
+    // Reporting recovery does not disable policy checks.
     block = true;
     const denied = await send([
       ...history,
@@ -1882,7 +1878,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     const previousAnalytics = config.analytics.enabled;
     config.openappa.yellEnabled = true;
     config.analytics.enabled = false;
-    await GuardrailsDeploymentModel.set({ superyellEnabled: true });
+    await GuardrailsDeploymentModel.set({ breakTheGlassEnabled: true });
     const originalDispatch = native.dispatchHook.getMockImplementation();
     native.dispatchHook.mockImplementation(async (raw: string) => {
       if (JSON.parse(raw).event === "yell")
@@ -2278,7 +2274,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             id: "global",
             enabled: false,
             unsupportedClientAction: "bypass",
-            superyellEnabled: true,
+            breakTheGlassEnabled: true,
           };
         }
         return realGet();
@@ -8666,9 +8662,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
               "task",
               "archestra__execute_remedy_plan",
               "archestra__get_remedy_plans",
-              ...(params.reporting
-                ? ["archestra__yell", "archestra__superyell"]
-                : []),
+              ...(params.reporting ? ["archestra__yell"] : []),
             ].map((name) => ({
               type: "function",
               function: {
@@ -8794,7 +8788,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       });
       expect(unsigned.statusCode, unsigned.body).toBe(409);
       expect(providerRequests).toHaveLength(0);
-      for (const command of ["yell", "superyell"]) {
+      for (const command of ["yell"]) {
         const recovery = await send({
           id: "oc-return-root",
           reporting: true,
@@ -8804,10 +8798,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             { role: "user", content: framedReturn.replace(carrier, rawMarker) },
             {
               role: "user",
-              content:
-                command === "yell"
-                  ? "Please report the broken request"
-                  : "Please report this and turn off these checks for this session",
+              content: "Please report the broken request",
             },
           ],
         });
@@ -10537,13 +10528,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
                     {
                       type: "namespace",
                       name: "mcp__namespace_gateway",
-                      tools: ["archestra__yell", "archestra__superyell"].map(
-                        (name) => ({
-                          type: "function",
-                          name,
-                          parameters: { type: "object", properties: {} },
-                        }),
-                      ),
+                      tools: ["archestra__yell"].map((name) => ({
+                        type: "function",
+                        name,
+                        parameters: { type: "object", properties: {} },
+                      })),
                     },
                   ]
                 : []),
@@ -10743,7 +10732,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         "matches several subagents",
       );
       expect(providerRequests).toHaveLength(0);
-      for (const command of ["yell", "superyell"]) {
+      for (const command of ["yell"]) {
         const recovery = await send({
           thread: "return-root",
           reporting: true,
@@ -10768,10 +10757,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
                 ]),
             {
               role: "user",
-              content:
-                command === "yell"
-                  ? "Please report the broken request"
-                  : "Please report this and turn off these checks for this session",
+              content: "Please report the broken request",
             },
           ],
         });

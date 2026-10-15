@@ -12,8 +12,9 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import {
+  breakTheGlassActiveIn,
+  getGuardrailsDeployment,
   isGuardrailsV2Active,
-  isSuperyellAvailable,
 } from "@/services/guardrails-deployment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { registerRoutePermissions } from "@/test/route-permissions";
@@ -68,7 +69,7 @@ describe("Deployment-wide Guardrails v2 switch", () => {
         expect(response.json()).toEqual({
           enabled,
           unsupportedClientAction: "bypass",
-          superyellEnabled: true,
+          breakTheGlassEnabled: true,
           featureEnabled,
           active: enabled && featureEnabled,
         });
@@ -112,24 +113,24 @@ describe("Deployment-wide Guardrails v2 switch", () => {
     });
   });
 
-  test("administrators can turn superyell off without changing enforcement", async () => {
+  test("administrators can turn break the glass off without changing enforcement", async () => {
     await set(true);
     const response = await app.inject({
       method: "PUT",
       url: "/api/guardrails-deployment",
-      payload: { superyellEnabled: false },
+      payload: { breakTheGlassEnabled: false },
     });
     expect(response.statusCode, response.body).toBe(200);
     expect(response.json()).toMatchObject({
       enabled: true,
       active: true,
-      superyellEnabled: false,
+      breakTheGlassEnabled: false,
     });
-    expect(await isSuperyellAvailable()).toBe(false);
-    await GuardrailsDeploymentModel.set({ superyellEnabled: true });
-    expect(await isSuperyellAvailable()).toBe(true);
+    expect(breakTheGlassActiveIn(await getGuardrailsDeployment())).toBe(false);
+    await GuardrailsDeploymentModel.set({ breakTheGlassEnabled: true });
+    expect(breakTheGlassActiveIn(await getGuardrailsDeployment())).toBe(true);
     await set(false);
-    expect(await isSuperyellAvailable()).toBe(false);
+    expect(breakTheGlassActiveIn(await getGuardrailsDeployment())).toBe(false);
   });
 
   test("rejects an unsupported action without changing the saved setting", async () => {

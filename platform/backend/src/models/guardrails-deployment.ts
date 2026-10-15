@@ -12,7 +12,7 @@ class GuardrailsDeploymentModel {
         id,
         enabled: false,
         unsupportedClientAction: "bypass" as const,
-        superyellEnabled: true,
+        breakTheGlassEnabled: true,
       }
     );
   }
@@ -25,7 +25,7 @@ class GuardrailsDeploymentModel {
   static async set(update: {
     enabled?: boolean;
     unsupportedClientAction?: UnsupportedAppaClientAction;
-    superyellEnabled?: boolean;
+    breakTheGlassEnabled?: boolean;
   }) {
     await db
       .insert(table)

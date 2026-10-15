@@ -2,6 +2,7 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import { Bot } from "lucide-react";
+import { useMemo, useState } from "react";
 import { scopeLabel } from "@/components/scope-vocabulary";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -12,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { type AgentOwner, describeAgentOwner } from "@/lib/agent-owner-label";
 import { useSession } from "@/lib/auth/auth.query";
 import { agentTypeLabel, deriveAgentUsage } from "./mcp-server-agent-usage";
@@ -33,10 +35,20 @@ export function McpServerUsageTab({
     | archestraApiTypes.GetMcpServerAutoModeAgentsResponses["200"]
     | undefined;
 }) {
-  const { all, assigned, autoOnly } = deriveAgentUsage({
-    serversForCatalog,
-    autoModeAgents,
-  });
+  const { all, assigned, autoOnly } = useMemo(
+    () => deriveAgentUsage({ serversForCatalog, autoModeAgents }),
+    [serversForCatalog, autoModeAgents],
+  );
+  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 20 });
+  // A refreshed roster can remove the last page while it is being viewed.
+  const pageIndex = Math.min(
+    pagination.pageIndex,
+    Math.max(0, Math.ceil(all.length / pagination.pageSize) - 1),
+  );
+  const visibleAgents = all.slice(
+    pageIndex * pagination.pageSize,
+    (pageIndex + 1) * pagination.pageSize,
+  );
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 
@@ -74,7 +86,7 @@ export function McpServerUsageTab({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {all.map((agent) => (
+            {visibleAgents.map((agent) => (
               <TableRow key={agent.id}>
                 <TableCell className="font-medium">{agent.name}</TableCell>
                 <TableCell className="text-muted-foreground">
@@ -95,6 +107,12 @@ export function McpServerUsageTab({
           </TableBody>
         </Table>
       </div>
+      <TablePagination
+        pageIndex={pageIndex}
+        pageSize={pagination.pageSize}
+        total={all.length}
+        onPaginationChange={setPagination}
+      />
     </div>
   );
 }

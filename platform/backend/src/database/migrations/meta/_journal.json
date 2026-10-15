@@ -3872,6 +3872,13 @@
       "when": 1792086361199,
       "tag": "0552_remove-scheduled-task-permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 553,
+      "version": "7",
+      "when": 1792092012829,
+      "tag": "0553_rename-guardrails-validation-tools",
+      "breakpoints": true
     }
   ]
 }

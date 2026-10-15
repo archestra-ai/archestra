@@ -20,8 +20,10 @@ import {
   mintDelegationMarker,
 } from "@/openappa/delegation";
 import {
+  clearHitlReview,
   consumeHitlRuling,
   getHitlReview,
+  HITL_QUESTION_TTL_MS,
   peekHitlRuling,
   recordHitlReviewResult,
   recordHitlRuling,
@@ -2018,7 +2020,7 @@ describe("asking through the client's own question tool", () => {
       expect(cacheSet).toHaveBeenCalledWith(
         nativeQuestionCacheKey(trusted.session, issuedId ?? ""),
         { name: "question", offerIds: ["offer-hitl"] },
-        TimeInMs.Minute * 10,
+        HITL_QUESTION_TTL_MS,
       );
       const released = await plugin.onToolCalls({
         ...context,
@@ -2588,6 +2590,376 @@ describe("asking through the client's own question tool", () => {
           "Open the pending HITL review",
         );
       }
+    } finally {
+      evaluateToolCalls.mockRestore();
+      processResults.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
+  const NATIVE_APPROVAL_CLIENTS = [
+    {
+      client: "Claude Code",
+      adapter: () => new AppaClaudeCodeAdapter(),
+      headers: { "user-agent": "claude-code/1" },
+      nativeName: "AskUserQuestion",
+      answer: JSON.stringify(
+        'Your questions have been answered: "Approve the archestra__whoami call?"="Approve". You can now continue with these answers in mind.',
+      ),
+      interactionType: "anthropic:messages" as const,
+      provider: "anthropic" as const,
+    },
+    {
+      client: "Codex",
+      adapter: () => new AppaCodexAdapter(),
+      headers: {
+        originator: "codex_cli_rs",
+        "x-archestra-native-question": "request_user_input",
+      },
+      nativeName: "request_user_input",
+      answer: JSON.stringify({
+        answers: { archestra_question: { answers: ["Approve"] } },
+      }),
+      interactionType: "openai:responses" as const,
+      provider: "openai" as const,
+    },
+  ];
+
+  /** Stages a review, lets the model ask about it, and returns the question's wire id. */
+  async function askStagedReview(params: {
+    plugin: AppaPluginArchestra;
+    context: ReturnType<typeof requestContext>;
+    client: string;
+    nativeName: string;
+    offerId: string;
+  }): Promise<string> {
+    const trusted = params.context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.request = {
+      tools: {
+        control: { name: "archestra__execute_remedy_plan" },
+        notice: { name: "archestra__get_remedy_plans" },
+        askUser: { name: "archestra__ask_user" },
+        platformToolNames: new Set(["archestra__ask_user"]),
+        namespaces: new Map(),
+      },
+      customTools: new Set(),
+      declaredTools: [{ name: params.nativeName }],
+      session: {},
+    };
+    await stageHitlReview({
+      session: trusted.session,
+      review: {
+        offerId: params.offerId,
+        text: "Canonical HITL review.",
+        tool: "archestra__whoami",
+        arguments: "{}",
+        remedyArguments: {
+          offer_id: params.offerId,
+          plan: "Submit for approval",
+        },
+      },
+    });
+    await params.plugin.onSessionInit(params.context);
+    const prepared = await params.plugin.onPrepareToolCalls({
+      ...params.context,
+      toolCalls: [
+        {
+          id: params.client === "Claude Code" ? "toolu_review" : "call_review",
+          name: "archestra__ask_user",
+          arguments: JSON.stringify({
+            question: "Open the pending HITL review.",
+            options: [{ label: "Approve" }, { label: "Deny" }],
+            remedy_offer_ids: [params.offerId],
+          }),
+        },
+      ],
+    });
+    if (prepared?.decision !== "allow")
+      throw new Error("expected native question");
+    const released = await params.plugin.onToolCalls({
+      ...params.context,
+      toolCalls: prepared.toolCalls,
+    });
+    if (released?.decision !== "allow")
+      throw new Error("expected released native question");
+    const [question] = released.toolCalls;
+    expect(question.name).toBe(params.nativeName);
+    const outerStamp = parseTrajectoryStamp(question.wireId ?? "");
+    if (!outerStamp) throw new Error("expected outer trajectory stamp");
+    return outerStamp.callId;
+  }
+
+  test.each(
+    NATIVE_APPROVAL_CLIENTS,
+  )("$client: an approval answered after the review's staging window is an approval", async ({
+    client,
+    adapter,
+    headers,
+    nativeName,
+    answer,
+    interactionType,
+    provider,
+  }) => {
+    const clientId = `${client.toLowerCase().replaceAll(" ", "-")}-late`;
+    const offerId = `offer-${clientId}`;
+    const plugin = new AppaPluginArchestra([adapter()]);
+    const context = requestContext({ sessionId: `user:user|${clientId}` });
+    context.headers = headers;
+    context.interactionType = interactionType;
+    context.provider = provider;
+    context.model = client === "Codex" ? "gpt-5.6-luna" : "model";
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async () => [{ kind: "allow" as const }]);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      // The remedy call staged the review; the question came 20 s later.
+      const staged = Date.now();
+      vi.setSystemTime(staged + 20 * 1000);
+      const questionId = await askStagedReview({
+        plugin,
+        context,
+        client,
+        nativeName,
+        offerId,
+      });
+      // The person answers once the review's own ten minutes have passed.
+      vi.setSystemTime(staged + 10 * 60 * 1000 + 3 * 1000);
+      await plugin.onToolResults({
+        ...context,
+        toolResults: [
+          { id: questionId, name: nativeName, content: answer, isError: false },
+        ],
+      });
+      const continuationRequest =
+        interactionType === "openai:responses"
+          ? {
+              instructions: "Base",
+              input: [],
+              tool_choice: "auto",
+              parallel_tool_calls: true,
+            }
+          : { system: "Base", messages: [] };
+      await plugin.onBeforeModel({ ...context, request: continuationRequest });
+      const continuation = JSON.stringify(continuationRequest);
+      expect(continuation).toContain("approved OpenAPPA offer IDs");
+      expect(continuation).not.toContain("did not approve");
+      await expect(
+        plugin.onPrepareToolCalls({
+          ...context,
+          toolCalls: [
+            { id: "retry", name: "archestra__whoami", arguments: "{}" },
+          ],
+        }),
+      ).resolves.toMatchObject({
+        decision: "allow",
+        toolCalls: [
+          {
+            name: "archestra__execute_remedy_plan",
+            arguments: expect.stringContaining(offerId),
+          },
+        ],
+      });
+      await expect(
+        consumeHitlRuling({ session: trusted.session, offerId }),
+      ).resolves.toBe("approve");
+    } finally {
+      vi.useRealTimers();
+      evaluateToolCalls.mockRestore();
+      processResults.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test.each(
+    NATIVE_APPROVAL_CLIENTS,
+  )("$client: an answer whose review is gone has the review staged again, never refused", async ({
+    client,
+    adapter,
+    headers,
+    nativeName,
+    answer,
+    interactionType,
+    provider,
+  }) => {
+    const clientId = `${client.toLowerCase().replaceAll(" ", "-")}-expired`;
+    const offerId = `offer-${clientId}`;
+    const plugin = new AppaPluginArchestra([adapter()]);
+    const context = requestContext({ sessionId: `user:user|${clientId}` });
+    context.headers = headers;
+    context.interactionType = interactionType;
+    context.provider = provider;
+    context.model = client === "Codex" ? "gpt-5.6-luna" : "model";
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async () => [{ kind: "allow" as const }]);
+    try {
+      const questionId = await askStagedReview({
+        plugin,
+        context,
+        client,
+        nativeName,
+        offerId,
+      });
+      // The review is gone when the answer arrives.
+      await clearHitlReview({ session: trusted.session, offerId });
+      await plugin.onToolResults({
+        ...context,
+        toolResults: [
+          { id: questionId, name: nativeName, content: answer, isError: false },
+        ],
+      });
+      const continuationRequest =
+        interactionType === "openai:responses"
+          ? {
+              instructions: "Base",
+              input: [],
+              tool_choice: "auto",
+              parallel_tool_calls: true,
+            }
+          : { system: "Base", messages: [] };
+      await plugin.onBeforeModel({ ...context, request: continuationRequest });
+      const continuation = JSON.stringify(continuationRequest);
+      expect(continuation).toContain("after its OpenAPPA review expired");
+      expect(continuation).toContain("Call execute_remedy_plan again");
+      expect(continuation).toContain(offerId);
+      expect(continuation).not.toContain("did not approve");
+      if (client === "Codex") {
+        expect(continuationRequest).toMatchObject({
+          tool_choice: "required",
+          parallel_tool_calls: false,
+        });
+      }
+      // No closure was sealed: the next remedy call can stage the review again.
+      await expect(
+        peekHitlRuling({ session: trusted.session, offerId }),
+      ).resolves.toBeUndefined();
+      const remedy = {
+        id: "remedy-again",
+        name: "archestra__execute_remedy_plan",
+        arguments: JSON.stringify({
+          offer_id: offerId,
+          plan: "Submit for approval",
+        }),
+      };
+      const again = await plugin.onPrepareToolCalls({
+        ...context,
+        toolCalls: [remedy],
+      });
+      expect(again?.decision).not.toBe("refuse");
+      await expect(
+        stageHitlReview({
+          session: trusted.session,
+          review: {
+            offerId,
+            text: "Canonical HITL review.",
+            tool: "archestra__whoami",
+            arguments: "{}",
+            remedyArguments: { offer_id: offerId, plan: "Submit for approval" },
+          },
+        }),
+      ).resolves.toEqual({ status: "staged" });
+      await plugin.onToolResults({
+        ...context,
+        toolResults: [
+          {
+            id: "remedy-again",
+            name: "archestra__execute_remedy_plan",
+            content: JSON.stringify({
+              ok: false,
+              outcome: "review_required",
+              offer_id: offerId,
+            }),
+            isError: false,
+          },
+        ],
+      });
+      const askAgainRequest =
+        interactionType === "openai:responses"
+          ? { instructions: "Base", input: [] }
+          : { system: "Base", messages: [] };
+      await plugin.onBeforeModel({ ...context, request: askAgainRequest });
+      expect(JSON.stringify(askAgainRequest)).toContain(
+        "The policy needs the user's approval for the last execute_remedy_plan result",
+      );
+    } finally {
+      evaluateToolCalls.mockRestore();
+      processResults.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test("a denial recorded elsewhere stands when the native answer finds no review", async () => {
+    const offerId = "offer-denied-elsewhere";
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({ sessionId: "user:user|denied-elsewhere" });
+    context.headers = { "user-agent": "claude-code/1" };
+    context.interactionType = "anthropic:messages";
+    context.provider = "anthropic";
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async () => [{ kind: "allow" as const }]);
+    try {
+      const questionId = await askStagedReview({
+        plugin,
+        context,
+        client: "Claude Code",
+        nativeName: "AskUserQuestion",
+        offerId,
+      });
+      // The gateway's form recorded a denial before the client's answer came.
+      await expect(
+        recordHitlRuling({ session: trusted.session, offerId, ruling: "deny" }),
+      ).resolves.toBe(true);
+      await plugin.onToolResults({
+        ...context,
+        toolResults: [
+          {
+            id: questionId,
+            name: "AskUserQuestion",
+            content: JSON.stringify(
+              'Your questions have been answered: "Approve the archestra__whoami call?"="Approve". You can now continue with these answers in mind.',
+            ),
+            isError: false,
+          },
+        ],
+      });
+      const continuationRequest = { system: "Base", messages: [] };
+      await plugin.onBeforeModel({ ...context, request: continuationRequest });
+      expect(JSON.stringify(continuationRequest)).toContain(
+        "did not approve the pending OpenAPPA review",
+      );
+      await expect(
+        plugin.onPrepareToolCalls({
+          ...context,
+          toolCalls: [
+            { id: "retry", name: "archestra__whoami", arguments: "{}" },
+          ],
+        }),
+      ).resolves.toMatchObject({
+        decision: "refuse",
+        refusal: { reason: "openappa_hitl_not_approved" },
+      });
     } finally {
       evaluateToolCalls.mockRestore();
       processResults.mockRestore();
@@ -3698,7 +4070,7 @@ describe("rendering runtime text for this client", () => {
     }
   });
 
-  test("suppresses the queued start proof when a streamed child completes its handback", async ({
+  test("releases a streamed child's lone handback as the rewritten call", async ({
     makeOrganization,
   }) => {
     const priorSecret = config.openappa.offerSigningSecret;
@@ -3768,21 +4140,20 @@ describe("rendering runtime text for this client", () => {
         expect.objectContaining({ id: "handback" }),
       ]);
 
+      const [handback] = outcome.toolCalls;
+      expect(handback?.name).toBe("SubagentHandback");
+      expect(JSON.stringify(handback?.arguments)).toContain("raw child return");
+
+      // Claude Code takes a subagent's report only through SubagentHandback.
+      // Replacing the streamed turn with text drops that call, and the client
+      // then asks the subagent to send its report again.
       const buffered = await plugin.onBufferedModelResponse({
         ...context,
         streaming: true,
         response: {},
         responseText: "",
       });
-      if (buffered?.decision !== "replace") {
-        throw new Error(
-          "expected the completed handback to replace the buffered stream",
-        );
-      }
-      expect(buffered.responseText).toContain("raw child return");
-      expect(buffered.responseText).toContain("finished subagent");
-      expect(buffered.responseText).not.toContain("[appa]");
-      expect(buffered.responseText).not.toContain("appact2-");
+      expect(buffered).toBeUndefined();
       expect(endChild).toHaveBeenCalledTimes(1);
     } finally {
       endChild.mockRestore();

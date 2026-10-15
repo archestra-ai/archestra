@@ -374,6 +374,12 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "List all agent skills for the organization",
         tags: ["Skills"],
         querystring: PaginationQuerySchema.extend({
+          includeContent: z
+            .preprocess((val) => val !== "false" && val !== false, z.boolean())
+            .optional()
+            .describe(
+              "Include manifest bodies (default true). False returns empty content for lightweight lists.",
+            ),
           search: z.string().optional(),
           sourceRepo: z.string().optional(),
           skillIds: z
@@ -454,6 +460,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           offset,
           search,
           sourceRepo,
+          includeContent,
           skillIds: requestedSkillIds,
           forAgentId,
           mcpGatewayEnvironment,
@@ -652,6 +659,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const [skills, total] = await Promise.all([
         SkillModel.findByOrganization({
           organizationId,
+          includeContent,
           limit,
           offset,
           search,

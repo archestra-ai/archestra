@@ -1091,23 +1091,15 @@ class OpenAppaBatteriesService {
       root,
       governed: installs.flatMap((install) => install.catalogId ?? []),
     });
-    const inputs = {
+    const { snapshot } = await this.retirement(organizationId, {
+      fresh: true,
+    });
+    const fingerprint = compositionFingerprint({
       planned,
       batteries: this.composeInputs({ planned, installs }),
       root,
-    };
-    let retirement = await this.retirement(organizationId, { fresh: false });
-    let fingerprint = compositionFingerprint({
-      ...inputs,
-      retiredCredentials: retirement.snapshot.suffix,
+      retiredCredentials: snapshot.suffix,
     });
-    if (fingerprint !== stored.installFingerprint && retirement.memoised) {
-      retirement = await this.retirement(organizationId, { fresh: true });
-      fingerprint = compositionFingerprint({
-        ...inputs,
-        retiredCredentials: retirement.snapshot.suffix,
-      });
-    }
     // Catalogs, credentials or stored packages moved under the policy; only a
     // recomposition can say what the root composes to now.
     if (fingerprint !== stored.installFingerprint)

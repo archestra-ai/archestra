@@ -38,14 +38,20 @@ export function agentsLosingAccessOnUninstall<
     : agents;
 }
 
-/** Who loses the connection, for the uninstall confirmation. */
-export function uninstallConsequence(server: {
-  teamId?: string | null;
-  scope?: InstallScope;
-}): string {
+/**
+ * Who loses the connection, for the uninstall confirmation. Null for a
+ * personal connection when the viewer sees no shared ones: there is nothing
+ * for it to be told apart from.
+ */
+export function uninstallConsequence(
+  server: { teamId?: string | null; scope?: InstallScope },
+  { seesSharedInstalls }: { seesSharedInstalls: boolean },
+): string | null {
   switch (resolveInstallScope(server)) {
     case "personal":
-      return "Only this personal connection is removed; team and organization connections are not affected.";
+      return seesSharedInstalls
+        ? "Only this personal connection is removed; team and organization connections are not affected."
+        : null;
     case "team":
       return "This removes the team connection for everyone on the team.";
     case "org":

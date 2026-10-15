@@ -105,6 +105,100 @@ function renderEditor(onParentSubmit?: () => void, canManageGlobal = false) {
   return { ...view, client };
 }
 
+it("gives a member who owns the object the list without what they cannot act on", async () => {
+  policy = {
+    ...policy,
+    ownerId: "reviewer",
+    grants: [
+      {
+        subject: { type: "user", id: "reviewer" },
+        name: "Riley Reviewer",
+        actions: ["read", "use", "update", "delete", "manage-permissions"],
+      },
+      ...policy.grants,
+    ],
+  };
+  const renderAs = (memberView: boolean) => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    client.setQueryData(["auth", "session"], { user: { id: "reviewer" } });
+    client.setQueryData(["auth", "userPermissions"], {});
+    return render(
+      <QueryClientProvider client={client}>
+        <ResourcePermissions
+          layout="settings"
+          resource="mcpRegistry"
+          scope={policy.scope}
+          memberView={memberView}
+        />
+      </QueryClientProvider>,
+    );
+  };
+  const user = userEvent.setup();
+
+  const { unmount } = renderAs(false);
+  const fullOwnerRow = await screen.findByTestId("owner-grant");
+  expect(fullOwnerRow).toHaveTextContent("Riley Reviewer");
+  expect(fullOwnerRow).toHaveTextContent("User");
+  expect(screen.getByTestId("inherited-access-note")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  unmount();
+
+  renderAs(true);
+  const ownerRow = await screen.findByTestId("owner-grant");
+  // "You" says who it is; the name and the "User" label would say it again.
+  expect(ownerRow).toHaveTextContent("You");
+  expect(ownerRow).not.toHaveTextContent("Riley Reviewer");
+  expect(ownerRow).not.toHaveTextContent("User");
+  // Every admin's access is not theirs to change.
+  expect(screen.queryByTestId("inherited-access-note")).toBeNull();
+  // Nothing to save yet, so no Save button.
+  expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+  await user.click(
+    screen.getByRole("button", {
+      name: "Remove direct access for Build automation",
+    }),
+  );
+  expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled();
+});
+
+it("leaves out the who-can-use-it line where the surface asks", async () => {
+  const renderWith = (hideAudience: boolean) => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    client.setQueryData(["auth", "session"], { user: { id: "reviewer" } });
+    client.setQueryData(["auth", "userPermissions"], {});
+    return render(
+      <QueryClientProvider client={client}>
+        <ResourcePermissions
+          layout="settings"
+          resource="mcpRegistry"
+          scope={policy.scope}
+          hideAudience={hideAudience}
+        />
+      </QueryClientProvider>,
+    );
+  };
+
+  const { unmount } = renderWith(false);
+  expect(
+    await screen.findByRole("heading", { name: "Who can use it" }),
+  ).toBeInTheDocument();
+  unmount();
+
+  renderWith(true);
+  // The list itself says who can use it, on a tab named Permissions.
+  expect(
+    await screen.findByRole("button", {
+      name: "Remove direct access for Build automation",
+    }),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Who can use it" })).toBeNull();
+  expect(screen.queryByTestId("audience-chip")).toBeNull();
+});
+
 it("preserves an unsaved draft when a background refresh fails", async () => {
   const user = userEvent.setup();
   const { client } = renderEditor();
@@ -474,10 +568,11 @@ it("lets someone who cannot make an entry org-wide lower an everyone grant, but 
   );
   const user = userEvent.setup();
   renderEditor();
-  // The field names only the recipients the server will offer.
+  // The field names only the recipients the server will offer: no everyone,
+  // no roles, and no service accounts for someone who cannot see them.
   expect(
     await screen.findByRole("combobox", { name: "Add access" }),
-  ).toHaveTextContent("Add access: a team, a person or a service account…");
+  ).toHaveTextContent("Add access: a team or a person…");
   await user.click(
     await screen.findByRole("combobox", {
       name: "Permission for Everyone in the organization",

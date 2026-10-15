@@ -61,6 +61,7 @@ import {
   DialogForm,
   DialogStickyFooter,
 } from "@/components/ui/dialog";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -769,13 +770,14 @@ export default function LimitsPage() {
   }
 
   return (
-    <div>
+    <div className="-mt-3">
       <WithPermissions
         permissions={{ llmLimit: ["read"] }}
         noPermissionHandle="hide"
       >
-        <Alert variant="info" className="mb-4">
-          <AlertDescription className="block">
+        <InlineNotice variant="info" className="mb-2">
+          <Info />
+          <InlineNoticeText>
             {defaultUserLimits.length > 0
               ? "A default user limit applies to every user. Custom per-user limits override it. Configure it in "
               : "No default user limit is set — users are only capped by the custom limits below. Set a default for every user in "}
@@ -786,8 +788,8 @@ export default function LimitsPage() {
               LLM settings
             </Link>
             .
-          </AlertDescription>
-        </Alert>
+          </InlineNoticeText>
+        </InlineNotice>
       </WithPermissions>
 
       {attentionLimits.length > 0 && (

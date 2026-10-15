@@ -3,8 +3,11 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import { Bot } from "lucide-react";
 import { useMemo, useState } from "react";
+import { QueryLoadError } from "@/components/query-load-error";
 import { scopeLabel } from "@/components/scope-vocabulary";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -16,6 +19,7 @@ import {
 import { TablePagination } from "@/components/ui/table-pagination";
 import { type AgentOwner, describeAgentOwner } from "@/lib/agent-owner-label";
 import { useSession } from "@/lib/auth/auth.query";
+import { useMcpServerAgentUsage } from "@/lib/mcp/mcp-agent-usage.query";
 import { agentTypeLabel, deriveAgentUsage } from "./mcp-server-agent-usage";
 
 type McpServerFromApi = archestraApiTypes.GetMcpServersResponses["200"][number];
@@ -28,31 +32,48 @@ type McpServerFromApi = archestraApiTypes.GetMcpServersResponses["200"][number];
 export function McpServerUsageTab({
   serversForCatalog,
   autoModeAgents,
+  page,
+  pagination: controlledPagination,
+  onPaginationChange,
 }: {
   serversForCatalog: McpServerFromApi[];
+  page?: archestraApiTypes.GetMcpServerAgentUsageResponses["200"][number];
+  pagination?: { pageIndex: number; pageSize: number };
+  onPaginationChange?: (value: { pageIndex: number; pageSize: number }) => void;
   /** Org-wide auto-mode roster, fetched once by the parent (useAutoModeAgents). */
   autoModeAgents:
     | archestraApiTypes.GetMcpServerAutoModeAgentsResponses["200"]
     | undefined;
 }) {
-  const { all, assigned, autoOnly } = useMemo(
+  const derived = useMemo(
     () => deriveAgentUsage({ serversForCatalog, autoModeAgents }),
     [serversForCatalog, autoModeAgents],
   );
-  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 20 });
+  const all = page?.data ?? derived.all;
+  const total = page?.pagination.total ?? all.length;
+  const assignedCount = page?.assignedCount ?? derived.assigned.length;
+  const autoCount = page?.autoCount ?? derived.autoOnly.length;
+  const [localPagination, setLocalPagination] = useState({
+    pageIndex: 0,
+    pageSize: 20,
+  });
+  const pagination = controlledPagination ?? localPagination;
+  const setPagination = onPaginationChange ?? setLocalPagination;
   // A refreshed roster can remove the last page while it is being viewed.
   const pageIndex = Math.min(
     pagination.pageIndex,
-    Math.max(0, Math.ceil(all.length / pagination.pageSize) - 1),
+    Math.max(0, Math.ceil(total / pagination.pageSize) - 1),
   );
-  const visibleAgents = all.slice(
-    pageIndex * pagination.pageSize,
-    (pageIndex + 1) * pagination.pageSize,
-  );
+  const visibleAgents = page
+    ? all
+    : all.slice(
+        pageIndex * pagination.pageSize,
+        (pageIndex + 1) * pagination.pageSize,
+      );
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 
-  if (all.length === 0) {
+  if (total === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-12 text-center">
         <Bot className="h-6 w-6 text-muted-foreground" />
@@ -70,10 +91,9 @@ export function McpServerUsageTab({
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        {all.length}{" "}
-        {all.length === 1 ? "agent or gateway" : "agents and gateways"} can
-        reach this server — {assigned.length} with Manual tool access,{" "}
-        {autoOnly.length} with All.
+        {total} {total === 1 ? "agent or gateway" : "agents and gateways"} can
+        reach this server — {assignedCount} with Manual tool access, {autoCount}{" "}
+        with All.
       </p>
       <div className="rounded-lg border">
         <Table>
@@ -110,9 +130,65 @@ export function McpServerUsageTab({
       <TablePagination
         pageIndex={pageIndex}
         pageSize={pagination.pageSize}
-        total={all.length}
+        total={total}
         onPaginationChange={setPagination}
       />
+    </div>
+  );
+}
+
+/** Fetch only the selected Usage page; the legacy renderer stays reusable. */
+export function McpServerPagedUsageTab({ catalogId }: { catalogId: string }) {
+  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 20 });
+  const [search, setSearch] = useState("");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const query = useMcpServerAgentUsage({
+    catalogIds: [catalogId],
+    limit: pagination.pageSize,
+    offset: pagination.pageIndex * pagination.pageSize,
+    search,
+    sortDirection,
+  });
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Input
+          placeholder="Search agents or owners"
+          value={search}
+          onChange={(event) => {
+            setSearch(event.target.value);
+            setPagination((current) => ({ ...current, pageIndex: 0 }));
+          }}
+        />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+            setPagination((current) => ({ ...current, pageIndex: 0 }));
+          }}
+        >
+          <span>
+            {sortDirection === "asc" ? "Name: A to Z" : "Name: Z to A"}
+          </span>
+        </Button>
+      </div>
+      {query.isLoadingError ? (
+        <QueryLoadError
+          title="Could not load agent usage"
+          onRetry={() => query.refetch()}
+        />
+      ) : query.isPending ? (
+        <p className="text-sm text-muted-foreground">Loading agent usage…</p>
+      ) : query.data?.[0] ? (
+        <McpServerUsageTab
+          serversForCatalog={[]}
+          autoModeAgents={undefined}
+          page={query.data[0]}
+          pagination={pagination}
+          onPaginationChange={setPagination}
+        />
+      ) : null}
     </div>
   );
 }

@@ -73,9 +73,9 @@ import {
   useInternalMcpCatalog,
   useRefreshInternalMcpCatalogImage,
 } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpServerAgentUsage } from "@/lib/mcp/mcp-agent-usage.query";
 import {
   type McpDeploymentFeedState,
-  useAutoModeAgents,
   useMcpDeploymentStatuses,
   useMcpInstallationStatusCacheSync,
   useMcpServers,
@@ -114,10 +114,9 @@ import {
   mcpServerAction,
   mcpServerActionHref,
 } from "../_parts/mcp-server-actions-model";
-import { deriveAgentUsage } from "../_parts/mcp-server-agent-usage";
 import type { CatalogItem, InstalledServer } from "../_parts/mcp-server-card";
 import { McpServerIssueNotice } from "../_parts/mcp-server-issue-notice";
-import { McpServerUsageTab } from "../_parts/mcp-server-usage-tab";
+import { McpServerPagedUsageTab } from "../_parts/mcp-server-usage-tab";
 import { PlaywrightSavedLoginsTab } from "../_parts/playwright-saved-logins-tab";
 import { useCatalogInstall } from "../_parts/use-catalog-install";
 import { useChatWithCatalogItem } from "../_parts/use-chat-with-catalog-item";
@@ -462,13 +461,13 @@ function CatalogItemDetails({
       : isMemberView
         ? "Installation"
         : "Installations";
-  const { data: autoModeAgents } = useAutoModeAgents({
+  const { data: usageSummary } = useMcpServerAgentUsage({
+    catalogIds: [item.id],
     enabled: !isMemberView,
+    limit: 8,
+    previews: true,
   });
-  const agentUsageCount = deriveAgentUsage({
-    serversForCatalog: allServersForCatalog,
-    autoModeAgents,
-  }).total;
+  const agentUsageCount = usageSummary?.[0]?.pagination.total ?? 0;
 
   const tabs: {
     label: React.ReactNode;
@@ -691,10 +690,7 @@ function CatalogItemDetails({
         )}
         {effectiveTab === "logins" && <PlaywrightSavedLoginsTab />}
         {effectiveTab === "usage" && (
-          <McpServerUsageTab
-            serversForCatalog={allServersForCatalog}
-            autoModeAgents={autoModeAgents}
-          />
+          <McpServerPagedUsageTab catalogId={item.id} />
         )}
 
         {effectiveTab === "overview" && (

@@ -80006,6 +80006,136 @@ export type McpServerProxyPostResponses = {
     200: unknown;
 };
 
+export type GetMcpServerAgentUsageData = {
+    body?: never;
+    path?: never;
+    query: {
+        limit?: number;
+        offset?: number;
+        catalogIds: Array<string>;
+        search?: string;
+        sortDirection?: 'asc' | 'desc';
+        previews?: 'true' | 'false';
+    };
+    url: '/api/mcp_server/agent_usage';
+};
+
+export type GetMcpServerAgentUsageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetMcpServerAgentUsageError = GetMcpServerAgentUsageErrors[keyof GetMcpServerAgentUsageErrors];
+
+export type GetMcpServerAgentUsageResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        data: Array<{
+            id: string;
+            name: string;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            scope: 'personal' | 'team' | 'org';
+            ownerId: string | null;
+            ownerEmail: string | null;
+            access: 'assigned' | 'auto';
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+        catalogId: string;
+        assignedCount: number;
+        autoCount: number;
+        assignedPreview: Array<{
+            id: string;
+            name: string;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            scope: 'personal' | 'team' | 'org';
+            ownerId: string | null;
+            ownerEmail: string | null;
+            access: 'assigned' | 'auto';
+        }>;
+        autoPreview: Array<{
+            id: string;
+            name: string;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            scope: 'personal' | 'team' | 'org';
+            ownerId: string | null;
+            ownerEmail: string | null;
+            access: 'assigned' | 'auto';
+        }>;
+    }>;
+};
+
+export type GetMcpServerAgentUsageResponse = GetMcpServerAgentUsageResponses[keyof GetMcpServerAgentUsageResponses];
+
 export type GetMcpServerAutoModeAgentsData = {
     body?: never;
     path?: never;

@@ -81,6 +81,7 @@ import {
   useMcpCatalogLabelValues,
   useReinstallInternalMcpCatalogItem,
 } from "@/lib/mcp/internal-mcp-catalog.query";
+import { McpUsageSummaryProvider } from "@/lib/mcp/mcp-agent-usage.query";
 import {
   type McpDeploymentFeedState,
   useBulkUninstallMcpServers,
@@ -1622,7 +1623,11 @@ function McpServerCatalogSection({
             onVisibleRowIdsChange={recordCardPageRowIds}
           >
             <div className="space-y-4">
-              <TableCardGrid>{cardPageItems.map(renderCard)}</TableCardGrid>
+              <McpUsageSummaryProvider
+                catalogIds={cardPageItems.map((item) => item.id)}
+              >
+                <TableCardGrid>{cardPageItems.map(renderCard)}</TableCardGrid>
+              </McpUsageSummaryProvider>
               {orderedCardItems.length > cardPagination.pageSize ? (
                 <TablePagination
                   pageIndex={cardPageIndex}

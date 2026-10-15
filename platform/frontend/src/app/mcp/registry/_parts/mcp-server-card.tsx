@@ -63,8 +63,9 @@ import { copyToClipboard } from "@/lib/clipboard";
 import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { useReinstallInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpUsageSummary } from "@/lib/mcp/mcp-agent-usage.query";
 import type { McpDeploymentFeedState } from "@/lib/mcp/mcp-server.query";
-import { useAutoModeAgents, useMcpServers } from "@/lib/mcp/mcp-server.query";
+import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import {
   canReinstallInstall,
   type McpServerIssue,
@@ -327,18 +328,18 @@ export function McpServerCard({
   // The distinct agents that can reach this catalog item, across every install
   // of it — the audience affected if those installs go away. Shared with the
   // detail page's Usage tab so both surfaces count the same way.
-  const { data: autoModeAgents } = useAutoModeAgents({
-    enabled: !!showsAgentUsage,
-  });
-  const {
-    assigned: assignedAgents,
-    autoOnly: autoModeOnlyAgents,
-    total: usageTotal,
-  } = deriveAgentUsage({
+  const summary = useMcpUsageSummary(item.id);
+  const fallback = deriveAgentUsage({
     serversForCatalog: allServersForCatalog,
-    autoModeAgents,
+    autoModeAgents: undefined,
   });
-  const totalAgentCount = showsAgentUsage ? usageTotal : 0;
+  const assignedAgents = summary?.assignedPreview ?? fallback.assigned;
+  const autoModeOnlyAgents = summary?.autoPreview ?? [];
+  const assignedCount = summary?.assignedCount ?? fallback.assigned.length;
+  const autoCount = summary?.autoCount ?? 0;
+  const totalAgentCount = showsAgentUsage
+    ? (summary?.pagination.total ?? fallback.total)
+    : 0;
 
   // The most recent personal install for this catalog item, if any.
   const uninstallInstalls: UninstallServerInstall[] = (() => {
@@ -729,23 +730,25 @@ export function McpServerCard({
               </Link>
             </HoverCardTrigger>
             <HoverCardContent pointerEventsNone className="w-72 p-3 text-sm">
-              {assignedAgents.length > 0 && (
+              {assignedCount > 0 && (
                 <AgentUsageSection
-                  title={`Used by ${assignedAgents.length} ${
-                    assignedAgents.length === 1 ? "agent" : "agents"
+                  title={`Used by ${assignedCount} ${
+                    assignedCount === 1 ? "agent" : "agents"
                   } (assigned tools)`}
                   agents={assignedAgents}
+                  total={assignedCount}
                 />
               )}
-              {assignedAgents.length > 0 && autoModeOnlyAgents.length > 0 && (
+              {assignedCount > 0 && autoCount > 0 && (
                 <div className="my-2 h-px bg-border" />
               )}
-              {autoModeOnlyAgents.length > 0 && (
+              {autoCount > 0 && (
                 <AgentUsageSection
-                  title={`${autoModeOnlyAgents.length} auto-mode ${
-                    autoModeOnlyAgents.length === 1 ? "agent" : "agents"
+                  title={`${autoCount} auto-mode ${
+                    autoCount === 1 ? "agent" : "agents"
                   } (access all tools)`}
                   agents={autoModeOnlyAgents}
+                  total={autoCount}
                 />
               )}
               <p className="mt-2.5 flex items-center gap-1 border-t pt-2 text-xs text-muted-foreground">
@@ -1134,12 +1137,14 @@ export function McpServerCard({
 function AgentUsageSection({
   title,
   agents,
+  total = agents.length,
 }: {
   title: string;
   agents: AgentUsage[];
+  total?: number;
 }) {
   const shown = agents.slice(0, AGENT_USAGE_PREVIEW_LIMIT);
-  const remaining = agents.length - shown.length;
+  const remaining = total - shown.length;
 
   return (
     <>

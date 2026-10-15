@@ -105,8 +105,10 @@ import {
   broadcastMcpServersChanged,
 } from "@/websocket";
 import { BulkDeleteBodySchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
+import mcpServerAgentUsageRoutes from "./mcp-server-agent-usage";
 
 const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  await fastify.register(mcpServerAgentUsageRoutes);
   fastify.get(
     "/api/mcp_server/auto_mode_agents",
     {

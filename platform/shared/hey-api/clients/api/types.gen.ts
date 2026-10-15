@@ -80102,16 +80102,16 @@ export type GetMcpServersData = {
     path?: never;
     query?: {
         catalogId?: string;
+        /**
+         * Include per-install agent usage (default true). False returns empty assignedAgents for status-only lists.
+         */
+        includeAssignedAgents?: boolean;
         assignmentScope?: 'personal' | 'team' | 'org';
         assignmentTeamIds?: Array<string>;
         /**
          * Filter by lifecycle status. `deleted` lists soft-deleted (uninstalled) installs and requires delete permission and is limited to connections you can uninstall.
          */
         status?: 'active' | 'deleted';
-        /**
-         * Include per-install agent usage (default true). False returns empty assignedAgents for status-only lists.
-         */
-        includeAssignedAgents?: boolean;
     };
     url: '/api/mcp_server';
 };

@@ -105633,6 +105633,15 @@ export type RunScheduleTriggerNowResponses = {
         startedAt: string | null;
         completedAt: string | null;
         error: string | null;
+        blockedBy: {
+            phase: 'starting' | 'running' | 'stopping';
+            runId: string | null;
+            runtimeTaskId: string | null;
+            startedAt: string;
+            elapsedSeconds: number;
+            deadline: string | null;
+            maximumDurationSeconds: number | null;
+        } | null;
         artifact: string | null;
         createdAt: string;
     };
@@ -105738,6 +105747,15 @@ export type GetScheduleTriggerRunsResponses = {
             startedAt: string | null;
             completedAt: string | null;
             error: string | null;
+            blockedBy: {
+                phase: 'starting' | 'running' | 'stopping';
+                runId: string | null;
+                runtimeTaskId: string | null;
+                startedAt: string;
+                elapsedSeconds: number;
+                deadline: string | null;
+                maximumDurationSeconds: number | null;
+            } | null;
             artifact: string | null;
             createdAt: string;
         }>;
@@ -105848,6 +105866,15 @@ export type GetScheduleTriggerRunResponses = {
         startedAt: string | null;
         completedAt: string | null;
         error: string | null;
+        blockedBy: {
+            phase: 'starting' | 'running' | 'stopping';
+            runId: string | null;
+            runtimeTaskId: string | null;
+            startedAt: string;
+            elapsedSeconds: number;
+            deadline: string | null;
+            maximumDurationSeconds: number | null;
+        } | null;
         artifact: string | null;
         createdAt: string;
     };

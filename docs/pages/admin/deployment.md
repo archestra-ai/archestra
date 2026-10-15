@@ -165,6 +165,10 @@ Pin an exact chart version or image tag from [GitHub Releases](https://github.co
 3. Test the selected version in staging.
 4. Apply the Helm upgrade above and check rollout and migration Job status.
 
+For the v1.3-to-v1.4 upgrade, stop older application replicas before starting v1.4, as required by the [OAuth client upgrade](#upgrade-oauth-clients). Older and newer authorization writers cannot run together.
+
+On the first v1.4 startup, Archestra converts legacy sharing and role permissions before serving API traffic. One replica performs the conversion; other replicas wait, and later restarts skip it. During startup, `/health` responds successfully while `/ready` returns HTTP 503 until the API is ready, so large conversions do not exhaust the Kubernetes startup probe budget.
+
 During shutdown, Archestra stops accepting new model requests and gives active requests up to 60 seconds to finish. Requests that outlast this window can still lose their connection. The Helm chart sets `archestra.terminationGracePeriodSeconds` to 120; keep it at least this high so the container can finish shutdown.
 
 For Docker, use `docker stop --time 120` or set Compose's `stop_grace_period: 120s`. A shorter host deadline can kill the container before requests finish.

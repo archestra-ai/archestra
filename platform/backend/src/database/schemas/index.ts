@@ -253,6 +253,7 @@ export { default as skillUsageEventsTable } from "./skill-usage-event";
 export { default as skillUsersTable } from "./skill-user";
 export { default as skillVersionsTable } from "./skill-version";
 export { default as skillVersionFilesTable } from "./skill-version-file";
+export { default as startupMigrationsTable } from "./startup-migration";
 export { default as tasksTable } from "./task";
 export { team as teamsTable, teamMember as teamMembersTable } from "./team";
 export { default as teamExternalGroupsTable } from "./team-external-group";

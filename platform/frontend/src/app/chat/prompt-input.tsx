@@ -220,6 +220,8 @@ export interface ArchestraPromptInputProps
     skill: ChatExternalMcpSkillMetadata,
   ) => void;
   placeholderPreview?: string | null;
+  /** The composer's text answers the open question rather than starting a new message. */
+  answersQuestion?: boolean;
   /** Render the new-chat composer as a dedicated runtime launcher. */
   runtimeMode?: boolean;
   runtimeAgentName?: string;
@@ -293,6 +295,7 @@ const PromptInputContent = ({
   onRemoveExternalMcpSkillAttachment,
   onRestoreExternalMcpSkillAttachment,
   placeholderPreview,
+  answersQuestion = false,
   runtimeMode = false,
   runtimeAgentName,
   drawerBelow = false,
@@ -372,9 +375,11 @@ const PromptInputContent = ({
 
   const defaultPlaceholder = runtimeMode
     ? "Describe the task to run..."
-    : conversationId
-      ? "Ask a follow-up..."
-      : (chatPlaceholder ?? "What would you like to get done?");
+    : answersQuestion
+      ? "Type your answer..."
+      : conversationId
+        ? "Ask a follow-up..."
+        : (chatPlaceholder ?? "What would you like to get done?");
   const isPreviewingSuggestion =
     !!placeholderPreview && controller.textInput.value.length === 0;
   const placeholder = isPreviewingSuggestion
@@ -1318,6 +1323,7 @@ const ArchestraPromptInput = ({
   onRemoveExternalMcpSkillAttachment,
   onRestoreExternalMcpSkillAttachment,
   placeholderPreview,
+  answersQuestion,
   runtimeMode,
   runtimeAgentName,
   drawerBelow,
@@ -1431,6 +1437,7 @@ const ArchestraPromptInput = ({
           encryptedChat={encryptedChat}
           onEncryptedChatChange={onEncryptedChatChange}
           placeholderPreview={placeholderPreview}
+          answersQuestion={answersQuestion}
           runtimeMode={runtimeMode}
           runtimeAgentName={runtimeAgentName}
           drawerBelow={drawerBelow}

@@ -61,7 +61,10 @@ import { ConversationFilesPanel } from "@/components/chat/conversation-files-pan
 import { ConversationHeader } from "@/components/chat/conversation-header";
 import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
-import { getComposerAnswer } from "@/components/chat/mcp-elicitation-fields";
+import {
+  getComposerAnswer,
+  takesComposerAnswer,
+} from "@/components/chat/mcp-elicitation-fields";
 import { OnboardingWizardButton } from "@/components/chat/onboarding-wizard-button";
 import {
   AppsPanelContent,
@@ -3529,6 +3532,9 @@ export function ChatPageContent({
                             <AgentConnectionNotice agentId={activeAgentId} />
                             <ArchestraPromptInput
                               onSubmit={handleSubmit}
+                              answersQuestion={takesComposerAnswer(
+                                chatSession?.pendingMcpElicitations ?? [],
+                              )}
                               toolsUnavailable={conversationToolsUnavailable}
                               notRecommendedForAgents={
                                 conversationNotRecommended

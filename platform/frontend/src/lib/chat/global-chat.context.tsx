@@ -130,6 +130,8 @@ interface ChatSession {
   transportActivitySequence: number;
   /** Monotonic signal advanced only when the assistant response progresses. */
   responseProgressSequence: number;
+  /** True once silent-stall reattaches are used up; the stall notice shows only then. */
+  stallRecoveryExhausted: boolean;
   sendMessage: (
     message: Parameters<ReturnType<typeof useChat>["sendMessage"]>[0],
   ) => void;
@@ -1678,6 +1680,8 @@ function ChatSessionHook({
     messages: displayedMessages,
     transportActivitySequence: streamActivity.transportSequence,
     responseProgressSequence: streamActivity.responseProgressSequence,
+    stallRecoveryExhausted:
+      stallRecoveryCountRef.current >= MAX_STALL_RECOVERIES,
     sendMessage,
     regenerateUserMessage,
     stop: stopSession,

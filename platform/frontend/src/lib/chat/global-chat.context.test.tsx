@@ -361,6 +361,60 @@ describe("ChatProvider retries", () => {
     expect(mocks.stop).toHaveBeenCalledTimes(1);
   });
 
+  it("flags the stall notice only after the silent-stall reattaches are used up", async () => {
+    let status: "ready" | "streaming" = "streaming";
+    const baseUseChat = mocks.useChat.getMockImplementation();
+    mocks.useChat.mockImplementation((options) => ({
+      ...baseUseChat?.(options),
+      status,
+    }));
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+    vi.useFakeTimers();
+    const renderTree = () => (
+      <ChatProvider>
+        <RegisterChatSession />
+        <CaptureChatSession
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>
+    );
+    const { rerender } = render(renderTree());
+
+    // Each silent stall aborts the hung request; the reattach starts once the
+    // status settles back to ready, and the next stall needs a fresh stream.
+    const settle = (nextStatus: "ready" | "streaming") => {
+      status = nextStatus;
+      act(() => {
+        rerender(renderTree());
+      });
+    };
+    for (const attempt of [1, 2, 3]) {
+      settle("streaming");
+      act(() => {
+        vi.advanceTimersByTime(40_000);
+      });
+      expect(mocks.stop).toHaveBeenCalledTimes(attempt);
+      settle("ready");
+      expect(mocks.resumeStream).toHaveBeenCalledTimes(attempt);
+      // Only the third reattach's use-up is a signal; earlier ones keep the notice hidden.
+      expect(latestSessionRef.current?.stallRecoveryExhausted).toBe(
+        attempt === 3,
+      );
+    }
+
+    // Reattaches are used up: a fourth stall starts no further reattach.
+    settle("streaming");
+    act(() => {
+      vi.advanceTimersByTime(40_000);
+    });
+    expect(mocks.stop).toHaveBeenCalledTimes(3);
+    expect(latestSessionRef.current?.stallRecoveryExhausted).toBe(true);
+  });
+
   it("clears persisted chat errors once a user-message regenerate is issued", async () => {
     const latestSessionRef: { current: ChatSessionSnapshot } = {
       current: undefined,

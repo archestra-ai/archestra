@@ -115,6 +115,14 @@ type HitlAskUserArguments = {
 };
 
 const HITL_REVIEW_TTL_MS = 10 * TimeInMs.Minute;
+/**
+ * How long a client's own question about a review accepts its answer. The
+ * review the question asks about is kept a full review window longer
+ * (`renewHitlReview`), so the answer always finds the review it is read
+ * against, and an approval given on the question's last second keeps its
+ * context for as long as the ruling can be spent.
+ */
+export const HITL_QUESTION_TTL_MS = 30 * TimeInMs.Minute;
 // Replay facts outlive live review claims, but abandoned history is not permanent.
 const HITL_HISTORY_TTL_MS = 30 * TimeInMs.Day;
 const HITL_RULINGS: readonly HitlRuling[] = ["approve", "none", "deny"];
@@ -196,6 +204,25 @@ export async function stageHitlReview(params: {
           ...(closure ? { closure } : {}),
         };
       }
+      const issued = await cache.get<PendingHitlReview>(
+        stagePresenceKey(params.session, params.review.offerId),
+      );
+      if (issued?.offerId === params.review.offerId) {
+        // A repeated remedy call keeps the stage it finds: the question a
+        // client already shows about it may still be open, and that question
+        // was promised the review's lifetime (`renewHitlReview`).
+        const pending = await cache.get<PendingHitlReview>(
+          reviewKey(params.session, params.review.offerId),
+        );
+        if (pending?.offerId !== params.review.offerId) {
+          await cache.set(
+            reviewKey(params.session, params.review.offerId),
+            issued,
+            HITL_REVIEW_TTL_MS,
+          );
+        }
+        return { status: "staged" as const };
+      }
       await cache.set(
         stagePresenceKey(params.session, params.review.offerId),
         params.review,
@@ -265,8 +292,11 @@ export async function getHitlReview(params: {
   session: OpenAppaSession;
   offerId: string;
 }): Promise<PendingHitlReview | undefined> {
+  // A review that cannot be read is not a review that is gone: callers turn
+  // its absence into a closed question, so a storage failure must fail them.
   const review = await cacheManager.get<PendingHitlReview>(
     reviewKey(params.session, params.offerId),
+    { throwOnError: true },
   );
   if (review?.offerId === params.offerId) return review;
   // Native clients still need the exact review text to bind their following
@@ -367,7 +397,7 @@ export async function recordHitlRuling(params: {
     stagePresenceKey(params.session, params.offerId),
     async (cache) => {
       // Validation and commit share the consumer's lock across replicas.
-      const issued = await cache.get<{ offerId: string }>(
+      const issued = await cache.get<PendingHitlReview>(
         stagePresenceKey(params.session, params.offerId),
       );
       if (issued?.offerId !== params.offerId) return false;
@@ -416,6 +446,13 @@ export async function recordHitlRuling(params: {
         await cache.delete(rulingKey(params.session, params.offerId, "none"));
       } else if (params.ruling === "approve") {
         await cache.delete(rulingKey(params.session, params.offerId, "none"));
+        // The review an approval is spent with lives as long as the approval:
+        // the proxy reads it to make the remedy call the approval authorizes.
+        await cache.set(
+          stagePresenceKey(params.session, params.offerId),
+          issued,
+          HITL_REVIEW_TTL_MS,
+        );
       }
       return true;
     },
@@ -433,6 +470,52 @@ export async function recordHitlRuling(params: {
       : "OpenAPPA human-review ruling recorded",
   );
   return true;
+}
+
+/**
+ * Keeps a staged review for the question a client now shows about it. The
+ * review outlives the question by a full review window, so an answer the
+ * question still accepts always finds the review it is read against. A review
+ * that is not staged, or already ruled or closed, is left as it is.
+ */
+export async function renewHitlReview(params: {
+  session: OpenAppaSession;
+  offerId: string;
+}): Promise<boolean> {
+  return cacheManager.withLock(
+    stagePresenceKey(params.session, params.offerId),
+    async (cache) => {
+      const issued = await cache.get<PendingHitlReview>(
+        stagePresenceKey(params.session, params.offerId),
+      );
+      const pending = await cache.get<PendingHitlReview>(
+        reviewKey(params.session, params.offerId),
+      );
+      if (
+        issued?.offerId !== params.offerId ||
+        pending?.offerId !== params.offerId
+      )
+        return false;
+      const existing = await readLockedRulings(
+        cache,
+        params.session,
+        params.offerId,
+      );
+      if (existing.deny || existing.approve || existing.none) return false;
+      const lifetime = HITL_QUESTION_TTL_MS + HITL_REVIEW_TTL_MS;
+      await cache.set(
+        stagePresenceKey(params.session, params.offerId),
+        issued,
+        lifetime,
+      );
+      await cache.set(
+        reviewKey(params.session, params.offerId),
+        pending,
+        lifetime,
+      );
+      return true;
+    },
+  );
 }
 
 /**
@@ -576,6 +659,7 @@ export async function hitlReviewAskedInForm(params: {
   for (const offerId of params.offerIds) {
     const entry = await cacheManager.get<{ offerId: string }>(
       formKey(params.session, offerId),
+      { throwOnError: true },
     );
     if (entry?.offerId === offerId) return true;
   }

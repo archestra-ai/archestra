@@ -122,76 +122,6 @@ describe("CompactToolGroup", () => {
     expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();
   });
 
-  it("shows combined policy previews only when the proposal changes the policy", () => {
-    mockGetToolShortName.mockImplementation((name: string) =>
-      name.replace(/^archestra__/, ""),
-    );
-    const client = new QueryClient();
-    const proposal = {
-      stage: "preview",
-      delivery: "revision",
-      policy: {
-        before: '[policy]\nversion = 2\nname = "old"\n',
-        after: '[policy]\nversion = 2\nname = "new"\n',
-        changed: true,
-      },
-      validation: { valid: true, errors: [], warnings: [] },
-    };
-    const show = (name: string, output: unknown) => (
-      <QueryClientProvider client={client}>
-        <CompactToolGroup
-          tools={[
-            {
-              kind: "tool",
-              key: "preview",
-              toolName: `archestra__${name}`,
-              part: {
-                type: `tool-archestra__${name}`,
-                state: "output-available",
-                toolCallId: "preview",
-                input: {},
-                output,
-              } as never,
-              toolResultPart: null,
-              errorText: undefined,
-            },
-          ]}
-        />
-      </QueryClientProvider>
-    );
-    const { rerender } = render(
-      show("preview_openappa_validation_change", {
-        structuredContent: proposal,
-      }),
-    );
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "preview openappa validation change",
-      }),
-    );
-    expect(screen.getByLabelText("Policy diff")).toHaveTextContent(
-      'Added: name = "new"',
-    );
-    // Previews check syntax only; they report no replay outcome.
-    expect(screen.queryByText(/could not run/)).not.toBeInTheDocument();
-    rerender(
-      show("preview_openappa_validation_change", {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify({
-              ...proposal,
-              policy: { ...proposal.policy, changed: false },
-            }),
-          },
-        ],
-      }),
-    );
-    expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();
-    rerender(show("unrelated_tool", { structuredContent: proposal }));
-    expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();
-  });
-
   it("keeps saved validations visible without claiming a run or policy activation", () => {
     mockGetToolShortName.mockImplementation((name: string) =>
       name.replace(/^archestra__/, ""),
@@ -211,9 +141,9 @@ describe("CompactToolGroup", () => {
             {
               kind: "tool",
               key: "publish",
-              toolName: "archestra__publish_openappa_validation_change",
+              toolName: "archestra__update_guardrails_validation",
               part: {
-                type: "tool-archestra__publish_openappa_validation_change",
+                type: "tool-archestra__update_guardrails_validation",
                 state: "output-available",
                 toolCallId: "publish",
                 input: {},
@@ -235,7 +165,7 @@ describe("CompactToolGroup", () => {
     ).toHaveAttribute("href", "/openappa/validation");
     expect(
       screen.getByRole("button", {
-        name: "publish openappa validation change",
+        name: "update guardrails validation",
       }),
     ).toHaveAttribute("aria-expanded", "true");
     expect(screen.queryByText(/Enforcement confirmed/)).not.toBeInTheDocument();
@@ -261,7 +191,7 @@ describe("CompactToolGroup", () => {
     expect(screen.queryByText("Saved validations")).not.toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", {
-        name: "publish openappa validation change",
+        name: "update guardrails validation",
       }),
     );
     expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();

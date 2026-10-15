@@ -661,8 +661,7 @@ function Show-ArchReconfigureOffer {
   if (-not $UseVt) { Show-ArchReconfigureHint }
   $key = ''
   if ($null -ne $Script:PendingKey) {
-    # only [C] is answered here; any other queued key (e.g. a [U] meant for the
-    # update offer below) is left in PendingKey so that beat can read it
+    # Only [C] is answered here; unrelated input must not select a menu action.
     if ($Script:PendingKey -eq 'c' -or $Script:PendingKey -eq 'C') {
       $key = $Script:PendingKey; $Script:PendingKey = $null
     }
@@ -673,54 +672,35 @@ function Show-ArchReconfigureOffer {
       if ($key) { break }
       Start-Sleep -Milliseconds 40
     }
-    # a non-[C] key pressed here belongs to the update offer below: stash it so
-    # this closing beat doesn't swallow it
+    # Preserve unrelated input without treating it as a menu action.
     if ($key -and $key -ne 'c' -and $key -ne 'C') { $Script:PendingKey = $key; $key = '' }
   }
   Clear-ArchReconfigureHint
   if ($key -eq 'c' -or $key -eq 'C') { Invoke-ArchReconfigureMenu }
 }
 
-# When the instance reports a newer guard format than this one, show a one-line
-# advisory with a timed, non-blocking [U] offer. It never blocks the launch: the
-# key poll has a short deadline and any other key — or the timeout — lets
-# ${client.binary} start. Pressing [U] prints the concrete /connection re-run
-# steps and holds a beat longer so they can be read. Re-connecting needs a fresh
-# one-time link only the user can fetch, so [U] shows the steps.
+# The health request checks for updates on every launch. Show the reason and
+# concrete steps automatically, then let the client start after six seconds.
 function Show-ArchVersionUpdate {
-  # Nothing to update if the guard just removed itself (every remote was
-  # disconnected this run); the timed reads below already hold the advisory on
-  # screen, so no extra dwell is needed.
   if ($Script:GuardUninstalled) { return }
   if (-not (Test-ArchVersionStale)) { return }
+  # Flush type-ahead before drawing, including keys beyond PendingKey.
+  $Script:PendingKey = $null
+  try { while ([Console]::KeyAvailable) { [void][Console]::ReadKey($true) } } catch { }
   Clear-ArchLine
-  Write-Arch 'update:' Yellow -NoNewline
-  Write-Arch (' a newer ' + $AppName + ' setup is available. ') DarkGray -NoNewline
-  Write-Arch '[U]' Cyan -NoNewline
-  Write-Arch ' for the steps to update this startup check' DarkGray
-  $key = ''
-  if ($null -ne $Script:PendingKey) {
-    # a [U] typed ahead during the probes (left in place by the closing beat) answers here
-    $key = $Script:PendingKey; $Script:PendingKey = $null
-  } else {
-    $deadline = [DateTime]::UtcNow.AddMilliseconds(1500)
-    while ([DateTime]::UtcNow -lt $deadline) {
-      $key = Read-ArchKey
-      if ($key) { break }
-      Start-Sleep -Milliseconds 40
-    }
-  }
-  if ($key -eq 'u' -or $key -eq 'U') {
-    Write-Arch ('To update, re-run the ' + $AppName + ' connection setup:') Cyan
-    Write-Host ('  1. Open the ' + $AppName + ' /connection page and pick ' + ${psq(client.label)} + '.')
-    Write-Host '  2. Copy the setup command it shows and run it in your terminal.'
-    Write-Host '     It reinstalls this startup check at the current version.'
-    # a longer, still non-blocking beat so the steps can be read
-    $deadline = [DateTime]::UtcNow.AddMilliseconds(6000)
-    while ([DateTime]::UtcNow -lt $deadline) {
-      if (Read-ArchKey) { break }
-      Start-Sleep -Milliseconds 40
-    }
+  Write-Host ''
+  Write-Arch 'Update available' Yellow -NoNewline
+  Write-Host (' — a newer ' + $AppName + ' setup is available.')
+  Write-Host 'Your installed startup check is older than this deployment.'
+  Write-Arch ('To update, re-run the ' + $AppName + ' connection setup:') Cyan
+  Write-Host ('  1. Open the ' + $AppName + ' /connection page and pick ' + ${psq(client.label)} + '.')
+  Write-Host '  2. Copy the setup command it shows and run it in your terminal.'
+  Write-Host '     It reinstalls this startup check at the current version.'
+  Write-Arch 'Continuing in 6 seconds — press any key to continue now.' DarkGray
+  $deadline = [DateTime]::UtcNow.AddMilliseconds(6000)
+  while ([DateTime]::UtcNow -lt $deadline) {
+    if (Read-ArchKey) { break }
+    Start-Sleep -Milliseconds 40
   }
 }
 
@@ -921,6 +901,7 @@ if ($Script:OpenMenu) {
   if ($UseVt) { Write-Host -NoNewline ("$Esc[" + $ActiveRemotes.Count + 'B' + "\`r") }
   Clear-ArchReconfigureHint
   Invoke-ArchReconfigureMenu
+  Show-ArchVersionUpdate
   Exit-ArchGuard
   return
 }
@@ -929,6 +910,7 @@ if ($Script:DiscAll) {
   $Script:Dwell = $true
   Disconnect-ArchRemotes $ActiveRemotes
   if (-not $Script:ArchDisconnectFailed) { Remove-ArchGuard }
+  Show-ArchVersionUpdate
   Exit-ArchGuard
   return
 }
@@ -1071,7 +1053,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Could not restore Codex direct tool settings.'
     : ""
 }
 # A guard installed BEFORE the version-check feature has no $GuardFormatVersion
-# stamp and no [U] update check, so at launch it can never nudge the user to
+# stamp and no startup update check, so at launch it can never nudge the user to
 # re-connect on its own. Running connect is the one moment we can lift such a
 # user onto the current guard, so we upgrade it in place, automatically, with no
 # prompt. (A guard already carrying the stamp is just refreshed silently.)

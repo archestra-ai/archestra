@@ -2,6 +2,7 @@
 
 import {
   type archestraApiTypes,
+  buildSlackSlashCommands,
   SLACK_BOT_HANDLE_PATTERN,
   slackHandleFor,
 } from "@archestra/shared";
@@ -109,6 +110,7 @@ export function SlackAgentBotsSection({
   const [addOpen, setAddOpen] = useState(false);
   const [addRouterOpen, setAddRouterOpen] = useState(false);
   const [routerSetupOpen, setRouterSetupOpen] = useState(false);
+  const [routerEditOpen, setRouterEditOpen] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
   const [manualAgent, setManualAgent] = useState<AgentRef | null>(null);
   const [finishBot, setFinishBot] = useState<FinishTarget | null>(null);
@@ -266,7 +268,7 @@ export function SlackAgentBotsSection({
           bot={routerBot}
           userId={userId}
           onAdd={startAddRouter}
-          onEdit={() => setRouterSetupOpen(true)}
+          onEdit={() => setRouterEditOpen(true)}
           onFinish={() => routerBot && openRouterFinish(routerBot)}
           onShare={(target) => setShareBot(target)}
           onConvert={startConvert}
@@ -606,6 +608,20 @@ export function SlackAgentBotsSection({
         />
       )}
 
+      {routerEditOpen && routerBot && (
+        <SlackBotEditDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setRouterEditOpen(false);
+          }}
+          agentId={null}
+          handle={routerBot.handle ?? appName.toLowerCase()}
+          appId={routerBot.appId}
+          installed={routerBot.installed}
+          reinstallUrl={null}
+        />
+      )}
+
       {editBot && (
         <SlackBotEditDialog
           key={editBot.agentId}
@@ -863,6 +879,11 @@ function RouterBotCard({
   }
 
   const handle = bot.handle ?? appName.toLowerCase();
+  // Slack commands are named after the app: "@archestra_all" has
+  // "/archestra-all-select-agent".
+  const selectAgentCommand = buildSlackSlashCommands(
+    bot.handle ?? appName,
+  ).SELECT_AGENT;
   const needsSetup = !bot.installed || bot.needsAppLevelToken;
   const problem = !bot.installed
     ? "Not installed"
@@ -905,10 +926,14 @@ function RouterBotCard({
         </div>
         <p className="text-sm text-muted-foreground">
           Answers as the agent each person picks in their DM, or the channel's
-          default agent, with{" "}
-          <code className="font-mono text-xs">/select-agent</code>. Anyone can
-          send one message to another agent with{" "}
-          <code className="font-mono text-xs">Agent &gt; message</code>.
+          default agent. Change it with{" "}
+          <code className="font-mono text-xs">{selectAgentCommand}</code>.
+          Anyone can send one message to another agent with{" "}
+          <code className="font-mono text-xs">
+            @{handle} Agent &gt; message
+          </code>
+          , and see the agents with{" "}
+          <code className="font-mono text-xs">@{handle} list</code>.
         </p>
       </div>
       <DropdownMenu>
@@ -1061,9 +1086,7 @@ function AddRouterBotDialog({
 }) {
   const appName = useAppName();
   const mutation = useCreateSlackRouterBotApp();
-  const [handle, setHandle] = useState(
-    appName.toLowerCase().replace(/\s+/g, "_"),
-  );
+  const [handle, setHandle] = useState(slackHandleFor(appName, "all"));
   const handleValid = SLACK_BOT_HANDLE_PATTERN.test(handle);
 
   return (

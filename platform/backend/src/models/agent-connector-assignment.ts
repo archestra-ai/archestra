@@ -4,6 +4,7 @@ import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { AgentConnectorAssignment } from "@/types";
 import { agentKnowledgeSourcesCache } from "./agent-knowledge-sources-cache";
 import AgentVersionModel from "./agent-version";
+import { idArrayCondition } from "./id-array-condition";
 
 class AgentConnectorAssignmentModel {
   static async findByAgent(
@@ -256,7 +257,10 @@ class AgentConnectorAssignmentModel {
       )
       .where(
         and(
-          inArray(schema.agentConnectorAssignmentsTable.agentId, agentIds),
+          idArrayCondition(
+            schema.agentConnectorAssignmentsTable.agentId,
+            agentIds,
+          ),
           notDeleted(schema.knowledgeBaseConnectorsTable),
         ),
       );

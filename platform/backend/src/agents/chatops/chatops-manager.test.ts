@@ -1778,6 +1778,67 @@ describe("ChatOpsManager security validation", () => {
     expect(await ownerOf("C_CODING")).toBe(coding.id);
   });
 
+  test("'list' to the router bot names the agents a person can reach, without asking one", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const execute = mockA2AExecutor();
+    const user = await makeUser({ email: "router-list@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const marketing = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Marketing",
+    });
+    await AgentTeamModel.assignTeamsToAgent(marketing.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "slack",
+      channelId: "C_LIST",
+      workspaceId: "T_TEST",
+      agentId: marketing.id,
+    });
+    const sendReply = vi.fn(async () => "reply-id");
+    const router: ChatOpsProvider = {
+      ...createMockProvider({ sendReply }),
+      providerId: "slack",
+    };
+    const manager = new ChatOpsManager();
+
+    await manager.processMessage({
+      provider: router,
+      message: {
+        ...createMockMessage({ messageId: "router-list-1", text: "list" }),
+        channelId: "C_LIST",
+        workspaceId: "T_TEST",
+        senderEmail: user.email,
+      },
+    });
+
+    expect(execute).not.toHaveBeenCalled();
+    expect(sendReply).toHaveBeenCalledTimes(1);
+    const reply = (sendReply.mock.calls[0] as unknown as [ChatReplyOptions])[0]
+      .text;
+    expect(reply).toContain("• Marketing");
+    expect(reply).toContain("Marketing > ");
+
+    // An agent's own bot passes "list" to its agent like any message.
+    await manager.processMessage({
+      provider: { ...router, pinnedAgentId: marketing.id },
+      message: {
+        ...createMockMessage({ messageId: "router-list-2", text: "list" }),
+        channelId: "C_LIST",
+        workspaceId: "T_TEST",
+        senderEmail: user.email,
+      },
+    });
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
   test("a person's DMs with the router bot and with agent bots stay separate", async ({
     makeUser,
     makeOrganization,

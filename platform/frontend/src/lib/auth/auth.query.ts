@@ -36,10 +36,14 @@ export function useSession() {
       // snapshot, and the shell's queries are already running by then.
       const isColdLoad =
         queryClient.getQueryData(authQueryKeys.session()) === undefined;
-      const [{ data }] = await Promise.all([
+      const [{ data, error }] = await Promise.all([
         authClient.getSession(),
         isColdLoad ? seedBootstrapQueries(queryClient) : undefined,
       ]);
+      // An explicit authentication refusal clears the shell. An unavailable
+      // server must enter the query's error state and retain the last session.
+      if (error?.status === 401 || error?.status === 403) return null;
+      throwOnApiError(error, { toastOnError: false });
       return data;
     },
     staleTime: 5 * 60 * 1000,
@@ -215,7 +219,7 @@ export function usePermissionMap<Key extends string>(
   const { data: userPermissions, isLoading } = useAllPermissions();
   const capabilities = useScopedCapabilities();
 
-  if (isLoading || capabilities.isLoading) {
+  if (isLoading || (userPermissions === undefined && capabilities.isLoading)) {
     return null;
   }
 

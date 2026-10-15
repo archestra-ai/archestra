@@ -38,6 +38,14 @@ Use this skill before changing files under `platform/backend/` (except unit test
 - Pagination: use `PaginationQuerySchema` + `createPaginatedResponseSchema` from `@archestra/shared` for bounded tables needing page counts. For write-hot or unbounded logs, use `CursorQuerySchema` + `createCursorPaginatedResponseSchema`; fetch `limit + 1` rows and do not calculate totals.
 - Sorting: `SortingQuerySchema` or `createSortingQuerySchema` from `@/types`.
 
+## Architecture
+
+Dependencies flow from routes to services to models to the database. Routes validate
+requests and serialize responses; services own business logic, cross-model
+orchestration, external calls, and scoped authorization. A route that only needs
+one model call may call that model directly. Models own database access, do not
+call services, and use joins rather than calling other models.
+
 ## Data access
 
 - All DB queries go through `backend/src/models/` — never inline Drizzle in routes or services. Create a model file for new entities; business logic stays in services.

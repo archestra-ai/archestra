@@ -76,6 +76,7 @@ export function useMcpServers(params?: McpServersParams) {
       "mcp-servers",
       {
         catalogId: params?.catalogId,
+        includeAssignedAgents: params?.includeAssignedAgents,
         assignmentScope: params?.assignmentScope,
         assignmentTeamIds: params?.assignmentTeamIds,
       },
@@ -83,10 +84,14 @@ export function useMcpServers(params?: McpServersParams) {
     queryFn: async () => {
       const { data, error } = await getMcpServers({
         query:
+          params?.includeAssignedAgents !== undefined ||
           params?.catalogId ||
           params?.assignmentScope ||
           params?.assignmentTeamIds
             ? {
+                ...(params?.includeAssignedAgents !== undefined && {
+                  includeAssignedAgents: params.includeAssignedAgents,
+                }),
                 ...(params?.catalogId && { catalogId: params.catalogId }),
                 ...(params?.assignmentScope && {
                   assignmentScope: params.assignmentScope,

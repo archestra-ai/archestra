@@ -18,6 +18,14 @@ test("connection loads skills without treating the proxy as a skill agent", asyn
   const skill = await skillResponse.json();
   const agentIds: string[] = [];
   const failedSkillRequests: string[] = [];
+  const setupRequests: string[] = [];
+  page.on("request", (request) => {
+    if (
+      request.method() === "POST" &&
+      new URL(request.url()).pathname === "/api/connection-setups"
+    )
+      setupRequests.push(request.url());
+  });
   const trackSkillResponse = (response: Response) => {
     if (
       response.url().includes("/api/") &&
@@ -57,6 +65,10 @@ test("connection loads skills without treating the proxy as a skill agent", asyn
     await page.getByRole("button", { name: "Choose what to include" }).click();
     await expect(page.getByRole("switch", { name: /^Skills/ })).toBeChecked();
     await page.keyboard.press("Escape");
+    const prepare = page.getByRole("button", { name: "Prepare installer" });
+    await expect(prepare).toBeVisible();
+    expect(setupRequests).toEqual([]);
+    await prepare.click();
     await expect(
       page.getByRole("link", { name: "Download installer" }),
     ).toBeVisible();

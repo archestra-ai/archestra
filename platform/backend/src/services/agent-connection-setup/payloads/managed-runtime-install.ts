@@ -89,7 +89,10 @@ for (;;) {
       throw error;
     }
     if (error.code !== "EEXIST") throw error;
-    check(lock);
+    // A live owner may release the lock after mkdir observes EEXIST.
+    try { check(lock); } catch (inspection) {
+      if (inspection.code !== "ENOENT") throw inspection;
+    }
     try {
       const pid = Number(fs.readFileSync(path.join(lock, "pid"), "utf8"));
       if (Number.isInteger(pid) && pid > 0) {

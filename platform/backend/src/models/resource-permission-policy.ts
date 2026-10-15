@@ -28,10 +28,57 @@ import {
   sql,
 } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
+import { idArrayCondition } from "./id-array-condition";
 import type { GrantPrincipal } from "./resource-permission-subject";
 import RoleCompositionModel from "./role-composition";
 
 export default class ResourcePermissionPolicyModel {
+  /** Bound application memory while upgrading a large legacy policy catalog. */
+  static async listForPresetUpgrade(params: {
+    tx: Transaction;
+    after?: { organizationId: string; resource: string; scope: string };
+  }) {
+    const table = schema.resourcePermissionPoliciesTable;
+    return params.tx
+      .select({
+        organizationId: table.organizationId,
+        resource: table.resource,
+        scope: table.scope,
+        grants: table.grants,
+      })
+      .from(table)
+      .where(
+        params.after
+          ? sql`(${table.organizationId}, ${table.resource}, ${table.scope}) >
+        (${params.after.organizationId}, ${params.after.resource}, ${params.after.scope})`
+          : undefined,
+      )
+      .orderBy(table.organizationId, table.resource, table.scope)
+      .limit(100);
+  }
+
+  static async updatePresetUpgradePolicy(params: {
+    tx: Transaction;
+    policy: { organizationId: string; resource: ScopedResource; scope: string };
+    grants: ResourcePermissionGrant[];
+  }): Promise<void> {
+    const table = schema.resourcePermissionPoliciesTable;
+    await params.tx
+      .update(table)
+      .set({
+        grants: params.grants,
+        revision: sql`${table.revision} + 1`,
+        updatedAt: sql`now()`,
+      })
+      .where(
+        and(
+          eq(table.organizationId, params.policy.organizationId),
+          eq(table.resource, params.policy.resource),
+          eq(table.scope, params.policy.scope),
+        ),
+      );
+  }
+
   /**
    * Whether a policy puts an object within reach of the organization at large,
    * for a principal that carries no role of its own — a shared credential, an
@@ -413,13 +460,12 @@ export default class ResourcePermissionPolicyModel {
   }) {
     if (params.subjects.length === 0) return [];
     const table = schema.resourcePermissionPoliciesTable;
-    return db
+    const policies = await db
       .select()
       .from(table)
       .where(
         and(
           eq(table.organizationId, params.organizationId),
-          sql`(${table.scope} = '*' OR ${table.scope} ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')`,
           or(
             ...params.subjects.map(
               (subject) =>
@@ -428,6 +474,13 @@ export default class ResourcePermissionPolicyModel {
           ),
         ),
       );
+    // Apply the same scope grammar after subject matching. Running this regexp
+    // in SQL costs a check for every policy, including unrelated subjects.
+    return policies.filter(
+      (policy) =>
+        policy.scope === "*" ||
+        (policy.scope.length === 36 && OBJECT_POLICY_SCOPE.test(policy.scope)),
+    );
   }
 
   /**
@@ -448,13 +501,24 @@ export default class ResourcePermissionPolicyModel {
       (subject) =>
         sql`${JSON.stringify([{ subject, actions: [params.action] }])}`,
     );
-    return sql<boolean>`EXISTS (
+    const matches = sql`grant_policy.grants @> ANY(ARRAY[${sql.join(candidates, sql`, `)}]::jsonb[])`;
+    const objectGrant = sql<boolean>`EXISTS (
       SELECT 1 FROM resource_permission_policies grant_policy
       WHERE grant_policy.organization_id = ${params.organizationId}
         AND grant_policy.resource = ${params.resource}
-        AND ((${params.includeWildcard !== false} AND grant_policy.scope = '*') OR grant_policy.scope = ${params.scopeColumn}::text)
-        AND grant_policy.grants @> ANY(ARRAY[${sql.join(candidates, sql`, `)}]::jsonb[])
+        AND grant_policy.scope = ${params.scopeColumn}::text
+        AND ${matches}
     )`;
+    if (params.includeWildcard === false) return objectGrant;
+    // The wildcard has no row dependency, so PostgreSQL can evaluate it once
+    // instead of probing the same policy for every object in a list.
+    return sql<boolean>`(EXISTS (
+      SELECT 1 FROM resource_permission_policies grant_policy
+      WHERE grant_policy.organization_id = ${params.organizationId}
+        AND grant_policy.resource = ${params.resource}
+        AND grant_policy.scope = '*'
+        AND ${matches}
+    ) OR ${objectGrant})`;
   }
 
   /**
@@ -720,7 +784,7 @@ export default class ResourcePermissionPolicyModel {
         and(
           eq(table.organizationId, params.organizationId),
           eq(table.resource, params.resource),
-          inArray(table.scope, params.scopes),
+          idArrayCondition(table.scope, params.scopes),
         ),
       );
     const byScope = new Map(policies.map((policy) => [policy.scope, policy]));
@@ -754,7 +818,7 @@ export default class ResourcePermissionPolicyModel {
       .where(
         and(
           inArray(table.resource, params.resources),
-          inArray(table.scope, params.scopes),
+          idArrayCondition(table.scope, params.scopes),
         ),
       );
     for (const policy of policies) {
@@ -807,7 +871,7 @@ export default class ResourcePermissionPolicyModel {
         : db
             .select({ id: schema.teamsTable.id, name: schema.teamsTable.name })
             .from(schema.teamsTable)
-            .where(inArray(schema.teamsTable.id, teamIds)),
+            .where(idArrayCondition(schema.teamsTable.id, teamIds)),
       userIds.length === 0
         ? []
         : db
@@ -817,7 +881,7 @@ export default class ResourcePermissionPolicyModel {
               email: schema.usersTable.email,
             })
             .from(schema.usersTable)
-            .where(inArray(schema.usersTable.id, userIds)),
+            .where(idArrayCondition(schema.usersTable.id, userIds)),
     ]);
     const teamById = new Map(teams.map((team) => [team.id, team]));
     const userById = new Map(users.map((user) => [user.id, user]));
@@ -871,27 +935,9 @@ export default class ResourcePermissionPolicyModel {
     return rows.map((row) => row.scope).filter((scope) => scope !== "*");
   }
 
-  /**
-   * Whether the object in `scopeColumn` has a policy that grants read to the
-   * team in `teamColumn`. The join condition that replaces joining through a
-   * retired team assignment table.
-   */
-  static grantsReadToTeamColumn(params: {
-    organizationId: SQLWrapper;
-    resource: ScopedResource | SQLWrapper;
-    scopeColumn: SQLWrapper;
-    teamColumn: SQLWrapper;
-  }) {
-    return sql<boolean>`EXISTS (
-      SELECT 1 FROM resource_permission_policies team_policy,
-        jsonb_array_elements(team_policy.grants) team_entry
-      WHERE team_policy.organization_id = ${params.organizationId}
-        AND team_policy.resource = ${params.resource}
-        AND team_policy.scope = ${params.scopeColumn}::text
-        AND (team_entry->'actions') ? 'read'
-        AND team_entry->'subject'->>'type' = 'team'
-        AND team_entry->'subject'->>'id' = ${params.teamColumn}::text
-    )`;
+  /** The direct team-read grant predicate shared by team attribution queries. */
+  static teamReadGrantCondition(entry: SQLWrapper) {
+    return sql`(${entry}->'actions') ? 'read' AND ${entry}->'subject'->>'type' = 'team'`;
   }
 
   /**
@@ -1226,3 +1272,6 @@ function sharedWithCallerCondition(params: {
       AND (${sql.join(reaches, sql` OR `)})
   )`;
 }
+
+const OBJECT_POLICY_SCOPE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

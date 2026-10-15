@@ -46,7 +46,7 @@ if [ "$1 $2" = "auth login" ]; then cat > "$HOME/current-token"; fi
         [
           path.resolve(
             import.meta.dirname,
-            "../../../../agent_images/bin/archestra-agent-init",
+            "../../../../docker_images/agent/bin/archestra-agent-init",
           ),
         ],
         {
@@ -101,7 +101,7 @@ fi
       [
         path.resolve(
           import.meta.dirname,
-          "../../../../agent_images/bin/archestra-agent-init",
+          "../../../../docker_images/agent/bin/archestra-agent-init",
         ),
       ],
       {

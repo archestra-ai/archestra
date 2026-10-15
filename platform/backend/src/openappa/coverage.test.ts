@@ -67,6 +67,90 @@ describe("openappaCoverageService.toolsForCatalog", () => {
   });
 });
 
+describe("coverage server pages", () => {
+  test("metadata pages retain full-report counts, ordering, visibility and filters", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeTool,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, organization.id, { role: "admin" });
+    const { catalogIds } = await seedCoverage({
+      organizationId: organization.id,
+      userId: user.id,
+      fixtures: { makeAgent, makeAgentTool, makeInternalMcpCatalog, makeTool },
+      github: true,
+    });
+    const visibility = await coverageVisibility(user.id, organization.id);
+    // The reader can see a subset: the hidden server must not affect pages or totals.
+    const params = {
+      ...visibility,
+      organizationId: organization.id,
+      visibleCatalogIds: visibility.visibleCatalogIds.filter(
+        (id) => id !== catalogIds.acme,
+      ),
+    };
+    // Count sorting deliberately retains the full visible-tool report path.
+    const baseline = await openappaCoverageService.entities({
+      ...params,
+      sortBy: "tools",
+      limit: 100,
+      offset: 0,
+    });
+    expect(baseline.data.some((row) => row.id === catalogIds.acme)).toBe(false);
+    expect(baseline.data.some((row) => row.toolCount === 0)).toBe(true);
+    for (const sortBy of ["name", "type"] as const) {
+      for (const sortDirection of ["asc", "desc"] as const) {
+        const ordered = [...baseline.data].sort((a, b) => {
+          const alphabetical =
+            a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
+          return sortBy === "name" && sortDirection === "desc"
+            ? -alphabetical
+            : alphabetical;
+        });
+        const result = await openappaCoverageService.entities({
+          ...params,
+          sortBy,
+          sortDirection,
+          limit: 2,
+          offset: 1,
+        });
+        expect(result.data).toEqual(ordered.slice(1, 3));
+        expect(result.pagination.total).toBe(ordered.length);
+      }
+    }
+    const searched = await openappaCoverageService.entities({
+      ...params,
+      search: "dOC",
+      limit: 10,
+      offset: 0,
+    });
+    expect(searched.data).toEqual(
+      baseline.data.filter((row) => row.name.toLowerCase().includes("doc")),
+    );
+    const hidden = await openappaCoverageService.entities({
+      ...params,
+      entityId: catalogIds.acme,
+      limit: 10,
+      offset: 0,
+    });
+    expect(hidden.data).toEqual([]);
+    expect(hidden.pagination.total).toBe(0);
+    const beyond = await openappaCoverageService.entities({
+      ...params,
+      limit: 10,
+      offset: 1000,
+    });
+    expect(beyond.data).toEqual([]);
+    expect(beyond.pagination.total).toBe(baseline.pagination.total);
+  });
+});
+
 describe("ToolModel.findCoverageInventory", () => {
   test("narrows catalogs, tools and assignments to one catalog", async ({
     makeAgent,
@@ -112,5 +196,22 @@ describe("ToolModel.findCoverageInventory", () => {
       expect.objectContaining({ toolId: scopedTool.id, agentId: agent.id }),
     ]);
     expect(scoped.entities).toEqual(whole.entities);
+
+    const serverOnly = await ToolModel.findCoverageInventory(organization.id, {
+      catalogIds: [scopedCatalog.id],
+      includeAgentAssignments: false,
+    });
+    expect(serverOnly).toEqual({
+      catalogs: scoped.catalogs,
+      tools: scoped.tools,
+      assignments: [],
+      entities: [],
+    });
+    expect(
+      await ToolModel.findCoverageInventory(organization.id, {
+        catalogIds: [],
+        includeAgentAssignments: false,
+      }),
+    ).toEqual({ catalogs: [], tools: [], assignments: [], entities: [] });
   });
 });

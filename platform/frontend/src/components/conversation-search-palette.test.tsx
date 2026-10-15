@@ -1,4 +1,12 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { archestraApiSdk } from "@archestra/shared";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock ResizeObserver which is used by Radix UI components
@@ -13,11 +21,17 @@ const {
   mockDeleteMutate,
   mockUseConversations,
   mockUseMyAgentRuns,
+  mockUseAgentOptions,
+  mockUseInternalMcpCatalog,
+  mockUseSkillsList,
 } = vi.hoisted(() => ({
   mockRouterPush: vi.fn(),
   mockDeleteMutate: vi.fn(),
   mockUseConversations: vi.fn(),
   mockUseMyAgentRuns: vi.fn(),
+  mockUseAgentOptions: vi.fn(),
+  mockUseInternalMcpCatalog: vi.fn(),
+  mockUseSkillsList: vi.fn(),
 }));
 
 vi.mock("next/navigation");
@@ -57,8 +71,40 @@ vi.mock("@/lib/chat/chat.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/agent-runtime.query", () => ({
-  useMyAgentRuns: mockUseMyAgentRuns,
+let useRealRunsQuery = false;
+vi.mock("@archestra/shared", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@archestra/shared")>();
+  return {
+    ...actual,
+    archestraApiSdk: { ...actual.archestraApiSdk, getMyAgentRuns: vi.fn() },
+  };
+});
+vi.mock("@/lib/agent-runtime.query", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/agent-runtime.query")>();
+  return {
+    useMyAgentRuns: (...args: Parameters<typeof actual.useMyAgentRuns>) =>
+      useRealRunsQuery
+        ? // biome-ignore lint/correctness/useHookAtTopLevel: Test implementation is selected before mounting.
+          actual.useMyAgentRuns(...args)
+        : mockUseMyAgentRuns(...args),
+  };
+});
+
+vi.mock("@/lib/agent.query", () => ({
+  useAgentOptions: mockUseAgentOptions,
+}));
+
+vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  useInternalMcpCatalog: mockUseInternalMcpCatalog,
+}));
+
+vi.mock("@/lib/skills/skill.query", () => ({
+  useSkillsList: mockUseSkillsList,
+}));
+
+vi.mock("@/lib/secrets.query", () => ({
+  useSecretsType: () => ({ data: undefined }),
 }));
 
 // Store the onValueChange callback so tests can control selectedValue
@@ -200,10 +246,14 @@ describe("ConversationSearchPalette", () => {
       isLoading: false,
       isFetching: false,
     });
+    useRealRunsQuery = false;
     mockUseMyAgentRuns.mockReturnValue({
       data: [],
       isLoading: false,
     });
+    mockUseAgentOptions.mockReturnValue({ data: [] });
+    mockUseInternalMcpCatalog.mockReturnValue({ data: [] });
+    mockUseSkillsList.mockReturnValue({ data: [] });
     capturedOnValueChange = null;
   });
 
@@ -238,6 +288,39 @@ describe("ConversationSearchPalette", () => {
     expect(screen.getAllByText("Today")).toHaveLength(2);
     expect(screen.queryByText("Previous 7 Days")).not.toBeInTheDocument();
     expect(screen.queryByText("Previous 30 Days")).not.toBeInTheDocument();
+  });
+
+  it("keeps New chat in place while chats load, then shows the lists", () => {
+    mockUseConversations.mockReturnValue({
+      data: [],
+      isLoading: true,
+      isFetching: true,
+    });
+    const { rerender } = render(
+      <ConversationSearchPalette {...defaultProps} />,
+    );
+
+    expect(screen.getByText("New chat")).toBeInTheDocument();
+    expect(screen.queryByText("First conversation")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pages")).not.toBeInTheDocument();
+
+    mockUseConversations.mockReturnValue({
+      data: [
+        {
+          id: "conv-1",
+          title: "First conversation",
+          updatedAt: new Date().toISOString(),
+          lastMessageAt: new Date().toISOString(),
+          messages: [],
+        },
+      ],
+      isLoading: false,
+      isFetching: false,
+    });
+    rerender(<ConversationSearchPalette {...defaultProps} />);
+
+    expect(screen.getByText("First conversation")).toBeInTheDocument();
+    expect(screen.getByText("Pages")).toBeInTheDocument();
   });
 
   it("drops the Chats heading when there are no chats under it", () => {
@@ -315,6 +398,63 @@ describe("ConversationSearchPalette", () => {
     expect(screen.getByLabelText("Encrypted chat")).toBeInTheDocument();
     // The lock replaces the chat-bubble glyph rather than sitting next to it.
     expect(row.querySelector(".lucide-message-circle")).toBeNull();
+  });
+
+  it("loads more matching runs during search without a misleading browse paging action", async () => {
+    useRealRunsQuery = true;
+    vi.mocked(useFeature).mockImplementation(
+      (feature) => feature === "agentRuntime",
+    );
+    const makeRun = (taskId: string, title: string) => ({
+      taskId,
+      title,
+      state: "TASK_STATE_COMPLETED",
+      startedAt: "2020-01-01T00:00:00Z",
+      stateChangedAt: "2020-01-01T00:00:00Z",
+      endedAt: "2020-01-01T00:00:00Z",
+    });
+    vi.mocked(archestraApiSdk.getMyAgentRuns).mockImplementation(
+      async ({ query } = {}) =>
+        ({
+          data: {
+            data: query?.pinned
+              ? []
+              : [
+                  query?.offset
+                    ? makeRun("older", "Report older")
+                    : makeRun("current", "Report current"),
+                ],
+            pagination: { hasNext: !query?.pinned && !query?.offset },
+          },
+          error: undefined,
+        }) as never,
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConversationSearchPalette {...defaultProps} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByText("Report current")).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("More runs")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByTestId("command-input"), {
+      target: { value: "Report" },
+    });
+    await waitFor(() =>
+      expect(screen.getByText("More runs")).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("Report older")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("More runs"));
+    await waitFor(() =>
+      expect(screen.getByText("Report older")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByText("Report older"));
+    expect(mockRouterPush).toHaveBeenCalledWith("/chat/runs/older");
+    queryClient.clear();
   });
 
   it("lists Agent Runtime sessions in the browse view and opens one", () => {
@@ -415,6 +555,102 @@ describe("ConversationSearchPalette", () => {
     });
     expect(screen.queryByText("Nightly report run")).not.toBeInTheDocument();
     expect(screen.getByText("No chats or pages found.")).toBeInTheDocument();
+  });
+
+  describe("searching by name", () => {
+    it("finds an agent by its name and opens it", () => {
+      mockUseAgentOptions.mockReturnValue({
+        data: [{ id: "agent-1", name: "Support Triage" }],
+      });
+      render(<ConversationSearchPalette {...defaultProps} />);
+
+      fireEvent.change(screen.getByTestId("command-input"), {
+        target: { value: "triage" },
+      });
+
+      expect(screen.getByText("Agents")).toBeInTheDocument();
+      fireEvent.click(screen.getByText("Support Triage"));
+      expect(mockRouterPush).toHaveBeenCalledWith("/agents/agent-1");
+    });
+
+    it("finds an MCP server in the registry by its name", () => {
+      mockUseInternalMcpCatalog.mockReturnValue({
+        data: [{ id: "cat-1", name: "GitHub MCP" }],
+      });
+      render(<ConversationSearchPalette {...defaultProps} />);
+
+      fireEvent.change(screen.getByTestId("command-input"), {
+        target: { value: "github" },
+      });
+
+      expect(screen.getByText("MCP Servers")).toBeInTheDocument();
+      fireEvent.click(screen.getByText("GitHub MCP"));
+      expect(mockRouterPush).toHaveBeenCalledWith("/mcp/registry/cat-1");
+    });
+
+    it("finds a skill through the server search and opens it", () => {
+      mockUseSkillsList.mockReturnValue({
+        data: [{ id: "skill-1", name: "Invoice Parser" }],
+      });
+      render(<ConversationSearchPalette {...defaultProps} />);
+
+      fireEvent.change(screen.getByTestId("command-input"), {
+        target: { value: "invoice" },
+      });
+
+      expect(mockUseSkillsList).toHaveBeenLastCalledWith(
+        { search: "invoice" },
+        expect.objectContaining({ enabled: true }),
+      );
+      fireEvent.click(screen.getByText("Invoice Parser"));
+      expect(mockRouterPush).toHaveBeenCalledWith("/skills/skill-1");
+    });
+
+    it("finds a settings tab by its label and by its path", () => {
+      render(<ConversationSearchPalette {...defaultProps} />);
+
+      fireEvent.change(screen.getByTestId("command-input"), {
+        target: { value: "service accounts" },
+      });
+
+      expect(screen.getByText("Settings")).toBeInTheDocument();
+      fireEvent.click(screen.getByText("Service Accounts"));
+      expect(mockRouterPush).toHaveBeenCalledWith("/settings/service-accounts");
+    });
+
+    it("does not offer agents the reader may not read", () => {
+      vi.mocked(useHasPermissions).mockImplementation(
+        (permissions) =>
+          ({
+            data: !("agent" in permissions),
+            isPending: false,
+            isLoading: false,
+          }) as ReturnType<typeof useHasPermissions>,
+      );
+      mockUseAgentOptions.mockReturnValue({
+        data: [{ id: "agent-1", name: "Support Triage" }],
+      });
+      render(<ConversationSearchPalette {...defaultProps} />);
+
+      expect(mockUseAgentOptions).toHaveBeenLastCalledWith(
+        expect.objectContaining({ enabled: false }),
+      );
+    });
+
+    it("does not report nothing found when an agent matches", () => {
+      mockUseAgentOptions.mockReturnValue({
+        data: [{ id: "agent-1", name: "Support Triage" }],
+      });
+      render(<ConversationSearchPalette {...defaultProps} />);
+
+      fireEvent.change(screen.getByTestId("command-input"), {
+        target: { value: "triage" },
+      });
+
+      expect(
+        screen.queryByText("No chats or pages found."),
+      ).not.toBeInTheDocument();
+    });
   });
 
   it("routes Connect to the connection page", () => {
@@ -575,7 +811,7 @@ describe("ConversationSearchPalette", () => {
       target: { value: "agent" },
     });
 
-    expect(screen.getByText("Agents")).toBeInTheDocument();
+    expect(screen.getByText("Pages")).toBeInTheDocument();
     expect(screen.getByText("First conversation")).toBeInTheDocument();
     expect(screen.getByText("Second conversation")).toBeInTheDocument();
     expect(screen.getByText("Chats")).toBeInTheDocument();

@@ -3,7 +3,7 @@ title: Custom Images
 description: Run your own coding agent image in Agent Runtime
 order: 3
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -32,7 +32,7 @@ Your agent reaches models through the supplied LLM Proxy URL and virtual key, an
 | Exit code | `0` on success, non-zero on failure. |
 | Storage | Working files and saved sessions under `/home/node`. Other paths may not survive a pause. |
 
-For the full contract and working examples, see the [image contract](https://github.com/archestra-ai/archestra/blob/main/platform/agent_images/runtime-contract.md) and the [maintained images](https://github.com/archestra-ai/archestra/blob/main/platform/agent_images/README.md).
+For the full contract and working examples, see the [image contract](https://github.com/archestra-ai/archestra/blob/main/platform/docker_images/agent/runtime-contract.md) and the [maintained images](https://github.com/archestra-ai/archestra/blob/main/platform/docker_images/agent/README.md).
 
 ## Add a Toolchain
 

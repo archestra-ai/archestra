@@ -52,6 +52,7 @@ const native = vi.hoisted(() => ({
     runtimeCredentials: [],
     errors: [],
   })),
+  validateHostedOpenappaPolicy: vi.fn(async () => []),
   composeOpenappaPolicy: vi.fn(async (input: { root: string }) => ({
     content: input.root,
     errors: [],
@@ -880,7 +881,7 @@ async function claudeWrapperHeaders(params: {
   await chmod(stub, 0o755);
   const script = join(
     process.cwd(),
-    "../agent_images/bin/archestra-claude-code",
+    "../docker_images/agent/bin/archestra-claude-code",
   );
   const result = spawnSync(script, [], {
     encoding: "utf8",

@@ -603,6 +603,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAgents]: {},
   [RouteId.GetAgentCatalog]: {},
   [RouteId.GetAllAgents]: {},
+  [RouteId.GetAgentOptions]: {},
   [RouteId.GetAgentCredentialReadiness]: {},
   [RouteId.GetAgent]: {},
   // Agent read access is checked in the handler (requireReadableAgent).
@@ -1534,6 +1535,12 @@ export const requiredEndpointPermissionsMap: Partial<
     organizationSettings: ["read"],
   },
   [RouteId.JoinSlackAgentBotChannel]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.ListSlackRouterBotChannels]: {
+    organizationSettings: ["read"],
+  },
+  [RouteId.JoinSlackRouterBotChannel]: {
     organizationSettings: ["update"],
   },
   [RouteId.UpdateTelegramChatOpsConfig]: {

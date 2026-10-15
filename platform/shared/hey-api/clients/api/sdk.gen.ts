@@ -9775,7 +9775,7 @@ export const getPluginSkill = <ThrowOnError extends boolean = false>(options: Op
  *
  * Authorization:
  *
- * `project:update`: Edit project descriptions, instructions, and sharing
+ * `project:update`: Edit project descriptions, instructions, sharing, and schedules
  */
 export const transferProjectOwnership = <ThrowOnError extends boolean = false>(options: Options<TransferProjectOwnershipData, ThrowOnError>) => (options.client ?? client).post<TransferProjectOwnershipResponses, TransferProjectOwnershipErrors, ThrowOnError>({
     url: '/api/projects/{id}/transfer-ownership',
@@ -9795,7 +9795,7 @@ export const transferProjectOwnership = <ThrowOnError extends boolean = false>(o
  *
  * Authorization:
  *
- * `project:read`: View projects and your own sessions inside them
+ * `project:read`: View projects, their schedules, and your own sessions inside them
  */
 export const projectLabelKeys = <ThrowOnError extends boolean = false>(options?: Options<ProjectLabelKeysData, ThrowOnError>) => (options?.client ?? client).get<ProjectLabelKeysResponses, ProjectLabelKeysErrors, ThrowOnError>({ url: '/api/projects/labels/keys', ...options });
 
@@ -9808,7 +9808,7 @@ export const projectLabelKeys = <ThrowOnError extends boolean = false>(options?:
  *
  * Authorization:
  *
- * `project:read`: View projects and your own sessions inside them
+ * `project:read`: View projects, their schedules, and your own sessions inside them
  */
 export const projectLabelValues = <ThrowOnError extends boolean = false>(options?: Options<ProjectLabelValuesData, ThrowOnError>) => (options?.client ?? client).get<ProjectLabelValuesResponses, ProjectLabelValuesErrors, ThrowOnError>({ url: '/api/projects/labels/values', ...options });
 
@@ -9821,7 +9821,7 @@ export const projectLabelValues = <ThrowOnError extends boolean = false>(options
  *
  * Authorization:
  *
- * `project:read`: View projects and your own sessions inside them
+ * `project:read`: View projects, their schedules, and your own sessions inside them
  */
 export const getProjects = <ThrowOnError extends boolean = false>(options?: Options<GetProjectsData, ThrowOnError>) => (options?.client ?? client).get<GetProjectsResponses, GetProjectsErrors, ThrowOnError>({ url: '/api/projects', ...options });
 
@@ -9834,7 +9834,7 @@ export const getProjects = <ThrowOnError extends boolean = false>(options?: Opti
  *
  * Authorization:
  *
- * `project:create`: Create projects
+ * `project:create`: Create projects and schedules, and trigger schedule runs
  */
 export const createProject = <ThrowOnError extends boolean = false>(options: Options<CreateProjectData, ThrowOnError>) => (options.client ?? client).post<CreateProjectResponses, CreateProjectErrors, ThrowOnError>({
     url: '/api/projects',
@@ -9854,7 +9854,7 @@ export const createProject = <ThrowOnError extends boolean = false>(options: Opt
  *
  * Authorization:
  *
- * `project:create`: Create projects
+ * `project:create`: Create projects and schedules, and trigger schedule runs
  */
 export const createProjectFromConversation = <ThrowOnError extends boolean = false>(options: Options<CreateProjectFromConversationData, ThrowOnError>) => (options.client ?? client).post<CreateProjectFromConversationResponses, CreateProjectFromConversationErrors, ThrowOnError>({
     url: '/api/projects/from-conversation',
@@ -9874,7 +9874,7 @@ export const createProjectFromConversation = <ThrowOnError extends boolean = fal
  *
  * Authorization:
  *
- * `project:delete`: Delete projects
+ * `project:delete`: Delete projects and schedules
  */
 export const deleteProject = <ThrowOnError extends boolean = false>(options: Options<DeleteProjectData, ThrowOnError>) => (options.client ?? client).delete<DeleteProjectResponses, DeleteProjectErrors, ThrowOnError>({ url: '/api/projects/{id}', ...options });
 
@@ -9887,7 +9887,7 @@ export const deleteProject = <ThrowOnError extends boolean = false>(options: Opt
  *
  * Authorization:
  *
- * `project:read`: View projects and your own sessions inside them
+ * `project:read`: View projects, their schedules, and your own sessions inside them
  */
 export const getProject = <ThrowOnError extends boolean = false>(options: Options<GetProjectData, ThrowOnError>) => (options.client ?? client).get<GetProjectResponses, GetProjectErrors, ThrowOnError>({ url: '/api/projects/{id}', ...options });
 
@@ -9900,7 +9900,7 @@ export const getProject = <ThrowOnError extends boolean = false>(options: Option
  *
  * Authorization:
  *
- * `project:update`: Edit project descriptions, instructions, and sharing
+ * `project:update`: Edit project descriptions, instructions, sharing, and schedules
  */
 export const updateProject = <ThrowOnError extends boolean = false>(options: Options<UpdateProjectData, ThrowOnError>) => (options.client ?? client).patch<UpdateProjectResponses, UpdateProjectErrors, ThrowOnError>({
     url: '/api/projects/{id}',
@@ -9920,7 +9920,7 @@ export const updateProject = <ThrowOnError extends boolean = false>(options: Opt
  *
  * Authorization:
  *
- * `project:delete`: Delete projects
+ * `project:delete`: Delete projects and schedules
  */
 export const bulkDeleteProjects = <ThrowOnError extends boolean = false>(options: Options<BulkDeleteProjectsData, ThrowOnError>) => (options.client ?? client).delete<BulkDeleteProjectsResponses, BulkDeleteProjectsErrors, ThrowOnError>({
     url: '/api/projects/bulk',
@@ -9940,7 +9940,7 @@ export const bulkDeleteProjects = <ThrowOnError extends boolean = false>(options
  *
  * Authorization:
  *
- * `project:delete`: Delete projects
+ * `project:delete`: Delete projects and schedules
  */
 export const restoreProject = <ThrowOnError extends boolean = false>(options: Options<RestoreProjectData, ThrowOnError>) => (options.client ?? client).post<RestoreProjectResponses, RestoreProjectErrors, ThrowOnError>({
     url: '/api/projects/{id}/restore',
@@ -9973,7 +9973,7 @@ export const permanentlyDeleteProject = <ThrowOnError extends boolean = false>(o
  *
  * Authorization:
  *
- * `project:read`: View projects and your own sessions inside them
+ * `project:read`: View projects, their schedules, and your own sessions inside them
  */
 export const getProjectFiles = <ThrowOnError extends boolean = false>(options: Options<GetProjectFilesData, ThrowOnError>) => (options.client ?? client).get<GetProjectFilesResponses, GetProjectFilesErrors, ThrowOnError>({ url: '/api/projects/{id}/files', ...options });
 
@@ -9986,7 +9986,7 @@ export const getProjectFiles = <ThrowOnError extends boolean = false>(options: O
  *
  * Authorization:
  *
- * `project:read`: View projects and your own sessions inside them
+ * `project:read`: View projects, their schedules, and your own sessions inside them
  */
 export const uploadProjectFiles = <ThrowOnError extends boolean = false>(options: Options<UploadProjectFilesData, ThrowOnError>) => (options.client ?? client).post<UploadProjectFilesResponses, UploadProjectFilesErrors, ThrowOnError>({
     url: '/api/projects/{id}/files',
@@ -10006,7 +10006,7 @@ export const uploadProjectFiles = <ThrowOnError extends boolean = false>(options
  *
  * Authorization:
  *
- * `project:read`: View projects and your own sessions inside them
+ * `project:read`: View projects, their schedules, and your own sessions inside them
  */
 export const getProjectInstructions = <ThrowOnError extends boolean = false>(options: Options<GetProjectInstructionsData, ThrowOnError>) => (options.client ?? client).get<GetProjectInstructionsResponses, GetProjectInstructionsErrors, ThrowOnError>({ url: '/api/projects/{id}/instructions', ...options });
 
@@ -10019,7 +10019,7 @@ export const getProjectInstructions = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `project:update`: Edit project descriptions, instructions, and sharing
+ * `project:update`: Edit project descriptions, instructions, sharing, and schedules
  */
 export const setProjectInstructions = <ThrowOnError extends boolean = false>(options: Options<SetProjectInstructionsData, ThrowOnError>) => (options.client ?? client).put<SetProjectInstructionsResponses, SetProjectInstructionsErrors, ThrowOnError>({
     url: '/api/projects/{id}/instructions',
@@ -10039,7 +10039,7 @@ export const setProjectInstructions = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `project:read`: View projects and your own sessions inside them
+ * `project:read`: View projects, their schedules, and your own sessions inside them
  */
 export const getProjectConversations = <ThrowOnError extends boolean = false>(options: Options<GetProjectConversationsData, ThrowOnError>) => (options.client ?? client).get<GetProjectConversationsResponses, GetProjectConversationsErrors, ThrowOnError>({ url: '/api/projects/{id}/conversations', ...options });
 
@@ -10053,7 +10053,7 @@ export const getProjectConversations = <ThrowOnError extends boolean = false>(op
  * Authorization:
  *
  * `agent:read`: Open Agents, and use the code sandboxes and files of agents you can use
- * `project:read`: View projects and your own sessions inside them
+ * `project:read`: View projects, their schedules, and your own sessions inside them
  */
 export const getProjectRuns = <ThrowOnError extends boolean = false>(options: Options<GetProjectRunsData, ThrowOnError>) => (options.client ?? client).get<GetProjectRunsResponses, GetProjectRunsErrors, ThrowOnError>({ url: '/api/projects/{id}/runs', ...options });
 
@@ -10066,7 +10066,7 @@ export const getProjectRuns = <ThrowOnError extends boolean = false>(options: Op
  *
  * Authorization:
  *
- * `project:read`: View projects and your own sessions inside them
+ * `project:read`: View projects, their schedules, and your own sessions inside them
  */
 export const unpinProject = <ThrowOnError extends boolean = false>(options: Options<UnpinProjectData, ThrowOnError>) => (options.client ?? client).delete<UnpinProjectResponses, UnpinProjectErrors, ThrowOnError>({ url: '/api/projects/{id}/pin', ...options });
 
@@ -10079,7 +10079,7 @@ export const unpinProject = <ThrowOnError extends boolean = false>(options: Opti
  *
  * Authorization:
  *
- * `project:read`: View projects and your own sessions inside them
+ * `project:read`: View projects, their schedules, and your own sessions inside them
  */
 export const pinProject = <ThrowOnError extends boolean = false>(options: Options<PinProjectData, ThrowOnError>) => (options.client ?? client).put<PinProjectResponses, PinProjectErrors, ThrowOnError>({ url: '/api/projects/{id}/pin', ...options });
 
@@ -10093,7 +10093,7 @@ export const pinProject = <ThrowOnError extends boolean = false>(options: Option
  * Authorization:
  *
  * `app:read`: Open Apps
- * `project:read`: View projects and your own sessions inside them
+ * `project:read`: View projects, their schedules, and your own sessions inside them
  */
 export const getProjectApps = <ThrowOnError extends boolean = false>(options: Options<GetProjectAppsData, ThrowOnError>) => (options.client ?? client).get<GetProjectAppsResponses, GetProjectAppsErrors, ThrowOnError>({ url: '/api/projects/{id}/apps', ...options });
 
@@ -10107,7 +10107,7 @@ export const getProjectApps = <ThrowOnError extends boolean = false>(options: Op
  * Authorization:
  *
  * `app:read`: Open Apps
- * `project:read`: View projects and your own sessions inside them
+ * `project:read`: View projects, their schedules, and your own sessions inside them
  */
 export const unlinkProjectApp = <ThrowOnError extends boolean = false>(options: Options<UnlinkProjectAppData, ThrowOnError>) => (options.client ?? client).delete<UnlinkProjectAppResponses, UnlinkProjectAppErrors, ThrowOnError>({ url: '/api/projects/{id}/apps/{appId}', ...options });
 
@@ -10121,7 +10121,7 @@ export const unlinkProjectApp = <ThrowOnError extends boolean = false>(options: 
  * Authorization:
  *
  * `app:read`: Open Apps
- * `project:read`: View projects and your own sessions inside them
+ * `project:read`: View projects, their schedules, and your own sessions inside them
  */
 export const linkProjectApp = <ThrowOnError extends boolean = false>(options: Options<LinkProjectAppData, ThrowOnError>) => (options.client ?? client).put<LinkProjectAppResponses, LinkProjectAppErrors, ThrowOnError>({ url: '/api/projects/{id}/apps/{appId}', ...options });
 
@@ -10308,7 +10308,7 @@ export const setOrganizationRuntimeCredentialConnection = <ThrowOnError extends 
  *
  * Authorization:
  *
- * `scheduledTask:read`: View scheduled tasks and their run history
+ * `project:read`: View projects, their schedules, and your own sessions inside them
  */
 export const getScheduleTriggers = <ThrowOnError extends boolean = false>(options?: Options<GetScheduleTriggersData, ThrowOnError>) => (options?.client ?? client).get<GetScheduleTriggersResponses, GetScheduleTriggersErrors, ThrowOnError>({ url: '/api/schedule-triggers', ...options });
 
@@ -10321,7 +10321,7 @@ export const getScheduleTriggers = <ThrowOnError extends boolean = false>(option
  *
  * Authorization:
  *
- * `scheduledTask:create`: Create new scheduled tasks and trigger runs
+ * `project:create`: Create projects and schedules, and trigger schedule runs
  */
 export const createScheduleTrigger = <ThrowOnError extends boolean = false>(options: Options<CreateScheduleTriggerData, ThrowOnError>) => (options.client ?? client).post<CreateScheduleTriggerResponses, CreateScheduleTriggerErrors, ThrowOnError>({
     url: '/api/schedule-triggers',
@@ -10341,7 +10341,7 @@ export const createScheduleTrigger = <ThrowOnError extends boolean = false>(opti
  *
  * Authorization:
  *
- * `scheduledTask:delete`: Delete scheduled tasks
+ * `project:delete`: Delete projects and schedules
  */
 export const deleteScheduleTrigger = <ThrowOnError extends boolean = false>(options: Options<DeleteScheduleTriggerData, ThrowOnError>) => (options.client ?? client).delete<DeleteScheduleTriggerResponses, DeleteScheduleTriggerErrors, ThrowOnError>({ url: '/api/schedule-triggers/{id}', ...options });
 
@@ -10354,7 +10354,7 @@ export const deleteScheduleTrigger = <ThrowOnError extends boolean = false>(opti
  *
  * Authorization:
  *
- * `scheduledTask:read`: View scheduled tasks and their run history
+ * `project:read`: View projects, their schedules, and your own sessions inside them
  */
 export const getScheduleTrigger = <ThrowOnError extends boolean = false>(options: Options<GetScheduleTriggerData, ThrowOnError>) => (options.client ?? client).get<GetScheduleTriggerResponses, GetScheduleTriggerErrors, ThrowOnError>({ url: '/api/schedule-triggers/{id}', ...options });
 
@@ -10367,7 +10367,7 @@ export const getScheduleTrigger = <ThrowOnError extends boolean = false>(options
  *
  * Authorization:
  *
- * `scheduledTask:update`: Modify scheduled task configuration
+ * `project:update`: Edit project descriptions, instructions, sharing, and schedules
  */
 export const updateScheduleTrigger = <ThrowOnError extends boolean = false>(options: Options<UpdateScheduleTriggerData, ThrowOnError>) => (options.client ?? client).put<UpdateScheduleTriggerResponses, UpdateScheduleTriggerErrors, ThrowOnError>({
     url: '/api/schedule-triggers/{id}',
@@ -10387,7 +10387,7 @@ export const updateScheduleTrigger = <ThrowOnError extends boolean = false>(opti
  *
  * Authorization:
  *
- * `scheduledTask:update`: Modify scheduled task configuration
+ * `project:update`: Edit project descriptions, instructions, sharing, and schedules
  */
 export const enableScheduleTrigger = <ThrowOnError extends boolean = false>(options: Options<EnableScheduleTriggerData, ThrowOnError>) => (options.client ?? client).post<EnableScheduleTriggerResponses, EnableScheduleTriggerErrors, ThrowOnError>({ url: '/api/schedule-triggers/{id}/enable', ...options });
 
@@ -10400,7 +10400,7 @@ export const enableScheduleTrigger = <ThrowOnError extends boolean = false>(opti
  *
  * Authorization:
  *
- * `scheduledTask:update`: Modify scheduled task configuration
+ * `project:update`: Edit project descriptions, instructions, sharing, and schedules
  */
 export const disableScheduleTrigger = <ThrowOnError extends boolean = false>(options: Options<DisableScheduleTriggerData, ThrowOnError>) => (options.client ?? client).post<DisableScheduleTriggerResponses, DisableScheduleTriggerErrors, ThrowOnError>({ url: '/api/schedule-triggers/{id}/disable', ...options });
 
@@ -10413,7 +10413,7 @@ export const disableScheduleTrigger = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `scheduledTask:create`: Create new scheduled tasks and trigger runs
+ * `project:create`: Create projects and schedules, and trigger schedule runs
  */
 export const runScheduleTriggerNow = <ThrowOnError extends boolean = false>(options: Options<RunScheduleTriggerNowData, ThrowOnError>) => (options.client ?? client).post<RunScheduleTriggerNowResponses, RunScheduleTriggerNowErrors, ThrowOnError>({ url: '/api/schedule-triggers/{id}/run-now', ...options });
 
@@ -10426,7 +10426,7 @@ export const runScheduleTriggerNow = <ThrowOnError extends boolean = false>(opti
  *
  * Authorization:
  *
- * `scheduledTask:read`: View scheduled tasks and their run history
+ * `project:read`: View projects, their schedules, and your own sessions inside them
  */
 export const getScheduleTriggerRuns = <ThrowOnError extends boolean = false>(options: Options<GetScheduleTriggerRunsData, ThrowOnError>) => (options.client ?? client).get<GetScheduleTriggerRunsResponses, GetScheduleTriggerRunsErrors, ThrowOnError>({ url: '/api/schedule-triggers/{id}/runs', ...options });
 
@@ -10439,7 +10439,7 @@ export const getScheduleTriggerRuns = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `scheduledTask:read`: View scheduled tasks and their run history
+ * `project:read`: View projects, their schedules, and your own sessions inside them
  */
 export const getScheduleTriggerRun = <ThrowOnError extends boolean = false>(options: Options<GetScheduleTriggerRunData, ThrowOnError>) => (options.client ?? client).get<GetScheduleTriggerRunResponses, GetScheduleTriggerRunErrors, ThrowOnError>({ url: '/api/schedule-triggers/{id}/runs/{runId}', ...options });
 
@@ -10452,7 +10452,7 @@ export const getScheduleTriggerRun = <ThrowOnError extends boolean = false>(opti
  *
  * Authorization:
  *
- * `scheduledTask:create`: Create new scheduled tasks and trigger runs
+ * `project:create`: Create projects and schedules, and trigger schedule runs
  */
 export const createScheduleTriggerRunConversation = <ThrowOnError extends boolean = false>(options: Options<CreateScheduleTriggerRunConversationData, ThrowOnError>) => (options.client ?? client).post<CreateScheduleTriggerRunConversationResponses, CreateScheduleTriggerRunConversationErrors, ThrowOnError>({ url: '/api/schedule-triggers/{id}/runs/{runId}/conversation', ...options });
 

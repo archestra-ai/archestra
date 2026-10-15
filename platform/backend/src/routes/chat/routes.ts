@@ -4826,14 +4826,14 @@ async function findScheduleRunConversationForAdmin(params: {
   userId: string;
   organizationId: string;
 }): Promise<z.infer<typeof SelectConversationSchema> | null> {
-  const isScheduledTaskAdmin = await ResourcePermissions.allows({
+  const hasProjectOversight = await ResourcePermissions.allows({
     userId: params.userId,
     organizationId: params.organizationId,
-    resource: "scheduledTask",
+    resource: "project",
     scope: "*",
     action: "read",
   });
-  if (!isScheduledTaskAdmin) {
+  if (!hasProjectOversight) {
     return null;
   }
 

@@ -158,7 +158,7 @@ describe("annotators earlier opening policies declare", () => {
     });
     expect(preview.valid).toBe(false);
     expect(preview.errors).toEqual([
-      `in this deployment: annotator "a.tool-call" is bound to ${JUDGE_B} in this revision, but sessions opened under earlier policies were answered by ${JUDGE_A}. Declare the new binding under a new annotator name so those sessions keep theirs.`,
+      `in this deployment: annotator "a.tool-call" is bound to ${JUDGE_B} in this revision, but sessions opened under earlier policies were answered by ${JUDGE_A} and would be redirected. Declare the new binding under a new annotator name so those sessions keep theirs.`,
     ]);
     await expect(
       declare({ organizationId, userId, content: replacement }),
@@ -252,7 +252,7 @@ describe("annotators earlier opening policies declare", () => {
     });
     expect(preview.valid).toBe(true);
     expect(preview.warnings).toEqual([
-      `in this deployment: annotator "a.tool-call" is bound to ${JUDGE_B} now, but sessions opened under earlier policies were answered by ${JUDGE_A}; those sessions are answered by the current binding.`,
+      `in this deployment: annotator "a.tool-call" stays bound to ${JUDGE_B}; sessions opened under earlier policies were answered by ${JUDGE_A} and have been answered by ${JUDGE_B} since the revision that rebound it. This revision changes nothing for them.`,
     ]);
     await declare({ organizationId, userId, content: next });
     const served =
@@ -260,6 +260,43 @@ describe("annotators earlier opening policies declare", () => {
     expect(served.lastError).toBeNull();
     expect(served.rootRevision).toBe(effective.rootRevision + 1);
     expect(served.content).toContain("timeout_ms = 4000");
+
+    // Binding the name a third way redirects those sessions again: an error.
+    const third = urlJudged("a", "https://judge-c.test/annotate");
+    const rebound = await guardrailsPolicyService.validate(third, {
+      organizationId,
+    });
+    expect(rebound.valid).toBe(false);
+    expect(rebound.errors).toEqual([
+      expect.stringMatching(
+        /^in this deployment: annotator "a\.tool-call" is bound to https:\/\/judge-c\.test\/annotate in this revision, but sessions opened under earlier policies were answered by .* and would be redirected\. Declare the new binding under a new annotator name so those sessions keep theirs\.$/,
+      ),
+    ]);
+    expect(rebound.errors[0]).toContain(JUDGE_A);
+    expect(rebound.errors[0]).toContain(JUDGE_B);
+  });
+
+  test("rebinding a name no session opened under is still an error, since the next session opens under the effective policy", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const { organizationId, userId } = await admin({
+      makeOrganization,
+      makeUser,
+      makeMember,
+    });
+    await declare({ organizationId, userId, content: urlJudged("a", JUDGE_A) });
+    const preview = await guardrailsPolicyService.validate(
+      urlJudged("a", JUDGE_B),
+      { organizationId },
+    );
+    expect(preview.valid).toBe(false);
+    expect(preview.errors).toEqual([
+      expect.stringContaining(
+        `annotator "a.tool-call" is bound to ${JUDGE_B} in this revision, but sessions opened under earlier policies were answered by ${JUDGE_A}`,
+      ),
+    ]);
   });
 
   test("a battery helper answered under a previous install id is the same binding, so the policy is neither refused nor pinned", async ({

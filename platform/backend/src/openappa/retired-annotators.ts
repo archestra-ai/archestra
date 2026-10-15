@@ -129,6 +129,8 @@ export function retiredAnnotators(params: {
   readable: ReadonlySet<string>;
   /** The URL prefix of this host's battery helpers, followed by an install id. */
   helperBase: string;
+  /** The variable this host's helper bindings name as their bearer now. */
+  helperTokenEnv: string;
   /** Install ids that exist now. */
   installs: ReadonlySet<string>;
 }): {
@@ -161,11 +163,11 @@ export function retiredAnnotators(params: {
         ) {
           const entry = rebound.get(name) ?? {
             name,
-            current: now.binding,
+            current: described(now),
             earlier: [],
           };
-          if (!entry.earlier.includes(candidate.binding))
-            entry.earlier.push(candidate.binding);
+          if (!entry.earlier.includes(described(candidate)))
+            entry.earlier.push(described(candidate));
           rebound.set(name, entry);
         }
         continue;
@@ -173,13 +175,18 @@ export function retiredAnnotators(params: {
       const earlier = winners.get(name);
       if (
         earlier &&
-        !sameBinding({
-          a: earlier,
-          b: candidate,
-          helperBase: params.helperBase,
-        })
-      )
-        conflicts.add(name);
+        sameBinding({ a: earlier, b: candidate, helperBase: params.helperBase })
+      ) {
+        // Snapshots of one helper differ only in what the host generated:
+        // keep the one whose install still answers.
+        if (
+          !helperAnswers({ ...params, annotator: earlier }) &&
+          helperAnswers({ ...params, annotator: candidate })
+        )
+          winners.set(name, candidate);
+        continue;
+      }
+      if (earlier) conflicts.add(name);
       winners.set(name, candidate);
     }
   const kept: KeptAnnotator[] = [];
@@ -191,7 +198,7 @@ export function retiredAnnotators(params: {
       : unkeepable({ ...params, candidate, composed: bindings });
     if (reason) dropped.push({ name: candidate.name, reason });
     else {
-      kept.push(candidate);
+      kept.push(atThisHost({ ...params, annotator: candidate }));
       // Retained names can share a builtin profile too. Do not let the next
       // candidate replace a dependency already kept for another old name.
       bindings =
@@ -280,6 +287,61 @@ function keptFrom(params: {
   };
 }
 
+/** `binding` with the credentials it uses, so two bindings read apart in a message. */
+function described(annotator: KeptAnnotator): string {
+  const entries = Object.entries(annotator.credentials);
+  return entries.length === 0
+    ? annotator.binding
+    : `${annotator.binding} with ${entries
+        .map(([variable, key]) => `${variable} = "${key}"`)
+        .join(", ")}`;
+}
+
+/** Whether every host helper a candidate names has an install now; true without one. */
+function helperAnswers(params: {
+  annotator: KeptAnnotator;
+  helperBase: string;
+  installs: ReadonlySet<string>;
+}): boolean {
+  return params.annotator.externals.every(({ table }) => {
+    const helper = hostHelper(table.url, params.helperBase);
+    return helper === null || params.installs.has(helper.install);
+  });
+}
+
+/**
+ * A kept annotator with its host helper tables rewritten to this host: the
+ * port and the bearer variable are the deployment's now, not the snapshot's.
+ */
+function atThisHost(params: {
+  annotator: KeptAnnotator;
+  helperBase: string;
+  helperTokenEnv: string;
+}): KeptAnnotator {
+  const { annotator, helperBase, helperTokenEnv } = params;
+  let binding = annotator.binding;
+  const externals = annotator.externals.map(({ path, table }) => {
+    const helper = hostShaped(table) ? hostHelper(table.url, helperBase) : null;
+    if (!helper) return { path, table };
+    const base = new URL(helperBase);
+    const url = `${base.origin}/${[
+      ...base.pathname.split("/").filter(Boolean),
+      helper.install,
+      helper.external,
+    ].join("/")}`;
+    if (binding === table.url) binding = url;
+    return { path, table: { url, token_env: helperTokenEnv } };
+  });
+  return { ...annotator, externals, binding };
+}
+
+/** Whether a table has the shape the host writes for its helpers: a URL and its bearer variable. */
+function hostShaped(table: Record<string, unknown>): boolean {
+  return Object.keys(table).every(
+    (key) => key === "url" || key === "token_env",
+  );
+}
+
 /** Why a candidate cannot be kept, or null when it can. */
 function unkeepable(params: {
   candidate: KeptAnnotator;
@@ -321,7 +383,9 @@ function sameBinding(params: {
   const { a, b, helperBase } = params;
   const identity = (annotator: KeptAnnotator) =>
     annotator.externals.map(({ path, table }) => {
-      const helper = hostHelper(table.url, helperBase);
+      const helper = hostShaped(table)
+        ? hostHelper(table.url, helperBase)
+        : null;
       return { path, table: helper ? { hostHelper: helper.external } : table };
     });
   return (

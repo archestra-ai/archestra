@@ -352,7 +352,8 @@ class OpenAppaBatteriesService {
    * `retiring` names each annotator `previous` (the revision `content` would
    * replace, the latest one unless given) declares that the composition would
    * no longer declare, and whether the host keeps it for the sessions opened
-   * under earlier policies.
+   * under earlier policies; `rebound` names each annotator the composition
+   * still declares that a policy sessions opened under bound differently.
    */
   async composeInDeployment(params: {
     organizationId: string;
@@ -1280,6 +1281,7 @@ class OpenAppaBatteriesService {
       composed: params.composed,
       readable,
       helperBase: helperUrlBase(""),
+      helperTokenEnv: openappaDeclarations.publishBridgeToken(),
       installs: new Set(params.installs.map((install) => install.id)),
     });
   }
@@ -2566,8 +2568,9 @@ const NOTHING_RETIRED: Retirement = {
 };
 
 /**
- * One warning per stored composition that keeps annotators, one per name it
- * cannot keep, and one per declared name an earlier policy bound differently.
+ * Per recompose: one warning listing the annotators it keeps, one per name
+ * it cannot keep, and one per declared name an earlier policy bound
+ * differently.
  */
 function logRetired(params: Retirement & { organizationId: string }): void {
   const { organizationId, kept, dropped, conflicts, rebound } = params;

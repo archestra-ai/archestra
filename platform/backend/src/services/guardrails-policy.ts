@@ -78,7 +78,11 @@ function duplicateEntryErrors(resolution: PolicyResolution): string[] {
  * batteries are named with it, since they are what the refusal is fixed by.
  * A held-back battery the document composes without is no refusal; its status
  * is the effective policy's to report. A document that composes is warned
- * about each annotator the effective policy declares and it would drop.
+ * about each annotator the effective policy declares and it would drop. A
+ * name it binds differently from a policy sessions opened under is an error,
+ * since those sessions would be redirected; one the revision being replaced
+ * already binds that way is a warning, since the document changes nothing
+ * for them.
  */
 async function deploymentRefusal(params: {
   organizationId: string;
@@ -103,14 +107,21 @@ async function deploymentRefusal(params: {
             organizationId,
             content: previous,
           });
-  const keptRebinding = new Set(
-    (before?.rebound ?? []).map((rebinding) => rebinding.name),
+  // A rebinding is carried only while the name stays bound as the revision
+  // being replaced binds it; binding it a third way redirects sessions again.
+  const carried = new Map(
+    (before?.rebound ?? []).map((rebinding) => [
+      rebinding.name,
+      rebinding.current,
+    ]),
   );
+  const isCarried = (rebinding: Rebinding) =>
+    carried.get(rebinding.name) === rebinding.current;
   const rebindingErrors = submitted.rebound
-    .filter((rebinding) => !keptRebinding.has(rebinding.name))
+    .filter((rebinding) => !isCarried(rebinding))
     .map((rebinding) => inDeployment(rebindingError(rebinding)));
   const rebindingWarnings = submitted.rebound
-    .filter((rebinding) => keptRebinding.has(rebinding.name))
+    .filter(isCarried)
     .map((rebinding) => inDeployment(rebindingWarning(rebinding)));
   if (submitted.refusal.length === 0)
     return {
@@ -142,17 +153,14 @@ async function deploymentRefusal(params: {
 
 /** A rebinding this document introduces: sessions opened earlier would be redirected. */
 function rebindingError(rebinding: Rebinding): string {
-  return `${rebindingNote(rebinding, "in this revision")}. Declare the new binding under a new annotator name so those sessions keep theirs.`;
-}
-
-/** A rebinding the current revision already carries: nothing changes for those sessions. */
-function rebindingWarning(rebinding: Rebinding): string {
-  return `${rebindingNote(rebinding, "now")}; those sessions are answered by the current binding.`;
-}
-
-function rebindingNote(rebinding: Rebinding, when: string): string {
   const { name, current, earlier } = rebinding;
-  return `annotator "${name}" is bound to ${current} ${when}, but sessions opened under earlier policies were answered by ${earlier.join(" or ")}`;
+  return `annotator "${name}" is bound to ${current} in this revision, but sessions opened under earlier policies were answered by ${earlier.join(" or ")} and would be redirected. Declare the new binding under a new annotator name so those sessions keep theirs.`;
+}
+
+/** A rebinding the revision being replaced already carries: this document changes nothing for those sessions. */
+function rebindingWarning(rebinding: Rebinding): string {
+  const { name, current, earlier } = rebinding;
+  return `annotator "${name}" stays bound to ${current}; sessions opened under earlier policies were answered by ${earlier.join(" or ")} and have been answered by ${current} since the revision that rebound it. This revision changes nothing for them.`;
 }
 
 /** The 409 a lost revision race answers with; a retrying writer waits for this one. */

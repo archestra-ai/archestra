@@ -188,6 +188,89 @@ APPA_PROVIDER_JEV_API_KEY = "other-key"
     ]);
   });
 
+  test("the earlier bindings of a rebound name are listed once each, in hash order", () => {
+    const { rebound } = retire({
+      openings: [
+        opening("c3", URL_BOUND),
+        opening("b2", URL_BOUND.replace("judge-a.test", "judge-a0.test")),
+        opening("a1", URL_BOUND),
+      ],
+      composed: URL_BOUND.replace("judge-a.test", "judge-a2.test"),
+    });
+    expect(rebound).toEqual([
+      {
+        name: "a.tool-call",
+        current: "http://judge-a2.test/annotate",
+        earlier: [
+          "http://judge-a.test/annotate",
+          "http://judge-a0.test/annotate",
+        ],
+      },
+    ]);
+  });
+
+  test("a builtin whose credential changed is reported with the credential that differs", () => {
+    const { rebound } = retire({
+      openings: [opening("a1", JEV_BOUND)],
+      composed: JEV_BOUND.replace('"jev-key"', '"other-key"'),
+      readable: ["jev-key", "other-key"],
+    });
+    expect(rebound).toEqual([
+      {
+        name: "jev.tool-call",
+        current: 'builtin "jev" with APPA_PROVIDER_JEV_API_KEY = "other-key"',
+        earlier: ['builtin "jev" with APPA_PROVIDER_JEV_API_KEY = "jev-key"'],
+      },
+    ]);
+  });
+
+  test("two retired snapshots of one helper are one binding, kept at the install that answers and at this host", () => {
+    const gone = hostHelped({ install: "install-9", port: 9000 });
+    const alive = hostHelped({ install: "install-1", port: 3000 }).replace(
+      "APPA_ARCHESTRA_BRIDGE_TOKEN",
+      "APPA_ARCHESTRA_HELPER_TOKEN",
+    );
+    const { kept, dropped, conflicts } = retire({
+      // Hash order would pick the gone install last; the live one is kept.
+      openings: [opening("a1", alive), opening("b2", gone)],
+      composed: JUDGED_BY_B,
+    });
+    expect(conflicts).toEqual([]);
+    expect(dropped).toEqual([]);
+    expect(
+      kept.map(({ name, binding, externals }) => ({
+        name,
+        binding,
+        externals,
+      })),
+    ).toEqual([
+      {
+        name: "a.tool-call",
+        binding: `${HELPER_BASE}install-1/a.tool-call`,
+        externals: [
+          {
+            path: ["annotators", "a.tool-call"],
+            table: {
+              url: `${HELPER_BASE}install-1/a.tool-call`,
+              token_env: "APPA_ARCHESTRA_BRIDGE_TOKEN",
+            },
+          },
+        ],
+      },
+    ]);
+  });
+
+  test("a table with more than the host writes for its helpers is its own binding", () => {
+    const served = hostHelped({ install: "install-2", port: 9000 });
+    const authored = `${served}timeout_ms = 1\n`;
+    expect(
+      retire({ openings: [opening("a1", authored)], composed: served }).rebound,
+    ).toHaveLength(1);
+    expect(
+      retire({ openings: [opening("a1", served)], composed: authored }).rebound,
+    ).toHaveLength(1);
+  });
+
   test("a host helper served under another install id, port or token variable is the same binding", () => {
     const served = hostHelped({ install: "install-2", port: 9000 });
     for (const earlier of [
@@ -439,6 +522,7 @@ function retire(params: {
     composed: params.composed,
     readable: new Set(params.readable ?? ["jev-key"]),
     helperBase: HELPER_BASE,
+    helperTokenEnv: "APPA_ARCHESTRA_BRIDGE_TOKEN",
     installs: new Set(["install-1"]),
   });
 }

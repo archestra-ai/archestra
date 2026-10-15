@@ -37,7 +37,11 @@ import {
   startRuntimeChild,
 } from "./service";
 import { startedUnenforced } from "./unenforced";
-import { rememberYellSession } from "./yell-session";
+import {
+  isReportingToolCall,
+  rememberYellSession,
+  reportingToolSpellings,
+} from "./yell-session";
 
 /** Proxy-written run. Not an offer JWS and not a model-selected session. */
 function remedyTrajectory(sessionId: string, parentId?: string) {
@@ -169,6 +173,129 @@ afterEach(() => {
 });
 
 describe("APPA feature boundary", () => {
+  test("reporting recovery recognizes trusted dispatch targets, not foreign lookalikes or unrelated wrapped operations", () => {
+    const resolution = {
+      looseRunToolDispatch: false,
+      canonicalize: (name: string, namespace?: string) =>
+        namespace === "trusted" && name === "dispatch"
+          ? "archestra__run_tool"
+          : namespace
+            ? `foreign:${namespace}.${name}`
+            : name,
+    };
+    const dispatch = {
+      name: "dispatch",
+      namespace: "trusted",
+      arguments: {
+        tool_name: "archestra__yell",
+        tool_args: { message: "Please report the bug", with_trajectory: true },
+      },
+    };
+    expect(isReportingToolCall({ call: dispatch, resolution })).toBe(true);
+    expect(
+      isReportingToolCall({
+        call: { ...dispatch, namespace: "foreign" },
+        resolution,
+      }),
+    ).toBe(false);
+    expect(
+      isReportingToolCall({
+        call: {
+          ...dispatch,
+          arguments: { tool_name: "other__write", tool_args: {} },
+        },
+        resolution,
+      }),
+    ).toBe(false);
+    expect(
+      isReportingToolCall({
+        call: { name: "yell", arguments: {} },
+        resolution,
+      }),
+    ).toBe(false);
+    expect(
+      reportingToolSpellings({
+        identity: resolution,
+        declarations: [
+          { name: "dispatch", namespace: "trusted" },
+          { name: "superyell", namespace: "foreign" },
+        ],
+      }),
+    ).toEqual([{ name: "dispatch", namespace: "trusted" }]);
+  });
+  test.for([
+    "yell",
+    "superyell",
+  ] as const)("returns the executed %s result even when ordinary tool output is withheld", async (name) => {
+    config.openappa.yellEnabled = true;
+    await GuardrailsDeploymentModel.set({ superyellEnabled: true });
+    const originalDispatch = native.dispatchHook.getMockImplementation();
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      if (JSON.parse(raw).event === "yell")
+        return JSON.stringify({
+          decision: "mcp_result",
+          result: { content: [{ type: "text", text: "Report delivered" }] },
+        });
+      if (!originalDispatch) throw new Error("Missing native mock");
+      return originalDispatch(raw);
+    });
+    const callId = `executed-${name}`;
+    const result = await executeArchestraTool(
+      `archestra__${name}`,
+      {
+        message: "The guardrails failure was confusing",
+        with_trajectory: true,
+      },
+      {
+        agent: { id: "agent", name: "Assistant" },
+        organizationId,
+        userId: "alice",
+        openappaSession: session,
+        currentToolCallId: callId,
+      },
+    );
+    expect(result.isError).not.toBe(true);
+    const content = result.content
+      .flatMap((part) => (part.type === "text" ? [part.text] : []))
+      .join("\n");
+    const processed = await processProxyResults({
+      session,
+      results: [
+        {
+          id: callId,
+          name: `archestra__${name}`,
+          content: "CLIENT-SPOOFED REPORT OUTPUT",
+          isError: false,
+        },
+      ],
+      canonicalize: (tool) => tool,
+    });
+    expect(processed.toolResultUpdates[callId]).toEqual({
+      content,
+      outputSource: "runtime",
+    });
+    expect(JSON.stringify(processed)).not.toContain("CLIENT-SPOOFED");
+    expect(
+      native.dispatchHook.mock.calls
+        .map(([raw]) => JSON.parse(raw))
+        .filter(
+          (event) =>
+            event.event === "tool_result" &&
+            event.operation_id === `result:${callId}`,
+        ),
+    ).toEqual([]);
+    const otherSession = await processProxyResults({
+      session: { ...session, session_id: "unrelated" },
+      results: [
+        { id: callId, name: `archestra__${name}`, content, isError: false },
+      ],
+      canonicalize: (tool) => tool,
+    });
+    expect(otherSession.toolResultUpdates[callId].content).toBe(
+      "APPA: withheld; remedy offer-123",
+    );
+  });
+
   test("reporting is hidden and direct execution is refused until explicitly enabled", async () => {
     expect(
       getArchestraMcpTools().some((tool) => tool.name === "archestra__yell"),

@@ -4,6 +4,7 @@ import {
   TimeInMs,
   type YellToolShortName,
 } from "@archestra/shared";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
@@ -12,6 +13,7 @@ import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import type { ToolNameResolution } from "@/routes/proxy/utils/gateway-tool-names";
 import { ApiError } from "@/types";
 import type { OpenAppaSession } from "./service";
+import type { DeclaredToolSpelling } from "./wire";
 
 export const YellArgumentsSchema = z.strictObject({
   message: z
@@ -25,6 +27,92 @@ export const YellArgumentsSchema = z.strictObject({
 export type YellArguments = z.infer<typeof YellArgumentsSchema>;
 
 type YellSession = { session: OpenAppaSession; callId: string };
+
+export function reportingToolSpellings(params: {
+  identity: ToolNameResolution;
+  declarations: readonly DeclaredToolSpelling[];
+  nativeQuestion?: string;
+}): DeclaredToolSpelling[] {
+  const { identity, declarations, nativeQuestion } = params;
+  const shortName = (tool: DeclaredToolSpelling) =>
+    archestraMcpBranding.getToolShortName(
+      identity.canonicalize(tool.name, tool.namespace),
+    );
+  if (
+    !declarations.some((tool) =>
+      ["yell", "superyell", "run_tool"].some(
+        (name) => name === shortName(tool),
+      ),
+    )
+  )
+    return [];
+  const tools = declarations.filter((tool) =>
+    [...REPORTING_TOOLS, "run_tool"].some((name) => name === shortName(tool)),
+  );
+  if (
+    nativeQuestion &&
+    declarations.some(
+      (tool) => tool.name === nativeQuestion && tool.namespace === undefined,
+    )
+  )
+    tools.push({ name: nativeQuestion });
+  return tools;
+}
+
+export function isReportingToolCall(params: {
+  call: { name: string; arguments: string | object; namespace?: string };
+  resolution: ToolNameResolution;
+  nativeQuestion?: string;
+}): boolean {
+  const { call, resolution, nativeQuestion } = params;
+  if (typeof call.arguments === "string") {
+    try {
+      JSON.parse(call.arguments);
+    } catch {
+      return false;
+    }
+  } else if (!call.arguments || typeof call.arguments !== "object")
+    return false;
+  if (
+    nativeQuestion &&
+    call.name === nativeQuestion &&
+    call.namespace === undefined
+  )
+    return true;
+  const [target] = normalizeToolCallsForPolicy([call], resolution);
+  const shortName = archestraMcpBranding.getToolShortName(target.toolCallName);
+  return REPORTING_TOOLS.some((name) => name === shortName);
+}
+
+/** Retain the host's result, not a client's claim about what a reporting tool returned. */
+export async function rememberYellResult(
+  params: YellSession & { result: CallToolResult },
+): Promise<void> {
+  try {
+    await cacheManager.set<string>(
+      yellResultKey(params.session, params.callId),
+      params.result.content
+        .flatMap((part) => (part.type === "text" ? [part.text] : []))
+        .join("\n"),
+      TimeInMs.Day,
+    );
+  } catch (error) {
+    logger.warn(
+      { err: error },
+      "Could not retain the OpenAPPA reporting result",
+    );
+  }
+}
+
+export async function readYellResult(
+  session: OpenAppaSession,
+  callId: string,
+): Promise<string | undefined> {
+  return (
+    (await cacheManager.get<string>(yellResultKey(session, callId))) ??
+    undefined
+  );
+}
 
 /**
  * An external client runs the yell the proxy allowed through the MCP gateway,
@@ -80,6 +168,30 @@ export async function recallYellSession(params: {
       "OpenAPPA reporting is temporarily unavailable; retry the same yell call",
     );
   }
+}
+
+const REPORTING_TOOLS = [
+  "yell",
+  "superyell",
+  "ask_user",
+  "get_remedy_plans",
+  "execute_remedy_plan",
+] as const;
+
+function yellResultKey(
+  session: OpenAppaSession,
+  callId: string,
+): AllowedCacheKey {
+  return `${CacheKey.OpenAppaYellResult}-${createHash("sha256")
+    .update(
+      JSON.stringify([
+        session.organization_id,
+        session.caller_id,
+        session.session_id,
+        callId,
+      ]),
+    )
+    .digest("base64url")}`;
 }
 
 function yellSessionKey(

@@ -26,7 +26,8 @@ def locate_helper():
     assumed.
     """
     candidates = [
-        Path(__file__).resolve().parent.parent.parent
+        # Chained parents stay at the root for shallow in-image test mounts.
+        Path(__file__).resolve().parent.parent.parent.parent
         / "backend"
         / "src"
         / "static"

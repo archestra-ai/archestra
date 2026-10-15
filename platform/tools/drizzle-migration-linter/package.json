@@ -11,9 +11,9 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "lint": "pnpm --dir .. exec tsx drizzle-migration-linter/src/cli.ts",
-    "test": "pnpm --dir ../backend exec vitest run --root ../drizzle-migration-linter",
-    "type-check": "pnpm --dir ../backend exec tsc --noEmit --project ../drizzle-migration-linter/tsconfig.json",
+    "lint": "pnpm --dir ../.. exec tsx tools/drizzle-migration-linter/src/cli.ts",
+    "test": "pnpm --dir ../../backend exec vitest run --root ../tools/drizzle-migration-linter",
+    "type-check": "pnpm --dir ../../backend exec tsc --noEmit --project ../tools/drizzle-migration-linter/tsconfig.json",
     "check:ci": "pnpm type-check && pnpm test",
     "check:commit": "pnpm type-check"
   },

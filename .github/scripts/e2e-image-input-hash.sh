@@ -46,7 +46,7 @@ for entry in git("ls-tree", "-rz", "HEAD:platform").split(b"\0"):
     _, path = entry.split(b"\t", 1)
     excluded = (
         ("e2e-tests" in patterns and path.startswith(b"e2e-tests/"))
-        or ("docs-screenshots" in patterns and path.startswith(b"docs-screenshots/"))
+        or ("tools/docs-screenshots" in patterns and path.startswith(b"tools/docs-screenshots/"))
         or ("**/*.test.ts" in patterns and path.endswith(b".test.ts"))
         or ("**/*.test.tsx" in patterns and path.endswith(b".test.tsx"))
     )
@@ -58,7 +58,7 @@ PY
     ;;
   mcp-base)
     {
-      printf 'context %s\n' "$(git rev-parse HEAD:platform/mcp_server_docker_image)"
+      printf 'context %s\n' "$(git rev-parse HEAD:platform/docker_images/mcp_server)"
       definition
     } | git hash-object --stdin
     ;;

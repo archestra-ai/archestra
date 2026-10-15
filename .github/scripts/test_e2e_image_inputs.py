@@ -31,10 +31,10 @@ class ImageInputTests(unittest.TestCase):
             self.write(path, (ROOT / path).read_text())
         for path in RECIPES:
             self.write(path, "name: build\n")
-        self.write("platform/.dockerignore", "e2e-tests\ndocs-screenshots\n**/*.test.ts\n**/*.test.tsx\n")
+        self.write("platform/.dockerignore", "e2e-tests\ntools/docs-screenshots\n**/*.test.ts\n**/*.test.tsx\n")
         self.write("platform/Dockerfile", "FROM scratch\nCOPY . /app\n")
         self.write("platform/backend/app.ts", "export const value = 1;\n")
-        self.write("platform/mcp_server_docker_image/Dockerfile", "FROM scratch\n")
+        self.write("platform/docker_images/mcp_server/Dockerfile", "FROM scratch\n")
         self.commit()
         self.initial = self.digest()
 
@@ -61,7 +61,7 @@ class ImageInputTests(unittest.TestCase):
     def test_docker_excluded_test_changes_keep_the_image(self):
         for path in (
             "platform/backend/app.test.ts", "platform/frontend/app.test.tsx",
-            "platform/e2e-tests/example.spec.ts", "platform/docs-screenshots/manifest.ts",
+            "platform/e2e-tests/example.spec.ts", "platform/tools/docs-screenshots/manifest.ts",
         ):
             self.write(path, "test input\n")
         self.commit()

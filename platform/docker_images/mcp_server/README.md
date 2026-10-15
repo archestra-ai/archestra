@@ -33,7 +33,7 @@ Python dependencies are declared in `pyproject.toml` and compiled into
 dependencies with:
 
 ```bash
-make -C mcp_server_docker_image update-python-lockfile
+make -C docker_images/mcp_server update-python-lockfile
 ```
 
 ## Dependencies Included

@@ -16,7 +16,7 @@ For a capture change, run the same manifest twice against independently seeded, 
 DOCS_SCREENSHOTS_RAW_OUTPUT=/tmp/docs-first/raw DOCS_SCREENSHOTS_OUTPUT=/tmp/docs-first/webp pnpm docs:screenshots
 # Start a fresh instance/database, then run the same command with docs-second.
 DOCS_SCREENSHOTS_RAW_OUTPUT=/tmp/docs-second/raw DOCS_SCREENSHOTS_OUTPUT=/tmp/docs-second/webp pnpm docs:screenshots
-node docs-screenshots/scripts/compare-captures.mjs /tmp/docs-first/raw /tmp/docs-second/raw
+node tools/docs-screenshots/scripts/compare-captures.mjs /tmp/docs-first/raw /tmp/docs-second/raw
 ```
 
 `DOCS_SCREENSHOTS_ONLY` can select the same subset in both runs. The comparison fails for missing images or any changed decoded pixel, before the existing lossy WebP tolerance can hide a difference. Inspect every changed scene. Ordinary captures still validate the complete manifest in the merge queue; publication rules are unchanged.

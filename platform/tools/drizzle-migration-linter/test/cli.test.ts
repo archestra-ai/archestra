@@ -5,7 +5,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 const CLI_PATH = path.resolve(import.meta.dirname, "../src/cli.ts");
-const PLATFORM_ROOT = path.resolve(import.meta.dirname, "../..");
+const PLATFORM_ROOT = path.resolve(import.meta.dirname, "../../..");
 const TSX_BIN = path.join(PLATFORM_ROOT, "node_modules/.bin/tsx");
 
 let tempDir: string;

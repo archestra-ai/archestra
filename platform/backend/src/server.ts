@@ -122,9 +122,10 @@ import { mcpGatewayTaskReaper } from "@/services/mcp-gateway-task-reaper";
 import { mcpImageUpdateChecker } from "@/services/mcp-image-update-checker";
 import { mcpToolsRefreshManager } from "@/services/mcp-tools-refresh";
 import { initializeManagedPlaywrightRuntime } from "@/services/playwright-runtime";
-import { runScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
+import { ensureScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
+import { createStartupHealthServer } from "@/startup-health";
 import { taskQueueService } from "@/task-queue";
 import { registerTaskHandlers } from "@/task-queue/handlers";
 import {
@@ -819,6 +820,7 @@ const startMcpServerRuntime = async (
 
 const startWebServer = async () => {
   const fastify = createFastifyInstance();
+  const startupHealth = createStartupHealthServer();
 
   /**
    * Custom request logging hook that excludes noisy endpoints:
@@ -903,6 +905,9 @@ const startWebServer = async () => {
   registerAuditLogHook(fastify);
 
   try {
+    // Large upgrades may outlast Kubernetes' startup probe budget. Serve only
+    // liveness until the real API is ready; /ready and every API return 503.
+    await startupHealth.listen({ port, host });
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -961,9 +966,8 @@ const startWebServer = async () => {
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    // Convert legacy visibility and role authority into grants. Each policy
-    // converts once so later permission edits survive a restart.
-    await runScopedResourcePermissionCutover();
+    // Complete the one-time permission upgrade before admitting API traffic.
+    await ensureScopedResourcePermissionCutover();
     // SPDX-SnippetEnd
 
     // Initialize metrics with keys of custom agent labels
@@ -1222,6 +1226,8 @@ const startWebServer = async () => {
     // Register all API routes (eeRoutes already loaded at module level)
     await registerApiRoutes(fastify);
 
+    await fastify.ready();
+    await startupHealth.close();
     await fastify.listen({ port, host });
     fastify.log.info(`${name} started on port ${port}`);
     // Lets operators confirm an override without waiting for a reply to hit
@@ -1254,6 +1260,7 @@ const startWebServer = async () => {
       activeChatRunReaperIntervalId,
     });
   } catch (err) {
+    await startupHealth.close();
     fastify.log.error(err);
     process.exit(1);
   }

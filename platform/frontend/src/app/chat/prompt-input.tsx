@@ -199,6 +199,11 @@ export interface ArchestraPromptInputProps
    * nowhere to go yet — the new-chat screen before its agent has resolved.
    */
   sendDisabled?: boolean;
+  /**
+   * Why sending is blocked, shown on the disabled Send button. Without it the
+   * button just looks dead: a disabled button gets no hover of its own.
+   */
+  disabledReason?: string;
   /** Disable chat input while context compaction is running */
   isContextCompacting?: boolean;
   /** Manually compact the active conversation */
@@ -259,6 +264,7 @@ const PromptInputContent = ({
   agentLlmApiKeyId,
   submitDisabled = false,
   sendDisabled = false,
+  disabledReason,
   subscriptionConnectRequired = false,
   isContextCompacting = false,
   onCompactConversation,
@@ -802,6 +808,8 @@ const PromptInputContent = ({
   const canComposeDuringCompaction = !!conversationId;
   const composerLocked =
     submitDisabled || (isContextCompacting && !canComposeDuringCompaction);
+  const isSendBlocked =
+    composerLocked || subscriptionConnectRequired || sendDisabled;
   // Messages queued while a response was in-flight; sent automatically (in
   // order) by the conversation's chat session once each turn settles.
   const queuedMessages = useConversationMessageQueue(conversationId);
@@ -1132,32 +1140,40 @@ const PromptInputContent = ({
               />
             )}
             <Tooltip>
+              {/* A disabled button takes no pointer events, so the tooltip
+                  hangs off a wrapper that still does — otherwise a blocked
+                  Send gives no hint why. */}
               <TooltipTrigger asChild>
-                <PromptInputSubmit
-                  className="!h-8"
-                  status={submitStatus}
-                  disabled={
-                    composerLocked ||
-                    subscriptionConnectRequired ||
-                    sendDisabled
-                  }
-                  onClick={(event) => {
-                    // While a response is in-flight the button shows Stop; a
-                    // click stops the stream instead of submitting the form
-                    // (which would queue the typed text — see onStop docs).
-                    // With a queueable draft the button is a Send button, so
-                    // the click must submit (and queue) instead; Esc stops.
-                    if (onStop && isResponseInFlight && !isQueueingSubmit) {
-                      event.preventDefault();
-                      onStop();
-                    }
-                  }}
-                />
+                <span className="inline-flex">
+                  <PromptInputSubmit
+                    className="!h-8"
+                    status={submitStatus}
+                    disabled={isSendBlocked}
+                    onClick={(event) => {
+                      // While a response is in-flight the button shows Stop; a
+                      // click stops the stream instead of submitting the form
+                      // (which would queue the typed text — see onStop docs).
+                      // With a queueable draft the button is a Send button, so
+                      // the click must submit (and queue) instead; Esc stops.
+                      if (onStop && isResponseInFlight && !isQueueingSubmit) {
+                        event.preventDefault();
+                        onStop();
+                      }
+                    }}
+                  />
+                </span>
               </TooltipTrigger>
               <TooltipContent side="top">
                 {subscriptionConnectRequired ? (
                   <span>
                     Connect the subscription or choose another credential
+                  </span>
+                ) : isSendBlocked ? (
+                  <span>
+                    {disabledReason ??
+                      (isContextCompacting
+                        ? "Compacting the conversation…"
+                        : "You can't send yet")}
                   </span>
                 ) : isResponseInFlight && onStop && !isQueueingSubmit ? (
                   <span className="flex items-center gap-1.5">
@@ -1207,6 +1223,7 @@ const ArchestraPromptInput = ({
   agentLlmApiKeyId,
   submitDisabled,
   sendDisabled,
+  disabledReason,
   subscriptionConnectRequired,
   isContextCompacting,
   onCompactConversation,
@@ -1322,6 +1339,7 @@ const ArchestraPromptInput = ({
           agentLlmApiKeyId={agentLlmApiKeyId}
           submitDisabled={submitDisabled}
           sendDisabled={sendDisabled}
+          disabledReason={disabledReason}
           subscriptionConnectRequired={subscriptionConnectRequired}
           subscriptionProvider={subscriptionProvider}
           isContextCompacting={isContextCompacting}

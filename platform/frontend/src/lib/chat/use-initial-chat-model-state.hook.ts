@@ -41,6 +41,7 @@ type InitialChatModelStateParams<TAgent extends InitialChatAgent> = {
   organization: InitialChatOrganization;
   defaultAgentId: string | null | undefined;
   modelsByProvider: Record<string, LlmModel[]>;
+  /** Keys the viewer may use (the available-keys list), not merely see. */
   chatApiKeys: { id: string; provider: string }[];
   memberDefault: InitialChatMemberDefault;
   // ---- caller-owned policy, kept explicit at the boundary ----
@@ -63,6 +64,11 @@ type InitialChatModelStateParams<TAgent extends InitialChatAgent> = {
    * before its pin arrives and never re-resolves.
    */
   isProjectLoading?: boolean;
+  /**
+   * Hold resolution until the usable keys are loaded. Resolution runs once,
+   * so resolving against an empty list would settle on a model with no key.
+   */
+  isApiKeysLoading?: boolean;
   /**
    * The conversation id from the route, if any. When it transitions from a
    * conversation to the initial chat route (defined -> undefined), the resolved
@@ -112,6 +118,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
     isPermissionResolving,
     isOrgLoading,
     isProjectLoading,
+    isApiKeysLoading,
     routeConversationId,
   } = params;
 
@@ -178,6 +185,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
     // Same race for a chat started in a project: this effect resolves once, so
     // a pin that lands afterwards would never be applied.
     if (isProjectLoading) return;
+    if (isApiKeysLoading) return;
 
     // Process the URL agentId param, but only if it's a new value (not one we
     // already consumed). This allows navigating from different agent pages
@@ -229,6 +237,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
     organization?.defaultAgentId,
     isOrgLoading,
     isProjectLoading,
+    isApiKeysLoading,
     canUseSavedAgent,
     isPermissionResolving,
   ]);
@@ -241,6 +250,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
   useEffect(() => {
     if (!agentId) return;
     if (modelInitializedRef.current) return;
+    if (isApiKeysLoading) return;
 
     const resolved = resolveChatModelState({
       agent: resolvedAgentRef.current,
@@ -263,6 +273,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
     chatApiKeys,
     organizationDefaults,
     memberDefault,
+    isApiKeysLoading,
   ]);
 
   // Reset the resolved agent/model/key when leaving a conversation route for
@@ -297,9 +308,14 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
   );
   updateMemberDefaultModelMutateRef.current =
     updateMemberDefaultModelMutation.mutate;
+  const chatApiKeysRef = useRef(chatApiKeys);
+  chatApiKeysRef.current = chatApiKeys;
   const persistMemberDefaultModel = useCallback(
     (nextModelId: string | null, nextApiKeyId: string | null) => {
       if (!nextModelId || !nextApiKeyId) return;
+      // A default carries into chats on any agent, so it must be a key the
+      // viewer may use; an agent's own key works only through that agent.
+      if (!chatApiKeysRef.current.some((k) => k.id === nextApiKeyId)) return;
       updateMemberDefaultModelMutateRef.current({
         modelId: nextModelId,
         chatApiKeyId: nextApiKeyId,

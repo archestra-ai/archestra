@@ -2969,19 +2969,37 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Validate chatApiKeyId if provided
-      // Skip validation if it matches the agent's configured key (permission flows through agent access)
-      if (body.chatApiKeyId) {
-        const currentConversation = await ConversationModel.findById({
-          id,
-          userId: user.id,
-          organizationId,
-        });
+      // Validate agentId if provided
+      const nextAgent = body.agentId
+        ? await AgentModel.findById(
+            body.agentId,
+            user.id,
+            await hasAnyAgentTypeAdminPermission({
+              userId: user.id,
+              organizationId,
+            }),
+          )
+        : null;
+      if (body.agentId && !nextAgent) {
+        throw new ApiError(404, "Agent not found");
+      }
 
-        if (
-          !currentConversation ||
-          body.chatApiKeyId !== currentConversation.agent?.llmApiKeyId
-        ) {
+      // Validate chatApiKeyId if provided. Skip validation when it is the
+      // configured key of the agent the conversation will run on after this
+      // update (permission flows through agent access) — the new agent when
+      // this request switches agents, not the one being left.
+      if (body.chatApiKeyId) {
+        const currentConversation = nextAgent
+          ? null
+          : await ConversationModel.findById({
+              id,
+              userId: user.id,
+              organizationId,
+            });
+        const effectiveAgentLlmApiKeyId = nextAgent
+          ? nextAgent.llmApiKeyId
+          : currentConversation?.agent?.llmApiKeyId;
+        if (body.chatApiKeyId !== effectiveAgentLlmApiKeyId) {
           await validateChatApiKeyAccess(
             body.chatApiKeyId,
             user.id,
@@ -2990,35 +3008,22 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Validate agentId if provided
-      if (body.agentId) {
-        const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
-          userId: user.id,
+      if (
+        nextAgent &&
+        body.modelId === undefined &&
+        body.chatApiKeyId === undefined
+      ) {
+        const llmSelection = await resolveConversationLlmSelectionForAgent({
+          agent: {
+            llmApiKeyId: nextAgent.llmApiKeyId ?? null,
+            modelId: nextAgent.modelId ?? null,
+          },
           organizationId,
+          userId: user.id,
         });
 
-        const agent = await AgentModel.findById(
-          body.agentId,
-          user.id,
-          isAgentAdmin,
-        );
-        if (!agent) {
-          throw new ApiError(404, "Agent not found");
-        }
-
-        if (body.modelId === undefined && body.chatApiKeyId === undefined) {
-          const llmSelection = await resolveConversationLlmSelectionForAgent({
-            agent: {
-              llmApiKeyId: agent.llmApiKeyId ?? null,
-              modelId: agent.modelId ?? null,
-            },
-            organizationId,
-            userId: user.id,
-          });
-
-          body.modelId = llmSelection.modelId;
-          body.chatApiKeyId = llmSelection.chatApiKeyId;
-        }
+        body.modelId = llmSelection.modelId;
+        body.chatApiKeyId = llmSelection.chatApiKeyId;
       }
 
       // A conversation's model and API key are a pair: persist both or

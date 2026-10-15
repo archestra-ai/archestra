@@ -305,6 +305,12 @@ importers:
       '@linear/sdk':
         specifier: ^81.0.0
         version: 81.0.0(graphql@16.13.2)
+      '@microsoft/agents-activity':
+        specifier: 1.9.1
+        version: 1.9.1
+      '@microsoft/agents-hosting':
+        specifier: 1.9.1
+        version: 1.9.1(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.9.0)
       '@microsoft/kiota-authentication-azure':
         specifier: 1.0.0-preview.100
         version: 1.0.0-preview.100
@@ -323,6 +329,9 @@ importers:
       '@microsoft/msgraph-sdk-users':
         specifier: 1.0.0-preview.80
         version: 1.0.0-preview.80
+      '@microsoft/teams.api':
+        specifier: 2.0.14
+        version: 2.0.14
       '@modelcontextprotocol/ext-apps':
         specifier: ^1.1.1
         version: 1.3.1(@modelcontextprotocol/sdk@1.31.0(zod@4.3.6))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(zod@4.3.6)
@@ -413,12 +422,6 @@ importers:
       better-auth:
         specifier: 'catalog:'
         version: 1.6.22(@opentelemetry/api@1.9.0)(drizzle-kit@0.31.9)(drizzle-orm@0.45.2(@electric-sql/pglite@0.3.16)(@opentelemetry/api@1.9.0)(@types/pg@8.18.0)(kysely@0.28.17)(pg@8.20.0))(next@16.3.8(@babel/core@7.29.7)(@opentelemetry/api@1.9.0)(@playwright/test@1.58.2)(@types/node@25.5.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(pg@8.20.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(vitest@4.1.11(@opentelemetry/api@1.9.0)(@types/node@25.5.0)(jsdom@29.0.0(@noble/hashes@2.0.1))(msw@2.14.6(@types/node@25.5.0)(@typescript/typescript6@6.0.1))(vite@7.3.5(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.4)))
-      botbuilder:
-        specifier: ^4.23.3
-        version: 4.23.3
-      botframework-connector:
-        specifier: ^4.23.3
-        version: 4.23.3
       cheerio:
         specifier: ^1.2.0
         version: 1.2.0
@@ -612,23 +615,6 @@ importers:
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.0)(@types/node@25.5.0)(jsdom@29.0.0(@noble/hashes@2.0.1))(msw@2.14.6(@types/node@25.5.0)(@typescript/typescript6@6.0.1))(vite@7.3.5(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.4))
-
-  tools/docs-screenshots:
-    devDependencies:
-      '@playwright/test':
-        specifier: ^1.58.2
-        version: 1.58.2
-      '@types/node':
-        specifier: ^25.5.0
-        version: 25.9.1
-      sharp:
-        specifier: 0.35.5
-        version: 0.35.5(@types/node@25.9.1)
-      typescript:
-        specifier: 'catalog:'
-        version: '@typescript/typescript6@6.0.1'
-
-  tools/drizzle-migration-linter: {}
 
   e2e-tests:
     dependencies:
@@ -1034,6 +1020,23 @@ importers:
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@25.5.0)(jsdom@29.0.0(@noble/hashes@2.0.1))(msw@2.14.6(@types/node@25.5.0)(@typescript/typescript6@6.0.1))(vite@7.3.5(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.4))
+
+  tools/docs-screenshots:
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.58.2
+        version: 1.58.2
+      '@types/node':
+        specifier: ^25.5.0
+        version: 25.9.1
+      sharp:
+        specifier: 0.35.5
+        version: 0.35.5(@types/node@25.9.1)
+      typescript:
+        specifier: 'catalog:'
+        version: '@typescript/typescript6@6.0.1'
+
+  tools/drizzle-migration-linter: {}
 
 packages:
 
@@ -1463,10 +1466,6 @@ packages:
     resolution: {integrity: sha512-Nh5PhEOeY6PrnxNPsEHRr9eimxLwgLlpmguQaHKBinFYA/RU9+kOYVOQqOrTsCL+KSxrLLl1gD8Dk5BFW/7l/w==}
     engines: {node: '>=20.0.0'}
 
-  '@azure/core-http-compat@2.3.1':
-    resolution: {integrity: sha512-az9BkXND3/d5VgdRRQVkiJb2gOmDU8Qcq4GvjtBmDICNiQ9udFmDk4ZpSB5Qq1OmtDJGlQAfBaS4palFsazQ5g==}
-    engines: {node: '>=20.0.0'}
-
   '@azure/core-rest-pipeline@1.22.2':
     resolution: {integrity: sha512-MzHym+wOi8CLUlKCQu12de0nwcq9k9Kuv43j4Wa++CsCpJwps2eeBQwD2Bu8snkxTtDKDx4GwjuR9E8yC8LNrg==}
     engines: {node: '>=20.0.0'}
@@ -1491,21 +1490,21 @@ packages:
     resolution: {integrity: sha512-al2u2fTchbClq3L4C1NlqLm+vwKfhYCPtZN2LR/9xJVaQ4Mnrwf5vANvuyPSJHcGvw50UBmhuVmYUAhTEetTpA==}
     engines: {node: '>=0.8.0'}
 
-  '@azure/msal-common@14.16.1':
-    resolution: {integrity: sha512-nyxsA6NA4SVKh5YyRpbSXiMr7oQbwark7JU9LMeg6tJYTSPyAGkdx61wPT4gyxZfxlSxMMEyAsWaubBlNyIa1w==}
-    engines: {node: '>=0.8.0'}
-
   '@azure/msal-common@15.14.1':
     resolution: {integrity: sha512-IkzF7Pywt6QKTS0kwdCv/XV8x8JXknZDvSjj/IccooxnP373T5jaadO3FnOrbWo3S0UqkfIDyZNTaQ/oAgRdXw==}
     engines: {node: '>=0.8.0'}
 
-  '@azure/msal-node@2.16.3':
-    resolution: {integrity: sha512-CO+SE4weOsfJf+C5LM8argzvotrXw252/ZU6SM2Tz63fEblhH1uuVaaO4ISYFuN4Q6BhTo7I3qIdi8ydUQCqhw==}
-    engines: {node: '>=16'}
+  '@azure/msal-common@16.13.0':
+    resolution: {integrity: sha512-rOAy0KUcyBbdwVJ+f3uPpthXatFLLZN+/KWAsTLzk1aB23Xl9DRmmXYwSvBFOZyXj4jUQQ5FKxxRkhAFW1fOow==}
+    engines: {node: '>=0.8.0'}
 
   '@azure/msal-node@3.8.6':
     resolution: {integrity: sha512-XTmhdItcBckcVVTy65Xp+42xG4LX5GK+9AqAsXPXk4IqUNv+LyQo5TMwNjuFYBfAB2GTG9iSQGk+QLc03vhf3w==}
     engines: {node: '>=16'}
+
+  '@azure/msal-node@5.6.0':
+    resolution: {integrity: sha512-uFY9NxrWHw8PwZx7gAX6PDn+9vdfS05+levc/kwkx77IkjfaldnQbbcQzzDIZ5Hq5Zdr6/z92oAIoRWKp6MnOA==}
+    engines: {node: '>=20'}
 
   '@babel/cli@7.28.6':
     resolution: {integrity: sha512-6EUNcuBbNkj08Oj4gAZ+BUU8yLCgKzgVX4gaTh09Ya2C8ICM4P+G30g4m3akRxSYAp3A/gnWchrNst7px4/nUQ==}
@@ -2602,6 +2601,26 @@ packages:
   '@mermaid-js/parser@1.2.0':
     resolution: {integrity: sha512-oYPyv8A4As1yH5Bx+04iQEQxXuIQDe0GKCNSRgao6z8AM9jixXIfP0vsppRLvGf+nKIOb9/LdpWA4YuJiVvESA==}
 
+  '@microsoft/agents-activity@1.9.1':
+    resolution: {integrity: sha512-uYp/nDqhhVNk9P19hdMz8WS9art0Qd8M+O1bWt/oISt7C+WEzUqh9HNXJBOrkG7JiwaRlu7CP48nFrFp/1hGsQ==}
+    engines: {node: '>=20.0.0'}
+
+  '@microsoft/agents-hosting@1.9.1':
+    resolution: {integrity: sha512-sebwK3m9dznt7yEGafljjevJyPaWZxN0cpgcb/947/2Qa/Aai41xbmvatWWAxSHXZ9kuoRH/3ZZcstZsjwoJ1A==}
+    engines: {node: '>=20.0.0'}
+
+  '@microsoft/agents-telemetry@1.9.1':
+    resolution: {integrity: sha512-SnD+yZUViynkuu01zbhelGWWeODg+AHmCjGflcaa29MRMLZFjZRE1eSAi1hSpV6tcHrqf+GZkK1IgFlIqTppxA==}
+    engines: {node: '>=20.0.0'}
+    peerDependencies:
+      '@opentelemetry/api': '1'
+      '@opentelemetry/api-logs': '>=0.214.0 <1'
+    peerDependenciesMeta:
+      '@opentelemetry/api':
+        optional: true
+      '@opentelemetry/api-logs':
+        optional: true
+
   '@microsoft/kiota-abstractions@1.0.0-preview.110':
     resolution: {integrity: sha512-O/GKSnI8AntXuH8+DmMcQffSKGbyKEZ0NmGxfOzES37LdETzr1b5SzGa6AgQ2jb/efJ80rATGFh3BNbO8vJ+uQ==}
 
@@ -2661,6 +2680,18 @@ packages:
 
   '@microsoft/msgraph-sdk@1.0.0-preview.80':
     resolution: {integrity: sha512-FEVUDUjPWdOokc400+KV9Le/0euS7fhtqlHEgDeR4z6j+BJaXiTQTHM7Kg3VvskPq0Ps4Hamw2A1E/2eLZE7tg==}
+
+  '@microsoft/teams.api@2.0.14':
+    resolution: {integrity: sha512-mEHBgs7yklydQWTlfGFok5i7np2WxOKS3j6aMgRH0HVfiLqenPjGm0NAWKR/Hg29n9ODtGZZeuIXNCwIYQ8syA==}
+    engines: {node: '>=20'}
+
+  '@microsoft/teams.cards@2.0.14':
+    resolution: {integrity: sha512-qrWnjJVgMPO8vvbLEiTeBLrrRLsr4rletQnuP9fPMXTTcrNx+Dh0gYWtQAOBvpoAuFo5tTXR/waNFNUm8IZtBw==}
+    engines: {node: '>=20'}
+
+  '@microsoft/teams.common@2.0.14':
+    resolution: {integrity: sha512-cjf3b/2sr5RqqiOaDuogJQ9fUNRZjDSh9eBEAv6NqkigNNLLjDgEgEl5lLoJsPp4usvc3drwFkx6HayuEbT7vA==}
+    engines: {node: '>=20'}
 
   '@modelcontextprotocol/ext-apps@1.3.1':
     resolution: {integrity: sha512-XchYFGrCEO9JOLo6575MF3LWBrHOH9nVt1sC3ZaDL/JSgd6uN37/48Bcn5K1AIPXPxpsuQuczF8J+b4HxiYJpA==}
@@ -3196,6 +3227,10 @@ packages:
   '@noble/ciphers@2.1.1':
     resolution: {integrity: sha512-bysYuiVfhxNJuldNXlFEitTVdNnYUc+XNJZd7Qm2a5j1vZHgY+fazadNFWFaMK/2vye0JVlxV3gHmC0WDfAOQw==}
     engines: {node: '>= 20.19.0'}
+
+  '@noble/hashes@1.8.0':
+    resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
+    engines: {node: ^14.21.3 || >=16}
 
   '@noble/hashes@2.0.1':
     resolution: {integrity: sha512-XlOlEbQcE9fmuXxrVTXCTlG2nlRXa9Rj3rr5Ue/+tX+nmkgbX720YHh0VR3hBF9xDvwnb8D2shVGOwNx+ulArw==}
@@ -5973,9 +6008,6 @@ packages:
   '@types/use-sync-external-store@0.0.6':
     resolution: {integrity: sha512-zFDAD+tlpf2r4asuHEj0XH6pY6i0g5NeAHPn+15wk3BV6JA69eERFXC1gyGThDkVa1zCyKr5jox1+2LbV/AMLg==}
 
-  '@types/ws@6.0.4':
-    resolution: {integrity: sha512-PpPrX7SZW9re6+Ha8ojZG4Se8AZXgf0GK6zmfqEuCsY49LFDNXO3SByp44X3dFEqtB73lkCDAdUazhAjVPiNwg==}
-
   '@types/ws@8.18.1':
     resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
@@ -6318,9 +6350,6 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
 
-  adaptivecards@1.2.3:
-    resolution: {integrity: sha512-amQ5OSW3OpIkrxVKLjxVBPk/T49yuOtnqs1z5ZPfZr0+OpTovzmiHbyoAGDIsu5SNYHwOZFp/3LGOnRaALFa/g==}
-
   adm-zip@0.6.1:
     resolution: {integrity: sha512-Xwrja8nx9e5o2N1my4DsKCeKpdrnACyr1wtbPxBDgGzKzKyE9kRtBFA8mWldI+RVlD7CBZNWY/wQ2+ydwOR6kQ==}
     engines: {node: '>=14.0'}
@@ -6613,27 +6642,6 @@ packages:
   boolbase@1.0.0:
     resolution: {integrity: sha512-JZOSA7Mo9sNGB8+UjSgzdLtokWAky1zbztM3WRLCbZ70/3cTANmQmOdR7y2g+J0e2WXywy1yS468tY+IruqEww==}
 
-  botbuilder-core@4.23.3:
-    resolution: {integrity: sha512-48iW739I24piBH683b/Unvlu1fSzjB69ViOwZ0PbTkN2yW5cTvHJWlW7bXntO8GSqJfssgPaVthKfyaCW457ig==}
-
-  botbuilder-dialogs-adaptive-runtime-core@4.23.3-preview:
-    resolution: {integrity: sha512-EssyvqK9MobX3gbnUe/jjhLuxpCEeyQeQsyUFMJ236U6vzSQdrAxNH7Jc5DyZw2KKelBdK1xPBdwTYQNM5S0Qw==}
-
-  botbuilder-stdlib@4.23.3-internal:
-    resolution: {integrity: sha512-fwvIHnKU8sXo1gTww+m/k8wnuM5ktVBAV/3vWJ+ou40zapy1HYjWQuu6sVCRFgMUngpKwhdmoOQsTXsp58SNtA==}
-
-  botbuilder@4.23.3:
-    resolution: {integrity: sha512-1gDIQHHYosYBHGXMjvZEJDrcp3NGy3lzHBml5wn9PFqVuIk/cbsCDZs3KJ3g+aH/GGh4CH/ij9iQ2KbQYHAYKA==}
-
-  botframework-connector@4.23.3:
-    resolution: {integrity: sha512-sChwCFJr3xhcMCYChaOxJoE8/YgdjOPWzGwz5JAxZDwhbQonwYX5O/6Z9EA+wB3TCFNEh642SGeC/rOitaTnGQ==}
-
-  botframework-schema@4.23.3:
-    resolution: {integrity: sha512-/W0uWxZ3fuPLAImZRLnPTbs49Z2xMpJSIzIBxSfvwO0aqv9GsM3bTk3zlNdJ1xr40SshQ7WiH2H1hgjBALwYJw==}
-
-  botframework-streaming@4.23.3:
-    resolution: {integrity: sha512-GMtciQGfZXtAW6syUqFpFJQ2vDyVbpxL3T1DqFzq/GmmkAu7KTZ1zvo7PTww6+IT1kMW0lmL/XZJVq3Rhg4PQA==}
-
   bowser@2.14.1:
     resolution: {integrity: sha512-tzPjzCxygAKWFOJP011oxFHs57HzIhOEracIgAePE4pqB3LikALKnSzUyU4MGs9/iCEUuHlAJTjTc5M+u7YEGg==}
 
@@ -6658,9 +6666,6 @@ packages:
 
   buffer@5.7.1:
     resolution: {integrity: sha512-EHcyIPBQ4BSGlvjB16k5KgAJ27CIsHY/2JBmCRReo48y9rQ3MaUzWX3KVlBa4U7MyX02HdVj0K7C3WaB3ju7FQ==}
-
-  buffer@6.0.3:
-    resolution: {integrity: sha512-FTiCpNxtwiZZHEZbcbTIcZjERVICn9yq/pDFkTl95/AxzD1naBctN7YO68riM/gLSDY7sdrMby8hofADYuuqOA==}
 
   bundle-name@4.1.0:
     resolution: {integrity: sha512-tjwM5exMg6BGRI+kNmTntNsvdZS1X8BFYS6tnJ2hdH0kVxM6/eVZ2xy+FqStSWvYmtfFMDLIxurorHwDKfDz5Q==}
@@ -6950,9 +6955,6 @@ packages:
     resolution: {integrity: sha512-M06cKwRIN46AyuM8BOmF1HUkBTkd3/h7uYImnrH1T3wtRKBGOibVo3jZ42VheEvx8LtgZbG/4GI35vfIxYxMug==}
     hasBin: true
 
-  cross-fetch@4.1.0:
-    resolution: {integrity: sha512-uKm5PU+MHTootlWEY+mZ4vvXoCn4fLQxT9dSc1sXVMSFkINTJVN8cAQROpwcKm8bJ/c7rgZVIBWzH5T78sNZZw==}
-
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
     engines: {node: '>= 8'}
@@ -7161,9 +7163,6 @@ packages:
   dateformat@4.6.3:
     resolution: {integrity: sha512-2P0p0pFGzHS5EMnhdxQi7aJN+iMheud0UhG4dlE1DLAlvL8JHjJJTX/CSm4JXwV0Ka5nGk3zC5mcb5bUQUxxMA==}
 
-  dayjs@1.11.19:
-    resolution: {integrity: sha512-t5EcLVS6QPBNqM2z8fakk/NKel+Xzshgt8FFKAn+qwlD1pzZWxh0nVCrvFK7ZDb6XucZeF9z8C7CBWTRIVApAw==}
-
   dayjs@1.11.21:
     resolution: {integrity: sha512-98IT+HOahAisibz/yjKbzuOBwYcjJ7BCLPzARyHiyEBmRz4fatF+KPJszEHXsGYjUG234aH/cOjW1wwTbKUZlA==}
 
@@ -7234,10 +7233,6 @@ packages:
     resolution: {integrity: sha512-NUGjObRSbUJTo9FFQixtTfV/3ozbtpivPKJoWP5g7JbKdFjBrQ4TsbmpcOrUcErK+q9n2l+Y4ZS2xVjGGtzm8g==}
     engines: {node: ^22||^24||>=26}
     hasBin: true
-
-  dependency-graph@1.0.0:
-    resolution: {integrity: sha512-cW3gggJ28HZ/LExwxP2B++aiKxhJXMSIt9K48FOXQkm+vuG5gyatXnLsONRJdzO/7VfjDIiaOOa/bs4l464Lwg==}
-    engines: {node: '>=4'}
 
   dequal@2.0.3:
     resolution: {integrity: sha512-0je+qPKHEMohvfRTCEo3CrPG6cAzAYgmzKyxRiYSSDkS6eGJdyVJm7WaYA5ECaAD9wLB2T4EEeymA5aFVcYXCA==}
@@ -7737,14 +7732,6 @@ packages:
     resolution: {integrity: sha512-Ievi/yy8DS3ygGvT47PjSfdFoX+2isQueoYP1cntFW1JLYAuS4GD7NUPGg4zv2iZfV52uDyk5w5Z0TdpRS6Q1g==}
     engines: {node: '>=20'}
 
-  filename-reserved-regex@3.0.0:
-    resolution: {integrity: sha512-hn4cQfU6GOT/7cFHXBqeBg2TbrMBgdD0kcjLhvSQYYwm3s4B6cjvBfb7nBALJLAXqmU5xajSa7X2NnUud/VCdw==}
-    engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
-
-  filenamify@6.0.0:
-    resolution: {integrity: sha512-vqIlNogKeyD3yzrm0yhRMQg8hOVwYcYRfjEoODd49iCprMn4HL85gK3HcykQE53EPIpX3HcAbGA5ELQv216dAQ==}
-    engines: {node: '>=16'}
-
   fill-range@7.1.1:
     resolution: {integrity: sha512-YsGpe3WHLK8ZYi4tWDg2Jy3ebRz2rXowDxnld4bkQB00cc/1Zw9AWnC0i9ztDJitivtQvaI9KaLyKrc+hBW0yg==}
     engines: {node: '>=8'}
@@ -7816,10 +7803,6 @@ packages:
 
   from@0.1.7:
     resolution: {integrity: sha512-twe20eF1OxVxp/ML/kq2p1uc6KvFK/+vs8WjEbeKmV2He22MKm7YF2ANIt+EOqhJ5L3K/SuuPhk0hWQDjOM23g==}
-
-  fs-extra@11.3.3:
-    resolution: {integrity: sha512-VWSRii4t0AFm6ixFFmLLx1t7wS1gh+ckoa84aOeapGum0h+EZd1EhEumSB+ZdDLnEPuucsVB9oB7cxJHap6Afg==}
-    engines: {node: '>=14.14'}
 
   fs-extra@11.3.5:
     resolution: {integrity: sha512-eKpRKAovdpZtR1WopLHxlBWvAgPny3c4gX1G5Jhwmmw4XJj0ifSD5qB5TOo8hmA0wlRKDAOAhEE1yVPgs6Fgcg==}
@@ -8391,9 +8374,6 @@ packages:
     engines: {node: '>=6'}
     hasBin: true
 
-  jsonfile@6.2.0:
-    resolution: {integrity: sha512-FGuPw30AdOIUTRMC2OMRtQV+jkVj2cfPqSeWXv1NEAJ1qZ5zb1X6z1mFhbfOB/iy3ssJCD+3KuZ8r8C3uVFlAg==}
-
   jsonfile@6.2.1:
     resolution: {integrity: sha512-zwOTdL3rFQ/lRdBnntKVOX6k5cKJwEc1HdilT71BWEu7J41gXIB2MRp+vxduPSwZJPWBxEzv4yH1wYLJGUHX4Q==}
 
@@ -8414,6 +8394,10 @@ packages:
 
   jwa@2.0.1:
     resolution: {integrity: sha512-hRF04fqJIP8Abbkq5NKGN0Bbr3JxlQ+qhZufXVr0DvujKy93ZCbXZMHDL4EOtodSbCWxOqR8MS1tXA5hwqCXDg==}
+
+  jwks-rsa@4.0.1:
+    resolution: {integrity: sha512-poXwUA8S4cP9P5N8tZS3xnUDJH8WmwSGfKK9gIaRPdjLHyJtd9iX/cngX9CUIe0Caof5JhK2EbN7N5lnnaf9NA==}
+    engines: {node: ^20.19.0 || ^22.12.0 || >= 23.0.0}
 
   jws@4.0.1:
     resolution: {integrity: sha512-EKI/M/yqPncGUUh44xz0PxSidXFr/+r0pA70+gIYhjv+et7yxM+s29Y+VGDkovRofQem0fs7Uvf4+YmAdyRduA==}
@@ -8534,6 +8518,9 @@ packages:
     resolution: {integrity: sha512-l51N2r93WmGUye3WuFoN5k10zyvrVs0qfKBhyC5ogUQ6Ew6JUSswh78mbSO+IU3nTWsyOArqPCcShdQSadghBQ==}
     engines: {node: '>= 12.0.0'}
 
+  limiter@1.1.5:
+    resolution: {integrity: sha512-FWWMIEOxz3GwUI4Ts/IvgVy6LPvoMPgjMdQ185nN6psJyBJ4yOpzqm695/h5umdLJg2vW3GR5iG11MAkR2AzJA==}
+
   loader-runner@4.3.1:
     resolution: {integrity: sha512-IWqP2SCPhyVFTBtRcgMHdzlf9ul25NwaFx4wCEH/KjAXuuHY4yNjvPXsBokp8jCB936PyWRaPKUNh8NvylLp2Q==}
     engines: {node: '>=6.11.5'}
@@ -8547,6 +8534,9 @@ packages:
 
   lodash.camelcase@4.3.0:
     resolution: {integrity: sha512-TwuEnCnxbc3rAvhf/LbG7tJUDzhqXyFnv3dtzLOPgCG/hODL7WFnsbwktkD7yUV0RrreP/l1PALq/YSg6VvjlA==}
+
+  lodash.clonedeep@4.5.0:
+    resolution: {integrity: sha512-H5ZhCF25riFd9uB5UCkVKo61m3S/xZk1x4wA6yp/L3RFP6Z/eHH1ymQcGLo7J3GMPfm0V/7m1tryHuGVxpqEBQ==}
 
   lodash.includes@4.3.0:
     resolution: {integrity: sha512-W3Bx6mdkRTGtlJISOvVD/lbqjTlPPUDTMnlXZFnVwi9NKJ6tiAk6LVdlhZMm17VZisqhKcgzpO5Wz91PCt5b0w==}
@@ -8609,6 +8599,9 @@ packages:
 
   lru-cache@5.1.1:
     resolution: {integrity: sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==}
+
+  lru-memoizer@3.0.0:
+    resolution: {integrity: sha512-m83w/cYXLdUIboKSPxzPAGfYnk+vqeDYXuoSrQRw1q+yVEd8IXhvMufN8Q5TIPe7e2jyX4SRNrDJI2Skw1yznQ==}
 
   lucide-react@0.577.0:
     resolution: {integrity: sha512-4LjoFv2eEPwYDPg/CUdBJQSDfPyzXCRrVW1X7jrx/trgxnxkHFjnVZINbzvzxjN70dxychOfg+FTYwBiS3pQ5A==}
@@ -9089,9 +9082,6 @@ packages:
 
   openid-client@6.8.1:
     resolution: {integrity: sha512-VoYT6enBo6Vj2j3Q5Ec0AezS+9YGzQo1f5Xc42lreMGlfP4ljiXPKVDvCADh+XHCV/bqPu/wWSiCVXbJKvrODw==}
-
-  openssl-wrapper@0.3.4:
-    resolution: {integrity: sha512-iITsrx6Ho8V3/2OVtmZzzX8wQaKAaFXEJQdzoPUZDtyf5jWFlqo+h+OhGT4TATQ47f9ACKHua8nw7Qoy85aeKQ==}
 
   option@0.2.4:
     resolution: {integrity: sha512-pkEqbDyl8ou5cpq+VsnQbe/WlEy5qS7xPzMS1U55OCG9KPvwFD46zDbxQIj3egJSFc3D+XhYOPUzz49zQAVy7A==}
@@ -9757,9 +9747,6 @@ packages:
   router@2.2.0:
     resolution: {integrity: sha512-nLTrUKm2UyiL7rlhapu/Zl45FwNgkZGaCpZbIHajDYgwlJCOzLSk+cIPAnsEqV955GjILJnKbdQC1nVPz+gAYQ==}
     engines: {node: '>= 18'}
-
-  rsa-pem-from-mod-exp@0.8.6:
-    resolution: {integrity: sha512-c5ouQkOvGHF1qomUUDJGFcXsomeSO2gbEs6hVhMAtlkE1CuaZase/WzoaKFG/EZQuNmq6pw/EMCeEnDvOgCJYQ==}
 
   run-applescript@7.1.0:
     resolution: {integrity: sha512-DPe5pVFaAsinSaV6QjQ6gdiedWDcRCbUuiQfQa2wmWV7+xC9bGulGI8+TdRmoFkAPaBXk8CrAbnlY2ISniJ47Q==}
@@ -10831,6 +10818,9 @@ packages:
     peerDependencies:
       zod: ^3.25 || ^4
 
+  zod@3.25.75:
+    resolution: {integrity: sha512-OhpzAmVzabPOL6C3A3gpAifqr9MqihV/Msx3gor2b2kviCgcb+HM9SEOpMWwwNp9MRunWnhtAKUoo0AHhjyPPg==}
+
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
@@ -11728,14 +11718,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@azure/core-http-compat@2.3.1':
-    dependencies:
-      '@azure/abort-controller': 2.1.2
-      '@azure/core-client': 1.10.1
-      '@azure/core-rest-pipeline': 1.22.2
-    transitivePeerDependencies:
-      - supports-color
-
   '@azure/core-rest-pipeline@1.22.2':
     dependencies:
       '@azure/abort-controller': 2.1.2
@@ -11787,21 +11769,20 @@ snapshots:
     dependencies:
       '@azure/msal-common': 15.14.1
 
-  '@azure/msal-common@14.16.1': {}
-
   '@azure/msal-common@15.14.1': {}
 
-  '@azure/msal-node@2.16.3':
-    dependencies:
-      '@azure/msal-common': 14.16.1
-      jsonwebtoken: 9.0.3
-      uuid: 14.0.0
+  '@azure/msal-common@16.13.0': {}
 
   '@azure/msal-node@3.8.6':
     dependencies:
       '@azure/msal-common': 15.14.1
       jsonwebtoken: 9.0.3
       uuid: 11.1.1
+
+  '@azure/msal-node@5.6.0':
+    dependencies:
+      '@azure/msal-common': 16.13.0
+      jsonwebtoken: 9.0.3
 
   '@babel/cli@7.28.6(@babel/core@7.29.7)':
     dependencies:
@@ -13036,6 +13017,35 @@ snapshots:
     dependencies:
       '@chevrotain/types': 11.1.2
 
+  '@microsoft/agents-activity@1.9.1':
+    dependencies:
+      zod: 3.25.75
+
+  '@microsoft/agents-hosting@1.9.1(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.9.0)':
+    dependencies:
+      '@azure/core-auth': 1.10.1
+      '@azure/msal-node': 5.6.0
+      '@microsoft/agents-activity': 1.9.1
+      '@microsoft/agents-telemetry': 1.9.1(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.9.0)
+      jsonwebtoken: 9.0.3
+      jwks-rsa: 4.0.1
+      zod: 3.25.75
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+      - '@opentelemetry/api-logs'
+      - supports-color
+
+  '@microsoft/agents-telemetry@1.9.1(@opentelemetry/api-logs@0.223.0)(@opentelemetry/api@1.9.0)':
+    dependencies:
+      '@microsoft/agents-activity': 1.9.1
+      '@noble/hashes': 1.8.0
+      debug: 4.4.3
+    optionalDependencies:
+      '@opentelemetry/api': 1.9.0
+      '@opentelemetry/api-logs': 0.223.0
+    transitivePeerDependencies:
+      - supports-color
+
   '@microsoft/kiota-abstractions@1.0.0-preview.110':
     dependencies:
       '@opentelemetry/api': 1.9.1
@@ -13131,6 +13141,25 @@ snapshots:
       '@microsoft/msgraph-sdk-core': 1.0.0-preview.17
       tslib: 2.8.1
     transitivePeerDependencies:
+      - supports-color
+
+  '@microsoft/teams.api@2.0.14':
+    dependencies:
+      '@microsoft/teams.cards': 2.0.14
+      '@microsoft/teams.common': 2.0.14
+      jwt-decode: 4.0.0
+      qs: 6.16.0
+    transitivePeerDependencies:
+      - debug
+      - supports-color
+
+  '@microsoft/teams.cards@2.0.14': {}
+
+  '@microsoft/teams.common@2.0.14':
+    dependencies:
+      axios: 1.20.0(debug@4.4.3)
+    transitivePeerDependencies:
+      - debug
       - supports-color
 
   '@modelcontextprotocol/ext-apps@1.3.1(@modelcontextprotocol/sdk@1.31.0(zod@4.3.6))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(zod@4.3.6)':
@@ -13513,6 +13542,8 @@ snapshots:
     optional: true
 
   '@noble/ciphers@2.1.1': {}
+
+  '@noble/hashes@1.8.0': {}
 
   '@noble/hashes@2.0.1': {}
 
@@ -16630,10 +16661,6 @@ snapshots:
 
   '@types/use-sync-external-store@0.0.6': {}
 
-  '@types/ws@6.0.4':
-    dependencies:
-      '@types/node': 25.9.1
-
   '@types/ws@8.18.1':
     dependencies:
       '@types/node': 25.9.1
@@ -16933,8 +16960,6 @@ snapshots:
   acorn@8.16.0: {}
 
   acorn@8.18.0: {}
-
-  adaptivecards@1.2.3: {}
 
   adm-zip@0.6.1: {}
 
@@ -17247,95 +17272,6 @@ snapshots:
 
   boolbase@1.0.0: {}
 
-  botbuilder-core@4.23.3:
-    dependencies:
-      botbuilder-dialogs-adaptive-runtime-core: 4.23.3-preview
-      botbuilder-stdlib: 4.23.3-internal
-      botframework-connector: 4.23.3
-      botframework-schema: 4.23.3
-      uuid: 11.1.1
-      zod: 3.25.76
-    transitivePeerDependencies:
-      - debug
-      - encoding
-      - supports-color
-
-  botbuilder-dialogs-adaptive-runtime-core@4.23.3-preview:
-    dependencies:
-      dependency-graph: 1.0.0
-
-  botbuilder-stdlib@4.23.3-internal:
-    dependencies:
-      '@azure/abort-controller': 2.1.2
-      '@azure/core-auth': 1.10.1
-      '@azure/core-client': 1.10.1
-      '@azure/core-http-compat': 2.3.1
-      '@azure/core-rest-pipeline': 1.22.2
-      '@azure/core-tracing': 1.3.1
-    transitivePeerDependencies:
-      - supports-color
-
-  botbuilder@4.23.3:
-    dependencies:
-      '@azure/core-rest-pipeline': 1.22.2
-      '@azure/msal-node': 2.16.3
-      axios: 1.20.0(debug@4.4.3)
-      botbuilder-core: 4.23.3
-      botbuilder-stdlib: 4.23.3-internal
-      botframework-connector: 4.23.3
-      botframework-schema: 4.23.3
-      botframework-streaming: 4.23.3
-      dayjs: 1.11.19
-      filenamify: 6.0.0
-      fs-extra: 11.3.3
-      htmlparser2: 9.1.0
-      uuid: 11.1.1
-      zod: 3.25.76
-    transitivePeerDependencies:
-      - bufferutil
-      - debug
-      - encoding
-      - supports-color
-      - utf-8-validate
-
-  botframework-connector@4.23.3:
-    dependencies:
-      '@azure/core-rest-pipeline': 1.22.2
-      '@azure/identity': 4.13.0
-      '@azure/msal-node': 2.16.3
-      '@types/jsonwebtoken': 9.0.6
-      axios: 1.20.0(debug@4.4.3)
-      base64url: 3.0.1
-      botbuilder-stdlib: 4.23.3-internal
-      botframework-schema: 4.23.3
-      buffer: 6.0.3
-      cross-fetch: 4.1.0
-      https-proxy-agent: 7.0.6
-      jsonwebtoken: 9.0.3
-      node-fetch: 2.7.0
-      openssl-wrapper: 0.3.4
-      rsa-pem-from-mod-exp: 0.8.6
-      zod: 3.25.76
-    transitivePeerDependencies:
-      - debug
-      - encoding
-      - supports-color
-
-  botframework-schema@4.23.3:
-    dependencies:
-      adaptivecards: 1.2.3
-      uuid: 11.1.1
-      zod: 3.25.76
-
-  botframework-streaming@4.23.3:
-    dependencies:
-      '@types/ws': 6.0.4
-      uuid: 11.1.1
-      ws: 8.21.0
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
   bowser@2.14.1: {}
 
   brace-expansion@5.0.12:
@@ -17359,11 +17295,6 @@ snapshots:
   buffer-from@1.1.2: {}
 
   buffer@5.7.1:
-    dependencies:
-      base64-js: 1.5.1
-      ieee754: 1.2.1
-
-  buffer@6.0.3:
     dependencies:
       base64-js: 1.5.1
       ieee754: 1.2.1
@@ -17647,12 +17578,6 @@ snapshots:
 
   cronstrue@3.13.0: {}
 
-  cross-fetch@4.1.0:
-    dependencies:
-      node-fetch: 2.7.0
-    transitivePeerDependencies:
-      - encoding
-
   cross-spawn@7.0.6:
     dependencies:
       path-key: 3.1.1
@@ -17887,8 +17812,6 @@ snapshots:
 
   dateformat@4.6.3: {}
 
-  dayjs@1.11.19: {}
-
   dayjs@1.11.21: {}
 
   debug@3.2.7:
@@ -17959,8 +17882,6 @@ snapshots:
       semver: 7.8.5
       tsconfig-paths-webpack-plugin: 4.2.0
       watskeburt: 6.0.0
-
-  dependency-graph@1.0.0: {}
 
   dequal@2.0.3: {}
 
@@ -18435,12 +18356,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  filename-reserved-regex@3.0.0: {}
-
-  filenamify@6.0.0:
-    dependencies:
-      filename-reserved-regex: 3.0.0
-
   fill-range@7.1.1:
     dependencies:
       to-regex-range: 5.0.1
@@ -18513,12 +18428,6 @@ snapshots:
   fresh@2.0.0: {}
 
   from@0.1.7: {}
-
-  fs-extra@11.3.3:
-    dependencies:
-      graceful-fs: 4.2.11
-      jsonfile: 6.2.0
-      universalify: 2.0.1
 
   fs-extra@11.3.5:
     dependencies:
@@ -19196,12 +19105,6 @@ snapshots:
 
   json5@2.2.3: {}
 
-  jsonfile@6.2.0:
-    dependencies:
-      universalify: 2.0.1
-    optionalDependencies:
-      graceful-fs: 4.2.11
-
   jsonfile@6.2.1:
     dependencies:
       universalify: 2.0.1
@@ -19241,6 +19144,16 @@ snapshots:
       buffer-equal-constant-time: 1.0.1
       ecdsa-sig-formatter: 1.0.11
       safe-buffer: 5.2.1
+
+  jwks-rsa@4.0.1:
+    dependencies:
+      '@types/jsonwebtoken': 9.0.6
+      debug: 4.4.3
+      jose: 6.2.10
+      limiter: 1.1.5
+      lru-memoizer: 3.0.0
+    transitivePeerDependencies:
+      - supports-color
 
   jws@4.0.1:
     dependencies:
@@ -19344,6 +19257,8 @@ snapshots:
       lightningcss-win32-arm64-msvc: 1.31.1
       lightningcss-win32-x64-msvc: 1.31.1
 
+  limiter@1.1.5: {}
+
   loader-runner@4.3.1: {}
 
   locate-path@6.0.0:
@@ -19353,6 +19268,8 @@ snapshots:
   lodash-es@4.18.1: {}
 
   lodash.camelcase@4.3.0: {}
+
+  lodash.clonedeep@4.5.0: {}
 
   lodash.includes@4.3.0: {}
 
@@ -19409,6 +19326,11 @@ snapshots:
   lru-cache@5.1.1:
     dependencies:
       yallist: 3.1.1
+
+  lru-memoizer@3.0.0:
+    dependencies:
+      lodash.clonedeep: 4.5.0
+      lru-cache: 11.2.7
 
   lucide-react@0.577.0(react@19.2.4):
     dependencies:
@@ -20128,8 +20050,6 @@ snapshots:
     dependencies:
       jose: 6.2.10
       oauth4webapi: 3.8.3
-
-  openssl-wrapper@0.3.4: {}
 
   option@0.2.4: {}
 
@@ -20978,8 +20898,6 @@ snapshots:
       path-to-regexp: 8.4.1
     transitivePeerDependencies:
       - supports-color
-
-  rsa-pem-from-mod-exp@0.8.6: {}
 
   run-applescript@7.1.0: {}
 
@@ -22093,6 +22011,8 @@ snapshots:
   zod-to-json-schema@3.25.1(zod@4.3.6):
     dependencies:
       zod: 4.3.6
+
+  zod@3.25.75: {}
 
   zod@3.25.76: {}
 

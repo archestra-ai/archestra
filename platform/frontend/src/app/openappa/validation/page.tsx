@@ -24,13 +24,14 @@ import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { formatDate } from "@/lib/utils/date-time";
 import { OpenAppaPageAction } from "../_parts/openappa-page-action";
+import { useValidationFileHashes } from "../_parts/use-validation-file-hashes";
+import {
+  type ValidationFileState,
+  validationFileStates,
+  validationName,
+} from "../_parts/validation-run-history";
 import { useValidation, validationFileHref } from "./_parts/validation-context";
 import {
   exportValidationFile,
@@ -45,11 +46,15 @@ const statuses = [
   { value: "all", label: "All statuses" },
   { value: "passed", label: "Passed" },
   { value: "failed", label: "Failed" },
+  { value: "cannot_run", label: "Cannot run" },
+  { value: "not_run", label: "Not run" },
 ];
 type ValidationRow = {
   file: { path: string; content: string };
   id: string;
-  status: "passed" | "failed" | null;
+  name: string;
+  /** Unknown while the file's content is still being hashed. */
+  status: ValidationFileState["status"] | null;
   lastRunAt: string | null;
   error?: string | null;
 };
@@ -69,38 +74,29 @@ export default function ValidationPage() {
   )
     ? Number(params.get("pageSize"))
     : 10;
+  const hashes = useValidationFileHashes(suite.files);
+  const states = hashes.data
+    ? validationFileStates(hashes.data, suite.history.data ?? [])
+    : null;
+  const query = search.toLowerCase();
   const filtered = suite.files
     .map((file) => {
-      const lastRun = [suite.currentRun, ...(suite.history.data ?? [])].find(
-        (run) =>
-          run &&
-          (run.executionError ||
-            run.files.some((result) => result.path === file.path)),
-      );
-      const result = lastRun?.files.find((item) => item.path === file.path);
-      const failedToRun = Boolean(
-        lastRun?.executionError || (lastRun && !lastRun.validation.valid),
-      );
+      const state = states?.get(file.path);
       return {
         file,
         id: file.path,
-        status:
-          failedToRun || (result && result.status !== "passed")
-            ? "failed"
-            : result
-              ? "passed"
-              : null,
-        lastRunAt: lastRun?.createdAt ?? null,
+        name: validationName(file),
+        status: state?.status ?? null,
+        lastRunAt: state?.runAt ?? null,
         error:
-          result?.error ||
-          lastRun?.executionError ||
-          (failedToRun ? lastRun?.validation.errors.join("\n") : null) ||
-          result?.steps.find((step) => step.error)?.error,
+          state?.error ||
+          suite.summaries?.find((item) => item.path === file.path)?.error,
       } satisfies ValidationRow;
     })
     .filter(
       (row) =>
-        row.file.path.toLowerCase().includes(search.toLowerCase()) &&
+        (row.name.toLowerCase().includes(query) ||
+          row.file.path.toLowerCase().includes(query)) &&
         (status === "all" || row.status === status),
     );
   const pageIndex = Math.max(
@@ -150,19 +146,19 @@ export default function ValidationPage() {
         ]
       : []),
     {
-      id: "filename",
-      header: "Filename",
+      id: "name",
+      header: "Name",
       cell: ({ row }) => {
-        const { file, error } = row.original;
+        const { file, name, error } = row.original;
         return (
-          <div className="max-w-xs">
+          <div className="max-w-md">
             <RowClickShield>
               <Link
-                className="block truncate font-mono text-sm"
+                className="block truncate font-medium"
                 href={validationFileHref(file.path)}
                 title={file.path}
               >
-                {file.path}
+                {name}
               </Link>
             </RowClickShield>
             {error && (
@@ -191,51 +187,12 @@ export default function ValidationPage() {
       id: "lastRunAt",
       header: "Last run",
       cell: ({ row }) => (
-        <span className="whitespace-nowrap text-sm">
+        <span className="whitespace-nowrap text-sm text-muted-foreground">
           {row.original.lastRunAt
             ? formatDate({ date: row.original.lastRunAt })
-            : "Never"}
+            : "—"}
         </span>
       ),
-    },
-    {
-      id: "assertions",
-      header: "Assertions",
-      cell: ({ row }) =>
-        suite.summaries?.find((item) => item.path === row.original.file.path)
-          ?.assertionCount ?? "—",
-    },
-    {
-      id: "tools",
-      header: "Tools exercised",
-      cell: ({ row }) => {
-        const summary = suite.summaries?.find(
-          (item) => item.path === row.original.file.path,
-        );
-        return summary ? (
-          summary.error ? (
-            <span
-              className="text-xs text-muted-foreground"
-              title={summary.error}
-            >
-              Unparseable
-            </span>
-          ) : (
-            <ToolsSummary tools={summary.tools} path={row.original.file.path} />
-          )
-        ) : (
-          <span className="text-xs text-muted-foreground">
-            {suite.collection.error ||
-            suite.loadError ||
-            !suite.validPaths ||
-            suite.files.length > 32 ||
-            suite.sourceChanged ||
-            suite.inspectionError
-              ? "Unavailable"
-              : "Parsing…"}
-          </span>
-        );
-      },
     },
     {
       id: "actions",
@@ -300,7 +257,7 @@ export default function ValidationPage() {
             onClearFilters={hasFilters ? clearFilters : undefined}
             search={
               <SearchInput
-                placeholder="Search validation filenames…"
+                placeholder="Search validations…"
                 className={filterSearchClass}
               />
             }
@@ -365,7 +322,7 @@ export default function ValidationPage() {
           }
           onPageRowIdsChange={setPageIds}
           hideSelectedCount
-          tableClassName="min-w-[700px]"
+          tableClassName="min-w-[560px]"
           pagination={{ pageIndex, pageSize, total: filtered.length }}
           onPaginationChange={(next) =>
             updateQuery({
@@ -377,7 +334,7 @@ export default function ValidationPage() {
           onClearFilters={clearFilters}
           filteredEmptyMessage="No matching validation files."
           emptyMessage="No validation files yet."
-          emptyDescription="Add a local file or select a Git directory containing .appa files."
+          emptyDescription="Ask the agent to write one for a case you want to protect."
         />
       </BulkActionsScope>
       <DeleteConfirmDialog
@@ -393,49 +350,6 @@ export default function ValidationPage() {
           suite.deleteFiles(deleteIds, () => setDeleteIds([]));
         }}
       />
-    </div>
-  );
-}
-
-function ToolsSummary({ tools, path }: { tools: string[]; path: string }) {
-  if (!tools.length)
-    return <span className="text-xs text-muted-foreground">No tools</span>;
-  return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-      {tools.slice(0, 2).map((tool) => (
-        <span
-          key={tool}
-          className="max-w-48 truncate font-mono text-xs"
-          title={tool}
-        >
-          {tool}
-        </span>
-      ))}
-      {tools.length > 2 && (
-        <RowClickShield>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                size="xs"
-                variant="ghost"
-                aria-label={`Show all tools for ${path}`}
-              >
-                <span>{`+${tools.length - 2}`}</span>
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="max-h-80 overflow-y-auto">
-              <p className="mb-2 text-sm font-medium">Tools exercised</p>
-              <ul className="space-y-1">
-                {tools.map((tool) => (
-                  <li key={tool} className="break-all font-mono text-xs">
-                    {tool}
-                  </li>
-                ))}
-              </ul>
-            </PopoverContent>
-          </Popover>
-        </RowClickShield>
-      )}
     </div>
   );
 }

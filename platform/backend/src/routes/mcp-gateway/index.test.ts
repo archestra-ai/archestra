@@ -1,16 +1,12 @@
 import {
   AGENT_TOOL_PREFIX,
+  ARCHESTRA_MCP_CATALOG_ID,
   MCP_APPS_EXTENSION_ID,
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
   MCP_OAUTH_CLIENT_CREDENTIALS_EXTENSION_ID,
   SKILL_TOOL_PREFIX,
   slugify,
   TOOL_ASK_USER_FULL_NAME,
-  TOOL_CANCEL_RUN_FULL_NAME,
-  TOOL_DELETE_FILE_FULL_NAME,
-  TOOL_DOWNLOAD_FILE_FULL_NAME,
-  TOOL_EDIT_FILE_FULL_NAME,
-  TOOL_GET_RUN_FULL_NAME,
   TOOL_LIST_RUNS_FULL_NAME,
   TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_LOAD_SKILL_FULL_NAME,
@@ -18,11 +14,8 @@ import {
   TOOL_RUN_COMMAND_FULL_NAME,
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SAVE_FILE_FULL_NAME,
-  TOOL_SEARCH_FILES_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
-  TOOL_STEER_RUN_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
-  TOOL_UPLOAD_FILE_FULL_NAME,
 } from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
@@ -31,14 +24,17 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import {
   AgentExcludedSubagentModel,
+  AgentExcludedToolModel,
   AgentModel,
   AppModel,
   McpServerModel,
   McpToolCallModel,
+  ProjectModel,
   TeamTokenModel,
   ToolModel,
   UserTokenModel,
@@ -694,6 +690,97 @@ describe("MCP Gateway (stateless mode)", () => {
     expect(remote?.title).toBe("linear_search_issues");
   });
 
+  for (const scenario of [
+    "auto",
+    "custom compact",
+    "custom empty",
+    "excluded tool",
+    "no create permission",
+  ] as const) {
+    test(`scheduling discovery guidance: ${scenario}`, async ({
+      makeAgent,
+      makeAgentTool,
+      makeCustomRole,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const restrictedRole =
+        scenario === "no create permission"
+          ? await makeCustomRole(org.id, {
+              permission: { agent: ["read"], project: ["create"] },
+            })
+          : null;
+      await makeMember(user.id, org.id, {
+        role: restrictedRole?.role ?? "admin",
+      });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        authorId: user.id,
+        agentType: "agent",
+        accessAllTools: !scenario.startsWith("custom"),
+        toolExposureMode: "search_and_run_only",
+      });
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      const schedulingToolName = archestraMcpBranding.getToolName(
+        "create_schedule_trigger",
+      );
+      const scheduleTool = mustExist(
+        await ToolModel.findByName(schedulingToolName),
+      );
+      if (scenario === "custom compact") {
+        await makeAgentTool(agent.id, scheduleTool.id);
+      }
+      if (scenario === "excluded tool") {
+        await AgentExcludedToolModel.replaceForAgent(agent.id, [
+          scheduleTool.id,
+        ]);
+      }
+      const token = await UserTokenModel.create(user.id, org.id);
+      await initializeMcpSession({
+        app,
+        agentId: agent.id,
+        token: token.value,
+      });
+      const listing = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: makeMcpHeaders(token.value),
+        payload: { jsonrpc: "2.0", method: "tools/list", params: {}, id: 2 },
+      });
+      expect(listing.statusCode).toBe(200);
+      const listedTools: Array<{ name: string; description?: string }> =
+        listing.json().result.tools;
+      const searchDescription = mustExist(
+        listedTools.find((tool) => tool.name === TOOL_SEARCH_TOOLS_FULL_NAME),
+      ).description;
+      const available = scenario === "auto" || scenario === "custom compact";
+      expect(searchDescription?.includes("schedule this agent")).toBe(
+        available,
+      );
+      expect(searchDescription?.includes("project_id is omitted")).toBe(
+        available,
+      );
+
+      const search = await callMcpTool({
+        app,
+        agentId: agent.id,
+        token: token.value,
+        name: TOOL_SEARCH_TOOLS_FULL_NAME,
+        arguments: { query: "schedule agent" },
+      });
+      expect(search.statusCode).toBe(200);
+      expect(search.json().result.isError).not.toBe(true);
+      const matches: Array<{ toolName: string }> =
+        search.json().result.structuredContent.tools;
+      expect(matches.some((tool) => tool.toolName === schedulingToolName)).toBe(
+        available,
+      );
+    });
+  }
+
   test("Auto-tool mode exclusions: tools/list drops excluded assigned tools and their catalog from the search_tools description", async ({
     makeAgent,
     makeAgentTool,
@@ -778,7 +865,7 @@ describe("MCP Gateway (stateless mode)", () => {
     // built-ins like load_skill normally stay top-level in tools/list.
     const agent = await makeAgent({
       organizationId: org.id,
-      agentType: "mcp_gateway",
+      agentType: "agent",
       accessAllTools: true,
     });
     await seedAndAssignArchestraTools(agent.id);
@@ -1414,8 +1501,6 @@ describe("MCP Gateway (stateless mode)", () => {
     expect(toolNames.sort()).toEqual(
       [
         TOOL_ASK_USER_FULL_NAME,
-        TOOL_LIST_SKILLS_FULL_NAME,
-        TOOL_LOAD_SKILL_FULL_NAME,
         TOOL_RUN_TOOL_FULL_NAME,
         TOOL_SEARCH_TOOLS_FULL_NAME,
       ].sort(),
@@ -1423,7 +1508,7 @@ describe("MCP Gateway (stateless mode)", () => {
     expect(toolNames).not.toContain(TOOL_TODO_WRITE_FULL_NAME);
   });
 
-  test("keeps sandbox runtime tools top-level in tools/list when the sandbox runtime is enabled", async ({
+  test("defers runtime tools while preserving file and skill workflows through search/run", async ({
     makeAgent,
     makeMember,
     makeOrganization,
@@ -1482,30 +1567,89 @@ describe("MCP Gateway (stateless mode)", () => {
       const toolNames = response
         .json()
         .result.tools.map((tool: { name: string }) => tool.name);
-      // App tools are deliberately absent: in search_and_run_only mode the
-      // whole app surface is reached through search_tools/run_tool. Task
-      // lifecycle controls stay top-level because delegated work is durable.
+      // Questions stay direct; capability and run controls use search/run.
       expect(toolNames.sort()).toEqual(
         [
           TOOL_ASK_USER_FULL_NAME,
-          TOOL_CANCEL_RUN_FULL_NAME,
-          TOOL_DELETE_FILE_FULL_NAME,
-          TOOL_DOWNLOAD_FILE_FULL_NAME,
-          TOOL_EDIT_FILE_FULL_NAME,
-          TOOL_GET_RUN_FULL_NAME,
-          TOOL_LIST_SKILLS_FULL_NAME,
-          TOOL_LIST_RUNS_FULL_NAME,
-          TOOL_LOAD_SKILL_FULL_NAME,
-          TOOL_READ_FILE_FULL_NAME,
-          TOOL_RUN_COMMAND_FULL_NAME,
           TOOL_RUN_TOOL_FULL_NAME,
-          TOOL_SAVE_FILE_FULL_NAME,
-          TOOL_SEARCH_FILES_FULL_NAME,
           TOOL_SEARCH_TOOLS_FULL_NAME,
-          TOOL_STEER_RUN_FULL_NAME,
-          TOOL_UPLOAD_FILE_FULL_NAME,
         ].sort(),
       );
+
+      const call = async (name: string, args: Record<string, unknown>) => {
+        const result = await callMcpTool({
+          app,
+          agentId: agent.id,
+          token: token.value,
+          name,
+          arguments: args,
+        });
+        expect(result.statusCode).toBe(200);
+        expect(result.json().result.isError).not.toBe(true);
+        return result.json().result;
+      };
+      const discovery = await call(TOOL_SEARCH_TOOLS_FULL_NAME, {
+        query:
+          "^archestra__(list_skills|save_file|read_file|run_command|get_run|list_runs|steer_run|cancel_run)$",
+        limit: 20,
+        mode: "regex",
+      });
+      expect(
+        discovery.structuredContent.tools.map(
+          (tool: { toolName: string }) => tool.toolName,
+        ),
+      ).toEqual(
+        expect.arrayContaining([
+          TOOL_LIST_SKILLS_FULL_NAME,
+          TOOL_SAVE_FILE_FULL_NAME,
+          TOOL_READ_FILE_FULL_NAME,
+          TOOL_RUN_COMMAND_FULL_NAME,
+          "archestra__get_run",
+          TOOL_LIST_RUNS_FULL_NAME,
+          "archestra__steer_run",
+          "archestra__cancel_run",
+        ]),
+      );
+      await call(TOOL_RUN_TOOL_FULL_NAME, {
+        tool_name: TOOL_LIST_SKILLS_FULL_NAME,
+      });
+      const runs = await call(TOOL_RUN_TOOL_FULL_NAME, {
+        tool_name: TOOL_LIST_RUNS_FULL_NAME,
+        tool_args: { agent_id: agent.id },
+      });
+      expect(runs.structuredContent).toMatchObject({ runs: [], total: 0 });
+      const searchDescription = response
+        .json()
+        .result.tools.find(
+          (tool: { name: string }) => tool.name === TOOL_SEARCH_TOOLS_FULL_NAME,
+        ).description;
+      expect(searchDescription).toContain("Files");
+      expect(searchDescription).toContain("Skills");
+      expect(searchDescription).toContain("Code Sandbox");
+      expect(searchDescription).toContain("Agent Runtime");
+      expect(searchDescription).toContain("'read file'");
+      const project = await ProjectModel.create({
+        organizationId: org.id,
+        userId: adminUser.id,
+        name: "Gateway workflow",
+        description: null,
+      });
+      const saved = await call(TOOL_RUN_TOOL_FULL_NAME, {
+        tool_name: TOOL_SAVE_FILE_FULL_NAME,
+        tool_args: {
+          filename: "note.txt",
+          content: "Gateway file round trip",
+          project_id: project.id,
+        },
+      });
+      const read = await call(TOOL_RUN_TOOL_FULL_NAME, {
+        tool_name: TOOL_READ_FILE_FULL_NAME,
+        tool_args: {
+          id: saved.structuredContent.fileId,
+          project_id: project.id,
+        },
+      });
+      expect(JSON.stringify(read.content)).toContain("Gateway file round trip");
     } finally {
       (config.skillsSandbox as { enabled: boolean }).enabled =
         originalSandboxEnabled;

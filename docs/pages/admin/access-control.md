@@ -20,6 +20,8 @@ Choose a built-in role for organization permissions, then share the resources th
 
 Built-in roles cannot be edited. The [complete role tables](/docs/reference/permissions#predefined-roles) list their exact permissions.
 
+**Settings** appears only when you can open an organization settings page or manage teams, credentials, or OAuth clients. People who cannot open **Settings → Credentials** use **Personal Settings → Credentials**; see [credential access](/docs/admin/security/credentials#who-can-manage-a-credential).
+
 ## Custom Roles
 
 Create a custom role when the built-in roles grant more than the job needs.
@@ -149,7 +151,7 @@ Saved credentials and provider keys have different sharing rules.
 <span id="visibility-scoped-credentials"></span>
 <span id="models"></span>
 
-- [Saved credentials](/docs/admin/security/credentials#who-can-manage-a-credential) use per-item grants. An organization credential attached to a resource can serve everyone who can use that resource; a personal credential requires each person's own connected value and access.
+- [Saved credentials](/docs/admin/security/credentials#who-can-manage-a-credential) use per-item grants. An organization credential attached to a resource can serve everyone who can use that resource; a personal credential requires each person's own connected value and access. Anyone can create a personal credential for their own use. Creating a shared or organization credential requires [`credential:create`](/docs/reference/permissions#credential:create).
 - Provider keys and virtual keys can be personal, team, or organization scoped. Team membership and the key's grants determine access.
 - Model **Can read** permits discovery; **Can use** permits inference. A use grant on all models also covers future and uncatalogued model IDs. Catalog refreshes preserve grants and revocations.
 

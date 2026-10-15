@@ -5,7 +5,7 @@ order: 1
 lastUpdated: 2026-10-15
 ---
 
-Save a repository credential once, then use it for an MCP server, a coding agent, and a Knowledge connector. **Settings → Credentials** keeps the definition and its permissions separate from the secret value.
+Save a repository credential once, then use it for an MCP server, a coding agent, and a Knowledge connector. The Credentials pages keep the definition and its permissions separate from the secret value.
 
 ## Credential Types
 
@@ -31,7 +31,7 @@ Choose **Each user** when an integration must act as the person using it. Choose
 
 A GitHub App installation credential and a GitLab token belong to the organization. A GitHub user credential is personal. Create separate credential definitions when one service needs both ownership policies.
 
-When personal credentials are available, users connect them under **Account → Credentials**. The page is available with Agent Runtime or an installed Claude Code agent.
+To connect your own values or add a credential for personal use, open **Settings → Credentials** if available. Otherwise, click your name in the sidebar and open **Personal Settings → Credentials**. The personal page lists the personal credentials you can access and, with Agent Runtime enabled, your Claude Code subscription.
 
 ## Who Can Manage a Credential
 
@@ -50,7 +50,9 @@ Use **Permissions** beside **Add credential** to grant access to every credentia
 | **Can update** | Also change its details and organization value. |
 | **Full access** | Also delete it and manage recipients. |
 
-Opening Credentials requires [`credential:read`](/docs/reference/permissions#credential:read); adding one requires [`credential:create`](/docs/reference/permissions#credential:create). The creator gets Full access. New definitions grant everyone **Can use** only when their creator has [organization-wide sharing authority](/docs/admin/access-control#granular-access-control); otherwise they start with the creator alone. Remove the Everyone grant for a team-only credential. Admin and Platform Admin have Full access to all credentials by default, as does Editor.
+Opening **Settings → Credentials** requires [`credential:read`](/docs/reference/permissions#credential:read) and one of these: a role that can add, change, or delete credentials; **Can update** or **Full access** on an organization credential; or access to another Settings page. Owning a personal credential alone does not open Settings.
+
+Anyone can add a personal credential that only they can use. Creating a shared or organization credential requires [`credential:create`](/docs/reference/permissions#credential:create). The creator gets Full access. New shared definitions grant everyone **Can use** only when their creator has [organization-wide sharing authority](/docs/admin/access-control#granular-access-control); otherwise they start with the creator alone. Remove the Everyone grant for a team-only credential. Admin and Platform Admin have Full access to all credentials by default, as does Editor.
 
 An attached organization value works for anyone who can use the server or agent. A personal value additionally requires **Can use** on the credential. Without that access, installation is disabled or chat reports missing credential access. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
 

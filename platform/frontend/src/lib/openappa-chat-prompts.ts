@@ -12,12 +12,14 @@ export const OPENAPPA_SUGGESTED_LAUNCH_PROMPTS = {
   explainPolicy: OPENAPPA_CONFIG_SUGGESTED_PROMPTS[0],
   reviewRisks: OPENAPPA_CONFIG_SUGGESTED_PROMPTS[1],
   changePolicy: OPENAPPA_CONFIG_SUGGESTED_PROMPTS[2],
-  validateAssumptions: OPENAPPA_CONFIG_SUGGESTED_PROMPTS[3],
+  validatePolicy: OPENAPPA_CONFIG_SUGGESTED_PROMPTS[3],
 } as const;
 
 const POLICY_LAUNCH_PROMPTS = {
-  writeValidations:
-    "Help me choose a useful validation for my current policy. Find checks we can actually run, and explain each in everyday language: what it checks, a concrete example, and why I might want it. Explain any important limits without making me read tool calls or policy files. Let me choose before drafting, explain the result, and save only when I ask. Leave the policy unchanged.",
+  /** Validations page: same request as the overview's validate prompt. */
+  writeValidations: OPENAPPA_SUGGESTED_LAUNCH_PROMPTS.validatePolicy.prompt,
+  /** Validations page: explain what the saved checks protect. */
+  explainValidations: "Explain my OpenAPPA validations.",
   /** Overview setup step: no policy has been saved yet. */
   setUpPolicy:
     "Set up a starting OpenAPPA policy with what is already available.",
@@ -31,8 +33,7 @@ const POLICY_LAUNCH_PROMPTS = {
   explainPolicy: OPENAPPA_SUGGESTED_LAUNCH_PROMPTS.explainPolicy.prompt,
   reviewRisks: OPENAPPA_SUGGESTED_LAUNCH_PROMPTS.reviewRisks.prompt,
   changePolicy: OPENAPPA_SUGGESTED_LAUNCH_PROMPTS.changePolicy.prompt,
-  validateAssumptions:
-    OPENAPPA_SUGGESTED_LAUNCH_PROMPTS.validateAssumptions.prompt,
+  validatePolicy: OPENAPPA_SUGGESTED_LAUNCH_PROMPTS.validatePolicy.prompt,
 } as const;
 
 const TARGET_LAUNCH_PROMPTS = {

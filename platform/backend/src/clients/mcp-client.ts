@@ -3961,6 +3961,8 @@ class McpClient {
 
   private formatAuthContext(tokenAuth?: TokenAuthContext): string {
     if (tokenAuth?.userId) return `user: ${tokenAuth.userId}`;
+    if (tokenAuth?.serviceAccountId)
+      return `service account: ${tokenAuth.serviceAccountId}`;
     if (tokenAuth?.teamId) return `team: ${tokenAuth.teamId}`;
     return "organization";
   }

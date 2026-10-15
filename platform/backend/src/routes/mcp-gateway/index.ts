@@ -1363,7 +1363,11 @@ function runtimeTokenMatchesRun(params: {
     case "user":
       return params.tokenAuth.userId === params.run.actorId;
     case "team":
-      return params.tokenAuth.teamId === params.run.actorId;
+      // A service account acting for the team is not the team's token.
+      return (
+        !params.tokenAuth.serviceAccountId &&
+        params.tokenAuth.teamId === params.run.actorId
+      );
     case "serviceAccount":
       return params.tokenAuth.serviceAccountId === params.run.actorId;
     case "oauthClient":

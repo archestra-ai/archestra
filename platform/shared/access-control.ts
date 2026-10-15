@@ -1521,6 +1521,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateSlackAgentBotApp]: {
     organizationSettings: ["update"],
   },
+  [RouteId.CreateSlackRouterBotApp]: {
+    organizationSettings: ["update"],
+  },
   [RouteId.MigrateSlackApps]: {
     organizationSettings: ["update"],
   },

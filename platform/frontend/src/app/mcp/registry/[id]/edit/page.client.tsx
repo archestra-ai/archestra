@@ -75,7 +75,7 @@ export function McpCatalogItemEditPage({ id }: { id: string }) {
       actionButton={
         item ? (
           <SetupStepper
-            compact
+            allReached
             activeStep={navigation.step}
             onStepClick={navigation.goToStep}
           />
@@ -143,11 +143,9 @@ function SetupWizard({
             item={item}
             onClose={() => {}}
             keepOpenOnSave
-            // A save lands a success toast in the bottom-right corner, exactly
-            // where this step's sticky footer sits — so staying here would mean
-            // waiting out the toast before the CTA under it could be clicked.
-            // Saving is also the point at which this step is done, so move on
-            // — or, for a plain Save, back to the server's page.
+            // Saving is the point at which this step is done, so move on — or,
+            // for a plain Save, back to the server's page. The navigation is
+            // the save's confirmation; no toast.
             onSaved={() => {
               if (saveIntentRef.current === "finish") router.push(detailHref);
               else goToStep("test");

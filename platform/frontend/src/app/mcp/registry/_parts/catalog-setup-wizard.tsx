@@ -82,21 +82,26 @@ export const SETUP_STEPS: Array<{ id: SetupStepId; title: string }> = [
   { id: "tools", title: "Tools & Guardrails" },
 ];
 
+/**
+ * The header stepper, drawn the way the Agents create/edit pages draw theirs.
+ * An edit page passes `allReached`: every step already has its values.
+ */
 export function SetupStepper({
   activeStep,
   onStepClick,
-  compact = false,
+  allReached = false,
 }: {
   activeStep: SetupStepId;
   onStepClick?: (step: SetupStepId) => void;
-  compact?: boolean;
+  allReached?: boolean;
 }) {
   return (
     <WizardStepper
+      variant="progress"
       steps={SETUP_STEPS}
       activeStep={activeStep}
       onStepClick={onStepClick}
-      compact={compact}
+      allReached={allReached}
     />
   );
 }

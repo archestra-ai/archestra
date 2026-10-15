@@ -3807,6 +3807,37 @@ class AgentModel {
     return rows.length > 0;
   }
 
+  /** Startup candidates only: existing live personal agents need no repair. */
+  static async findMembersMissingPersonalChatAgents() {
+    return db
+      .select({
+        userId: schema.membersTable.userId,
+        organizationId: schema.membersTable.organizationId,
+      })
+      .from(schema.membersTable)
+      .where(
+        and(
+          isNull(schema.membersTable.defaultAgentId),
+          not(
+            exists(
+              db
+                .select({ id: schema.agentsTable.id })
+                .from(schema.agentsTable)
+                .where(
+                  and(
+                    ...personalChatAgentConditions({
+                      userId: schema.membersTable.userId,
+                      organizationId: schema.membersTable.organizationId,
+                    }),
+                    notDeleted(schema.agentsTable),
+                  ),
+                ),
+            ),
+          ),
+        ),
+      );
+  }
+
   /**
    * Ensure a personal chat agent exists for a member, and return the one they
    * should chat with — their oldest live personal chat agent.
@@ -3892,14 +3923,7 @@ class AgentModel {
       .from(schema.agentsTable)
       .where(
         and(
-          eq(schema.agentsTable.organizationId, params.organizationId),
-          eq(schema.agentsTable.authorId, params.userId),
-          eq(schema.agentsTable.agentType, "agent"),
-          agentAudienceIs("personal"),
-          eq(schema.agentsTable.builtIn, false),
-          params.excludeId
-            ? ne(schema.agentsTable.id, params.excludeId)
-            : undefined,
+          ...personalChatAgentConditions(params),
           notDeleted(schema.agentsTable),
         ),
       )
@@ -3917,15 +3941,7 @@ class AgentModel {
     const [row] = await db
       .select({ id: schema.agentsTable.id })
       .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.organizationId, params.organizationId),
-          eq(schema.agentsTable.authorId, params.userId),
-          eq(schema.agentsTable.agentType, "agent"),
-          agentAudienceIs("personal"),
-          eq(schema.agentsTable.builtIn, false),
-        ),
-      )
+      .where(and(...personalChatAgentConditions(params)))
       .limit(1);
     return row !== undefined;
   }
@@ -5201,4 +5217,20 @@ const ALL_SORTS_ABOVE_ANY_COUNT = 2147483647;
  */
 function qualified(column: AnyPgColumn): SQL {
   return sql`${sql.identifier(getTableName(column.table))}.${sql.identifier(column.name)}`;
+}
+
+/** Shared by the startup preflight and the per-member creation guard. */
+function personalChatAgentConditions(params: {
+  userId: string | AnyPgColumn;
+  organizationId: string | AnyPgColumn;
+  excludeId?: string;
+}) {
+  return [
+    eq(schema.agentsTable.organizationId, params.organizationId),
+    eq(schema.agentsTable.authorId, params.userId),
+    eq(schema.agentsTable.agentType, "agent"),
+    agentAudienceIs("personal"),
+    eq(schema.agentsTable.builtIn, false),
+    params.excludeId ? ne(schema.agentsTable.id, params.excludeId) : undefined,
+  ];
 }

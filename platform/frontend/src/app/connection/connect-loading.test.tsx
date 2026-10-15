@@ -5,6 +5,7 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import type { ReactNode } from "react";
 import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
+import { useProfiles } from "@/lib/agent.query";
 import { useGatewayToolPreview } from "@/lib/mcp/gateway-tool-preview.query";
 import { fetchAllSkills } from "@/lib/skills/skill.query";
 import { useGatewayServers } from "./use-gateway-servers";
@@ -136,4 +137,47 @@ it("expands gateway tool schemas only when requested and retains the result afte
   rerender({ enabled: false });
   expect(result.current.data?.tokenCount?.total).toBe(12);
   expect(previews).toBe(1);
+});
+
+it("keeps gateway selector rosters lightweight unless a caller explicitly needs tools", async () => {
+  const requested: string[] = [];
+  server.use(
+    http.get(`${origin}/api/agents/all`, ({ request }) => {
+      const includeTools =
+        new URL(request.url).searchParams.get("includeTools") ?? "";
+      requested.push(includeTools);
+      return HttpResponse.json([
+        {
+          id: "gateway",
+          name: "Gateway",
+          tools: includeTools === "true" ? [{ name: "example__search" }] : [],
+        },
+      ]);
+    }),
+  );
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  );
+  const { result, rerender } = renderHook(
+    ({ includeTools }) =>
+      useProfiles({
+        filters: {
+          agentTypes: ["profile", "mcp_gateway"],
+          ...(includeTools === undefined ? {} : { includeTools }),
+        },
+      }),
+    {
+      wrapper,
+      initialProps: { includeTools: undefined as boolean | undefined },
+    },
+  );
+  await waitFor(() => expect(result.current.data?.[0].name).toBe("Gateway"));
+  expect(result.current.data?.[0].tools).toEqual([]);
+  expect(requested).toEqual(["false"]);
+  rerender({ includeTools: true });
+  await waitFor(() => expect(result.current.data?.[0].tools).toHaveLength(1));
+  expect(requested).toEqual(["false", "true"]);
 });

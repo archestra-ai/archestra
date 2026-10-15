@@ -8,7 +8,6 @@ import {
   slugify,
   TOOL_ASK_USER_FULL_NAME,
   TOOL_CANCEL_RUN_FULL_NAME,
-  TOOL_CREATE_SCHEDULE_TRIGGER_SHORT_NAME,
   TOOL_DELETE_FILE_FULL_NAME,
   TOOL_DOWNLOAD_FILE_FULL_NAME,
   TOOL_EDIT_FILE_FULL_NAME,
@@ -733,7 +732,7 @@ describe("MCP Gateway (stateless mode)", () => {
       });
       await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
       const schedulingToolName = archestraMcpBranding.getToolName(
-        TOOL_CREATE_SCHEDULE_TRIGGER_SHORT_NAME,
+        "create_schedule_trigger",
       );
       const scheduleTool = mustExist(
         await ToolModel.findByName(schedulingToolName),

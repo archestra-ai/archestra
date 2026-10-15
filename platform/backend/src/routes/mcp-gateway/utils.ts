@@ -18,7 +18,6 @@ import {
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_CANCEL_RUN_SHORT_NAME,
   TOOL_COPY_FILE_SHORT_NAME,
-  TOOL_CREATE_SCHEDULE_TRIGGER_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_GET_RUN_SHORT_NAME,
@@ -2910,6 +2909,14 @@ async function buildSearchToolsDescription(params: {
   )
     ? `For requests such as "hand this work over to ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}" or "spin this up in ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}", discover Agent Runtime tools here and load the Agent Runtime Handoff skill before transferring work. Discover an agent with list_agents; use start_run only when this work has no runtime session. Otherwise steer_run reuses its saved session. "Bring it back" or "resume locally" means retrieve changes and context, stop remote editing, and continue in the local client.`
     : null;
+  const baseDescription = [
+    searchTool.description,
+    knowledgeInstruction,
+    runtimeInstruction,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   // Mirror search_tools' actual search space: the catalogs backing the
   // assigned tools, widened by the dynamically discoverable ones when the
   // agent's "access all tools" setting is on (getUnassignedDiscoverableTools
@@ -2922,8 +2929,19 @@ async function buildSearchToolsDescription(params: {
     lookups,
   });
 
+  const catalogIds = [
+    ...new Set(
+      [...mcpTools, ...discoverableTools]
+        .map((tool) => tool.catalogId)
+        .filter(
+          (catalogId): catalogId is string =>
+            Boolean(catalogId) && catalogId !== ARCHESTRA_MCP_CATALOG_ID,
+        ),
+    ),
+  ];
+
   const schedulingToolName = archestraMcpBranding.getToolName(
-    TOOL_CREATE_SCHEDULE_TRIGGER_SHORT_NAME,
+    "create_schedule_trigger",
   );
   const schedulingSearchable = [...mcpTools, ...discoverableTools].some(
     (tool) =>
@@ -2943,28 +2961,12 @@ async function buildSearchToolsDescription(params: {
   const schedulingInstruction = schedulingPermitted
     ? 'To schedule this agent or recurring work, search for "schedule agent". The scheduling tool can create a private project and save the task as instructions when project_id is omitted (requires project:create).'
     : null;
-  const baseDescription = [
-    searchTool.description,
-    knowledgeInstruction,
-    runtimeInstruction,
-    schedulingInstruction,
-  ]
+  const description = [baseDescription, schedulingInstruction]
     .filter(Boolean)
     .join(" ");
 
-  const catalogIds = [
-    ...new Set(
-      [...mcpTools, ...discoverableTools]
-        .map((tool) => tool.catalogId)
-        .filter(
-          (catalogId): catalogId is string =>
-            Boolean(catalogId) && catalogId !== ARCHESTRA_MCP_CATALOG_ID,
-        ),
-    ),
-  ];
-
   if (catalogIds.length === 0) {
-    return baseDescription;
+    return description;
   }
 
   const catalogs = new Map(prefetchedCatalogs ?? []);
@@ -2991,14 +2993,14 @@ async function buildSearchToolsDescription(params: {
     });
 
   if (catalogSummaries.length === 0) {
-    return baseDescription;
+    return description;
   }
 
   const remainingCount = resolvedCatalogs.length - catalogSummaries.length;
   const remainingText =
     remainingCount > 0 ? `, and ${remainingCount} more` : "";
 
-  return `${baseDescription} Available MCP servers for this gateway include: ${catalogSummaries.join(", ")}${remainingText}. Use this tool first when the user names one of these servers or asks for capabilities that may be provided by connected MCP servers.`;
+  return `${description} Available MCP servers for this gateway include: ${catalogSummaries.join(", ")}${remainingText}. Use this tool first when the user names one of these servers or asks for capabilities that may be provided by connected MCP servers.`;
 }
 
 // One-line, length-capped rendering of a catalog's own description for

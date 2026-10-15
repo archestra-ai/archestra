@@ -143,6 +143,11 @@ function getMessageText(
   return "";
 }
 
+/** A guardrail's own model call (e.g. an annotator consult) inside the session it judges. */
+function isGuardrailSource(source: string | null): boolean {
+  return source?.startsWith("guardrail:") ?? false;
+}
+
 /**
  * Detects if a request is a "main" request or "subagent" request.
  *
@@ -173,7 +178,7 @@ function computeRequestType(
   // the session detail view must badge them as "subagent". A chat session's
   // session_source is not a Claude source, so without this the heuristics below
   // would fall through to "main" and mislabel every auxiliary chat call.
-  if (source?.startsWith("chat:")) {
+  if (source?.startsWith("chat:") || isGuardrailSource(source)) {
     return "subagent";
   }
 
@@ -2159,6 +2164,7 @@ class InteractionModel {
       string,
       {
         lastMainInteraction: (typeof interactions)[0] | null;
+        guardrailTip: (typeof interactions)[0] | null;
         claudeCodeTitle: string | null | undefined;
       }
     >();
@@ -2168,9 +2174,12 @@ class InteractionModel {
       windowRows: SessionWindowRow[],
     ): {
       lastMainInteraction: SessionWindowRow | null;
+      guardrailTip: SessionWindowRow | null;
       claudeCodeTitle: string | null | undefined;
     } => {
       let lastMainInteraction: SessionWindowRow | null = null;
+      // A guardrail's call previews only a session that has nothing else.
+      let guardrailTip: SessionWindowRow | null = null;
       // undefined = not yet found, null = found but no text, string = found with text
       let claudeCodeTitle: string | null | undefined;
 
@@ -2232,7 +2241,9 @@ class InteractionModel {
             hasGeminiContent ||
             isLogContentNotStored(interaction.request)
           ) {
-            lastMainInteraction = interaction;
+            if (isGuardrailSource(interaction.source))
+              guardrailTip ??= interaction;
+            else lastMainInteraction = interaction;
           }
         }
 
@@ -2242,12 +2253,16 @@ class InteractionModel {
         }
       }
 
-      return { lastMainInteraction, claudeCodeTitle };
+      return { lastMainInteraction, guardrailTip, claudeCodeTitle };
     };
 
     for (const [sessionKey, windowRows] of groupedBySession) {
       const selection = selectTip(windowRows);
-      if (selection.lastMainInteraction || selection.claudeCodeTitle) {
+      if (
+        selection.lastMainInteraction ||
+        selection.guardrailTip ||
+        selection.claudeCodeTitle
+      ) {
         selectedPerSession.set(sessionKey, selection);
       }
     }
@@ -2269,7 +2284,11 @@ class InteractionModel {
       });
       for (const [sessionKey, windowRows] of groupRowsBySession(deepRows)) {
         const selection = selectTip(windowRows);
-        if (selection.lastMainInteraction || selection.claudeCodeTitle) {
+        if (
+          selection.lastMainInteraction ||
+          selection.guardrailTip ||
+          selection.claudeCodeTitle
+        ) {
           selectedPerSession.set(sessionKey, selection);
         }
       }
@@ -2280,7 +2299,10 @@ class InteractionModel {
     // Still at most one tip per session, now in a single ancestor query.
     const reconstructed = await InteractionDeltaManager.reconstructMany(
       [...selectedPerSession.values()]
-        .map(({ lastMainInteraction }) => lastMainInteraction)
+        .map(
+          ({ lastMainInteraction, guardrailTip }) =>
+            lastMainInteraction ?? guardrailTip,
+        )
         .filter((tip): tip is (typeof interactions)[0] => tip !== null)
         .map((tip) => ({
           id: tip.id,
@@ -2292,8 +2314,9 @@ class InteractionModel {
 
     for (const [
       sessionKey,
-      { lastMainInteraction, claudeCodeTitle },
+      { lastMainInteraction: mainTip, guardrailTip, claudeCodeTitle },
     ] of selectedPerSession) {
+      const lastMainInteraction = mainTip ?? guardrailTip;
       const tipRequest = lastMainInteraction
         ? (reconstructed.get(lastMainInteraction.id)?.request ??
           lastMainInteraction.request)

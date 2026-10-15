@@ -509,6 +509,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentTypes: ["agent"],
           excludeBuiltIn: true,
           onlyEnforcingMissingCredentials: true,
+          includeTools: false,
         },
       );
 

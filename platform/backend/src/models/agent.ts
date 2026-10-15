@@ -1073,6 +1073,22 @@ class AgentModel {
     return agents;
   }
 
+  /** The delegation canvas needs nodes, not editable agents or their assigned tools. */
+  static async findDelegationGraphNodes(organizationId: string) {
+    const table = schema.agentsTable;
+    return db
+      .select({ id: table.id, name: table.name, agentType: table.agentType })
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, organizationId),
+          eq(table.agentType, "agent"),
+          notDeleted(table),
+        ),
+      )
+      .orderBy(desc(table.createdAt), desc(table.id));
+  }
+
   /**
    * Find all agents for an organization with optional filtering by agentType
    */

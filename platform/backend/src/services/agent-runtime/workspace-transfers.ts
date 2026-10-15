@@ -316,7 +316,11 @@ class WorkspaceTransferTickets {
     taskId: string;
     transferId: string;
   }): Promise<void> {
-    const session = await runningRuntimeSession(params).catch(() => null);
+    const session = await runningRuntimeSession(params).catch((error) => {
+      // A stopped or gone workspace keeps its pin until the in-pod sweep.
+      if (error instanceof ApiError) return null;
+      throw error;
+    });
     if (!session) return;
     await discardSnapshot({
       driver: resolveAgentRuntimeBackendDriver(session.backend),
@@ -622,8 +626,19 @@ async function runningRuntimeSession(params: {
 }
 
 /** Unique per crossing attempt, so a retry never meets a decision already given. */
-function operationNonce(): string {
+export function operationNonce(): string {
   return randomBytes(6).toString("hex");
+}
+
+/** The bytes the next chunk of a pinned export carries when it crosses. */
+export function nextProtectedChunkBytes(
+  progress: ProtectedExportProgress,
+): number {
+  const start = progress.digests.length * PROTECTED_EXPORT_CHUNK_BYTES;
+  return Math.max(
+    0,
+    Math.min(PROTECTED_EXPORT_CHUNK_BYTES, progress.snapshot.size - start),
+  );
 }
 
 type TransferDriver = ReturnType<typeof resolveAgentRuntimeBackendDriver>;
@@ -635,6 +650,9 @@ type TransferSession = Awaited<
  * Admits the next chunks of a pinned snapshot in order, one child value per
  * chunk. Content crosses, never a manifest that could be approved apart from
  * its bytes. Stops at the budget, or when the runtime is mid-call (`busy`).
+ * Chunks admitted before a held one stay in the parent's label: they crossed,
+ * so the parent is ruled as having seen them, though no ticket is issued and
+ * nothing downloads.
  */
 async function advanceExportOn(params: {
   driver: TransferDriver;
@@ -864,10 +882,10 @@ async function discardSnapshot(params: {
       args: helperArgs(undefined, "discard", params.transferId),
       timeoutMs: CONTROL_TIMEOUT_MS,
     })
-    .catch(() => {
+    .catch((error) => {
       logger.warn(
-        { transferId: params.transferId },
-        "Could not discard a refused runtime export snapshot",
+        { err: error, transferId: params.transferId },
+        "Could not discard a pinned runtime export snapshot",
       );
     });
 }

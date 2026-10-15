@@ -495,6 +495,87 @@ describe("files pinned while their runtime is mid-call", () => {
     const served = Buffer.from(await downloaded(ticketed, "base64"), "base64");
     expect(served.equals(bytes)).toBe(true);
   });
+
+  test("downloads pinned after the first share the runtime request's byte budget", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    });
+    // Two chunks each: a full one and a 1 MiB tail.
+    fakePod(Buffer.alloc(CHUNK + 1024 * 1024, 7));
+    const crossing = vi
+      .spyOn(openappa, "returnRuntimeValue")
+      .mockResolvedValue(BUSY);
+    const paths = ["out/first.bin", "out/second.bin", "out/third.bin"];
+    for (const path of paths) {
+      const pinned = await transfer(seeded, path);
+      expect(pinned.structuredContent).toMatchObject({ status: "pending" });
+    }
+    crossing.mockImplementation(async ({ value }) => ({
+      kind: "admitted",
+      value,
+    }));
+    const crossed = () =>
+      crossing.mock.calls.slice(paths.length).map((call) => {
+        const value = JSON.parse(call[0].value);
+        return `${value.path}#${value.chunk.index}`;
+      });
+
+    await pendingExports.drain(seeded.child);
+    // 4 MiB + 4 MiB fills the 8 MiB budget; the third waits.
+    expect(crossed()).toEqual(["out/first.bin#0", "out/second.bin#0"]);
+
+    await pendingExports.drain(seeded.child);
+    expect(crossed().slice(2)).toEqual([
+      "out/first.bin#1",
+      "out/second.bin#1",
+      "out/third.bin#0",
+    ]);
+  });
+
+  test("a runtime keeps at most sixteen pinned files and releases the oldest pin", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    });
+    const pod = fakePod("pinned bytes");
+    vi.spyOn(workspaceFiles, "accessAgentWorkspaceFile").mockResolvedValue(
+      fileResult("pinned bytes"),
+    );
+    vi.spyOn(openappa, "returnRuntimeValue").mockResolvedValue(BUSY);
+    // A clock that only moves forward, so "oldest" never depends on the host's.
+    let clock = Date.now();
+    const now = vi.spyOn(Date, "now").mockImplementation(() => ++clock);
+    try {
+      for (let file = 1; file <= 17; file++) {
+        const pinned = await readFile(seeded, `reports/${file}.md`);
+        expect(pinned.structuredContent).toMatchObject({ status: "pending" });
+      }
+    } finally {
+      now.mockRestore();
+    }
+
+    expect(pod.snapshots).toBe(17);
+    expect(pod.discarded).toEqual(["pinned-1"]);
+  });
 });
 
 // =============================================================================
@@ -572,13 +653,13 @@ function readFile(
   );
 }
 
-function transfer(seeded: Seeded) {
+function transfer(seeded: Seeded, path = "out/report.txt") {
   return executeArchestraTool(
     TRANSFER,
     {
       task_id: seeded.taskId,
       direction: "download",
-      path: "out/report.txt",
+      path,
       local_path: "/tmp/report.txt",
     },
     seeded.context,

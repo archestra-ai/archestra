@@ -18,6 +18,8 @@ import {
 } from "./runtime-crossing";
 import { authorizeAgentWorkspaceAccess } from "./workspace-files";
 import {
+  nextProtectedChunkBytes,
+  operationNonce,
   ProtectedExportBusy,
   type ProtectedExportProgress,
   workspaceTransferTickets,
@@ -143,7 +145,10 @@ class PendingExports {
    * tool call open: on its model request, after its tool results are admitted
    * and before its next calls are released. Never fails the request and keeps
    * to a small budget; a file that cannot cross now stays pinned for the next
-   * request or the parent's next call.
+   * request or the parent's next call. The first file always gets its turn;
+   * the files after it share the byte budget, one chunk per download. The
+   * deadline is checked before each file, so one already crossing finishes
+   * (a slow pod read gives up after its own timeout) and the rest wait.
    */
   async drain(child: OpenAppaSession): Promise<void> {
     if (!child.parent_id) return;
@@ -158,25 +163,20 @@ class PendingExports {
       );
       return;
     }
-    let readBytes = 0;
-    let downloadChunks = 0;
+    let spentBytes = 0;
     for (const [name, entry] of entries) {
       if (Date.now() - started > DRAIN_DEADLINE_MS) return;
-      const size = entry.progress.snapshot.size;
-      if (
-        entry.kind === "read" &&
-        readBytes > 0 &&
-        readBytes + size > DRAIN_READ_BYTES
-      )
-        continue;
-      if (entry.kind === "download" && downloadChunks >= 1) continue;
+      const size =
+        entry.kind === "read"
+          ? entry.progress.snapshot.size
+          : nextProtectedChunkBytes(entry.progress);
+      if (spentBytes > 0 && spentBytes + size > DRAIN_BYTES) continue;
       try {
         const step =
           entry.kind === "read"
             ? await advanceRead(entry, { drain: true })
             : await advanceDownload(entry, { drain: true });
-        if (entry.kind === "read") readBytes += size;
-        else downloadChunks++;
+        spentBytes += size;
         await this.replace(child, name, entry, step.entry);
         await afterStep(entry, step.entry);
         // Still mid-call: nothing else can cross on this request either.
@@ -486,13 +486,15 @@ class Entries {
 
   /** Adds an entry, dropping the oldest when the runtime already has the most. */
   add(name: string, entry: PendingEntry): void {
-    while (this.entries.size >= MAX_ENTRIES_PER_RUNTIME) {
-      const [oldest] = [...this.entries.entries()].sort(
-        ([, a], [, b]) => a.createdAt - b.createdAt,
-      );
-      if (!oldest) break;
-      this.entries.delete(oldest[0]);
-      this.dropped.push(oldest[1]);
+    const excess = this.entries.size - MAX_ENTRIES_PER_RUNTIME + 1;
+    if (excess > 0) {
+      const oldest = [...this.entries.entries()]
+        .sort(([, a], [, b]) => a.createdAt - b.createdAt)
+        .slice(0, excess);
+      for (const [oldName, old] of oldest) {
+        this.entries.delete(oldName);
+        this.dropped.push(old);
+      }
     }
     this.set(name, entry);
   }
@@ -555,11 +557,6 @@ function newEntry(params: {
 
 function newRev(): string {
   return randomBytes(8).toString("hex");
-}
-
-/** Unique per crossing attempt, so a retry never meets a decision already given. */
-function operationNonce(): string {
-  return randomBytes(6).toString("hex");
 }
 
 /**
@@ -713,13 +710,16 @@ async function discardPinned(entry: {
   taskId: string;
   progress: ProtectedExportProgress;
 }): Promise<void> {
+  const transferId = entry.progress.snapshot.transferId;
   await workspaceTransferTickets
-    .discardExport({
-      actor: entry.actor,
-      taskId: entry.taskId,
-      transferId: entry.progress.snapshot.transferId,
-    })
-    .catch(() => undefined);
+    .discardExport({ actor: entry.actor, taskId: entry.taskId, transferId })
+    .catch((error) => {
+      // The in-pod sweep removes the pin later; this only says it stayed.
+      logger.warn(
+        { err: error, taskId: entry.taskId, transferId },
+        "Could not discard a protected file pinned for an Agent Runtime",
+      );
+    });
 }
 
 /** The pinned version changed or was swept; the next call pins the current one. */
@@ -734,7 +734,9 @@ function pinnedVersionGone(error: unknown): boolean {
 
 /**
  * Whether the runtime is in a turn. A runtime that stopped mid-call never
- * reports that call, so its files would wait forever: refuse instead.
+ * reports that call, so its files would wait forever: refuse instead. Best
+ * effort: a runtime that stops right after this check leaves a pin that
+ * expires, or that the parent's next call crosses or refuses.
  */
 async function runtimeIsMidTurn(taskId: string): Promise<boolean> {
   const run = await AgentRunModel.findByTaskId(taskId);
@@ -793,7 +795,7 @@ function digest(value: string): string {
 
 /** What one runtime request spends releasing files, so its own latency stays small. */
 const DRAIN_DEADLINE_MS = 2_000;
-const DRAIN_READ_BYTES = 8 * 1024 * 1024;
+const DRAIN_BYTES = 8 * 1024 * 1024;
 const MAX_DRAIN_FAILURES = 3;
 /** One tool call worth waiting for; a longer one gets a fresh pin on the next call. */
 const PENDING_TTL_MS = 30 * 60 * 1000;

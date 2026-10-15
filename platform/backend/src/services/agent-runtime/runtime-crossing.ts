@@ -386,7 +386,7 @@ export async function crossRuntimeFile(params: {
 
 /** Shared with protected transfers so both file paths explain a hold the same way. */
 export function heldFileRefusal(reason: string): string {
-  return `The protected file could not be admitted. No original bytes were returned.\n\nGuardrails ruling: ${reason}`;
+  return `The protected file could not be admitted. No original bytes were returned.\n\nGuardrails ruling: ${reason.trim()}`;
 }
 
 /**

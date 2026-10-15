@@ -20,7 +20,7 @@ describe("resolveModelOutputBudget", () => {
         provider: "openai",
         modelName: "gpt-4-turbo",
       }),
-    ).toBe(4_096);
+    ).toEqual({ kind: "catalogued", tokens: 4_096 });
   });
 
   test("clamps a large catalogued cap to the operator ceiling", async () => {
@@ -39,7 +39,10 @@ describe("resolveModelOutputBudget", () => {
         provider: "anthropic",
         modelName: "claude-sonnet-5",
       }),
-    ).toBe(config.chat.maxOutputTokensCeiling);
+    ).toEqual({
+      kind: "catalogued",
+      tokens: config.chat.maxOutputTokensCeiling,
+    });
   });
 
   test("falls back to a conservative budget for a model the catalog lacks", async () => {
@@ -48,7 +51,7 @@ describe("resolveModelOutputBudget", () => {
         provider: "gemini",
         modelName: "gemini-unknown",
       }),
-    ).toBe(8_192);
+    ).toEqual({ kind: "uncatalogued", tokens: 8_192 });
   });
 
   test("a caller can assume a smaller cap for a model the catalog lacks", async () => {
@@ -58,6 +61,6 @@ describe("resolveModelOutputBudget", () => {
         modelName: "us.anthropic.claude-3-haiku-20240307-v1:0",
         unknownOutputLength: 4_096,
       }),
-    ).toBe(4_096);
+    ).toEqual({ kind: "uncatalogued", tokens: 4_096 });
   });
 });

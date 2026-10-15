@@ -167,16 +167,20 @@ export function createDirectLLMModel({
     resolvedBaseUrl && cfg.proxiedPathSuffix
       ? `${resolvedBaseUrl}${cfg.proxiedPathSuffix}`
       : resolvedBaseUrl;
-  return cfg.createModel({
-    apiKey,
-    modelName,
-    baseURL,
-    headers: providerHeaders(cfg),
-    // Direct OpenRouter models bypass the proxy adapter, so heal the request
-    // body here; the wrapper no-ops for non-healable requests.
-    fetch: provider === "openrouter" ? createResponseHealingFetch() : undefined,
-    direct: true,
-  });
+  return withCatalogOutputBudget(
+    cfg.createModel({
+      apiKey,
+      modelName,
+      baseURL,
+      headers: providerHeaders(cfg),
+      // Direct OpenRouter models bypass the proxy adapter, so heal the request
+      // body here; the wrapper no-ops for non-healable requests.
+      fetch:
+        provider === "openrouter" ? createResponseHealingFetch() : undefined,
+      direct: true,
+    }),
+    { provider, modelName },
+  );
 }
 
 /**
@@ -288,14 +292,17 @@ export function createLLMModel(params: {
     ? `${proxyBaseUrl}${cfg.proxiedPathSuffix}`
     : proxyBaseUrl;
 
-  return cfg.createModel({
-    apiKey,
-    modelName,
-    baseURL,
-    headers,
-    fetch: createTracedFetch(),
-    supportedEndpoints,
-  });
+  return withCatalogOutputBudget(
+    cfg.createModel({
+      apiKey,
+      modelName,
+      baseURL,
+      headers,
+      fetch: createTracedFetch(),
+      supportedEndpoints,
+    }),
+    { provider, modelName },
+  );
 }
 
 /**
@@ -597,22 +604,19 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
 
   anthropic: {
     createModel: ({ apiKey, modelName, baseURL, headers, fetch, direct }) =>
-      withAnthropicOutputBudget(
-        direct && anthropicVertexClient.isEnabled()
-          ? anthropicVertexClient.createModel({
-              modelId: modelName,
-              fetch: createAnthropicThinkingDisplayFetch(fetch),
-            })
-          : createAnthropic({
-              apiKey,
-              baseURL,
-              headers,
-              // Models that think by default return their thinking text only on
-              // request — see createAnthropicThinkingDisplayFetch.
-              fetch: createAnthropicThinkingDisplayFetch(fetch),
-            })(modelName),
-        modelName,
-      ),
+      direct && anthropicVertexClient.isEnabled()
+        ? anthropicVertexClient.createModel({
+            modelId: modelName,
+            fetch: createAnthropicThinkingDisplayFetch(fetch),
+          })
+        : createAnthropic({
+            apiKey,
+            baseURL,
+            headers,
+            // Models that think by default return their thinking text only on
+            // request — see createAnthropicThinkingDisplayFetch.
+            fetch: createAnthropicThinkingDisplayFetch(fetch),
+          })(modelName),
     defaultBaseUrl: config.llm.anthropic.baseUrl,
     apiKeyRequiredMessage: isAnthropicKeylessAuthEnabled()
       ? undefined
@@ -1244,31 +1248,38 @@ function createOllamaNativeFetch(
 }
 
 /**
- * Default output budget for Anthropic calls that set no `maxOutputTokens`,
- * taken from the model catalog (see resolveModelOutputBudget). Without it
- * @ai-sdk/anthropic falls back to its own per-model table, which lags new
- * model ids and Vertex `@` spellings: unknown ids get 4096 (older SDKs, which
- * adaptive thinking exhausts) or the full 128k (newer ones, which older models
- * reject). Explicit per-call values still win.
+ * Default output budget for calls that set no `maxOutputTokens`. When the
+ * model catalog knows the model's output cap, every provider gets the catalog
+ * budget (see resolveModelOutputBudget), so a model that reasons by default
+ * never runs into a small provider or SDK default. Otherwise the provider's
+ * own default stands, except for Anthropic: its SDK substitutes a per-model
+ * table that lags new model ids and Vertex `@` spellings (4096 for unknown
+ * ids on older SDKs, 128k on newer ones, which older models reject), so it
+ * gets the safe fallback. Explicit per-call values still win.
  */
-function withAnthropicOutputBudget(
-  model: Parameters<typeof wrapLanguageModel>[0]["model"],
-  modelName: string,
-): ReturnType<typeof wrapLanguageModel> {
+function withCatalogOutputBudget(
+  model: LLMModel,
+  target: { provider: SupportedProvider; modelName: string },
+): LLMModel {
+  // Plain ids and v2 providers (Ollama) keep their provider default.
+  if (typeof model === "string" || model.specificationVersion !== "v3")
+    return model;
   return wrapLanguageModel({
     model,
     middleware: {
       specificationVersion: "v3",
-      transformParams: async ({ params }) =>
-        params.maxOutputTokens !== undefined
-          ? params
-          : {
-              ...params,
-              maxOutputTokens: await resolveModelOutputBudget({
-                provider: "anthropic",
-                modelName,
-              }),
-            },
+      transformParams: async ({ params }) => {
+        if (params.maxOutputTokens !== undefined) return params;
+        const budget = await resolveModelOutputBudget(target);
+        switch (budget.kind) {
+          case "catalogued":
+            return { ...params, maxOutputTokens: budget.tokens };
+          case "uncatalogued":
+            return target.provider === "anthropic"
+              ? { ...params, maxOutputTokens: budget.tokens }
+              : params;
+        }
+      },
     },
   });
 }

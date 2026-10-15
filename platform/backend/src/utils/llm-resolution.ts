@@ -461,27 +461,26 @@ export async function resolveAgentLlmOrDefault(params: {
 }
 
 /**
- * Output-token budget for a one-off call on `modelName`: the model's real
- * output ceiling from the catalog, clamped by the operator ceiling, or a safe
- * fallback when the catalog does not know the model. Never exceeds the model's
- * known cap, so a provider that forwards `max_tokens` unchanged never rejects
- * the request.
+ * Output-token budget for a one-off call on `modelName`. `catalogued` when the
+ * catalog knows the model's output cap: the cap clamped by the operator
+ * ceiling. `uncatalogued` otherwise: a safe fallback. Never exceeds a known
+ * cap, so a provider that forwards `max_tokens` unchanged never rejects it.
  */
 export async function resolveModelOutputBudget(params: {
   provider: SupportedProvider;
   modelName: string;
   /** Output cap to assume when the catalog has none for the model. */
   unknownOutputLength?: number;
-}): Promise<number> {
+}): Promise<ModelOutputBudget> {
   const model = await ModelModel.findByProviderAndModelId(
     params.provider,
     params.modelName,
   );
-  return resolveAgentMaxOutputTokens({
-    outputLength:
-      (model ? ModelModel.resolveEffectiveOutputLength(model) : null) ??
-      params.unknownOutputLength ??
-      null,
+  const outputLength = model
+    ? ModelModel.resolveEffectiveOutputLength(model)
+    : null;
+  const tokens = resolveAgentMaxOutputTokens({
+    outputLength: outputLength ?? params.unknownOutputLength ?? null,
     contextLength: model
       ? ModelModel.resolveEffectiveContextLength(model)
       : null,
@@ -489,7 +488,15 @@ export async function resolveModelOutputBudget(params: {
     rateMeteredCeiling: config.chat.rateMeteredMaxOutputTokensCeiling,
     provider: params.provider,
   });
+  return outputLength === null
+    ? { kind: "uncatalogued", tokens }
+    : { kind: "catalogued", tokens };
 }
+
+export type ModelOutputBudget = {
+  kind: "catalogued" | "uncatalogued";
+  tokens: number;
+};
 
 /**
  * Resolve the default LLM for built-in subagent operations that have nothing

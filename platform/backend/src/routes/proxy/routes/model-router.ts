@@ -45,6 +45,7 @@ import {
   OpenAi,
   UuidIdSchema,
 } from "@/types";
+import { resolveModelOutputBudget } from "@/utils/llm-resolution";
 import { selectMappedProviderKey } from "@/utils/provider-key-mappings";
 import {
   azureAdapterFactory,
@@ -485,10 +486,10 @@ async function routeChatCompletion(
     allowedProviders: getMappedProviders(auth),
     allowedApiKeyIds: getMappedApiKeyIds(auth),
   });
-  const routedBody = {
+  const routedBody = await withDefaultOutputBudget(resolution, {
     ...body,
     model: resolution.modelId,
-  };
+  });
 
   logger.info(
     {
@@ -557,10 +558,10 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
   const { chatBody, responsesContext } = responsesToOpenaiChat(body, {
     preserveContentParts: resolution.provider === "bedrock",
   });
-  const routedChatBody = {
+  const routedChatBody = await withDefaultOutputBudget(resolution, {
     ...chatBody,
     model: resolution.modelId,
-  };
+  });
 
   const provider = getOpenAiChatProviderForResolution({
     provider: resolution.provider,
@@ -709,6 +710,29 @@ function modelRequiresResponses(resolution: ModelRouterResolution): boolean {
     (resolution.provider === "openai" &&
       requiresOpenAiResponsesApi(resolution.modelId))
   );
+}
+
+/**
+ * Anthropic requires `max_tokens`, so a client that sets no cap gets the
+ * model's catalog budget instead of the translator's fixed fallback, which
+ * adaptive thinking can exhaust. Other upstreams default to the model's own
+ * maximum when the field is absent.
+ */
+async function withDefaultOutputBudget(
+  resolution: { provider: SupportedProvider; modelId: string },
+  body: OpenAi.Types.ChatCompletionsRequest,
+): Promise<OpenAi.Types.ChatCompletionsRequest> {
+  if (
+    resolution.provider !== "anthropic" ||
+    body.max_tokens != null ||
+    body.max_completion_tokens != null
+  )
+    return body;
+  const { tokens } = await resolveModelOutputBudget({
+    provider: resolution.provider,
+    modelName: resolution.modelId,
+  });
+  return { ...body, max_tokens: tokens };
 }
 
 function getOpenAiChatProviderForResolution(params: {

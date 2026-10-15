@@ -86,10 +86,12 @@ class OpenAppaArchestraAnnotator {
     // A fraction of the model's budget, so the truncation retry's extra room
     // still fits under the model's real output cap.
     const maxOutputTokens = Math.floor(
-      (await resolveModelOutputBudget({
-        provider: selection.provider,
-        modelName: selection.modelName,
-      })) / TRUNCATION_RETRY_FACTOR,
+      (
+        await resolveModelOutputBudget({
+          provider: selection.provider,
+          modelName: selection.modelName,
+        })
+      ).tokens / TRUNCATION_RETRY_FACTOR,
     );
     try {
       const text = await generateTaggedText({

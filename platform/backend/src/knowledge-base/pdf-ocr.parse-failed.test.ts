@@ -51,6 +51,7 @@ test("a document whose only readable pages are scans is transcribed even when it
     modelName: "mock-vision",
     provider: "anthropic",
     llmModel: model as never,
+    maxOutputTokens: 16_384,
   };
 
   const result = await extractPdfText({

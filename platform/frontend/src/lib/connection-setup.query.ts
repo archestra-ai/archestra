@@ -18,12 +18,16 @@ type CreateConnectionVirtualKeyBody =
 type CreateConnectionPassthroughKeyBody =
   archestraApiTypes.CreateConnectionPassthroughKeyData["body"];
 
-export function useCreateConnectionSetup() {
+export function useCreateConnectionSetup(options?: {
+  /** Receives the user-facing reason when the backend refuses the setup. */
+  onRefused?: (message: string) => void;
+}) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (body: CreateConnectionSetupBody) => {
       const { data, error } = await createConnectionSetup({ body });
       if (error) {
+        options?.onRefused?.(getApiErrorMessage(error));
         await handleConnectionSetupError(queryClient, error);
         return null;
       }

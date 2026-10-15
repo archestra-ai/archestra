@@ -118,6 +118,7 @@ const native = vi.hoisted(() => ({
     runtimeCredentials: [],
     errors: [],
   })),
+  validateHostedOpenappaPolicy: vi.fn(async () => []),
   composeOpenappaPolicy: vi.fn(async (input: { root: string }) => ({
     content: input.root,
     errors: [],
@@ -138,6 +139,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   let block: boolean;
   let fail: boolean;
   let failure: string;
+  /** A tool whose annotator gives no answer, as the runtime reports it. */
+  let unruled: string | undefined;
   let unregisterAppaPlugin: () => void;
 
   beforeEach(async ({ makeAgent, makeConversation, makeMember, makeUser }) => {
@@ -195,6 +198,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     block = false;
     fail = false;
     failure = "private native database error";
+    unruled = undefined;
     native.initializeOpenappa.mockResolvedValue(undefined);
     // Mirrors the real binding closely enough to be regression coverage: the
     // runtime remembers which call it denied, and answers that call's result
@@ -224,6 +228,10 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       }
       if (event.event === "tool_call") {
         if (fail) throw new Error(failure);
+        if (event.tool === unruled)
+          throw new Error(
+            "OpenAPPA processing interrupted: annotator=archestra.tool-call error=timeout",
+          );
         if (!block || event.tool === "allowed_first")
           return JSON.stringify({
             decision: "allow_call",
@@ -1026,6 +1034,69 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(sent.tools.map((declared) => declared.name)).not.toContain(
       "archestra__get_remedy_plans",
     );
+  });
+
+  test("answers the notice of a call whose annotator gave no answer itself, and never rules on that call as one that ran", async () => {
+    unruled = "get_weather";
+    const first = await post(payload(false));
+    const notice = noticeFrom(first.body, false);
+    unruled = undefined;
+    const before = events.length;
+
+    const second = await post(
+      payload(false, [
+        { role: "user", content: "Check the weather" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: notice.id,
+              name: "archestra__get_remedy_plans",
+              input: notice.input,
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: notice.id,
+              content: "client text in place of the notice",
+            },
+          ],
+        },
+      ]),
+    );
+
+    expect(second.statusCode, second.body).toBe(200);
+    // Only the notice ran. Reporting its result would make the runtime rule on
+    // the call after the fact and ask the annotator that just failed again.
+    expect(
+      events
+        .slice(before)
+        .filter(
+          (event) =>
+            event.event === "tool_result" && event.tool_call_id === notice.id,
+        ),
+    ).toEqual([]);
+    const sent = providerRequests.at(-1) as {
+      messages: { role: string; content: Record<string, unknown>[] }[];
+    };
+    expect(sent.messages[1].content[0]).toEqual({
+      type: "tool_use",
+      id: notice.id,
+      name: "get_weather",
+      input: { location: "SF" },
+    });
+    expect(sent.messages[2].content[0]).toMatchObject({
+      type: "tool_result",
+      tool_use_id: notice.id,
+      content: expect.stringContaining(
+        'its annotator "archestra.tool-call" did not answer in time. The call did not run.',
+      ),
+    });
   });
 
   test.each([
@@ -4953,6 +5024,24 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(events.some((event) => event.event === "tool_call")).toBe(true);
   });
 
+  test("a call whose annotator gave no answer ends the stream as a notice, not as an error", async () => {
+    // The ruling fails after the response has started. A stream error would
+    // read as a reply cut off mid-stream; the notice tells the model the call
+    // did not run and that it can make it again.
+    unruled = "get_weather";
+
+    const response = await post(payload());
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.body).not.toContain("event: error");
+    expect(response.body).not.toContain('"name":"get_weather"');
+    expect(response.body).toContain("event: message_stop");
+    const notice = noticeFrom(response.body, true).input.ruling;
+    expect(notice).toContain("The call did not run.");
+    expect(notice).toContain("Make the same call again to retry.");
+    expect(notice).not.toContain("processing interrupted");
+  });
+
   test("normalizes run_tool before APPA evaluates the target", async () => {
     // A gateway dispatch names its target inside the arguments. The runtime
     // must be shown that target, not the dispatcher, or every dispatched call
@@ -5238,22 +5327,27 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   });
 
   test.each([
-    { stream: true, enabled: true, denied: false },
-    { stream: false, enabled: true, denied: false },
-    { stream: true, enabled: true, denied: true },
-    { stream: false, enabled: true, denied: true },
-    { stream: true, enabled: false, denied: false },
-    { stream: false, enabled: false, denied: false },
-  ])("answers each call of a batch on its own (stream=$stream, enabled=$enabled, denied=$denied)", async ({
+    { stream: true, enabled: true, denied: false, unanswered: false },
+    { stream: false, enabled: true, denied: false, unanswered: false },
+    { stream: true, enabled: true, denied: true, unanswered: false },
+    { stream: false, enabled: true, denied: true, unanswered: false },
+    { stream: true, enabled: true, denied: false, unanswered: true },
+    { stream: false, enabled: true, denied: false, unanswered: true },
+    { stream: true, enabled: false, denied: false, unanswered: false },
+    { stream: false, enabled: false, denied: false, unanswered: false },
+  ])("answers each call of a batch on its own (stream=$stream, enabled=$enabled, denied=$denied, unanswered=$unanswered)", async ({
     stream,
     enabled,
     denied,
+    unanswered,
   }) => {
     // Two calls in one response: the runtime admits the first and denies the
-    // second. The admitted call reaches the client untouched, arguments and all;
-    // the denied one becomes its own notice. Nothing admitted is withdrawn, so
-    // the runtime sees no cancellation.
+    // second, or cannot rule on it because its annotator gave no answer. The
+    // admitted call reaches the client untouched, arguments and all; the other
+    // one becomes its own notice. Nothing admitted is withdrawn, so the runtime
+    // sees no cancellation and an approval the admitted call spent stays used.
     block = denied;
+    if (unanswered) unruled = "get_weather";
     if (!enabled) {
       config.openappa.enabled = false;
       config.llmProxy.plugins = [];
@@ -5326,6 +5420,15 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     if (!enabled) {
       expect(events).toHaveLength(0);
       expect(response.body).toContain('"name":"get_weather"');
+      return;
+    }
+    if (unanswered) {
+      expect(response.body).toContain('"name":"archestra__get_remedy_plans"');
+      expect(response.body).not.toContain('"name":"get_weather"');
+      expect(response.body).not.toContain("event: error");
+      expect(noticeFrom(response.body, stream).input.ruling).toContain(
+        'its annotator "archestra.tool-call" did not answer in time. The call did not run.',
+      );
       return;
     }
     if (denied) {

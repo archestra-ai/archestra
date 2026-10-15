@@ -26,6 +26,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+function isGithubApiUrl(url: string): boolean {
+  return new URL(url).hostname === "api.github.com";
+}
+
 /**
  * Stub GitHub, then override specific raw-file responses by path: `delayMs`
  * makes a file resolve later than its tree position (surfacing any assembly
@@ -208,12 +212,12 @@ describe("discoverSkills", () => {
 
     await discoverSkills({ repoUrl: "disc-cache/skills" });
     const apiCallsAfterFirst = fetchMock.mock.calls.filter(([input]) =>
-      String(input).includes("api.github.com"),
+      isGithubApiUrl(String(input)),
     ).length;
 
     await discoverSkills({ repoUrl: "disc-cache/skills" });
     const apiCallsAfterSecond = fetchMock.mock.calls.filter(([input]) =>
-      String(input).includes("api.github.com"),
+      isGithubApiUrl(String(input)),
     ).length;
 
     expect(apiCallsAfterSecond).toBe(apiCallsAfterFirst);
@@ -552,7 +556,7 @@ describe("repository URL parsing", () => {
     expect(result.repoUrl).toBe(`${owner}/skills`);
     const commitCall = fetchMock.mock.calls
       .map(([input]) => String(input))
-      .find((u) => u.includes("api.github.com"));
+      .find((u) => isGithubApiUrl(u));
     expect(commitCall).toContain(`/repos/${owner}/skills/`);
   });
 

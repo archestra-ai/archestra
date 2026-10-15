@@ -113,8 +113,13 @@ describe("LLM OAuth client edit", () => {
     expect(screen.getByRole("button", { name: "Budget" })).toBeVisible();
     await user.clear(screen.getByLabelText("Name"));
     await user.type(screen.getByLabelText("Name"), "ci-runner-2");
+    expect(
+      screen.queryByRole("textbox", { name: "Label key" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
     await user.type(screen.getByLabelText("Label key"), "env");
     await user.type(screen.getByLabelText("Label value"), "staging");
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
@@ -259,6 +264,7 @@ describe("MCP OAuth client edit", () => {
       await screen.findByRole("option", { name: /Worker account/ }),
     );
     await user.click(screen.getByRole("button", { name: "General" }));
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
     await user.type(
       screen.getByRole("textbox", { name: "Label key" }),
       "environment",
@@ -267,6 +273,7 @@ describe("MCP OAuth client edit", () => {
       screen.getByRole("textbox", { name: "Label value" }),
       "demo",
     );
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
     await user.click(screen.getByRole("button", { name: "General" }));
     expect(
       screen.queryByRole("combobox", { name: "Service account" }),

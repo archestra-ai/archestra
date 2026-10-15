@@ -53,7 +53,14 @@ const client = {
   grantType: "client_credentials",
   scopes: ["mcp", "a2a", "llm:proxy"],
   allowedGatewayIds: ["agent-1"],
-  providerApiKeys: [{ provider: "openai", providerApiKeyId: "key-1" }],
+  providerApiKeys: [
+    {
+      provider: "openai",
+      providerApiKeyId: "key-1",
+      providerApiKeyName: "Main OpenAI",
+    },
+  ],
+  includeFutureProviders: false,
   redirectUris: [],
   disabled: false,
   labels: [],
@@ -72,7 +79,22 @@ const server = setupServer(
   http.get(`${API_ORIGIN}/api/oauth-clients`, () =>
     HttpResponse.json(page([])),
   ),
-  http.get(`${API_ORIGIN}/api/agents/all`, () => HttpResponse.json([])),
+  http.get(`${API_ORIGIN}/api/agents/all`, () =>
+    HttpResponse.json([
+      { id: "agent-1", name: "Support agent", agentType: "agent" },
+    ]),
+  ),
+  http.get(`${API_ORIGIN}/api/oauth-clients/labels/keys`, () =>
+    HttpResponse.json([]),
+  ),
+  http.get(`${API_ORIGIN}/api/teams`, () =>
+    HttpResponse.json(
+      page([
+        { id: "team-1", name: "Platform", description: null, members: [] },
+      ]),
+    ),
+  ),
+  http.get(`${API_ORIGIN}/api/limits`, () => HttpResponse.json([])),
   http.get(`${API_ORIGIN}/api/llm-provider-api-keys`, () =>
     HttpResponse.json([]),
   ),
@@ -163,10 +185,10 @@ describe("OauthClientsPage", () => {
       "MCP Gateway",
       "A2A",
       "LLM Proxy",
-      "1 allowed target",
-      "1 provider key",
-      "Platform",
-      "$200/month cap",
+      "1 target",
+      "1 agent",
+      "1 key",
+      "Main OpenAI",
     ])
       expect(within(row).getByText(label)).toBeVisible();
     expect(
@@ -176,6 +198,15 @@ describe("OauthClientsPage", () => {
     expect(
       await screen.findByRole("dialog", { name: /Combined bot/ }),
     ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Budget" }));
+    expect(
+      screen.getByRole("textbox", { name: "Spend cap in dollars" }),
+    ).toHaveValue("200");
+    expect(
+      await screen.findByRole("combobox", {
+        name: "Who pays for this client?",
+      }),
+    ).toHaveTextContent("Platform");
     await user.click(screen.getByRole("button", { name: "Access" }));
     for (const label of [/MCP Gateway/, /A2A/, /LLM Proxy/])
       expect(screen.getByRole("checkbox", { name: label })).toBeChecked();

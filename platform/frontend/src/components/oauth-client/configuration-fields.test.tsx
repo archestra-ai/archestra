@@ -115,6 +115,20 @@ beforeEach(() => {
 });
 
 describe("OAuth provider access", () => {
+  it("shows model guidance beside the provider on hover", async () => {
+    const user = userEvent.setup();
+    renderProviders();
+    expect(
+      screen.queryByText(/no models on the chosen key/),
+    ).not.toBeInTheDocument();
+    await user.hover(
+      screen.getByRole("button", { name: "OpenAI: no models discovered" }),
+    );
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "This key has no discovered models.",
+    );
+  });
+
   it.each([
     { resource: "llmProviderApiKey", action: "use", scope: "pk-main" },
     { resource: "llmProviderApiKey", action: "read", scope: "*" },

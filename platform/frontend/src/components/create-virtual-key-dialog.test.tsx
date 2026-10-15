@@ -297,8 +297,8 @@ describe("CreateVirtualKeyDialog", () => {
     const section = screen.getByRole("region", { name: "Provider keys" });
     expect(section).toHaveTextContent("Team key");
     expect(
-      within(section).getByRole("button", { name: "Enable all" }),
-    ).toBeDisabled();
+      within(section).queryByRole("button", { name: "Add all" }),
+    ).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create key" }));
 
     expect(mutateAsync).toHaveBeenCalledWith({
@@ -348,7 +348,7 @@ describe("CreateVirtualKeyDialog", () => {
       screen.getByText("No providers selected — add one below"),
     ).toBeVisible();
     expect(screen.getByRole("button", { name: "Create key" })).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: "Enable all" }));
+    await user.click(screen.getByRole("button", { name: "Add all" }));
     expect(screen.getByRole("button", { name: "Create key" })).toBeEnabled();
   });
 

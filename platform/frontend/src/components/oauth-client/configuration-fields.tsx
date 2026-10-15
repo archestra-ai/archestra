@@ -347,6 +347,7 @@ function OAuthClientProviderAccessFields({
           alwaysOpen
           label="LLM API keys"
           showLabel={!includeFutureProviders}
+          allowBulkAdd={!includeFutureProviders}
           emptyLabel={
             includeFutureProviders
               ? "Uses primary API keys — add a provider to choose a different key"

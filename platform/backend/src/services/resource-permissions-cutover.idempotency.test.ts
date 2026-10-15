@@ -287,11 +287,13 @@ describe("cutover idempotency", () => {
     });
 
     // OAuth clients keep their audience in the provider's metadata column.
+    const oauthClientIds: string[] = [];
     for (const [type, scope] of [
       ["mcp_oauth_client", "personal"],
       ["llm_oauth_client", "team"],
     ] as const) {
       const id = crypto.randomUUID();
+      oauthClientIds.push(id);
       await db.insert(schema.oauthClientsTable).values({
         id,
         clientId: `replay_${id}`,
@@ -328,11 +330,22 @@ describe("cutover idempotency", () => {
         "environment",
         "serviceAccount",
         "credential",
-        "mcpOauthClient",
-        "llmOauthClient",
+        "oauthClient",
         "scheduledTask",
       ]),
     );
+
+    // The kinds merge; each client keeps its own scoped policy.
+    expect(
+      converted
+        .filter(
+          (policy) =>
+            policy.resource === "oauthClient" &&
+            oauthClientIds.includes(policy.scope),
+        )
+        .map((policy) => policy.scope)
+        .sort(),
+    ).toEqual([...oauthClientIds].sort());
 
     for (let restart = 0; restart < 2; restart++) {
       await runScopedResourcePermissionCutover();

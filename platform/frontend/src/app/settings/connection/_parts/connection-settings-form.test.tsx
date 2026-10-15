@@ -397,9 +397,7 @@ describe("ConnectionSettingsForm", () => {
       screen.getByRole("button", { name: "Cursor provider keys" }),
     );
     const dialog = screen.getByRole("dialog", { name: "Cursor" });
-    await user.click(
-      within(dialog).getByRole("button", { name: /Enable all/ }),
-    );
+    await user.click(within(dialog).getByRole("button", { name: /Add all/ }));
     await user.click(within(dialog).getByRole("button", { name: "Done" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(within(row("Cursor")).getByText("Admin keys")).toBeVisible();

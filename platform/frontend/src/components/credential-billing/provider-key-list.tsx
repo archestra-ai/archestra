@@ -1,7 +1,7 @@
 "use client";
 
 import type { SupportedProvider } from "@archestra/shared";
-import { Plus, X } from "lucide-react";
+import { Info, Plus, X } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useMemo, useState } from "react";
 import {
@@ -17,6 +17,12 @@ import { ProviderIcon } from "@/components/provider-icon";
 import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useModelsWithApiKeys } from "@/lib/llm-models.query";
 import { cn } from "@/lib/utils/tailwind";
@@ -36,6 +42,7 @@ export function ProviderKeyList({
   providerApiKeys,
   label = "Provider keys",
   showLabel = true,
+  allowBulkAdd = true,
   emptyLabel,
   alwaysOpen = false,
 }: {
@@ -45,6 +52,7 @@ export function ProviderKeyList({
   label?: ReactNode;
   /** A surrounding disclosure can supply the visible heading. */
   showLabel?: boolean;
+  allowBulkAdd?: boolean;
   emptyLabel?: string;
   /**
    * Always show the editable list, with no Change/Done toggle. For a dialog
@@ -99,9 +107,6 @@ export function ProviderKeyList({
     providers.length > 0 && onLines.length === 0 && emptyLabel === undefined;
   const showList = alwaysOpen || open || noneOn;
   const notPrimaryCount = onLines.filter((line) => line.notPrimary).length;
-  const noModelNames = onLines
-    .filter((line) => line.noModels)
-    .map((line) => line.label);
 
   const primaryKey = (provider: SupportedProvider) =>
     grouped.get(provider)?.[0];
@@ -109,7 +114,7 @@ export function ProviderKeyList({
     const key = primaryKey(provider);
     if (key) onChange([...value, { provider, providerApiKeyId: key.id }]);
   };
-  const enableAll = () =>
+  const addAll = () =>
     onChange([
       ...value,
       ...offLines.flatMap((line) => {
@@ -145,25 +150,11 @@ export function ProviderKeyList({
       aria-label={typeof label === "string" ? label : "Provider keys"}
       className="space-y-2"
     >
-      <div className="flex min-h-8 items-center justify-between gap-2">
-        <span className={cn("font-medium text-sm", !showLabel && "sr-only")}>
-          {label}
-        </span>
-        <div className={cn("flex gap-2", !showLabel && "ml-auto")}>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={offLines.length === 0}
-            title={
-              offLines.length === 0
-                ? "All providers are enabled"
-                : `Enable all ${providers.length} providers`
-            }
-            onClick={enableAll}
-          >
-            Enable all
-          </Button>
+      {(showLabel || (!noneOn && !alwaysOpen)) && (
+        <div className="flex min-h-8 items-center justify-between gap-2">
+          <span className={cn("font-medium text-sm", !showLabel && "sr-only")}>
+            {label}
+          </span>
           {!noneOn && !alwaysOpen && (
             <Button
               type="button"
@@ -172,11 +163,11 @@ export function ProviderKeyList({
               aria-expanded={open}
               onClick={() => setOpen(!open)}
             >
-              {open ? "Done" : "Change"}
+              <span>{open ? "Done" : "Change"}</span>
             </Button>
           )}
         </div>
-      </div>
+      )}
 
       {(!showList || alwaysOpen) &&
         onLines.length === 0 &&
@@ -194,9 +185,7 @@ export function ProviderKeyList({
                 key={line.provider}
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded-full border py-0.5 pr-2.5 pl-1.5 text-xs",
-                  line.noModels
-                    ? "border-amber-500/50 bg-amber-50 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200"
-                    : "bg-muted",
+                  "bg-muted",
                 )}
               >
                 <span aria-hidden className="shrink-0">
@@ -212,6 +201,7 @@ export function ProviderKeyList({
                     </span>
                   )}
                 </span>
+                {line.noModels && <NoModelsInfo label={line.label} />}
               </span>
             ))}
           </div>
@@ -281,11 +271,22 @@ export function ProviderKeyList({
               )}
               aria-label="Providers not used"
             >
-              {!noneOn && (
+              <div className="flex items-center justify-between gap-2">
                 <p className="text-xs text-muted-foreground">
-                  Not used · {offLines.length}
+                  <span>Not used · {offLines.length}</span>
                 </p>
-              )}
+                {allowBulkAdd && offLines.length > 1 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    onClick={addAll}
+                  >
+                    <Plus />
+                    <span>Add all</span>
+                  </Button>
+                )}
+              </div>
               {offLines.map((line) => {
                 const key = primaryKey(line.provider);
                 return (
@@ -322,12 +323,6 @@ export function ProviderKeyList({
             </fieldset>
           )}
         </div>
-      )}
-
-      {noModelNames.length > 0 && (
-        <p className="text-xs text-amber-700 dark:text-amber-400">
-          <span>{noModelNames.join(", ")}: no models on the chosen key.</span>
-        </p>
       )}
     </section>
   );
@@ -403,12 +398,9 @@ function ProviderLine({
 
   return (
     <div className="flex items-center gap-2">
-      <ProviderName provider={provider} label={label} />
+      <ProviderName provider={provider} label={label} noModels={noModels} />
       <SearchableSelect
-        className={cn(
-          "min-w-0 flex-1 bg-background",
-          noModels && "border-amber-500/60",
-        )}
+        className="min-w-0 flex-1 bg-background"
         ariaLabel={`${label} key`}
         value={several ? "" : (chosenIds[0] ?? "")}
         placeholder={summary}
@@ -441,10 +433,12 @@ function ProviderName({
   provider,
   label,
   muted = false,
+  noModels = false,
 }: {
   provider: SupportedProvider;
   label: string;
   muted?: boolean;
+  noModels?: boolean;
 }) {
   return (
     <span
@@ -457,7 +451,30 @@ function ProviderName({
         <ProviderIcon provider={provider} size={16} />
       </span>
       <span className="truncate">{label}</span>
+      {noModels && <NoModelsInfo label={label} />}
     </span>
+  );
+}
+
+function NoModelsInfo({ label }: { label: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <UnstyledButton
+          type="button"
+          aria-label={`${label}: no models discovered`}
+          className="shrink-0 cursor-help rounded-full text-amber-600 outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-amber-400"
+        >
+          <Info className="size-3.5" />
+        </UnstyledButton>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs">
+        <span>
+          This key has no discovered models. Refresh its model list or check the
+          key's provider permissions.
+        </span>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

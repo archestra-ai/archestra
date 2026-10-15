@@ -50,7 +50,7 @@ export function SectionNav({
               href={href}
               aria-current={isActive && !subnav ? "page" : undefined}
               className={cn(
-                "flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-sm transition-colors lg:py-2",
+                "flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md px-3 py-1 text-sm transition-colors lg:py-2",
                 isActive && !subnav
                   ? "bg-accent font-medium text-accent-foreground"
                   : isActive

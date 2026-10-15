@@ -74,6 +74,7 @@ import {
   getCatalogClientSecretValues,
   upsertCatalogClientSecretValue,
 } from "@/services/mcp-catalog-secrets";
+import { refreshCatalogImage } from "@/services/mcp-image-refresh";
 import {
   flagImageApprovalRequired,
   holdInstallIfImageGated,
@@ -1745,7 +1746,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       const restartResults = await Promise.allSettled(
-        targetCatalogItems.map(refreshCatalogImage),
+        targetCatalogItems.map((item) => refreshCatalogImage(item)),
       );
       const failures = restartResults.filter(
         (result): result is PromiseRejectedResult =>
@@ -2629,56 +2630,6 @@ async function reinstallApprovedImage(
     return;
   }
   autoReinstallInstallsInBackground(installedServers, catalogItem);
-}
-
-async function refreshCatalogImage(catalogItem: InternalMcpCatalog) {
-  if (catalogItem.multitenant === true) {
-    await reinstallMultitenantCatalog(catalogItem, { freshImagePull: true });
-    return;
-  }
-
-  const installs = await McpServerModel.findByCatalogId(catalogItem.id);
-  const restartResults = await Promise.allSettled(
-    installs.map(async (server) => {
-      await McpServerModel.update(server.id, {
-        localInstallationStatus: "pending",
-        localInstallationError: null,
-      });
-      broadcastMcpInstallationStatus(server.id, "pending", null);
-
-      try {
-        await autoReinstallServer(server, catalogItem, {
-          freshImagePull: true,
-        });
-        await McpServerModel.update(server.id, {
-          localInstallationStatus: "success",
-          localInstallationError: null,
-        });
-        broadcastMcpInstallationStatus(server.id, "success", null);
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error";
-        logger.error(
-          { err: error, serverId: server.id, catalogId: catalogItem.id },
-          "Pod restart failed for MCP server install",
-        );
-        await McpServerModel.update(server.id, {
-          localInstallationStatus: "error",
-          localInstallationError: errorMessage,
-        });
-        broadcastMcpInstallationStatus(server.id, "error", errorMessage);
-        throw error;
-      }
-    }),
-  );
-  const failures = restartResults.filter(
-    (result): result is PromiseRejectedResult => result.status === "rejected",
-  );
-  if (failures.length > 0 && failures.length === restartResults.length) {
-    // Rethrow the original reason (not a rewrapped Error) so the route can
-    // classify it by error name in toMcpOperationApiError.
-    throw failures[0].reason;
-  }
 }
 
 /**

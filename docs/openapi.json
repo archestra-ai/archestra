@@ -306688,6 +306688,15 @@
             "name": "status",
             "required": false,
             "description": "Filter by lifecycle status. `deleted` lists soft-deleted (uninstalled) installs and requires delete permission and is limited to connections you can uninstall."
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "includeAssignedAgents",
+            "required": false,
+            "description": "Include per-install agent usage (default true). False returns empty assignedAgents for status-only lists."
           }
         ],
         "responses": {

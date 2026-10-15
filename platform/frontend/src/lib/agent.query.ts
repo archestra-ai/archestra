@@ -40,6 +40,7 @@ const {
   getAgents,
   getAllAgents,
   getAgentOptions,
+  getChatAgentRoster,
   getDefaultMcpGateway,
   getAgent,
   importAgent,
@@ -68,18 +69,13 @@ const internalAgentsQuery = {
   includeTools: false,
 } as const;
 
-const chatAgentsQuery = {
-  ...internalAgentsQuery,
-  view: "chat",
-} as const;
-
 export const internalAgentsQueryKey = [
   "agents",
   "all",
   internalAgentsQuery,
 ] as const;
 
-const chatAgentsQueryKey = ["agents", "chat-roster", chatAgentsQuery] as const;
+const chatAgentsQueryKey = ["agents", "chat-roster", "v2"] as const;
 
 export async function fetchInternalAgents() {
   const { data, error } = await getAllAgents({ query: internalAgentsQuery });
@@ -88,7 +84,7 @@ export async function fetchInternalAgents() {
 }
 
 async function fetchChatAgents() {
-  const { data, error } = await getAllAgents({ query: chatAgentsQuery });
+  const { data, error } = await getChatAgentRoster();
   throwOnApiError(error, { toastOnError: false });
   return data ?? [];
 }

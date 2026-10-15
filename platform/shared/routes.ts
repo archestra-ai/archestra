@@ -22,6 +22,7 @@ export const RouteId = {
   GetAgents: "getAgents",
   GetAgentCatalog: "getAgentCatalog",
   GetAllAgents: "getAllAgents",
+  GetChatAgentRoster: "getChatAgentRoster",
   GetAgentOptions: "getAgentOptions",
   GetAgentCredentialReadiness: "getAgentCredentialReadiness",
   CreateAgent: "createAgent",

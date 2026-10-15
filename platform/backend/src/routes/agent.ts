@@ -97,6 +97,7 @@ import {
   AgentToolExclusionsSchema,
   ApiError,
   BuiltInAgentConfigSchema,
+  ChatAgentRosterSchema,
   CloneAgentBodySchema,
   CreateAgentBodySchema,
   constructResponseSchema,
@@ -415,6 +416,32 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           organizationId,
         }),
       ),
+  );
+
+  fastify.get(
+    "/api/agents/chat-roster",
+    {
+      schema: {
+        operationId: RouteId.GetChatAgentRoster,
+        description:
+          "Get authorized chat agent identities and model references",
+        tags: ["Agents"],
+        response: constructResponseSchema(z.array(ChatAgentRosterSchema)),
+      },
+    },
+    async ({ user, organizationId }, reply) => {
+      const params = await getPermittedAgentRosterOptions({
+        query: {
+          agentType: "agent",
+          excludeBuiltIn: true,
+          includeTools: false,
+          view: "chat",
+        },
+        userId: user.id,
+        organizationId,
+      });
+      return reply.send(await AgentModel.findChatRoster(params));
+    },
   );
 
   fastify.get(
@@ -2964,13 +2991,21 @@ const AgentRosterQuerySchema = z.object({
     ),
 });
 
-async function findPermittedAgentRoster(params: {
+type AgentRosterRequest = {
   query: z.infer<typeof AgentRosterQuerySchema>;
   userId: string;
   organizationId: string;
   optionsView?: boolean;
   ids?: string[];
-}) {
+};
+
+async function findPermittedAgentRoster(params: AgentRosterRequest) {
+  const { userId, isAgentAdmin, options } =
+    await getPermittedAgentRosterOptions(params);
+  return AgentModel.findAll(userId, isAgentAdmin, options);
+}
+
+async function getPermittedAgentRosterOptions(params: AgentRosterRequest) {
   const { userId, organizationId } = params;
   const {
     agentType,
@@ -3004,7 +3039,7 @@ async function findPermittedAgentRoster(params: {
       : checker.hasAnyAdminPermission()
     : checker.hasAnyAdminPermission();
 
-  return AgentModel.findAll(userId, isAdmin, {
+  const options = {
     authorization: {
       organizationId,
       baseReadTypes: checker.getAgentTypesWithPermission("read"),
@@ -3021,5 +3056,6 @@ async function findPermittedAgentRoster(params: {
     includeTools,
     view: params.optionsView ? "options" : view,
     ids: params.ids,
-  });
+  } satisfies Parameters<typeof AgentModel.findAll>[2];
+  return { userId, isAgentAdmin: isAdmin, options };
 }

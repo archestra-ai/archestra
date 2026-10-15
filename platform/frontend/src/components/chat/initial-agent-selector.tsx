@@ -212,9 +212,10 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
     currentAgentSummary?.id ?? undefined,
     { enabled: open || afterFirstPaint },
   );
-  const currentAgent = currentAgentDetail ?? currentAgentSummary;
-  const displayAgentName = currentAgent?.name ?? "Select agent";
-  const effectiveAgentId = currentAgent?.id ?? currentAgentId;
+  const currentAgent = currentAgentDetail;
+  const displayAgent = currentAgentDetail ?? currentAgentSummary;
+  const displayAgentName = displayAgent?.name ?? "Select agent";
+  const effectiveAgentId = displayAgent?.id ?? currentAgentId;
   const shouldLoadAgentManagementDetails =
     open || !!editingAgentId || afterFirstPaint;
   const installer = useMcpInstallOrchestrator({
@@ -498,7 +499,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
               onKeyDown={navigation.onTriggerKeyDown}
               className="min-w-0"
             >
-              <AgentIcon icon={currentAgent?.icon} size={16} />
+              <AgentIcon icon={displayAgent?.icon} size={16} />
               <span className="truncate flex-1 text-left">
                 {displayAgentName}
               </span>
@@ -535,8 +536,8 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                   onOpenChange={setSummaryOpen}
                 />
               )}
-              {runtimeEnabled && currentAgent?.runtime && (
-                <RuntimeCapableIndicator runtime={currentAgent.runtime} />
+              {runtimeEnabled && displayAgent?.runtime && (
+                <RuntimeCapableIndicator runtime={displayAgent.runtime} />
               )}
             </PromptInputButton>
           </PopoverTrigger>
@@ -838,7 +839,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
 // Internal: picker row
 // ============================================================================
 
-type PickerAgent = archestraApiTypes.GetAllAgentsResponses["200"][number];
+type PickerAgent = archestraApiTypes.GetChatAgentRosterResponses["200"][number];
 
 function AgentPickerRow({
   agent,

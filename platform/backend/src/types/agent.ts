@@ -364,6 +364,24 @@ export const SelectAgentSchema = AgentRowSchema.extend({
   lastUsedAt: z.date().nullable().optional(),
 });
 
+/** Bootstrap identity and model references; selected-agent details load separately. */
+export const ChatAgentRosterSchema = SelectAgentSchema.pick({
+  id: true,
+  organizationId: true,
+  name: true,
+  description: true,
+  icon: true,
+  scope: true,
+  authorId: true,
+  agentType: true,
+  builtIn: true,
+  builtInAgentConfig: true,
+  runtime: true,
+  modelId: true,
+  llmApiKeyId: true,
+});
+export type ChatAgentRoster = z.infer<typeof ChatAgentRosterSchema>;
+
 /** Fields rendered by resource pickers; editing loads the individual resource. */
 export const AgentOptionSchema = SelectAgentSchema.pick({
   id: true,

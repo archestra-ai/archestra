@@ -31,6 +31,7 @@ vi.mock("@archestra/shared", async (importOriginal) => {
       ...actual.archestraApiSdk,
       createAgent: vi.fn(),
       getAllAgents: vi.fn(),
+      getChatAgentRoster: vi.fn(),
       getAgent: vi.fn(),
       getChatAgentMcpTools: vi.fn(),
       pinAgent: vi.fn(),
@@ -249,7 +250,7 @@ describe("chat agent roster", () => {
   });
 
   it("requests the compact chat view without tool payloads", async () => {
-    sdk.getAllAgents.mockResolvedValue({
+    sdk.getChatAgentRoster.mockResolvedValue({
       data: [{ id: "agent-1", name: "Agent" }],
       error: undefined,
     } as never);
@@ -257,21 +258,14 @@ describe("chat agent roster", () => {
     const { result } = setup(() => useChatAgents());
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(sdk.getAllAgents).toHaveBeenCalledWith({
-      query: {
-        agentType: "agent",
-        excludeBuiltIn: true,
-        includeTools: false,
-        view: "chat",
-      },
-    });
+    expect(sdk.getChatAgentRoster).toHaveBeenCalledOnce();
   });
 
   // A transient roster failure must self-heal: the app-wide default is
   // `retry: false`, so without the query's own retry a single blip left the
   // new-chat composer stranded on "Select agent" with no default (T-1317).
   it("recovers the roster after a transient fetch failure", async () => {
-    sdk.getAllAgents
+    sdk.getChatAgentRoster
       .mockResolvedValueOnce({
         data: undefined,
         error: {
@@ -294,7 +288,7 @@ describe("chat agent roster", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual([{ id: "agent-1", name: "Agent" }]);
-    expect(sdk.getAllAgents).toHaveBeenCalledTimes(2);
+    expect(sdk.getChatAgentRoster).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -303,12 +297,15 @@ describe("agent detail", () => {
     vi.clearAllMocks();
   });
 
-  it("never seeds an editing form from selector-only metadata", async () => {
+  it.each([
+    "options",
+    "chat-roster",
+  ])("never seeds an editing form from %s metadata", async (kind) => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
     queryClient.setQueryData(
-      ["agents", "options", {}],
+      ["agents", kind, kind === "chat-roster" ? "v2" : {}],
       [{ id: "agent-1", name: "Only a name" }],
     );
     let finish: ((value: never) => void) | undefined;

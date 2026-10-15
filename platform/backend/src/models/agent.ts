@@ -60,6 +60,7 @@ import {
   type AgentScopeFilter,
   type AgentToolRef,
   type AgentType,
+  type ChatAgentRoster,
   GATEWAY_CAPABLE_AGENT_TYPES,
   type GatewayAgent,
   type InsertAgent,
@@ -99,6 +100,38 @@ import ResourcePermissionSubjectModel, {
   type ResourceAccessSelection,
 } from "./resource-permission-subject";
 import ToolModel from "./tool";
+
+type AgentRosterOptions = {
+  agentType?: AgentType;
+  authorization?: { organizationId: string; baseReadTypes: AgentType[] };
+  agentTypes?: AgentType[];
+  excludeBuiltIn?: boolean;
+  scope?: AgentScope;
+  excludeOtherPersonalAgents?: boolean;
+  status?: AgentRecordStatus;
+  /**
+   * Keep only agents that enforce a missing-credential behavior. The
+   * readiness pre-flight has nothing to say about the rest, and this keeps
+   * it from loading an organization's whole agent roster to discard it.
+   */
+  onlyEnforcingMissingCredentials?: boolean;
+  /**
+   * Attach each agent's assigned tools. Defaults to true. The refs carry
+   * every tool's name and description, so on an organization of any size
+   * they are the great majority of the result's size — callers that only
+   * need the roster (which agents exist, what they are called, which model
+   * they run) should turn this off and get `tools: []`, which here means
+   * "not requested" rather than "none assigned".
+   */
+  includeTools?: boolean;
+  /**
+   * Return the compact roster used to initialize chat. The response keeps
+   * the full Agent wire shape for compatibility, but fields the chat does
+   * not consume are empty and oversized embedded icons are omitted.
+   */
+  view?: "chat" | "options";
+  ids?: string[];
+};
 
 type AgentListFilters = {
   organizationId?: string;
@@ -927,134 +960,38 @@ class AgentModel {
     return result;
   }
 
-  /**
-   * Find all agents with optional filtering by agentType or agentTypes
-   */
+  /** The authorized chat roster without editing or selected-agent hydration. */
+  static async findChatRoster(params: {
+    userId: string;
+    isAgentAdmin: boolean;
+    options: AgentRosterOptions;
+  }): Promise<ChatAgentRoster[]> {
+    const where = await AgentModel.buildRosterWhere(params);
+    const agents = await db
+      .select(CHAT_ROSTER_COLUMNS)
+      .from(schema.agentsTable)
+      .where(where);
+    await AgentModel.populateGrantedScope(agents);
+    return agents;
+  }
+
+  /** Find all agents with optional filtering by agent type. */
   static async findAll(
     userId?: string,
     isAgentAdmin?: boolean,
-    options?: {
-      agentType?: AgentType;
-      authorization?: { organizationId: string; baseReadTypes: AgentType[] };
-      agentTypes?: AgentType[];
-      excludeBuiltIn?: boolean;
-      scope?: AgentScope;
-      excludeOtherPersonalAgents?: boolean;
-      status?: AgentRecordStatus;
-      /**
-       * Keep only agents that enforce a missing-credential behavior. The
-       * readiness pre-flight has nothing to say about the rest, and this keeps
-       * it from loading an organization's whole agent roster to discard it.
-       */
-      onlyEnforcingMissingCredentials?: boolean;
-      /**
-       * Attach each agent's assigned tools. Defaults to true. The refs carry
-       * every tool's name and description, so on an organization of any size
-       * they are the great majority of the result's size — callers that only
-       * need the roster (which agents exist, what they are called, which model
-       * they run) should turn this off and get `tools: []`, which here means
-       * "not requested" rather than "none assigned".
-       */
-      includeTools?: boolean;
-      /**
-       * Return the compact roster used to initialize chat. The response keeps
-       * the full Agent wire shape for compatibility, but fields the chat does
-       * not consume are empty and oversized embedded icons are omitted.
-       */
-      view?: "chat" | "options";
-      ids?: string[];
-    },
+    options?: AgentRosterOptions,
   ): Promise<Agent[]> {
     // Tools are attached afterwards as slim refs via one batched query:
     // joining them here multiplied every agent row (system prompt included)
     // by that agent's tool count.
-    const principals = userId
-      ? await ResourcePermissionSubjectModel.resolvePrincipals({
-          userId,
-          organizationId: options?.authorization?.organizationId,
-        })
-      : [];
-    // Build where conditions
-    const whereConditions: SQL[] = [
-      getAgentStatusCondition(options?.status ?? "active"),
-      ...(userId ? [agentListFence(principals)] : []),
-    ];
-    if (options?.authorization) {
-      if (!userId) return [];
-      const { organizationId, baseReadTypes } = options.authorization;
-      whereConditions.push(
-        eq(schema.agentsTable.organizationId, organizationId),
-      );
-      if (options.status !== "deleted") {
-        whereConditions.push(
-          or(
-            inArray(schema.agentsTable.agentType, baseReadTypes),
-            explicitAgentReadCondition(principals),
-          ) as SQL,
-        );
-      }
-    }
-
-    // Filter by agentTypes if specified (array of types)
-    if (options?.agentTypes && options.agentTypes.length > 0) {
-      whereConditions.push(
-        inArray(schema.agentsTable.agentType, options.agentTypes),
-      );
-    }
-    // Filter by agentType if specified (single type, backwards compatible)
-    else if (options?.agentType !== undefined) {
-      whereConditions.push(eq(schema.agentsTable.agentType, options.agentType));
-    }
-
-    if (options?.onlyEnforcingMissingCredentials) {
-      whereConditions.push(
-        ne(schema.agentsTable.missingCredentialBehavior, "allow"),
-      );
-    }
-
+    const where = await AgentModel.buildRosterWhere({
+      userId,
+      isAgentAdmin,
+      options,
+    });
     const isChatView = options?.view === "chat";
     const isOptionsView = options?.view === "options";
     const isCompactView = isChatView || isOptionsView;
-    const builtInName = sql<string>`coalesce(${schema.agentsTable.builtInAgentConfig}->>'name', '')`;
-    // Chat exposes its system assistant through the same authorized roster;
-    // platform subagents remain excluded from ordinary chat selection.
-    if (options?.excludeBuiltIn || !isAgentAdmin || isChatView) {
-      const visibleAgents = [eq(schema.agentsTable.builtIn, false)];
-      if (isChatView && enterpriseTier.isOpenappaActive()) {
-        visibleAgents.push(eq(builtInName, BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG));
-      }
-      whereConditions.push(or(...visibleAgents) as SQL);
-    }
-
-    // Filter by scope if specified
-    if (options?.scope) {
-      whereConditions.push(agentAudienceIs(options.scope));
-    }
-
-    // Keep oversight-only personal agents hidden, while honoring explicit shares.
-    if (options?.excludeOtherPersonalAgents && userId) {
-      whereConditions.push(
-        AgentModel.notOthersPersonalCondition({ userId, principals }),
-      );
-    }
-
-    // Apply access control filtering for non-agent admins
-    if (userId && !isAgentAdmin) {
-      whereConditions.push(
-        inArray(
-          schema.agentsTable.id,
-          accessibleAgentIdsQuery({ userId, isAgentAdmin: false, principals }),
-        ),
-      );
-    }
-
-    if (options?.ids !== undefined) {
-      whereConditions.push(
-        idArrayCondition(schema.agentsTable.id, options.ids),
-      );
-    }
-
-    const where = and(...whereConditions);
     const rows = isCompactView
       ? await db
           .select(CHAT_AGENT_ROW_COLUMNS)
@@ -4780,6 +4717,103 @@ class AgentModel {
     };
     // SPDX-SnippetEnd
   }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  private static async buildRosterWhere(params: {
+    userId?: string;
+    isAgentAdmin?: boolean;
+    options?: AgentRosterOptions;
+  }) {
+    const { userId, isAgentAdmin, options } = params;
+    const principals = userId
+      ? await ResourcePermissionSubjectModel.resolvePrincipals({
+          userId,
+          organizationId: options?.authorization?.organizationId,
+        })
+      : [];
+    // Build where conditions
+    const whereConditions: SQL[] = [
+      getAgentStatusCondition(options?.status ?? "active"),
+      ...(userId ? [agentListFence(principals)] : []),
+    ];
+    if (options?.authorization) {
+      if (!userId) return sql`false`;
+      const { organizationId, baseReadTypes } = options.authorization;
+      whereConditions.push(
+        eq(schema.agentsTable.organizationId, organizationId),
+      );
+      if (options.status !== "deleted") {
+        whereConditions.push(
+          or(
+            inArray(schema.agentsTable.agentType, baseReadTypes),
+            explicitAgentReadCondition(principals),
+          ) as SQL,
+        );
+      }
+    }
+
+    // Filter by agentTypes if specified (array of types)
+    if (options?.agentTypes && options.agentTypes.length > 0) {
+      whereConditions.push(
+        inArray(schema.agentsTable.agentType, options.agentTypes),
+      );
+    }
+    // Filter by agentType if specified (single type, backwards compatible)
+    else if (options?.agentType !== undefined) {
+      whereConditions.push(eq(schema.agentsTable.agentType, options.agentType));
+    }
+
+    if (options?.onlyEnforcingMissingCredentials) {
+      whereConditions.push(
+        ne(schema.agentsTable.missingCredentialBehavior, "allow"),
+      );
+    }
+
+    const isChatView = options?.view === "chat";
+    const builtInName = sql<string>`coalesce(${schema.agentsTable.builtInAgentConfig}->>'name', '')`;
+    // Chat exposes its system assistant through the same authorized roster;
+    // platform subagents remain excluded from ordinary chat selection.
+    if (options?.excludeBuiltIn || !isAgentAdmin || isChatView) {
+      const visibleAgents = [eq(schema.agentsTable.builtIn, false)];
+      if (isChatView && enterpriseTier.isOpenappaActive()) {
+        visibleAgents.push(eq(builtInName, BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG));
+      }
+      whereConditions.push(or(...visibleAgents) as SQL);
+    }
+
+    // Filter by scope if specified
+    if (options?.scope) {
+      whereConditions.push(agentAudienceIs(options.scope));
+    }
+
+    // Keep oversight-only personal agents hidden, while honoring explicit shares.
+    if (options?.excludeOtherPersonalAgents && userId) {
+      whereConditions.push(
+        AgentModel.notOthersPersonalCondition({ userId, principals }),
+      );
+    }
+
+    // Apply access control filtering for non-agent admins
+    if (userId && !isAgentAdmin) {
+      whereConditions.push(
+        inArray(
+          schema.agentsTable.id,
+          accessibleAgentIdsQuery({ userId, isAgentAdmin: false, principals }),
+        ),
+      );
+    }
+
+    if (options?.ids !== undefined) {
+      whereConditions.push(
+        idArrayCondition(schema.agentsTable.id, options.ids),
+      );
+    }
+
+    return and(...whereConditions);
+  }
+  // SPDX-SnippetEnd
 }
 
 const PERSONAL_MCP_GATEWAY_DESCRIPTION =
@@ -4868,6 +4902,22 @@ const CHAT_AGENT_ROW_COLUMNS = {
       then ${schema.agentsTable.icon}
     else null
   end`,
+};
+
+const CHAT_ROSTER_COLUMNS = {
+  id: schema.agentsTable.id,
+  organizationId: schema.agentsTable.organizationId,
+  name: schema.agentsTable.name,
+  description: schema.agentsTable.description,
+  icon: CHAT_AGENT_ROW_COLUMNS.icon,
+  scope: schema.agentsTable.scope,
+  authorId: schema.agentsTable.authorId,
+  agentType: schema.agentsTable.agentType,
+  builtIn: schema.agentsTable.builtIn,
+  builtInAgentConfig: schema.agentsTable.builtInAgentConfig,
+  runtime: schema.agentsTable.runtime,
+  modelId: schema.agentsTable.modelId,
+  llmApiKeyId: schema.agentsTable.llmApiKeyId,
 };
 
 function explicitAgentReadCondition(principals: GrantPrincipal[]) {

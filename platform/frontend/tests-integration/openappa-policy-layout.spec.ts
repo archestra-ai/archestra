@@ -153,8 +153,13 @@ for (const viewport of [
       await mswControl.registerMany([
         {
           method: "get",
-          url: "/api/agents/all",
+          url: "/api/agents/chat-roster",
           body: [configurationAgent],
+        },
+        {
+          method: "get",
+          url: `/api/agents/${configurationAgent.id}`,
+          body: configurationAgent,
         },
         {
           method: "get",

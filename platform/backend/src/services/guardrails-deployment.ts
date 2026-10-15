@@ -44,11 +44,6 @@ export async function getGuardrailsDeployment() {
  * enforcement is on and an administrator left break the glass on in
  * Guardrails settings.
  */
-export async function isBreakTheGlassActive(): Promise<boolean> {
-  return breakTheGlassActiveIn(await getGuardrailsDeployment());
-}
-
-/** isBreakTheGlassActive for a caller that already read the deployment. */
 export function breakTheGlassActiveIn(deployment: {
   active: boolean;
   breakTheGlassEnabled: boolean;

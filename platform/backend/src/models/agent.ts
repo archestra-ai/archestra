@@ -56,6 +56,7 @@ import {
   type AgentActivationSkillMode,
   AgentActivationSkillModeSchema,
   type AgentListItem,
+  type AgentOption,
   type AgentScope,
   type AgentScopeFilter,
   type AgentToolRef,
@@ -92,7 +93,9 @@ import { idArrayCondition } from "./id-array-condition";
 import { latestCreatedAtByKey } from "./latest-created-at";
 import McpToolCallModel from "./mcp-tool-call";
 import OrganizationModel from "./organization";
-import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionPolicyModel, {
+  type ObjectPolicy,
+} from "./resource-permission-policy";
 import ResourcePermissionSubjectModel, {
   type GrantPrincipal,
   type PrincipalSource,
@@ -141,6 +144,38 @@ type AgentCatalogCandidatePage = {
   total: number;
   agentTotal: number;
   externalAgentTotal: number;
+};
+
+type AgentRosterOptions = {
+  agentType?: AgentType;
+  authorization?: { organizationId: string; baseReadTypes: AgentType[] };
+  agentTypes?: AgentType[];
+  excludeBuiltIn?: boolean;
+  scope?: AgentScope;
+  excludeOtherPersonalAgents?: boolean;
+  status?: AgentRecordStatus;
+  /**
+   * Keep only agents that enforce a missing-credential behavior. The
+   * readiness pre-flight has nothing to say about the rest, and this keeps
+   * it from loading an organization's whole agent roster to discard it.
+   */
+  onlyEnforcingMissingCredentials?: boolean;
+  /**
+   * Attach each agent's assigned tools. Defaults to true. The refs carry
+   * every tool's name and description, so on an organization of any size
+   * they are the great majority of the result's size — callers that only
+   * need the roster (which agents exist, what they are called, which model
+   * they run) should turn this off and get `tools: []`, which here means
+   * "not requested" rather than "none assigned".
+   */
+  includeTools?: boolean;
+  /**
+   * Return the compact roster used to initialize chat. The response keeps
+   * the full Agent wire shape for compatibility, but fields the chat does
+   * not consume are empty and oversized embedded icons are omitted.
+   */
+  view?: "chat" | "options";
+  ids?: string[];
 };
 
 class AgentModel {
@@ -434,6 +469,7 @@ class AgentModel {
 
   static async populateGrantedScope(
     agents: Pick<Agent, "id" | "organizationId" | "agentType" | "scope">[],
+    policies?: ObjectPolicy[],
   ): Promise<void> {
     const byKey = new Map<string, string[]>();
     for (const agent of agents) {
@@ -455,6 +491,7 @@ class AgentModel {
         organizationId,
         resource,
         scopes,
+        policies,
       });
       for (const [id, { audience }] of found) audiences.set(id, audience);
     }
@@ -464,10 +501,17 @@ class AgentModel {
     }
   }
 
-  /**
-   * Populate author identity on agents by looking up users in one batch.
-   */
-  private static async populateAuthorNames(agents: Agent[]): Promise<void> {
+  /** Populate creator identity in one batch, including service accounts. */
+  private static async populateAuthorNames(
+    agents: Pick<
+      Agent,
+      | "authorId"
+      | "createdByServiceAccountId"
+      | "authorName"
+      | "authorEmail"
+      | "createdBy"
+    >[],
+  ): Promise<void> {
     const creators = await CreatedByModel.resolve(
       agents.map((agent) => CreatedByModel.id(agent, agent.authorId)),
     );
@@ -933,38 +977,23 @@ class AgentModel {
   static async findAll(
     userId?: string,
     isAgentAdmin?: boolean,
-    options?: {
-      agentType?: AgentType;
-      authorization?: { organizationId: string; baseReadTypes: AgentType[] };
-      agentTypes?: AgentType[];
-      excludeBuiltIn?: boolean;
-      scope?: AgentScope;
-      excludeOtherPersonalAgents?: boolean;
-      status?: AgentRecordStatus;
-      /**
-       * Keep only agents that enforce a missing-credential behavior. The
-       * readiness pre-flight has nothing to say about the rest, and this keeps
-       * it from loading an organization's whole agent roster to discard it.
-       */
-      onlyEnforcingMissingCredentials?: boolean;
-      /**
-       * Attach each agent's assigned tools. Defaults to true. The refs carry
-       * every tool's name and description, so on an organization of any size
-       * they are the great majority of the result's size — callers that only
-       * need the roster (which agents exist, what they are called, which model
-       * they run) should turn this off and get `tools: []`, which here means
-       * "not requested" rather than "none assigned".
-       */
-      includeTools?: boolean;
-      /**
-       * Return the compact roster used to initialize chat. The response keeps
-       * the full Agent wire shape for compatibility, but fields the chat does
-       * not consume are empty and oversized embedded icons are omitted.
-       */
-      view?: "chat" | "options";
-      ids?: string[];
-    },
-  ): Promise<Agent[]> {
+    options?: AgentRosterOptions & { view?: "chat" },
+  ): Promise<Agent[]>;
+  static async findAll(
+    userId: string | undefined,
+    isAgentAdmin: boolean | undefined,
+    options: AgentRosterOptions & { view: "options" },
+  ): Promise<AgentOption[]>;
+  static async findAll(
+    userId?: string,
+    isAgentAdmin?: boolean,
+    options?: AgentRosterOptions,
+  ): Promise<Agent[] | AgentOption[]>;
+  static async findAll(
+    userId?: string,
+    isAgentAdmin?: boolean,
+    options?: AgentRosterOptions,
+  ): Promise<Agent[] | AgentOption[]> {
     // Tools are attached afterwards as slim refs via one batched query:
     // joining them here multiplied every agent row (system prompt included)
     // by that agent's tool count.
@@ -1055,6 +1084,7 @@ class AgentModel {
     }
 
     const where = and(...whereConditions);
+    if (isOptionsView) return AgentModel.findOptionRows(where);
     const rows = isCompactView
       ? await db
           .select(CHAT_AGENT_ROW_COLUMNS)
@@ -4795,6 +4825,52 @@ class AgentModel {
       createdAt: row.createdAt.toISOString(),
     };
     // SPDX-SnippetEnd
+  }
+  /** Select only selector fields and hydrate their presentation in batches. */
+  private static async findOptionRows(
+    where: SQL | undefined,
+  ): Promise<AgentOption[]> {
+    const table = schema.agentsTable;
+    const rows = await db
+      .select({
+        id: table.id,
+        name: table.name,
+        slug: table.slug,
+        agentType: table.agentType,
+        icon: CHAT_AGENT_ROW_COLUMNS.icon,
+        scope: table.scope,
+        authorId: table.authorId,
+        isPersonalGateway: table.isPersonalGateway,
+        runtime: table.runtime,
+        description: table.description,
+        organizationId: table.organizationId,
+        createdByServiceAccountId: table.createdByServiceAccountId,
+      })
+      .from(table)
+      .where(where);
+    const agents = rows.map((row) => ({
+      ...row,
+      teams: [] as { id: string; name: string }[],
+      authorName: null as string | null,
+      authorEmail: null as string | null,
+      createdBy: null as Agent["createdBy"],
+    }));
+    const agentIds = agents.map((agent) => agent.id);
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const policies = await ResourcePermissionPolicyModel.findObjectPolicies({
+      resources: ["agent", "mcpGateway"],
+      scopes: agentIds,
+    });
+    const [teams] = await Promise.all([
+      AgentTeamModel.getTeamDetailsForAgents(agentIds, policies),
+      AgentModel.populateGrantedScope(agents, policies),
+      AgentModel.populateAuthorNames(agents),
+    ]);
+    for (const agent of agents) agent.teams = teams.get(agent.id) ?? [];
+    // SPDX-SnippetEnd
+    return agents;
   }
 }
 

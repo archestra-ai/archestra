@@ -6,7 +6,9 @@ import logger from "@/logging";
 import type { AgentAccessContext, LabelWithDetails } from "@/types";
 import AgentModel from "./agent";
 import { findAgentAccessContextById } from "./agent-access-context";
-import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionPolicyModel, {
+  type ObjectPolicy,
+} from "./resource-permission-policy";
 import ResourcePermissionSubjectModel, {
   type GrantPrincipal,
   type PrincipalSource,
@@ -296,10 +298,12 @@ class AgentTeamModel {
   /** {@link getTeamsForAgent} for several agents at once. */
   static async getTeamsForAgents(
     agentIds: string[],
+    policies?: ObjectPolicy[],
   ): Promise<Map<string, string[]>> {
     const recipients = await ResourcePermissionPolicyModel.findReadRecipients({
       resources: AGENT_RESOURCES,
       scopes: agentIds,
+      policies,
     });
     return new Map(
       agentIds.map((agentId) => [
@@ -312,8 +316,12 @@ class AgentTeamModel {
   /** Team details (id and name) for {@link getTeamsForAgents}. */
   static async getTeamDetailsForAgents(
     agentIds: string[],
+    policies?: ObjectPolicy[],
   ): Promise<Map<string, Array<{ id: string; name: string }>>> {
-    const teamsByAgent = await AgentTeamModel.getTeamsForAgents(agentIds);
+    const teamsByAgent = await AgentTeamModel.getTeamsForAgents(
+      agentIds,
+      policies,
+    );
     const nameById = await AgentTeamModel.findTeamNames([
       ...new Set([...teamsByAgent.values()].flat()),
     ]);

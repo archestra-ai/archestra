@@ -86,6 +86,7 @@ import {
   AgentExportPayloadSchema,
   AgentKnowledgeSourceExclusionsSchema,
   AgentListItemSchema,
+  type AgentOption,
   AgentOptionSchema,
   type AgentScope,
   AgentScopeFilterSchema,
@@ -2964,13 +2965,21 @@ const AgentRosterQuerySchema = z.object({
     ),
 });
 
-async function findPermittedAgentRoster(params: {
+type PermittedAgentRosterParams = {
   query: z.infer<typeof AgentRosterQuerySchema>;
   userId: string;
   organizationId: string;
   optionsView?: boolean;
   ids?: string[];
-}) {
+};
+
+function findPermittedAgentRoster(
+  params: PermittedAgentRosterParams & { optionsView: true },
+): Promise<AgentOption[]>;
+function findPermittedAgentRoster(
+  params: PermittedAgentRosterParams & { optionsView?: false },
+): Promise<Agent[]>;
+async function findPermittedAgentRoster(params: PermittedAgentRosterParams) {
   const { userId, organizationId } = params;
   const {
     agentType,
@@ -3004,7 +3013,7 @@ async function findPermittedAgentRoster(params: {
       : checker.hasAnyAdminPermission()
     : checker.hasAnyAdminPermission();
 
-  return AgentModel.findAll(userId, isAdmin, {
+  const options = {
     authorization: {
       organizationId,
       baseReadTypes: checker.getAgentTypesWithPermission("read"),
@@ -3019,7 +3028,9 @@ async function findPermittedAgentRoster(params: {
       : undefined,
     status,
     includeTools,
-    view: params.optionsView ? "options" : view,
     ids: params.ids,
-  });
+  };
+  return params.optionsView
+    ? AgentModel.findAll(userId, isAdmin, { ...options, view: "options" })
+    : AgentModel.findAll(userId, isAdmin, { ...options, view });
 }

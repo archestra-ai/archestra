@@ -21,6 +21,7 @@ import OrganizationModel from "@/models/organization";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ToolModel from "@/models/tool";
+import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service";
 import { CredentialAccess } from "@/services/credential-access";
 import { resolveCredentialValue } from "@/services/credentials";
@@ -94,13 +95,24 @@ type BatteryWriteResult = {
  */
 class OpenAppaBatteriesService {
   private readonly recomposing = new Map<string, Slot<Recomposition>>();
-  /** Concurrent dispatches of one organization share a single policy read. */
-  private readonly reading = new Map<string, Promise<EffectivePolicy>>();
+  /** Concurrent reads of one organization in one mode share a single policy read. */
+  private readonly reading = new Map<string, Promise<PolicyRead>>();
   /** Stored opening policies never change, so each is parsed once. */
-  private readonly openings = new LRUCacheManager<OpeningPolicy | null>({
-    maxSize: 1_000,
-    defaultTtl: 0,
-  });
+  private readonly openings = registerProcessLocalCache(
+    new LRUCacheManager<OpeningPolicy>({ maxSize: 1_000, defaultTtl: 0 }),
+  );
+  /**
+   * What the retirement snapshot needs from each stored opening policy, by
+   * hash: the credential keys it names, or null for a row that is not TOML.
+   * Content-addressed, so an entry never goes stale.
+   */
+  private readonly openingIndex = registerProcessLocalCache(
+    new Map<string, OpeningIndexEntry>(),
+  );
+  /** The retirement snapshot each organization last computed on this process. */
+  private readonly retirements = registerProcessLocalCache(
+    new Map<string, RetirementSnapshot>(),
+  );
 
   /** Every battery this organization can include, bundled and uploaded, with its rows. */
   async listBatteries(organizationId: string): Promise<BatterySummary[]> {
@@ -323,14 +335,38 @@ class OpenAppaBatteriesService {
     };
   }
 
-  /** The policy the runtime opens for this organization, recomposed when it moved. */
+  /**
+   * The policy the runtime opens for this organization, recomposed when it
+   * moved. Reads the retirement inputs afresh; the dispatch path reads them
+   * through `readForDispatch` instead.
+   */
   async getEffectivePolicy(organizationId: string): Promise<EffectivePolicy> {
-    const inFlight = this.reading.get(organizationId);
+    return (await this.sharedRead(organizationId, { fresh: true })).policy;
+  }
+
+  /**
+   * The policy a dispatch opens, with the retained credential keys that were
+   * readable when its retirement inputs were last read on this process. Those
+   * inputs are reused for up to `RETIREMENT_FRESHNESS_MS`; a dispatch that
+   * finds one of these keys unreadable recompiles first (see service.ts).
+   */
+  async readForDispatch(organizationId: string): Promise<PolicyRead> {
+    return this.sharedRead(organizationId, { fresh: false });
+  }
+
+  private sharedRead(
+    organizationId: string,
+    options: { fresh: boolean },
+  ): Promise<PolicyRead> {
+    const key = `${organizationId}:${options.fresh ? "fresh" : "memo"}`;
+    const inFlight = this.reading.get(key);
     if (inFlight) return inFlight;
-    const read = this.readEffectivePolicy(organizationId).finally(() => {
-      this.reading.delete(organizationId);
-    });
-    this.reading.set(organizationId, read);
+    const read = this.readEffectivePolicy(organizationId, options).finally(
+      () => {
+        this.reading.delete(key);
+      },
+    );
+    this.reading.set(key, read);
     return read;
   }
 
@@ -944,22 +980,58 @@ class OpenAppaBatteriesService {
 
   private async readEffectivePolicy(
     organizationId: string,
-  ): Promise<EffectivePolicy> {
+    options: { fresh: boolean },
+  ): Promise<PolicyRead> {
     const root = await guardrailsPolicyService.get(organizationId);
     const effective = await OpenAppaEffectivePolicyModel.find(organizationId);
-    // Revision zero is shipped policy text and can change without a database revision.
-    if (
-      effective &&
+    let retirement = await this.retirement(organizationId, options);
+    if (effective && this.answers({ effective, root, retirement }))
+      return { policy: effective, readable: retirement.snapshot.readable };
+    // A reused snapshot can lag a store another replica made. One fresh
+    // snapshot tells a suffix that moved from a composition that must run.
+    if (effective && retirement.memoised) {
+      retirement = await this.retirement(organizationId, { fresh: true });
+      if (this.answers({ effective, root, retirement }))
+        return { policy: effective, readable: retirement.snapshot.readable };
+    }
+    logger.info(
+      {
+        organizationId,
+        reason: !effective
+          ? "nothing stored"
+          : effective.rootRevision !== root.revision
+            ? "root revision"
+            : "composition inputs",
+      },
+      "OpenAPPA effective policy recomposes",
+    );
+    const policy = await this.recompile(organizationId);
+    return {
+      policy,
+      readable: this.retirements.get(organizationId)?.readable ?? null,
+    };
+  }
+
+  /**
+   * Whether a stored row is this root composed under these retirement inputs.
+   * Revision zero is shipped policy text and can change without a database
+   * revision, so its content hash is part of the answer.
+   */
+  private answers(params: {
+    effective: EffectivePolicy;
+    root: GuardrailsPolicy;
+    retirement: { snapshot: RetirementSnapshot };
+  }): boolean {
+    const { effective, root, retirement } = params;
+    return (
       effective.rootRevision === root.revision &&
       effective.installFingerprint.startsWith(COMPOSITION_VERSION) &&
       effective.installFingerprint.endsWith(
-        `:${await this.retiredCredentialFingerprint(organizationId)}${
+        `:${retirement.snapshot.suffix}${
           root.revision === 0 ? `:${root.contentHash}` : ""
         }`,
       )
-    )
-      return effective;
-    return this.recompile(organizationId);
+    );
   }
 
   /** Whether the latest revision, or a held pull, spells these bytes. */
@@ -1019,12 +1091,14 @@ class OpenAppaBatteriesService {
       root,
       governed: installs.flatMap((install) => install.catalogId ?? []),
     });
+    const { snapshot } = await this.retirement(organizationId, {
+      fresh: true,
+    });
     const fingerprint = compositionFingerprint({
       planned,
       batteries: this.composeInputs({ planned, installs }),
       root,
-      retiredCredentials:
-        await this.retiredCredentialFingerprint(organizationId),
+      retiredCredentials: snapshot.suffix,
     });
     // Catalogs, credentials or stored packages moved under the policy; only a
     // recomposition can say what the root composes to now.
@@ -1054,12 +1128,14 @@ class OpenAppaBatteriesService {
             rows: planned.rows,
           });
       const composed = this.composeInputs({ planned, installs });
+      const { snapshot } = await this.retirement(organizationId, {
+        fresh: true,
+      });
       const installFingerprint = compositionFingerprint({
         planned,
         batteries: composed,
         root,
-        retiredCredentials:
-          await this.retiredCredentialFingerprint(organizationId),
+        retiredCredentials: snapshot.suffix,
       });
       // Same inputs give the same bytes, so the stored row already is the answer.
       if (
@@ -1090,6 +1166,7 @@ class OpenAppaBatteriesService {
         installFingerprint,
         previousContent: expected?.content ?? null,
         installs,
+        snapshot,
       });
       if (values.error === null) {
         // The kept rows still carry the refusal this composition lifts.
@@ -1188,6 +1265,7 @@ class OpenAppaBatteriesService {
     installFingerprint: string;
     previousContent: string | null;
     installs: readonly BatteryInstall[];
+    snapshot: RetirementSnapshot;
   }): Promise<{ values: EffectivePolicyValues; retired: Retirement }> {
     const { root, planned, composed, installFingerprint, previousContent } =
       params;
@@ -1224,6 +1302,7 @@ class OpenAppaBatteriesService {
       organizationId: params.organizationId,
       composed: accepted,
       installs: params.installs,
+      snapshot: params.snapshot,
     });
     const keep = async (kept: readonly KeptAnnotator[]) => {
       // Opening snapshots contain host-bound helpers, not authored input. Keep
@@ -1259,12 +1338,17 @@ class OpenAppaBatteriesService {
     };
   }
 
-  /** What `retiredAnnotators` makes of this organization's stored opening policies now. */
+  /**
+   * What `retiredAnnotators` makes of this organization's stored opening
+   * policies now. A snapshot supplies which keys are readable; only keys it
+   * does not cover (those of an extra opening) are resolved here.
+   */
   private async retiredAnnotators(params: {
     organizationId: string;
     composed: string;
     installs: readonly BatteryInstall[];
     extraOpening?: string;
+    snapshot: RetirementSnapshot;
   }): Promise<Retirement> {
     const openings = await this.openingPolicies();
     const extra =
@@ -1272,10 +1356,16 @@ class OpenAppaBatteriesService {
         ? null
         : readOpeningPolicy(hash(params.extraOpening), params.extraOpening);
     const candidates = extra ? [...openings, extra] : openings;
-    const readable = await this.readableCredentialKeys({
-      organizationId: params.organizationId,
-      openings: candidates,
-    });
+    const known = params.snapshot;
+    const readable = new Set([
+      ...known.readable,
+      ...(await this.readableCredentialKeys({
+        organizationId: params.organizationId,
+        keys: credentialKeys(candidates).filter(
+          (key) => !known.keys.includes(key),
+        ),
+      })),
+    ]);
     return retiredAnnotators({
       openings: candidates,
       composed: params.composed,
@@ -1287,58 +1377,122 @@ class OpenAppaBatteriesService {
   }
 
   /**
-   * Every policy a stored session opened under, parsed.
+   * Every policy a stored session opened under, parsed. The ledger's hashes
+   * are read on every call; a document's bytes only when this process has not
+   * parsed it, or the parse cache let it go.
    *
    * The runtime ledger has no organization column. That is safe here because a
    * deployment serves one organization; credential and helper checks still use
    * that organization's readable keys and installs.
    */
   private async openingPolicies(): Promise<OpeningPolicy[]> {
-    const rows = await OpenAppaPolicyFileModel.list();
-    return rows.flatMap(({ hash, bytes }) => {
-      let opening = this.openings.get(hash);
-      if (opening === undefined) {
-        // node-postgres reads bytea as a Buffer, PGlite as a bare Uint8Array.
-        opening = readOpeningPolicy(hash, Buffer.from(bytes).toString("utf8"));
-        this.openings.set(hash, opening);
-        if (opening === null)
-          logger.error(
-            { policyHash: hash },
-            "OpenAPPA skipped a stored opening policy that is not valid TOML",
-          );
-      }
-      return opening ? [opening] : [];
-    });
+    const hashes = (await OpenAppaPolicyFileModel.listHashes()).sort();
+    await this.indexOpenings(hashes);
+    await this.parseOpenings(
+      hashes.filter(
+        (hash) =>
+          this.openingIndex.get(hash) !== null && !this.openings.has(hash),
+      ),
+    );
+    return hashes.flatMap((hash) => this.openings.get(hash) ?? []);
   }
 
-  /** Only availability, never secret values, participates in composition freshness. */
-  private async retiredCredentialFingerprint(
+  /** Parse the stored documents this process has not indexed yet. */
+  private async indexOpenings(hashes: readonly string[]): Promise<void> {
+    await this.parseOpenings(
+      hashes.filter((hash) => !this.openingIndex.has(hash)),
+    );
+  }
+
+  private async parseOpenings(hashes: readonly string[]): Promise<void> {
+    if (hashes.length === 0) return;
+    for (const { hash, bytes } of await OpenAppaPolicyFileModel.findByHashes(
+      hashes,
+    )) {
+      // node-postgres reads bytea as a Buffer, PGlite as a bare Uint8Array.
+      const opening = readOpeningPolicy(
+        hash,
+        Buffer.from(bytes).toString("utf8"),
+      );
+      if (opening) {
+        this.openings.set(hash, opening);
+        this.openingIndex.set(hash, {
+          credentialKeys: credentialKeys([opening]),
+        });
+        continue;
+      }
+      if (!this.openingIndex.has(hash))
+        logger.error(
+          { policyHash: hash },
+          "OpenAPPA skipped a stored opening policy that is not valid TOML",
+        );
+      this.openingIndex.set(hash, null);
+    }
+  }
+
+  /**
+   * The inputs that decide which retained annotators a composition keeps: the
+   * stored opening policies and which of the credential keys they name the
+   * organization can read. Read afresh, or reused from this process's last
+   * reading when it is younger than `RETIREMENT_FRESHNESS_MS`. Only a
+   * credential's availability is read, never its value.
+   */
+  private async retirement(
     organizationId: string,
-  ): Promise<string> {
-    const openings = await this.openingPolicies();
-    const readable = await this.readableCredentialKeys({
-      organizationId,
-      openings,
-    });
+    options: { fresh: boolean },
+  ): Promise<{ snapshot: RetirementSnapshot; memoised: boolean }> {
+    const memo = this.retirements.get(organizationId);
+    if (
+      !options.fresh &&
+      memo &&
+      performance.now() - memo.startedAt <= RETIREMENT_FRESHNESS_MS
+    )
+      return { snapshot: memo, memoised: true };
+    const snapshot = await this.retirementSnapshot(organizationId);
+    // A slower reading must not replace a newer one.
+    const current = this.retirements.get(organizationId);
+    if (!current || current.startedAt < snapshot.startedAt)
+      this.retirements.set(organizationId, snapshot);
+    return { snapshot, memoised: false };
+  }
+
+  private async retirementSnapshot(
+    organizationId: string,
+  ): Promise<RetirementSnapshot> {
+    const startedAt = performance.now();
+    const hashes = (await OpenAppaPolicyFileModel.listHashes()).sort();
+    await this.indexOpenings(hashes);
     const keys = [
       ...new Set(
-        openings.flatMap((opening) => Object.values(opening.credentials)),
+        hashes.flatMap(
+          (hash) => this.openingIndex.get(hash)?.credentialKeys ?? [],
+        ),
       ),
-    ]
-      .filter((key): key is string => typeof key === "string")
-      .sort();
-    return hash(JSON.stringify(keys.map((key) => [key, readable.has(key)])));
+    ].sort();
+    const readable = await this.readableCredentialKeys({
+      organizationId,
+      keys,
+    });
+    return {
+      startedAt,
+      keys,
+      readable,
+      suffix: hash(
+        JSON.stringify({
+          openings: hashes,
+          credentials: keys.map((key) => [key, readable.has(key)]),
+        }),
+      ),
+    };
   }
 
   /** A connection row alone does not prove its organization secret can still be read. */
   private async readableCredentialKeys(params: {
     organizationId: string;
-    openings: readonly OpeningPolicy[];
+    keys: readonly string[];
   }): Promise<ReadonlySet<string>> {
-    const requested = new Set(
-      params.openings.flatMap((opening) => Object.values(opening.credentials)),
-    );
-    if (requested.size === 0) return new Set();
+    if (params.keys.length === 0) return new Set();
+    const requested = new Set(params.keys);
     const keys = [...(await this.bindableKeys(params.organizationId))].filter(
       (key) => requested.has(key),
     );
@@ -1390,6 +1544,8 @@ class OpenAppaBatteriesService {
       composed: params.draft,
       installs: params.installs,
       extraOpening: params.effective ?? undefined,
+      snapshot: (await this.retirement(params.organizationId, { fresh: false }))
+        .snapshot,
     });
     return {
       rebound: retired.rebound,
@@ -2276,9 +2432,57 @@ function heldBackRemedy(battery: HeldBackBattery): string {
 
 // Recompose legacy rows with implicit 64 KiB limits (v2), rows that do not
 // record their deployed battery target (v3), rows before host member rosters
-// (v4), rows without retained original annotator bindings (v5), and rows a
-// same-name rebinding refused and pinned to an earlier composition (v6).
-const COMPOSITION_VERSION = "v6:";
+// (v4), rows without retained original annotator bindings (v5), rows a
+// same-name rebinding refused and pinned to an earlier composition (v6), and
+// rows whose retirement suffix covers credential keys but not the stored
+// opening policies (v7).
+const COMPOSITION_VERSION = "v7:";
+
+/**
+ * How long a process reuses an organization's retirement snapshot on the
+ * dispatch path. A retained credential that becomes unreadable inside the
+ * window is caught by the dispatch itself (service.ts); one that becomes
+ * readable again, or a session that opened under the previous composition
+ * while this one was stored, waits at most this long per replica.
+ */
+const RETIREMENT_FRESHNESS_MS = 60_000;
+
+/** A stored opening policy's part in the retirement snapshot; null when it is not TOML. */
+type OpeningIndexEntry = { credentialKeys: string[] } | null;
+
+/**
+ * The retirement inputs as last read: which stored opening policies exist and
+ * which of the credential keys they name the organization can read. The
+ * suffix is the part of `installFingerprint` after the composition inputs.
+ */
+type RetirementSnapshot = {
+  /** `performance.now()` before the first read; the freshness window counts from here. */
+  startedAt: number;
+  /** Every credential key a stored opening policy names, sorted. */
+  keys: string[];
+  readable: ReadonlySet<string>;
+  suffix: string;
+};
+
+/** A policy read, with the retained keys readable when its retirement inputs were read. */
+type PolicyRead = {
+  policy: EffectivePolicy;
+  /** Null when the read recomposed and no snapshot of this process answers for it. */
+  readable: ReadonlySet<string> | null;
+};
+
+/** The credential keys the `[credentials]` tables of these openings name, sorted. */
+function credentialKeys(openings: readonly OpeningPolicy[]): string[] {
+  return [
+    ...new Set(
+      openings.flatMap((opening) =>
+        Object.values(opening.credentials).filter(
+          (key): key is string => typeof key === "string",
+        ),
+      ),
+    ),
+  ].sort();
+}
 
 /**
  * What a stored composition answers: the batteries it composed, the credential

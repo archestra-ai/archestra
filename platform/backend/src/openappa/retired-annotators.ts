@@ -12,6 +12,13 @@ import { asRecord, parsePolicyToml } from "./policy-text";
  * opening policy did, with the externals table and credential binding that
  * answered it. The runtime's stored opening policies are the ledger.
  *
+ * What is kept follows the ledger and the organization's readable credential
+ * keys (batteries.ts `retirement`). A change the host makes itself recomposes
+ * at once; a credential that becomes unreadable behind the host's back is
+ * caught by the next dispatch; one that becomes readable again, or a session
+ * that opened under the previous composition while a new one was stored,
+ * waits for the next reading of those inputs, at most a minute per replica.
+ *
  * Temporary: this goes away once the runtime answers a session's consults
  * from the policy it opened with.
  */

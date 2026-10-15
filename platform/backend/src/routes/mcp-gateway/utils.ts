@@ -2970,8 +2970,33 @@ async function buildSearchToolsDescription(params: {
     ),
   ];
 
+  const schedulingToolName = archestraMcpBranding.getToolName(
+    "create_schedule_trigger",
+  );
+  const schedulingSearchable = [...mcpTools, ...discoverableTools].some(
+    (tool) =>
+      tool.catalogId === ARCHESTRA_MCP_CATALOG_ID &&
+      tool.name === schedulingToolName,
+  );
+  const schedulingPermitted =
+    schedulingSearchable &&
+    (
+      await filterToolNamesByPermission(
+        [schedulingToolName],
+        userId,
+        organizationId,
+        lookups,
+      )
+    ).has(schedulingToolName);
+  const schedulingInstruction = schedulingPermitted
+    ? 'To schedule this agent or recurring work, search for "schedule agent". The scheduling tool can create a private project and save the task as instructions when project_id is omitted (requires project:create).'
+    : null;
+  const description = [baseDescription, schedulingInstruction]
+    .filter(Boolean)
+    .join(" ");
+
   if (catalogIds.length === 0) {
-    return baseDescription;
+    return description;
   }
 
   const catalogs = new Map(prefetchedCatalogs ?? []);
@@ -2998,14 +3023,14 @@ async function buildSearchToolsDescription(params: {
     });
 
   if (catalogSummaries.length === 0) {
-    return baseDescription;
+    return description;
   }
 
   const remainingCount = resolvedCatalogs.length - catalogSummaries.length;
   const remainingText =
     remainingCount > 0 ? `, and ${remainingCount} more` : "";
 
-  return `${baseDescription} Available MCP servers for this gateway include: ${catalogSummaries.join(", ")}${remainingText}. Use this tool first when the user names one of these servers or asks for capabilities that may be provided by connected MCP servers.`;
+  return `${description} Available MCP servers for this gateway include: ${catalogSummaries.join(", ")}${remainingText}. Use this tool first when the user names one of these servers or asks for capabilities that may be provided by connected MCP servers.`;
 }
 
 function summarizeDeferredBuiltIns(params: {

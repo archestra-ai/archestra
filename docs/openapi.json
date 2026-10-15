@@ -395745,7 +395745,7 @@
         "tags": [
           "Credentials"
         ],
-        "description": "Create a credential definition\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:create`: Create saved credentials",
+        "description": "Create a credential definition\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nChecked dynamically based on the credential being created. A credential just for the caller (`allowPersonal: true`, `allowOrganization: false`, no `initialGrants`) needs no permission, and only its author can reach it. Organization credentials and credentials created with grants require `credential:create`.",
         "requestBody": {
           "required": true,
           "content": {
@@ -396299,10 +396299,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:create"
-          ]
+          "kind": "dynamic",
+          "note": "Checked dynamically based on the credential being created. A credential just for the caller (`allowPersonal: true`, `allowOrganization: false`, no `initialGrants`) needs no permission, and only its author can reach it. Organization credentials and credentials created with grants require `credential:create`.",
+          "permissions": []
         }
       }
     },

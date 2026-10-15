@@ -6,7 +6,6 @@ import {
   getDocsUrl,
 } from "@archestra/shared";
 import { ChevronDown, Copy, MessageCircle } from "lucide-react";
-import Link from "next/link";
 import { useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -21,6 +20,7 @@ import {
 import { CurlExampleSection } from "@/components/curl-example-section";
 import { McpOauthManagement } from "@/components/mcp-oauth-management";
 import { SECRET_PLACEHOLDER_TOKEN } from "@/components/secret-copy-button";
+import { SettingsLink } from "@/components/settings-link";
 import {
   SettingsSection,
   SettingsSectionGroup,
@@ -819,12 +819,13 @@ curl -X POST "${a2aEndpoint}" \\
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            <Link
+            <SettingsLink
               href={manageTokenLink.href}
               className="underline hover:text-foreground"
+              fallback={null}
             >
               {manageTokenLink.label}
-            </Link>
+            </SettingsLink>
           </p>
           {agent.identityProviderId && (
             <p className="text-xs text-muted-foreground">

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
+import { SettingsLink } from "@/components/settings-link";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -247,14 +248,14 @@ function HeldChanges({ held }: { held: HeldDetails }) {
                 Some of these credentials aren't saved yet. The battery runs
                 without them until someone adds them in{" "}
               </span>
-              <Link
+              <SettingsLink
                 href="/settings/credentials"
                 target="_blank"
                 rel="noreferrer"
                 className="font-medium text-foreground underline-offset-4 hover:underline"
               >
                 Settings &gt; Credentials
-              </Link>
+              </SettingsLink>
               <span>.</span>
             </p>
           )}

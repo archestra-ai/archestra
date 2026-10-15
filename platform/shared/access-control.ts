@@ -527,7 +527,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ListRuntimeCredentials]: { credential: ["read"] },
   [RouteId.StartGitHubUserConnection]: {},
   [RouteId.CompleteGitHubUserConnection]: { credential: ["read"] },
-  [RouteId.CreateRuntimeCredential]: { credential: ["create"] },
+  // A credential just for you is self-service; the route requires
+  // credential:create for organization and shared ones.
+  [RouteId.CreateRuntimeCredential]: {},
   [RouteId.GetRuntimeCredentialUsage]: {},
   [RouteId.UpdateRuntimeCredential]: {},
   [RouteId.DeleteRuntimeCredential]: {},

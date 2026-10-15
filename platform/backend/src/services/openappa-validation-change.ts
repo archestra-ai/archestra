@@ -8,7 +8,6 @@ import {
 import {
   getOpenAppaPolicyTests,
   inspectOpenAppaPolicyTests,
-  replayOpenAppaValidationProposal,
 } from "@/services/openappa-policy-tests";
 import { ApiError } from "@/types";
 import { PolicyTestFilesSchema } from "@/types/openappa-policy-tests";
@@ -84,42 +83,27 @@ async function prepare(params: Caller & PreviewOpenAppaValidationChange) {
       before: root.content,
       after: policyContent,
     });
-  const [replayed, inspection] = await Promise.all([
-    replayOpenAppaValidationProposal(
-      {
-        organizationId,
-        userId,
-        files,
-        sourceVersion: collection.version,
-        directory: collection.directory,
-        ...(policyChanged
-          ? {
-              proposedPolicy: {
-                content: policyContent,
-                expectedRevision: root.revision,
-              },
-            }
-          : {}),
-      },
-      collection,
-    ),
+  // Preview and publication check the text only; replaying the suite is
+  // run_openappa_policy_tests' job, so every result lands in run history.
+  const [policyCheck, inspection] = await Promise.all([
+    policyChanged
+      ? guardrailsPolicyService.validate(policyContent, {
+          organizationId,
+          previous: root.content,
+        })
+      : { valid: true, errors: [] as string[], warnings: [] as string[] },
     request.changes.upsert.length
       ? inspectOpenAppaPolicyTests(request.changes.upsert)
       : { files: [] },
   ]);
   const parseErrors = inspection.files.flatMap((file) =>
-    file.error === null ? [] : [file.error],
+    file.error === null ? [] : [`${file.path}: ${file.error}`],
   );
-  const tests = parseErrors.length
-    ? {
-        ...replayed,
-        validation: {
-          ...replayed.validation,
-          valid: false,
-          errors: [...replayed.validation.errors, ...parseErrors],
-        },
-      }
-    : replayed;
+  const validation = {
+    valid: policyCheck.valid && parseErrors.length === 0,
+    errors: [...policyCheck.errors, ...parseErrors],
+    warnings: policyCheck.warnings,
+  };
   const [currentRoot, currentSource, currentSuite] = await Promise.all([
     guardrailsPolicyService.get(organizationId),
     OpenAppaGithubSyncModel.find(organizationId),
@@ -135,19 +119,13 @@ async function prepare(params: Caller & PreviewOpenAppaValidationChange) {
       409,
       "Policy or validation source changed during preview; read both again",
     );
-  const counts = {
-    passed: tests.files.filter((file) => file.status === "passed").length,
-    failed: tests.files.filter((file) => file.status === "failed").length,
-    cannotRun: tests.files.filter((file) => file.status === "cannot_run")
-      .length,
-  };
   return {
     request,
     root,
     collection,
     files,
-    tests,
-    counts,
+    validation,
+    inspected: inspection.files,
     policyContent,
     policyChanged,
   };
@@ -174,8 +152,8 @@ export async function previewOpenAppaValidationChange(
         : {}),
     },
     changes: proposal.request.changes,
-    tests: proposal.tests,
-    counts: proposal.counts,
+    validation: proposal.validation,
+    files: proposal.inspected,
     directory: proposal.collection.activeDirectory,
     sourceCommit: proposal.collection.sourceCommit,
   };
@@ -188,8 +166,8 @@ export async function publishOpenAppaValidationChange(
   const { title, summary, ...request } =
     PublishOpenAppaValidationChangeSchema.parse(input);
   const proposal = await prepare({ organizationId, userId, ...request });
-  if (!proposal.tests.validation.valid)
-    throw new ApiError(400, proposal.tests.validation.errors.join("\n"));
+  if (!proposal.validation.valid)
+    throw new ApiError(400, proposal.validation.errors.join("\n"));
   const testsChanged =
     request.changes.upsert.length > 0 || request.changes.delete.length > 0;
   if (!proposal.policyChanged && !testsChanged)
@@ -209,7 +187,7 @@ export async function publishOpenAppaValidationChange(
         expectedVersion: proposal.collection.version,
       },
     });
-    return { ...published, tests: proposal.tests, counts: proposal.counts };
+    return { ...published, validation: proposal.validation };
   }
   let revision = proposal.root.revision;
   let version: string;
@@ -245,7 +223,6 @@ export async function publishOpenAppaValidationChange(
     revision,
     version,
     policyChanged: proposal.policyChanged,
-    tests: proposal.tests,
-    counts: proposal.counts,
+    validation: proposal.validation,
   };
 }

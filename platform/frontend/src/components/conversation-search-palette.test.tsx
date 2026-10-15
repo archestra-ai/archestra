@@ -35,6 +35,10 @@ vi.mock("@/lib/auth/auth.hook", () => ({
 }));
 
 vi.mock("@/lib/auth/auth.query");
+// Read only when a grant on one credential might open Settings.
+vi.mock("@/lib/runtime-credentials.query", () => ({
+  useRuntimeCredentials: () => ({ data: [], isPending: false }),
+}));
 
 vi.mock("@/lib/config/config.query");
 
@@ -138,11 +142,15 @@ vi.mock("@/components/ui/badge", () => ({
   ),
 }));
 
-import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
+import {
+  predefinedPermissionsMap,
+  requiredPagePermissionsMap,
+} from "@archestra/shared/access-control";
 import { usePathname, useRouter } from "next/navigation";
 // Import component after mocks
 import { act } from "react";
 import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
+import { hasPagePermissions } from "@/lib/auth/auth.utils";
 import { useFeature } from "@/lib/config/config.query";
 import { ConversationSearchPalette } from "./conversation-search-palette";
 
@@ -521,6 +529,43 @@ describe("ConversationSearchPalette", () => {
     // check and not an empty list.
     expect(screen.getByText("MCP Gateways")).toBeInTheDocument();
     expect(screen.queryByText("MCP Registry")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { role: "member", offered: false },
+    { role: "editor", offered: true },
+  ] as const)("offers Settings only to a reader who can see the Settings area: $role", ({
+    role,
+    offered,
+  }) => {
+    // Both of the hook's permission maps resolved from the role itself.
+    vi.mocked(usePermissionMap).mockImplementation((map) =>
+      Object.fromEntries(
+        Object.entries(map).map(([key, required]) => [
+          key,
+          hasPagePermissions({
+            userPermissions: predefinedPermissionsMap[role],
+            required,
+            capabilities: [],
+          }),
+        ]),
+      ),
+    );
+    mockUseConversations.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isFetching: false,
+    });
+    render(<ConversationSearchPalette {...defaultProps} />);
+    fireEvent.change(screen.getByTestId("command-input"), {
+      target: { value: "settings" },
+    });
+
+    if (offered) {
+      expect(screen.getByText("Settings")).toBeInTheDocument();
+    } else {
+      expect(screen.queryByText("Settings")).not.toBeInTheDocument();
+    }
   });
 
   it("shows page matches alongside matching chats", () => {

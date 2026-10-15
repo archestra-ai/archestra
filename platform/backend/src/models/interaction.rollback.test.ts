@@ -1450,23 +1450,26 @@ describe("InteractionModel", () => {
           },
           type: "openai:chatCompletions",
         });
-      await turn({
-        sessionId: "mixed",
-        content: "the user's turn",
-        source: "api",
-        seconds: 0,
-      });
-      await turn({
-        sessionId: "mixed",
-        content: "annotate this call",
-        source: "guardrail:annotator",
-        seconds: 1,
-      });
+      // Four turns, then more guardrail calls than the newest-rows sample holds.
+      for (const n of [1, 2, 3, 4])
+        await turn({
+          sessionId: "mixed",
+          content: `turn ${n}`,
+          source: "api",
+          seconds: n,
+        });
+      for (const n of [5, 6, 7])
+        await turn({
+          sessionId: "mixed",
+          content: `annotate call ${n}`,
+          source: "guardrail:annotator",
+          seconds: n,
+        });
       await turn({
         sessionId: "guardrail-only",
         content: "annotate that call",
         source: "guardrail:annotator",
-        seconds: 2,
+        seconds: 8,
       });
 
       const preview = async (sessionId: string) => {
@@ -1479,7 +1482,7 @@ describe("InteractionModel", () => {
         return sessions.data.map((s) => s.lastUserMessagePreview);
       };
 
-      expect(await preview("mixed")).toEqual(["the user's turn"]);
+      expect(await preview("mixed")).toEqual(["turn 4"]);
       expect(await preview("guardrail-only")).toEqual(["annotate that call"]);
       const detail = await InteractionModel.findAllPaginated(
         { limit: 100, offset: 0 },
@@ -1489,14 +1492,13 @@ describe("InteractionModel", () => {
         { sessionId: "mixed" },
       );
       expect(
-        detail.data.map((i) => [
-          i.source,
-          (i as unknown as { requestType: string }).requestType,
-        ]),
-      ).toEqual([
-        ["guardrail:annotator", "subagent"],
-        ["api", "main"],
-      ]);
+        new Set(
+          detail.data.map(
+            (i) =>
+              `${i.source} ${(i as unknown as { requestType: string }).requestType}`,
+          ),
+        ),
+      ).toEqual(new Set(["guardrail:annotator subagent", "api main"]));
     });
   });
 

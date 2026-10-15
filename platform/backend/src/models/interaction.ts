@@ -2271,10 +2271,15 @@ class InteractionModel {
     // prompt suggestions — yields no main interaction, and would lose the
     // preview the old deep window used to find. Re-read just those sessions at
     // the old depth so the preview cannot regress; in the common case the list
-    // is empty and this costs nothing.
-    const unresolvedKeys = [...groupedBySession.keys()].filter(
-      (key) => !selectedPerSession.get(key)?.lastMainInteraction,
-    );
+    // is empty and this costs nothing. A tip found only past the newest rows
+    // may skip newer turns between the two windows (behind a run of guardrail
+    // calls, say), so such a session is re-read too.
+    const unresolvedKeys = [...groupedBySession]
+      .filter(([key, rows]) => {
+        const tip = selectedPerSession.get(key)?.lastMainInteraction;
+        return !tip || rows.indexOf(tip) >= NEWEST_PER_SESSION;
+      })
+      .map(([key]) => key);
     if (unresolvedKeys.length > 0) {
       const deepRows = await InteractionModel.fetchSessionWindowRows({
         sessionKeys: unresolvedKeys,
@@ -2283,7 +2288,14 @@ class InteractionModel {
         oldest: 0,
       });
       for (const [sessionKey, windowRows] of groupRowsBySession(deepRows)) {
-        const selection = selectTip(windowRows);
+        const deep = selectTip(windowRows);
+        const sampled = selectedPerSession.get(sessionKey);
+        const selection = {
+          lastMainInteraction:
+            deep.lastMainInteraction ?? sampled?.lastMainInteraction ?? null,
+          guardrailTip: deep.guardrailTip ?? sampled?.guardrailTip ?? null,
+          claudeCodeTitle: deep.claudeCodeTitle ?? sampled?.claudeCodeTitle,
+        };
         if (
           selection.lastMainInteraction ||
           selection.guardrailTip ||

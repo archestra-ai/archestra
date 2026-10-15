@@ -488,8 +488,10 @@ Be neurodiversity friendly.
       const validationIds = await ToolModel.findBuiltInToolIdsByNames([
         archestraMcpBranding.getToolName("get_openappa_policy_tests"),
         archestraMcpBranding.getToolName("run_openappa_policy_tests"),
-        archestraMcpBranding.getToolName("preview_openappa_validation_change"),
-        archestraMcpBranding.getToolName("publish_openappa_validation_change"),
+        archestraMcpBranding.getToolName(
+          "preview_guardrails_validation_change",
+        ),
+        archestraMcpBranding.getToolName("update_guardrails_validation"),
       ]);
       expect(validationIds).toHaveLength(4);
       expect(assignedIds).toEqual(expect.arrayContaining(validationIds));

@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import config from "@/config";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
-import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
@@ -102,101 +101,6 @@ describe("source-aware validation proposals", () => {
     expect(preview.tests).toBeNull();
   });
 
-  test("a policy preview replays the changed files against the candidate policy without saving anything", async () => {
-    const unsupported = {
-      path: "traces/unknown.appa",
-      content: "mcp/unknown/tool {}\nexpect allow\n",
-    };
-    const preview = await previewOpenAppaValidationChange({
-      ...request(),
-      policyContent: proposedPolicy,
-      changes: { upsert: [added, unsupported], delete: [] },
-    });
-    expect(preview.policy.changed).toBe(true);
-    expect(preview.validation).toEqual({
-      valid: true,
-      errors: [],
-      warnings: [],
-    });
-    // Only the changed files are inspected and replayed; the loosened mail
-    // rule lets the new check pass.
-    expect(preview.files.map((file) => file.path)).toEqual([
-      added.path,
-      unsupported.path,
-    ]);
-    expect(preview.tests?.map((file) => file.path)).toEqual([
-      added.path,
-      unsupported.path,
-    ]);
-    expect(preview.tests?.[0]).toMatchObject({ status: "passed" });
-    expect(await guardrailsPolicyService.get(ctx.organizationId)).toMatchObject(
-      { content: policy, revision: 1 },
-    );
-    expect(
-      await OpenAppaPolicyTestsModel.find(ctx.organizationId),
-    ).toMatchObject({ version, files: [existing] });
-    expect(
-      await OpenAppaPolicyTestsModel.listRuns(ctx.organizationId),
-    ).toHaveLength(0);
-  });
-
-  test("preview checks a candidate policy against stored credential bindings without writing them into it", async () => {
-    await OpenAppaCredentialBindingModel.upsert({
-      organizationId: ctx.organizationId,
-      variable: "APPA_PROVIDER_GITHUB_TOKEN",
-      credentialKey: "stored-github",
-      updatedBy: ctx.user.id,
-    });
-    const candidate = `include = ["batteries/github/appa.toml"]\n\n${policy}`;
-    const preview = await previewOpenAppaValidationChange({
-      ...request(),
-      policyContent: candidate,
-    });
-    expect(preview.validation.valid).toBe(true);
-    expect(preview.policy).toMatchObject({ changed: true, after: candidate });
-    expect(await guardrailsPolicyService.get(ctx.organizationId)).toMatchObject(
-      {
-        content: policy,
-        revision: 1,
-      },
-    );
-  });
-
-  test("policy and specification publication is atomic and records no run", async () => {
-    const saved = await publishOpenAppaValidationChange({
-      ...publish(),
-      policyContent: proposedPolicy,
-    });
-    expect(saved).toMatchObject({
-      delivery: "revision",
-      revision: 2,
-      policyChanged: true,
-      validation: { valid: true },
-    });
-    expect(saved).not.toHaveProperty("counts");
-    expect(await guardrailsPolicyService.get(ctx.organizationId)).toMatchObject(
-      { content: proposedPolicy, revision: 2 },
-    );
-    expect(
-      (await OpenAppaPolicyTestsModel.find(ctx.organizationId))?.files,
-    ).toEqual([existing, added]);
-  });
-
-  test("invalid policy never writes either half of a combined change", async () => {
-    await expect(
-      publishOpenAppaValidationChange({
-        ...publish(),
-        policyContent: "[invalid",
-      }),
-    ).rejects.toThrow();
-    expect(await guardrailsPolicyService.get(ctx.organizationId)).toMatchObject(
-      { revision: 1, content: policy },
-    );
-    expect(
-      await OpenAppaPolicyTestsModel.find(ctx.organizationId),
-    ).toMatchObject({ version, files: [existing] });
-  });
-
   test("an unparseable scenario makes the proposal invalid and publication refuses it", async () => {
     const broken = {
       path: "traces/broken.appa",
@@ -223,7 +127,6 @@ describe("source-aware validation proposals", () => {
     await expect(
       publishOpenAppaValidationChange({
         ...publish(),
-        policyContent: proposedPolicy,
         expectedVersion: "stale",
       }),
     ).rejects.toThrow("changed");
@@ -312,7 +215,6 @@ describe("source-aware validation proposals", () => {
     });
     expect(saved).toMatchObject({
       revision: 1,
-      policyChanged: false,
       validation: { valid: true },
     });
     expect(
@@ -321,27 +223,5 @@ describe("source-aware validation proposals", () => {
     expect(await OpenAppaPolicyTestsModel.listRuns(ctx.organizationId)).toEqual(
       [],
     );
-  });
-
-  test("a policy-only proposal validates and publishes when no specifications exist", async () => {
-    const empty = await OpenAppaPolicyTestsModel.saveLocal({
-      organizationId: ctx.organizationId,
-      files: [],
-      expectedVersion: version,
-    });
-    const saved = await publishOpenAppaValidationChange({
-      ...publish(),
-      expectedVersion: empty?.version ?? "empty",
-      policyContent: proposedPolicy,
-      changes: { upsert: [], delete: [] },
-    });
-    expect(saved).toMatchObject({
-      revision: 2,
-      policyChanged: true,
-      validation: { valid: true },
-    });
-    expect(
-      (await OpenAppaPolicyTestsModel.find(ctx.organizationId))?.version,
-    ).toBe(empty?.version);
   });
 });

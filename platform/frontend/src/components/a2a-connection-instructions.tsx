@@ -7,7 +7,7 @@ import {
 } from "@archestra/shared";
 import { ChevronDown, Copy, MessageCircle } from "lucide-react";
 import Link from "next/link";
-import { useId, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   resolveAdminDefaultBaseUrl,
@@ -25,38 +25,22 @@ import {
   SettingsSection,
   SettingsSectionGroup,
 } from "@/components/settings-section";
-import { getManageTokenLink } from "@/components/tokens/manage-token-link";
+import { ServiceAccountHint } from "@/components/tokens/service-account-hint";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { FieldDescription } from "@/components/ui/field-description";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { WizardStep } from "@/components/wizard-step";
-import { useHasPermissions } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import config from "@/lib/config/config";
 import { useOrganization } from "@/lib/organization.query";
-import {
-  useFetchTeamTokenValue,
-  useTokens,
-} from "@/lib/teams/team-token.query";
 import { useFetchUserTokenValue, useUserToken } from "@/lib/user-token.query";
 import { generateUuid } from "@/lib/uuid";
 
 type InternalAgent = archestraApiTypes.GetAllAgentsResponses["200"][number];
-
-// Special ID for personal token in the dropdown
-const PERSONAL_TOKEN_ID = "__personal_token__";
 
 interface A2AConnectionInstructionsProps {
   agent: InternalAgent;
@@ -67,14 +51,7 @@ export function A2AConnectionInstructions({
   agent,
   layout,
 }: A2AConnectionInstructionsProps) {
-  const { data: tokensData } = useTokens({
-    profileId: agent.id,
-  });
   const { data: userToken } = useUserToken();
-  const { data: hasAdminPermission } = useHasPermissions({ ac: ["update"] });
-
-  const tokens = tokensData?.tokens;
-  const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
 
   // messageId is required by the A2A protocol and must be unique per message,
   // so each example gets a real UUID (fresh per mount).
@@ -83,7 +60,6 @@ export function A2AConnectionInstructions({
   const [replyExampleMessageId] = useState(() => generateUuid());
   const [approvalExampleMessageId] = useState(() => generateUuid());
   const [backgroundExampleMessageId] = useState(() => generateUuid());
-  const exampleTokenSelectId = useId();
 
   // Mirror the /connection page's base-URL fallback chain so the A2A panel
   // honors the same admin curation (descriptions, default flag, hidden URLs).
@@ -110,73 +86,16 @@ export function A2AConnectionInstructions({
       adminDefaultBaseUrl) ||
     candidateBaseUrls[0];
 
-  // Mutations for fetching token values
   const fetchUserTokenMutation = useFetchUserTokenValue();
-  const fetchTeamTokenMutation = useFetchTeamTokenValue();
 
   // The A2A protocol surface (SendMessage / SendStreamingMessage / the
   // agent-card.json card) lives under /v2.
   const a2aEndpoint = `${toA2ABaseUrl(connectionUrl)}/a2a/${agent.id}`;
 
-  // Default to personal token if available, otherwise org token, then the
-  // first token that can actually authenticate against this agent.
-  const orgToken = tokens?.find((t) => t.isOrganizationToken);
-  const firstUsableToken = tokens?.find((t) => t.worksWithProfile !== false);
-  const defaultTokenId = userToken
-    ? PERSONAL_TOKEN_ID
-    : (orgToken?.id ?? firstUsableToken?.id ?? "");
-
-  // Unusable tokens stay listed but greyed out with the reason.
-  const unusableTokenReason =
-    agent.scope === "personal"
-      ? "Team tokens can't access personal agents"
-      : "This agent isn't assigned to this team";
-
-  // Check if personal token is selected (either explicitly or by default)
-  const effectiveTokenId = selectedTokenId ?? defaultTokenId;
-  const isPersonalTokenSelected = effectiveTokenId === PERSONAL_TOKEN_ID;
-
-  // Get the selected team token (for non-personal tokens)
-  const selectedTeamToken = isPersonalTokenSelected
-    ? null
-    : tokens?.find((t) => t.id === effectiveTokenId);
-
-  // Get display name for selected token
-  const getTokenDisplayName = () => {
-    if (isPersonalTokenSelected) {
-      return "Personal Token";
-    }
-    if (selectedTeamToken) {
-      if (selectedTeamToken.isOrganizationToken) {
-        return "Organization Token";
-      }
-      if (selectedTeamToken.team?.name) {
-        return `Team Token (${selectedTeamToken.team.name})`;
-      }
-      return selectedTeamToken.name;
-    }
-    return "Select token";
-  };
-
-  // Determine display token based on selection (masked)
-  // The caller's own token, masked, for the Authentication field. Independent
-  // of whichever token the examples are written with.
-  const personalTokenMasked = userToken
+  // The examples are written with the caller's own token, masked.
+  const tokenForDisplay = userToken
     ? `${userToken.tokenStart}***`
     : SECRET_PLACEHOLDER_TOKEN;
-  const tokenForDisplay = isPersonalTokenSelected
-    ? userToken
-      ? `${userToken.tokenStart}***`
-      : "ask-admin-for-access-token"
-    : hasAdminPermission && selectedTeamToken
-      ? `${selectedTeamToken.tokenStart}***`
-      : "ask-admin-for-access-token";
-
-  // Deep link to the settings surface where the selected token is managed.
-  const manageTokenLink = getManageTokenLink({
-    isPersonalTokenSelected,
-    selectedTeamToken: selectedTeamToken ?? null,
-  });
 
   // Agent Card URL for discovery
   const agentCardUrl = `${a2aEndpoint}/.well-known/agent-card.json`;
@@ -403,12 +322,45 @@ curl -X POST "${a2aEndpoint}" \\
 
   const curlExampleProps = {
     tokenForDisplay,
-    isPersonalTokenSelected,
-    hasAdminPermission: hasAdminPermission ?? false,
-    selectedTeamToken: selectedTeamToken ?? null,
+    hasPersonalToken: !!userToken,
     fetchUserTokenMutation,
-    fetchTeamTokenMutation,
   };
+
+  // The caller's own token, masked. Not the block's own copy button: what is
+  // on screen is masked, and what belongs on the clipboard is the real value.
+  const personalTokenBlock = (
+    <CodeBlock
+      code={tokenForDisplay}
+      language="text"
+      wrapLongLines
+      contentClassName="overflow-x-hidden"
+      contentStyle={{
+        fontSize: "0.75rem",
+        paddingRight: "3.5rem",
+      }}
+    >
+      <div className="overflow-hidden rounded-md border bg-background/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="rounded-none"
+          aria-label="Copy your platform token"
+          disabled={!userToken}
+          onClick={async () => {
+            const value = (await fetchUserTokenMutation.mutateAsync())?.value;
+            if (!value) {
+              toast.error("Failed to fetch token");
+              return;
+            }
+            await copyToClipboard(value);
+            toast.success("Token copied");
+          }}
+        >
+          <Copy className="size-4" />
+        </Button>
+      </div>
+    </CodeBlock>
+  );
 
   if (layout === "detail") {
     return (
@@ -462,44 +414,10 @@ curl -X POST "${a2aEndpoint}" \\
             </>
           }
         >
-          {/* The caller's own token, masked, in the same field the endpoint
-              above uses. No label or blurb: the section already says what
-              authentication is, and which token the examples are written with
-              is chosen with the examples. */}
-          <CodeBlock
-            code={personalTokenMasked}
-            language="text"
-            wrapLongLines
-            contentClassName="overflow-x-hidden"
-            contentStyle={{
-              fontSize: "0.75rem",
-              paddingRight: "3.5rem",
-            }}
-          >
-            <div className="overflow-hidden rounded-md border bg-background/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
-              {/* Not the block's own copy button: what is on screen is masked,
-                  and what belongs on the clipboard is the real value. */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="rounded-none"
-                aria-label="Copy your platform token"
-                disabled={!userToken}
-                onClick={async () => {
-                  const value = (await fetchUserTokenMutation.mutateAsync())
-                    ?.value;
-                  if (!value) {
-                    toast.error("Failed to fetch token");
-                    return;
-                  }
-                  await copyToClipboard(value);
-                  toast.success("Token copied");
-                }}
-              >
-                <Copy className="size-4" />
-              </Button>
-            </div>
-          </CodeBlock>
+          <div className="space-y-2">
+            {personalTokenBlock}
+            <ServiceAccountHint />
+          </div>
         </SettingsSection>
 
         <SettingsSection
@@ -531,100 +449,13 @@ curl -X POST "${a2aEndpoint}" \\
               to find out what the section they had opened contained. The bulk
               still folds — each request below is its own disclosure. */}
           <div className="space-y-4">
-            <div className="space-y-2">
-              <div className="space-y-1">
-                <Label htmlFor={exampleTokenSelectId}>Token for examples</Label>
-                <FieldDescription>
-                  Which token the requests below are written with.
-                </FieldDescription>
-              </div>
-              <Select
-                value={effectiveTokenId}
-                onValueChange={setSelectedTokenId}
-              >
-                <SelectTrigger
-                  id={exampleTokenSelectId}
-                  className="min-h-[60px] w-full py-2.5"
-                >
-                  <SelectValue placeholder="Select token">
-                    {effectiveTokenId && (
-                      <div className="flex flex-col items-start gap-0.5 text-left">
-                        <div>{getTokenDisplayName()}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {isPersonalTokenSelected
-                            ? "For your own integrations"
-                            : selectedTeamToken?.isOrganizationToken
-                              ? "Shared across the organization"
-                              : "Shared with this team"}
-                        </div>
-                      </div>
-                    )}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {userToken && (
-                    <SelectItem value={PERSONAL_TOKEN_ID}>
-                      <div className="flex flex-col items-start gap-0.5">
-                        <div>Personal Token</div>
-                        <div className="text-xs text-muted-foreground">
-                          For your own integrations
-                        </div>
-                      </div>
-                    </SelectItem>
-                  )}
-                  {tokens
-                    ?.filter((token) => !token.isOrganizationToken)
-                    .map((token) => {
-                      const unusable = token.worksWithProfile === false;
-                      return (
-                        <SelectItem
-                          key={token.id}
-                          value={token.id}
-                          disabled={unusable}
-                        >
-                          <div className="flex flex-col items-start gap-0.5">
-                            <div>
-                              {token.team?.name
-                                ? `Team Token (${token.team.name})`
-                                : token.name}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              {unusable
-                                ? unusableTokenReason
-                                : "Shared with this team"}
-                            </div>
-                          </div>
-                        </SelectItem>
-                      );
-                    })}
-                  {tokens
-                    ?.filter((token) => token.isOrganizationToken)
-                    .map((token) => (
-                      <SelectItem key={token.id} value={token.id}>
-                        <div className="flex flex-col items-start gap-0.5">
-                          <div>Organization Token</div>
-                          <div className="text-xs text-muted-foreground">
-                            Shared across the organization
-                          </div>
-                        </div>
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-3 border-t pt-4">
+            <div className="space-y-3">
               <CurlExampleSection
-                key={`card-${effectiveTokenId}`}
                 code={agentCardCurlCode}
                 {...curlExampleProps}
               />
+              <CurlExampleSection code={curlCode} {...curlExampleProps} />
               <CurlExampleSection
-                key={`send-${effectiveTokenId}`}
-                code={curlCode}
-                {...curlExampleProps}
-              />
-              <CurlExampleSection
-                key={`stream-${effectiveTokenId}`}
                 code={streamingCurlCode}
                 {...curlExampleProps}
               />
@@ -635,7 +466,6 @@ curl -X POST "${a2aEndpoint}" \\
                 </CollapsibleTrigger>
                 <CollapsibleContent className="px-4 pb-4">
                   <CurlExampleSection
-                    key={`reply-${effectiveTokenId}`}
                     code={replyCurlCode}
                     {...curlExampleProps}
                   />
@@ -648,7 +478,6 @@ curl -X POST "${a2aEndpoint}" \\
                 </CollapsibleTrigger>
                 <CollapsibleContent className="px-4 pb-4">
                   <CurlExampleSection
-                    key={`approval-${effectiveTokenId}`}
                     code={approvalCurlCode}
                     {...curlExampleProps}
                   />
@@ -661,7 +490,6 @@ curl -X POST "${a2aEndpoint}" \\
                 </CollapsibleTrigger>
                 <CollapsibleContent className="px-4 pb-4">
                   <CurlExampleSection
-                    key={`background-${effectiveTokenId}`}
                     code={backgroundTaskCurlCode}
                     {...curlExampleProps}
                   />
@@ -674,7 +502,6 @@ curl -X POST "${a2aEndpoint}" \\
                 </CollapsibleTrigger>
                 <CollapsibleContent className="px-4 pb-4">
                   <CurlExampleSection
-                    key={`subscribe-${effectiveTokenId}`}
                     code={subscribeCurlCode}
                     {...curlExampleProps}
                   />
@@ -687,7 +514,6 @@ curl -X POST "${a2aEndpoint}" \\
                 </CollapsibleTrigger>
                 <CollapsibleContent className="px-4 pb-4">
                   <CurlExampleSection
-                    key={`manage-${effectiveTokenId}`}
                     code={manageTasksCurlCode}
                     {...curlExampleProps}
                   />
@@ -744,88 +570,16 @@ curl -X POST "${a2aEndpoint}" \\
             configured identity-provider JWTs are also accepted. LLM API keys
             and virtual keys will not work here.
           </p>
-          <Select
-            value={effectiveTokenId}
-            onValueChange={(value) => {
-              setSelectedTokenId(value);
-            }}
-          >
-            <SelectTrigger className="w-full min-h-[60px] py-2.5">
-              <SelectValue placeholder="Select token">
-                {effectiveTokenId && (
-                  <div className="flex flex-col gap-0.5 items-start text-left">
-                    <div>{getTokenDisplayName()}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {isPersonalTokenSelected
-                        ? "For your own integrations"
-                        : selectedTeamToken?.isOrganizationToken
-                          ? "Shared across the organization"
-                          : "Shared with this team"}
-                    </div>
-                  </div>
-                )}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {userToken && (
-                <SelectItem value={PERSONAL_TOKEN_ID}>
-                  <div className="flex flex-col gap-0.5 items-start">
-                    <div>Personal Token</div>
-                    <div className="text-xs text-muted-foreground">
-                      For your own integrations
-                    </div>
-                  </div>
-                </SelectItem>
-              )}
-              {/* Team tokens (non-organization) */}
-              {tokens
-                ?.filter((token) => !token.isOrganizationToken)
-                .map((token) => {
-                  const unusable = token.worksWithProfile === false;
-                  return (
-                    <SelectItem
-                      key={token.id}
-                      value={token.id}
-                      disabled={unusable}
-                    >
-                      <div className="flex flex-col gap-0.5 items-start">
-                        <div>
-                          {token.team?.name
-                            ? `Team Token (${token.team.name})`
-                            : token.name}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {unusable
-                            ? unusableTokenReason
-                            : "Shared with this team"}
-                        </div>
-                      </div>
-                    </SelectItem>
-                  );
-                })}
-              {/* Organization token */}
-              {tokens
-                ?.filter((token) => token.isOrganizationToken)
-                .map((token) => (
-                  <SelectItem key={token.id} value={token.id}>
-                    <div className="flex flex-col gap-0.5 items-start">
-                      <div>Organization Token</div>
-                      <div className="text-xs text-muted-foreground">
-                        Shared across the organization
-                      </div>
-                    </div>
-                  </SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
+          {personalTokenBlock}
           <p className="text-xs text-muted-foreground">
             <Link
-              href={manageTokenLink.href}
+              href="/account?highlight=personal-token"
               className="underline hover:text-foreground"
             >
-              {manageTokenLink.label}
+              Manage your personal token
             </Link>
           </p>
+          <ServiceAccountHint />
           {agent.identityProviderId && (
             <p className="text-xs text-muted-foreground">
               This agent is bound to an external identity provider — JWTs it
@@ -837,52 +591,16 @@ curl -X POST "${a2aEndpoint}" \\
 
       <WizardStep n={3} title="Call the agent" last>
         <div className="space-y-3">
-          <CurlExampleSection
-            key={`card-${effectiveTokenId}`}
-            code={agentCardCurlCode}
-            tokenForDisplay={tokenForDisplay}
-            isPersonalTokenSelected={isPersonalTokenSelected}
-            hasAdminPermission={hasAdminPermission ?? false}
-            selectedTeamToken={selectedTeamToken ?? null}
-            fetchUserTokenMutation={fetchUserTokenMutation}
-            fetchTeamTokenMutation={fetchTeamTokenMutation}
-          />
-          <CurlExampleSection
-            key={`send-${effectiveTokenId}`}
-            code={curlCode}
-            tokenForDisplay={tokenForDisplay}
-            isPersonalTokenSelected={isPersonalTokenSelected}
-            hasAdminPermission={hasAdminPermission ?? false}
-            selectedTeamToken={selectedTeamToken ?? null}
-            fetchUserTokenMutation={fetchUserTokenMutation}
-            fetchTeamTokenMutation={fetchTeamTokenMutation}
-          />
-          <CurlExampleSection
-            key={`stream-${effectiveTokenId}`}
-            code={streamingCurlCode}
-            tokenForDisplay={tokenForDisplay}
-            isPersonalTokenSelected={isPersonalTokenSelected}
-            hasAdminPermission={hasAdminPermission ?? false}
-            selectedTeamToken={selectedTeamToken ?? null}
-            fetchUserTokenMutation={fetchUserTokenMutation}
-            fetchTeamTokenMutation={fetchTeamTokenMutation}
-          />
+          <CurlExampleSection code={agentCardCurlCode} {...curlExampleProps} />
+          <CurlExampleSection code={curlCode} {...curlExampleProps} />
+          <CurlExampleSection code={streamingCurlCode} {...curlExampleProps} />
           <Collapsible className="rounded-lg border">
             <CollapsibleTrigger className="group flex w-full items-center justify-between px-4 py-3 text-sm font-medium">
               Continue the conversation (multi-turn)
               <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
             </CollapsibleTrigger>
             <CollapsibleContent className="px-4 pb-4">
-              <CurlExampleSection
-                key={`reply-${effectiveTokenId}`}
-                code={replyCurlCode}
-                tokenForDisplay={tokenForDisplay}
-                isPersonalTokenSelected={isPersonalTokenSelected}
-                hasAdminPermission={hasAdminPermission ?? false}
-                selectedTeamToken={selectedTeamToken ?? null}
-                fetchUserTokenMutation={fetchUserTokenMutation}
-                fetchTeamTokenMutation={fetchTeamTokenMutation}
-              />
+              <CurlExampleSection code={replyCurlCode} {...curlExampleProps} />
             </CollapsibleContent>
           </Collapsible>
           <Collapsible className="rounded-lg border">
@@ -892,14 +610,8 @@ curl -X POST "${a2aEndpoint}" \\
             </CollapsibleTrigger>
             <CollapsibleContent className="px-4 pb-4">
               <CurlExampleSection
-                key={`approval-${effectiveTokenId}`}
                 code={approvalCurlCode}
-                tokenForDisplay={tokenForDisplay}
-                isPersonalTokenSelected={isPersonalTokenSelected}
-                hasAdminPermission={hasAdminPermission ?? false}
-                selectedTeamToken={selectedTeamToken ?? null}
-                fetchUserTokenMutation={fetchUserTokenMutation}
-                fetchTeamTokenMutation={fetchTeamTokenMutation}
+                {...curlExampleProps}
               />
             </CollapsibleContent>
           </Collapsible>
@@ -910,14 +622,8 @@ curl -X POST "${a2aEndpoint}" \\
             </CollapsibleTrigger>
             <CollapsibleContent className="px-4 pb-4">
               <CurlExampleSection
-                key={`background-${effectiveTokenId}`}
                 code={backgroundTaskCurlCode}
-                tokenForDisplay={tokenForDisplay}
-                isPersonalTokenSelected={isPersonalTokenSelected}
-                hasAdminPermission={hasAdminPermission ?? false}
-                selectedTeamToken={selectedTeamToken ?? null}
-                fetchUserTokenMutation={fetchUserTokenMutation}
-                fetchTeamTokenMutation={fetchTeamTokenMutation}
+                {...curlExampleProps}
               />
             </CollapsibleContent>
           </Collapsible>
@@ -928,14 +634,8 @@ curl -X POST "${a2aEndpoint}" \\
             </CollapsibleTrigger>
             <CollapsibleContent className="px-4 pb-4">
               <CurlExampleSection
-                key={`subscribe-${effectiveTokenId}`}
                 code={subscribeCurlCode}
-                tokenForDisplay={tokenForDisplay}
-                isPersonalTokenSelected={isPersonalTokenSelected}
-                hasAdminPermission={hasAdminPermission ?? false}
-                selectedTeamToken={selectedTeamToken ?? null}
-                fetchUserTokenMutation={fetchUserTokenMutation}
-                fetchTeamTokenMutation={fetchTeamTokenMutation}
+                {...curlExampleProps}
               />
             </CollapsibleContent>
           </Collapsible>
@@ -946,14 +646,8 @@ curl -X POST "${a2aEndpoint}" \\
             </CollapsibleTrigger>
             <CollapsibleContent className="px-4 pb-4">
               <CurlExampleSection
-                key={`manage-${effectiveTokenId}`}
                 code={manageTasksCurlCode}
-                tokenForDisplay={tokenForDisplay}
-                isPersonalTokenSelected={isPersonalTokenSelected}
-                hasAdminPermission={hasAdminPermission ?? false}
-                selectedTeamToken={selectedTeamToken ?? null}
-                fetchUserTokenMutation={fetchUserTokenMutation}
-                fetchTeamTokenMutation={fetchTeamTokenMutation}
+                {...curlExampleProps}
               />
             </CollapsibleContent>
           </Collapsible>

@@ -14,7 +14,6 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import config from "@/config";
-import { TeamTokenModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import mcpGatewayRoutes from "./index";
 
@@ -35,18 +34,17 @@ describe("MCP Gateway - subscriptions/listen route", () => {
   async function setup({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }: {
     makeAgent: (args?: Record<string, unknown>) => Promise<{ id: string }>;
     makeOrganization: () => Promise<{ id: string }>;
+    makeServiceAccountToken: (args: {
+      organizationId: string;
+    }) => Promise<{ value: string }>;
   }) {
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
     await app.listen({ port: 0, host: "127.0.0.1" });
     const { port } = app.server.address() as AddressInfo;
     return { agent, token, url: `http://127.0.0.1:${port}/v1/mcp/${agent.id}` };
@@ -55,8 +53,13 @@ describe("MCP Gateway - subscriptions/listen route", () => {
   test("opens an SSE stream whose first event is the acknowledgment", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
-    const { token, url } = await setup({ makeAgent, makeOrganization });
+    const { token, url } = await setup({
+      makeAgent,
+      makeOrganization,
+      makeServiceAccountToken,
+    });
 
     const controller = new AbortController();
     const response = await fetch(url, {
@@ -109,9 +112,14 @@ describe("MCP Gateway - subscriptions/listen route", () => {
   test("an enabled duration cap ends the authenticated stream with its matching result", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     config.mcpGateway.subscriptionMaxDurationMs = 50;
-    const { token, url } = await setup({ makeAgent, makeOrganization });
+    const { token, url } = await setup({
+      makeAgent,
+      makeOrganization,
+      makeServiceAccountToken,
+    });
     const response = await fetch(url, {
       method: "POST",
       signal: AbortSignal.timeout(5_000),
@@ -152,8 +160,13 @@ describe("MCP Gateway - subscriptions/listen route", () => {
   test("a legacy client gets method-not-found, not a stream", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
-    const { token, url } = await setup({ makeAgent, makeOrganization });
+    const { token, url } = await setup({
+      makeAgent,
+      makeOrganization,
+      makeServiceAccountToken,
+    });
 
     // No revision declaration and no stateless markers: the method does not
     // exist in the legacy revision, so the SDK answers -32601.
@@ -179,8 +192,13 @@ describe("MCP Gateway - subscriptions/listen route", () => {
   test("a listen request without an id is rejected", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
-    const { token, url } = await setup({ makeAgent, makeOrganization });
+    const { token, url } = await setup({
+      makeAgent,
+      makeOrganization,
+      makeServiceAccountToken,
+    });
 
     // The subscription id IS the JSON-RPC id; a notification-shaped listen
     // has nothing for later messages to correlate against.
@@ -208,8 +226,13 @@ describe("MCP Gateway - subscriptions/listen route", () => {
   test("server/discover advertises tools.listChanged only for 2026-07-28", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
-    const { token, url } = await setup({ makeAgent, makeOrganization });
+    const { token, url } = await setup({
+      makeAgent,
+      makeOrganization,
+      makeServiceAccountToken,
+    });
 
     const response = await fetch(url, {
       method: "POST",

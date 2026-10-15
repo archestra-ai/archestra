@@ -44,7 +44,6 @@ import ServiceAccountModel from "@/models/service-account";
 import SkillModel from "@/models/skill";
 import SkillShareLinkModel from "@/models/skill-share-link";
 import TeamModel from "@/models/team";
-import TeamTokenModel from "@/models/team-token";
 import UserTokenModel from "@/models/user-token";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 import { findConnectedClientForAudit } from "@/services/connected-client";
@@ -980,13 +979,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceIdSource: "organizationContext",
     fetchById: (id, orgId) =>
       EnvironmentResourceDefaultModel.findByIdForAudit(id, orgId),
-  },
-  // Team / org tokens — rotation is semantically distinct from a generic update.
-  "/api/tokens/:tokenId/rotate": {
-    resourceType: "teamToken",
-    action: "teamToken.rotated",
-    resourceIdParam: "tokenId",
-    fetchById: (id, orgId) => TeamTokenModel.findByIdForAudit(id, orgId),
   },
   "/api/user-tokens/me/rotate": {
     resourceType: "userToken",

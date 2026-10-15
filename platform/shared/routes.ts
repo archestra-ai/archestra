@@ -698,9 +698,6 @@ export const RouteId = {
   GetImpersonableUsers: "getImpersonableUsers",
 
   // Team Token Routes
-  GetTokens: "getTokens",
-  GetTokenValue: "getTokenValue",
-  RotateToken: "rotateToken",
 
   // User Token Routes (Personal Tokens)
   GetUserToken: "getUserToken",

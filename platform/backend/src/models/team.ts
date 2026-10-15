@@ -26,7 +26,6 @@ import type { TeamMemberRole } from "@/types/team-role";
 import AgentLabelModel from "./agent-label";
 import CreatedByModel from "./created-by";
 import TeamLabelModel from "./team-label";
-import TeamTokenModel from "./team-token";
 
 class TeamModel {
   /** SQL predicate matching direct team membership plus every ancestor. */
@@ -119,11 +118,6 @@ class TeamModel {
     });
     // No prune needed here: on create, label sync only creates keys/values and
     // inserts rows (never deletes), so nothing can be orphaned.
-
-    // Auto-create a team token. Kept outside the transaction (pre-existing
-    // behavior); the atomicity guarantee covers the team row + labels only.
-    await TeamTokenModel.createTeamToken(teamId, input.name);
-    logger.debug({ teamId }, "TeamModel.create: created team token");
 
     logger.debug({ teamId }, "TeamModel.create: completed");
     return {

@@ -346,7 +346,6 @@ describe("chat-mcp-client health check", () => {
       const team = await makeTeam(org.id, user.id);
       const agent = await makeAgent({});
       await makeTeamMember(team.id, user.id);
-      await TeamTokenModel.createTeamToken(team.id, team.name);
 
       const cacheKey = chatClient.__test.getCacheKey(
         agent.id,
@@ -405,7 +404,6 @@ describe("chat-mcp-client health check", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({});
     await makeTeamMember(team.id, user.id);
-    await TeamTokenModel.createTeamToken(team.id, team.name);
 
     const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
     chatClient.clearChatMcpClient(agent.id);
@@ -459,7 +457,6 @@ describe("chat-mcp-client health check", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({});
     await makeTeamMember(team.id, user.id);
-    await TeamTokenModel.createTeamToken(team.id, team.name);
 
     const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
     chatClient.clearChatMcpClient(agent.id);
@@ -520,7 +517,6 @@ describe("chat-mcp-client health check", () => {
       const team = await makeTeam(org.id, user.id);
       const agent = await makeAgent({});
       await makeTeamMember(team.id, user.id);
-      await TeamTokenModel.createTeamToken(team.id, team.name);
 
       const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
       chatClient.clearChatMcpClient(agent.id);
@@ -580,7 +576,6 @@ describe("getChatMcpTools failure-vs-empty contract", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({});
     await makeTeamMember(team.id, user.id);
-    await TeamTokenModel.createTeamToken(team.id, team.name);
 
     const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
     chatClient.clearChatMcpClient(agent.id);
@@ -907,7 +902,6 @@ describe("chat-mcp-client tool caching", () => {
     await makeTeamMember(team.id, user.id);
 
     // Create team token for the team
-    await TeamTokenModel.createTeamToken(team.id, team.name);
 
     const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
 
@@ -975,7 +969,6 @@ describe("chat-mcp-client tool caching", () => {
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({});
     await makeTeamMember(team.id, user.id);
-    await TeamTokenModel.createTeamToken(team.id, team.name);
 
     const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
     chatClient.clearChatMcpClient(agent.id);
@@ -1606,7 +1599,10 @@ describe("getChatMcpClient", () => {
       rawToken: "external-idp-jwt",
     });
 
-    const teamTokenSpy = vi.spyOn(TeamTokenModel, "findAll");
+    const platformTokenSpy = vi.spyOn(
+      ServiceAccountModel,
+      "ensurePlatformTokenValue",
+    );
 
     const agentId = crypto.randomUUID();
     const userId = crypto.randomUUID();
@@ -1621,7 +1617,7 @@ describe("getChatMcpClient", () => {
     );
 
     expect(client).not.toBeNull();
-    expect(teamTokenSpy).not.toHaveBeenCalled();
+    expect(platformTokenSpy).not.toHaveBeenCalled();
 
     const [, options] = vi.mocked(StreamableHTTPClientTransport).mock
       .calls[0] as [URL, { requestInit?: RequestInit }];
@@ -2524,11 +2520,6 @@ describe("selectMCPGatewayToken synthetic principals", () => {
     const user = await makeUser();
     const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({ organizationId: org.id });
-    await TeamTokenModel.create({
-      organizationId: org.id,
-      isOrganizationToken: true,
-      name: "Org Token",
-    });
     const account = await makeServiceAccount(org.id, { teamId: team.id });
 
     const first = await chatClient.selectMCPGatewayToken(
@@ -2623,38 +2614,25 @@ describe("selectMCPGatewayToken synthetic principals", () => {
     }
   });
 
-  test("team actor uses its own team token over the org token", async ({
+  test("the system sentinel acts as the organization's hidden built-in account", async ({
     makeOrganization,
-    makeUser,
-    makeTeam,
     makeAgent,
   }) => {
     const org = await makeOrganization();
-    const user = await makeUser();
-    const team = await makeTeam(org.id, user.id);
     const agent = await makeAgent({ organizationId: org.id });
-
-    await TeamTokenModel.create({
-      organizationId: org.id,
-      isOrganizationToken: true,
-      name: "Org Token",
-    });
-    const { token: teamToken } = await TeamTokenModel.createTeamToken(
-      team.id,
-      team.name,
-    );
 
     const result = await chatClient.selectMCPGatewayToken(
       agent.id,
       "system",
       org.id,
-      team.id,
     );
+    const system = await ServiceAccountModel.ensureSystemServiceAccount(org.id);
 
-    expect(result).toMatchObject({
-      tokenId: teamToken.id,
-      teamId: team.id,
-      isOrganizationToken: false,
-    });
+    expect(result).toMatchObject({ serviceAccountId: system.id });
+    expect(
+      (await ServiceAccountModel.listByOrganizationId(org.id)).map(
+        (account) => account.id,
+      ),
+    ).not.toContain(system.id);
   });
 });

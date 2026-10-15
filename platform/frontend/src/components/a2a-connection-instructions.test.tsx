@@ -8,19 +8,11 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useOrganization } from "@/lib/organization.query";
-import {
-  useFetchTeamTokenValue,
-  useTokens,
-} from "@/lib/teams/team-token.query";
 import { useFetchUserTokenValue, useUserToken } from "@/lib/user-token.query";
 import { A2AConnectionInstructions } from "./a2a-connection-instructions";
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
-vi.mock("@/lib/teams/team-token.query", () => ({
-  useTokens: vi.fn(),
-  useFetchTeamTokenValue: vi.fn(),
-}));
 vi.mock("@/lib/user-token.query", () => ({
   useUserToken: vi.fn(),
   useFetchUserTokenValue: vi.fn(),
@@ -62,10 +54,8 @@ beforeEach(() => {
   vi.mocked(useOrganization).mockReturnValue(
     stubQuery({ data: { connectionBaseUrls: null } }),
   );
-  vi.mocked(useTokens).mockReturnValue(stubQuery({ data: { tokens: [] } }));
   vi.mocked(useUserToken).mockReturnValue(stubQuery({ data: null }));
   vi.mocked(useFetchUserTokenValue).mockReturnValue(stubQuery({}));
-  vi.mocked(useFetchTeamTokenValue).mockReturnValue(stubQuery({}));
 });
 
 describe("A2AConnectionInstructions — detail layout", () => {
@@ -103,9 +93,15 @@ describe("A2AConnectionInstructions — detail layout", () => {
       `${getDocsUrl(DocsPage.PlatformAgentTriggersWebhookA2a)}#authentication`,
     );
 
+    // Shared org and team tokens are gone: automation goes to service
+    // accounts, and the examples have no token picker.
+    expect(
+      within(authentication).getByRole("link", { name: "service account" }),
+    ).toHaveAttribute("href", "/settings/service-accounts");
+    expect(screen.queryByRole("combobox")).toBeNull();
+
     // The section's own contents are not behind a second door: opening
     // Examples is what shows the examples.
-    expect(screen.getByLabelText("Token for examples")).toBeVisible();
     expect(screen.getByText("Chat Deep Link")).toBeVisible();
 
     // The bulk still folds, one disclosure per request, so the reference

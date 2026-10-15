@@ -3,6 +3,7 @@ import { SESSION_ID_HEADER } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { executeA2AMessage } from "@/agents/a2a-executor";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import { AgentModel, AgentTeamModel, TeamModel, UserModel } from "@/models";
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
@@ -253,7 +254,7 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      // Get user info - for user tokens we have userId, for team tokens we use system context
+      // Who the turn runs as: the token's user, or the service account
       let userId: string;
       const organizationId = tokenAuth.organizationId;
 
@@ -271,6 +272,9 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
           });
         }
+      } else if (tokenAuth.serviceAccountId) {
+        // Service account token - the turn runs as the account itself
+        userId = serviceAccountUserId(tokenAuth.serviceAccountId);
       } else {
         // Team/org token - we don't have a specific user, use a system context
         // The LLM client will work without user-specific API key resolution
@@ -343,11 +347,6 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
               message: userMessage,
               organizationId,
               userId,
-              // Only a team token acts as its team; a service account linked
-              // to one still acts as itself.
-              actorTeamId: tokenAuth.serviceAccountId
-                ? undefined
-                : (tokenAuth.teamId ?? undefined),
               sessionId,
               parentDelegationChain: undefined, // This is the root call, chain starts with agentId
             });

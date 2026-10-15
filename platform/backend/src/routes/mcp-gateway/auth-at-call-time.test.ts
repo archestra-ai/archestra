@@ -10,8 +10,8 @@
  *  1. An admin installs a remote MCP server (personal scope, no team).
  *  2. A tool from that catalog is assigned to a gateway agent with dynamic
  *     credential resolution.
- *  3. A team token (for a team the admin's personal install is not shared with)
- *     calls the tool.
+ *  3. A service account acting for a team (one the admin's personal install is not
+ *     shared with) calls the tool.
  *  4. The gateway returns an auth-required result carrying a self-service
  *     install URL for the catalog item.
  */
@@ -26,7 +26,7 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { TeamTokenModel, UserTokenModel } from "@/models";
+import { UserTokenModel } from "@/models";
 import McpServerUserModel from "@/models/mcp-server-user";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import mcpGatewayRoutes from "./index";
@@ -66,6 +66,7 @@ describe("MCP Gateway - Auth at Call Time", () => {
     makeInternalMcpCatalog,
     makeMcpServer,
     makeTool,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
 
@@ -92,7 +93,7 @@ describe("MCP Gateway - Auth at Call Time", () => {
     });
 
     // Admin's personal install (no team): present but NOT shared with the
-    // Marketing team, so it must not be picked for the team token.
+    // Marketing team, so it must not be picked for the team-linked service account.
     await makeMcpServer({
       catalogId: catalog.id,
       ownerId: admin.id,
@@ -113,19 +114,17 @@ describe("MCP Gateway - Auth at Call Time", () => {
       credentialResolutionMode: "dynamic",
     });
 
-    // Marketing team token (personal/team token, not org-wide).
-    const { value: marketingTeamToken } = await TeamTokenModel.create({
+    // Service account acting for the Marketing team (not org-wide).
+    const { value: marketingTeamAccountToken } = await makeServiceAccountToken({
       organizationId: org.id,
-      name: "Marketing Token",
       teamId: marketingTeam.id,
-      isOrganizationToken: false,
     });
 
     // Stateless mode requires an initialize before a tools/call.
     const initResponse = await app.inject({
       method: "POST",
       url: `/v1/mcp/${agent.id}`,
-      headers: makeMcpHeaders(marketingTeamToken),
+      headers: makeMcpHeaders(marketingTeamAccountToken),
       payload: {
         jsonrpc: "2.0",
         method: "initialize",
@@ -142,7 +141,7 @@ describe("MCP Gateway - Auth at Call Time", () => {
     const response = await app.inject({
       method: "POST",
       url: `/v1/mcp/${agent.id}`,
-      headers: makeMcpHeaders(marketingTeamToken),
+      headers: makeMcpHeaders(marketingTeamAccountToken),
       payload: {
         jsonrpc: "2.0",
         id: 2,

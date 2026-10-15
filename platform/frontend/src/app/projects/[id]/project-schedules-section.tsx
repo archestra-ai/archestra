@@ -13,7 +13,6 @@ import { useMemo, useState } from "react";
 import { runHref } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
 import { AgentSelector } from "@/components/agent-selector";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   DEFAULT_FORM_STATE,
   isValidCronExpression,
@@ -75,29 +74,10 @@ export function ProjectSchedulesSection({
   canCreate?: boolean;
   defaultAgentId?: string | null;
 }) {
-  // The schedule query requires the role action and polls, so never mount it
-  // for a caller with only a scoped wildcard grant. That grant still reaches
-  // the organization-level permissions editor through the section header.
   const { data: canReadSchedules } = useHasPermissions({
-    scheduledTask: ["read"],
+    project: ["read"],
   });
-  const { data: capabilities } = useScopedCapabilities();
-  const canReadAllPermissions = capabilities?.some(
-    (grant) =>
-      grant.resource === "scheduledTask" &&
-      grant.scope === "*" &&
-      grant.action === "read",
-  );
-  if (canReadSchedules !== true) {
-    return canReadAllPermissions ? (
-      <section>
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold">Schedules</h2>
-          <ResourceListActions resource="scheduledTask" />
-        </div>
-      </section>
-    ) : null;
-  }
+  if (canReadSchedules !== true) return null;
 
   return (
     <ProjectSchedulesSectionContent
@@ -122,8 +102,17 @@ function ProjectSchedulesSectionContent({
     refetchInterval: 10000,
   });
   const { data: canCreateSchedules } = useHasPermissions({
-    scheduledTask: ["create"],
+    project: ["create"],
   });
+  const { data: session } = useSession();
+  const { data: capabilities } = useScopedCapabilities();
+  const hasOversight = (action: "update" | "delete" | "use") =>
+    capabilities?.some(
+      (grant) =>
+        grant.resource === "project" &&
+        grant.scope === "*" &&
+        grant.action === action,
+    ) === true;
   const [createOpen, setCreateOpen] = useState(false);
   const searchParams = useSearchParams();
   const scheduleId = searchParams.get("schedule");
@@ -138,10 +127,10 @@ function ProjectSchedulesSectionContent({
   });
   const schedules = data?.data ?? [];
   const { data: canUpdateSchedules } = useHasPermissions({
-    scheduledTask: ["update"],
+    project: ["update"],
   });
   const { data: canDeleteSchedules } = useHasPermissions({
-    scheduledTask: ["delete"],
+    project: ["delete"],
   });
 
   return (
@@ -166,7 +155,6 @@ function ProjectSchedulesSectionContent({
               <span>New schedule</span>
             </Button>
           )}
-          <ResourceListActions resource="scheduledTask" />
         </div>
       </div>
 
@@ -211,8 +199,21 @@ function ProjectSchedulesSectionContent({
               projectId={projectId}
               schedule={schedule}
               onEdit={openEditDialog}
-              canEdit={canUpdateSchedules === true}
-              canDelete={canDeleteSchedules === true}
+              canEdit={
+                canUpdateSchedules === true &&
+                (schedule.actorUserId === session?.user.id ||
+                  hasOversight("update"))
+              }
+              canDelete={
+                canDeleteSchedules === true &&
+                (schedule.actorUserId === session?.user.id ||
+                  hasOversight("delete"))
+              }
+              canRun={
+                canCreateSchedules === true &&
+                (schedule.actorUserId === session?.user.id ||
+                  hasOversight("use"))
+              }
             />
           ))}
         </div>
@@ -229,12 +230,14 @@ function ScheduleRow({
   onEdit,
   canEdit,
   canDelete,
+  canRun,
 }: {
   projectId: string;
   schedule: ScheduleTrigger;
   onEdit: (schedule: ScheduleTrigger) => void;
   canEdit: boolean;
   canDelete: boolean;
+  canRun: boolean;
 }) {
   const enableSchedule = useEnableScheduleTrigger();
   const disableSchedule = useDisableScheduleTrigger();
@@ -345,7 +348,7 @@ function ScheduleRow({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem
-              disabled={runNow.isPending}
+              disabled={!canRun || runNow.isPending}
               onSelect={runNow.start}
             >
               <Play className="h-4 w-4" />

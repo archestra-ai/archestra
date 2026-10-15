@@ -622,75 +622,57 @@ class ConversationModel {
      */
     canReadOthersViaProject: () => Promise<boolean>;
   }): Promise<Conversation | null> {
-    const ownedConversation = await ConversationModel.findById(params);
-
-    if (ownedConversation) {
-      return ownedConversation;
-    }
-
-    // SPDX-SnippetBegin
-    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    // A chat is shared through its permission policy. Returning another
-    // user's conversation is intentional once that policy grants read. A grant
-    // on every chat is left out: it reaches only chats inside a project the
-    // caller can open, which the branch below decides.
-    const sharedWithCaller = await ResourcePermissionAccessModel.canRead({
-      organizationId: params.organizationId,
-      userId: params.userId,
-      resource: "conversation",
-      scope: params.id,
-      includeWildcard: false,
+    return ConversationModel.findForRead({
+      ...params,
+      loadOwned: () => ConversationModel.findById(params),
+      loadShared: () => ConversationModel.findByIdInOrganization(params),
     });
-    if (sharedWithCaller) {
-      return ConversationModel.findByIdInOrganization({
-        id: params.id,
-        organizationId: params.organizationId,
-      });
-    }
-    // SPDX-SnippetEnd
+  }
 
-    // Project membership grants a read-only view of chats in the project
-    // (writing stays author-only — every mutating route resolves the
-    // conversation by owner). Reading a chat the caller did NOT author is
-    // additionally gated by `read` on every chat, uniformly — including when the
-    // caller owns the project.
-    const [bare] = await db
+  /** The same read authorization as a transcript, without loading its history. */
+  static async findAccessibleMetadataById(
+    params: Parameters<typeof ConversationModel.findAccessibleById>[0],
+  ) {
+    return ConversationModel.findForRead({
+      ...params,
+      loadOwned: () => ConversationModel.getReadAccessMetadata(params),
+      loadShared: () =>
+        ConversationModel.getReadAccessMetadata({
+          id: params.id,
+          organizationId: params.organizationId,
+        }),
+    });
+  }
+
+  /**
+   * Metadata for an already-authorized reader, fenced to the organization and
+   * optionally the owner. No messages, errors, compactions, or agent prompts.
+   */
+  static async getReadAccessMetadata(params: {
+    id: string;
+    organizationId: string;
+    userId?: string;
+  }) {
+    const [row] = await db
       .select({
-        projectId: schema.conversationsTable.projectId,
-        organizationId: schema.conversationsTable.organizationId,
+        id: schema.conversationsTable.id,
+        encryptedChat: schema.conversationsTable.encryptedChat,
+        encryptedChatDekFingerprint:
+          schema.conversationsTable.encryptedChatDekFingerprint,
       })
       .from(schema.conversationsTable)
       .where(
         and(
           notDeletedConversation,
           eq(schema.conversationsTable.id, params.id),
+          eq(schema.conversationsTable.organizationId, params.organizationId),
+          params.userId !== undefined
+            ? eq(schema.conversationsTable.userId, params.userId)
+            : undefined,
         ),
-      );
-    if (
-      !bare ||
-      !bare.projectId ||
-      bare.organizationId !== params.organizationId
-    ) {
-      return null;
-    }
-    const project = await ProjectModel.findById(bare.projectId);
-    if (
-      !project ||
-      !(await ProjectAccessModel.userCanAccessProject({
-        sessionAccess: true,
-        project,
-        userId: params.userId,
-        organizationId: params.organizationId,
-      })) ||
-      !(await params.canReadOthersViaProject())
-    ) {
-      return null;
-    }
-    return ConversationModel.findByIdInOrganization({
-      id: params.id,
-      organizationId: params.organizationId,
-    });
+      )
+      .limit(1);
+    return row ?? null;
   }
 
   static async findByIdInOrganization(params: {
@@ -1132,6 +1114,78 @@ class ConversationModel {
       .limit(1);
 
     return result[0]?.agentId ?? null;
+  }
+
+  /** Keep transcript and metadata reads on exactly the same authorization path. */
+  private static async findForRead<T>(
+    params: Parameters<typeof ConversationModel.findAccessibleById>[0] & {
+      loadOwned: () => Promise<T | null>;
+      loadShared: () => Promise<T | null>;
+    },
+  ): Promise<T | null> {
+    const ownedConversation = await params.loadOwned();
+
+    if (ownedConversation) {
+      return ownedConversation;
+    }
+
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    // A chat is shared through its permission policy. Returning another
+    // user's conversation is intentional once that policy grants read. A grant
+    // on every chat is left out: it reaches only chats inside a project the
+    // caller can open, which the branch below decides.
+    const sharedWithCaller = await ResourcePermissionAccessModel.canRead({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      resource: "conversation",
+      scope: params.id,
+      includeWildcard: false,
+    });
+    if (sharedWithCaller) {
+      return params.loadShared();
+    }
+    // SPDX-SnippetEnd
+
+    // Project membership grants a read-only view of chats in the project
+    // (writing stays author-only — every mutating route resolves the
+    // conversation by owner). Reading a chat the caller did NOT author is
+    // additionally gated by `read` on every chat, uniformly — including when the
+    // caller owns the project.
+    const [bare] = await db
+      .select({
+        projectId: schema.conversationsTable.projectId,
+        organizationId: schema.conversationsTable.organizationId,
+      })
+      .from(schema.conversationsTable)
+      .where(
+        and(
+          notDeletedConversation,
+          eq(schema.conversationsTable.id, params.id),
+        ),
+      );
+    if (
+      !bare ||
+      !bare.projectId ||
+      bare.organizationId !== params.organizationId
+    ) {
+      return null;
+    }
+    const project = await ProjectModel.findById(bare.projectId);
+    if (
+      !project ||
+      !(await ProjectAccessModel.userCanAccessProject({
+        sessionAccess: true,
+        project,
+        userId: params.userId,
+        organizationId: params.organizationId,
+      })) ||
+      !(await params.canReadOthersViaProject())
+    ) {
+      return null;
+    }
+    return params.loadShared();
   }
 
   /**

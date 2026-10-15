@@ -37,6 +37,23 @@ describe("openappaFailure", () => {
     }
   });
 
+  test.each([
+    "OpenAPPA processing interrupted: the opening policy is unavailable: the stored policy file compiles to a different identity than the opening of archestra:f779b8",
+    "OpenAPPA result refused: the opening policy is unavailable: the policy file 0a1b is not stored",
+  ])("tells a conversation whose opening policy cannot reopen to start again: %s", (message) => {
+    const cause = new Error(message);
+
+    const failure = openappaFailure(cause);
+
+    expect(failure.statusCode).toBe(409);
+    expect(failure.shouldRetry).toBe(false);
+    expect(failure.retryAfterSeconds).toBeUndefined();
+    expect(failure.message).toBe(
+      "OpenAPPA could not safely complete this operation: this conversation started under a guardrails policy that the policy runtime cannot reopen. Start a new conversation.",
+    );
+    expect(failure.cause).toBe(cause);
+  });
+
   test("names an exhausted connection pool without its internals", () => {
     const failure = openappaFailure(
       new Error(

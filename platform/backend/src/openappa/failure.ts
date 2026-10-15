@@ -11,8 +11,9 @@ import { ApiError } from "@/types/api";
  * id so an operator can find the full cause in the logs.
  *
  * A refused policy fails the same way on every request, so clients are told
- * not to retry it (`x-should-retry: false` on a 500). An unavailable runtime
- * may recover, so it stays a retryable 503.
+ * not to retry it (`x-should-retry: false` on a 500). So does a conversation
+ * whose opening policy the runtime cannot reopen (a 409). An unavailable
+ * runtime may recover, so it stays a retryable 503.
  */
 export function openappaFailure(error: unknown): ApiError {
   if (error instanceof ApiError && error.message.startsWith(FAILURE_PREFIX))
@@ -121,6 +122,15 @@ function classify(error: unknown): {
       detail:
         "another request of this session is still working on this operation. Retry the request.",
     };
+  // The runtime cannot reopen the policy this conversation started under: the
+  // stored file is gone or no longer compiles to the identity the opening
+  // recorded. Every later request of the conversation fails the same way.
+  if (message.includes(OPENING_POLICY_UNAVAILABLE))
+    return {
+      statusCode: 409,
+      detail:
+        "this conversation started under a guardrails policy that the policy runtime cannot reopen. Start a new conversation.",
+    };
   // Every later request of the subagent fails the same way: no fork exists
   // for it to open, whatever the retry.
   if (message.includes(UNFORKED_CHILD) || message === UNSTARTED_PARENT)
@@ -139,6 +149,9 @@ const LEASE_LOST =
 /** The runtime's report of an operation another live request is working on. */
 const HELD_ELSEWHERE =
   "OpenAPPA is processing this operation in another request; retry the request";
+
+/** The runtime's refusal of a root whose opening policy it cannot load or verify. */
+const OPENING_POLICY_UNAVAILABLE = "the opening policy is unavailable: ";
 
 /** The runtime's refusal of a child that no approved spawn prepared. */
 const UNFORKED_CHILD = "no prepared fork to open this child";

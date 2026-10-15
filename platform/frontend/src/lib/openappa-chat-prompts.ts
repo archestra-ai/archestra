@@ -9,10 +9,11 @@ import {
  * so the overview chat strip offers the same ones the chat shows.
  */
 export const OPENAPPA_SUGGESTED_LAUNCH_PROMPTS = {
-  explainPolicy: OPENAPPA_CONFIG_SUGGESTED_PROMPTS[0],
-  reviewRisks: OPENAPPA_CONFIG_SUGGESTED_PROMPTS[1],
-  changePolicy: OPENAPPA_CONFIG_SUGGESTED_PROMPTS[2],
-  validatePolicy: OPENAPPA_CONFIG_SUGGESTED_PROMPTS[3],
+  explainGuardrails: OPENAPPA_CONFIG_SUGGESTED_PROMPTS[0],
+  explainPolicy: OPENAPPA_CONFIG_SUGGESTED_PROMPTS[1],
+  reviewRisks: OPENAPPA_CONFIG_SUGGESTED_PROMPTS[2],
+  changePolicy: OPENAPPA_CONFIG_SUGGESTED_PROMPTS[3],
+  validatePolicy: OPENAPPA_CONFIG_SUGGESTED_PROMPTS[4],
 } as const;
 
 const POLICY_LAUNCH_PROMPTS = {
@@ -30,6 +31,8 @@ const POLICY_LAUNCH_PROMPTS = {
   configureBatteries:
     "Review my OpenAPPA batteries: what is not enforced, and which ones fit my MCP servers.",
   // Overview chat strip: the agent's suggested prompts.
+  explainGuardrails:
+    OPENAPPA_SUGGESTED_LAUNCH_PROMPTS.explainGuardrails.prompt,
   explainPolicy: OPENAPPA_SUGGESTED_LAUNCH_PROMPTS.explainPolicy.prompt,
   reviewRisks: OPENAPPA_SUGGESTED_LAUNCH_PROMPTS.reviewRisks.prompt,
   changePolicy: OPENAPPA_SUGGESTED_LAUNCH_PROMPTS.changePolicy.prompt,

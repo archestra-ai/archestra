@@ -27,10 +27,13 @@ import { useLogsLayoutConfig } from "@/lib/audit-log/use-logs-layout-config";
  */
 export function LogsSectionLayout({
   listPath,
+  description,
   children,
 }: {
   /** The list route this segment's header belongs to, e.g. `/llm/logs`. */
   listPath: string;
+  /** Replaces the shared Logs description while this tab is shown. */
+  description?: string;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -42,7 +45,11 @@ export function LogsSectionLayout({
 
   return (
     <LogsActionContext.Provider value={contextValue}>
-      <PageLayout {...config} actionButton={actionButton}>
+      <PageLayout
+        {...config}
+        description={description ?? config.description}
+        actionButton={actionButton}
+      >
         {children}
       </PageLayout>
     </LogsActionContext.Provider>

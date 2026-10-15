@@ -68,7 +68,7 @@ describe("LogsSectionLayout", () => {
     expect(screen.getByRole("heading", { name: "Logs" })).toBeVisible();
   });
 
-  it("shows the Guardrail consults tab when OpenAPPA is enabled and permitted", () => {
+  it("shows the Guardrails consult tab when OpenAPPA is enabled and permitted", () => {
     vi.mocked(usePathname).mockReturnValue("/llm/logs");
     vi.mocked(useFeature).mockReturnValue(true);
     vi.mocked(usePermissionMap).mockReturnValue({ "/consults/logs": true });
@@ -80,7 +80,7 @@ describe("LogsSectionLayout", () => {
     );
 
     expect(
-      screen.getAllByRole("link", { name: "Guardrail consults" }).length,
+      screen.getAllByRole("link", { name: "Guardrails consult" }).length,
     ).toBeGreaterThan(0);
   });
 });

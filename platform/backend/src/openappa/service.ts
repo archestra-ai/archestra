@@ -22,6 +22,7 @@ import { enterpriseTier } from "@/enterprise-tier";
 import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
 import MemberModel from "@/models/member";
+import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { openappaBatteriesService } from "@/openappa/batteries";
@@ -54,7 +55,6 @@ import {
   isGuardrailsV2Active,
 } from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
-import type { EffectivePolicy } from "@/types/openappa-batteries";
 import { policyView } from "./result-view";
 import type { DeclaredToolSpelling } from "./wire";
 
@@ -537,21 +537,49 @@ async function withRuntime(
     const rawResult = await call(module, policy);
     return NativeDecisionSchema.parse(JSON.parse(rawResult));
   } catch (error) {
-    throw await dispatchFailure({ session, served: policy.content, error });
+    throw await dispatchFailure({
+      organizationId,
+      session,
+      served: policy.content,
+      error,
+    });
   }
 }
 
 async function dispatchFailure(params: {
+  organizationId: string;
   session?: OpenAppaSession;
   served: string;
   error: unknown;
 }): Promise<ApiError> {
   const missing = await missingOpeningAnnotator(params.session, params.served);
+  if (missing !== null)
+    return openappaFailure(new OpenappaRetiredAnnotatorError(missing));
   return openappaFailure(
-    missing === null
-      ? params.error
-      : new OpenappaRetiredAnnotatorError(missing),
+    (await rootOnlyRefusal(params.organizationId)) ?? params.error,
   );
+}
+
+/**
+ * When the runtime refuses the served document because it is the root text
+ * alone (no composition ever opened), what was refused, said plainly: the
+ * runtime's own words only name the `include` list it cannot open.
+ */
+async function rootOnlyRefusal(
+  organizationId: string,
+): Promise<OpenappaRootOnlyError | null> {
+  try {
+    const stored = await OpenAppaEffectivePolicyModel.find(organizationId);
+    return stored && compositionView(stored).served.kind === "root_only"
+      ? new OpenappaRootOnlyError(stored.lastError ?? "")
+      : null;
+  } catch (error) {
+    logger.warn(
+      { organizationId, err: error },
+      "OpenAPPA could not read the stored composition after a refused dispatch",
+    );
+    return null;
+  }
 }
 
 async function missingOpeningAnnotator(
@@ -592,7 +620,6 @@ async function effectivePolicy(
   try {
     const { policy, readable } =
       await openappaBatteriesService.readForDispatch(organizationId);
-    refuseRootOnly(policy);
     let unreadable: UnreadableCredential[] = [];
     let dispatch: DispatchPolicy | null = null;
     try {
@@ -616,7 +643,6 @@ async function effectivePolicy(
       "OpenAPPA composes again before a dispatch: a credential the served policy reads cannot be read",
     );
     const recompiled = await openappaBatteriesService.recompile(organizationId);
-    refuseRootOnly(recompiled);
     return await openappaDeclarations.dispatchPolicy({
       organizationId,
       content: expandCommandExecutionPolicyRules(recompiled.content),
@@ -624,15 +650,6 @@ async function effectivePolicy(
   } catch (error) {
     throw openappaFailure(error);
   }
-}
-
-/**
- * A stored root text alone cannot open, whatever the call: refuse it plainly
- * instead of asking the runtime to compile a document it always refuses.
- */
-function refuseRootOnly(policy: EffectivePolicy): void {
-  if (compositionView(policy).served.kind === "root_only")
-    throw new OpenappaRootOnlyError(policy.lastError ?? "");
 }
 
 /**

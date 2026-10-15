@@ -9,6 +9,7 @@ import {
   usePolicyDeclarations,
 } from "@/lib/openappa-batteries.query";
 import { BATTERY_STATUS } from "./battery-status";
+import { compositionOf } from "./composition-view";
 import { POLICY_EDITOR_OPTIONS } from "./policy-editor-options";
 
 /**
@@ -31,9 +32,8 @@ export function EffectivePolicyView() {
         onRetry={() => effective.refetch()}
       />
     );
-  const { content, contentHash, rootRevision, lastError, composition } =
-    effective.data;
-  const { served, refusal } = composition;
+  const { content, contentHash, rootRevision, lastError } = effective.data;
+  const { served, refusal } = compositionOf(effective.data);
   const hash = contentHash.slice(0, 12);
   // A battery the host holds back folds in as the empty stub, which the
   // document itself does not show. Under an earlier composition the stubs

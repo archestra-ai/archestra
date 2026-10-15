@@ -143,47 +143,47 @@ class OpenAppaArchestraAnnotator {
         baseUrl: selection.baseUrl,
       }),
     }) as SystemModelMessage[];
-    const refusalKey = JSON.stringify([
+    // A fraction of the budget, so the tagged truncation retry's extra room
+    // still fits under the model's real output cap. Both forms reserve the
+    // same, so the format is all that tells one request from the other.
+    const maxOutputTokens =
+      budget === undefined
+        ? undefined
+        : Math.floor(budget / TRUNCATION_RETRY_FACTOR);
+    const call = { model, system, request, maxOutputTokens };
+    const formatKey = JSON.stringify([
       selection.provider,
       selection.modelName,
       selection.baseUrl,
       request.schema,
     ]);
     try {
-      const structured = await structuredAnswer({
-        model,
-        refusalKey,
-        system,
-        request,
-        maxOutputTokens: budget,
-      });
+      const structured = await structuredAnswer({ ...call, formatKey });
       const answer =
         structured.kind === "answered"
           ? structured.answer
-          : await taggedAnswer({
-              model,
-              system,
-              request,
-              // A fraction of the budget, so the truncation retry's extra room
-              // still fits under the model's real output cap.
-              maxOutputTokens:
-                budget === undefined
-                  ? undefined
-                  : Math.floor(budget / TRUNCATION_RETRY_FACTOR),
-            });
+          : await taggedAnswer(call);
       if (answer === null)
         return {
           kind: "failed",
           reason: "The model did not answer a JSON object.",
         };
-      // The same input was answered without the format, so the rejection was
-      // about the format, not this request.
-      if (structured.kind === "refused") {
-        structuredOutputRefusals.set(refusalKey, true);
-        logger.info(
-          { provider: selection.provider, model: selection.modelName },
-          "OpenAPPA archestra annotator: the model refused structured output; using tagged answers",
-        );
+      // The same request was answered without the format, so the format is
+      // what failed.
+      switch (structured.kind) {
+        case "refused":
+          formatStrikes.set(formatKey, STRIKES_TO_SKIP_FORMAT);
+          logger.info(
+            { provider: selection.provider, model: selection.modelName },
+            "OpenAPPA archestra annotator: the model refused structured output; using tagged answers",
+          );
+          break;
+        case "unparsed":
+          formatStrikes.set(formatKey, (formatStrikes.get(formatKey) ?? 0) + 1);
+          break;
+        case "answered":
+        case "skipped":
+          break;
       }
       return { kind: "answered", answer };
     } catch (error) {
@@ -280,32 +280,36 @@ type AnnotationCall = {
 };
 
 /**
- * Model endpoints that refused the structured-output format for a schema while
- * taking the same input as a tagged answer, so later consults go straight to
- * the tagged answer instead of paying for a refused call each time. Entries
- * expire, so a provider that gains support is tried again.
+ * Strikes against the structured-output format per model endpoint and schema,
+ * each counted when the tagged answer then went through: a rejected request
+ * is enough at once, an answer outside the schema counts one, and a structured
+ * answer clears them. At the limit later consults go straight to the tagged
+ * answer instead of paying for a failed call each time; entries expire, so a
+ * provider that gains support is tried again.
  */
-const structuredOutputRefusals = new LRUCacheManager<true>({
+const formatStrikes = new LRUCacheManager<number>({
   maxSize: 256,
   defaultTtl: 60 * 60 * 1000,
 });
+const STRIKES_TO_SKIP_FORMAT = 2;
 
 /**
  * The answer under the provider's structured-output format, which carries the
  * schema beside the prompt. `refused`: the provider rejected the request.
- * `fallback`: the format is known to be refused, or this answer fell outside
- * it. Either way the caller falls back to the tagged answer; authentication,
- * rate and cost limits propagate unchanged.
+ * `unparsed`: this answer fell outside the schema. `skipped`: the format has
+ * failed here too often lately. All but `answered` fall back to the tagged
+ * answer; authentication, rate and cost limits propagate unchanged.
  */
 async function structuredAnswer(
-  call: AnnotationCall & { refusalKey: string },
+  call: AnnotationCall & { formatKey: string },
 ): Promise<
   | { kind: "answered"; answer: Record<string, unknown> }
   | { kind: "refused" }
-  | { kind: "fallback" }
+  | { kind: "unparsed" }
+  | { kind: "skipped" }
 > {
-  if (structuredOutputRefusals.get(call.refusalKey))
-    return { kind: "fallback" };
+  if ((formatStrikes.get(call.formatKey) ?? 0) >= STRIKES_TO_SKIP_FORMAT)
+    return { kind: "skipped" };
   try {
     const { output } = await generateText({
       model: call.model,
@@ -314,11 +318,11 @@ async function structuredAnswer(
       output: Output.object({ schema: jsonSchema(call.request.schema) }),
       maxOutputTokens: call.maxOutputTokens,
     });
-    return isPlainObject(output)
-      ? { kind: "answered", answer: output }
-      : { kind: "fallback" };
+    if (!isPlainObject(output)) return { kind: "unparsed" };
+    formatStrikes.delete(call.formatKey);
+    return { kind: "answered", answer: output };
   } catch (error) {
-    if (NoObjectGeneratedError.isInstance(error)) return { kind: "fallback" };
+    if (NoObjectGeneratedError.isInstance(error)) return { kind: "unparsed" };
     if (!APICallError.isInstance(error)) throw error;
     switch (error.statusCode) {
       case 400:

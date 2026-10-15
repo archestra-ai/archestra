@@ -243,24 +243,44 @@ describe("archestra annotator", () => {
     ]);
   });
 
-  test("keeps asking for the format after one answer that did not parse", async () => {
-    await useDefaultModel({ provider: "openai", modelId: "gpt-4o-mini" });
-    let structured = 0;
+  test("skips the format only once its answers keep falling outside the schema", async () => {
+    await useDefaultModel({
+      provider: "openai",
+      modelId: "gpt-answers-in-prose",
+    });
+    const structuredReplies = [
+      "not json",
+      '{"rank":"trusted"}',
+      "not json",
+      "not json",
+    ];
     const sent = answerAt(`/v1/openai/${agentId}/chat/completions`, (body) =>
       "response_format" in body
-        ? completion(structured++ === 0 ? "not json" : '{"rank":"trusted"}')
+        ? completion(structuredReplies.shift() ?? "unexpected")
         : completion('<annotation>{"rank":"suspicious"}</annotation>'),
     );
 
-    const first = await annotate(bearer());
-    const second = await annotate(bearer());
+    const answers = [];
+    for (let consult = 0; consult < 5; consult++)
+      answers.push((await annotate(bearer())).json());
 
-    expect(first.json()).toEqual({ rank: "suspicious" });
-    expect(second.json()).toEqual({ rank: "trusted" });
+    expect(answers.map((answer) => answer.rank)).toEqual([
+      "suspicious",
+      "trusted",
+      "suspicious",
+      "suspicious",
+      "suspicious",
+    ]);
+    // A structured answer clears the first miss; two in a row skip the format.
     expect(sent.map(({ body }) => "response_format" in body)).toEqual([
       true,
       false,
       true,
+      true,
+      false,
+      true,
+      false,
+      false,
     ]);
   });
 
@@ -364,8 +384,9 @@ describe("archestra annotator", () => {
     ]);
   });
 
-  test("answers unattributed when the attribution names no session, and without a user who left the organization", async ({
+  test("answers unattributed when the attribution names no single session, and without a user who left the organization", async ({
     makeUser,
+    makeOrganization,
   }) => {
     await useDefaultModel({
       provider: "openai",
@@ -377,6 +398,16 @@ describe("archestra annotator", () => {
       callerId: `user:${outsider.id}`,
       sessionId: `user:${outsider.id}|conversation`,
     });
+    // Two organizations' rows under one root name no single owner.
+    const shared = "archestra:shared-root";
+    const other = (await makeOrganization()).id;
+    for (const owner of [organizationId, other])
+      await openSession({
+        organizationId: owner,
+        callerId: "app:shared",
+        sessionId: "app:shared|conversation",
+        root: shared,
+      });
     const sent = answerAt(`/v1/openai/${agentId}/chat/completions`, () =>
       completion('{"rank":"trusted"}'),
     );
@@ -388,14 +419,20 @@ describe("archestra annotator", () => {
         trajectory: "archestra:unknown",
       },
     });
+    const ambiguous = await annotate(bearer(), {
+      ...request,
+      attribution: { root: shared, trajectory: shared },
+    });
     const outside = await annotate(bearer(), {
       ...request,
       attribution: { root: ROOT, trajectory: ROOT },
     });
 
     expect(unknown.json()).toEqual({ rank: "trusted" });
+    expect(ambiguous.json()).toEqual({ rank: "trusted" });
     expect(outside.json()).toEqual({ rank: "trusted" });
     expect(sent.map(({ user, session }) => ({ user, session }))).toEqual([
+      { user: null, session: null },
       { user: null, session: null },
       { user: null, session: "conversation" },
     ]);

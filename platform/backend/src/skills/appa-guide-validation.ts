@@ -18,8 +18,11 @@ Do not offer one after a first policy or \`init\`, for explain, review, or yell 
 ## Get the case
 
 1. A concrete case names an action and the expected decision, plus starting conditions when they matter (for example, after reading private Slack data). If the request or the change you just made gives one, go to **Write**.
-2. Otherwise read only the policy, then ask one \`archestra__ask_user\` question, "Which case should the validation cover?", with one or two example cases built from the connected servers' tools as options (for example, "Block public posting after reading an HR record"); the operator types their own case in its "Type something" field. The question is your whole reply: do not inspect servers or read the suite first, do not summarize the policy or the existing validations, and do not offer to review them.
-3. If the operator asks what to check, name one or two cases the policy's own rules govern and ask them to pick one or describe their own.
+2. Otherwise read only the policy and find the operator's own rules: root \`[[policy.tool]]\` rules that name a tool other than \`archestra__*\` or the catch-all \`*\`. The starter's controls for platform tools (\`run_command\`, \`ask_user\`, \`superyell\`), the catch-all, and battery rules are defaults: never offer them as cases.
+   - **With own rules**: ask one \`archestra__ask_user\` question, "Which case should the validation cover?", with one or two options, each a case one of those rules decides (for example, "Block public posting after reading an HR record"); the operator types their own case in its "Type something" field.
+   - **Without own rules**: say in one sentence that the policy has only default rules, so there is no case of theirs to validate yet, and offer to make a change first (\`references/adjust.md\`); after that change, offer its validation as **When to offer one** says.
+   - Either way, that is your whole reply: do not inspect servers or read the suite first, do not summarize the policy or the existing validations, and do not offer to review them.
+3. If the operator asks what to check, name one or two cases their own rules decide and ask them to pick one or describe their own.
 
 ## Before you write
 

@@ -214,9 +214,7 @@ function ValidationCard() {
   const statusLabel = status
     ? { passed: "Passed", failed: "Failed", cannot_run: "Cannot run" }[status]
     : "";
-  const qualifiers = [run?.draft && "draft", run?.stale && "outdated"].filter(
-    Boolean,
-  );
+  const qualifiers = [run?.draft && "draft"].filter(Boolean);
   return (
     <StatusCard
       icon={<ClipboardCheck />}

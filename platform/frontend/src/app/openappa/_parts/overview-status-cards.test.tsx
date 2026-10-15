@@ -240,7 +240,8 @@ test("draft and stale results are visibly qualified", async () => {
   const summary = await screen.findByRole("region", {
     name: "Last validation run",
   });
-  expect(await screen.findByText("Failed (draft, outdated)")).toBeVisible();
+  expect(await screen.findByText("Failed (draft)")).toBeVisible();
+  expect(screen.queryByText(/outdated/)).not.toBeInTheDocument();
   expect(summary).toHaveTextContent(
     formatDate({ date: validationRun.createdAt }),
   );

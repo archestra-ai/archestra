@@ -327,8 +327,6 @@ export type TokenAuthContext = {
   /** OAuth client the caller signed in with, for OAuth tokens */
   oauthClientId?: string;
   serviceAccountId?: string;
-  /** Set when the service account is the organization's built-in one */
-  isSystemServiceAccount?: boolean;
   /** Who sent the request over the HTTP gateway; unset for in-process calls */
   source?: McpGatewayCallSource;
   /** Headers to forward to downstream MCP servers (extracted from incoming request per gateway allowlist) */

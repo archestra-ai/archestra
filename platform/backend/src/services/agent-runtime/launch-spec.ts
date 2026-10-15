@@ -360,7 +360,9 @@ export async function buildAgentRunLaunchSpec(params: {
         Math.ceil((boundWorkspace.expiresAt.getTime() - Date.now()) / 1000),
       )
     : (params.runtime.ttlHours ?? config.agentRuntime.defaultTtlHours) * 3600;
-  let accountToken: { id: string; token: string } | null = null;
+  let accountToken: Awaited<
+    ReturnType<typeof ServiceAccountModel.createToken>
+  > | null = null;
   let gatewayToken: string;
   try {
     accountToken =
@@ -371,16 +373,7 @@ export async function buildAgentRunLaunchSpec(params: {
             name: `agent-run-${params.runId}`,
             expiresIn: deadline,
           })
-        : params.actor.kind === "system" ||
-            params.actor.kind === "organization" ||
-            params.actor.kind === "oauthClient"
-          ? // Work with no user behind it acts as the built-in system account.
-            await ServiceAccountModel.createSystemRunToken({
-              organizationId: params.organizationId,
-              name: `agent-run-${params.runId}`,
-              expiresIn: deadline,
-            })
-          : null;
+        : null;
     gatewayToken =
       accountToken?.token ??
       (await resolveGatewayToken({

@@ -197,8 +197,6 @@ export interface TokenAuthResult {
   /** OAuth client the caller signed in with, for OAuth tokens */
   oauthClientId?: string;
   serviceAccountId?: string;
-  /** Set when the service account is the organization's built-in one */
-  isSystemServiceAccount?: boolean;
 }
 
 /**
@@ -1934,8 +1932,6 @@ async function validateServiceAccountGatewayAccess(params: {
   organizationId: string;
   /** Team the account acts for; call-time credentials prefer its installs. */
   teamId: string | null;
-  /** The organization's built-in account, which stands in for system runs. */
-  isSystem?: boolean;
   tokenId: string;
 }): Promise<TokenAuthResult | null> {
   const id = serviceAccountUserId(params.serviceAccountId);
@@ -1953,7 +1949,6 @@ async function validateServiceAccountGatewayAccess(params: {
   return {
     tokenId: params.tokenId,
     serviceAccountId: params.serviceAccountId,
-    ...(params.isSystem && { isSystemServiceAccount: true }),
     organizationId: params.organizationId,
     teamId: params.teamId,
     isOrganizationToken: false,
@@ -2172,7 +2167,6 @@ export async function authenticateMCPGatewayRequest(
         serviceAccountId: resolvedToken.serviceAccount.id,
         organizationId: resolvedToken.serviceAccount.organizationId,
         teamId: resolvedToken.serviceAccount.teamId,
-        isSystem: resolvedToken.serviceAccount.isSystem,
         tokenId: resolvedToken.token.id,
       });
       return result

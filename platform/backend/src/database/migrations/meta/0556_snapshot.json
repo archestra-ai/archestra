@@ -1,5 +1,5 @@
 {
-  "id": "ed0bfec7-0d70-4bcd-9c1f-4a615eafd764",
+  "id": "0a849a0b-a1f6-4fa9-a12b-fecc333693ac",
   "prevId": "7f37e0be-17cc-4405-bed7-3e73a955e59c",
   "version": "7",
   "dialect": "postgresql",
@@ -21706,13 +21706,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "is_system": {
-          "name": "is_system",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
         "created_by": {
           "name": "created_by",
           "type": "text",
@@ -21788,22 +21781,6 @@
             }
           ],
           "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "service_accounts_organization_id_system_unique_idx": {
-          "name": "service_accounts_organization_id_system_unique_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"service_accounts\".\"is_system\"",
           "concurrently": false,
           "method": "btree",
           "with": {}

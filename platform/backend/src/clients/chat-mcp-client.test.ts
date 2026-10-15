@@ -2577,13 +2577,13 @@ describe("selectMCPGatewayToken synthetic principals", () => {
     expect(rotated?.tokenValue).not.toBe(first?.tokenValue);
   });
 
-  test("the system principal acts as the built-in system account", async ({
+  test("the system principal uses the organization token", async ({
     makeOrganization,
     makeAgent,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
-    await TeamTokenModel.create({
+    const { token } = await TeamTokenModel.create({
       organizationId: org.id,
       isOrganizationToken: true,
       name: "Org Token",
@@ -2595,13 +2595,11 @@ describe("selectMCPGatewayToken synthetic principals", () => {
       org.id,
     );
 
-    const system = await ServiceAccountModel.ensureSystemServiceAccount(org.id);
     expect(result).toMatchObject({
-      serviceAccountId: system.id,
-      isOrganizationToken: false,
+      tokenId: token.id,
+      isOrganizationToken: true,
     });
-    // Hidden from the organization's accounts.
-    expect(await ServiceAccountModel.findById(system.id, org.id)).toBeNull();
+    expect(await ServiceAccountModel.listByOrganizationId(org.id)).toEqual([]);
   });
 
   test("a disabled or unknown service account gets no token", async ({

@@ -290,9 +290,8 @@ export const __test = {
 /**
  * Select the token the chat MCP client presents to the gateway:
  * - a team token's call uses that team's token;
- * - a service account (`service-account:<id>`) uses its platform key, and
- *   the headless "system" sentinel uses the organization's built-in system
- *   account's;
+ * - a service account (`service-account:<id>`) uses its platform key;
+ * - the headless "system" sentinel uses the organization token;
  * - a person uses their personal token, then a team token for a team they
  *   share with the profile.
  *
@@ -327,18 +326,12 @@ export async function selectMCPGatewayToken(
   }
 
   // Synthetic principals have no users row, so they can never own a personal
-  // user token. They act through a service account instead of borrowing the
-  // organization token.
+  // user token. A service account acts through its own key instead of
+  // borrowing the organization token.
   const serviceAccountId = serviceAccountIdFromUserId(userId);
-  const serviceAccount =
-    userId === "system"
-      ? await ServiceAccountModel.ensureSystemServiceAccount(organizationId)
-      : serviceAccountId
-        ? await ServiceAccountModel.findAccount(
-            serviceAccountId,
-            organizationId,
-          )
-        : null;
+  const serviceAccount = serviceAccountId
+    ? await ServiceAccountModel.findAccount(serviceAccountId, organizationId)
+    : null;
   if (serviceAccount) {
     if (serviceAccount.disabled) {
       logger.warn(
@@ -367,6 +360,25 @@ export async function selectMCPGatewayToken(
       "Service account not found - no gateway token for chat MCP client",
     );
     return null;
+  }
+  if (userId === "system") {
+    const orgToken = (await TeamTokenModel.findAll(organizationId)).find(
+      (token) => token.isOrganizationToken,
+    );
+    const tokenValue = orgToken
+      ? await TeamTokenModel.getTokenValue(orgToken.id)
+      : null;
+    if (!orgToken || !tokenValue) return null;
+    logger.info(
+      { agentId, userId, tokenId: orgToken.id },
+      "Using organization token for chat MCP client (system principal)",
+    );
+    return {
+      tokenValue,
+      tokenId: orgToken.id,
+      teamId: null,
+      isOrganizationToken: true,
+    };
   }
 
   // Get user's team IDs and profile's team IDs (needed for fallback token selection)

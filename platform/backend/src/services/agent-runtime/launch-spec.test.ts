@@ -373,7 +373,7 @@ describe("buildAgentRunLaunchSpec", () => {
     expect(providerVirtualKeys.map(({ id }) => id)).toContain(virtualApiKeyId);
   });
 
-  test("a system run acts as the built-in system account through a key of its own", async ({
+  test("uses organization-scoped access for a system run actor", async ({
     makeOrganization,
     makeAdmin,
     makeMember,
@@ -396,36 +396,27 @@ describe("buildAgentRunLaunchSpec", () => {
       name: "Automation token",
     });
 
-    const { spec, virtualApiKeyId, gatewayTokenId } =
-      await buildAgentRunLaunchSpec({
-        runtime: runtime(setup.agent, "openai_responses"),
-        taskId: crypto.randomUUID(),
-        runId: crypto.randomUUID(),
-        agentId: setup.agent.id,
-        actor: {
-          id: "system",
-          kind: "system",
-          organizationId: setup.agent.organizationId,
-        },
+    const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
+      runtime: runtime(setup.agent, "openai_responses"),
+      taskId: crypto.randomUUID(),
+      runId: crypto.randomUUID(),
+      agentId: setup.agent.id,
+      actor: {
+        id: "system",
+        kind: "system",
         organizationId: setup.agent.organizationId,
-        runtimeScope: "agent-tests",
-        effectiveNetworkPolicy: { source: "built_in", policy: null },
-        appName: "Archestra",
-        runMode: "one_shot",
-        task: "Process an incoming message.",
-      });
+      },
+      organizationId: setup.agent.organizationId,
+      runtimeScope: "agent-tests",
+      effectiveNetworkPolicy: { source: "built_in", policy: null },
+      appName: "Archestra",
+      runMode: "one_shot",
+      task: "Process an incoming message.",
+    });
 
-    // Not the organization token: an expiring key on the built-in account,
-    // revoked with the run.
-    const system = await ServiceAccountModel.ensureSystemServiceAccount(
-      setup.agent.organizationId,
+    expect(spec.secretEnv.ARCHESTRA_MCP_GATEWAY_TOKEN).toEqual(
+      expect.any(String),
     );
-    const verified = await ServiceAccountModel.verifyToken(
-      spec.secretEnv.ARCHESTRA_MCP_GATEWAY_TOKEN,
-    );
-    expect(verified?.serviceAccount.id).toBe(system.id);
-    expect(verified?.token.id).toBe(gatewayTokenId);
-    expect(verified?.token.expiresAt).not.toBeNull();
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise

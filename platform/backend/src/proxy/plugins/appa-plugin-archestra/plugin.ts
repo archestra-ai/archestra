@@ -160,7 +160,11 @@ import {
   type NativeQuestionNoAnswer,
   type NativeQuestionReading,
 } from "./types";
-import { withCallerScope, withoutCallerScope } from "./utils";
+import {
+  withCallerScope,
+  withoutCallerScope,
+  withoutRemedySections,
+} from "./utils";
 
 type AppaPluginBinding = {
   /** The request continues a provider thread that holds the system prompt. */
@@ -1524,18 +1528,18 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             ruling: decision.feedback,
           });
         }
-        // A call that only needs loading gets that one instruction.
+        // A call that only needs loading gets that one instruction. A client
+        // that defers tools can still load the remedy tools and act on the
+        // plans. Any other session cannot act on them, so the ruling loses its
+        // plan and delegation sections: the model would otherwise pass them
+        // on to the person as options.
         const contentMessage = notLoaded.has(call.id)
           ? decision.feedback
           : noPlan
             ? ruling
-            : transient
-              ? `${ruling}\n\n[appa] This request did not include the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the ruling could not be offered as a remedy and the call is refused. The gateway tools usually finish loading a moment after the session starts. Send your message again.`
-              : binding.request.defersTools
-                ? `${ruling}\n\n[appa] This client defers tools it has not loaded, and the ${archestraMcpBranding.serverName} MCP gateway remedy tools are not loaded in this session, so the ruling could not be offered as a remedy and the call is refused. Search for ${TOOL_GET_REMEDY_PLANS_SHORT_NAME} and ${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME} with your tool search, then call the denied tool again to receive the remedy.`
-                : binding.request.declaredTools.length === 0
-                  ? `${ruling}\n\n[appa] This request listed no tools, so the ruling could not be offered as a remedy and the call is refused. Remedies need the ${archestraMcpBranding.serverName} MCP gateway tools in the request. Connect the gateway, then start a new session. In Codex, also set code_mode_host = false: code mode keeps its tools out of the request.`
-                  : `${ruling}\n\n[appa] This client did not declare the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the call is refused. Connect the MCP gateway and allow both remedy tools to use approval plans.`;
+            : binding.request.defersTools
+              ? `${ruling}\n\n[appa] This client defers tools it has not loaded, and the ${archestraMcpBranding.serverName} MCP gateway remedy tools are not loaded in this session, so the ruling could not be offered as a remedy and the call is refused. Search for ${TOOL_GET_REMEDY_PLANS_SHORT_NAME} and ${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME} with your tool search, then call the denied tool again to receive the remedy.`
+              : `${withoutRemedySections(decision.feedback)}${clarification}\n\n${remedylessRefusalNote({ binding, transient })}`;
         return {
           decision: "refuse",
           refusal: {
@@ -1999,6 +2003,27 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
 
 const NO_REMEDY_PLAN_HINT =
   "\n\n[appa] This ruling offers no remedy plan. Explain the ruling to the user and STOP this blocked action. Do not retry the same call, directly or through a wrapper.";
+
+/**
+ * Why a refused call got no remedy, and what the person does about it. The
+ * client's adapter knows where its gateway state is seen and how to sign in.
+ * Without one, the first miss in a session is read as tools still loading.
+ */
+function remedylessRefusalNote(params: {
+  binding: AppaPluginBinding;
+  transient: boolean;
+}): string {
+  const server = archestraMcpBranding.serverName;
+  if (params.binding.request.declaredTools.length === 0) {
+    return `[appa] This request listed no tools, so the ruling could not be offered as a remedy and the call is refused. Remedies need the ${server} MCP gateway tools in the request. Connect the gateway, then start a new session. In Codex, also set code_mode_host = false: code mode keeps its tools out of the request.`;
+  }
+  const lead = `[appa] This request did not include the ${server} MCP gateway tools, so no remedy plan can be used in this session, and a subagent started from it has the same limit. The call is refused.`;
+  const hint = params.binding.adapter?.gatewayToolsHint?.(server);
+  if (hint) return `${lead} ${hint}`;
+  return params.transient
+    ? `${lead} The gateway tools usually finish loading a moment after the session starts. Send your message again.`
+    : `${lead} Connect this client to the ${server} MCP gateway, then start a new session.`;
+}
 
 function deniedCallClarificationKey(params: {
   session: OpenAppaSession;

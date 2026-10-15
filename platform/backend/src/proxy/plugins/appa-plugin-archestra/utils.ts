@@ -24,6 +24,21 @@ export function questionHeader(header: unknown, maxLength: number): string {
     : "Question";
 }
 
+/**
+ * The ruling without the sections that name a remedy: the plan calls under
+ * `Continue:` and the delegation advice that follows them. For a session that
+ * cannot make those calls, so the model does not pass them on as options.
+ */
+export function withoutRemedySections(ruling: string): string {
+  const lines = ruling.split("\n");
+  const cut = lines.findIndex(
+    (line, index) =>
+      REMEDY_SECTION_HEADINGS.has(line) &&
+      (index === 0 || lines[index - 1] === ""),
+  );
+  return cut === -1 ? ruling : lines.slice(0, cut).join("\n").trimEnd();
+}
+
 /** The id as this session's runtime knows it: under its caller's scope. */
 export function withCallerScope(session: OpenAppaSession, id: string): string {
   if (!session.caller_id) return id;
@@ -41,3 +56,15 @@ export function withoutCallerScope(
   const prefix = session.caller_id ? `${session.caller_id}|` : undefined;
   return prefix && id.startsWith(prefix) ? id.slice(prefix.length) : id;
 }
+
+/**
+ * The runtime's headings for the parts of a ruling that name a remedy or a
+ * route around it. Each sits on its own line after a blank line.
+ */
+const REMEDY_SECTION_HEADINGS = new Set([
+  "Continue:",
+  "Keep this session unchanged:",
+  "Delegation:",
+  "Refused by the parent's declaration:",
+  "Alternative:",
+]);

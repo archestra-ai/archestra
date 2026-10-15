@@ -2,6 +2,7 @@ import { createHash, createHmac, randomUUID } from "node:crypto";
 import { gunzipSync } from "node:zlib";
 import { TimeInMs } from "@archestra/shared";
 import { type MockInstance, vi } from "vitest";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import * as database from "@/database";
@@ -47,7 +48,7 @@ import { ApiError } from "@/types";
 import { AppaChatAdapter } from "./adapters/chat";
 import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
-import { AppaOpenCodeAdapter } from "./adapters/opencode";
+import { AppaKiloAdapter, AppaOpenCodeAdapter } from "./adapters/opencode";
 import { AppaPluginArchestra } from "./plugin";
 import {
   APPA_CHILD_TRAJECTORY_RECEIPT,
@@ -55,6 +56,7 @@ import {
   type AppaChildTrajectoryReceiptOutput,
   type AppaTrustedContext,
 } from "./types";
+import { withoutRemedySections } from "./utils";
 
 // The real cache, stored in this file's test database.
 setupTestCacheManager();
@@ -3223,7 +3225,176 @@ describe("AppaPluginArchestra", () => {
   });
 });
 
+describe("withoutRemedySections", () => {
+  test("keeps the block and its reasons, and drops the plans and the delegation advice", () => {
+    expect(withoutRemedySections(NARROWING_RULING)).toBe(
+      [
+        "[appa] Blocked: Bash cannot run yet.",
+        "",
+        "Why:",
+        "  - allowed readers would narrow: public -> internal",
+        "  - Accepting restricts 25 of 319 tools for this session: 25 will need sign-off, 0 will be blocked.",
+      ].join("\n"),
+    );
+  });
+
+  test("drops an alternative route offered after the plans", () => {
+    expect(withoutRemedySections(APPROVAL_RULING)).toBe(
+      [
+        "[appa] Blocked: Bash cannot run yet.",
+        "",
+        "Why:",
+        "  - trust is suspicious, below the required floor trusted",
+      ].join("\n"),
+    );
+  });
+
+  test("leaves a ruling without those sections as it is", () => {
+    const ruling =
+      "[appa] Refused: tool builtin:exec is not declared in this policy";
+    expect(withoutRemedySections(ruling)).toBe(ruling);
+  });
+});
+
 describe("rendering runtime text for this client", () => {
+  test("shows a ruling the session cannot act on without its plans, and where Claude Code shows the gateway", async () => {
+    // The gateway needs a sign-in, so Claude Code lists no gateway tool and
+    // no wait tool: nothing is pending. The ruling still names a plan and a
+    // subagent route, which the model would pass on as options; neither can
+    // be taken here. The person is sent to /mcp, where the client says why.
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({ sessionId: "gateway-needs-sign-in" });
+    context.headers = { "user-agent": "claude-cli/2.1.300 (external, cli)" };
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: undefined,
+      customTools: new Set(),
+      declaredTools: [{ name: "Bash" }, { name: "Read" }],
+    };
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async () => [
+        {
+          kind: "deny" as const,
+          feedback: NARROWING_RULING,
+          recorded: true as const,
+          offers: ["19c2f9e386227c19"],
+        },
+      ]);
+    const cancelCalls = vi
+      .spyOn(appaService, "cancelCalls")
+      .mockResolvedValue(undefined);
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = (await plugin.onToolCalls({
+        ...context,
+        toolCalls: [{ id: "bash", name: "Bash", arguments: { command: "ls" } }],
+      })) as { decision: string; refusal: { contentMessage: string } };
+      expect(outcome.decision).toBe("refuse");
+      const message = outcome.refusal.contentMessage;
+      expect(
+        message.startsWith("[appa] Blocked: Bash cannot run yet.\n\nWhy:\n"),
+      ).toBe(true);
+      expect(message).toContain("allowed readers would narrow");
+      for (const gone of [
+        "Continue:",
+        "execute_remedy_plan(",
+        "Keep this session unchanged:",
+        "subagent tool is available",
+      ]) {
+        expect(message).not.toContain(gone);
+      }
+      expect(message).toContain(
+        `[appa] This request did not include the ${archestraMcpBranding.serverName} MCP gateway tools, so no remedy plan can be used in this session, and a subagent started from it has the same limit. The call is refused.`,
+      );
+      expect(message).toContain(
+        `Run /mcp in Claude Code. If "${archestraMcpBranding.serverName}" is still connecting, wait for it. If it needs authentication, select it and sign in.`,
+      );
+      expect(message).toMatch(/Then send your message again\.$/);
+    } finally {
+      cancelCalls.mockRestore();
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
+  test.each([
+    {
+      client: "Codex",
+      adapter: () => new AppaCodexAdapter(),
+      headers: { "user-agent": "codex_cli_rs/0.99.0" },
+      hint: (server: string) =>
+        `Run codex mcp login ${server} and finish the sign-in in your browser. If "${server}" is not in your Codex config, connect Codex again. Then start a new session.`,
+    },
+    {
+      client: "OpenCode",
+      adapter: () => new AppaOpenCodeAdapter(),
+      headers: { "user-agent": "opencode/1.17.0" },
+      hint: (server: string) =>
+        `Run opencode mcp auth ${server} and finish the sign-in in your browser. If "${server}" is not configured, connect OpenCode again. Then start a new session.`,
+    },
+    {
+      client: "Kilo Code",
+      adapter: () => new AppaKiloAdapter(),
+      headers: {
+        "user-agent":
+          "kilo/latest/7.8.8/cli ai-sdk/provider-utils/4.0.46 runtime/bun/1.4.2",
+      },
+      hint: (server: string) =>
+        `Run kilo mcp auth ${server} and finish the sign-in in your browser. If "${server}" is not configured, connect Kilo Code again. Then start a new session.`,
+    },
+  ])("names $client's sign-in when its request carries no gateway tools", async ({
+    adapter,
+    headers,
+    hint,
+  }) => {
+    // These clients read the gateway's sign-in and config only when they
+    // start, so a resend would meet the same refusal.
+    const plugin = new AppaPluginArchestra([adapter()]);
+    const context = requestContext({ sessionId: "gateway-not-signed-in" });
+    context.headers = headers;
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: undefined,
+      customTools: new Set(),
+      declaredTools: [{ name: "read_file" }],
+    };
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async () => [
+        {
+          kind: "deny" as const,
+          feedback: APPROVAL_RULING,
+          recorded: true as const,
+          offers: ["9b003e10090940eb"],
+        },
+      ]);
+    const cancelCalls = vi
+      .spyOn(appaService, "cancelCalls")
+      .mockResolvedValue(undefined);
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = (await plugin.onToolCalls({
+        ...context,
+        toolCalls: [{ id: "call", name: "read_file", arguments: {} }],
+      })) as { decision: string; refusal: { contentMessage: string } };
+      expect(outcome.decision).toBe("refuse");
+      expect(outcome.refusal.contentMessage).not.toContain("Alternative:");
+      expect(outcome.refusal.contentMessage).not.toContain(
+        "Send your message again",
+      );
+      expect(outcome.refusal.contentMessage).toContain(
+        hint(archestraMcpBranding.serverName),
+      );
+    } finally {
+      cancelCalls.mockRestore();
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
   test("refuses the turn and saves a local diagnostic when the client cannot receive remedies", async ({
     makeOrganization,
   }) => {
@@ -3421,14 +3592,12 @@ describe("rendering runtime text for this client", () => {
       const first = await refuse();
       expect(first.decision).toBe("refuse");
       expect(first.refusal.contentMessage).toContain("Send your message again");
-      expect(first.refusal.contentMessage).not.toContain(
-        "Connect the MCP gateway",
-      );
+      expect(first.refusal.contentMessage).not.toContain("Connect this client");
       expect((await yells()).data).toHaveLength(0);
 
       const second = await refuse();
       expect(second.refusal.contentMessage).toContain(
-        "Connect the MCP gateway",
+        `Connect this client to the ${archestraMcpBranding.serverName} MCP gateway, then start a new session.`,
       );
       expect((await yells()).data).toHaveLength(1);
     } finally {
@@ -3504,8 +3673,9 @@ describe("rendering runtime text for this client", () => {
         refusal: { contentMessage: string };
       };
       expect(second.decision).toBe("refuse");
+      // Claude Code's own view of its servers is where the person sees why.
       expect(second.refusal.contentMessage).toContain(
-        "Send your message again",
+        "Run /mcp in Claude Code.",
       );
       expect(cancelCalls.mock.calls[0][1]).toEqual(["admitted"]);
       expect((await yells()).data).toHaveLength(0);
@@ -5917,6 +6087,41 @@ function nativeQuestionCacheWrites(
     String(call[0]).startsWith(`${CacheKey.OpenAppaNativeQuestion}-`),
   );
 }
+
+/**
+ * Rulings as the runtime renders them for a proxied client: a plan under
+ * `Continue:`, then advice on delegating the work. The first narrows the
+ * session's readers; the second needs a person's approval.
+ */
+const NARROWING_RULING = [
+  "[appa] Blocked: Bash cannot run yet.",
+  "",
+  "Why:",
+  "  - allowed readers would narrow: public -> internal",
+  "  - Accepting restricts 25 of 319 tools for this session: 25 will need sign-off, 0 will be blocked.",
+  "",
+  "Continue:",
+  '  - archestra__execute_remedy_plan(offer_id: "19c2f9e386227c19", plan: "Accept narrower readers for the rest of this session")',
+  "",
+  "Keep this session unchanged:",
+  "  If a child-session or subagent tool is available, delegate this call and all work that uses its result there.",
+  "  No registered return sanitizer carries this change back without applying it here, so finish there by returning nothing: a returned value applies the same change to this session.",
+].join("\n");
+
+const APPROVAL_RULING = [
+  "[appa] Blocked: Bash cannot run yet.",
+  "",
+  "Why:",
+  "  - trust is suspicious, below the required floor trusted",
+  "",
+  "Continue:",
+  '  - archestra__execute_remedy_plan(offer_id: "9b003e10090940eb", plan: "Submit for approval")',
+  "    The runtime asks the configured authority and returns its ruling.",
+  "",
+  "Alternative:",
+  "  If a child-session or subagent tool is available, handle the work there if isolation is useful.",
+  "  A child inherits the same session label, so delegation does not clear these requirements.",
+].join("\n");
 
 function requestContext(params: {
   sessionId: string;

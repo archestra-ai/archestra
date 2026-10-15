@@ -63,6 +63,12 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
       openCodeQuestionRuling(result, asked.question),
   };
 
+  // The binary is named after the client; a running session does not pick up
+  // a sign-in or a config change.
+  gatewayToolsHint(serverName: string): string {
+    return `Run ${this.id} mcp auth ${serverName} and finish the sign-in in your browser. If "${serverName}" is not configured, connect ${this.clientLabel} again. Then start a new session.`;
+  }
+
   matches(context: AppaMatchContext): boolean {
     const userAgent = (
       readHeader(context.headers, "user-agent") ?? ""

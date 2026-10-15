@@ -213,6 +213,9 @@ export async function resolveOcrConfig(
     maxOutputTokens: await resolveModelOutputBudget({
       provider: resolved.provider,
       modelName: org.ocrModel,
+      // Older vision models cap output at 4096 and some providers (Bedrock)
+      // reject a larger request instead of clamping it.
+      unknownOutputLength: 4_096,
     }),
   };
 }

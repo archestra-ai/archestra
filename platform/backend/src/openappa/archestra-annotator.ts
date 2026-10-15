@@ -5,7 +5,10 @@ import logger from "@/logging";
 import AgentModel from "@/models/agent";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import OrganizationModel from "@/models/organization";
-import { generateTaggedText } from "@/utils/generate-tagged-text";
+import {
+  generateTaggedText,
+  TRUNCATION_RETRY_FACTOR,
+} from "@/utils/generate-tagged-text";
 import {
   resolveAgentLlmOrDefault,
   resolveModelOutputBudget,
@@ -80,13 +83,13 @@ class OpenAppaArchestraAnnotator {
       baseUrl: selection.baseUrl,
       chatApiKeyId: selection.chatApiKeyId,
     });
-    // Half the model's budget, so the truncation retry's doubled room still
-    // fits under the model's real output cap.
+    // A fraction of the model's budget, so the truncation retry's extra room
+    // still fits under the model's real output cap.
     const maxOutputTokens = Math.floor(
       (await resolveModelOutputBudget({
         provider: selection.provider,
         modelName: selection.modelName,
-      })) / 2,
+      })) / TRUNCATION_RETRY_FACTOR,
     );
     try {
       const text = await generateTaggedText({

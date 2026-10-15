@@ -470,13 +470,18 @@ export async function resolveAgentLlmOrDefault(params: {
 export async function resolveModelOutputBudget(params: {
   provider: SupportedProvider;
   modelName: string;
+  /** Output cap to assume when the catalog has none for the model. */
+  unknownOutputLength?: number;
 }): Promise<number> {
   const model = await ModelModel.findByProviderAndModelId(
     params.provider,
     params.modelName,
   );
   return resolveAgentMaxOutputTokens({
-    outputLength: model ? ModelModel.resolveEffectiveOutputLength(model) : null,
+    outputLength:
+      (model ? ModelModel.resolveEffectiveOutputLength(model) : null) ??
+      params.unknownOutputLength ??
+      null,
     contextLength: model
       ? ModelModel.resolveEffectiveContextLength(model)
       : null,

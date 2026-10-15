@@ -50,4 +50,14 @@ describe("resolveModelOutputBudget", () => {
       }),
     ).toBe(8_192);
   });
+
+  test("a caller can assume a smaller cap for a model the catalog lacks", async () => {
+    expect(
+      await resolveModelOutputBudget({
+        provider: "bedrock",
+        modelName: "us.anthropic.claude-3-haiku-20240307-v1:0",
+        unknownOutputLength: 4_096,
+      }),
+    ).toBe(4_096);
+  });
 });

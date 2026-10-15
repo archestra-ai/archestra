@@ -108775,6 +108775,10 @@ export type GetSkillsData = {
     query?: {
         limit?: number;
         offset?: number;
+        /**
+         * Include manifest bodies (default true). False returns empty content for lightweight lists.
+         */
+        includeContent?: boolean;
         search?: string;
         sourceRepo?: string;
         /**

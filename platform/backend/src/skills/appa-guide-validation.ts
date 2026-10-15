@@ -10,11 +10,10 @@ A validation is a unit test for one case the operator cares about: a short \`.ap
 
 Offer a validation only at these points, in one sentence, and never more than once per conversation:
 
-- **After a first policy or \`init\` is saved**: ask whether there is a specific case the policy must handle, with one example from the connected servers, and say you can write a validation for it.
 - **After a targeted behavior change is approved**: ask with one \`archestra__ask_user\` question, "Add a validation for this change?", with options "Write validation" and "Not now". With local delivery, ask after the save. When approval opens a pull request, ask before publishing, so the check joins the same pull request: preview it with the complete proposed policy as \`policyContent\`, and publish both with \`archestra__publish_openappa_validation_change\` instead of \`archestra__update_guardrails_policy\`.
 - **When the operator asks to validate the policy or write a validation**: go to **Get the case**.
 
-Do not offer one for explain, review, or yell requests, after the operator declines, or just to add coverage.
+Do not offer one after a first policy or \`init\`, for explain, review, or yell requests, after the operator declines, or just to add coverage.
 
 ## Get the case
 

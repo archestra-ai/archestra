@@ -108,13 +108,10 @@ export function ServerDetails({
           )}
         </div>
 
-        <aside
-          aria-label="Server setup"
-          className="min-w-0 space-y-6 xl:sticky xl:top-44"
-        >
+        <aside aria-label="Server setup" className="min-w-0 space-y-6">
           {configuration.length > 0 && (
             <section className="overflow-hidden rounded-lg border">
-              <h2 className="flex items-center gap-2 border-b bg-muted/25 px-4 py-3 text-sm font-semibold">
+              <h2 className="flex items-center gap-2 border-b bg-muted/25 px-4 py-4 text-sm font-semibold">
                 <Settings2 className="size-4 text-muted-foreground" />
                 <span>Configuration</span>
               </h2>

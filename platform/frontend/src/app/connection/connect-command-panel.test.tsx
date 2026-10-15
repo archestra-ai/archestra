@@ -343,6 +343,17 @@ describe("ConnectCommandPanel", () => {
     expect(createKeyMock).not.toHaveBeenCalled();
   });
 
+  it("prepares a command after switching from download mode without remounting", async () => {
+    const view = renderPanel({ variant: "download" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(createSetupMock).not.toHaveBeenCalled();
+    view.rerender(
+      <ConnectCommandPanel {...renderPanelProps({ variant: "full" })} />,
+    );
+    await waitFor(() => expect(createSetupMock).toHaveBeenCalled());
+    expect(await screen.findByText(COMMAND)).toBeVisible();
+  });
+
   it("keeps the gateway in Desktop downloads while honoring optional exclusions", async () => {
     availableKeysMock.mockReturnValue({ data: [] });
     createSetupMock.mockResolvedValue({

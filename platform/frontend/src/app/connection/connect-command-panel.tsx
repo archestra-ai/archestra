@@ -213,9 +213,8 @@ export function ConnectCommandPanel({
   const searchParams = useSearchParams();
   const connectRequest = searchParams.get("connectRequest");
   const [customizing, setCustomizing] = useState(false);
-  const [downloadRequested, setDownloadRequested] = useState(
-    variant !== "download",
-  );
+  const [downloadRequested, setDownloadRequested] = useState(false);
+  const preparationEnabled = variant !== "download" || downloadRequested;
   // Optional portions start from the Connect page choices and remain editable.
   const [includeProxy, setIncludeProxy] = useState(true);
   const activeLlmProxyId = includeProxy ? llmProxyId : null;
@@ -226,7 +225,7 @@ export function ConnectCommandPanel({
     eligible: skillsEligible,
     skills: allSkills,
     loading: skillsLoading,
-  } = useConnectSkills(skillsEnabled && downloadRequested);
+  } = useConnectSkills(skillsEnabled && preparationEnabled);
   // Providers are named the way this organization names them, so a renamed
   // provider reads the same here as in the model-provider settings.
   const providerCatalog = useModelProviderCatalog();
@@ -730,7 +729,7 @@ export function ConnectCommandPanel({
     // has no provider key to mint from — either way the backend would reject it
     // (or the script would silently drop the proxy).
     if (
-      !downloadRequested ||
+      !preparationEnabled ||
       !hasRunnableAnything ||
       skillsLoading ||
       pluginsLoading ||
@@ -745,7 +744,7 @@ export function ConnectCommandPanel({
     return () => clearTimeout(timer);
   }, [
     inputsKey,
-    downloadRequested,
+    preparationEnabled,
     hasRunnableAnything,
     skillsLoading,
     pluginsLoading,

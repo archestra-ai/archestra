@@ -32,6 +32,7 @@ import {
   SLACK_DEFAULT_CONNECTION_MODE,
   TELEGRAM_LINK_CODE_TTL_MS,
 } from "@/agents/chatops/constants";
+import { resolveMSTeamsUserEmail } from "@/agents/chatops/ms-teams-user";
 import { slackAppFactory } from "@/agents/chatops/slack-app-factory";
 import {
   buildAgentFooter,
@@ -407,12 +408,11 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
               return;
             }
 
-            // Team-channel auto-reply gate: in channels the bot stays quiet
-            // until @mentioned, then keeps replying to that thread without
-            // further mentions, unless the channel opted into answering every
-            // message. Group chats and DMs always reply (no gate). Runs before
-            // sender resolution so we don't do Graph lookups for the many
-            // un-mentioned channel messages the bot now receives.
+            // Gate before sender resolution: ambient conversation must not
+            // invoke an agent or onboard people who did not address the bot.
+            // Channel threads stay active after a mention; flat group chats
+            // require a mention on each request unless answer-all is enabled.
+            // Personal DMs continue to answer every message.
             //
             // A mute command (e.g. "@bot mute") ends the sticky behavior early —
             // honored both when the bot is mentioned and when the thread is
@@ -462,6 +462,24 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
               });
               if (!gate.proceed) return;
               addressed = gate.addressed;
+            } else if (
+              context.activity.conversation?.conversationType === "groupChat"
+            ) {
+              addressed = provider.wasBotMentioned(context.activity);
+              if (
+                !addressed &&
+                !(await isChannelAnswerAllEnabled({
+                  provider: "ms-teams",
+                  channelId: message.channelId,
+                  workspaceId: message.workspaceId,
+                }))
+              ) {
+                await chatOpsManager.recordAmbientMessage({
+                  provider,
+                  message,
+                });
+                return;
+              }
             }
 
             // Attach TurnContext so the provider can send typing indicators
@@ -1034,7 +1052,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
     "/api/webhooks/chatops/slack/oauth/callback",
     {
       schema: {
-        description: "Slack OAuth callback for an agent bot install",
+        description: "Slack OAuth callback for a Slack bot install",
         tags: ["ChatOps Webhooks"],
         querystring: z.object({
           code: z.string().optional(),
@@ -1062,7 +1080,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
           state,
         });
         await chatOpsManager.reinitialize();
-        settingsUrl.searchParams.set("slackBotInstalled", agentId);
+        settingsUrl.searchParams.set("slackBotInstalled", agentId ?? "router");
       } catch (installError) {
         logger.warn(
           { error: errorMessage(installError) },
@@ -1932,9 +1950,11 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         channel: "slack",
       });
 
-      // Merge new values with existing DB config (or defaults for first setup)
+      // Merge new values with existing DB config (or defaults for first setup).
+      // Keeps what the form does not edit, such as a created app's OAuth client.
       const existing = await ChatOpsConfigModel.getSlackConfig();
       const merged = {
+        ...existing,
         enabled: enabled ?? existing?.enabled ?? false,
         botToken: botToken ?? existing?.botToken ?? "",
         signingSecret: signingSecret ?? existing?.signingSecret ?? "",
@@ -1976,12 +1996,23 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             /** The Slack workspace the bots are in, once one has connected. */
             workspaceName: z.string().nullable(),
             /**
-             * A Slack app connected the old way — answering whichever agent a
-             * channel picks — waiting to become one agent's bot.
+             * The router bot: the Slack app that answers as whichever agent
+             * each DM or channel picks, next to the agents' own bots.
              */
             unassignedApp: z
               .object({
                 appId: z.string(),
+                /** The bot's Slack username, what people type after @. */
+                handle: z.string().nullable(),
+                connected: z.boolean(),
+                /** Installed to the workspace (it has a bot token). */
+                installed: z.boolean(),
+                /** Socket Mode without the app-level token Slack has no API to create. */
+                needsAppLevelToken: z.boolean(),
+                /** Whose Slack token created the app, when Archestra created it. */
+                createdBy: z
+                  .object({ id: z.string(), name: z.string().nullable() })
+                  .nullable(),
                 connectionMode: ChatOpsConnectionModeSchema,
                 /** Agents its channels and DMs use, most used first. */
                 agentUsage: z.array(
@@ -2001,7 +2032,11 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const bots = await ChatOpsConfigModel.getSlackAgentBots();
       const main = await ChatOpsConfigModel.getSlackConfig();
       const creatorNames = await UserModel.getNamesByIds([
-        ...new Set(bots.flatMap((bot) => bot.configTokenUserId ?? [])),
+        ...new Set(
+          [...bots, ...(main ? [main] : [])].flatMap(
+            (app) => app.configTokenUserId ?? [],
+          ),
+        ),
       ]);
       const summaries = await Promise.all(
         bots.map(async (bot) => {
@@ -2060,10 +2095,27 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .find(Boolean) ??
           chatOpsManager.getSlackProvider()?.getWorkspaceName() ??
           null,
+        // Listed once connected, or once Archestra created it (to finish
+        // its install).
         unassignedApp:
-          main?.enabled && main.botToken
+          main?.appId &&
+          ((main.enabled && main.botToken) || main.managed || main.clientId)
             ? {
                 appId: main.appId,
+                handle:
+                  chatOpsManager.getSlackProvider()?.getBotHandle() ?? null,
+                connected: Boolean(
+                  chatOpsManager.getSlackProvider()?.getBotUserId(),
+                ),
+                installed: Boolean(main.botToken),
+                needsAppLevelToken:
+                  main.connectionMode === "socket" && !main.appLevelToken,
+                createdBy: main.configTokenUserId
+                  ? {
+                      id: main.configTokenUserId,
+                      name: creatorNames.get(main.configTokenUserId) ?? null,
+                    }
+                  : null,
                 connectionMode: (main.connectionMode ??
                   SLACK_DEFAULT_CONNECTION_MODE) as ChatOpsConnectionMode,
                 agentUsage: await describeSlackAgentUsage(
@@ -2411,6 +2463,68 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
+   * Create the router bot's Slack app — the one that answers as whichever agent
+   * each DM or channel picks — with the user's configuration token, and return
+   * the link the admin opens to install it.
+   */
+  fastify.post(
+    "/api/chatops/config/slack/router/app",
+    {
+      schema: {
+        operationId: RouteId.CreateSlackRouterBotApp,
+        description:
+          "Create the Slack app of the router bot and return its install link",
+        tags: ["ChatOps"],
+        body: z.object({
+          /** The bot's handle, what people type after @. */
+          appName: z
+            .string()
+            .regex(
+              SLACK_BOT_HANDLE_PATTERN,
+              "Use lowercase letters, digits, periods, hyphens, and underscores (at most 35)",
+            ),
+          connectionMode: ChatOpsConnectionModeSchema,
+        }),
+        response: constructResponseSchema(
+          z.object({
+            appId: z.string(),
+            installUrl: z.string(),
+            installMode: z.enum(["oauth", "manual"]),
+          }),
+        ),
+      },
+    },
+    async (request, reply) => {
+      await assertMessagingChannelAllowed({
+        organizationId: request.organizationId,
+        channel: "slack",
+      });
+      const existing = await ChatOpsConfigModel.getSlackConfig();
+      if (existing?.enabled && existing.botToken) {
+        throw new ApiError(
+          400,
+          "There already is a router bot. Convert or disconnect it first.",
+        );
+      }
+      try {
+        const created = await slackAppFactory.createRouterApp({
+          appName: request.body.appName,
+          connectionMode: request.body.connectionMode,
+          organizationId: request.organizationId,
+          userId: request.user.id,
+        });
+        await chatOpsManager.reinitialize();
+        return reply.send(created);
+      } catch (error) {
+        throw new ApiError(
+          400,
+          `Slack could not create the app: ${errorMessage(error)}`,
+        );
+      }
+    },
+  );
+
+  /**
    * Disconnect the Slack bot pinned to an agent.
    */
   fastify.delete(
@@ -2455,21 +2569,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "List the Slack channels an agent's bot is in or can join",
         tags: ["ChatOps"],
         params: z.object({ agentId: z.string().uuid() }),
-        response: constructResponseSchema(
-          z.object({
-            workspaceId: z.string().nullable(),
-            canJoin: z.boolean(),
-            channels: z.array(
-              z.object({
-                channelId: z.string(),
-                channelName: z.string().nullable(),
-                description: z.string().nullable(),
-                isPrivate: z.boolean(),
-                isMember: z.boolean(),
-              }),
-            ),
-          }),
-        ),
+        response: constructResponseSchema(SlackBotChannelsSchema),
       },
     },
     async (request, reply) => {
@@ -2477,25 +2577,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentId: request.params.agentId,
         organizationId: request.organizationId,
       });
-      let channels: Awaited<ReturnType<typeof provider.listJoinableChannels>>;
-      try {
-        channels = await provider.listJoinableChannels();
-      } catch (error) {
-        throw new ApiError(
-          502,
-          `Slack did not list the channels: ${errorMessage(error)}`,
-        );
-      }
-      return reply.send({
-        workspaceId: provider.getWorkspaceId(),
-        canJoin: !provider.getMissingScopes().includes("channels:join"),
-        channels: channels
-          // A private channel the bot was not invited to is not ours to show.
-          .filter((channel) => channel.isMember || !channel.isPrivate)
-          .sort((a, b) =>
-            (a.channelName ?? "").localeCompare(b.channelName ?? ""),
-          ),
-      });
+      return reply.send(await listSlackBotChannels(provider));
     },
   );
 
@@ -2512,7 +2594,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["ChatOps"],
         params: z.object({
           agentId: z.string().uuid(),
-          channelId: z.string().regex(/^[A-Z0-9]+$/),
+          channelId: SlackChannelIdSchema,
         }),
         response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
@@ -2523,44 +2605,56 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentId,
         organizationId: request.organizationId,
       });
-      let channelName: string | null;
-      try {
-        ({ channelName } = await provider.joinChannel(channelId));
-      } catch (error) {
-        const slackError = (error as { data?: { error?: string } }).data?.error;
-        throw new ApiError(
-          400,
-          slackError === "missing_scope"
-            ? "The bot needs Slack's permission to join channels. Reinstall it from the Slack settings, then try again."
-            : slackError === "method_not_supported_for_channel_type"
-              ? "A bot cannot join a private channel by itself. Invite it from the channel in Slack."
-              : `Slack did not add the bot to the channel: ${errorMessage(error)}`,
-        );
-      }
-      const workspaceId = provider.getWorkspaceId();
-      const binding = await ChatOpsChannelBindingModel.findByChannel({
-        provider: "slack",
+      await joinSlackBotChannel({
+        provider,
         channelId,
-        workspaceId,
+        agentId,
+        organizationId: request.organizationId,
       });
-      if (!binding) {
-        await ChatOpsChannelBindingModel.upsertByChannel({
-          organizationId: request.organizationId,
-          provider: "slack",
-          channelId,
-          workspaceId,
-          workspaceName: provider.getWorkspaceName() ?? undefined,
-          channelName: channelName ?? undefined,
-          agentId,
-        });
-      } else if (!binding.agentId) {
-        await ChatOpsChannelBindingModel.update(binding.id, { agentId });
-        await invalidateChannelAnswerAll({
-          provider: "slack",
-          channelId,
-          workspaceId,
-        });
-      }
+      return reply.send({ success: true });
+    },
+  );
+
+  /**
+   * The Slack channels the router bot is in, and the public ones it can join.
+   */
+  fastify.get(
+    "/api/chatops/config/slack/router/channels",
+    {
+      schema: {
+        operationId: RouteId.ListSlackRouterBotChannels,
+        description: "List the Slack channels the router bot is in or can join",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(SlackBotChannelsSchema),
+      },
+    },
+    async (_request, reply) => {
+      return reply.send(await listSlackBotChannels(requireRouterSlackBot()));
+    },
+  );
+
+  /**
+   * Add the router bot to a public Slack channel. The channel keeps its
+   * default agent, or has none until someone picks one.
+   */
+  fastify.post(
+    "/api/chatops/config/slack/router/channels/:channelId/join",
+    {
+      schema: {
+        operationId: RouteId.JoinSlackRouterBotChannel,
+        description: "Add the Slack router bot to a public channel",
+        tags: ["ChatOps"],
+        params: z.object({ channelId: SlackChannelIdSchema }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      await joinSlackBotChannel({
+        provider: requireRouterSlackBot(),
+        channelId: request.params.channelId,
+        agentId: null,
+        organizationId: request.organizationId,
+      });
       return reply.send({ success: true });
     },
   );
@@ -3459,7 +3553,8 @@ async function resolveAndVerifySenderForMSTeams(params: {
   try {
     const member = await TeamsInfo.getMember(context, context.activity.from.id);
     if (member?.email || member?.userPrincipalName) {
-      message.senderEmail = member.email || member.userPrincipalName;
+      message.senderEmail =
+        (await resolveMSTeamsUserEmail(member)) ?? undefined;
     }
   } catch (error) {
     logger.debug(
@@ -3705,6 +3800,103 @@ const TEAMS_AAD_GROUP_ID_TTL_MS = TimeInMs.Day;
 const TEAMS_AAD_GROUP_ID_RETRY_TTL_MS = 5 * TimeInMs.Minute;
 
 /** The connected Slack bot pinned to an agent of this organization. */
+function requireRouterSlackBot() {
+  const provider = chatOpsManager.getSlackProvider();
+  if (!provider?.isConfigured()) {
+    throw new ApiError(404, "The Slack router bot is not connected");
+  }
+  return provider;
+}
+
+async function listSlackBotChannels(provider: SlackBot) {
+  let channels: Awaited<ReturnType<SlackBot["listJoinableChannels"]>>;
+  try {
+    channels = await provider.listJoinableChannels();
+  } catch (error) {
+    throw new ApiError(
+      502,
+      `Slack did not list the channels: ${errorMessage(error)}`,
+    );
+  }
+  return {
+    workspaceId: provider.getWorkspaceId(),
+    canJoin: !provider.getMissingScopes().includes("channels:join"),
+    channels: channels
+      // A private channel the bot was not invited to is not ours to show.
+      .filter((channel) => channel.isMember || !channel.isPrivate)
+      .sort((a, b) => (a.channelName ?? "").localeCompare(b.channelName ?? "")),
+  };
+}
+
+/**
+ * Add a bot to a public channel. An agent's bot claims the channel when no
+ * agent owns it yet; the router only records the channel.
+ */
+async function joinSlackBotChannel(params: {
+  provider: SlackBot;
+  channelId: string;
+  agentId: string | null;
+  organizationId: string;
+}) {
+  const { provider, channelId, agentId, organizationId } = params;
+  let channelName: string | null;
+  try {
+    ({ channelName } = await provider.joinChannel(channelId));
+  } catch (error) {
+    const slackError = (error as { data?: { error?: string } }).data?.error;
+    throw new ApiError(
+      400,
+      slackError === "missing_scope"
+        ? "The bot needs Slack's permission to join channels. Reinstall it from the Slack settings, then try again."
+        : slackError === "method_not_supported_for_channel_type"
+          ? "A bot cannot join a private channel by itself. Invite it from the channel in Slack."
+          : `Slack did not add the bot to the channel: ${errorMessage(error)}`,
+    );
+  }
+  const workspaceId = provider.getWorkspaceId();
+  const binding = await ChatOpsChannelBindingModel.findByChannel({
+    provider: "slack",
+    channelId,
+    workspaceId,
+  });
+  if (!binding) {
+    await ChatOpsChannelBindingModel.upsertByChannel({
+      organizationId,
+      provider: "slack",
+      channelId,
+      workspaceId,
+      workspaceName: provider.getWorkspaceName() ?? undefined,
+      channelName: channelName ?? undefined,
+      agentId: agentId ?? undefined,
+    });
+  } else if (!binding.agentId && agentId) {
+    await ChatOpsChannelBindingModel.update(binding.id, { agentId });
+    await invalidateChannelAnswerAll({
+      provider: "slack",
+      channelId,
+      workspaceId,
+    });
+  }
+}
+
+type SlackBot = NonNullable<ReturnType<typeof chatOpsManager.getSlackProvider>>;
+
+const SlackChannelIdSchema = z.string().regex(/^[A-Z0-9]+$/);
+
+const SlackBotChannelsSchema = z.object({
+  workspaceId: z.string().nullable(),
+  canJoin: z.boolean(),
+  channels: z.array(
+    z.object({
+      channelId: z.string(),
+      channelName: z.string().nullable(),
+      description: z.string().nullable(),
+      isPrivate: z.boolean(),
+      isMember: z.boolean(),
+    }),
+  ),
+});
+
 async function requireAgentSlackBot(params: {
   agentId: string;
   organizationId: string;

@@ -15,7 +15,6 @@ import type {
   Model,
   UpdateLimit,
 } from "@/types";
-import { LLM_OAUTH_CLIENT_METADATA_TYPE } from "@/types/llm-oauth-client";
 import { retryOnceOnDeadlock } from "@/utils/deadlock";
 import AgentModel from "./agent";
 import AgentTeamModel, { type AgentTeamSource } from "./agent-team";
@@ -1688,7 +1687,7 @@ export function buildOrganizationLimitScopeCondition(
 
 /** LLM OAuth clients live in the shared `oauth_client` table, scoped by metadata. */
 function llmOauthClientInOrganization(organizationId: string): SQL {
-  return sql`(${schema.oauthClientsTable.metadata}->>'type' = ${LLM_OAUTH_CLIENT_METADATA_TYPE}
+  return sql`(${schema.oauthClientsTable.metadata}->>'type' IN ('llm_oauth_client', 'managed_oauth_client')
     AND ${schema.oauthClientsTable.metadata}->>'organizationId' = ${organizationId})`;
 }
 

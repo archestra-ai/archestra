@@ -1,3 +1,4 @@
+import { isPlainMcpClientServerName } from "@archestra/shared/connection-setup";
 import type {
   AgentEnding,
   SetupEnding,
@@ -17,11 +18,18 @@ export const INSTALLER_ENV = "ARCHESTRA_CONNECT_INSTALLER";
 /** Comment line that carries the ending inside a script, for the installer. */
 const ENDING_MARKER = "# archestra-ending: ";
 
-/** The first prompt the launch command starts an agent with. */
+/**
+ * The first prompt the launch command starts an agent with. With the gateway,
+ * it names the gateway's server so the agent leaves the user's other MCP
+ * servers alone. No double quotes: PowerShell 5.1 mangles them in a native
+ * argument.
+ */
 export function starterPrompt(ctx: SetupScriptContext): string {
-  return ctx.mcp
-    ? `What can you do with my ${ctx.appName} tools?`
-    : `What did ${ctx.appName} set up for you?`;
+  if (!ctx.mcp) return `What did ${ctx.appName} set up for you?`;
+  const server = isPlainMcpClientServerName(ctx.mcp.serverName)
+    ? `the ${ctx.mcp.serverName} MCP server`
+    : `the MCP server ${ctx.appName} added`;
+  return `What can you do with my ${ctx.appName} tools from ${server}? Do not call, test, reconnect or sign in to my other MCP servers. Leave them out of your answer.`;
 }
 
 /** The shared ending, filled in with what the agent adds. */
@@ -53,6 +61,11 @@ export function buildEnding(
     });
   }
   parts.push(...(agent.parts ?? []));
+  if (ctx.proxy?.setupReference) {
+    // An agent that runs the installer reads this in its conversation. The
+    // proxy lets that conversation finish the setup without Guardrails.
+    parts.push({ name: "Setup reference", detail: ctx.proxy.setupReference });
+  }
 
   const quote = (command: string[]) => quoteCommand(ctx, command);
   const signIn =
@@ -63,6 +76,7 @@ export function buildEnding(
             ? quote(agent.signIn.command)
             : agent.signIn.howTo,
           howTo: agent.signIn.howTo,
+          gatewayName: ctx.mcp.serverName,
         }
       : null;
   return {
@@ -125,7 +139,7 @@ export function renderEndingNextSteps(ending: SetupEnding): string {
   if (ending.signIn) {
     lines.push(
       "",
-      `Sign in to ${ending.appName} tools:`,
+      `Authorize ${ending.label} for the "${ending.signIn.gatewayName}" MCP gateway:`,
       `  ${ending.signIn.text}`,
     );
   }

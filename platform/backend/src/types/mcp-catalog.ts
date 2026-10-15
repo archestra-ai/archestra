@@ -2,6 +2,7 @@ import {
   CreatedByNullableSchema,
   EnvFromSchema,
   HttpUrlSchema,
+  ImagePullPolicySchema,
   ImagePullSecretConfigSchema,
   LocalConfigEnvironmentDefaultSchema,
   LocalConfigSchema,
@@ -118,6 +119,7 @@ const LocalConfigSelectSchema = z.object({
       ]),
     )
     .optional(),
+  imagePullPolicy: ImagePullPolicySchema.optional(),
 });
 
 const CatalogLabelSchema = z.object({
@@ -274,6 +276,9 @@ export const CreateInternalMcpCatalogBodySchema =
     })
     .superRefine(validateInternalMcpCatalog);
 
+// A field that changes what an entry runs or where it connects must also be
+// listed in MCP_RUNTIME_FIELDS (services/mcp-advanced-settings.ts); otherwise
+// someone with Full access alone could change it.
 const UpdateInternalMcpCatalogSchemaBase = createUpdateSchema(
   schema.internalMcpCatalogTable,
 )

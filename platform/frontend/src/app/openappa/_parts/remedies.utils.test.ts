@@ -2,18 +2,10 @@
 import { describe, expect, test } from "vitest";
 import type {
   Authority,
-  BlockCoverage,
   RemediesView,
   Sanitizer,
 } from "@/lib/openappa-remedies.query";
-import {
-  coverChips,
-  forTools,
-  gapCount,
-  gapLines,
-  groupBySource,
-  runsAs,
-} from "./remedies.utils";
+import { coverChips, groupBySource } from "./remedies.utils";
 
 function authority(overrides: Partial<Authority> = {}): Authority {
   return {
@@ -69,23 +61,6 @@ function view(overrides: Partial<RemediesView> = {}): RemediesView {
   };
 }
 
-describe("runsAs", () => {
-  test("groups implementations by who answers, and null when not wired", () => {
-    expect(runsAs(authority())).toBe("a person reviews");
-    expect(
-      runsAs(authority({ implementation: { kind: "url", detail: "a.b" } })),
-    ).toBe("an HTTP service");
-    expect(
-      runsAs(sanitizer({ implementation: { kind: "llm", detail: "llm" } })),
-    ).toBe("a model decides");
-    expect(
-      runsAs(sanitizer({ implementation: { kind: "command", detail: "py" } })),
-    ).toBe("a local program");
-    expect(runsAs(sanitizer())).toBe("built in");
-    expect(runsAs(authority({ implementation: null }))).toBeNull();
-  });
-});
-
 describe("coverChips", () => {
   test("an authority gets one chip per permit, with the wildcard spelled any", () => {
     expect(
@@ -100,10 +75,10 @@ describe("coverChips", () => {
         }),
       ),
     ).toEqual([
-      { lock: "Approvals", value: "any", code: false },
-      { lock: "Audience", value: "up to public", code: false },
-      { lock: "Trust", value: "up to trusted", code: false },
-      { lock: "Effects", value: "email.sent", code: true },
+      { lock: "attention", value: "any", code: false },
+      { lock: "audience", value: "up to public", code: false },
+      { lock: "trust", value: "up to trusted", code: false },
+      { lock: "effects", value: "email.sent", code: true },
     ]);
     expect(
       coverChips(
@@ -116,12 +91,12 @@ describe("coverChips", () => {
           },
         }),
       ),
-    ).toEqual([{ lock: "Approvals", value: "finance-signoff", code: true }]);
+    ).toEqual([{ lock: "attention", value: "finance-signoff", code: true }]);
   });
 
   test("a sanitizer gets its one transition", () => {
     expect(coverChips(sanitizer())).toEqual([
-      { lock: "Audience", value: "self → public", code: true },
+      { lock: "audience", value: "self → public", code: true },
     ]);
     expect(
       coverChips(
@@ -129,21 +104,8 @@ describe("coverChips", () => {
           permits: { kind: "trust", from: "suspicious", to: "trusted" },
         }),
       ),
-    ).toEqual([{ lock: "Trust", value: "suspicious → trusted", code: true }]);
+    ).toEqual([{ lock: "trust", value: "suspicious → trusted", code: true }]);
     expect(coverChips(sanitizer({ permits: null }))).toEqual([]);
-  });
-});
-
-describe("forTools", () => {
-  test("a sanitizer names the data it touches; an authority only its tags", () => {
-    expect(forTools(sanitizer())).toEqual({ prefix: "results of", tags: [] });
-    expect(
-      forTools(sanitizer({ on: ["tool_input"], tags: ["slack"] })),
-    ).toEqual({ prefix: "arguments of", tags: ["slack"] });
-    expect(forTools(authority({ tags: ["finance"] }))).toEqual({
-      prefix: null,
-      tags: ["finance"],
-    });
   });
 });
 
@@ -168,121 +130,5 @@ describe("groupBySource", () => {
       ["support", ["support-reviewer"]],
       ["claude-code", ["redact-secrets"]],
     ]);
-  });
-});
-
-describe("gapLines", () => {
-  const coverage = (
-    partial: Partial<BlockCoverage> & Pick<BlockCoverage, "kind" | "level">,
-  ): BlockCoverage => ({
-    approvers: [],
-    cleaners: [],
-    unservedMarks: [],
-    covered:
-      partial.approvers?.length || partial.cleaners?.length ? true : false,
-    ...partial,
-  });
-
-  test("names each level with what lifts it, gaps first", () => {
-    const lines = gapLines(
-      view({
-        blocks: [
-          coverage({
-            kind: "trust",
-            level: "suspicious",
-            cleaners: ["attest-schema"],
-          }),
-          coverage({
-            kind: "audience",
-            level: "internal",
-            approvers: ["human"],
-            cleaners: ["strip-pii"],
-          }),
-          coverage({ kind: "audience", level: "self" }),
-          coverage({ kind: "audience", level: "@finance" }),
-          coverage({
-            kind: "effects",
-            level: null,
-            approvers: ["finance-officer"],
-          }),
-          coverage({
-            kind: "approvals",
-            level: null,
-            approvers: ["human"],
-            unservedMarks: ["monday-review", "sentry-review"],
-            covered: false,
-          }),
-        ],
-      }),
-    );
-    expect(lines).toEqual([
-      {
-        key: "audience:self",
-        label: "self data",
-        text: "can't be shared wider",
-        covered: false,
-      },
-      {
-        key: "audience:@finance",
-        label: "@finance data",
-        text: "can't be shared wider",
-        covered: false,
-      },
-      {
-        key: "approvals",
-        label: "Approvals",
-        text: "2 marks nobody gives: monday-review, sentry-review",
-        covered: false,
-      },
-      {
-        key: "trust:suspicious",
-        label: "suspicious data",
-        text: "only subagent returns can be made trusted (attest-schema)",
-        covered: true,
-      },
-      {
-        key: "audience:internal",
-        label: "internal data",
-        text: "can be shared wider (human, strip-pii)",
-        covered: true,
-      },
-      {
-        key: "effects",
-        label: "Effects",
-        text: "can run after an excluded effect (finance-officer)",
-        covered: true,
-      },
-    ]);
-  });
-
-  test("a declared but unwired authority adds a wiring line, and every uncovered line counts as a gap", () => {
-    const current = view({
-      authorities: [
-        authority(),
-        authority({ name: "legal-reviewer", implementation: null }),
-      ],
-      blocks: [
-        coverage({ kind: "trust", level: "suspicious" }),
-        coverage({
-          kind: "approvals",
-          level: null,
-          approvers: ["human"],
-          covered: true,
-        }),
-      ],
-    });
-    expect(gapLines(current).map((line) => line.key)).toEqual([
-      "trust:suspicious",
-      "wiring",
-      "approvals",
-    ]);
-    expect(gapLines(current)[1]).toEqual({
-      key: "wiring",
-      label: "Wiring",
-      text: "1 declared but not wired: legal-reviewer",
-      covered: false,
-    });
-    expect(gapCount(current)).toBe(2);
-    expect(gapCount(view())).toBe(0);
   });
 });

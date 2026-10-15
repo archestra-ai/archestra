@@ -23,6 +23,11 @@ import {
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 
+const scopedCapabilities = vi.hoisted(() => ({
+  data: undefined as
+    | { resource: string; scope: string; action: string }[]
+    | undefined,
+}));
 vi.mock("@/lib/auth/auth.query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/auth.query")>()),
   useSession: () => ({
@@ -30,6 +35,7 @@ vi.mock("@/lib/auth/auth.query", async (importOriginal) => ({
       user: { id: "author-user", name: "Sam Author", email: "sam@example.com" },
     },
   }),
+  useScopedCapabilities: () => ({ data: scopedCapabilities.data }),
 }));
 
 const origin = "http://localhost:9000";
@@ -42,7 +48,10 @@ beforeAll(() => {
   server.listen({ onUnhandledRequest: "error" });
 });
 beforeEach(() => archestraApiClient.setConfig({ baseUrl: origin }));
-afterEach(() => server.resetHandlers());
+afterEach(() => {
+  server.resetHandlers();
+  scopedCapabilities.data = undefined;
+});
 afterAll(() => {
   server.close();
   archestraApiClient.setConfig({ baseUrl: "" });
@@ -102,7 +111,7 @@ it("adds initial access without submitting the resource, excludes duplicates, an
   await user.click(
     screen.getByRole("combobox", { name: "Permission for Editor" }),
   );
-  await user.click(screen.getByRole("option", { name: "Can edit" }));
+  await user.click(screen.getByRole("option", { name: "Can update" }));
   await user.click(screen.getByRole("button", { name: "Create agent" }));
   expect(submit).toHaveBeenLastCalledWith([
     {
@@ -247,7 +256,7 @@ it("keeps creation fields and mixed recipient permissions in one dialog until th
   await user.click(
     screen.getByRole("combobox", { name: "Permission for Support" }),
   );
-  await user.click(screen.getByRole("option", { name: "Can edit" }));
+  await user.click(screen.getByRole("option", { name: "Can update" }));
   await pick(user, "Design");
   expect(screen.getByRole("dialog", { name: "Create virtual key" })).toBe(
     dialog,
@@ -258,7 +267,7 @@ it("keeps creation fields and mixed recipient permissions in one dialog until th
   expect(submit).not.toHaveBeenCalled();
   expect(
     screen.getByRole("combobox", { name: "Permission for Support" }),
-  ).toHaveTextContent("Can edit");
+  ).toHaveTextContent("Can update");
   expect(
     screen.getByRole("combobox", { name: "Permission for Design" }),
   ).toHaveTextContent("Can use");

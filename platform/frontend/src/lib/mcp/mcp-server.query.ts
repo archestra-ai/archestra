@@ -25,6 +25,7 @@ import { clipErrorMessage, trackEvent } from "@/lib/analytics";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { toBulkOutcome } from "@/lib/bulk-action";
 import { useFeature } from "@/lib/config/config.query";
+import { isInstallInProgress } from "@/lib/mcp/install-status";
 import { coverageQueryPrefix } from "@/lib/openappa-policy-views";
 import {
   externalMcpSkillDetailQueryKey,
@@ -75,6 +76,7 @@ export function useMcpServers(params?: McpServersParams) {
       "mcp-servers",
       {
         catalogId: params?.catalogId,
+        includeAssignedAgents: params?.includeAssignedAgents,
         assignmentScope: params?.assignmentScope,
         assignmentTeamIds: params?.assignmentTeamIds,
       },
@@ -82,10 +84,14 @@ export function useMcpServers(params?: McpServersParams) {
     queryFn: async () => {
       const { data, error } = await getMcpServers({
         query:
+          params?.includeAssignedAgents !== undefined ||
           params?.catalogId ||
           params?.assignmentScope ||
           params?.assignmentTeamIds
             ? {
+                ...(params?.includeAssignedAgents !== undefined && {
+                  includeAssignedAgents: params.includeAssignedAgents,
+                }),
                 ...(params?.catalogId && { catalogId: params.catalogId }),
                 ...(params?.assignmentScope && {
                   assignmentScope: params.assignmentScope,
@@ -316,8 +322,13 @@ export function useInstallMcpServer() {
           scope: variables.scope,
         });
       }
-      // Show success toast for remote servers (local servers show toast after async tool fetch completes)
-      if (!dontShowToast && installedServer) {
+      // Toast only an install that is already done. A local install comes
+      // back pending; its toast is shown when the install actually finishes.
+      if (
+        !dontShowToast &&
+        installedServer &&
+        !isInstallInProgress(installedServer.localInstallationStatus)
+      ) {
         toast.success(`Successfully installed ${variables.name}`);
       }
       // Refetch instead of just invalidating to ensure data is fresh

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   ARCHESTRA_TOKEN_PREFIX,
+  ASK_USER_OTHER_ANSWER_FIELD,
   LEGACY_ARCHESTRA_TOKEN_PREFIXES,
   OAUTH_TOKEN_ID_PREFIX,
   TOOL_ASK_USER_FULL_NAME,
@@ -26,18 +27,23 @@ import {
   TOOL_UPLOAD_FILE_FULL_NAME,
   TOOL_WHOAMI_FULL_NAME,
 } from "@archestra/shared";
+import { StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import {
   ErrorCode,
   type ListToolsResult,
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 import { type MockInstance, onTestFinished, vi } from "vitest";
-import { archestraMcpBranding } from "@/archestra-mcp-server";
+import { ZodError } from "zod";
+import {
+  archestraMcpBranding,
+  executeArchestraTool,
+} from "@/archestra-mcp-server";
 import {
   takeLeadingAttestation,
   verifyToolAttestation,
 } from "@/archestra-mcp-server/tool-attestation";
-import mcpClient from "@/clients/mcp-client";
+import mcpClient, { McpServerStoppedError } from "@/clients/mcp-client";
 import config from "@/config";
 import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import {
@@ -57,6 +63,9 @@ import {
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import { jwksValidator } from "@/services/jwks-validator";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
+import { ApiError } from "@/types/api";
+import { handleTaskMethod, MCP_TASKS_EXTENSION_ID } from "./tasks";
 import {
   authenticateMCPGatewayRequest,
   createAgentServer,
@@ -93,6 +102,7 @@ type TestCallToolHandler = (
   content: Array<{ type: string; text: string }>;
   isError?: boolean;
   resultType?: string;
+  task?: { taskId: string };
   structuredContent?: { items?: unknown[] };
 }>;
 
@@ -1695,7 +1705,10 @@ describe("createAgentServer tools/list", () => {
     ).toBe(false);
   });
 
-  test("lists APPA notice, remedy and inbox tools for an unassigned agent when OpenAPPA is enabled", async ({
+  test.for([
+    "agent",
+    "mcp_gateway",
+  ] as const)("%s keeps APPA session controls directly available", async (agentType, {
     makeAgent,
     makeMember,
     makeOrganization,
@@ -1712,7 +1725,7 @@ describe("createAgentServer tools/list", () => {
     await makeMember(user.id, org.id, { role: "admin" });
     const agent = await makeAgent({
       organizationId: org.id,
-      agentType: "agent",
+      agentType,
       toolExposureMode: "search_and_run_only",
     });
 
@@ -1779,15 +1792,66 @@ describe("createAgentServer tools/list", () => {
       "preview_guardrails_policy_change",
       "get_guardrails_policy_change_status",
     ] as const) {
-      expect(
-        response.tools.find(
-          (tool) => tool.name === archestraMcpBranding.getToolName(policyTool),
-        )?.annotations,
-      ).toMatchObject({ readOnlyHint: true });
+      const policy = response.tools.find(
+        (tool) => tool.name === archestraMcpBranding.getToolName(policyTool),
+      );
+      if (agentType === "agent") {
+        expect(policy?.annotations).toMatchObject({ readOnlyHint: true });
+      } else {
+        expect(policy).toBeUndefined();
+      }
     }
     expect(names).not.toContain(
       archestraMcpBranding.getToolName("update_guardrails_policy"),
     );
+  });
+
+  test("keeps yell when an administrator turns break the glass off", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const previousEnabled = config.openappa.enabled;
+    config.openappa.enabled = true;
+    await GuardrailsDeploymentModel.set({
+      enabled: true,
+      breakTheGlassEnabled: false,
+    });
+    onTestFinished(() => {
+      config.openappa.enabled = previousEnabled;
+    });
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+      toolExposureMode: "search_and_run_only",
+    });
+    const { server } = await createAgentServer({
+      agentId: agent.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      },
+    });
+    const listToolsHandler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+    if (!listToolsHandler) throw new Error("Expected tools/list handler");
+    const response = await listToolsHandler({
+      method: "tools/list",
+      params: {},
+    });
+    const names = response.tools.map((tool) => tool.name);
+    expect(names).toContain(archestraMcpBranding.getToolName("yell"));
   });
 
   test("hides remedy tools while the deployment switch is off and still lists policy tools", async ({
@@ -2027,14 +2091,26 @@ describe("createAgentServer tools/list", () => {
     if (!list) throw new Error("Missing tool list handler");
     const response = await list({ method: "tools/list", params: {} });
     const names = response.tools.map((tool) => tool.name);
-    expect(names).toEqual(
-      expect.arrayContaining([
-        archestraMcpBranding.getToolName("get_run"),
-        archestraMcpBranding.getToolName("list_runs"),
-        archestraMcpBranding.getToolName("steer_run"),
-        archestraMcpBranding.getToolName("cancel_run"),
-      ]),
+    const controlNames = (
+      ["get_run", "list_runs", "steer_run", "cancel_run"] as const
+    ).map((name) => archestraMcpBranding.getToolName(name));
+    for (const name of controlNames) expect(names).not.toContain(name);
+    const found = await executeArchestraTool(
+      archestraMcpBranding.getToolName("search_tools"),
+      { query: "(get_run|list_runs|steer_run|cancel_run)$", mode: "regex" },
+      {
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId: org.id,
+        userId: user.id,
+      },
     );
+    expect(found.isError).not.toBe(true);
+    expect(
+      (found.structuredContent as { tools: { toolName: string }[] }).tools
+        .map((tool) => tool.toolName)
+        .sort(),
+    ).toEqual(controlNames.sort());
     expect(names).not.toContain(archestraMcpBranding.getToolName("start_run"));
     const discovery = response.tools.find(
       (tool) => tool.name === archestraMcpBranding.getToolName("search_tools"),
@@ -2048,7 +2124,7 @@ describe("createAgentServer tools/list", () => {
     expect(discovery?.description).toContain("resume locally");
   });
 
-  test("advertises task controls when the gateway can start delegated tasks", async ({
+  test("defers task controls when the gateway can start delegated tasks", async ({
     makeAgent,
     makeAgentTool,
     makeMember,
@@ -2099,15 +2175,14 @@ describe("createAgentServer tools/list", () => {
         TOOL_ASK_USER_FULL_NAME,
         TOOL_RUN_TOOL_FULL_NAME,
         TOOL_SEARCH_TOOLS_FULL_NAME,
-        TOOL_GET_RUN_FULL_NAME,
-        TOOL_LIST_RUNS_FULL_NAME,
-        TOOL_STEER_RUN_FULL_NAME,
-        TOOL_CANCEL_RUN_FULL_NAME,
       ]),
     );
   });
 
-  test("keeps assigned skill and sandbox runtime tools top-level in search_and_run_only", async ({
+  test.for([
+    "agent",
+    "mcp_gateway",
+  ] as const)("%s keeps its skill and runtime exposure consistent", async (agentType, {
     makeAgent,
     makeMember,
     makeOrganization,
@@ -2124,6 +2199,7 @@ describe("createAgentServer tools/list", () => {
     try {
       const agent = await makeAgent({
         organizationId: org.id,
+        agentType,
         toolExposureMode: "search_and_run_only",
       });
       await seedAndAssignArchestraTools(agent.id);
@@ -2156,18 +2232,26 @@ describe("createAgentServer tools/list", () => {
       });
       const names = new Set(response.tools.map((tool) => tool.name));
 
-      // meta tools and the skill/sandbox runtime path stay top-level
+      // Session primitives remain directly available on both surfaces.
       for (const exposed of [
         TOOL_ASK_USER_FULL_NAME,
         TOOL_SEARCH_TOOLS_FULL_NAME,
         TOOL_RUN_TOOL_FULL_NAME,
+      ]) {
+        expect(names.has(exposed)).toBe(true);
+      }
+      for (const runtimeTool of [
         TOOL_LIST_SKILLS_FULL_NAME,
         TOOL_LOAD_SKILL_FULL_NAME,
         TOOL_RUN_COMMAND_FULL_NAME,
         TOOL_DOWNLOAD_FILE_FULL_NAME,
         TOOL_UPLOAD_FILE_FULL_NAME,
+        TOOL_GET_RUN_FULL_NAME,
+        TOOL_LIST_RUNS_FULL_NAME,
+        TOOL_STEER_RUN_FULL_NAME,
+        TOOL_CANCEL_RUN_FULL_NAME,
       ]) {
-        expect(names.has(exposed)).toBe(true);
+        expect(names.has(runtimeTool)).toBe(agentType === "agent");
       }
       // authoring + unrelated tools remain hidden behind search_tools/run_tool
       for (const hidden of [
@@ -3364,12 +3448,6 @@ describe("createAgentServer tools/list", () => {
     const copyFileName = archestraMcpBranding.getToolName(
       TOOL_COPY_FILE_SHORT_NAME,
     );
-    // copy_file only exists under the sandbox runtime, so without this both
-    // copy_file assertions below would pass for the wrong reason.
-    const config = (await import("@/config")).default;
-    const originalSandboxEnabled = config.skillsSandbox.enabled;
-    (config.skillsSandbox as { enabled: boolean }).enabled = true;
-
     const gatewayAgent = await makeAgent({
       toolExposureMode: "full",
       organizationId: org.id,
@@ -3412,24 +3490,19 @@ describe("createAgentServer tools/list", () => {
       return new Set(response.tools.map((tool) => tool.name));
     };
 
-    try {
-      const gatewayNames = await listFor(gatewayAgent.id);
-      expect(gatewayNames.has(renderAppName)).toBe(false);
-      // copy_file is chat-locked for the same reason: it exchanges files with
-      // the app the user has open in chat, and an external client has neither a
-      // conversation nor an open app, so every call there could only refuse.
-      expect(gatewayNames.has(copyFileName)).toBe(false);
-      // The rest of the authoring surface (scaffold/read/edit/validate) works
-      // from external clients and stays.
-      expect(gatewayNames.has(scaffoldAppName)).toBe(true);
+    const gatewayNames = await listFor(gatewayAgent.id);
+    expect(gatewayNames.has(renderAppName)).toBe(false);
+    // copy_file is chat-locked for the same reason: it exchanges files with
+    // the app the user has open in chat, and an external client has neither a
+    // conversation nor an open app, so every call there could only refuse.
+    expect(gatewayNames.has(copyFileName)).toBe(false);
+    // The rest of the authoring surface (scaffold/read/edit/validate) works
+    // from external clients and stays.
+    expect(gatewayNames.has(scaffoldAppName)).toBe(true);
 
-      const chatNames = await listFor(chatAgent.id);
-      expect(chatNames.has(renderAppName)).toBe(true);
-      expect(chatNames.has(copyFileName)).toBe(true);
-    } finally {
-      (config.skillsSandbox as { enabled: boolean }).enabled =
-        originalSandboxEnabled;
-    }
+    const chatNames = await listFor(chatAgent.id);
+    expect(chatNames.has(renderAppName)).toBe(true);
+    expect(chatNames.has(copyFileName)).toBe(true);
   });
 
   // The list exclusion above is not enough on its own: sibling tool
@@ -3502,6 +3575,148 @@ describe("createAgentServer tools/list", () => {
     const chatResponse = await callRenderApp(chatAgent.id);
     expect(chatResponse.isError).not.toBe(true);
     expect(chatResponse.structuredContent).toMatchObject({ id: app.id });
+  });
+
+  test.for([
+    false,
+    true,
+  ])("search_tools capability summary respects RBAC in Auto mode=%s", async (accessAllTools, {
+    makeAgent,
+    makeCustomRole,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const previousSandboxEnabled = config.skillsSandbox.enabled;
+    config.skillsSandbox.enabled = true;
+    onTestFinished(() => {
+      config.skillsSandbox.enabled = previousSandboxEnabled;
+    });
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const role = await makeCustomRole(org.id, { permission: {} });
+    await makeMember(user.id, org.id, { role: role.role });
+    const gateway = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      toolExposureMode: "search_and_run_only",
+      accessAllTools,
+    });
+    // Auto mode discovers these from a different agent's seed, without any
+    // assignment on the gateway. Both sources must produce the same RBAC-safe
+    // summary. Identity is public; skill/file/runtime tools require a grant.
+    const seedAgent = accessAllTools
+      ? await makeAgent({ organizationId: org.id })
+      : gateway;
+    await seedAndAssignArchestraTools(seedAgent.id);
+    const { server } = await createAgentServer({
+      agentId: gateway.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      },
+    });
+    const handler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+    if (!handler) throw new Error("Missing tool list handler");
+    const response = await handler({ method: "tools/list", params: {} });
+    const description = response.tools.find(
+      (tool) => tool.name === TOOL_SEARCH_TOOLS_FULL_NAME,
+    )?.description;
+    expect(description).toContain(
+      "Available built-in capabilities to discover: Identity",
+    );
+    for (const hidden of [
+      "Files",
+      "Skills",
+      "Code Sandbox",
+      "Agent Runtime",
+      "'read file'",
+      "'load skill'",
+      "'run command'",
+    ]) {
+      expect(description).not.toContain(hidden);
+    }
+  });
+
+  test.for([
+    false,
+    true,
+  ])("search_tools summarizes knowledge only when the caller has sources (visible=%s)", async (visible, {
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeTool,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const viewer = await makeUser();
+    await makeMember(owner.id, org.id, { role: "member" });
+    await makeMember(viewer.id, org.id, { role: "member" });
+    const team = await makeTeam(org.id, owner.id);
+    await makeTeamMember(team.id, owner.id);
+    if (visible) await makeTeamMember(team.id, viewer.id);
+    const kb = await makeKnowledgeBase(org.id, {
+      name: "Restricted handbook",
+      access: { teams: [team.id] },
+    });
+    await makeKnowledgeBaseConnector(kb.id, org.id, {
+      access: { teams: [team.id] },
+    });
+    const gateway = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      toolExposureMode: "search_and_run_only",
+      knowledgeBaseIds: [kb.id],
+    });
+    await makeInternalMcpCatalog({
+      id: ARCHESTRA_MCP_CATALOG_ID,
+      name: "Archestra",
+      serverType: "builtin",
+    });
+    const knowledge = await makeTool({
+      catalogId: ARCHESTRA_MCP_CATALOG_ID,
+      name: archestraMcpBranding.getToolName("query_knowledge_sources"),
+    });
+    await makeAgentTool(gateway.id, knowledge.id);
+    const { server } = await createAgentServer({
+      agentId: gateway.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: viewer.id,
+      },
+    });
+    const handler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+    if (!handler) throw new Error("Missing tool list handler");
+    const response = await handler({ method: "tools/list", params: {} });
+    const description =
+      response.tools.find((tool) => tool.name === TOOL_SEARCH_TOOLS_FULL_NAME)
+        ?.description ?? "";
+    expect(description.includes("Knowledge Management")).toBe(visible);
+    expect(description.includes(kb.name)).toBe(visible);
   });
 
   test("adds assigned MCP server names and descriptions to search_tools description", async ({
@@ -3704,6 +3919,302 @@ describe("createAgentServer tools/list", () => {
     );
   });
 
+  describe("tool execution errors", () => {
+    setupTestCacheManager();
+
+    test.for([
+      {
+        label: "silent server",
+        error: new McpServerStoppedError("not_answering"),
+      },
+      {
+        label: "closed connection",
+        error: new McpServerStoppedError("connection_closed"),
+      },
+      { label: "unexpected error", error: new Error("PRIVATE_SENTINEL") },
+    ])("settles a detached $label without losing its error contract", async ({
+      error,
+    }, {
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeOrganization,
+      makeTool,
+    }) => {
+      config.mcpGateway.toolCallTimeoutMs = 20;
+      const org = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: org.id,
+        name: "qa-errors",
+      });
+      const tool = await makeTool({
+        catalogId: catalog.id,
+        name: "qa-errors__execute",
+        parameters: { type: "object", properties: {} },
+      });
+      await makeAgentTool(agent.id, tool.id);
+      let rejectExecution!: (reason: unknown) => void;
+      const pending = new Promise<never>((_resolve, reject) => {
+        rejectExecution = reject;
+      });
+      const execute = vi
+        .spyOn(mcpClient, "executeToolCallForOwner")
+        .mockImplementationOnce(() => pending);
+      onTestFinished(() => execute.mockRestore());
+      const { server } = await createAgentServer({
+        agentId: agent.id,
+        mrtr: { enabled: true },
+      });
+      const handler = (
+        server.server as unknown as {
+          _requestHandlers: Map<string, TestCallToolHandler>;
+        }
+      )._requestHandlers.get("tools/call");
+      if (!handler) throw new Error("Expected tools/call handler");
+      const result = await handler(
+        {
+          method: "tools/call",
+          params: {
+            name: tool.name,
+            arguments: {},
+            _meta: {
+              "io.modelcontextprotocol/clientCapabilities": {
+                extensions: { [MCP_TASKS_EXTENSION_ID]: {} },
+              },
+            },
+          },
+        },
+        { sendRequest: vi.fn() },
+      );
+      expect(result.resultType).toBe("task");
+      expect(result.task?.taskId).toBeDefined();
+      await vi.waitFor(() => expect(execute).toHaveBeenCalledOnce());
+      rejectExecution(error);
+      await vi.waitFor(async () => {
+        const state = await handleTaskMethod({
+          body: {
+            method: "tasks/get",
+            params: { taskId: result.task?.taskId },
+          },
+          agentId: agent.id,
+          principal: "anonymous",
+        });
+        expect(state).toMatchObject({
+          result: {
+            task:
+              error instanceof McpServerStoppedError
+                ? {
+                    status: "failed",
+                    error: { code: -32603, message: error.message },
+                  }
+                : {
+                    status: "completed",
+                    result: {
+                      resultType: "complete",
+                      isError: true,
+                      content: [
+                        {
+                          type: "text",
+                          text: "Error: An internal error occurred while executing tool",
+                        },
+                      ],
+                    },
+                  },
+          },
+        });
+        expect(JSON.stringify(state)).not.toContain("PRIVATE_SENTINEL");
+      });
+    });
+
+    test("returns the real yell missing-identity reason as tool content", async ({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      config.openappa.enabled = true;
+      config.openappa.yellEnabled = true;
+      config.enterpriseFeatures.aiSecurity = true;
+      await GuardrailsDeploymentModel.setEnabled(true);
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({ organizationId: org.id });
+      const { server } = await createAgentServer({
+        agentId: agent.id,
+        tokenAuth: {
+          tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+          teamId: null,
+          isOrganizationToken: false,
+          organizationId: org.id,
+          isUserToken: true,
+          userId: user.id,
+        },
+      });
+      const handler = (
+        server.server as unknown as {
+          _requestHandlers: Map<string, TestCallToolHandler>;
+        }
+      )._requestHandlers.get("tools/call");
+      if (!handler) throw new Error("Expected tools/call handler");
+      const result = await handler(
+        {
+          method: "tools/call",
+          params: {
+            name: "archestra__yell",
+            arguments: { message: "QA feedback", with_trajectory: false },
+          },
+        },
+        { sendRequest: vi.fn() },
+      );
+      expect(result).toMatchObject({
+        resultType: "complete",
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: "Error: OpenAPPA reporting requires an authenticated session and tool-call identity",
+          },
+        ],
+      });
+    });
+
+    test.for([
+      {
+        label: "authored client error",
+        error: new ApiError(403, "Access denied"),
+        message: "Error: Access denied",
+      },
+      {
+        label: "internal API error",
+        error: new ApiError(500, "PRIVATE_SENTINEL"),
+      },
+      { label: "unexpected error", error: new Error("PRIVATE_SENTINEL") },
+      {
+        label: "spoofed server-stopped error",
+        error: Object.assign(new Error("PRIVATE_SENTINEL"), {
+          name: "McpServerStoppedError",
+        }),
+      },
+      {
+        label: "HTTP transport error",
+        error: new StreamableHTTPError(503, "PRIVATE_SENTINEL"),
+      },
+      {
+        label: "numeric-code Error",
+        error: Object.assign(new Error("PRIVATE_SENTINEL"), { code: -32603 }),
+      },
+      {
+        label: "SQL unique violation",
+        error: Object.assign(new Error("PRIVATE_SENTINEL"), {
+          code: "23505",
+          detail: "PRIVATE_SENTINEL",
+        }),
+        message:
+          "Error: A record with the same value already exists (executing tool)",
+      },
+      {
+        label: "other string-code error",
+        error: Object.assign(new Error("PRIVATE_SENTINEL"), {
+          code: "ECONNRESET",
+        }),
+      },
+      {
+        label: "malformed protocol object",
+        error: { code: -32603.5, message: "PRIVATE_SENTINEL" },
+      },
+      { label: "thrown string", error: "PRIVATE_SENTINEL" },
+      { label: "thrown null", error: null },
+      {
+        label: "custom validation message and path",
+        error: new ZodError([
+          {
+            code: "custom",
+            path: ["PRIVATE_SENTINEL"],
+            message: "PRIVATE_SENTINEL",
+          },
+        ]),
+        message: "Error: Invalid tool arguments",
+      },
+      {
+        label: "MCP protocol error",
+        error: new McpError(
+          ErrorCode.InvalidParams,
+          "Invalid protocol parameters",
+          { field: "name" },
+        ),
+        protocol: true,
+      },
+      {
+        label: "authored protocol object",
+        error: {
+          code: -32601,
+          message: "Method not found",
+          data: { method: "unknown" },
+        },
+        protocol: true,
+      },
+    ])("handles $label without leaking execution details", async ({
+      error,
+      message,
+      protocol,
+    }, {
+      makeAgent,
+      makeAgentTool,
+      makeInternalMcpCatalog,
+      makeOrganization,
+      makeTool,
+    }) => {
+      const org = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: org.id,
+        name: "qa-errors",
+      });
+      const tool = await makeTool({
+        catalogId: catalog.id,
+        name: "qa-errors__execute",
+        parameters: { type: "object", properties: {} },
+      });
+      await makeAgentTool(agent.id, tool.id);
+      const execute = vi
+        .spyOn(mcpClient, "executeToolCallForOwner")
+        .mockRejectedValueOnce(error);
+      onTestFinished(() => execute.mockRestore());
+      const { server } = await createAgentServer({ agentId: agent.id });
+      const handler = (
+        server.server as unknown as {
+          _requestHandlers: Map<string, TestCallToolHandler>;
+        }
+      )._requestHandlers.get("tools/call");
+      if (!handler) throw new Error("Expected tools/call handler");
+      const response = handler(
+        { method: "tools/call", params: { name: tool.name, arguments: {} } },
+        { sendRequest: vi.fn() },
+      );
+      if (protocol) {
+        await expect(response).rejects.toBe(error);
+      } else {
+        const result = await response;
+        expect(result).toMatchObject({
+          resultType: "complete",
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text:
+                message ??
+                "Error: An internal error occurred while executing tool",
+            },
+          ],
+        });
+        expect(JSON.stringify(result)).not.toContain("PRIVATE_SENTINEL");
+      }
+      expect(execute).toHaveBeenCalledOnce();
+    });
+  });
+
   test("preserves user context when calling restricted Archestra tools", async ({
     makeAgent,
     makeMember,
@@ -3861,10 +4372,21 @@ describe("createAgentServer tools/list", () => {
     }
   });
 
-  test("ask_user elicits a choice form through the MCP caller", async ({
-    makeAgent,
-    makeOrganization,
-  }) => {
+  test.for([
+    {
+      answer: "a selected option",
+      content: { choice: "Accept for this session" },
+      expected: { selected: ["Accept for this session"] },
+    },
+    {
+      answer: "a typed answer",
+      content: { [ASK_USER_OTHER_ANSWER_FIELD]: "  Only this time  " },
+      expected: { selected: [], text: "Only this time" },
+    },
+  ])("ask_user elicits a form and returns $answer through the MCP caller", async ({
+    content,
+    expected,
+  }, { makeAgent, makeOrganization }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
     const { server } = await createAgentServer({ agentId: agent.id });
@@ -3880,7 +4402,7 @@ describe("createAgentServer tools/list", () => {
 
     const sendRequest = vi.fn().mockResolvedValue({
       action: "accept",
-      content: { choice: "Accept for this session" },
+      content,
     });
     const result = await callToolHandler(
       {
@@ -3912,7 +4434,16 @@ describe("createAgentServer tools/list", () => {
           message: "Accept this change for the rest of this session?",
           requestedSchema: expect.objectContaining({
             type: "object",
-            required: ["choice"],
+            properties: expect.objectContaining({
+              choice: expect.objectContaining({
+                enum: ["Accept for this session", "Do not accept"],
+              }),
+              [ASK_USER_OTHER_ANSWER_FIELD]: {
+                type: "string",
+                title: "Type something",
+              },
+            }),
+            required: [],
           }),
         },
       },
@@ -3923,14 +4454,63 @@ describe("createAgentServer tools/list", () => {
     expect(result.isError).not.toBe(true);
     expect(result.structuredContent).toEqual({
       action: "accept",
-      selected: ["Accept for this session"],
+      ...expected,
     });
   });
 
-  test("ask_user treats Codex automatic MCP decline as no visible form", async ({
-    makeAgent,
-    makeOrganization,
-  }) => {
+  test.for([
+    {
+      case: "under its automatic reviewer",
+      callMeta: {},
+      answer: {
+        action: "decline",
+        _meta: { approvals_reviewer: "auto_review" },
+      },
+      noPerson: true,
+    },
+    {
+      case: "accepted by its automatic reviewer",
+      callMeta: {},
+      answer: {
+        action: "accept",
+        content: { choice: "One" },
+        _meta: { approvals_reviewer: "auto_review" },
+      },
+      noPerson: true,
+    },
+    {
+      case: "accepted in a run no person drives",
+      callMeta: { "x-codex-turn-metadata": { turn_trigger: "exec" } },
+      answer: { action: "accept", content: { choice: "One" } },
+      noPerson: true,
+    },
+    {
+      // `codex exec` declares forms, then declines each one itself.
+      case: "in a run no person drives",
+      callMeta: { "x-codex-turn-metadata": { turn_trigger: "exec" } },
+      answer: { action: "decline" },
+      noPerson: true,
+    },
+    {
+      case: "sent as text, in a run no person drives",
+      callMeta: {
+        "x-codex-turn-metadata": JSON.stringify({ turn_trigger: "exec" }),
+      },
+      answer: { action: "decline" },
+      noPerson: true,
+    },
+    {
+      // A person who declines the form in an interactive session refuses it.
+      case: "from a person",
+      callMeta: { "x-codex-turn-metadata": { turn_trigger: "user" } },
+      answer: { action: "decline" },
+      noPerson: false,
+    },
+  ])("ask_user treats a Codex form answer $case as unanswered when no person gave it", async ({
+    callMeta,
+    answer,
+    noPerson,
+  }, { makeAgent, makeOrganization }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
     const { server } = await createAgentServer({ agentId: agent.id });
@@ -3951,21 +4531,20 @@ describe("createAgentServer tools/list", () => {
           },
           _meta: {
             "io.modelcontextprotocol/clientCapabilities": { elicitation: {} },
+            ...callMeta,
           },
         },
       },
-      {
-        sendRequest: vi.fn().mockResolvedValue({
-          action: "decline",
-          _meta: { approvals_reviewer: "auto_review" },
-        }),
-      },
+      { sendRequest: vi.fn().mockResolvedValue(answer) },
     );
-    expect(result.isError).toBe(true);
-    expect(JSON.stringify(result.content)).toContain(
-      "This client did not answer the choice form",
-    );
-    expect(JSON.stringify(result.content)).not.toContain("The user declined");
+    const text = JSON.stringify(result.content);
+    if (noPerson) {
+      expect(result.isError).toBe(true);
+      expect(text).toContain("This client did not answer the choice form");
+      expect(text).not.toContain("declined");
+    } else {
+      expect(text).toContain("The MCP client declined the choice form");
+    }
   });
 
   test("ask_user reports a question nobody answered in time, not a client without forms", async ({

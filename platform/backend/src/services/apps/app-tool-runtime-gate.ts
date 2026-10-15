@@ -1,5 +1,6 @@
 import {
   APP_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+  isCodeRuntimeArchestraToolShortName,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_APP_DATA_DELETE_SHORT_NAME,
   TOOL_APP_DATA_GET_SHORT_NAME,
@@ -29,10 +30,7 @@ const APP_DATA_SHORT_NAMES = new Set<string>([
   TOOL_APP_DATA_DELETE_SHORT_NAME,
 ]);
 
-/**
- * The file tools, which — unlike the other built-ins — exist only while the
- * skills-sandbox runtime is on. Kept as a set for the availability predicate.
- */
+/** The app file tools, as a set for {@link isAppFileToolShortName}. */
 const APP_FILE_SHORT_NAMES = new Set<string>(
   APP_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
 );
@@ -54,16 +52,19 @@ const APP_RUNTIME_BUILTIN_SHORT_NAMES = new Set<string>([
 
 /**
  * Whether an app-runtime built-in is actually dispatchable right now. Set
- * membership alone is not enough for the file tools: they are registered only
- * when the skills-sandbox runtime is on (see `getArchestraMcpTools`), so with
- * the flag dark the gate would admit a call that dispatch then fails to
- * resolve. Every consumer — the gate, the in-process dispatch branch,
- * `tools/list`, and the SDK bootstrap — asks this one predicate, so a dark flag
- * removes the whole surface coherently.
+ * membership alone is not enough for upload_file/download_file: they move bytes
+ * through the code runtime and are registered only while it is on (see
+ * `getArchestraMcpTools`), so with the flag dark the gate would admit a call
+ * that dispatch then fails to resolve. Every consumer — the gate, the
+ * in-process dispatch branch, `tools/list`, and the SDK bootstrap — asks this
+ * one predicate, so a dark flag removes them coherently while the store-only
+ * file tools stay available.
  */
 export function isAppRuntimeBuiltinAvailable(shortName: string): boolean {
   if (!APP_RUNTIME_BUILTIN_SHORT_NAMES.has(shortName)) return false;
-  if (isAppFileToolShortName(shortName)) return config.skillsSandbox.enabled;
+  if (isCodeRuntimeArchestraToolShortName(shortName)) {
+    return config.skillsSandbox.enabled;
+  }
   return true;
 }
 

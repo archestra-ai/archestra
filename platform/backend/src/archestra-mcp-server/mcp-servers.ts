@@ -1,4 +1,5 @@
 import {
+  ImagePullPolicySchema,
   isBuiltInCatalogId,
   ResourcePermissionGrantSchema,
   redactCatalogToolArguments,
@@ -41,7 +42,10 @@ import {
   resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
 import { catalogVisibleInEnvironment } from "@/services/environments/environment-isolation";
-import { assertCanWriteMcpDeploymentYaml } from "@/services/mcp-advanced-settings";
+import {
+  assertCanChangeMcpRuntimeConfig,
+  assertCanWriteMcpDeploymentYaml,
+} from "@/services/mcp-advanced-settings";
 import {
   assertCatalogCredentialRecovery,
   extractLocalConfigSecrets,
@@ -251,6 +255,9 @@ const McpConfigToolSchema = z
       .array(ImagePullSecretSchema)
       .optional()
       .describe("[Local] Image pull secrets for private registries."),
+    imagePullPolicy: ImagePullPolicySchema.optional().describe(
+      "[Local] Kubernetes imagePullPolicy for the server container. Unset uses Always for :latest or untagged images and IfNotPresent otherwise.",
+    ),
     deploymentSpecYaml: z
       .string()
       .optional()
@@ -1005,6 +1012,7 @@ async function handleEditMcpConfig(
       "httpPath",
       "nodePort",
       "imagePullSecrets",
+      "imagePullPolicy",
     ] as const;
     for (const field of localFields) {
       if (args[field] !== undefined) {
@@ -1030,6 +1038,17 @@ async function handleEditMcpConfig(
       return errorResult(
         "No fields to update. Provide at least one configuration field.",
       );
+    }
+    try {
+      await assertCanChangeMcpRuntimeConfig({
+        userId: context.userId,
+        organizationId,
+        catalogId: existing.id,
+        requested: updateData,
+        current: existing,
+      });
+    } catch (error) {
+      return errorResult((error as Error).message);
     }
 
     // Validate before touching the secret bag: rotating a live credential and
@@ -1169,6 +1188,7 @@ async function handleCreateMcpServer(
       "httpPath",
       "nodePort",
       "imagePullSecrets",
+      "imagePullPolicy",
     ] as const;
     const localConfig: Record<string, unknown> = {};
     for (const field of localConfigFields) {

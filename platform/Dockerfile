@@ -183,7 +183,7 @@ RUN skopeo copy --override-os linux --override-arch "${TARGETARCH}" \
 # emulation — and the same bytes land in every target arch.
 FROM --platform=$BUILDPLATFORM ${DOTNET_SDK_IMAGE} AS vaf-add-on-builder
 WORKDIR /src
-COPY integrations/m-files-vaf-add-on/ ./
+COPY backend/src/knowledge-base/connectors/mfiles/vaf-add-on/ ./
 # The csproj's packaging target writes exactly one versioned
 # archestra-m-files-vaf-add-on-<version>.mfappx (it deletes older ones
 # first); ship it alongside a stable-named copy — the name the installer and
@@ -258,6 +258,7 @@ ENV OPENSSL_NO_VENDOR=1
 FROM rust-builder-base AS rust-deps
 ARG TARGETARCH
 COPY archestra-rs/Cargo.toml archestra-rs/Cargo.lock ./archestra-rs/
+COPY archestra-rs/vendor/dagger-sdk-0.21.9 ./archestra-rs/vendor/dagger-sdk-0.21.9
 COPY archestra-rs/sandbox-core/Cargo.toml ./archestra-rs/sandbox-core/
 COPY archestra-rs/sandbox-rs/Cargo.toml archestra-rs/sandbox-rs/build.rs ./archestra-rs/sandbox-rs/
 COPY archestra-rs/app-runtime-core/Cargo.toml ./archestra-rs/app-runtime-core/
@@ -294,6 +295,7 @@ COPY --from=deps /app/archestra-rs/image-rs/node_modules ./archestra-rs/image-rs
 COPY --from=deps /app/archestra-rs/openappa-rs/node_modules ./archestra-rs/openappa-rs/node_modules
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY archestra-rs/Cargo.toml archestra-rs/Cargo.lock ./archestra-rs/
+COPY archestra-rs/vendor/dagger-sdk-0.21.9 ./archestra-rs/vendor/dagger-sdk-0.21.9
 COPY archestra-rs/napi-loader ./archestra-rs/napi-loader
 COPY archestra-rs/sandbox-core ./archestra-rs/sandbox-core
 COPY archestra-rs/sandbox-rs ./archestra-rs/sandbox-rs
@@ -629,7 +631,7 @@ COPY --from=builder /app/frontend/.next/standalone ./
 
 # Copy previous version's static assets first (from CI build context)
 # Content-hashed filenames ensure no conflicts between versions
-COPY prev-static-assets/ ./frontend/.next/static/
+COPY docker/prev-static-assets/ ./frontend/.next/static/
 
 # Copy current build's assets on top
 COPY --from=builder /app/frontend/.next/static ./frontend/.next/static

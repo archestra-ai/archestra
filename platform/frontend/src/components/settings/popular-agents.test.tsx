@@ -375,7 +375,7 @@ describe("popular agent configuration", () => {
     ).toBeInTheDocument();
     await ready();
     const codingAgents = screen
-      .getByRole("heading", { name: "Coding agents" })
+      .getByRole("heading", { name: "Coding agents Beta" })
       .closest("section") as HTMLElement;
     expect(
       within(codingAgents)
@@ -524,7 +524,7 @@ describe("popular agent configuration", () => {
     await ready();
     expect(picker().getAllByRole("listitem")[0]).toHaveTextContent("Codex");
     const section = screen
-      .getByRole("heading", { name: "Coding agents" })
+      .getByRole("heading", { name: "Coding agents Beta" })
       .closest("section");
     if (!section) throw new Error("Missing catalog section");
     expect(within(section).getAllByRole("button")[0]).toHaveTextContent(

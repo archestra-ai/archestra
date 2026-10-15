@@ -12,6 +12,7 @@ import { Database, Layers, MessageSquare, MessagesSquare } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo } from "react";
+import { useLogsHeaderAction } from "@/app/_parts/logs-section-layout";
 import { AgentSelector } from "@/components/agent-selector";
 import { BilledCost } from "@/components/billed-cost";
 import { ClientSourceBadge } from "@/components/client-source-badge";
@@ -26,9 +27,9 @@ import { SourceFilterOption } from "@/components/log-filter-option";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { SourceBadge } from "@/components/source-badge";
+import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
-import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { UnattributedUserBadge } from "@/components/unattributed-user-badge";
 import {
@@ -36,7 +37,7 @@ import {
   UserFilterSelect,
 } from "@/components/user-client-filter-selects";
 import { VirtualKeyBadge } from "@/components/virtual-key-badge";
-import { useProfiles } from "@/lib/agent.query";
+import { useAgentOptions } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
@@ -183,6 +184,22 @@ function SessionsTable() {
       [cursorPagination.goNewest, updateQueryParams],
     ),
   });
+  // Every log page keeps its time range in the header's top-right corner.
+  const timeRangePicker = useMemo(
+    () => (
+      <TimeRangePicker
+        value={dateTimePicker.range}
+        onChange={dateTimePicker.setRange}
+        onClear={dateTimePicker.clearDateRange}
+      />
+    ),
+    [
+      dateTimePicker.range,
+      dateTimePicker.setRange,
+      dateTimePicker.clearDateRange,
+    ],
+  );
+  useLogsHeaderAction(timeRangePicker);
 
   const handleProfileFilterChange = useCallback(
     (value: string) => {
@@ -251,7 +268,7 @@ function SessionsTable() {
     toastOnError: false,
   });
 
-  const { data: agents } = useProfiles({
+  const { data: agents } = useAgentOptions({
     filters: { agentTypes: ["agent"] },
   });
 
@@ -597,23 +614,6 @@ function SessionsTable() {
           <ClientFilterSelect
             value={clientFilter}
             onValueChange={handleClientFilterChange}
-          />
-
-          <DateTimeRangePicker
-            startDate={dateTimePicker.startDate}
-            endDate={dateTimePicker.endDate}
-            isDialogOpen={dateTimePicker.isDateDialogOpen}
-            tempStartDate={dateTimePicker.tempStartDate}
-            tempEndDate={dateTimePicker.tempEndDate}
-            displayText={dateTimePicker.getDateRangeDisplay()}
-            onDialogOpenChange={dateTimePicker.setIsDateDialogOpen}
-            onTempStartDateChange={dateTimePicker.setTempStartDate}
-            onTempEndDateChange={dateTimePicker.setTempEndDate}
-            onOpenDialog={dateTimePicker.openDateDialog}
-            onApply={dateTimePicker.handleApplyDateRange}
-            className={filterControlClass({
-              active: dateTimePicker.startDate !== undefined,
-            })}
           />
         </FilterBar>
       </CollectionFilters>

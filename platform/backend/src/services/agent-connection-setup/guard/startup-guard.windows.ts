@@ -109,7 +109,8 @@ ${remoteEntries}
 )${
     ctx.mcp
       ? `
-$McpServerName = ${psq(ctx.mcp.serverName)}`
+$McpServerName = ${psq(ctx.mcp.serverName)}
+$McpServerUrl = ${psq(ctx.mcp.url)}`
       : ""
   }${
     ctx.skills
@@ -160,7 +161,7 @@ function Remove-ArchGuard {
   $Script:GuardUninstalled = $true
   Remove-Item -Force -ErrorAction SilentlyContinue ($GuardPath + '.instructions-source.json'), ($GuardPath + '.instructions-refresh.ps1')
   Remove-Item -Force -ErrorAction SilentlyContinue $GuardPath, $SkipFile
-  Remove-Item -Force -ErrorAction SilentlyContinue ($GuardPath + '.prompt.md')
+  Remove-Item -Force -ErrorAction SilentlyContinue ($GuardPath + '.prompt.md')${client.inlineConfigEnv ? ", ($GuardPath + '.handoff.mjs')" : ""}
   Remove-Item -Recurse -Force -ErrorAction SilentlyContinue ($GuardPath + '.instructions')
   $profilePaths = @()
   $docs = [Environment]::GetFolderPath('MyDocuments')
@@ -660,8 +661,7 @@ function Show-ArchReconfigureOffer {
   if (-not $UseVt) { Show-ArchReconfigureHint }
   $key = ''
   if ($null -ne $Script:PendingKey) {
-    # only [C] is answered here; any other queued key (e.g. a [U] meant for the
-    # update offer below) is left in PendingKey so that beat can read it
+    # Only [C] is answered here; unrelated input must not select a menu action.
     if ($Script:PendingKey -eq 'c' -or $Script:PendingKey -eq 'C') {
       $key = $Script:PendingKey; $Script:PendingKey = $null
     }
@@ -672,54 +672,35 @@ function Show-ArchReconfigureOffer {
       if ($key) { break }
       Start-Sleep -Milliseconds 40
     }
-    # a non-[C] key pressed here belongs to the update offer below: stash it so
-    # this closing beat doesn't swallow it
+    # Preserve unrelated input without treating it as a menu action.
     if ($key -and $key -ne 'c' -and $key -ne 'C') { $Script:PendingKey = $key; $key = '' }
   }
   Clear-ArchReconfigureHint
   if ($key -eq 'c' -or $key -eq 'C') { Invoke-ArchReconfigureMenu }
 }
 
-# When the instance reports a newer guard format than this one, show a one-line
-# advisory with a timed, non-blocking [U] offer. It never blocks the launch: the
-# key poll has a short deadline and any other key — or the timeout — lets
-# ${client.binary} start. Pressing [U] prints the concrete /connection re-run
-# steps and holds a beat longer so they can be read. Re-connecting needs a fresh
-# one-time link only the user can fetch, so [U] shows the steps.
+# The health request checks for updates on every launch. Show the reason and
+# concrete steps automatically, then let the client start after six seconds.
 function Show-ArchVersionUpdate {
-  # Nothing to update if the guard just removed itself (every remote was
-  # disconnected this run); the timed reads below already hold the advisory on
-  # screen, so no extra dwell is needed.
   if ($Script:GuardUninstalled) { return }
   if (-not (Test-ArchVersionStale)) { return }
+  # Flush type-ahead before drawing, including keys beyond PendingKey.
+  $Script:PendingKey = $null
+  try { while ([Console]::KeyAvailable) { [void][Console]::ReadKey($true) } } catch { }
   Clear-ArchLine
-  Write-Arch 'update:' Yellow -NoNewline
-  Write-Arch (' a newer ' + $AppName + ' setup is available. ') DarkGray -NoNewline
-  Write-Arch '[U]' Cyan -NoNewline
-  Write-Arch ' for the steps to update this startup check' DarkGray
-  $key = ''
-  if ($null -ne $Script:PendingKey) {
-    # a [U] typed ahead during the probes (left in place by the closing beat) answers here
-    $key = $Script:PendingKey; $Script:PendingKey = $null
-  } else {
-    $deadline = [DateTime]::UtcNow.AddMilliseconds(1500)
-    while ([DateTime]::UtcNow -lt $deadline) {
-      $key = Read-ArchKey
-      if ($key) { break }
-      Start-Sleep -Milliseconds 40
-    }
-  }
-  if ($key -eq 'u' -or $key -eq 'U') {
-    Write-Arch ('To update, re-run the ' + $AppName + ' connection setup:') Cyan
-    Write-Host ('  1. Open the ' + $AppName + ' /connection page and pick ' + ${psq(client.label)} + '.')
-    Write-Host '  2. Copy the setup command it shows and run it in your terminal.'
-    Write-Host '     It reinstalls this startup check at the current version.'
-    # a longer, still non-blocking beat so the steps can be read
-    $deadline = [DateTime]::UtcNow.AddMilliseconds(6000)
-    while ([DateTime]::UtcNow -lt $deadline) {
-      if (Read-ArchKey) { break }
-      Start-Sleep -Milliseconds 40
-    }
+  Write-Host ''
+  Write-Arch 'Update available' Yellow -NoNewline
+  Write-Host (' — a newer ' + $AppName + ' setup is available.')
+  Write-Host 'Your installed startup check is older than this deployment.'
+  Write-Arch ('To update, re-run the ' + $AppName + ' connection setup:') Cyan
+  Write-Host ('  1. Open the ' + $AppName + ' /connection page and pick ' + ${psq(client.label)} + '.')
+  Write-Host '  2. Copy the setup command it shows and run it in your terminal.'
+  Write-Host '     It reinstalls this startup check at the current version.'
+  Write-Arch 'Continuing in 6 seconds — press any key to continue now.' DarkGray
+  $deadline = [DateTime]::UtcNow.AddMilliseconds(6000)
+  while ([DateTime]::UtcNow -lt $deadline) {
+    if (Read-ArchKey) { break }
+    Start-Sleep -Milliseconds 40
   }
 }
 
@@ -920,6 +901,7 @@ if ($Script:OpenMenu) {
   if ($UseVt) { Write-Host -NoNewline ("$Esc[" + $ActiveRemotes.Count + 'B' + "\`r") }
   Clear-ArchReconfigureHint
   Invoke-ArchReconfigureMenu
+  Show-ArchVersionUpdate
   Exit-ArchGuard
   return
 }
@@ -928,6 +910,7 @@ if ($Script:DiscAll) {
   $Script:Dwell = $true
   Disconnect-ArchRemotes $ActiveRemotes
   if (-not $Script:ArchDisconnectFailed) { Remove-ArchGuard }
+  Show-ArchVersionUpdate
   Exit-ArchGuard
   return
 }
@@ -1011,7 +994,7 @@ export function buildWindowsStartupGuardInstallSection(
         ? handoffEnabled
           ? `$null = New-Item -ItemType Directory -Force ($archGuardPath + '.instructions')\nif (Test-Path (Join-Path $env:USERPROFILE ${psq(promptRelpath)})) { Copy-Item -Force (Join-Path $env:USERPROFILE ${psq(promptRelpath)}) ($archGuardPath + '.instructions/AGENTS.md') } else { Remove-Item -Force -ErrorAction SilentlyContinue ($archGuardPath + '.instructions/AGENTS.md') }`
           : `Remove-Item -Force -ErrorAction SilentlyContinue ($archGuardPath + '.instructions/AGENTS.md')`
-        : client.clientId === "opencode"
+        : client.inlineConfigEnv
           ? handoffEnabled
             ? `[IO.File]::WriteAllBytes(($archGuardPath + '.handoff.mjs'), [Convert]::FromBase64String('${Buffer.from(OPENCODE_HANDOFF_PLUGIN).toString("base64")}'))`
             : `Remove-Item -Force -ErrorAction SilentlyContinue ($archGuardPath + '.handoff.mjs')`
@@ -1024,7 +1007,7 @@ export function buildWindowsStartupGuardInstallSection(
       } catch { Write-Warning 'Runtime handoff instructions skipped: could not read Codex configuration.' }`
       : client.clientId === "copilot-cli"
         ? `$archInstructionsDir = $archGuard + '.instructions'`
-        : client.clientId === "opencode"
+        : client.inlineConfigEnv
           ? `if (Test-Path ($archGuard + '.handoff.mjs')) { $archOpencodeHandoff = [Uri]::new(($archGuard + '.handoff.mjs'), [UriKind]::Absolute).AbsoluteUri }`
           : `$archLaunchArgs = @('--append-system-prompt-file', $archPromptPath) + $archLaunchArgs`;
   const promptArgs = handoffEnabled
@@ -1033,7 +1016,7 @@ export function buildWindowsStartupGuardInstallSection(
     $archInstructionsDir = $null
     $archOpencodeHandoff = $null
     $archAddPrompt = $true
-    if ($args.Count -gt 0 -and $args[0] -in @('auth', 'mcp', 'plugin', 'plugins', 'install', 'uninstall', 'update', 'upgrade', 'doctor', 'setup-token', 'completion', 'completions', 'config', 'agents', 'login', 'logout', 'mcp-server', 'app-server', 'remote-control', 'app', 'sandbox', 'debug', 'apply', 'a', 'archive', 'delete', 'unarchive', 'cloud', 'exec-server', 'features', 'help'${client.clientId === "opencode" ? ", 'serve', 'web', 'acp', 'models', 'stats', 'export', 'import', 'github', 'session', 'attach', 'providers', 'db', 'pr', 'agent'" : ""})) { $archAddPrompt = $false }
+    if ($args.Count -gt 0 -and $args[0] -in @('auth', 'mcp', 'plugin', 'plugins', 'install', 'uninstall', 'update', 'upgrade', 'doctor', 'setup-token', 'completion', 'completions', 'config', 'agents', 'login', 'logout', 'mcp-server', 'app-server', 'remote-control', 'app', 'sandbox', 'debug', 'apply', 'a', 'archive', 'delete', 'unarchive', 'cloud', 'exec-server', 'features', 'help'${(client.handoffSkipSubcommands ?? []).map((command) => `, '${command}'`).join("")})) { $archAddPrompt = $false }
     foreach ($archArg in $args) {
       if ($archArg -eq '--') { break }
       if ($archArg -match '^--(system-prompt|system-prompt-file|append-system-prompt|append-system-prompt-file)(=|$)' -or $archArg -in @('--help', '-h', '--version', '-v')) { $archAddPrompt = $false }
@@ -1070,7 +1053,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Could not restore Codex direct tool settings.'
     : ""
 }
 # A guard installed BEFORE the version-check feature has no $GuardFormatVersion
-# stamp and no [U] update check, so at launch it can never nudge the user to
+# stamp and no startup update check, so at launch it can never nudge the user to
 # re-connect on its own. Running connect is the one moment we can lift such a
 # user onto the current guard, so we upgrade it in place, automatically, with no
 # prompt. (A guard already carrying the stamp is just refreshed silently.)
@@ -1079,7 +1062,7 @@ if ((Test-Path $archGuardPath) -and -not (Select-String -Path $archGuardPath -Pa
   $archGuardPreFeature = $true
 }
 $archGuardBody = @'
-${renderStartupGuardPowerShell(ctx, client)}'@
+${inSingleQuotedHereString(renderStartupGuardPowerShell(ctx, client))}'@
 [IO.File]::WriteAllText($archGuardPath, $archGuardBody, (New-Object System.Text.UTF8Encoding $true))
 Write-Host ('Updated ' + $archGuardPath)
 if ($archGuardPreFeature) {
@@ -1097,13 +1080,25 @@ $archGuardBlock = @'
 ${client.markerStart}
 # Pre-flight connectivity check for ${ctx.appName}-connected ${client.label}.
 # Remove this block and ~/${client.psScriptRelpath} to uninstall.
-${refreshBlock}
+${inSingleQuotedHereString(refreshBlock)}
 function ${client.binary} {
   $archGuard = Join-Path $env:USERPROFILE '${client.psScriptRelpath}'
   $archUtilityCommand = $args.Count -gt 0 -and $args[0] -in @(${client.utilitySubcommands.map(psq).join(", ")}, '--help', '-h', '--version', '-v')
   ${
+    ctx.managedRuntimeSource
+      ? `if (-not $archUtilityCommand -and (Test-Path $archGuard)) {
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) { throw 'Node.js is required for the managed launcher' }
+    & node (Join-Path $env:USERPROFILE '.archestra/${client.clientId}-runtime/bootstrap.cjs')
+    if ($LASTEXITCODE -ne 0) { throw 'Managed launcher preparation failed' }
+  }`
+      : ""
+  }
+  ${
     ctx.managedInstructionsSource
-      ? `if (-not $archUtilityCommand -and (Test-Path $archGuard) -and -not (Select-String -Path (Join-Path $env:USERPROFILE '${client.skipRelpath}') -Pattern '^mcp$' -Quiet -ErrorAction SilentlyContinue)) {
+      ? `# Windows PowerShell 5.1 Select-String reports a missing file even with
+  # -ErrorAction SilentlyContinue, so check that the skip file exists first.
+  $archSkip = Join-Path $env:USERPROFILE '${client.skipRelpath}'
+  if (-not $archUtilityCommand -and (Test-Path $archGuard) -and -not ((Test-Path $archSkip) -and (Select-String -Path $archSkip -Pattern '^mcp$' -Quiet))) {
     try { & ($archGuard + '.instructions-refresh.ps1') ($archGuard + '.instructions-source.json') ($archGuard + '.prompt.md') ${client.clientId === "copilot-cli" ? "($archGuard + '.instructions/AGENTS.md')" : ""} } catch { }
   }`
       : ""
@@ -1145,10 +1140,10 @@ function ${client.binary} {
         ? `$archPreviousDirs = $env:COPILOT_CUSTOM_INSTRUCTIONS_DIRS
     try {
       if ($archInstructionsDir) { $env:COPILOT_CUSTOM_INSTRUCTIONS_DIRS = (@($archPreviousDirs, $archInstructionsDir) | Where-Object { $_ }) -join ',' }`
-        : handoffEnabled && client.clientId === "opencode"
-          ? `$archPreviousConfigContent = $env:OPENCODE_CONFIG_CONTENT
+        : handoffEnabled && client.inlineConfigEnv
+          ? `$archPreviousConfigContent = $env:${client.inlineConfigEnv}
     try {
-      if ($archOpencodeHandoff -and -not $archPreviousConfigContent) { $env:OPENCODE_CONFIG_CONTENT = (@{ plugin = @($archOpencodeHandoff) } | ConvertTo-Json -Compress) }`
+      if ($archOpencodeHandoff -and -not $archPreviousConfigContent) { $env:${client.inlineConfigEnv} = (@{ plugin = @($archOpencodeHandoff) } | ConvertTo-Json -Compress) }`
           : ""
     }
     ${
@@ -1182,7 +1177,7 @@ function ${client.binary} {
     }`
         : `& $archReal.Source ${handoffEnabled ? "@archLaunchArgs" : "@args"}`
     }
-    ${handoffEnabled && client.clientId === "copilot-cli" ? `} finally { $env:COPILOT_CUSTOM_INSTRUCTIONS_DIRS = $archPreviousDirs }` : handoffEnabled && client.clientId === "opencode" ? `} finally { $env:OPENCODE_CONFIG_CONTENT = $archPreviousConfigContent }` : ""}
+    ${handoffEnabled && client.clientId === "copilot-cli" ? `} finally { $env:COPILOT_CUSTOM_INSTRUCTIONS_DIRS = $archPreviousDirs }` : handoffEnabled && client.inlineConfigEnv ? `} finally { $env:${client.inlineConfigEnv} = $archPreviousConfigContent }` : ""}
     ${refreshCall}
   }
   else { Write-Error "${client.binary} executable not found on PATH" }
@@ -1300,6 +1295,20 @@ Remove-Item Function:${client.binary} -ErrorAction SilentlyContinue`;
 // ===================================================================
 // Internal helpers
 // ===================================================================
+
+/**
+ * A line starting with '@ would end the enclosing here-string early, and the
+ * rest of the script would then parse as setup code.
+ * @public — exported for tests; used internally otherwise.
+ */
+export function inSingleQuotedHereString(content: string): string {
+  if (/^'@/m.test(content)) {
+    throw new Error(
+      "Rendered content embedded in a single-quoted here-string has a line starting with '@",
+    );
+  }
+  return content;
+}
 
 /**
  * The pre-loader header: the Archestra mark with the title beside it, for the

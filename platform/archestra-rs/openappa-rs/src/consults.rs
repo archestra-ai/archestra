@@ -1,6 +1,6 @@
 //! Every external consult a dispatch makes, kept as a row of
 //! `openappa_external_consults`: a dataset, never an input to a decision.
-use appa_eventlog::postgres::{LeasedPostgres, PostgresError};
+use appa_eventlog::postgres::PostgresError;
 use appa_runtime::api::{
     ConsultBackend, ConsultRecord, ConsultRecorder, ExternalOutcome, ExternalRole, NoAnswerClass,
 };
@@ -66,7 +66,7 @@ impl Attribution {
 
 /// Stores what `buffer` holds on the dispatch's leased connection. A failure is
 /// reported and swallowed: the dataset never changes what the dispatch returns.
-pub(crate) fn store(pg: &LeasedPostgres, attribution: Attribution, buffer: &ConsultBuffer) {
+pub(crate) fn store(pg: &crate::Sql<'_>, attribution: Attribution, buffer: &ConsultBuffer) {
     let Buffered { records, dropped } = buffer.take();
     if dropped > 0 {
         eprintln!(
@@ -84,10 +84,35 @@ pub(crate) fn store(pg: &LeasedPostgres, attribution: Attribution, buffer: &Cons
 }
 
 fn insert(
-    pg: &LeasedPostgres,
+    pg: &crate::Sql<'_>,
     attribution: Attribution,
-    columns: Columns,
+    mut columns: Columns,
 ) -> Result<(), PostgresError> {
+    let cipher = pg.0.cipher();
+    for index in 0..columns.id.len() {
+        let context = |field: &str| {
+            appa_eventlog::encryption::field_context(&[
+                "openappa_external_consults",
+                &attribution.organization_id,
+                &attribution.session_id,
+                &columns.id[index],
+                field,
+            ])
+        };
+        columns.request[index] = cipher.seal_json(&context("request"), &columns.request[index])?;
+        columns.answer[index] = columns.answer[index]
+            .as_ref()
+            .map(|value| cipher.seal_json(&context("answer"), value))
+            .transpose()?;
+        columns.raw_response[index] = columns.raw_response[index]
+            .as_ref()
+            .map(|bytes| cipher.seal_bytes(&context("raw_response"), bytes))
+            .transpose()?;
+        columns.diagnostics[index] = columns.diagnostics[index]
+            .as_ref()
+            .map(|bytes| cipher.seal_bytes(&context("diagnostics"), bytes))
+            .transpose()?;
+    }
     pg.with_client(move |client| {
         client
             .execute(

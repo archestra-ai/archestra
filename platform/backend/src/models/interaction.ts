@@ -12,6 +12,7 @@ import {
   LEGACY_CLAUDE_CODE_SESSION_SOURCE,
   TimeInMs,
 } from "@archestra/shared";
+import { isOpenCodeFamilySessionSource } from "@archestra/shared/opencode-family";
 import {
   and,
   asc,
@@ -176,10 +177,12 @@ function computeRequestType(
     return "subagent";
   }
 
-  if (source === "opencode:main") return "main";
-  if (source?.startsWith("opencode:")) return "subagent";
+  if (source === "opencode:main" || source === "kilo:main") return "main";
+  if (source?.startsWith("opencode:") || source?.startsWith("kilo:")) {
+    return "subagent";
+  }
 
-  if (sessionSource === "opencode_session") {
+  if (isOpenCodeFamilySessionSource(sessionSource)) {
     return computeOpenCodeRequestType(request);
   }
 
@@ -777,18 +780,18 @@ class InteractionModel {
           source: schema.interactionsTable.source,
           requestType: sql<"main" | "subagent">`
             CASE
-              WHEN ${schema.interactionsTable.source} = 'opencode:main'
+              WHEN ${schema.interactionsTable.source} IN ('opencode:main', 'kilo:main')
               THEN 'main'
-              WHEN ${schema.interactionsTable.source} IN ('opencode:subagent', 'opencode:title', 'opencode:compaction')
+              WHEN ${schema.interactionsTable.source} IN ('opencode:subagent', 'opencode:title', 'opencode:compaction', 'kilo:subagent', 'kilo:title', 'kilo:compaction')
               THEN 'subagent'
-              WHEN ${schema.interactionsTable.sessionSource} = 'opencode_session'
+              WHEN ${schema.interactionsTable.sessionSource} IN ('opencode_session', 'kilo_session')
                 AND LOWER(CONCAT_WS('\n',
                   ${schema.interactionsTable.request}->>'system',
                   ${schema.interactionsTable.request}->>'instructions',
                   ${schema.interactionsTable.request}#>>'{systemInstruction,parts,0,text}'
                 )) LIKE '%title generator%'
               THEN 'subagent'
-              WHEN ${schema.interactionsTable.sessionSource} = 'opencode_session'
+              WHEN ${schema.interactionsTable.sessionSource} IN ('opencode_session', 'kilo_session')
                 AND ${schema.interactionsTable.request} ? 'tools'
                 AND NOT EXISTS (
                   SELECT 1
@@ -1475,17 +1478,27 @@ class InteractionModel {
     const access = await InteractionModel.buildSessionConditions(
       requestingUserId,
       isAgentAdmin,
-      filters,
+      filters ? { ...filters, organizationId: undefined } : undefined,
     );
     if (access === SESSION_ACCESS_DENIED) {
       return emptyPage();
     }
-    const whereClause = access;
+    const whereClause = filters?.organizationId
+      ? and(access, interactionBelongsToOrganization(filters.organizationId))
+      : access;
+    const headWhereClause = filters?.organizationId
+      ? and(
+          access,
+          InteractionModel.sessionHeadOrganizationCondition(
+            filters.organizationId,
+          ),
+        )
+      : access;
 
     // One row past the page is fetched so its presence can answer "is there
     // another page" — the job the total count used to do.
     const heads = await InteractionModel.findSessionHeadsForCursor(
-      whereClause,
+      headWhereClause,
       cursorQuery,
     );
     const hasNext = heads.length > cursorQuery.limit;
@@ -1638,6 +1651,28 @@ class InteractionModel {
     }
 
     return conditions.length > 0 ? and(...conditions) : undefined;
+  }
+
+  /**
+   * A bounded head scan should probe owner primary keys, rather than build the
+   * organization's complete owner sets before it can return its first page.
+   * Scalar subqueries prevent PostgreSQL from rewriting EXISTS into hashed
+   * full-roster scans. Missing owners fail closed, as in the shared predicate.
+   */
+  private static sessionHeadOrganizationCondition(organizationId: string): SQL {
+    const t = schema.interactionsTable;
+    const agent = schema.agentsTable;
+    const connector = schema.knowledgeBaseConnectorsTable;
+    const app = schema.appsTable;
+    const agentBelongs = sql`COALESCE((SELECT ${agent.organizationId} = ${organizationId} FROM ${agent} WHERE ${agent.id} = ${t.profileId}), false)`;
+    const connectorBelongs = sql`COALESCE((SELECT ${connector.organizationId} = ${organizationId} FROM ${connector} WHERE ${connector.id} = ${t.connectorId}), false)`;
+    const appBelongs = sql`COALESCE((SELECT ${app.organizationId} = ${organizationId} FROM ${app} WHERE ${app.id} = ${t.appId}), false)`;
+    return and(
+      or(agentBelongs, connectorBelongs, appBelongs),
+      or(sql`${t.profileId} IS NULL`, agentBelongs),
+      or(sql`${t.connectorId} IS NULL`, connectorBelongs),
+      or(sql`${t.appId} IS NULL`, appBelongs),
+    ) as SQL;
   }
 
   /**
@@ -2141,7 +2176,7 @@ class InteractionModel {
 
       for (const interaction of windowRows) {
         const isOpenCodeSideTurn =
-          interaction.sessionSource === "opencode_session" &&
+          isOpenCodeFamilySessionSource(interaction.sessionSource) &&
           computeRequestType(
             interaction.request,
             interaction.sessionSource,

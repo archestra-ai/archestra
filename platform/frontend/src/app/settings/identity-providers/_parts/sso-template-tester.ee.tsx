@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 "use client";
 
 import {
@@ -6,9 +7,12 @@ import {
   isTruthyTemplateOutput,
   registerSsoTemplateHelpers,
 } from "@archestra/shared";
-import { useEffect, useMemo, useState } from "react";
-import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Check } from "lucide-react";
+import { useEffect, useState } from "react";
+import { CodeBlock } from "@/components/ai-elements/code-block";
+import { JsonCodeBlock } from "@/components/json-code-block";
+import { Button } from "@/components/ui/button";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useIdentityProviderLatestIdTokenClaims } from "@/lib/auth/identity-provider.query.ee";
 import { formatRoleName } from "@/lib/utils/role";
 import type {
@@ -17,7 +21,6 @@ import type {
 } from "./sso-template-debug-types.ee";
 
 type HandlebarsRuntime = typeof import("handlebars");
-
 interface SsoTemplateTesterProps {
   identityProviderId?: string;
   template: string | undefined;
@@ -26,261 +29,244 @@ interface SsoTemplateTesterProps {
   roleRules?: SsoRoleMappingRule[];
   defaultRole?: string;
   strictMode?: boolean;
+  teamSyncEnabled?: boolean;
 }
 
-let helpersRegistered = false;
+const SAMPLE_CLAIMS = {
+  sub: "sample-user",
+  email: "user@example.com",
+  name: "Sample User",
+  email_verified: true,
+  groups: ["platform-admins", "engineering"],
+};
+let runtime: Promise<HandlebarsRuntime> | undefined;
+type PreviewResult = {
+  error?: string;
+  roles?: string;
+  matchedRuleIndex?: number;
+  groups?: string[];
+};
 
 export function SsoTemplateTester({
   identityProviderId,
   template,
-  templateLabel,
   mode,
   roleRules,
   defaultRole,
   strictMode = false,
+  teamSyncEnabled = true,
 }: SsoTemplateTesterProps) {
-  const { data, isLoading } =
-    useIdentityProviderLatestIdTokenClaims(identityProviderId);
-  const claims = data?.claims;
-  const [result, setResult] = useState<TemplateTestResult | null>(null);
-  const [isEvaluating, setIsEvaluating] = useState(false);
-  const disabledReason = useMemo(() => {
-    if (!identityProviderId) {
-      return "Save this provider and sign in with it before testing templates.";
-    }
-    if (isLoading) return "Loading latest ID token claims.";
-    if (!claims) return "No latest ID token claims are available to test.";
-    if (mode === "role" && !template?.trim())
-      return "Enter a template to test.";
-    return null;
-  }, [claims, identityProviderId, isLoading, mode, template]);
-
+  const query = useIdentityProviderLatestIdTokenClaims(identityProviderId);
+  const claims = query.data?.claims ?? SAMPLE_CLAIMS;
+  const [result, setResult] = useState<PreviewResult | null>(null);
   useEffect(() => {
     let cancelled = false;
-    if (disabledReason || !claims) {
-      setResult(null);
-      setIsEvaluating(false);
-      return;
-    }
-
-    setIsEvaluating(true);
-    evaluateTemplate({
-      claims,
-      defaultRole,
-      mode,
-      roleRules,
-      strictMode,
-      template,
-    }).then((nextResult) => {
-      if (cancelled) return;
-      setResult(nextResult);
-      setIsEvaluating(false);
-    });
-
+    void (async () => {
+      let next: PreviewResult;
+      try {
+        const engine = await loadHandlebars();
+        if (mode === "role") {
+          next = { roles: strictMode ? undefined : defaultRole || "member" };
+          for (const [index, rule] of (roleRules ?? []).entries()) {
+            if (!rule.expression.trim()) continue;
+            const output = engine
+              .compile(rule.expression, { noEscape: true })(claims)
+              .trim();
+            if (isTruthyTemplateOutput(output)) {
+              next = { roles: rule.role, matchedRuleIndex: index };
+              break;
+            }
+          }
+        } else {
+          next = {
+            groups: teamSyncEnabled
+              ? template?.trim()
+                ? extractSsoGroupsFromRenderedTemplate(
+                    engine.compile(template, { noEscape: true })(claims).trim(),
+                  )
+                : extractSsoGroupsFromClaims(claims)
+              : [],
+          };
+        }
+      } catch (error) {
+        next = {
+          error:
+            error instanceof Error
+              ? error.message
+              : "Could not evaluate this mapping.",
+        };
+      }
+      if (!cancelled) setResult(next);
+    })();
     return () => {
       cancelled = true;
     };
   }, [
     claims,
     defaultRole,
-    disabledReason,
     mode,
     roleRules,
     strictMode,
+    teamSyncEnabled,
     template,
   ]);
 
+  const matchingTemplate =
+    result?.matchedRuleIndex !== undefined
+      ? roleRules?.[result.matchedRuleIndex]?.expression
+      : undefined;
+  const roleNames = result?.roles?.split(",").map(formatRoleName).join(", ");
   return (
-    <div className="space-y-3 rounded-md border bg-muted/20 p-4">
-      <div className="space-y-0.5">
-        <div className="text-sm font-medium">Live Template Test</div>
+    <section
+      className="@container min-w-0 rounded-md border"
+      aria-label="Sign-in preview"
+    >
+      <div className="space-y-1 px-3 py-2.5">
+        <h4 className="text-sm font-medium">
+          {query.isLoading
+            ? "Loading your sign-in data…"
+            : query.data?.claims
+              ? "Preview using your sign-in data"
+              : "Preview using sample data"}
+        </h4>
         <p className="text-xs text-muted-foreground">
-          Runs {templateLabel} against your latest decoded ID token claims.
+          {query.data?.claims
+            ? "From your latest sign-in with this provider. Updates as you edit."
+            : "No saved sign-in data for your account yet. This sample lets you try your mappings."}
         </p>
       </div>
-
-      {result && (
-        <div className="flex flex-col gap-2 rounded-md border bg-background/50 px-3 py-2 sm:flex-row sm:items-center">
-          <Badge
-            variant={result.ok ? "secondary" : "destructive"}
-            className="w-fit"
-          >
-            {result.label}
-          </Badge>
-          <span className="text-xs text-muted-foreground">
-            {result.description}
-          </span>
+      {query.isError ? (
+        <div className="border-t p-3">
+          <InlineNotice variant="error">
+            <span className="font-medium">Could not load sign-in data.</span>
+            <InlineNoticeText>Try loading it again.</InlineNoticeText>
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              onClick={() => query.refetch()}
+            >
+              <span>Try again</span>
+            </Button>
+          </InlineNotice>
+        </div>
+      ) : (
+        <div className="grid min-w-0 grid-cols-1 border-t @[700px]:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+          <div className="min-w-0 p-3">
+            <span className="text-xs font-medium">Sign-in data</span>
+            <JsonCodeBlock
+              value={claims}
+              maxHeightClassName="max-h-72 overflow-auto"
+            />
+          </div>
+          <div className="min-w-0 space-y-3 border-t p-3 @[700px]:border-l @[700px]:border-t-0">
+            {result?.error ? (
+              <InlineNotice variant="error">
+                <span className="font-medium">Could not preview mapping.</span>
+                <InlineNoticeText>{result.error}</InlineNoticeText>
+              </InlineNotice>
+            ) : mode === "role" ? (
+              <>
+                <p
+                  className="flex items-start gap-2 text-sm font-medium"
+                  aria-live="polite"
+                >
+                  <Check className="mt-0.5 size-4 shrink-0" />
+                  <span>
+                    {result?.matchedRuleIndex !== undefined
+                      ? `Rule ${result.matchedRuleIndex + 1} → ${roleNames}`
+                      : roleNames
+                        ? `Default roles → ${roleNames}`
+                        : result
+                          ? "No matching rule · Sign-in denied"
+                          : "Updating preview…"}
+                  </span>
+                </p>
+                {matchingTemplate ? (
+                  <div className="space-y-1.5">
+                    <span className="text-xs text-muted-foreground">
+                      Matching template
+                    </span>
+                    <TemplateCode value={matchingTemplate} />
+                  </div>
+                ) : (
+                  result && (
+                    <p className="text-xs text-muted-foreground">
+                      {roleNames
+                        ? "No rule matches this sign-in data, so the default roles apply."
+                        : "No rule matches this sign-in data. Strict Mode would prevent sign-in."}
+                    </p>
+                  )
+                )}
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-medium" aria-live="polite">
+                  {teamSyncEnabled
+                    ? `${result?.groups?.length ?? 0} groups extracted`
+                    : "Team Sync is off"}
+                </p>
+                {teamSyncEnabled && (
+                  <>
+                    <div className="flex flex-wrap gap-1.5">
+                      {result?.groups?.map((group) => (
+                        <span
+                          key={group}
+                          className="rounded-md bg-muted px-2 py-1 text-xs break-all"
+                        >
+                          {group}
+                        </span>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {result?.groups?.length
+                        ? "Use these identifiers in each team’s External Group Sync settings."
+                        : "This sign-in data does not produce any group identifiers."}
+                    </p>
+                    <div className="space-y-1.5">
+                      <span className="text-xs text-muted-foreground">
+                        Groups Handlebars template
+                      </span>
+                      {template?.trim() ? (
+                        <TemplateCode value={template} />
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Default extraction from the sign-in data.
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
         </div>
       )}
-
-      {disabledReason && (
-        <p className="text-xs text-muted-foreground">{disabledReason}</p>
-      )}
-      {isEvaluating && !result && (
-        <p className="text-xs text-muted-foreground">
-          Loading template tester.
-        </p>
-      )}
-
-      {result && (
-        <div>
-          {result.output && (
-            <ScrollArea className="max-h-40 overflow-auto rounded-md border bg-muted/40">
-              <pre className="p-3 text-xs leading-relaxed whitespace-pre-wrap break-words font-mono">
-                {result.output}
-              </pre>
-            </ScrollArea>
-          )}
-        </div>
-      )}
-    </div>
+    </section>
   );
 }
-
-interface TemplateTestResult {
-  ok: boolean;
-  label: string;
-  description: string;
-  output?: string;
+function TemplateCode({ value }: { value: string }) {
+  return (
+    <CodeBlock
+      code={value}
+      language="handlebars"
+      wrapLongLines
+      contentClassName="overflow-auto [&_code]:text-xs"
+      contentStyle={{
+        fontSize: "0.75rem",
+        padding: "0.75rem",
+        paddingTop: "0.75rem",
+      }}
+    />
+  );
 }
-
-async function evaluateTemplate(params: {
-  claims: Record<string, unknown>;
-  defaultRole: string | undefined;
-  mode: SsoTemplateTestMode;
-  roleRules: SsoRoleMappingRule[] | undefined;
-  strictMode: boolean;
-  template: string | undefined;
-}): Promise<TemplateTestResult> {
-  try {
-    if (params.mode === "role") {
-      const handlebars = await loadHandlebars();
-      const compiled = handlebars.compile(params.template ?? "", {
-        noEscape: true,
-      });
-      const output = compiled(params.claims).trim();
-      const matched = isTruthyTemplateOutput(output);
-      return {
-        ok: matched,
-        label: matched ? "Match" : "No match",
-        description: getRoleMappingDescription({
-          outcome: evaluateRoleMappingOutcome({
-            claims: params.claims,
-            defaultRole: params.defaultRole,
-            handlebars,
-            roleRules: params.roleRules,
-            strictMode: params.strictMode,
-          }),
-          selectedRuleMatched: matched,
-        }),
-      };
-    }
-
-    const hasTemplate = Boolean(params.template?.trim());
-    if (!hasTemplate) {
-      const groups = extractSsoGroupsFromClaims(params.claims);
-      return {
-        ok: groups.length > 0,
-        label: groups.length > 0 ? "Groups extracted" : "No groups",
-        description:
-          groups.length > 0
-            ? `${groups.length} group identifier${groups.length === 1 ? "" : "s"} extracted using default extraction.`
-            : "Default extraction did not find any group identifiers.",
-        output: JSON.stringify(groups, null, 2),
-      };
-    }
-
-    const handlebars = await loadHandlebars();
-    const output = handlebars
-      .compile(params.template ?? "", { noEscape: true })(params.claims)
-      .trim();
-    const groups = extractSsoGroupsFromRenderedTemplate(output);
-    return {
-      ok: groups.length > 0,
-      label: groups.length > 0 ? "Groups extracted" : "No groups",
-      description:
-        groups.length > 0
-          ? `${groups.length} group identifier${groups.length === 1 ? "" : "s"} extracted.`
-          : "This template did not extract any group identifiers.",
-      output: JSON.stringify(groups, null, 2),
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      label: "Error",
-      description:
-        error instanceof Error
-          ? error.message
-          : "The template could not be evaluated.",
-    };
-  }
-}
-
-type RoleMappingOutcome =
-  | {
-      kind: "assigned";
-      role: string;
-    }
-  | {
-      kind: "denied";
-    };
-
-function evaluateRoleMappingOutcome(params: {
-  claims: Record<string, unknown>;
-  defaultRole: string | undefined;
-  handlebars: HandlebarsRuntime;
-  roleRules: SsoRoleMappingRule[] | undefined;
-  strictMode: boolean;
-}): RoleMappingOutcome {
-  for (const rule of params.roleRules ?? []) {
-    if (!rule.expression.trim()) continue;
-    const compiled = params.handlebars.compile(rule.expression, {
-      noEscape: true,
+function loadHandlebars() {
+  runtime ??= import("handlebars/dist/handlebars").then((module) => {
+    const engine = (module.default ?? module) as HandlebarsRuntime;
+    registerSsoTemplateHelpers({
+      registerHelper: (name, helper) => engine.registerHelper(name, helper),
     });
-    const output = compiled(params.claims).trim();
-    if (isTruthyTemplateOutput(output)) {
-      return {
-        kind: "assigned",
-        role: rule.role,
-      };
-    }
-  }
-
-  if (params.strictMode) {
-    return { kind: "denied" };
-  }
-
-  return {
-    kind: "assigned",
-    role: params.defaultRole ?? "member",
-  };
-}
-
-function getRoleMappingDescription(params: {
-  outcome: RoleMappingOutcome;
-  selectedRuleMatched: boolean;
-}) {
-  const selectedRuleText = params.selectedRuleMatched
-    ? "The selected rule matches."
-    : "The selected rule does not match.";
-  if (params.outcome.kind === "denied") {
-    return `${selectedRuleText} Based on current rules and your latest token, sign-in would be denied by strict mode.`;
-  }
-
-  return `${selectedRuleText} Based on current rules and your latest token, you would be assigned ${formatRoleName(params.outcome.role)}.`;
-}
-
-async function loadHandlebars(): Promise<HandlebarsRuntime> {
-  const module = await import("handlebars/dist/handlebars");
-  const handlebars = (module.default ?? module) as HandlebarsRuntime;
-  if (helpersRegistered) return handlebars;
-  helpersRegistered = true;
-
-  registerSsoTemplateHelpers({
-    registerHelper: (name, helper) => {
-      handlebars.registerHelper(name, helper);
-    },
+    return engine;
   });
-
-  return handlebars;
+  return runtime;
 }

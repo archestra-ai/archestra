@@ -25,6 +25,7 @@ import { ChatListSkeleton } from "@/app/_parts/chat-list-skeleton";
 import { ConversationProjectActions } from "@/app/_parts/conversation-project-actions";
 import { groupSidebarTasks } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { AgentIcon } from "@/components/agent-icon";
+import { useConversationActions } from "@/components/chat/conversation-actions";
 import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { RunStateIcon } from "@/components/chat/run-state-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -68,6 +69,7 @@ import { ATTENTION_DOT_CLASS } from "@/lib/agent-run-status-marks";
 import {
   useCancelAgentRun,
   useDeleteAgentRun,
+  useMyAgentRun,
   useMyAgentRuns,
   useUpdateAgentRun,
 } from "@/lib/agent-runtime.query";
@@ -81,9 +83,7 @@ import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   useConversations,
-  useDeleteConversation,
   useGenerateConversationTitle,
-  usePinConversation,
   useUpdateConversation,
 } from "@/lib/chat/chat.query";
 import {
@@ -155,34 +155,45 @@ export function ChatSidebarSection({
     enabled: isAuthenticated && canReadConversation === true,
   });
   const runtimeEnabled = useFeature("agentRuntime") === true;
-  const { data: runs = [], isLoading: runsLoading } = useMyAgentRuns(
-    isAuthenticated && canReadConversation === true && runtimeEnabled,
+  const runsEnabled =
+    isAuthenticated && canReadConversation === true && runtimeEnabled;
+  const recentRunsQuery = useMyAgentRuns(runsEnabled, { pinned: false });
+  const pinnedRunsQuery = useMyAgentRuns(runsEnabled, { pinned: true });
+  const selectedRunId = pathname.startsWith("/chat/runs/")
+    ? (pathname.split("/").at(-1) ?? "")
+    : "";
+  const selectedRunQuery = useMyAgentRun(
+    selectedRunId,
+    runsEnabled && !!selectedRunId,
   );
+  const runs = [
+    ...new Map(
+      [
+        ...(recentRunsQuery.data ?? []),
+        ...(pinnedRunsQuery.data ?? []),
+        ...(selectedRunQuery.data?.viewerRole === "owner"
+          ? [selectedRunQuery.data]
+          : []),
+      ].map((run) => [run.taskId, run]),
+    ).values(),
+  ];
+  const runsLoading = recentRunsQuery.isLoading;
   const updateRunMutation = useUpdateAgentRun();
   const cancelRunMutation = useCancelAgentRun();
   const deleteRunMutation = useDeleteAgentRun();
   const updateConversationMutation = useUpdateConversation();
   const createProjectMutation = useCreateProject();
-  const deleteConversationMutation = useDeleteConversation();
   const generateTitleMutation = useGenerateConversationTitle();
-  const pinConversationMutation = usePinConversation();
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [editingRunId, setEditingRunId] = useState<string | null>(null);
   const [editingRunTitle, setEditingRunTitle] = useState("");
   const [stopRunId, setStopRunId] = useState<string | null>(null);
   const [deleteRunId, setDeleteRunId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const { data: canUpdateConversation } = useHasPermissions({
-    chat: ["update"],
-  });
-  const { data: canDeleteConversation } = useHasPermissions({
-    chat: ["delete"],
-  });
   const { data: canCreateProject } = useHasPermissions({
     project: ["create"],
   });
@@ -191,8 +202,9 @@ export function ChatSidebarSection({
   });
 
   // Conversations whose title should play the typing animation (shared via chat
-  // context); getSession drives the live "generating" spinner.
-  const { animatingTitleIds, markTitleAnimating, getSession } = useGlobalChat();
+  // context); generatingConversationIds drives the live "generating" spinner.
+  const { animatingTitleIds, markTitleAnimating, generatingConversationIds } =
+    useGlobalChat();
 
   const { isMobile, setOpenMobile } = useSidebar();
 
@@ -297,19 +309,6 @@ export function ChatSidebarSection({
     }
   };
 
-  const handleDeleteConversation = async (id: string) => {
-    // Navigate away before deleting to avoid "conversation not found" flash
-    if (currentConversationId === id) {
-      router.push("/chat");
-    }
-
-    try {
-      await deleteConversationMutation.mutateAsync(id);
-    } catch {
-      // Error is handled by the mutation's onError callback
-    }
-  };
-
   const handleRegenerateTitle = (id: string) => {
     // Close edit mode
     setEditingId(null);
@@ -325,30 +324,11 @@ export function ChatSidebarSection({
     );
   };
 
-  const handleTogglePin = (id: string, isPinned: boolean) => {
-    pinConversationMutation.mutate({ id, pinned: !isPinned });
-  };
-
   const handleToggleRunPin = (taskId: string, isPinned: boolean) => {
     updateRunMutation.mutate({
       taskId,
       pinnedAt: isPinned ? null : new Date().toISOString(),
     });
-  };
-
-  const handleChangeProject = async (
-    conversationId: string,
-    projectId: string | null,
-  ) => {
-    try {
-      await updateConversationMutation.mutateAsync({
-        id: conversationId,
-        projectId,
-      });
-      setOpenMenuId(null);
-    } catch {
-      // Error is handled by the mutation's onError callback
-    }
   };
 
   const handleChangeRunProject = async (
@@ -408,11 +388,7 @@ export function ChatSidebarSection({
   };
 
   const openConversationSearch = () => {
-    window.dispatchEvent(
-      new CustomEvent("open-conversation-search", {
-        detail: { recentChatsView: true },
-      }),
-    );
+    window.dispatchEvent(new CustomEvent("open-conversation-search"));
   };
 
   const renderConversationItem = (conv: (typeof conversations)[number]) => {
@@ -458,9 +434,7 @@ export function ChatSidebarSection({
       );
     }
     const isCurrentConversation = currentConversationId === conv.id;
-    const sessionStatus = getSession(conv.id)?.status;
-    const isGenerating =
-      sessionStatus === "submitted" || sessionStatus === "streaming";
+    const isGenerating = generatingConversationIds.has(conv.id);
     // `unread` is server-derived (lastMessageAt > lastReadAt). Suppressed on the
     // chat you're viewing (its read marker is being updated) and while it is
     // actively generating (the spinner wins).
@@ -472,13 +446,9 @@ export function ChatSidebarSection({
       generateTitleMutation.isPending &&
       generateTitleMutation.variables?.id === conv.id;
     const isMenuOpen = openMenuId === conv.id;
-    const isPinned = !!conv.pinnedAt;
-    const showChatMenu =
-      editingId !== conv.id && (canUpdateConversation || canDeleteConversation);
-    const showProjectActions =
-      canUpdateConversation === true &&
-      canReadProjects === true &&
-      isActionAvailableForConversation(conv, "changeProject");
+    const hasIndicator = isGenerating || isUnread;
+    // Export is open to every reader, so the menu always has something.
+    const showChatMenu = editingId !== conv.id;
     // AI title generation is rejected for encrypted chats (the server would
     // have to read encrypted messages), so hide both regenerate affordances.
     const canRegenerateTitle = isActionAvailableForConversation(
@@ -493,8 +463,10 @@ export function ChatSidebarSection({
             "relative flex items-center justify-between w-full gap-2 rounded-md pr-2 hover:bg-sidebar-accent focus-within:bg-sidebar-accent",
             isCurrentConversation && "bg-sidebar-accent",
             // Reserve the menu gutter only while the menu trigger is visible.
-            showChatMenu && "hover:pr-7 focus-within:pr-7",
-            showChatMenu && isMenuOpen && "pr-7",
+            // With a status indicator the gutter opens left of it instead,
+            // so the indicator keeps its column.
+            showChatMenu && !hasIndicator && "hover:pr-7 focus-within:pr-7",
+            showChatMenu && !hasIndicator && isMenuOpen && "pr-7",
           )}
         >
           {editingId === conv.id ? (
@@ -608,23 +580,38 @@ export function ChatSidebarSection({
                   />
                 )}
               </span>
-              {isGenerating ? (
-                <Loader2
-                  aria-label="Generating"
-                  data-testid={getChatItemGeneratingIndicatorTestId(conv.id)}
-                  className="ml-1 h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground"
-                />
-              ) : isUnread ? (
+              {/* One fixed slot for both, so the spinner and the smaller dot
+                  share a center line down the list. */}
+              {hasIndicator && (
                 <span
-                  role="img"
-                  aria-label="New messages"
-                  data-testid={getChatItemUnreadIndicatorTestId(conv.id)}
                   className={cn(
-                    "ml-1 h-2 w-2 shrink-0 rounded-full",
-                    ATTENTION_DOT_CLASS.attention,
+                    "ml-1 flex size-4 shrink-0 items-center justify-center",
+                    showChatMenu &&
+                      "group-hover/menu-sub-item:ml-7 group-focus-within/menu-sub-item:ml-7",
+                    showChatMenu && isMenuOpen && "ml-7",
                   )}
-                />
-              ) : null}
+                >
+                  {isGenerating ? (
+                    <Loader2
+                      aria-label="Generating"
+                      data-testid={getChatItemGeneratingIndicatorTestId(
+                        conv.id,
+                      )}
+                      className="size-3.5 animate-spin text-muted-foreground"
+                    />
+                  ) : (
+                    <span
+                      role="img"
+                      aria-label="New messages"
+                      data-testid={getChatItemUnreadIndicatorTestId(conv.id)}
+                      className={cn(
+                        "size-2 rounded-full",
+                        ATTENTION_DOT_CLASS.attention,
+                      )}
+                    />
+                  )}
+                </span>
+              )}
             </SidebarMenuButton>
           )}
           {editingId !== conv.id && conv.projectId && conv.projectName && (
@@ -639,115 +626,19 @@ export function ChatSidebarSection({
               }}
             />
           )}
-          {/* Absolute so the trigger never permanently narrows the title. */}
           {showChatMenu && (
-            <DropdownMenu
+            <ConversationRowMenu
+              conversation={conv}
               open={isMenuOpen}
               onOpenChange={(open) => setOpenMenuId(open ? conv.id : null)}
-            >
-              <DropdownMenuTrigger asChild>
-                {/* A real button: ARIA menu attributes are not valid on a
-                    bare <svg>, and an svg is not keyboard-operable. */}
-                <UnstyledButton
-                  type="button"
-                  aria-label="Chat actions"
-                  className={cn(
-                    "absolute right-1 top-1/2 -translate-y-1/2 transition-opacity",
-                    isMenuOpen
-                      ? "opacity-100"
-                      : "opacity-0 group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100",
-                  )}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <MoreHorizontal className="h-4 w-4 p-0" />
-                </UnstyledButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" side="right">
-                {canUpdateConversation && (
-                  <>
-                    <DropdownMenuItem
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleTogglePin(conv.id, isPinned);
-                      }}
-                    >
-                      {isPinned ? (
-                        <>
-                          <PinOff className="h-4 w-4 mr-2" />
-                          Unpin
-                        </>
-                      ) : (
-                        <>
-                          <Pin className="h-4 w-4 mr-2" />
-                          Pin
-                        </>
-                      )}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleStartEdit(conv.id, displayTitle);
-                      }}
-                    >
-                      <Pencil className="h-4 w-4 mr-2" />
-                      Rename
-                    </DropdownMenuItem>
-                    {canRegenerateTitle && (
-                      <DropdownMenuItem
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRegenerateTitle(conv.id);
-                        }}
-                        disabled={generateTitleMutation.isPending}
-                      >
-                        <Sparkles className="h-4 w-4 mr-2" />
-                        Regenerate title
-                      </DropdownMenuItem>
-                    )}
-                    {showProjectActions && (
-                      <ConversationProjectActions
-                        projectId={conv.projectId}
-                        projects={projectsData ?? []}
-                        isPending={
-                          updateConversationMutation.isPending ||
-                          createProjectMutation.isPending
-                        }
-                        onCreateProject={
-                          canCreateProject === true
-                            ? async (name) => {
-                                const project =
-                                  await createProjectMutation.mutateAsync({
-                                    name,
-                                  });
-                                if (project)
-                                  await handleChangeProject(
-                                    conv.id,
-                                    project.id,
-                                  );
-                              }
-                            : undefined
-                        }
-                        onProjectChange={(projectId) =>
-                          handleChangeProject(conv.id, projectId)
-                        }
-                      />
-                    )}
-                  </>
-                )}
-                {canDeleteConversation && (
-                  <DropdownMenuItem
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeleteConfirmId(conv.id);
-                    }}
-                    className="text-destructive focus:text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Delete
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
+              onRename={() => handleStartEdit(conv.id, displayTitle)}
+              triggerClassName={cn(
+                hasIndicator ? "right-9" : "right-1",
+                isMenuOpen
+                  ? "opacity-100"
+                  : "opacity-0 group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100",
+              )}
+            />
           )}
         </div>
       </SidebarMenuSubItem>
@@ -764,7 +655,16 @@ export function ChatSidebarSection({
     const isPinned = !!run.pinnedAt;
     return (
       <SidebarMenuSubItem key={menuKey}>
-        <div className="flex w-full items-center justify-between gap-1">
+        <div
+          className={cn(
+            "relative flex w-full items-center justify-between gap-1 rounded-md hover:bg-sidebar-accent focus-within:bg-sidebar-accent",
+            active && "bg-sidebar-accent",
+            // The menu trigger sits inside the row highlight; reserve its
+            // gutter only while the trigger is visible.
+            !isEditing && "hover:pr-7 focus-within:pr-7",
+            !isEditing && isMenuOpen && "pr-7",
+          )}
+        >
           {isEditing ? (
             <Input
               ref={inputRef}
@@ -832,7 +732,7 @@ export function ChatSidebarSection({
                   type="button"
                   aria-label="Run actions"
                   className={cn(
-                    "shrink-0 transition-opacity",
+                    "absolute right-1 top-1/2 -translate-y-1/2 transition-opacity",
                     isMenuOpen
                       ? "opacity-100"
                       : "opacity-0 group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100",
@@ -921,7 +821,16 @@ export function ChatSidebarSection({
 
     return (
       <SidebarMenuSubItem key={menuKey}>
-        <div className="flex items-center justify-between w-full gap-1">
+        <div
+          className={cn(
+            "relative flex w-full items-center justify-between gap-1 rounded-md hover:bg-sidebar-accent focus-within:bg-sidebar-accent",
+            isActive && "bg-sidebar-accent",
+            // The menu trigger sits inside the row highlight; reserve its
+            // gutter only while the trigger is visible.
+            "hover:pr-7 focus-within:pr-7",
+            isMenuOpen && "pr-7",
+          )}
+        >
           <SidebarMenuButton
             onClick={() => handleSelectProject(project.id)}
             isActive={isActive}
@@ -956,7 +865,7 @@ export function ChatSidebarSection({
                 type="button"
                 aria-label="Project actions"
                 className={cn(
-                  "shrink-0 transition-opacity",
+                  "absolute right-1 top-1/2 -translate-y-1/2 transition-opacity",
                   isMenuOpen
                     ? "opacity-100"
                     : "opacity-0 group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100",
@@ -994,7 +903,15 @@ export function ChatSidebarSection({
 
     return (
       <SidebarMenuSubItem key={menuKey}>
-        <div className="flex items-center justify-between w-full gap-1">
+        <div
+          className={cn(
+            "relative flex w-full items-center justify-between gap-1 rounded-md hover:bg-sidebar-accent focus-within:bg-sidebar-accent",
+            // The menu trigger sits inside the row highlight; reserve its
+            // gutter only while the trigger is visible.
+            "hover:pr-7 focus-within:pr-7",
+            isMenuOpen && "pr-7",
+          )}
+        >
           <SidebarMenuButton
             onClick={() => handleSelectApp(appItem)}
             className="cursor-pointer flex-1 justify-between"
@@ -1027,7 +944,7 @@ export function ChatSidebarSection({
                 type="button"
                 aria-label="App actions"
                 className={cn(
-                  "shrink-0 transition-opacity",
+                  "absolute right-1 top-1/2 -translate-y-1/2 transition-opacity",
                   isMenuOpen
                     ? "opacity-100"
                     : "opacity-0 group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100",
@@ -1066,7 +983,7 @@ export function ChatSidebarSection({
 
   const subClass = flat ? "mx-0 border-l-0 px-0" : "mx-0 ml-3.5 px-0 pl-2.5";
   const recentItems = [
-    ...recentUnpinnedChats.map((item) => ({
+    ...recentUnpinnedChats.slice(0, slots).map((item) => ({
       kind: "conversation" as const,
       item,
       timestamp: item.lastMessageAt,
@@ -1080,16 +997,13 @@ export function ChatSidebarSection({
     (left, right) =>
       new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime(),
   );
-  // Runs are operational sessions, so keep every one of them visible
-  // instead of counting them against the chat slots — the rows still sort
-  // into the same timeline.
-  const visibleSlots = slots + recentUnpinnedRuns.length;
+  // Every loaded run remains visible; only conversations consume chat slots.
   const showMore = recentUnpinnedChats.length > slots;
 
   // The list arrives sorted by lastMessageAt desc, so grouping the visible
   // slice by the same timestamp yields contiguous date sections.
   const recentChatGroups = groupConversationsByDay(
-    recentItems.slice(0, visibleSlots),
+    recentItems,
     (entry) => entry.timestamp,
   );
 
@@ -1113,6 +1027,22 @@ export function ChatSidebarSection({
                             : it.type === "app"
                               ? renderAppItem(it.item)
                               : renderRunItem(it.item),
+                      )}
+                      {pinnedRunsQuery.hasNextPage && (
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton asChild>
+                            <Button
+                              variant="ghost"
+                              size="xs"
+                              disabled={pinnedRunsQuery.isFetchingNextPage}
+                              onClick={() =>
+                                void pinnedRunsQuery.fetchNextPage()
+                              }
+                            >
+                              More pinned runs
+                            </Button>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
                       )}
                     </SidebarMenuSub>
                   </SidebarMenuItem>
@@ -1144,6 +1074,23 @@ export function ChatSidebarSection({
                             </SidebarMenuSubButton>
                           </SidebarMenuSubItem>
                         )}
+                      {recentRunsQuery.hasNextPage &&
+                        groupIndex === recentChatGroups.length - 1 && (
+                          <SidebarMenuSubItem>
+                            <SidebarMenuSubButton asChild>
+                              <Button
+                                variant="ghost"
+                                size="xs"
+                                disabled={recentRunsQuery.isFetchingNextPage}
+                                onClick={() =>
+                                  void recentRunsQuery.fetchNextPage()
+                                }
+                              >
+                                More runs
+                              </Button>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        )}
                     </SidebarMenuSub>
                   </SidebarMenuItem>
                 </SidebarMenu>
@@ -1152,22 +1099,6 @@ export function ChatSidebarSection({
           ))}
         </ChatListFadeIn>
       )}
-
-      <DeleteConfirmDialog
-        open={deleteConfirmId !== null}
-        onOpenChange={(open) => !open && setDeleteConfirmId(null)}
-        title="Delete conversation?"
-        description="This action cannot be undone. This will permanently delete the conversation and all its messages."
-        isPending={deleteConversationMutation.isPending}
-        onConfirm={async () => {
-          if (deleteConfirmId) {
-            await handleDeleteConversation(deleteConfirmId);
-            setDeleteConfirmId(null);
-          }
-        }}
-        confirmLabel="Delete"
-        pendingLabel="Deleting..."
-      />
 
       <DeleteConfirmDialog
         open={stopRunId !== null}
@@ -1233,5 +1164,51 @@ function CollapsibleSidebarGroup({
         <CollapsibleContent>{children}</CollapsibleContent>
       </SidebarGroup>
     </Collapsible>
+  );
+}
+
+/** The shared chat actions behind a row's "more" button. */
+function ConversationRowMenu({
+  conversation,
+  open,
+  onOpenChange,
+  onRename,
+  triggerClassName,
+}: {
+  conversation: Parameters<typeof useConversationActions>[0]["conversation"];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onRename: () => void;
+  triggerClassName: string;
+}) {
+  const { items, dialogs } = useConversationActions({
+    conversation,
+    onRename,
+  });
+  return (
+    <>
+      {/* Absolute so the trigger never permanently narrows the title. */}
+      <DropdownMenu open={open} onOpenChange={onOpenChange}>
+        <DropdownMenuTrigger asChild>
+          {/* A real button: ARIA menu attributes are not valid on a bare
+              <svg>, and an svg is not keyboard-operable. */}
+          <UnstyledButton
+            type="button"
+            aria-label="Chat actions"
+            className={cn(
+              "absolute top-1/2 -translate-y-1/2 transition-opacity",
+              triggerClassName,
+            )}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <MoreHorizontal className="h-4 w-4 p-0" />
+          </UnstyledButton>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" side="right">
+          {items}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {dialogs}
+    </>
   );
 }

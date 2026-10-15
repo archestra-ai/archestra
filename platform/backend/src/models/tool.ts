@@ -662,7 +662,11 @@ class ToolModel {
    * Get all tools for an agent.
    * All tools are linked via the agent_tools junction table.
    */
-  static async getToolsByAgent(agentId: string): Promise<AssignedTool[]> {
+  static async getToolsByAgent(
+    agentId: string,
+    /** Only tools from this catalog item. */
+    catalogId?: string,
+  ): Promise<AssignedTool[]> {
     const brandedKnowledgeToolName = archestraMcpBranding.getToolName(
       TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
     );
@@ -686,6 +690,7 @@ class ToolModel {
           ne(schema.toolsTable.name, brandedKnowledgeToolName),
           // Hide tools whose catalog was soft-deleted (retained binding).
           notDeleted(schema.toolsTable),
+          catalogId ? eq(schema.toolsTable.catalogId, catalogId) : undefined,
         ),
       )
       .orderBy(desc(schema.toolsTable.createdAt));
@@ -1552,8 +1557,9 @@ class ToolModel {
   /**
    * One-time backfill triggered on startup: when a sandbox built-in tool
    * (runtime or persistent-files) is created for the first time on this seed
-   * run — i.e. the code runtime was just enabled — assign just those new
-   * tools to every existing agent in every org.
+   * run — the code runtime was just enabled, or the persistent-files tools are
+   * seeded for the first time on a deployment without it — assign just those
+   * new tools to every existing agent in every org.
    *
    * New agents inherit the sandbox surface via
    * {@link assignSandboxToolsToAgent}, but agents that predate the runtime
@@ -1605,6 +1611,9 @@ class ToolModel {
     }
   }
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   /**
    * When OpenAPPA is on, every existing agent gets the notice and control
    * tools. New agents inherit them via {@link assignDefaultArchestraToolsToAgent}.
@@ -1619,13 +1628,19 @@ class ToolModel {
         REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
       );
       if (toolIds.length === 0) continue;
-      const agentIds =
-        await AgentModel.findNonBuiltInIdsByOrganizationId(organizationId);
+      const agentIds = await AgentModel.findNonBuiltInIdsMissingToolAssignments(
+        {
+          organizationId,
+          toolIds,
+        },
+      );
       for (const agentId of agentIds) {
         await AgentToolModel.createManyIfNotExists(agentId, toolIds);
       }
     }
   }
+
+  // SPDX-SnippetEnd
 
   /**
    * Assign skill tools to a single agent if its org has opted in
@@ -1671,25 +1686,23 @@ class ToolModel {
   }
 
   /**
-   * Assign the code-execution sandbox tools to a single agent when the
-   * skills-sandbox runtime is on (`config.skillsSandbox.enabled`). No-op
-   * otherwise. Covers both the runtime tools
-   * (run_command/upload_file/download_file) and the persistent-files tools
-   * (search_files/read_file/save_file/edit_file/delete_file).
+   * Assign the file tools to a single agent: the persistent-files tools
+   * (search_files/read_file/save_file/edit_file/delete_file/copy_file) always,
+   * plus the code runtime tools (run_command/upload_file/download_file) when
+   * the runtime is on (`config.skillsSandbox.enabled`) — with it dark they are
+   * not even seeded.
    *
-   * Called from `AgentModel.create` so new agents inherit the sandbox surface.
-   * With the runtime dark the sandbox tools are not even seeded, so there is
-   * nothing to assign.
+   * Called from `AgentModel.create` so new agents inherit the file surface.
    */
   static async assignSandboxToolsToAgent(
     agentId: string,
     organizationId: string,
   ): Promise<void> {
-    if (!config.skillsSandbox.enabled) return;
-
     const shortNames: ArchestraToolShortName[] = [
-      ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
       ...PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
+      ...(config.skillsSandbox.enabled
+        ? SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES
+        : []),
     ];
 
     const toolIds = await ToolModel.getToolIdsForOrgByShortNames(
@@ -2503,6 +2516,20 @@ class ToolModel {
     return toolsWithAgents;
   }
 
+  /** Lightweight targets for choosing a coverage page before loading its tools. */
+  static async findCoverageCatalogs(params: {
+    organizationId: string;
+    catalogIds: string[];
+  }): Promise<Array<{ id: string; name: string }>> {
+    return db
+      .select({
+        id: schema.internalMcpCatalogTable.id,
+        name: schema.internalMcpCatalogTable.name,
+      })
+      .from(schema.internalMcpCatalogTable)
+      .where(coverageCatalogCondition(params));
+  }
+
   /**
    * Catalog entries, tools, and visible entities used by the OpenAPPA overview.
    * The built-in catalog is included because its tools can be assigned.
@@ -2519,6 +2546,10 @@ class ToolModel {
       };
       includeAppCatalogs?: boolean;
       catalogId?: string;
+      /** Bound server-only reports to visible catalogs or the selected page. */
+      catalogIds?: string[];
+      /** Server counts and summary totals do not use agent assignments. */
+      includeAgentAssignments?: boolean;
     } = {},
   ): Promise<{
     catalogs: Array<Pick<InternalMcpCatalog, "id" | "name" | "scope" | "icon">>;
@@ -2544,61 +2575,71 @@ class ToolModel {
       accessAllTools: boolean;
     }>;
   }> {
-    const { visibility, includeAppCatalogs = false, catalogId } = options;
-    const principals = visibility
-      ? await ResourcePermissionSubjectModel.resolvePrincipals({
-          userId: visibility.userId,
-          organizationId,
-        })
+    const {
+      visibility,
+      includeAppCatalogs = false,
+      catalogId,
+      catalogIds: selectedCatalogIds,
+      includeAgentAssignments = true,
+    } = options;
+    const principals =
+      visibility && includeAgentAssignments
+        ? await ResourcePermissionSubjectModel.resolvePrincipals({
+            userId: visibility.userId,
+            organizationId,
+          })
+        : [];
+    const accessibleIds =
+      visibility && includeAgentAssignments
+        ? await AgentTeamModel.getUserAccessibleAgentIds(
+            visibility.userId,
+            false,
+            principals,
+          )
+        : undefined;
+    const entityRows = includeAgentAssignments
+      ? await db
+          .select({
+            id: schema.agentsTable.id,
+            organizationId: schema.agentsTable.organizationId,
+            name: schema.agentsTable.name,
+            agentType: schema.agentsTable.agentType,
+            scope: schema.agentsTable.scope,
+            icon: schema.agentsTable.icon,
+            accessAllTools: schema.agentsTable.accessAllTools,
+          })
+          .from(schema.agentsTable)
+          .where(
+            and(
+              eq(schema.agentsTable.organizationId, organizationId),
+              inArray(
+                schema.agentsTable.agentType,
+                visibility?.agentTypes ?? ["agent", "mcp_gateway"],
+              ),
+              eq(schema.agentsTable.builtIn, false),
+              notDeleted(schema.agentsTable),
+              ...(visibility
+                ? [
+                    inArray(schema.agentsTable.id, accessibleIds ?? []),
+                    ...((visibility.excludeOtherPersonalTypes?.length ?? 0) > 0
+                      ? [
+                          or(
+                            AgentModel.notOthersPersonalCondition({
+                              userId: visibility.userId,
+                              principals,
+                            }),
+                            notInArray(
+                              schema.agentsTable.agentType,
+                              visibility.excludeOtherPersonalTypes ?? [],
+                            ),
+                          ),
+                        ]
+                      : []),
+                  ]
+                : []),
+            ),
+          )
       : [];
-    const accessibleIds = visibility
-      ? await AgentTeamModel.getUserAccessibleAgentIds(
-          visibility.userId,
-          false,
-          principals,
-        )
-      : undefined;
-    const entityRows = await db
-      .select({
-        id: schema.agentsTable.id,
-        organizationId: schema.agentsTable.organizationId,
-        name: schema.agentsTable.name,
-        agentType: schema.agentsTable.agentType,
-        scope: schema.agentsTable.scope,
-        icon: schema.agentsTable.icon,
-        accessAllTools: schema.agentsTable.accessAllTools,
-      })
-      .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.organizationId, organizationId),
-          inArray(
-            schema.agentsTable.agentType,
-            visibility?.agentTypes ?? ["agent", "mcp_gateway"],
-          ),
-          eq(schema.agentsTable.builtIn, false),
-          notDeleted(schema.agentsTable),
-          ...(visibility
-            ? [
-                inArray(schema.agentsTable.id, accessibleIds ?? []),
-                ...((visibility.excludeOtherPersonalTypes?.length ?? 0) > 0
-                  ? [
-                      or(
-                        AgentModel.notOthersPersonalCondition({
-                          userId: visibility.userId,
-                          principals,
-                        }),
-                        notInArray(
-                          schema.agentsTable.agentType,
-                          visibility.excludeOtherPersonalTypes ?? [],
-                        ),
-                      ),
-                    ]
-                  : []),
-              ]
-            : []),
-        ),
-      );
     // The stored scope is retired; the audience comes from grants.
     await AgentModel.populateGrantedScope(entityRows);
     const entities = entityRows.flatMap(({ organizationId: _, ...row }) =>
@@ -2618,20 +2659,12 @@ class ToolModel {
       })
       .from(schema.internalMcpCatalogTable)
       .where(
-        and(
-          or(
-            eq(schema.internalMcpCatalogTable.organizationId, organizationId),
-            isNull(schema.internalMcpCatalogTable.organizationId),
-          ),
-          includeAppCatalogs
-            ? undefined
-            : ne(schema.internalMcpCatalogTable.serverType, "app"),
-          catalogId
-            ? eq(schema.internalMcpCatalogTable.id, catalogId)
-            : undefined,
-          isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
-          notDeleted(schema.internalMcpCatalogTable),
-        ),
+        coverageCatalogCondition({
+          organizationId,
+          includeAppCatalogs,
+          catalogId,
+          catalogIds: selectedCatalogIds,
+        }),
       );
     await InternalMcpCatalogModel.populateGrantedScope(catalogRows);
     const catalogs = catalogRows.map(({ id, name, scope, icon }) => ({
@@ -2662,23 +2695,27 @@ class ToolModel {
         })
         .from(schema.toolsTable)
         .where(toolConditions),
-      db
-        .select({
-          toolId: schema.agentToolsTable.toolId,
-          agentId: schema.agentsTable.id,
-          agentName: schema.agentsTable.name,
-          agentType: schema.agentsTable.agentType,
-        })
-        .from(schema.agentToolsTable)
-        .innerJoin(
-          schema.toolsTable,
-          eq(schema.toolsTable.id, schema.agentToolsTable.toolId),
-        )
-        .innerJoin(
-          schema.agentsTable,
-          eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
-        )
-        .where(and(toolConditions, inArray(schema.agentsTable.id, entityIds))),
+      entityIds.length > 0
+        ? db
+            .select({
+              toolId: schema.agentToolsTable.toolId,
+              agentId: schema.agentsTable.id,
+              agentName: schema.agentsTable.name,
+              agentType: schema.agentsTable.agentType,
+            })
+            .from(schema.agentToolsTable)
+            .innerJoin(
+              schema.toolsTable,
+              eq(schema.toolsTable.id, schema.agentToolsTable.toolId),
+            )
+            .innerJoin(
+              schema.agentsTable,
+              eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
+            )
+            .where(
+              and(toolConditions, inArray(schema.agentsTable.id, entityIds)),
+            )
+        : Promise.resolve([]),
     ]);
     return {
       catalogs,
@@ -4138,4 +4175,25 @@ export function toolUiResourceUriSql(): SQL<string | null> {
     case when ${meta}->'_meta'->'ui'->>'resourceUri' like 'ui://%' then ${meta}->'_meta'->'ui'->>'resourceUri' end,
     case when ${meta}->'_meta'->>'ui/resourceUri' like 'ui://%' then ${meta}->'_meta'->>'ui/resourceUri' end
   )`;
+}
+
+/** Identical catalog fences for coverage page candidates and hydrated inventory. */
+function coverageCatalogCondition(params: {
+  organizationId: string;
+  includeAppCatalogs?: boolean;
+  catalogId?: string;
+  catalogIds?: string[];
+}) {
+  const table = schema.internalMcpCatalogTable;
+  return and(
+    or(
+      eq(table.organizationId, params.organizationId),
+      isNull(table.organizationId),
+    ),
+    params.includeAppCatalogs ? undefined : ne(table.serverType, "app"),
+    params.catalogId ? eq(table.id, params.catalogId) : undefined,
+    params.catalogIds ? inArray(table.id, params.catalogIds) : undefined,
+    isNull(table.parentCatalogItemId),
+    notDeleted(table),
+  );
 }

@@ -18,6 +18,7 @@ import OpenappaExternalConsultModel from "@/models/openappa-external-consult";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import ToolModel from "@/models/tool";
 import { openappaBatteriesService } from "@/openappa/batteries";
+import { compositionView } from "@/openappa/composition-view";
 import {
   coverageVisibility,
   openappaCoverageService,
@@ -28,11 +29,16 @@ import {
 } from "@/openappa/current-trajectory";
 import {
   clearHitlReview,
+  closureFromReviewOutcome,
   consumeHitlRuling,
   getHitlReviewResult,
   type HitlReviewOutcome,
+  peekHitlDecision,
   recordHitlReviewResult,
+  recordHitlRuling,
+  reviewOutcomeFromClosure,
   reviewSessionFromTrajectory,
+  sealHitlClosure,
   stageHitlReview,
 } from "@/openappa/hitl-review";
 import { NoticeArguments, RemedyExecutionSchema } from "@/openappa/notice";
@@ -53,8 +59,11 @@ import {
   type OpenAppaSession,
   readPeerMessage,
 } from "@/openappa/service";
+import { superyellSession } from "@/openappa/unenforced";
 import {
   recallYellSession,
+  rememberYellResult,
+  type YellArguments,
   YellArgumentsSchema,
 } from "@/openappa/yell-session";
 import {
@@ -64,6 +73,7 @@ import {
 } from "@/services/agent-runtime/runtime-identity";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import {
+  breakTheGlassActiveIn,
   firstPolicyRefusal,
   getGuardrailsDeployment,
   turnOnForFirstPolicy,
@@ -81,6 +91,7 @@ import {
   connectAppaGithubRepository,
   createAppaGithubRepository,
   getAppaGithubSync,
+  updateAppaGithubSync,
 } from "@/services/openappa-github-sync";
 import {
   credentialLineWarnings,
@@ -90,12 +101,9 @@ import {
 } from "@/services/openappa-policy-change";
 import {
   getOpenAppaPolicyTests,
+  replaySavedValidations,
   runOpenAppaPolicyTests,
 } from "@/services/openappa-policy-tests";
-import {
-  discoverOpenAppaScenarios,
-  draftOpenAppaScenario,
-} from "@/services/openappa-scenario-discovery";
 import {
   previewOpenAppaValidationChange,
   publishOpenAppaValidationChange,
@@ -118,10 +126,6 @@ import {
 import { AppaGithubSourceSchema } from "@/types/openappa-github-sync";
 import { RunPolicyTestsSchema } from "@/types/openappa-policy-tests";
 import {
-  DiscoverOpenAppaScenariosSchema,
-  SelectOpenAppaScenarioSchema,
-} from "@/types/openappa-scenario-discovery";
-import {
   PreviewOpenAppaValidationChangeSchema,
   PublishOpenAppaValidationChangeSchema,
 } from "@/types/openappa-validation-change";
@@ -132,6 +136,7 @@ import {
   defineArchestraTool,
   defineArchestraTools,
   errorResult,
+  successResult,
 } from "./helpers";
 import { filterToolNamesByPermission } from "./rbac";
 import type { ArchestraContext } from "./types";
@@ -418,17 +423,24 @@ const registry = defineArchestraTools([
   }),
   defineArchestraTool({
     shortName: "create_guardrails_repository",
-    title: "Create OpenAPPA GitHub repository",
+    title: "Create OpenAPPA policy repository",
     description:
-      "Copy the OpenAPPA configuration template into a private GitHub repository, seed it with the current policy and battery declarations, and start GitHub sync. If repository rules block the initial commit, open a pull request instead. List credentials first and choose a connected organization GitHub App. Ask the user for the GitHub owner and repository name before calling. When source.setupPullRequestNumber is present, return its PR link using source.repo and ask the user to merge it. Sync checks for the merge every minute and keeps the current policy active until then. Future policy edits open pull requests.",
+      "Create a private policy repository from the OpenAPPA configuration template, seed it with the current policy and battery declarations, and start Git sync. On GitHub, pass githubAppConfigId (an organization GitHub App) and the owner account. On GitLab (gitlab.com or self-managed), pass gitlabTokenId and the group path as owner, or an empty owner for the token owner's namespace. List credentials first. Ask the user for the owner and repository name before calling. If branch rules block the initial commit, a pull request (GitLab: merge request) opens instead; when source.setupPullRequestNumber is present, link it and ask the user to merge it. Sync checks for the merge every minute and keeps the current policy active until then. Future policy edits open pull or merge requests.",
     schema: z.strictObject({
-      owner: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9-]*$/),
+      owner: z
+        .string()
+        .regex(/^([a-zA-Z0-9][a-zA-Z0-9_.-]*(\/[a-zA-Z0-9_.-]+)*)?$/),
       name: z.string().regex(/^[a-zA-Z0-9_.-]+$/),
-      githubAppConfigId: z.string().uuid(),
+      githubAppConfigId: z.string().uuid().optional(),
+      gitlabTokenId: z.string().uuid().optional(),
       interval: z.enum(["15m", "1h", "1d"]).default("1h"),
     }),
     async handler({ args, context }) {
       const { organizationId, userId } = organizationUser(context);
+      if (!args.githubAppConfigId === !args.gitlabTokenId)
+        return errorResult(
+          "Pass exactly one of githubAppConfigId or gitlabTokenId",
+        );
       return result(
         await createAppaGithubRepository({
           organizationId,
@@ -440,16 +452,21 @@ const registry = defineArchestraTools([
   }),
   defineArchestraTool({
     shortName: "connect_guardrails_repository",
-    title: "Connect existing OpenAPPA GitHub repository",
+    title: "Connect existing OpenAPPA policy repository",
     description:
-      "Make a policy file in an existing GitHub repository the organization's OpenAPPA policy source, pull it now, and keep it in sync. The file replaces the current policy, so tell the user that and get their agreement first. List credentials first and choose a connected organization GitHub App installed on the repository owner. Ask the user for the repository and, if it is not appa.toml at the repository root, the file path. Future policy edits open pull requests. A held pull is connected but waits for an operator to accept it in the guardrails panel; report `source.lastSyncError`. If the first pull fails, nothing is connected and the error says why.",
-    // `ref` and `path` stay plain strings here and are checked against the
-    // source schema in the handler: its `ref` pattern uses a Unicode property
-    // escape, which OpenAI refuses in a function schema.
+      "Make a policy file in an existing GitHub repository or GitLab project the organization's OpenAPPA policy source, pull it now, and keep it in sync. The file replaces the current policy, so tell the user that and get their agreement first. List credentials first and pass either an organization GitHub App installed on the repository owner (githubAppConfigId) or a GitLab access token that can read the project (gitlabTokenId). Ask the user for the repository and, if it is not appa.toml at the repository root, the file path. Future policy edits open pull requests. A held pull is connected but waits for an operator to accept it in the guardrails panel; report `source.lastSyncError`. If the first pull fails, nothing is connected and the error says why.",
+    // `repo`, `ref` and `path` stay plain strings here and are checked against
+    // the source schema in the handler. OpenAI refuses the source schema's
+    // patterns in a function schema: `ref` uses a Unicode property escape, and
+    // a model offered the `repo` pattern's repeated group ends its turn with
+    // no reply.
     schema: z.strictObject({
-      repo: AppaGithubSourceSchema.shape.repo.describe(
-        "The existing repository, as owner/name.",
-      ),
+      repo: z
+        .string()
+        .max(400)
+        .describe(
+          "The existing repository, as owner/name (GitLab: group/subgroup/project).",
+        ),
       path: z
         .string()
         .default("appa.toml")
@@ -461,13 +478,28 @@ const registry = defineArchestraTools([
         .describe(
           "Branch, tag, or commit to follow. Omit to follow the default branch.",
         ),
-      githubAppConfigId: z.string().uuid(),
+      githubAppConfigId: z
+        .string()
+        .uuid()
+        .optional()
+        .describe("An organization GitHub App, for a GitHub repository."),
+      gitlabTokenId: z
+        .string()
+        .uuid()
+        .optional()
+        .describe("A GitLab access token, for a GitLab project."),
       interval: z.enum(["15m", "1h", "1d"]).default("1h"),
     }),
     async handler({ args, context }) {
       const { organizationId, userId } = organizationUser(context);
+      if (!args.githubAppConfigId === !args.gitlabTokenId)
+        return errorResult(
+          "Pass exactly one of githubAppConfigId or gitlabTokenId",
+        );
       const source = AppaGithubSourceSchema.safeParse({
         ...args,
+        githubAppConfigId: args.githubAppConfigId ?? null,
+        gitlabTokenId: args.gitlabTokenId ?? null,
         githubPatId: null,
       });
       if (!source.success)
@@ -492,47 +524,70 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
+    shortName: "sync_guardrails_repository",
+    title: "Sync OpenAPPA policy repository",
+    description:
+      "Pull the policy file from the connected Git repository now instead of waiting for the next scheduled sync, so a merged policy or validation pull request takes effect. Call it after the user says the pull request is merged. It changes nothing in the repository. Report `source.lastSyncError` when it is set, and a held pull (`source.heldContentHash`) as waiting for an operator to accept it in the guardrails panel. Without a connected repository it fails; point the user to Git sync setup in the guardrails settings.",
+    schema: z.strictObject({}),
+    async handler({ context }) {
+      const { organizationId } = organizationUser(context);
+      try {
+        return result(
+          await updateAppaGithubSync({ organizationId, action: "sync" }),
+        );
+      } catch (error) {
+        // No connected source is the agent's to explain, not a provider failure.
+        if (error instanceof ApiError && error.statusCode < 500)
+          return errorResult(error.message);
+        throw error;
+      }
+    },
+  }),
+  defineArchestraTool({
     shortName: "yell",
     title: "Report OpenAPPA feedback",
     description:
-      "Send feedback about OpenAPPA, such as a confusing block, remedy or ruling, or the user's complaint, with a diagnostic archive for review in the Guardrails Yells tab. When deployment analytics is enabled, also forwards the report to the shared OpenAPPA reporting service. with_trajectory includes this session's policy decisions, never raw prompts, tool arguments, or outputs. Your message is sent verbatim: say what about OpenAPPA was confusing or wrong. When a call was blocked, report the block; never put the blocked call's content (such as a task you could not file) in its place, and do not include secrets, personal data, or task content. This does not change policy or grant permission.",
+      "Send feedback about OpenAPPA, with a diagnostic archive for review in the Guardrails Yells tab. Call it when a remedy plan makes no sense, you keep getting blocked, the user keeps being asked to approve similar calls, or the user is frustrated. When an administrator turned on break the glass in Guardrails settings, the report also turns OpenAPPA off for this session, so its calls are no longer checked; the result says which happened. When deployment analytics is enabled, also forwards the report to the shared OpenAPPA reporting service. with_trajectory includes this session's policy decisions, never raw prompts, tool arguments, or outputs. Your message is sent verbatim: say what about OpenAPPA was confusing or wrong. When a call was blocked, report the block; never put the blocked call's content (such as a task you could not file) in its place, and do not include secrets, personal data, or task content.",
     schema: YellArgumentsSchema,
     async handler({ args, context }) {
-      const id = context.sessionId ?? context.conversationId;
-      const known =
-        context.openappaSubagent?.session ??
-        context.openappaSession ??
-        (context.organizationId && context.userId && id
-          ? chatOpenAppaSession(context.organizationId, context.userId, id)
-          : undefined);
-      const identity =
-        known && context.currentToolCallId
-          ? { session: known, callId: context.currentToolCallId }
-          : context.organizationId
-            ? await recallYellSession({
-                organizationId: context.organizationId,
-                args,
-              })
-            : undefined;
-      if (!identity) {
-        logger.warn(
-          {
-            agentId: context.agentId,
-            hasSession: Boolean(known),
-            hasToolCallId: Boolean(context.currentToolCallId),
-          },
-          "OpenAPPA yell refused: no session or tool-call identity",
-        );
-        throw new ApiError(
-          400,
-          "OpenAPPA reporting requires an authenticated session and tool-call identity",
-        );
-      }
-      return executeYell({
+      const identity = await yellIdentity({ args, context });
+      const breakTheGlass = breakTheGlassActiveIn(
+        await getGuardrailsDeployment(),
+      );
+      const report = await executeYell({
         session: identity.session,
         toolCallId: identity.callId,
         args,
+        brokeTheGlass: breakTheGlass,
       });
+      if (!breakTheGlass) {
+        const result = report.isError
+          ? report
+          : successResult(
+              [...textParts(report), YELL_RESULT_GUARDRAILS_UNCHANGED].join(
+                "\n",
+              ),
+            );
+        await rememberYellResult({ ...identity, result });
+        return result;
+      }
+      // Break the glass turns OpenAPPA off even when the report failed to
+      // send: the agent is stuck either way.
+      await superyellSession(identity.session);
+      logger.warn(
+        {
+          organizationId: identity.session.organization_id,
+          sessionId: identity.session.session_id,
+          userId: context.userId,
+          reported: !report.isError,
+        },
+        "OpenAPPA turned off for a session by a yell with break the glass on",
+      );
+      const result = successResult(
+        [...textParts(report), YELL_RESULT_GUARDRAILS_OFF].join("\n"),
+      );
+      await rememberYellResult({ ...identity, result });
+      return result;
     },
   }),
   defineArchestraTool({
@@ -540,7 +595,7 @@ const registry = defineArchestraTools([
     title: "Read OpenAPPA policy",
     annotations: { readOnlyHint: true },
     description:
-      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; its `include` list names the batteries that compose into enforcement on top of it, `[server_aliases]` points each battery's namespace at the MCP servers it governs, and `effective` shows the composed result the runtime enforces, with one entry per declared battery and the status it composed under. Battery credential variables are bound with bind_guardrails_credential, outside the text, and `effective` lists each bound one under `[credentials]`. A `[credentials]` line in the text overrides that binding; do not add one. `enforcement.active` reports whether deployment enforcement is actually on; healthy composition alone does not prove enforcement. Use this read to recover after a lost local publish response, without publishing again. Report any battery whose status is not `active`, and any `effective.error`, to the user. Preserve unrelated rules and comments when editing.",
+      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; its `include` list names the batteries that compose into enforcement on top of it, `[server_aliases]` points each battery's namespace at the MCP servers it governs, and `effective` shows the composed result the runtime enforces, with one entry per declared battery and the status it composed under. Battery credential variables are bound with bind_guardrails_credential, outside the text, and `effective` lists each bound one under `[credentials]`. A `[credentials]` line in the text overrides that binding; do not add one. `enforcement.active` reports whether deployment enforcement is actually on; healthy composition alone does not prove enforcement. Without Git sync, `delivery.githubSyncSetupUrl` links to where the operator sets it up. Use this read to recover after a lost local publish response, without publishing again. `effective.served.kind` says what the runtime opens: `current` (the latest revision), `previous` (the latest attempt was refused and an earlier composition stays enforced; each battery's `served` is how that composition holds it, its `status` what the current text would give it), or `root_only` (nothing ever composed, so governed calls are refused). Report any battery whose status is not `active`, and any `effective.error`, to the user. Preserve unrelated rules and comments when editing.",
     schema: z.strictObject({}),
     async handler({ context }) {
       const organizationId = organization(context);
@@ -560,7 +615,11 @@ const registry = defineArchestraTools([
               path: sync.source.path,
               githubAppReady: Boolean(sync.source.githubAppConfigId),
             }
-          : { mode: "revision" },
+          : {
+              mode: "revision",
+              // Git sync is set up in the guardrails settings, not in chat.
+              githubSyncSetupUrl: `${config.frontendBaseUrl}/settings/guardrails?setup=github-sync`,
+            },
       });
     },
   }),
@@ -754,7 +813,7 @@ const registry = defineArchestraTools([
     title: "Preview OpenAPPA policy change",
     annotations: { readOnlyHint: true },
     description:
-      "Validate a proposed change to organization.appa.toml and return its unified `diff` and `changed` line counts. This saves nothing. Read the current policy and pass its revision as expectedRevision. To change an existing policy, send `edits`: only the text being replaced and its replacement. To insert rules, replace an anchor line with the new rules followed by that same anchor line. Send `content` only for a first policy or a full rewrite. Check `diff` and `changed` to confirm only the intended lines change. Explain what the change does and its warnings to the user, then publish with update_guardrails_policy using the same edits or content and expectedRevision; show the diff when the user asks.",
+      "Validate a proposed change to organization.appa.toml and return its unified `diff` and `changed` line counts. This saves nothing. Read the current policy and pass its revision as expectedRevision. To change an existing policy, send `edits`: only the text being replaced and its replacement. To insert rules, replace an anchor line with the new rules followed by that same anchor line. Send `content` only for a first policy or a full rewrite. Check `diff` and `changed` to confirm only the intended lines change. `validations` replays the saved validations against the proposed policy, without recording a run: pass/fail/cannot-run per file, or null when there are none. Explain what the change does, its warnings and any validation it fails to the user, then publish with update_guardrails_policy using the same edits or content and expectedRevision; show the diff when the user asks.",
     schema: ProposedGuardrailsPolicySchema,
     handler: ({ args, context }) =>
       refusalAsResult(async () => {
@@ -782,10 +841,25 @@ const registry = defineArchestraTools([
           organizationId,
           previous: before.content,
         });
-        const sync = await getAppaGithubSync(organizationId);
+        const [sync, validations] = await Promise.all([
+          getAppaGithubSync(organizationId),
+          // Replay the saved validations against the unsaved policy, so the
+          // user sees which checks the change breaks before approving it.
+          validation.valid
+            ? replaySavedValidations({
+                organizationId,
+                userId,
+                proposedPolicy: {
+                  content: after,
+                  expectedRevision: before.revision,
+                },
+              })
+            : null,
+        ]);
         const delivery = sync.source?.interval ? "pull_request" : "revision";
         return policyChangeResult({
           stage: "preview",
+          validations,
           delivery,
           // Whether publishing this turns enforcement on: only the first saved
           // policy does, and only for an administrator (see turnOnForFirstPolicy).
@@ -813,7 +887,7 @@ const registry = defineArchestraTools([
     shortName: "update_guardrails_policy",
     title: "Publish OpenAPPA policy change",
     description:
-      "Publish a change to organization.appa.toml. Call preview_guardrails_policy_change first, explain what the change does and its warnings, then send the same `edits` or `content` and the same expectedRevision that were previewed. Use `edits` to change an existing policy and `content` only for a first policy or a full rewrite. The result carries the published `diff` and `changed` line counts. When GitHub sync is configured, this creates a pull request using the configured GitHub App or PAT; the policy takes effect after merge and sync. Otherwise it saves a local revision immediately. On conflict, re-read and reconcile. A local revision affects new conversations only. The organization's first saved policy also turns enforcement on when the caller is an administrator; later saves leave it unchanged. Report `enforcement` to the user. Report any inactive effective battery.",
+      "Publish a change to organization.appa.toml. Call preview_guardrails_policy_change first, explain what the change does and its warnings, then send the same `edits` or `content` and the same expectedRevision that were previewed. Use `edits` to change an existing policy and `content` only for a first policy or a full rewrite. The result carries the published `diff` and `changed` line counts. When Git sync is configured, this opens a pull request (a merge request on GitLab) through the configured credential; the policy takes effect after merge and sync. Otherwise it saves a local revision immediately. On conflict, re-read and reconcile. A local revision affects new conversations only. The organization's first saved policy also turns enforcement on when the caller is an administrator; later saves leave it unchanged. Report `enforcement` to the user. Report any inactive effective battery.",
     schema: ProposedGuardrailsPolicySchema.extend({
       title: z
         .string()
@@ -839,7 +913,7 @@ const registry = defineArchestraTools([
     shortName: "bind_guardrails_credential",
     title: "Bind OpenAPPA battery credential",
     description:
-      "Bind one battery credential variable to a runtime credential key, or pass key null to unbind it. The binding is stored beside the policy, not in its text, so it needs no policy change and works while GitHub sync owns the policy. One variable has one key for the whole organization: every battery whose `credentials` list it is in reads that key. Use the variable names list_guardrails_battery_fits returns and keys from list_runtime_credentials that have an organization value. A variable bound by a `[credentials]` line in the policy text is refused; that line wins until a policy change removes it (update_guardrails_policy; with GitHub sync, through the repository). Returns every declared battery with its credentials and their source.",
+      "Bind one battery credential variable to a runtime credential key, or pass key null to unbind it. The binding is stored beside the policy, not in its text, so it needs no policy change and works while Git sync owns the policy. One variable has one key for the whole organization: every battery whose `credentials` list it is in reads that key. Use the variable names list_guardrails_battery_fits returns and keys from list_runtime_credentials that have an organization value. A variable bound by a `[credentials]` line in the policy text is refused; that line wins until a policy change removes it (update_guardrails_policy; with Git sync, through the repository). Returns every declared battery with its credentials and their source.",
     schema: z.strictObject({
       variable: z
         .string()
@@ -857,20 +931,8 @@ const registry = defineArchestraTools([
     handler: ({ args, context }) =>
       refusalAsResult(async () => {
         const { organizationId, userId } = organizationUser(context);
-        // TOOL_PERMISSIONS checks openappaPolicy:update; a binding also hands
-        // a credential's value to helper code, as the REST route requires.
-        if (
-          !(await userHasPermission(
-            userId,
-            organizationId,
-            "credential",
-            "update",
-          ))
-        )
-          throw new ApiError(
-            403,
-            "Credential update permission is required to bind a battery credential",
-          );
+        // TOOL_PERMISSIONS checks openappaPolicy:update; the service also
+        // requires `use` on the credential, as the REST route does.
         return result(
           await openappaBatteriesService.setCredentialBinding({
             userId,
@@ -880,37 +942,6 @@ const registry = defineArchestraTools([
           }),
         );
       }),
-  }),
-  defineArchestraTool({
-    shortName: "discover_openappa_validation_scenarios",
-    title: "Find replayable validation scenarios",
-    annotations: { readOnlyHint: true },
-    description:
-      "Find up to three exact current-policy call scenarios verified by offline replay. Checks policy and suite readiness itself; no prerequisite policy, suite, or tool-schema reads are needed. No model-invented calls or files are needed. Each candidate states an observed decision, not a desired requirement or proof of general protection. Explain returned candidates as human situations: what behavior each checks, a concrete example consistent with its inputs and starting state, and which unwanted policy change it would catch. Use short behavior labels that include the tested starting scope; describe each choice in at most two sentences. Distinguish illustrative context from what replay actually checked, and ask which outcome the user wants to preserve, then wait. A needs_input entry requires a custom check; its reason explains the discovery limit; cannot_run means no offline decision was established, not evidence of a live helper outage. Stop those branches. Discovery is bounded and incomplete; do not retry unchanged inputs or invent missing state. Saves nothing. For an explicit concrete requirement or supplied candidate policy, use validation preview directly. Do not discover for inspection-only/no-tests requests.",
-    schema: DiscoverOpenAppaScenariosSchema,
-    async handler({ context }) {
-      return result(
-        await discoverOpenAppaScenarios(
-          organizationUser(context, AUTHENTICATED_CONTEXT_REQUIRED),
-        ),
-      );
-    },
-  }),
-  defineArchestraTool({
-    shortName: "draft_openappa_validation_scenario",
-    title: "Draft a selected validation scenario",
-    annotations: { readOnlyHint: true },
-    description:
-      "After the user chooses a discovered scenario and confirms its observed decision is the desired expectation, prepare its exact verified file and preview the full suite without saving. Pass the discoveryId and candidateId returned by discovery; do not reconstruct its calls. Explain the example behavior and result before technical details; retain the exact returned file and provide its source on request. Do not substitute a scenario or change the policy. Stale or expired choices need fresh discovery and user selection. Saving requires separate authorization and publish_openappa_validation_change with this exact file, expectedRevision and expectedVersion.",
-    schema: SelectOpenAppaScenarioSchema,
-    async handler({ args, context }) {
-      return result(
-        await draftOpenAppaScenario(
-          organizationUser(context, AUTHENTICATED_CONTEXT_REQUIRED),
-          args,
-        ),
-      );
-    },
   }),
   defineArchestraTool({
     shortName: "get_openappa_policy_tests",
@@ -946,9 +977,17 @@ const registry = defineArchestraTools([
     shortName: "run_openappa_policy_tests",
     title: "Run saved OpenAPPA validations",
     description:
-      "Replay the complete currently saved validation suite offline against the current policy and record the result in validation run history. Use when the user asks to run saved checks or explicitly requests a fresh recorded result on the validations page. Showing existing results does not authorize a new run. Loads the authoritative saved files itself; no draft files or policy changes are accepted. This records a run only: it does not edit validations, change or enable the policy, execute business tools, or contact models or remote helpers. Report the returned run ID, pass/fail/cannot-run outcomes and stale status. A preview or publication replay alone does not create this recorded run.",
-    schema: z.strictObject({}),
-    async handler({ context }) {
+      "Replay saved validations offline against the current policy and record the result in validation run history. Use it to run what is saved and keep the result; preview_guardrails_validation_change already replays a draft before it is saved. Pass `path` to run one saved validation file; omit it to run the whole suite. Loads the authoritative saved files itself; no draft files or policy changes are accepted. This records a run only: it does not edit validations, change or enable the policy, execute business tools, or contact models or remote helpers. Report the returned run ID and pass/fail/cannot-run outcomes.",
+    schema: z.strictObject({
+      path: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+          "A saved validation file's path, as get_openappa_policy_tests lists it. Omit to run every saved validation.",
+        ),
+    }),
+    async handler({ args, context }) {
       const ids = organizationUser(context, AUTHENTICATED_CONTEXT_REQUIRED);
       const suite = await getOpenAppaPolicyTests(
         ids.organizationId,
@@ -965,20 +1004,34 @@ const registry = defineArchestraTools([
           400,
           "No saved validations to run. Save a validation first.",
         );
-      const args = RunPolicyTestsSchema.parse({
-        files: suite.files,
+      const files = args.path
+        ? suite.files.filter((file) => file.path === args.path)
+        : suite.files;
+      if (!files.length)
+        throw new ApiError(
+          400,
+          `No saved validation at ${args.path}. Save it first, or check the path with get_openappa_policy_tests.`,
+        );
+      const run = RunPolicyTestsSchema.parse({
+        files,
         sourceVersion: suite.version,
         directory: suite.directory,
       });
-      return result(await runOpenAppaPolicyTests({ ...ids, ...args }));
+      return result(
+        await runOpenAppaPolicyTests({
+          ...ids,
+          ...run,
+          partial: Boolean(args.path),
+        }),
+      );
     },
   }),
   defineArchestraTool({
-    shortName: "preview_openappa_validation_change",
+    shortName: "preview_guardrails_validation_change",
     title: "Preview OpenAPPA validations",
     annotations: { readOnlyHint: true },
     description:
-      "Preview a patch of .appa validation files against the current policy, then replay the full resulting suite offline. Replay evaluates the effective policy contracts, including their parameter schemas and selectors; it does not fetch installed MCP input schemas or require tools to be installed. Draft from those contracts and use replay to check decisions. Read the policy revision and specification version first. Upserts replace only named files; deletions must be explicit; unrelated files are preserved. Omit policyContent or pass null for validation-only work; never send the current policy or blank text as a placeholder. Include a complete proposed policy only when the user explicitly requested a policy change. Correct scenario syntax errors in the .appa files without changing the policy. This saves nothing and does not affect global run history, execute business tools, or contact model/helper providers. Before publishing, explain the scenario in ordinary language, its expected behavior, observed results and relevant limits. Give the file path and provide its exact source on request. A failed check does not authorize a policy fix or changing expectations merely to force green. Keep specifications small and focused on the user's intended behavior.",
+      "Validate a proposed change to the .appa validation files and replay it. This saves nothing and records no run. Read the policy and the suite first and pass their revision as expectedRevision and version as expectedVersion. Send `changes`: `upsert` files to add or replace, and explicit `delete` paths; unrelated files are kept. Checks each upserted file's syntax, then replays those files offline against the saved policy; `tests` holds pass/fail/cannot-run per file, or null when a syntax check failed or nothing was upserted. Fix syntax errors in the files only. Explain the case, its expected decision and the replay result to the user, then save with update_guardrails_validation. A failed check does not authorize a policy change or weakening an expectation. This tool never changes the policy; change it with preview_guardrails_policy_change and update_guardrails_policy.",
     schema: PreviewOpenAppaValidationChangeSchema,
     async handler({ args, context }) {
       const { organizationId, userId } = organizationUser(
@@ -995,17 +1048,14 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "publish_openappa_validation_change",
-    title: "Publish OpenAPPA validations",
+    shortName: "update_guardrails_validation",
+    title: "Save OpenAPPA validations",
     description:
-      "Publish the exact validation patch explained after preview_openappa_validation_change, only when the user authorized saving it. Replays the full suite again before saving. Omit policyContent or pass null for validation-only work. Saving validations does not authorize a policy change; include a complete proposed policy only for an explicitly requested policy change. With Git sync, opens one repository PR using the configured GitHub App or PAT, containing only the changed files; nothing becomes active until merge and sync. Otherwise saves locally, atomically when policy and validations both change. Test failures are informational and do not authorize policy fixes or block an authorized valid policy. Preserve existing expectations and unrelated rules. On a conflict, re-read and reconcile before retrying. Tests-only writes do not enable enforcement. A first local policy change turns enforcement on for an administrator; report enforcement and inactive batteries. Policy-only setup can continue to use update_guardrails_policy without creating tests.",
+      "Save a change to the .appa validation files. Call preview_guardrails_validation_change first, explain it, then send the same `changes`, expectedRevision and expectedVersion that were previewed, only when the user approved saving. Checks syntax again and saves without replaying. When Git sync is configured, this opens a pull request containing only the changed files; they take effect after merge and sync. Otherwise it saves locally. This tool never changes the policy or enforcement. On a conflict, read the policy and suite again and preview again.",
     schema: PublishOpenAppaValidationChangeSchema,
     async handler({ args, context }) {
       const ids = organizationUser(context, AUTHENTICATED_CONTEXT_REQUIRED);
-      const saved = await publishOpenAppaValidationChange({ ...args, ...ids });
-      if (saved.delivery !== "revision" || !saved.policyChanged)
-        return result(saved);
-      return result(await withLocalEnforcement(saved, ids));
+      return result(await publishOpenAppaValidationChange({ ...args, ...ids }));
     },
   }),
   defineArchestraTool({
@@ -1013,7 +1063,7 @@ const registry = defineArchestraTools([
     title: "Check OpenAPPA policy pull request",
     annotations: { readOnlyHint: true },
     description:
-      "Check the review state of an OpenAPPA policy pull request and whether GitHub sync has processed the merged policy. Use the pull request number returned by update_guardrails_policy.",
+      "Check the review state of an OpenAPPA policy pull request and whether Git sync has processed the merged policy. Use the pull request number returned by update_guardrails_policy.",
     schema: z.strictObject({ number: z.number().int().positive() }),
     async handler({ args, context }) {
       const { organizationId, userId } = organizationUser(
@@ -1047,7 +1097,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
     title: "Execute OpenAPPA remedy plan",
     description:
-      "Apply a remedy plan that the organization's guardrails policy offers for a blocked call. Pass the offer_id and plan from the ruling. The policy decides when the user must approve a plan. In that case, the result is review_required. Ask the user with the declared ask_user tool and that offer ID. After the user approves, call execute_remedy_plan again with the same offer and plan. After the plan is authorized, retry the original call or use the admitted output. If the user denies the review, or the review is canceled, unavailable, or unanswered, tell the user that the action stays blocked.",
+      "Apply a remedy plan that the organization's guardrails policy offers for a blocked call. Pass the offer_id and plan from the ruling. The policy decides when the user must approve a plan. In that case, the result is review_required. Ask the user with the declared ask_user tool and that offer ID. After the user approves, call execute_remedy_plan again with the same offer and plan. After the plan is authorized, retry the original call or use the admitted output. If the user denies the review, or the review is declined, canceled, unavailable, or unanswered, tell the user that the action stays blocked. A client decline is not a human denial.",
     // The proxy alone writes these members. They have no `.describe()` text,
     // so no rendering of the full schema can show the model their prose:
     // - execution: retry identity and history restoration; it does not authorize.
@@ -1128,8 +1178,17 @@ const registry = defineArchestraTools([
           callId,
           offerId: remedy.offer_id,
         });
-        if (previousOutcome && previousOutcome !== "review_required")
-          return unansweredReviewResult(remedy.offer_id, previousOutcome);
+        if (previousOutcome && previousOutcome !== "review_required") {
+          const decided = await peekHitlDecision({
+            session: reviewSession,
+            offerId: remedy.offer_id,
+          });
+          // A human ruling that won the race is still spendable. A stored
+          // closure, including one with no closure metadata, is not.
+          if (decided?.ruling !== "approve" && decided?.ruling !== "deny") {
+            return unansweredReviewResult(remedy.offer_id, previousOutcome);
+          }
+        }
       }
       const review = await loadOfferReview({
         organizationId: context.organizationId,
@@ -1152,67 +1211,108 @@ const registry = defineArchestraTools([
             offerId: remedy.offer_id,
           });
         } else {
-          const cachedRuling = await consumeHitlRuling({
+          const cached = await peekHitlDecision({
             session: reviewSession,
             offerId: remedy.offer_id,
           });
-          if (cachedRuling === "approve" || cachedRuling === "deny") {
-            ruling = cachedRuling;
-          } else if (cachedRuling === "none") {
-            // Legacy native answers did not distinguish dismissal from other
-            // missing rulings. Do not invent a timeout or explicit denial.
-            reviewOutcome = "review_invalid";
-          } else if (context.mrtr) {
-            // External MCP clients reach their native question tool through ask_user.
-            // Stage the exact review first so the model cannot alter
-            // the question or bind an answer to a different offer.
+          if (cached?.ruling === "approve" || cached?.ruling === "deny") {
+            const spent = await consumeHitlRuling({
+              session: reviewSession,
+              offerId: remedy.offer_id,
+            });
+            if (spent === "approve" || spent === "deny") ruling = spent;
+            else reviewOutcome = reviewOutcomeFromClosure(cached.closure);
+          } else if (cached?.ruling === "none") {
+            // A none entry from before closures were stored has no reason.
+            // That is not a denial, and it must not open another question.
+            reviewOutcome = reviewOutcomeFromClosure(cached.closure);
+          } else if (context.mrtr || context.elicitation) {
             const stagedReview = {
               offerId: remedy.offer_id,
               text: review.text,
               ...(review.tool ? { tool: review.tool } : {}),
               ...(review.arguments ? { arguments: review.arguments } : {}),
             };
-            await stageHitlReview({
+            const staged = await stageHitlReview({
               session: reviewSession,
-              callId,
+              ...(context.mrtr && callId ? { callId } : {}),
               review: { ...stagedReview, remedyArguments: submittedArguments },
             });
-            try {
-              await bindRuntimeHitlReview({
+            if (staged.status === "approve" || staged.status === "deny") {
+              const spent = await consumeHitlRuling({
                 session: reviewSession,
-                review: stagedReview,
+                offerId: remedy.offer_id,
               });
-            } catch (error) {
-              logger.warn(
-                { error, offerId: remedy.offer_id },
-                "Could not index the runtime OpenAPPA review",
-              );
-            }
-            return nativeReviewRequiredResult(remedy.offer_id);
-          } else if (context.elicitation) {
-            // Archestra Chat keeps its inline approval card.
-            const outcome = await context.elicitation.elicit({
-              toolName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
-              message: review.text,
-              requestedSchema: HITL_RULING_SCHEMA,
-              kind: "openappa_review",
-              ...(review.tool ? { reviewedTool: review.tool } : {}),
-              ...(review.arguments
-                ? { reviewedArguments: review.arguments }
-                : {}),
-            });
-            ruling = parseHitlRuling(
-              outcome.status === "answered" ? outcome.result : undefined,
-            );
-            if (!ruling) {
-              reviewOutcome =
-                outcome.status === "unanswered"
-                  ? "review_unanswered"
-                  : outcome.status === "no_viewer"
-                    ? "review_unavailable"
-                    : outcome.result.action === "cancel"
-                      ? "review_cancelled"
+              if (spent === "approve" || spent === "deny") ruling = spent;
+              else reviewOutcome = "review_invalid";
+            } else if (staged.status === "none") {
+              reviewOutcome = reviewOutcomeFromClosure(staged.closure);
+            } else if (context.mrtr) {
+              // External MCP clients reach their native question tool through ask_user.
+              // Stage the exact review first so the model cannot alter
+              // the question or bind an answer to a different offer.
+              try {
+                await bindRuntimeHitlReview({
+                  session: reviewSession,
+                  review: stagedReview,
+                });
+              } catch (error) {
+                logger.warn(
+                  { error, offerId: remedy.offer_id },
+                  "Could not index the runtime OpenAPPA review",
+                );
+              }
+              return nativeReviewRequiredResult(remedy.offer_id);
+            } else if (context.elicitation) {
+              const outcome = await context.elicitation.elicit({
+                toolName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+                message: review.text,
+                requestedSchema: HITL_RULING_SCHEMA,
+                kind: "openappa_review",
+                ...(review.tool ? { reviewedTool: review.tool } : {}),
+                ...(review.arguments
+                  ? { reviewedArguments: review.arguments }
+                  : {}),
+              });
+              if (outcome.status === "answered") {
+                const parsed = parseHitlRuling(outcome.result);
+                if (!parsed) {
+                  reviewOutcome =
+                    outcome.result.action === "decline"
+                      ? "review_declined"
+                      : outcome.result.action === "cancel"
+                        ? "review_cancelled"
+                        : "review_invalid";
+                } else {
+                  const claimed = await claimStagedRuling({
+                    session: reviewSession,
+                    offerId: remedy.offer_id,
+                    ruling: parsed,
+                  });
+                  if (claimed.ok) {
+                    ruling = claimed.ruling;
+                  } else {
+                    if (callId)
+                      await recordHitlReviewResult({
+                        session: reviewSession,
+                        callId,
+                        offerId: remedy.offer_id,
+                        outcome: claimed.outcome,
+                      });
+                    return unansweredReviewResult(
+                      remedy.offer_id,
+                      claimed.outcome,
+                    );
+                  }
+                }
+              } else {
+                reviewOutcome =
+                  outcome.status === "unanswered"
+                    ? "review_unanswered"
+                    : outcome.status === "no_viewer"
+                      ? "review_unavailable"
                       : "review_invalid";
+              }
             }
           } else {
             reviewOutcome = "review_unavailable";
@@ -1223,18 +1323,44 @@ const registry = defineArchestraTools([
       if (reviewOutcome) {
         // No human ruling exists. Do not invoke the embedded HITL backend with
         // undefined: without its own elicitation it would record Unreachable.
-        await clearHitlReview({
+        // Seal the closure unless a human ruling won the lock.
+        const sealed = await sealHitlClosure({
           session: reviewSession,
           offerId: remedy.offer_id,
+          ...(reviewOutcome === "review_invalid"
+            ? {}
+            : { closure: closureFromReviewOutcome(reviewOutcome) }),
         });
-        if (callId)
-          await recordHitlReviewResult({
+        if (sealed === "approve" || sealed === "deny") {
+          // The closure lost to a stored ruling. Claim it before execution so
+          // a concurrent retry cannot spend the same approval.
+          const spent = await consumeHitlRuling({
             session: reviewSession,
-            callId,
             offerId: remedy.offer_id,
-            outcome: reviewOutcome,
           });
-        return unansweredReviewResult(remedy.offer_id, reviewOutcome);
+          if (spent === "approve" || spent === "deny") {
+            ruling = spent;
+            reviewOutcome = undefined;
+          } else {
+            if (callId)
+              await recordHitlReviewResult({
+                session: reviewSession,
+                callId,
+                offerId: remedy.offer_id,
+                outcome: reviewOutcome,
+              });
+            return unansweredReviewResult(remedy.offer_id, reviewOutcome);
+          }
+        } else {
+          if (callId)
+            await recordHitlReviewResult({
+              session: reviewSession,
+              callId,
+              offerId: remedy.offer_id,
+              outcome: reviewOutcome,
+            });
+          return unansweredReviewResult(remedy.offer_id, reviewOutcome);
+        }
       }
 
       const byOffer = await executeRemedyByOffer({
@@ -1285,13 +1411,23 @@ async function enforced(organizationId: string) {
     openappaBatteriesService.getEffectivePolicy(organizationId),
     openappaBatteriesService.policyDeclarations(organizationId),
   ]);
+  const { served } = compositionView(effective);
   return {
     content: effective.content,
     error: effective.lastError,
+    served:
+      served.kind === "root_only"
+        ? { kind: served.kind }
+        : {
+            kind: served.kind,
+            rootRevision: served.rootRevision,
+            composedAt: served.composedAt,
+          },
     batteries: declarations.batteries.map((battery) => ({
       entry: battery.entry,
       name: battery.name,
       status: battery.status,
+      served: battery.served,
     })),
   };
 }
@@ -1330,7 +1466,20 @@ function organization(context: ArchestraContext): string {
 }
 
 const PREVIEW_APPROVAL_INSTRUCTION =
-  "Nothing is saved yet. In this same turn, summarize in 2-4 short bullets what the change does to agents and tools (not the TOML), then ask the user to approve it with the ask_user tool, or the client's own question tool. Do not end the turn without that question, even when the user said not to publish until they approve: the question is how they approve. After approval, call update_guardrails_policy with the same edits or content and expectedRevision.";
+  "Nothing is saved yet. In this same turn, summarize in 2-4 short bullets what the change does to agents and tools (not the TOML), and name any saved validation in `validations` that failed or could not run, then ask the user to approve it with the ask_user tool, or the client's own question tool. Do not end the turn without that question, even when the user said not to publish until they approve: the question is how they approve. After approval, call update_guardrails_policy with the same edits or content and expectedRevision.";
+
+/** What a yell tells the agent when break the glass is off. */
+const YELL_RESULT_GUARDRAILS_UNCHANGED =
+  "Guardrails are unchanged for this session.";
+/** What a yell tells the agent when break the glass turned OpenAPPA off. */
+const YELL_RESULT_GUARDRAILS_OFF =
+  "Guardrails are now off for this session: its label is reset, and its calls are no longer checked.";
+
+function textParts(result: CallToolResult): string[] {
+  return result.content.flatMap((part) =>
+    part.type === "text" ? [part.text] : [],
+  );
+}
 
 const YELL_LIST_LIMIT = 20;
 const YELL_MESSAGE_LIMIT = 300;
@@ -1551,13 +1700,56 @@ function nativeReviewRequiredResult(offerId: string): CallToolResult {
   });
 }
 
+async function claimStagedRuling(params: {
+  session: OpenAppaSession;
+  offerId: string;
+  ruling: "approve" | "deny";
+}): Promise<
+  | { ok: true; ruling: "approve" | "deny" }
+  | {
+      ok: false;
+      outcome: Exclude<HitlReviewOutcome, "review_required">;
+    }
+> {
+  const recorded = await recordHitlRuling({
+    session: params.session,
+    offerId: params.offerId,
+    ruling: params.ruling,
+  });
+  if (!recorded) {
+    const decided = await peekHitlDecision({
+      session: params.session,
+      offerId: params.offerId,
+    });
+    return {
+      ok: false,
+      outcome:
+        decided?.ruling === "none"
+          ? reviewOutcomeFromClosure(decided.closure)
+          : "review_invalid",
+    };
+  }
+  const spent = await consumeHitlRuling({
+    session: params.session,
+    offerId: params.offerId,
+  });
+  if (spent === "approve" || spent === "deny") {
+    return { ok: true, ruling: spent };
+  }
+  return { ok: false, outcome: "review_invalid" };
+}
+
 function unansweredReviewResult(
   offerId: string,
   outcome: Exclude<HitlReviewOutcome, "review_required">,
 ): CallToolResult {
   const reason = {
-    review_unanswered: "The human review timed out without an answer.",
-    review_cancelled: "The human canceled the review without giving a ruling.",
+    review_declined:
+      "The client declined the review form. That is not a human denial.",
+    review_unanswered:
+      "The review timed out without an answer. That does not show a person saw it.",
+    review_cancelled:
+      "The client canceled the review without a ruling. That does not show a person saw it.",
     review_unavailable:
       "No human review channel is available in this execution.",
     review_invalid:
@@ -1651,10 +1843,9 @@ function parseArgumentsRecord(
 /**
  * Parses the unified elicitation envelope into a remedy ruling.
  * An `accept` action must include an explicit `approve` or `deny` content action.
- * Malformed or missing actions yield no ruling. The handler records a failed
- * review as a history fact without invoking an authority or granting approval.
- * A `decline` action maps to `deny`.
- * A `cancel` action or unrecognized payload yields no ruling.
+ * A client `decline` or `cancel` is not a human ruling. Malformed or missing
+ * actions yield no ruling. The handler records that as a history fact without
+ * invoking an authority or granting approval.
  */
 function parseHitlRuling(envelope: unknown): "approve" | "deny" | undefined {
   if (typeof envelope !== "object" || envelope === null) return undefined;
@@ -1662,7 +1853,6 @@ function parseHitlRuling(envelope: unknown): "approve" | "deny" | undefined {
     action?: unknown;
     content?: unknown;
   };
-  if (action === "decline") return "deny";
   if (action !== "accept") return undefined;
   const contentAction =
     typeof content === "object" && content !== null
@@ -1756,4 +1946,48 @@ function peerExecution(params: {
     },
     toolCallId: proof.call_id,
   };
+}
+
+/**
+ * The session and call a yell reports under. A Chat or runtime
+ * call knows both; an external client's call through the MCP gateway does
+ * not, so the proxy left them when it allowed the call.
+ */
+async function yellIdentity(params: {
+  args: YellArguments;
+  context: ArchestraContext;
+}): Promise<{ session: OpenAppaSession; callId: string }> {
+  const { context } = params;
+  const id = context.sessionId ?? context.conversationId;
+  const known =
+    context.openappaSubagent?.session ??
+    context.openappaSession ??
+    (context.organizationId && context.userId && id
+      ? chatOpenAppaSession(context.organizationId, context.userId, id)
+      : undefined);
+  const identity =
+    known && context.currentToolCallId
+      ? { session: known, callId: context.currentToolCallId }
+      : context.organizationId
+        ? await recallYellSession({
+            organizationId: context.organizationId,
+            args: params.args,
+          })
+        : undefined;
+  if (!identity) {
+    logger.warn(
+      {
+        agentId: context.agentId,
+        tool: "yell",
+        hasSession: Boolean(known),
+        hasToolCallId: Boolean(context.currentToolCallId),
+      },
+      "OpenAPPA yell refused: no session or tool-call identity",
+    );
+    throw new ApiError(
+      400,
+      "OpenAPPA reporting requires an authenticated session and tool-call identity",
+    );
+  }
+  return identity;
 }

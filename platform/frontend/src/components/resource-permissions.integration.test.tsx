@@ -48,6 +48,7 @@ beforeEach(() => {
       },
     ],
     effectiveActions: ["read", "use", "update", "delete", "manage-permissions"],
+    canShareOrganizationWide: true,
     actorSubjects: [],
   };
   server.use(
@@ -103,6 +104,100 @@ function renderEditor(onParentSubmit?: () => void, canManageGlobal = false) {
   );
   return { ...view, client };
 }
+
+it("gives a member who owns the object the list without what they cannot act on", async () => {
+  policy = {
+    ...policy,
+    ownerId: "reviewer",
+    grants: [
+      {
+        subject: { type: "user", id: "reviewer" },
+        name: "Riley Reviewer",
+        actions: ["read", "use", "update", "delete", "manage-permissions"],
+      },
+      ...policy.grants,
+    ],
+  };
+  const renderAs = (memberView: boolean) => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    client.setQueryData(["auth", "session"], { user: { id: "reviewer" } });
+    client.setQueryData(["auth", "userPermissions"], {});
+    return render(
+      <QueryClientProvider client={client}>
+        <ResourcePermissions
+          layout="settings"
+          resource="mcpRegistry"
+          scope={policy.scope}
+          memberView={memberView}
+        />
+      </QueryClientProvider>,
+    );
+  };
+  const user = userEvent.setup();
+
+  const { unmount } = renderAs(false);
+  const fullOwnerRow = await screen.findByTestId("owner-grant");
+  expect(fullOwnerRow).toHaveTextContent("Riley Reviewer");
+  expect(fullOwnerRow).toHaveTextContent("User");
+  expect(screen.getByTestId("inherited-access-note")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  unmount();
+
+  renderAs(true);
+  const ownerRow = await screen.findByTestId("owner-grant");
+  // "You" says who it is; the name and the "User" label would say it again.
+  expect(ownerRow).toHaveTextContent("You");
+  expect(ownerRow).not.toHaveTextContent("Riley Reviewer");
+  expect(ownerRow).not.toHaveTextContent("User");
+  // Every admin's access is not theirs to change.
+  expect(screen.queryByTestId("inherited-access-note")).toBeNull();
+  // Nothing to save yet, so no Save button.
+  expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+  await user.click(
+    screen.getByRole("button", {
+      name: "Remove direct access for Build automation",
+    }),
+  );
+  expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled();
+});
+
+it("leaves out the who-can-use-it line where the surface asks", async () => {
+  const renderWith = (hideAudience: boolean) => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    client.setQueryData(["auth", "session"], { user: { id: "reviewer" } });
+    client.setQueryData(["auth", "userPermissions"], {});
+    return render(
+      <QueryClientProvider client={client}>
+        <ResourcePermissions
+          layout="settings"
+          resource="mcpRegistry"
+          scope={policy.scope}
+          hideAudience={hideAudience}
+        />
+      </QueryClientProvider>,
+    );
+  };
+
+  const { unmount } = renderWith(false);
+  expect(
+    await screen.findByRole("heading", { name: "Who can use it" }),
+  ).toBeInTheDocument();
+  unmount();
+
+  renderWith(true);
+  // The list itself says who can use it, on a tab named Permissions.
+  expect(
+    await screen.findByRole("button", {
+      name: "Remove direct access for Build automation",
+    }),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Who can use it" })).toBeNull();
+  expect(screen.queryByTestId("audience-chip")).toBeNull();
+});
 
 it("preserves an unsaved draft when a background refresh fails", async () => {
   const user = userEvent.setup();
@@ -434,6 +529,70 @@ it("shows the owner row and makes another person the owner", async () => {
   ).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Make owner" }));
   await waitFor(() => expect(transferred).toEqual({ ownerId: "user-2" }));
+});
+
+it("links the access every object gives to the list page's permissions for those who can change it", async () => {
+  renderEditor(undefined, true);
+  expect(
+    await screen.findByRole("link", {
+      name: "Edit access to every MCP registry entry",
+    }),
+  ).toHaveAttribute("href", "/mcp/registry?permissions=all");
+});
+
+it("explains the access every object gives without a link for those who cannot change it", async () => {
+  renderEditor();
+  expect(await screen.findByTestId("inherited-access-note")).toBeVisible();
+  expect(
+    screen.queryByRole("link", { name: /Edit access to every/ }),
+  ).not.toBeInTheDocument();
+});
+
+it("lets someone who cannot make an entry org-wide lower an everyone grant, but not raise it", async () => {
+  Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+  Element.prototype.scrollIntoView = vi.fn();
+  policy.canShareOrganizationWide = false;
+  policy.grants = [
+    {
+      subject: { type: "organization", id: "*" },
+      name: "Everyone in the organization",
+      actions: ["read", "use"],
+    },
+  ];
+  let saved: unknown;
+  server.use(
+    http.put(endpoint, async ({ request }) => {
+      saved = await request.json();
+      return HttpResponse.json(policy);
+    }),
+  );
+  const user = userEvent.setup();
+  renderEditor();
+  await user.click(
+    await screen.findByRole("combobox", {
+      name: "Permission for Everyone in the organization",
+    }),
+  );
+  // Only the levels at or below the stored grant stay on offer.
+  await screen.findByRole("option", { name: /^Can read/ });
+  const offered = screen
+    .getAllByRole("option")
+    .filter((option) => option.getAttribute("aria-disabled") !== "true")
+    .map((option) => option.textContent);
+  expect(offered).toEqual([
+    expect.stringMatching(/^Can read/),
+    expect.stringMatching(/^Can use/),
+  ]);
+  await user.click(screen.getByRole("option", { name: /^Can read/ }));
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+  await waitFor(() =>
+    expect(saved).toEqual({
+      revision: 1,
+      grants: [
+        { subject: { type: "organization", id: "*" }, actions: ["read"] },
+      ],
+    }),
+  );
 });
 
 async function pick(user: ReturnType<typeof userEvent.setup>, name: string) {

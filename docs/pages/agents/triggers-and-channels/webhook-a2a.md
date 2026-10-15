@@ -2,7 +2,7 @@
 title: Webhook (A2A)
 description: Call an agent over HTTP with the A2A protocol
 order: 1
-lastUpdated: 2026-10-12
+lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -32,8 +32,10 @@ Send a bearer token in the `Authorization` header of every request. A2A takes th
 | Personal token | Click your name in the sidebar to open **Personal Settings** | You |
 | Team token | **Settings → Teams**, then the team's token | The team |
 | Organization token | **Settings → Auth** | The organization |
-| OAuth access token | An [OAuth client](/docs/mcp/authentication) that lists the agent | The client, or the signed-in user |
+| OAuth access token | An [OAuth client](/docs/mcp/authentication/applications) with **A2A** enabled that lists the agent | The client, or the signed-in user |
 | Identity provider JWT | Bind the agent to an [identity provider](/docs/admin/identity) | The user in the JWT |
+
+For OAuth, request `scope=a2a` when obtaining the token. Other enabled capabilities can share the same client credentials.
 
 What to know:
 

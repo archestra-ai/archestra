@@ -5,6 +5,7 @@ import {
   desc,
   eq,
   getTableColumns,
+  ilike,
   inArray,
   isNotNull,
   isNull,
@@ -13,6 +14,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { actorFromUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { createPaginatedResult } from "@/database/utils/pagination";
@@ -24,6 +26,7 @@ import type {
 } from "@/types";
 import { A2A_TERMINAL_TASK_STATES } from "@/types/a2a-task";
 import type { AgentWorkspace } from "@/types/agent-workspace";
+import { escapeLikePattern } from "@/utils/sql-search";
 import A2AMessageModel from "./a2a/message";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
@@ -71,7 +74,10 @@ class AgentRunModel {
         organizationId: created.organizationId,
         resource: "agentRun",
         scope: created.taskId,
-        authorId: created.actorUserId,
+        authorId:
+          created.actorKind === "serviceAccount"
+            ? `service-account:${created.actorId}`
+            : created.actorUserId,
         grants: [],
       });
       // SPDX-SnippetEnd
@@ -110,6 +116,7 @@ class AgentRunModel {
     actorUserId: string;
     organizationId: string;
   }): Promise<AgentRunSession | null> {
+    const actor = actorFromUserId(params.actorUserId);
     const workspaces = schema.agentWorkspacesTable;
     const [workspace] = await db
       .select()
@@ -117,14 +124,14 @@ class AgentRunModel {
       .where(
         and(
           eq(workspaces.organizationId, params.organizationId),
-          eq(workspaces.actorKind, "user"),
-          eq(workspaces.actorId, params.actorUserId),
+          eq(workspaces.actorKind, actor.kind),
+          eq(workspaces.actorId, actor.id),
           or(
             eq(workspaces.id, params.taskId),
             sql`${workspaces.workloadName} IN (
           SELECT workload_name FROM agent_runs WHERE task_id = ${params.taskId}::uuid
           AND organization_id = ${params.organizationId}
-          AND actor_kind = 'user' AND actor_id = ${params.actorUserId}
+          AND actor_kind = ${actor.kind} AND actor_id = ${actor.id}
         )`,
           ),
         ),
@@ -494,19 +501,39 @@ class AgentRunModel {
     actorUserId: string;
     organizationId: string;
     pagination: PaginationQuery;
+    search?: string;
+    pinned?: boolean;
+    sort?: "started" | "recent" | "pinned";
   }) {
+    const actor = actorFromUserId(params.actorUserId);
     const conditions = [
-      eq(schema.agentRunsTable.actorKind, "user"),
-      eq(schema.agentRunsTable.actorId, params.actorUserId),
+      eq(schema.agentRunsTable.actorKind, actor.kind),
+      eq(schema.agentRunsTable.actorId, actor.id),
       eq(schema.agentRunsTable.organizationId, params.organizationId),
       sql`NOT EXISTS (SELECT 1 FROM agent_workspaces w
         WHERE w.workload_name = ${schema.agentRunsTable.workloadName}
         AND w.last_task_id <> ${schema.agentRunsTable.taskId})`,
     ];
+    if (params.pinned !== undefined) {
+      conditions.push(
+        params.pinned
+          ? isNotNull(schema.agentRunsTable.pinnedAt)
+          : isNull(schema.agentRunsTable.pinnedAt),
+      );
+    }
+    if (params.search?.trim()) {
+      conditions.push(
+        ilike(
+          schema.agentRunsTable.title,
+          `%${escapeLikePattern(params.search.trim())}%`,
+        ),
+      );
+    }
     const [rows, [{ total }]] = await Promise.all([
       AgentRunModel.selectRunSessionsWhere({
         conditions,
         pagination: params.pagination,
+        sort: params.sort,
       }),
       db
         .select({ total: sql<number>`count(*)` })
@@ -594,6 +621,7 @@ class AgentRunModel {
     pinnedAt?: Date | null;
     projectId?: string | null;
   }): Promise<AgentRunSession | null> {
+    const actor = actorFromUserId(params.actorUserId);
     const updated = await db
       .update(schema.agentRunsTable)
       .set({
@@ -604,7 +632,8 @@ class AgentRunModel {
       .where(
         and(
           eq(schema.agentRunsTable.taskId, params.taskId),
-          eq(schema.agentRunsTable.actorUserId, params.actorUserId),
+          eq(schema.agentRunsTable.actorKind, actor.kind),
+          eq(schema.agentRunsTable.actorId, actor.id),
           eq(schema.agentRunsTable.organizationId, params.organizationId),
         ),
       )
@@ -697,10 +726,11 @@ class AgentRunModel {
     organizationId: string;
     taskId?: string;
   }) {
+    const actor = actorFromUserId(params.actorUserId);
     return AgentRunModel.selectRunSessionsWhere({
       conditions: [
-        eq(schema.agentRunsTable.actorKind, "user"),
-        eq(schema.agentRunsTable.actorId, params.actorUserId),
+        eq(schema.agentRunsTable.actorKind, actor.kind),
+        eq(schema.agentRunsTable.actorId, actor.id),
         eq(schema.agentRunsTable.organizationId, params.organizationId),
         ...(params.taskId
           ? [eq(schema.agentRunsTable.taskId, params.taskId)]
@@ -712,6 +742,7 @@ class AgentRunModel {
   private static async selectRunSessionsWhere(params: {
     conditions: SQL[];
     pagination?: PaginationQuery;
+    sort?: "started" | "recent" | "pinned";
   }) {
     const {
       logs: _logs,
@@ -759,7 +790,24 @@ class AgentRunModel {
         eq(schema.agentRunsTable.projectId, schema.projectsTable.id),
       )
       .where(and(...params.conditions))
-      .orderBy(desc(schema.agentRunsTable.startedAt))
+      .orderBy(
+        ...(params.sort === "pinned"
+          ? [
+              desc(schema.agentRunsTable.pinnedAt),
+              desc(schema.agentRunsTable.startedAt),
+              desc(schema.agentRunsTable.taskId),
+            ]
+          : params.sort === "recent"
+            ? [
+                desc(
+                  sql`COALESCE(${schema.a2aTasksTable.stateChangedAt}, ${schema.agentRunsTable.startedAt})`,
+                ),
+                // Match the stable client-side recency sort of started-at rows.
+                desc(schema.agentRunsTable.startedAt),
+                desc(schema.agentRunsTable.taskId),
+              ]
+            : [desc(schema.agentRunsTable.startedAt)]),
+      )
       .$dynamic();
 
     return params.pagination

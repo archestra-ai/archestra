@@ -24,6 +24,7 @@ const allPermissions = {
   "/apps": true,
   "/llm/model-providers": true,
   "/mcp/registry": true,
+  "/openappa": true,
 };
 
 beforeEach(() => {
@@ -48,6 +49,7 @@ describe("useNavOnboarding", () => {
         "nav:connect",
         "nav:model-providers",
         "nav:mcp-registry",
+        "nav:guardrails",
       ]),
     );
     expect(result.current.showChatsDot).toBe(true);
@@ -73,6 +75,7 @@ describe("useNavOnboarding", () => {
       ...allPermissions,
       "/llm/model-providers": false,
       "/mcp/registry": false,
+      "/openappa": false,
     });
 
     const { result } = renderHook(() => useNavOnboarding());
@@ -96,9 +99,33 @@ describe("useNavOnboarding", () => {
     expect(result.current.unseenKeys.has("nav:mcp-registry")).toBe(true);
   });
 
+  it("shows the Guardrails dot when either OpenAPPA page is permitted", () => {
+    vi.mocked(usePermissionMap).mockReturnValue({
+      ...allPermissions,
+      "/openappa": false,
+      "/openappa/yells": true,
+    });
+    expect(
+      renderHook(() => useNavOnboarding()).result.current.unseenKeys.has(
+        "nav:guardrails",
+      ),
+    ).toBe(true);
+
+    vi.mocked(usePermissionMap).mockReturnValue({
+      ...allPermissions,
+      "/openappa": false,
+      "/openappa/yells": false,
+    });
+    expect(
+      renderHook(() => useNavOnboarding()).result.current.unseenKeys.has(
+        "nav:guardrails",
+      ),
+    ).toBe(false);
+  });
+
   it("clears the studio aggregate once all visible studio items are seen", () => {
     mockSeenQuery.data = {
-      items: ["nav:model-providers", "nav:mcp-registry"],
+      items: ["nav:model-providers", "nav:mcp-registry", "nav:guardrails"],
     };
 
     const { result } = renderHook(() => useNavOnboarding());

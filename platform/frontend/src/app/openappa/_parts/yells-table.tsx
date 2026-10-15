@@ -21,6 +21,12 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { DataTable } from "@/components/ui/data-table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { setPendingChatHandoffFiles } from "@/lib/chat/pending-chat-handoff-files";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
@@ -70,9 +76,12 @@ export function YellsTable() {
       size: isMobile ? 120 : 240,
       cell: ({ row }) => (
         <div className="min-w-0 space-y-1">
-          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-            {row.original.message}
-          </p>
+          <div className="flex items-start gap-2">
+            {row.original.superyell && <BrokeTheGlassMark />}
+            <p className="min-w-0 whitespace-pre-wrap break-words text-sm leading-relaxed">
+              {row.original.message}
+            </p>
+          </div>
           {isMobile && (
             <span className="block space-y-1 text-xs font-normal text-muted-foreground">
               <YellCaller yell={row.original} />
@@ -321,4 +330,22 @@ function YellCaller({ yell }: { yell: OpenAppaYell }) {
           ? "Virtual key"
           : "Unattributed caller";
   return <span className="text-xs text-muted-foreground">{label}</span>;
+}
+
+/** Marks a yell sent with break the glass on, which also turned guardrails off. */
+function BrokeTheGlassMark() {
+  const label = "Broke the glass: guardrails turned off for this session";
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <UnstyledButton
+          aria-label={label}
+          className="mt-1 shrink-0 text-amber-600 dark:text-amber-400"
+        >
+          <Megaphone className="size-3.5" />
+        </UnstyledButton>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
 }

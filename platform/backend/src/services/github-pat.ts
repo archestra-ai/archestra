@@ -4,6 +4,7 @@ import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-defini
 import SkillModel from "@/models/skill";
 import { secretManager } from "@/secrets-manager";
 import { deleteRuntimeCredentialDefinition } from "@/services/agent-runtime/runtime-credentials";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
   type CreateGithubPatRequest,
@@ -21,6 +22,8 @@ export async function listGithubPats(
 
 export async function createGithubPat(params: {
   organizationId: string;
+  /** Becomes the credential's author, who is granted full access to it. */
+  userId?: string;
   data: CreateGithubPatRequest;
 }): Promise<PublicGithubPat> {
   const { organizationId, data } = params;
@@ -29,11 +32,23 @@ export async function createGithubPat(params: {
     `github-pat-${data.name}`,
   );
 
-  const pat = await GithubPatModel.create({
-    organizationId,
-    name: data.name,
-    secretId: secret.id,
-  });
+  const pat = await GithubPatModel.create(
+    {
+      organizationId,
+      name: data.name,
+      secretId: secret.id,
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      initialPermissionGrants:
+        await ResourcePermissions.defaultCredentialGrants({
+          organizationId,
+          userId: params.userId,
+        }),
+      // SPDX-SnippetEnd
+    },
+    params.userId,
+  );
 
   return toPublicGithubPat(pat);
 }

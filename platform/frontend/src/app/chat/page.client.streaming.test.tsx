@@ -32,6 +32,7 @@ vi.mock("@/lib/clients/auth/auth-client");
 // transcript and status directly instead of opening a stream.
 vi.mock("@/lib/chat/global-chat.context", () => ({
   useChatSession: vi.fn(),
+  useChatSessionSnapshot: () => null,
   useGlobalChat: vi.fn(),
 }));
 
@@ -147,7 +148,6 @@ beforeEach(() => {
   } as Awaited<ReturnType<typeof authClient.getSession>>);
   vi.mocked(useGlobalChat).mockReturnValue({
     animatingTitleIds: new Set<string>(),
-    getSession: () => null,
   } as unknown as ReturnType<typeof useGlobalChat>);
   const setMessages = vi.fn();
   const sendMessage = vi.fn();

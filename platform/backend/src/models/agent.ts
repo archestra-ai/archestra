@@ -6,10 +6,10 @@ import {
   type PaginationQuery,
   PERSONAL_MCP_GATEWAY_NAME,
   PLAYWRIGHT_MCP_CATALOG_ID,
+  PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   parseFullToolName,
   providerRequiresPerUserCredential,
   type ResourcePermissionGrant,
-  SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   type SupportedProvider,
   TimeInMs,
@@ -25,6 +25,7 @@ import {
   exists,
   getTableColumns,
   getTableName,
+  gte,
   ilike,
   inArray,
   isNotNull,
@@ -32,6 +33,7 @@ import {
   max,
   ne,
   not,
+  notExists,
   notInArray,
   or,
   type SQL,
@@ -87,6 +89,7 @@ import AgentToolModel from "./agent-tool";
 import AgentUserModel from "./agent-user";
 import AgentVersionModel from "./agent-version";
 import CreatedByModel from "./created-by";
+import { idArrayCondition } from "./id-array-condition";
 import { latestCreatedAtByKey } from "./latest-created-at";
 import McpToolCallModel from "./mcp-tool-call";
 import OrganizationModel from "./organization";
@@ -439,7 +442,9 @@ class AgentModel {
       const resource =
         agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent";
       const key = `${agent.organizationId}\u0000${resource}`;
-      byKey.set(key, [...(byKey.get(key) ?? []), agent.id]);
+      const scopes = byKey.get(key);
+      if (scopes) scopes.push(agent.id);
+      else byKey.set(key, [agent.id]);
     }
     const audiences = new Map<string, AgentScope>();
     for (const [key, scopes] of byKey) {
@@ -843,9 +848,9 @@ class AgentModel {
       // apps without per-agent setup.
       await ToolModel.assignAppToolsToAgent(createdAgent.id, organizationId);
 
-      // Code-execution sandbox + persistent-files tools — gated on the sandbox
-      // runtime flag, same as the composer.
-      if (composesGroup(SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES)) {
+      // Persistent-files tools, plus the code runtime tools when the runtime
+      // is on — the same composition as the create form.
+      if (composesGroup(PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES)) {
         await ToolModel.assignSandboxToolsToAgent(
           createdAgent.id,
           organizationId,
@@ -957,7 +962,8 @@ class AgentModel {
        * the full Agent wire shape for compatibility, but fields the chat does
        * not consume are empty and oversized embedded icons are omitted.
        */
-      view?: "chat";
+      view?: "chat" | "options";
+      ids?: string[];
     },
   ): Promise<Agent[]> {
     // Tools are attached afterwards as slim refs via one batched query:
@@ -1008,6 +1014,8 @@ class AgentModel {
     }
 
     const isChatView = options?.view === "chat";
+    const isOptionsView = options?.view === "options";
+    const isCompactView = isChatView || isOptionsView;
     const builtInName = sql<string>`coalesce(${schema.agentsTable.builtInAgentConfig}->>'name', '')`;
     // Chat exposes its system assistant through the same authorized roster;
     // platform subagents remain excluded from ordinary chat selection.
@@ -1033,27 +1041,27 @@ class AgentModel {
 
     // Apply access control filtering for non-agent admins
     if (userId && !isAgentAdmin) {
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-        principals,
+      whereConditions.push(
+        inArray(
+          schema.agentsTable.id,
+          accessibleAgentIdsQuery({ userId, isAgentAdmin: false, principals }),
+        ),
       );
+    }
 
-      if (accessibleAgentIds.length === 0) {
-        return [];
-      }
-
-      whereConditions.push(inArray(schema.agentsTable.id, accessibleAgentIds));
+    if (options?.ids !== undefined) {
+      whereConditions.push(
+        idArrayCondition(schema.agentsTable.id, options.ids),
+      );
     }
 
     const where = and(...whereConditions);
-    const rows =
-      options?.view === "chat"
-        ? await db
-            .select(CHAT_AGENT_ROW_COLUMNS)
-            .from(schema.agentsTable)
-            .where(where)
-        : await db.select().from(schema.agentsTable).where(where);
+    const rows = isCompactView
+      ? await db
+          .select(CHAT_AGENT_ROW_COLUMNS)
+          .from(schema.agentsTable)
+          .where(where)
+      : await db.select().from(schema.agentsTable).where(where);
 
     const agents: Agent[] = rows.map((agent) => ({
       ...agent,
@@ -1071,7 +1079,7 @@ class AgentModel {
     // avoid N+1. Chat starts from scalar configuration plus a few small
     // relation lists; editing fetches the individual full agent on demand.
     const [toolRows, teamsMap, usersMap, labelsMap] = await Promise.all([
-      agentIds.length > 0 && options?.includeTools !== false && !isChatView
+      agentIds.length > 0 && options?.includeTools !== false && !isCompactView
         ? db
             .select({
               agentId: schema.agentToolsTable.agentId,
@@ -1082,15 +1090,15 @@ class AgentModel {
               schema.toolsTable,
               eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
             )
-            .where(inArray(schema.agentToolsTable.agentId, agentIds))
+            .where(idArrayCondition(schema.agentToolsTable.agentId, agentIds))
         : Promise.resolve([]),
       isChatView
         ? Promise.resolve(new Map())
         : AgentTeamModel.getTeamDetailsForAgents(agentIds),
-      isChatView
+      isCompactView
         ? Promise.resolve(new Map())
         : AgentUserModel.getUserDetailsForAgents(agentIds),
-      isChatView
+      isCompactView
         ? Promise.resolve(new Map())
         : AgentLabelModel.getLabelsForAgents(agentIds),
     ]);
@@ -1110,10 +1118,18 @@ class AgentModel {
     await Promise.all([
       AgentModel.populateGrantedScope(agents),
       isChatView ? Promise.resolve() : AgentModel.populateAuthorNames(agents),
-      AgentModel.populateKnowledgeBaseIds(agents),
-      AgentModel.populateConnectorIds(agents),
-      AgentModel.populateSuggestedPrompts(agents),
-      AgentModel.populateResolvedLlm(agents),
+      isOptionsView
+        ? Promise.resolve()
+        : AgentModel.populateKnowledgeBaseIds(agents),
+      isOptionsView
+        ? Promise.resolve()
+        : AgentModel.populateConnectorIds(agents),
+      isOptionsView
+        ? Promise.resolve()
+        : AgentModel.populateSuggestedPrompts(agents),
+      isOptionsView
+        ? Promise.resolve()
+        : AgentModel.populateResolvedLlm(agents),
     ]);
     AgentModel.filterUnavailableKnowledgeTools(agents);
 
@@ -1174,7 +1190,7 @@ class AgentModel {
           schema.toolsTable,
           eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
         )
-        .where(inArray(schema.agentToolsTable.agentId, agentIds)),
+        .where(idArrayCondition(schema.agentToolsTable.agentId, agentIds)),
     ]);
 
     // Group tools by agent
@@ -1202,8 +1218,21 @@ class AgentModel {
     return results;
   }
 
-  /** Distinct runtime configurations are selected by the warm pool reconciler. */
-  static async listWarmPoolCandidates() {
+  /**
+   * Runtime Agents run since `since`, most recently run first. The warm pool
+   * reconciler takes distinct configurations from the top, so its limited
+   * pools follow the Agents people actually use.
+   */
+  static async listWarmPoolCandidates(params: { since: Date }) {
+    const recentRuns = db
+      .select({
+        agentId: schema.agentRunsTable.agentId,
+        lastRunAt: max(schema.agentRunsTable.startedAt).as("last_run_at"),
+      })
+      .from(schema.agentRunsTable)
+      .where(gte(schema.agentRunsTable.startedAt, params.since))
+      .groupBy(schema.agentRunsTable.agentId)
+      .as("recent_runs");
     return db
       .select({
         id: schema.agentsTable.id,
@@ -1216,6 +1245,7 @@ class AgentModel {
         defaultPolicy: schema.organizationsTable.defaultNetworkPolicy,
       })
       .from(schema.agentsTable)
+      .innerJoin(recentRuns, eq(recentRuns.agentId, schema.agentsTable.id))
       .innerJoin(
         schema.organizationsTable,
         eq(schema.organizationsTable.id, schema.agentsTable.organizationId),
@@ -1236,7 +1266,7 @@ class AgentModel {
           notDeleted(schema.agentsTable),
         ),
       )
-      .orderBy(schema.agentsTable.createdAt, schema.agentsTable.id);
+      .orderBy(desc(recentRuns.lastRunAt), schema.agentsTable.id);
   }
 
   /**
@@ -1353,7 +1383,7 @@ class AgentModel {
           schema.toolsTable,
           eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
         )
-        .where(inArray(schema.agentToolsTable.agentId, agentIds)),
+        .where(idArrayCondition(schema.agentToolsTable.agentId, agentIds)),
     ]);
 
     // Group tools by agent
@@ -2220,15 +2250,11 @@ class AgentModel {
       (filters?.status ?? "active") !== "deleted";
     const restrictToAccessible = !isAgentAdmin || isDefaultActiveAllView;
     if (userId && restrictToAccessible) {
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-        principals,
-      );
       whereConditions.push(
-        accessibleAgentIds.length > 0
-          ? inArray(schema.agentsTable.id, accessibleAgentIds)
-          : sql<boolean>`false`,
+        inArray(
+          schema.agentsTable.id,
+          accessibleAgentIdsQuery({ userId, isAgentAdmin: false, principals }),
+        ),
       );
     }
 
@@ -2568,6 +2594,52 @@ class AgentModel {
     return agents.map((agent) => agent.id);
   }
 
+  /** Existing agents that still need at least one of the supplied tool assignments. */
+  static async findNonBuiltInIdsMissingToolAssignments(params: {
+    organizationId: string;
+    toolIds: string[];
+  }): Promise<string[]> {
+    if (params.toolIds.length === 0) return [];
+    const agents = await db
+      .select({ id: schema.agentsTable.id })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, params.organizationId),
+          notDeleted(schema.agentsTable),
+          isNull(schema.agentsTable.builtInAgentConfig),
+          exists(
+            db
+              .select({ id: schema.toolsTable.id })
+              .from(schema.toolsTable)
+              .where(
+                and(
+                  inArray(schema.toolsTable.id, params.toolIds),
+                  notExists(
+                    db
+                      .select({ id: schema.agentToolsTable.id })
+                      .from(schema.agentToolsTable)
+                      .where(
+                        and(
+                          eq(
+                            schema.agentToolsTable.agentId,
+                            schema.agentsTable.id,
+                          ),
+                          eq(
+                            schema.agentToolsTable.toolId,
+                            schema.toolsTable.id,
+                          ),
+                        ),
+                      ),
+                  ),
+                ),
+              ),
+          ),
+        ),
+      );
+    return agents.map((agent) => agent.id);
+  }
+
   /**
    * Whether `agentId` is its organization's LLM Proxy and `userId` a member of
    * that organization. See {@link organizationLlmProxyCondition}.
@@ -2598,19 +2670,11 @@ class AgentModel {
     const readers =
       principals ??
       (await ResourcePermissionSubjectModel.resolvePrincipals({ userId }));
-    const rows = await db
-      .select({ id: schema.agentsTable.id })
-      .from(schema.agentsTable)
-      .where(
-        and(
-          notDeleted(schema.agentsTable),
-          or(
-            explicitAgentReadCondition(readers),
-            isAgentAdmin ? sql`true` : undefined,
-            organizationLlmProxyCondition(userId),
-          ),
-        ),
-      );
+    const rows = await accessibleAgentIdsQuery({
+      userId,
+      isAgentAdmin,
+      principals: readers,
+    });
 
     return rows.map((row) => row.id);
   }
@@ -3807,6 +3871,37 @@ class AgentModel {
     return rows.length > 0;
   }
 
+  /** Startup candidates only: existing live personal agents need no repair. */
+  static async findMembersMissingPersonalChatAgents() {
+    return db
+      .select({
+        userId: schema.membersTable.userId,
+        organizationId: schema.membersTable.organizationId,
+      })
+      .from(schema.membersTable)
+      .where(
+        and(
+          isNull(schema.membersTable.defaultAgentId),
+          not(
+            exists(
+              db
+                .select({ id: schema.agentsTable.id })
+                .from(schema.agentsTable)
+                .where(
+                  and(
+                    ...personalChatAgentConditions({
+                      userId: schema.membersTable.userId,
+                      organizationId: schema.membersTable.organizationId,
+                    }),
+                    notDeleted(schema.agentsTable),
+                  ),
+                ),
+            ),
+          ),
+        ),
+      );
+  }
+
   /**
    * Ensure a personal chat agent exists for a member, and return the one they
    * should chat with — their oldest live personal chat agent.
@@ -3892,14 +3987,7 @@ class AgentModel {
       .from(schema.agentsTable)
       .where(
         and(
-          eq(schema.agentsTable.organizationId, params.organizationId),
-          eq(schema.agentsTable.authorId, params.userId),
-          eq(schema.agentsTable.agentType, "agent"),
-          agentAudienceIs("personal"),
-          eq(schema.agentsTable.builtIn, false),
-          params.excludeId
-            ? ne(schema.agentsTable.id, params.excludeId)
-            : undefined,
+          ...personalChatAgentConditions(params),
           notDeleted(schema.agentsTable),
         ),
       )
@@ -3917,15 +4005,7 @@ class AgentModel {
     const [row] = await db
       .select({ id: schema.agentsTable.id })
       .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.organizationId, params.organizationId),
-          eq(schema.agentsTable.authorId, params.userId),
-          eq(schema.agentsTable.agentType, "agent"),
-          agentAudienceIs("personal"),
-          eq(schema.agentsTable.builtIn, false),
-        ),
-      )
+      .where(and(...personalChatAgentConditions(params)))
       .limit(1);
     return row !== undefined;
   }
@@ -4900,6 +4980,35 @@ function agentListFence(principals: GrantPrincipal[]): SQL {
 }
 
 /**
+ * Shared accessible-ID query. List filters embed this exact authorization set
+ * instead of fetching the whole roster and sending its IDs back as parameters,
+ * so selective filters such as pins can narrow the work in the database.
+ */
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+function accessibleAgentIdsQuery(params: {
+  userId: string;
+  isAgentAdmin: boolean;
+  principals: GrantPrincipal[];
+}) {
+  return db
+    .select({ id: schema.agentsTable.id })
+    .from(schema.agentsTable)
+    .where(
+      and(
+        notDeleted(schema.agentsTable),
+        or(
+          explicitAgentReadCondition(params.principals),
+          params.isAgentAdmin ? sql`true` : undefined,
+          organizationLlmProxyCondition(params.userId),
+        ),
+      ),
+    );
+}
+// SPDX-SnippetEnd
+
+/**
  * The organization's LLM Proxy, for a member of that organization. A proxy has
  * no grant namespace of its own: the one row every proxy request resolves to
  * serves the whole organization, and the retired per-user proxy rows it
@@ -5172,4 +5281,20 @@ const ALL_SORTS_ABOVE_ANY_COUNT = 2147483647;
  */
 function qualified(column: AnyPgColumn): SQL {
   return sql`${sql.identifier(getTableName(column.table))}.${sql.identifier(column.name)}`;
+}
+
+/** Shared by the startup preflight and the per-member creation guard. */
+function personalChatAgentConditions(params: {
+  userId: string | AnyPgColumn;
+  organizationId: string | AnyPgColumn;
+  excludeId?: string;
+}) {
+  return [
+    eq(schema.agentsTable.organizationId, params.organizationId),
+    eq(schema.agentsTable.authorId, params.userId),
+    eq(schema.agentsTable.agentType, "agent"),
+    agentAudienceIs("personal"),
+    eq(schema.agentsTable.builtIn, false),
+    params.excludeId ? ne(schema.agentsTable.id, params.excludeId) : undefined,
+  ];
 }

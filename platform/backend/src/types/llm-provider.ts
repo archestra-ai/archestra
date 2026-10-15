@@ -553,6 +553,14 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
    */
   readonly formatStreamErrorFrame?: (event: unknown) => string;
 
+  /**
+   * Set by adapters that serve a client wire format different from the
+   * upstream provider's (e.g. OpenAI-format client, Anthropic upstream). The
+   * upstream's error body is foreign to the client there, so the proxy keeps
+   * its own error envelope instead of relaying it.
+   */
+  readonly translatesWireFormat?: boolean;
+
   // ---------------------------------------------------------------------------
   // Adapter Creation
   // ---------------------------------------------------------------------------
@@ -654,6 +662,8 @@ export interface UsageView {
   reasoningTokens?: number;
   /** True when inputTokens is a locally-computed estimate, not a provider-reported count (see applyInputTokenFallback). Absent/false = provider-measured. */
   inputTokensEstimated?: boolean;
+  /** USD the provider reports it billed for this response (OpenRouter's `usage.cost`). When present it is the recorded cost instead of a token-price estimate. */
+  providerReportedCost?: number;
 }
 
 /**

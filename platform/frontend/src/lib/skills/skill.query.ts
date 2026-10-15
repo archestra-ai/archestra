@@ -87,9 +87,11 @@ type SkillsQuery = NonNullable<archestraApiTypes.GetSkillsData["query"]>;
 type SkillsPaginatedParams = Pick<
   SkillsQuery,
   | "limit"
+  | "includeContent"
   | "offset"
   | "search"
   | "sourceRepo"
+  | "skillIds"
   | "forAgentId"
   | "mcpGatewayEnvironment"
   | "agentSkillView"
@@ -724,7 +726,9 @@ export function useUpdateSkillGithubSync() {
       } else if (variables.body.disconnect) {
         toast.success("Sync stopped — the skill is now editable");
       } else {
-        toast.success("Sync frequency updated");
+        toast.success(
+          variables.body.source ? "Source updated" : "Sync frequency updated",
+        );
       }
     },
   });
@@ -754,6 +758,8 @@ export function usePreviewGithubSkill(
       body?.repoUrl,
       body?.path ?? null,
       body?.skillPath,
+      // The same repository can read differently through another credential.
+      body?.githubAppConfigId ?? body?.gitlabTokenId ?? null,
     ],
     enabled: !!body,
     staleTime: 5 * 60 * 1000,
@@ -904,11 +910,9 @@ export function useAllSkills(params?: {
   /**
    * Hold the fetch back until the page has settled.
    *
-   * This walks the whole skill catalogue a page at a time, and every row
-   * carries the skill's full `content`, so it is the heaviest thing the
-   * connection page asks for by a wide margin — and it feeds the review step,
-   * which nobody reads before the step above it. Deferring keeps it out of the
-   * burst that renders the part of the page people act on first.
+   * This walks the whole skill catalogue a page at a time. Even without
+   * manifest bodies, its attribution metadata can be large. Defer the review
+   * step's fetch so the setup command can render first.
    */
   deferMs?: number;
 }) {
@@ -940,7 +944,12 @@ export async function fetchAllSkills(
   let offset = 0;
   while (true) {
     const { data, error } = await getSkills({
-      query: { limit, offset, forAgentId: forAgentId ?? undefined },
+      query: {
+        limit,
+        offset,
+        forAgentId: forAgentId ?? undefined,
+        includeContent: false,
+      },
     });
     if (error) {
       if (throwOnError) {

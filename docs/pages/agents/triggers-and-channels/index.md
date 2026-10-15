@@ -27,6 +27,8 @@ A channel is one place where people message the agent: a Slack or Microsoft Team
 2. Open the agent's **Messaging Channels** tab and click **Add channel**.
 3. To change the channel's instructions or reply behavior, click **Settings** on it.
 
+To see every channel at once, open the provider under messaging channel settings. Microsoft Teams and Telegram list each channel with its agent, whether it replies to all messages, and its settings. Personal chats stay hidden until you show them.
+
 ## Conversation History
 
 The agent remembers the conversation, so a follow-up such as "and for last month?" works without repeating the details.

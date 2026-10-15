@@ -8,6 +8,7 @@ const row = (
   ({
     batteryName: "github",
     status: "active",
+    target: null,
     packageHash: null,
     lastError: null,
     credentialBindings: {},

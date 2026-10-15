@@ -1,11 +1,16 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { act, render, waitFor } from "@testing-library/react";
-import { useEffect } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { ChatProvider, useGlobalChat } from "./global-chat.context";
+import {
+  ChatProvider,
+  useChatSession,
+  useChatSessionSnapshot,
+  useGlobalChat,
+} from "./global-chat.context";
 
 type ChatSessionSnapshot = ReturnType<
   ReturnType<typeof useGlobalChat>["getSession"]
@@ -319,6 +324,95 @@ describe("ChatProvider retries", () => {
     });
 
     expect(mocks.clearChatErrors).not.toHaveBeenCalled();
+  });
+
+  it("aborts a silently stalled stream and reattaches to the active run", async () => {
+    let status: "ready" | "streaming" = "streaming";
+    const baseUseChat = mocks.useChat.getMockImplementation();
+    mocks.useChat.mockImplementation((options) => ({
+      ...baseUseChat?.(options),
+      status,
+    }));
+    vi.useFakeTimers();
+
+    const { rerender } = render(
+      <ChatProvider>
+        <RegisterChatSession />
+      </ChatProvider>,
+    );
+
+    // No bytes (not even heartbeats) for the stall threshold: the hung request
+    // is aborted client-side, and the run is not reattached until it settles.
+    act(() => {
+      vi.advanceTimersByTime(40_000);
+    });
+    expect(mocks.stop).toHaveBeenCalledTimes(1);
+    expect(mocks.resumeStream).not.toHaveBeenCalled();
+
+    status = "ready";
+    act(() => {
+      rerender(
+        <ChatProvider>
+          <RegisterChatSession />
+        </ChatProvider>,
+      );
+    });
+    expect(mocks.resumeStream).toHaveBeenCalledTimes(1);
+    expect(mocks.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it("flags the stall notice only after the silent-stall reattaches are used up", async () => {
+    let status: "ready" | "streaming" = "streaming";
+    const baseUseChat = mocks.useChat.getMockImplementation();
+    mocks.useChat.mockImplementation((options) => ({
+      ...baseUseChat?.(options),
+      status,
+    }));
+    const latestSessionRef: { current: ChatSessionSnapshot } = {
+      current: undefined,
+    };
+    vi.useFakeTimers();
+    const renderTree = () => (
+      <ChatProvider>
+        <RegisterChatSession />
+        <CaptureChatSession
+          onSession={(session) => {
+            latestSessionRef.current = session;
+          }}
+        />
+      </ChatProvider>
+    );
+    const { rerender } = render(renderTree());
+
+    // Each silent stall aborts the hung request; the reattach starts once the
+    // status settles back to ready, and the next stall needs a fresh stream.
+    const settle = (nextStatus: "ready" | "streaming") => {
+      status = nextStatus;
+      act(() => {
+        rerender(renderTree());
+      });
+    };
+    for (const attempt of [1, 2, 3]) {
+      settle("streaming");
+      act(() => {
+        vi.advanceTimersByTime(40_000);
+      });
+      expect(mocks.stop).toHaveBeenCalledTimes(attempt);
+      settle("ready");
+      expect(mocks.resumeStream).toHaveBeenCalledTimes(attempt);
+      // Only the third reattach's use-up is a signal; earlier ones keep the notice hidden.
+      expect(latestSessionRef.current?.stallRecoveryExhausted).toBe(
+        attempt === 3,
+      );
+    }
+
+    // Reattaches are used up: a fourth stall starts no further reattach.
+    settle("streaming");
+    act(() => {
+      vi.advanceTimersByTime(40_000);
+    });
+    expect(mocks.stop).toHaveBeenCalledTimes(3);
+    expect(latestSessionRef.current?.stallRecoveryExhausted).toBe(true);
   });
 
   it("clears persisted chat errors once a user-message regenerate is issued", async () => {
@@ -1320,6 +1414,93 @@ describe("ChatProvider retries", () => {
     await waitFor(() =>
       expect(latestSessionRef.current?.isRecovering).toBe(false),
     );
+  });
+});
+
+describe("streamed session updates", () => {
+  type StreamState = { messages: UIMessage[]; status: string };
+  let streamState: StreamState;
+  const listeners = new Set<() => void>();
+  const setStreamState = (next: StreamState) => {
+    streamState = next;
+    for (const listener of listeners) listener();
+  };
+  const assistantReply = (text: string): UIMessage[] => [
+    { id: "user-1", role: "user", parts: [{ type: "text", text: "hi" }] },
+    { id: "assistant-1", role: "assistant", parts: [{ type: "text", text }] },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    streamState = { messages: [], status: "ready" };
+    mocks.useChat.mockImplementation(function useStreamingChat() {
+      const state = useSyncExternalStore(
+        (listener) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+        () => streamState,
+      );
+      return {
+        addToolApprovalResponse: mocks.addToolApprovalResponse,
+        addToolResult: mocks.addToolResult,
+        clearError: mocks.clearError,
+        error: undefined,
+        messages: state.messages,
+        regenerate: mocks.regenerate,
+        resumeStream: mocks.resumeStream,
+        sendMessage: mocks.sendMessage,
+        setMessages: mocks.setMessages,
+        status: state.status,
+        stop: mocks.stop,
+      };
+    });
+  });
+
+  it("re-renders session subscribers per chunk but global consumers only when generation starts or stops", async () => {
+    const globalRenders: boolean[] = [];
+    function GlobalConsumer() {
+      const { generatingConversationIds } = useGlobalChat();
+      globalRenders.push(generatingConversationIds.has("conversation-1"));
+      return null;
+    }
+    let latestText = "";
+
+    render(
+      <ChatProvider>
+        <RegisterChatSession />
+        <GlobalConsumer />
+        <CaptureChatSession
+          onSession={(session) => {
+            const part = session?.messages.at(-1)?.parts[0];
+            latestText = part?.type === "text" ? part.text : "";
+          }}
+        />
+      </ChatProvider>,
+    );
+    await waitFor(() => expect(mocks.useChat).toHaveBeenCalled());
+
+    act(() => {
+      setStreamState({ messages: assistantReply(""), status: "streaming" });
+    });
+    await waitFor(() => expect(globalRenders.at(-1)).toBe(true));
+    const rendersBeforeChunks = globalRenders.length;
+
+    let text = "";
+    for (let chunk = 0; chunk < 20; chunk++) {
+      text += `word${chunk} `;
+      act(() => {
+        setStreamState({ messages: assistantReply(text), status: "streaming" });
+      });
+    }
+    await waitFor(() => expect(latestText).toBe(text));
+    // The sidebar and other global consumers sit out every streamed chunk.
+    expect(globalRenders.length).toBe(rendersBeforeChunks);
+
+    act(() => {
+      setStreamState({ messages: assistantReply(text), status: "ready" });
+    });
+    await waitFor(() => expect(globalRenders.at(-1)).toBe(false));
   });
 });
 
@@ -2858,6 +3039,58 @@ function RegisterChatSession({
   return null;
 }
 
+describe("useChatSession snapshot", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.resumeStream.mockReturnValue(new Promise(() => {}));
+    const messages: UIMessage[] = [];
+    mocks.useChat.mockImplementation(() => ({
+      addToolApprovalResponse: mocks.addToolApprovalResponse,
+      addToolResult: mocks.addToolResult,
+      clearError: mocks.clearError,
+      error: undefined,
+      messages,
+      regenerate: mocks.regenerate,
+      resumeStream: mocks.resumeStream,
+      sendMessage: mocks.sendMessage,
+      setMessages: mocks.setMessages,
+      status: "ready",
+      stop: mocks.stop,
+    }));
+  });
+
+  it("runs effects keyed on the session's functions once it appears, even when an urgent re-render lands at the same time", async () => {
+    // What a just-created chat waits for before sending its opening message.
+    // An unrelated urgent state update arriving with the session snapshot must
+    // not leave those effects believing the functions were already there.
+    const seenSendMessage: string[] = [];
+    function SessionConsumer() {
+      const { subscribeSessionUpdates } = useGlobalChat();
+      const [, setUnrelated] = useState(0);
+      const session = useChatSession({ conversationId: "conversation-1" });
+      // Subscribed after the snapshot's own listener, so this urgent no-op
+      // update lands while the snapshot's transition update is still pending.
+      useEffect(
+        () => subscribeSessionUpdates(() => setUnrelated((value) => value)),
+        [subscribeSessionUpdates],
+      );
+      const sendMessage = session?.sendMessage;
+      useEffect(() => {
+        seenSendMessage.push(typeof sendMessage);
+      }, [sendMessage]);
+      return null;
+    }
+
+    render(
+      <ChatProvider>
+        <SessionConsumer />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(seenSendMessage).toContain("function"));
+  });
+});
+
 function CaptureChatSession({
   conversationId = "conversation-1",
   onSession,
@@ -2865,11 +3098,10 @@ function CaptureChatSession({
   conversationId?: string;
   onSession: (session: ChatSessionSnapshot) => void;
 }) {
-  const { getSession } = useGlobalChat();
-  const session = getSession(conversationId);
+  const session = useChatSessionSnapshot(conversationId);
 
   useEffect(() => {
-    onSession(session);
+    onSession(session ?? undefined);
   }, [onSession, session]);
 
   return null;

@@ -263,6 +263,7 @@ vi.mock("@/lib/chat/chat-message.query", () => ({
 }));
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  useMcpCatalogCredentialPreflight: () => ({ data: [] }),
   useInternalMcpCatalog: () => ({ data: [] }),
 }));
 
@@ -279,9 +280,7 @@ vi.mock("@/lib/organization.query");
 vi.mock("@/lib/hooks/use-app-name");
 
 vi.mock("@/lib/chat/global-chat.context", () => ({
-  useGlobalChat: () => ({
-    getSession: () => mockChatSession.current,
-  }),
+  useChatSessionSnapshot: () => mockChatSession.current,
 }));
 
 vi.mock("@/lib/mcp/archestra-mcp-server", () => ({

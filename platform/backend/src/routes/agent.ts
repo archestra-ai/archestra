@@ -41,6 +41,7 @@ import {
   AgentVersionModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
+  LlmProviderApiKeyModel,
   MemberModel,
   OrganizationModel,
   ProjectModel,
@@ -62,6 +63,7 @@ import { populateAgentListActivationSkillCounts } from "@/services/agent-list";
 import { transferAgentOwnership } from "@/services/agent-ownership";
 import {
   assertAgentRuntimeModelCompatibility,
+  assertCanBindRuntimeCredentials,
   requireAgentRuntimePermission,
 } from "@/services/agent-runtime/agent-config-validation";
 import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
@@ -84,6 +86,7 @@ import {
   AgentExportPayloadSchema,
   AgentKnowledgeSourceExclusionsSchema,
   AgentListItemSchema,
+  AgentOptionSchema,
   type AgentScope,
   AgentScopeFilterSchema,
   AgentSkillAssignmentsResponseSchema,
@@ -400,123 +403,52 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetAllAgents,
         description: "Get all agents without pagination",
         tags: ["Agents"],
-        querystring: z.object({
-          agentType: z
-            .enum(["profile", "mcp_gateway", "agent"])
-            .optional()
-            .describe(
-              "Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'agent' = internal agents with prompts.",
-            ),
-          agentTypes: z
-            .preprocess(
-              (val) => (typeof val === "string" ? val.split(",") : val),
-              z.array(z.enum(["profile", "mcp_gateway", "agent"])),
-            )
-            .optional()
-            .describe(
-              "Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided.",
-            ),
-          excludeBuiltIn: z
-            .preprocess((val) => val === "true" || val === true, z.boolean())
-            .optional()
-            .describe(
-              "Exclude built-in agents from the results, except the system chat assistant in chat view. Defaults to false.",
-            ),
-          scope: AgentScopeFilterSchema.optional().describe(
-            "Filter by scope: personal, team, org, or built_in.",
-          ),
-          excludeOtherPersonalAgents: z
-            .preprocess(
-              (val) => (typeof val === "string" ? val === "true" : val),
-              z.boolean(),
-            )
-            .optional()
-            .describe(
-              "Hide personal agents owned by other users. Admin-only; no-op for non-admins (their access control already excludes them).",
-            ),
-          status: z
-            .enum(["active", "deleted"])
-            .optional()
-            .describe(
-              "Filter by lifecycle status. Deleted rows require delete permission.",
-            ),
-          includeTools: z
-            .preprocess((val) => val !== "false" && val !== false, z.boolean())
-            .optional()
-            .describe(
-              "Attach each agent's assigned tools. Defaults to true. Pass false from callers that only need the roster itself — the tool refs carry every tool's name and description, which on an organization of any size is the great majority of this response's bytes. Agents come back with an empty `tools` array when it is off, meaning 'not requested' rather than 'none assigned'.",
-            ),
-          view: z
-            .enum(["chat"])
-            .optional()
-            .describe(
-              "Return the lightweight agent fields needed to initialize chat. Large embedded icons, system prompts, sharing metadata, and unrelated list hydration are omitted; fetch an individual agent before editing it.",
-            ),
-        }),
+        querystring: AgentRosterQuerySchema,
         response: constructResponseSchema(z.array(SelectAgentSchema)),
       },
     },
-    async (
-      {
-        query: {
-          agentType,
-          agentTypes,
-          excludeBuiltIn,
-          scope,
-          excludeOtherPersonalAgents,
-          status,
-          includeTools,
-          view,
-        },
-        user,
-        organizationId,
-      },
-      reply,
-    ) => {
-      // Determine the effective type filter
-      const effectiveTypes =
-        agentTypes || (agentType ? [agentType] : undefined);
-
-      // Single DB query for all permission checks
-      const checker = await getAgentTypePermissionChecker({
-        userId: user.id,
-        organizationId,
-      });
-
-      const permittedTypes = getPermittedAgentTypesForList({
-        checker,
-        effectiveTypes,
-        status,
-      });
-
-      // Check admin for the specific type(s) being queried, or any type if unfiltered
-      const isAdmin = effectiveTypes
-        ? effectiveTypes.length === 1
-          ? checker.isAdmin(effectiveTypes[0])
-          : checker.hasAnyAdminPermission()
-        : checker.hasAnyAdminPermission();
-
-      return reply.send(
-        await AgentModel.findAll(user.id, isAdmin, {
-          authorization: {
-            organizationId,
-            baseReadTypes: checker.getAgentTypesWithPermission("read"),
-          },
-          // agentTypes takes precedence over agentType
-          agentType: agentTypes || permittedTypes ? undefined : agentType,
-          agentTypes: permittedTypes ?? agentTypes,
-          excludeBuiltIn,
-          scope:
-            scope && scope !== "built_in" ? (scope as AgentScope) : undefined,
-          excludeOtherPersonalAgents: isAdmin
-            ? excludeOtherPersonalAgents
-            : undefined,
-          status,
-          includeTools,
-          view,
+    async ({ query, user, organizationId }, reply) =>
+      reply.send(
+        await findPermittedAgentRoster({
+          query,
+          userId: user.id,
+          organizationId,
         }),
-      );
+      ),
+  );
+
+  fastify.get(
+    "/api/agents/options",
+    {
+      schema: {
+        operationId: RouteId.GetAgentOptions,
+        description:
+          "Get authorized agent names and presentation fields for selectors",
+        tags: ["Agents"],
+        querystring: AgentRosterQuerySchema.omit({
+          view: true,
+          includeTools: true,
+        }).extend({
+          ids: z
+            .preprocess(
+              (value) => (typeof value === "string" ? value.split(",") : value),
+              z.array(z.uuid()),
+            )
+            .optional(),
+        }),
+        response: constructResponseSchema(z.array(AgentOptionSchema)),
+      },
     },
+    async ({ query, user, organizationId }, reply) =>
+      reply.send(
+        await findPermittedAgentRoster({
+          query,
+          userId: user.id,
+          organizationId,
+          optionsView: true,
+          ids: query.ids,
+        }),
+      ),
   );
 
   fastify.get(
@@ -668,6 +600,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentType,
         runtime: body.runtime,
         isAdmin: checker.isAdmin(agentType),
+      });
+      await assertCanBindRuntimeCredentials({
+        organizationId,
+        userId: user.id,
+        previous: null,
+        next: body.runtime,
       });
 
       // Validate knowledgeBaseIds if provided
@@ -1149,6 +1087,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
       }
+
+      // The copy is the caller's own Agent, so the credentials it reads are
+      // checked as if they had attached them.
+      await assertCanBindRuntimeCredentials({
+        organizationId,
+        userId: user.id,
+        previous: null,
+        next: sourceAgent.runtime,
+      });
 
       // Delegate cloning logic to the model
       const clonedAgent = await AgentModel.cloneAgent({
@@ -2033,6 +1980,12 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         runtime: body.runtime,
         isAdmin: checker.isAdmin(existingAgent.agentType),
       });
+      await assertCanBindRuntimeCredentials({
+        organizationId,
+        userId: user.id,
+        previous: existingAgent.runtime,
+        next: body.runtime,
+      });
 
       // Who can reach the agent is not editable here: access lives in the
       // agent's permission policy, which the permissions API writes on its own.
@@ -2632,6 +2585,21 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
+      // A default runs new chats on any agent, so it needs a key the member
+      // may use; an agent's own key is usable only through that agent.
+      if (body.chatApiKeyId) {
+        const apiKey = await LlmProviderApiKeyModel.findById(body.chatApiKeyId);
+        if (!apiKey || apiKey.organizationId !== organizationId) {
+          throw new ApiError(
+            400,
+            "The selected model or API key no longer exists",
+          );
+        }
+        if (!(await LlmProviderApiKeyModel.canUseKey(apiKey, user.id, []))) {
+          throw new ApiError(403, "You do not have access to this API key");
+        }
+      }
+
       try {
         await MemberModel.setDefaultModelSelection({
           userId: user.id,
@@ -2941,3 +2909,117 @@ const AGENT_READ_FORBIDDEN_MESSAGE =
  */
 const LLM_PROXY_MANAGED_MESSAGE =
   "The LLM Proxy is managed on the LLM Proxy page.";
+
+const AgentRosterQuerySchema = z.object({
+  agentType: z
+    .enum(["profile", "mcp_gateway", "agent"])
+    .optional()
+    .describe(
+      "Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'agent' = internal agents with prompts.",
+    ),
+  agentTypes: z
+    .preprocess(
+      (val) => (typeof val === "string" ? val.split(",") : val),
+      z.array(z.enum(["profile", "mcp_gateway", "agent"])),
+    )
+    .optional()
+    .describe(
+      "Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided.",
+    ),
+  excludeBuiltIn: z
+    .preprocess((val) => val === "true" || val === true, z.boolean())
+    .optional()
+    .describe(
+      "Exclude built-in agents from the results, except the system chat assistant in chat view. Defaults to false.",
+    ),
+  scope: AgentScopeFilterSchema.optional().describe(
+    "Filter by scope: personal, team, org, or built_in.",
+  ),
+  excludeOtherPersonalAgents: z
+    .preprocess(
+      (val) => (typeof val === "string" ? val === "true" : val),
+      z.boolean(),
+    )
+    .optional()
+    .describe(
+      "Hide personal agents owned by other users. Admin-only; no-op for non-admins (their access control already excludes them).",
+    ),
+  status: z
+    .enum(["active", "deleted"])
+    .optional()
+    .describe(
+      "Filter by lifecycle status. Deleted rows require delete permission.",
+    ),
+  includeTools: z
+    .preprocess((val) => val !== "false" && val !== false, z.boolean())
+    .optional()
+    .describe(
+      "Attach each agent's assigned tools. Defaults to true. Pass false from callers that only need the roster itself — the tool refs carry every tool's name and description, which on an organization of any size is the great majority of this response's bytes. Agents come back with an empty `tools` array when it is off, meaning 'not requested' rather than 'none assigned'.",
+    ),
+  view: z
+    .enum(["chat"])
+    .optional()
+    .describe(
+      "Return the lightweight agent fields needed to initialize chat. Large embedded icons, system prompts, sharing metadata, and unrelated list hydration are omitted; fetch an individual agent before editing it.",
+    ),
+});
+
+async function findPermittedAgentRoster(params: {
+  query: z.infer<typeof AgentRosterQuerySchema>;
+  userId: string;
+  organizationId: string;
+  optionsView?: boolean;
+  ids?: string[];
+}) {
+  const { userId, organizationId } = params;
+  const {
+    agentType,
+    agentTypes,
+    excludeBuiltIn,
+    scope,
+    excludeOtherPersonalAgents,
+    status,
+    includeTools,
+    view,
+  } = params.query;
+  // Determine the effective type filter
+  const effectiveTypes = agentTypes || (agentType ? [agentType] : undefined);
+
+  // Single DB query for all permission checks
+  const checker = await getAgentTypePermissionChecker({
+    userId,
+    organizationId,
+  });
+
+  const permittedTypes = getPermittedAgentTypesForList({
+    checker,
+    effectiveTypes,
+    status,
+  });
+
+  // Check admin for the specific type(s) being queried, or any type if unfiltered
+  const isAdmin = effectiveTypes
+    ? effectiveTypes.length === 1
+      ? checker.isAdmin(effectiveTypes[0])
+      : checker.hasAnyAdminPermission()
+    : checker.hasAnyAdminPermission();
+
+  return AgentModel.findAll(userId, isAdmin, {
+    authorization: {
+      organizationId,
+      baseReadTypes: checker.getAgentTypesWithPermission("read"),
+    },
+    // agentTypes takes precedence over agentType
+    agentType: agentTypes || permittedTypes ? undefined : agentType,
+    agentTypes: permittedTypes ?? agentTypes,
+    excludeBuiltIn,
+    scope: scope && scope !== "built_in" ? (scope as AgentScope) : undefined,
+    excludeOtherPersonalAgents: isAdmin
+      ? excludeOtherPersonalAgents
+      : undefined,
+    status,
+    includeTools,
+    view: params.optionsView ? "options" : view,
+    ids: params.ids,
+  });
+}

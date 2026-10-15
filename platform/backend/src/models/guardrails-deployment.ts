@@ -8,7 +8,12 @@ class GuardrailsDeploymentModel {
   static async get() {
     const [row] = await db.select().from(table).where(eq(table.id, id));
     return (
-      row ?? { id, enabled: false, unsupportedClientAction: "bypass" as const }
+      row ?? {
+        id,
+        enabled: false,
+        unsupportedClientAction: "bypass" as const,
+        breakTheGlassEnabled: true,
+      }
     );
   }
   static async isEnabled(): Promise<boolean> {
@@ -20,6 +25,7 @@ class GuardrailsDeploymentModel {
   static async set(update: {
     enabled?: boolean;
     unsupportedClientAction?: UnsupportedAppaClientAction;
+    breakTheGlassEnabled?: boolean;
   }) {
     await db
       .insert(table)

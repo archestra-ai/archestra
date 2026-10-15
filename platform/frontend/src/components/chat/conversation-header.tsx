@@ -4,17 +4,14 @@ import type { archestraApiTypes } from "@archestra/shared";
 import {
   AppWindow,
   CalendarClock,
-  Download,
   FileText,
-  FolderPlus,
   Globe,
   MoreHorizontal,
   MoreVertical,
   PlayCircle,
-  Share2,
-  Users,
 } from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -61,10 +58,6 @@ interface ConversationHeaderProps {
   messageCount: number;
   /** Whether the title is mid-animation — skips the resize-measuring tooltip. */
   isTitleAnimating: boolean;
-  canManageShare: boolean;
-  isShared: boolean;
-  /** Whether this chat is eligible to be turned into a project. */
-  canCreateProject: boolean;
   /**
    * When this chat was opened from a scheduled task, its trigger id — renders a
    * non-clickable "scheduled task" breadcrumb segment for orientation.
@@ -78,9 +71,8 @@ interface ConversationHeaderProps {
   isAppOversight?: boolean;
   /** The app owner's display name, appended to the oversight badge. */
   oversightOwnerName?: string | null;
-  onShare: () => void;
-  onExportMarkdown: () => void;
-  onCreateProject: () => void;
+  /** The shared chat actions (`useConversationActions().items`). */
+  actionItems?: ReactNode;
   panel: PanelControls;
 }
 
@@ -89,26 +81,11 @@ export function ConversationHeader({
   conversation,
   messageCount,
   isTitleAnimating,
-  canManageShare,
-  isShared,
-  canCreateProject,
   isAppOversight,
   oversightOwnerName,
-  onShare,
-  onExportMarkdown,
-  onCreateProject,
+  actionItems,
   panel,
 }: ConversationHeaderProps) {
-  const actionsProps = {
-    canManageShare,
-    isShared,
-    canCreateProject,
-    messageCount,
-    onShare,
-    onExportMarkdown,
-    onCreateProject,
-  };
-
   // Which tab the panel would show — mirror the panel's fallbacks so the strip
   // never highlights a tab the panel can't actually show. Only highlighted
   // while the panel is open; collapsing clears the highlight.
@@ -215,8 +192,8 @@ export function ConversationHeader({
               {oversightOwnerName ? ` · ${oversightOwnerName}` : ""}
             </Badge>
           )}
-          {/* Desktop: chat actions (Share / Export) next to the title */}
-          {conversationId && messageCount > 0 && (
+          {/* Desktop: chat actions next to the title */}
+          {conversationId && messageCount > 0 && actionItems && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -230,7 +207,7 @@ export function ConversationHeader({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start">
-                <ChatActionItems {...actionsProps} />
+                {actionItems}
               </DropdownMenuContent>
             </DropdownMenu>
           )}
@@ -312,7 +289,7 @@ export function ConversationHeader({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <ChatActionItems {...actionsProps} />
+              {actionItems}
               {panel.hasReview && (
                 <DropdownMenuItem
                   onSelect={() => {
@@ -417,57 +394,6 @@ function ProjectTitlePrefix({ projectId }: { projectId: string }) {
       <span className="text-muted-foreground/50 select-none" aria-hidden="true">
         /
       </span>
-    </>
-  );
-}
-
-/** Share / Export / Create project menu items, shared by desktop + mobile menus. */
-function ChatActionItems({
-  canManageShare,
-  isShared,
-  canCreateProject,
-  messageCount,
-  onShare,
-  onExportMarkdown,
-  onCreateProject,
-}: {
-  canManageShare: boolean;
-  isShared: boolean;
-  canCreateProject: boolean;
-  messageCount: number;
-  onShare: () => void;
-  onExportMarkdown: () => void;
-  onCreateProject: () => void;
-}) {
-  return (
-    <>
-      {canManageShare && (
-        <DropdownMenuItem onSelect={onShare}>
-          {isShared ? (
-            <>
-              <Users className="h-4 w-4 text-primary" />
-              <span className="text-primary">Shared</span>
-            </>
-          ) : (
-            <>
-              <Share2 className="h-4 w-4" />
-              Share
-            </>
-          )}
-        </DropdownMenuItem>
-      )}
-      {canCreateProject && (
-        <DropdownMenuItem onSelect={onCreateProject}>
-          <FolderPlus className="h-4 w-4" />
-          Create project
-        </DropdownMenuItem>
-      )}
-      {messageCount > 0 && (
-        <DropdownMenuItem onSelect={onExportMarkdown}>
-          <Download className="h-4 w-4" />
-          Export Markdown
-        </DropdownMenuItem>
-      )}
     </>
   );
 }

@@ -56,6 +56,8 @@ export function PageLayout({
   minWidth: minWidthKey = "none",
   contentOverflowX = "auto",
   fillContent = false,
+  compactHeader = false,
+  stackHeaderOnMobile = false,
 }: {
   children: React.ReactNode;
   /**
@@ -81,6 +83,7 @@ export function PageLayout({
      * decide, or every connected channel renders as the open page at once.
      */
     selected?: boolean;
+    onClick?: React.MouseEventHandler<HTMLAnchorElement>;
   }[];
   title: React.ReactNode;
   /**
@@ -136,7 +139,12 @@ export function PageLayout({
   contentOverflowX?: "auto" | "clip";
   /** Let a page's content fill the available app viewport. */
   fillContent?: boolean;
+  /** Tighter header spacing when the page layout is hosted in a dialog. */
+  compactHeader?: boolean;
+  /** Give long detail titles the full phone width, with actions below the description. */
+  stackHeaderOnMobile?: boolean;
 }) {
+  const headerSpacing = compactHeader ? COMPACT_HEADER_SPACING : HEADER_SPACING;
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const appName = useAppName();
@@ -217,7 +225,7 @@ export function PageLayout({
               "mx-auto px-6",
               minWidth,
               maxWidth,
-              HEADER_SPACING.top,
+              headerSpacing.top,
             )}
           >
             {/* On phones, the title and actions share a row while the
@@ -232,7 +240,7 @@ export function PageLayout({
                 icon
                   ? "grid-cols-[auto_minmax(0,1fr)_auto] sm:gap-x-4"
                   : "grid-cols-[minmax(0,1fr)_auto] sm:gap-x-6",
-                HEADER_SPACING.bottom,
+                headerSpacing.bottom,
               )}
             >
               {icon && (
@@ -286,10 +294,13 @@ export function PageLayout({
                 <div
                   className={cn(
                     "row-start-1 flex min-w-0 items-center gap-2",
-                    HEADER_SPACING.titleRow,
+                    headerSpacing.titleRow,
                     icon ? "col-start-2" : "col-start-1",
+                    stackHeaderOnMobile && "col-span-full sm:col-span-1",
                     maxWidthKey === "wizard"
-                      ? "flex-nowrap overflow-hidden"
+                      ? stackHeaderOnMobile
+                        ? "sm:flex-nowrap sm:overflow-hidden"
+                        : "flex-nowrap overflow-hidden"
                       : "flex-wrap",
                   )}
                 >
@@ -299,7 +310,10 @@ export function PageLayout({
                   <h1
                     className={cn(
                       "min-w-0 break-words text-2xl font-semibold tracking-tight",
-                      maxWidthKey === "wizard" && "max-h-10 overflow-hidden",
+                      maxWidthKey === "wizard" &&
+                        (stackHeaderOnMobile
+                          ? "sm:max-h-10 sm:overflow-hidden"
+                          : "max-h-10 overflow-hidden"),
                     )}
                   >
                     <span key={pathname}>{title}</span>
@@ -311,8 +325,11 @@ export function PageLayout({
                     data-page-description
                     className={cn(
                       "col-span-full row-start-2 text-sm text-muted-foreground",
-                      HEADER_SPACING.description,
-                      maxWidthKey === "wizard" && "hidden sm:line-clamp-1",
+                      headerSpacing.description,
+                      maxWidthKey === "wizard" &&
+                        (stackHeaderOnMobile
+                          ? "sm:line-clamp-1"
+                          : "hidden sm:line-clamp-1"),
                     )}
                   >
                     <span key={pathname}>{description}</span>
@@ -323,11 +340,21 @@ export function PageLayout({
                 <div
                   data-page-actions
                   className={cn(
-                    // Tablet and phone actions align with the title; desktop
-                    // actions centre against the title and description together.
-                    "row-start-1 flex items-center justify-self-end self-start lg:self-center",
-                    HEADER_SPACING.titleRow,
-                    icon ? "col-start-3" : "col-start-2",
+                    // Actions align with the title row at every width, so they
+                    // sit in the same spot on every page however long its
+                    // description is.
+                    "flex items-center self-start",
+                    stackHeaderOnMobile
+                      ? "col-span-full col-start-1 row-start-3 justify-self-start sm:col-span-1 sm:row-start-1 sm:justify-self-end"
+                      : "row-start-1 justify-self-end",
+                    headerSpacing.titleRow,
+                    stackHeaderOnMobile
+                      ? icon
+                        ? "sm:col-start-3"
+                        : "sm:col-start-2"
+                      : icon
+                        ? "col-start-3"
+                        : "col-start-2",
                     contentOverflowX === "clip" && "max-w-full overflow-x-auto",
                   )}
                 >
@@ -345,6 +372,7 @@ export function PageLayout({
                       <Link
                         key={tab.href}
                         href={tab.href}
+                        onClick={tab.onClick}
                         aria-current={isSelected ? "page" : undefined}
                         // Only this copy carries the test id — see the `tabs` prop.
                         data-testid={tab.testId}
@@ -372,6 +400,7 @@ export function PageLayout({
                       <Link
                         key={tab.href}
                         href={tab.href}
+                        onClick={tab.onClick}
                         aria-current={isSelected ? "page" : undefined}
                         className={cn(
                           "relative cursor-pointer pb-1 text-sm font-medium transition-colors hover:text-foreground",
@@ -435,7 +464,10 @@ export function PageLayout({
                                 key={tab.href}
                                 href={tab.href}
                                 aria-current={isSelected ? "page" : undefined}
-                                onClick={() => setOverflowOpen(false)}
+                                onClick={(event) => {
+                                  setOverflowOpen(false);
+                                  tab.onClick?.(event);
+                                }}
                                 className={cn(
                                   "cursor-pointer rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted",
                                   isSelected
@@ -454,7 +486,7 @@ export function PageLayout({
                 </div>
               </>
             )}
-            {!tabs.length && <div className={HEADER_SPACING.bottom} />}
+            {!tabs.length && <div className={headerSpacing.bottom} />}
           </div>
         </div>
         <div
@@ -522,4 +554,11 @@ const MAX_WIDTH_CLASSES = {
   // Wizard and detail pages share this exact header/content column. Padding
   // lives inside the band, so add it back for 5xl content-edge alignment.
   wizard: "max-w-[calc(var(--container-5xl)+3rem)]",
+} as const;
+
+const COMPACT_HEADER_SPACING = {
+  top: "pt-3",
+  bottom: "mb-3",
+  titleRow: "min-h-8",
+  description: "sm:mt-1",
 } as const;

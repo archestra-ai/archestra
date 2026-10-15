@@ -26,10 +26,12 @@ import {
   ToolModel,
   VirtualApiKeyModel,
 } from "@/models";
+import ConnectionSetupModel from "@/models/connection-setup";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { createAppaLlmProxyPlugin } from "@/proxy/plugins/appa-plugin-archestra";
 import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
+import { issueConnectionRuntimeToken } from "@/services/connection-runtime-token";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import {
@@ -62,6 +64,7 @@ const native = vi.hoisted(() => ({
     runtimeCredentials: [],
     errors: [],
   })),
+  validateHostedOpenappaPolicy: vi.fn(async () => []),
   composeOpenappaPolicy: vi.fn(async (input: { root: string }) => ({
     content: input.root,
     errors: [],
@@ -1266,6 +1269,139 @@ describe("Gateway tool attestation on the LLM proxy", () => {
     expect(response.body).toContain("exactly one declaration of");
     expect(response.body).toContain(`mcp__gw__${NOTICE}`);
     expect(response.body).toContain(`mcp__evil__${NOTICE}`);
+    expect(providerRequests).toHaveLength(0);
+  });
+
+  describe.each([
+    "primary",
+    "legacy",
+  ])("authenticated client alias recovery: %s", (alias) => {
+    test("recovers duplicate registrations and stamps the selected control without leaking provenance", async ({
+      makeUser,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      await makeMember(user.id, agent.organizationId);
+      const { setup, rawToken } = await ConnectionSetupModel.create({
+        organizationId: agent.organizationId,
+        userId: user.id,
+        clientId: "kilo",
+        mcpGatewayId: gateway.id,
+        baseUrl: "https://deployment.example.com/v1",
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+      await ConnectionSetupModel.claimByToken({ rawToken });
+      const token = issueConnectionRuntimeToken({
+        setupId: setup.id,
+        secret: config.auth.secret ?? "",
+      });
+      const control = openCode.spell(alias, CONTROL);
+      openCode.modelCalls({ name: control, input: OFFER });
+      const tools = ["primary", "legacy"].flatMap((label) =>
+        gatewayTools(openCode, label),
+      );
+      const response = await post({
+        url: `/v1/openai/${agent.id}/chat/completions`,
+        headers: {
+          "user-agent": "kilo/7.8",
+          "x-archestra-client-runtime-token": token,
+          "x-archestra-mcp-aliases": '["primary","legacy"]',
+        },
+        payload: {
+          model: "gpt-4o",
+          stream: false,
+          messages: [{ role: "user", content: "Check the weather" }],
+          tools: tools.map(({ name, description }) => ({
+            type: "function",
+            function: {
+              name,
+              description,
+              parameters: { type: "object", properties: {} },
+            },
+          })),
+        },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(openCode.released(response.body)).toEqual([
+        {
+          name: control,
+          input: expect.objectContaining({
+            ...OFFER,
+            execution: expect.objectContaining({
+              kind: "appa_remedy",
+              tool_name: control,
+            }),
+          }),
+        },
+      ]);
+      expect(openCode.providerToolNames()).not.toContain(
+        openCode.spell("primary", NOTICE),
+      );
+      expect(openCode.providerToolNames()).not.toContain(
+        openCode.spell("legacy", NOTICE),
+      );
+      expect(
+        JSON.stringify(vi.mocked(openaiAdapterFactory.createClient).mock.calls),
+      ).not.toContain(token);
+      expect(
+        JSON.stringify(
+          await InteractionModel.getAllInteractionsForProfile(agent.id),
+        ),
+      ).not.toContain(token);
+      expect(toolCallEvents()).toEqual([]);
+    });
+  });
+
+  test("a runtime capability from another organization cannot make replayed aliases trusted", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeAgent,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, organization.id);
+    const otherGateway = await makeAgent({
+      organizationId: organization.id,
+      authorId: user.id,
+      agentType: "mcp_gateway",
+    });
+    const { setup, rawToken } = await ConnectionSetupModel.create({
+      organizationId: organization.id,
+      userId: user.id,
+      clientId: "kilo",
+      mcpGatewayId: otherGateway.id,
+      baseUrl: "https://deployment.example.com/v1",
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    await ConnectionSetupModel.claimByToken({ rawToken });
+    const response = await post({
+      url: `/v1/openai/${agent.id}/chat/completions`,
+      headers: {
+        "user-agent": "kilo/7.8",
+        "x-archestra-client-runtime-token": issueConnectionRuntimeToken({
+          setupId: setup.id,
+          secret: config.auth.secret ?? "",
+        }),
+        "x-archestra-mcp-aliases": '["primary","legacy"]',
+      },
+      payload: {
+        model: "gpt-4o",
+        stream: false,
+        messages: [{ role: "user", content: "Check the weather" }],
+        tools: ["primary", "legacy"]
+          .flatMap((label) => gatewayTools(openCode, label))
+          .map(({ name, description }) => ({
+            type: "function",
+            function: {
+              name,
+              description,
+              parameters: { type: "object", properties: {} },
+            },
+          })),
+      },
+    });
+    expect(response.statusCode).toBe(400);
     expect(providerRequests).toHaveLength(0);
   });
 

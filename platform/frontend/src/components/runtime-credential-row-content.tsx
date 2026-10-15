@@ -45,7 +45,7 @@ export function RuntimeCredentialDescription({
   definition,
   className = "mt-1",
 }: {
-  definition: RuntimeCredentialDefinition;
+  definition: Pick<RuntimeCredentialDefinition, "key" | "description">;
   className?: string;
 }) {
   if (definition.key === "claude-code") {

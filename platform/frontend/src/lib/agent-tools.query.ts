@@ -1,10 +1,6 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import {
-  keepPreviousData,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { invalidateToolAssignmentQueries } from "./agent-tools.hook";
 import {
   getApiErrorMessage,
@@ -432,8 +428,9 @@ export function useAgentDelegations(
       return response.data ?? [];
     },
     enabled: !!agentId && (params?.enabled ?? true),
+    // No `keepPreviousData`: the key is the agent, so a placeholder would show
+    // (and, in the agent form, seed and save) the previous agent's subagents.
     staleTime: 30 * 1000,
-    placeholderData: keepPreviousData,
   });
 }
 
@@ -525,3 +522,120 @@ export function useRemoveAgentDelegation() {
     },
   });
 }
+
+/**
+ * Adds and removes one server's tools on an agent in a single step.
+ *
+ * Every request runs even when some are refused, and a failure reports how
+ * many tools still landed rather than leaving the caller to guess. Credentials
+ * default to resolving at call time, the only mode a personal connection can
+ * use. Pass `undoToast` to confirm a plain add with an Undo that removes
+ * exactly the tools it added.
+ */
+export function useUpdateAgentServerTools() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: UpdateAgentServerToolsParams) => {
+      const credential = params.credential ?? { mode: "dynamic" };
+      const assignBody = params.builtIn
+        ? null
+        : credential.mode === "dynamic"
+          ? {
+              resolveAtCallTime: true,
+              credentialResolutionMode: "dynamic" as const,
+            }
+          : {
+              mcpServerId: credential.mcpServerId,
+              resolveAtCallTime: false,
+              credentialResolutionMode: "static" as const,
+            };
+      const results = await Promise.allSettled([
+        ...params.add.map(async (toolId) => {
+          const { error } = await assignToolToAgent({
+            path: { agentId: params.agentId, toolId },
+            body: assignBody,
+          });
+          if (error) throw new Error(getApiErrorMessage(error));
+          return toolId;
+        }),
+        ...params.remove.map(async (toolId) => {
+          const { error } = await unassignToolFromAgent({
+            path: { agentId: params.agentId, toolId },
+          });
+          if (error) throw new Error(getApiErrorMessage(error));
+          return toolId;
+        }),
+      ]);
+      const added = results
+        .slice(0, params.add.length)
+        .flatMap((result) =>
+          result.status === "fulfilled" ? [result.value] : [],
+        );
+      const failure = results.find((result) => result.status === "rejected");
+      if (failure) {
+        throw new ServerToolsUpdateError({
+          message:
+            failure.reason instanceof Error
+              ? failure.reason.message
+              : "The server refused the change",
+          addedCount: added.length,
+          requestedAddCount: params.add.length,
+        });
+      }
+      return { added };
+    },
+    onSettled: (_data, _error, params) => {
+      invalidateToolAssignmentQueries(queryClient, params.agentId);
+    },
+    onSuccess: ({ added }, params) => {
+      if (!params.undoToast || added.length === 0) return;
+      const { agentName, serverName } = params.undoToast;
+      toast.success(
+        `Added ${added.length} ${serverName} ${added.length === 1 ? "tool" : "tools"} to ${agentName}`,
+        {
+          action: {
+            label: "Undo",
+            onClick: () => {
+              void Promise.allSettled(
+                added.map((toolId) =>
+                  unassignToolFromAgent({
+                    path: { agentId: params.agentId, toolId },
+                  }),
+                ),
+              ).then(() =>
+                invalidateToolAssignmentQueries(queryClient, params.agentId),
+              );
+            },
+          },
+        },
+      );
+    },
+  });
+}
+
+/** A server-tools update that was refused, with how many adds still landed. */
+export class ServerToolsUpdateError extends Error {
+  readonly addedCount: number;
+  readonly requestedAddCount: number;
+
+  constructor(params: {
+    message: string;
+    addedCount: number;
+    requestedAddCount: number;
+  }) {
+    super(params.message);
+    this.name = "ServerToolsUpdateError";
+    this.addedCount = params.addedCount;
+    this.requestedAddCount = params.requestedAddCount;
+  }
+}
+
+type UpdateAgentServerToolsParams = {
+  agentId: string;
+  add: string[];
+  remove: string[];
+  /** Built-in tools take no credential. */
+  builtIn: boolean;
+  credential?: { mode: "dynamic" } | { mode: "static"; mcpServerId: string };
+  undoToast?: { agentName: string; serverName: string };
+};

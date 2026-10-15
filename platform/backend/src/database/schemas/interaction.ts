@@ -24,6 +24,7 @@ import type {
 } from "@/types";
 import agentsTable from "./agent";
 import environmentsTable from "./environment";
+import serviceAccountsTable from "./service-account";
 import usersTable from "./user";
 import virtualApiKeysTable from "./virtual-api-key";
 
@@ -57,6 +58,10 @@ const interactionsTable = pgTable(
     userId: text("user_id").references(() => usersTable.id, {
       onDelete: "set null",
     }),
+    serviceAccountId: uuid("service_account_id").references(
+      () => serviceAccountsTable.id,
+      { onDelete: "set null" },
+    ),
     virtualKeyId: uuid("virtual_key_id").references(
       () => virtualApiKeysTable.id,
       { onDelete: "set null" },
@@ -138,7 +143,7 @@ const interactionsTable = pgTable(
     /**
      * Provenance of the session ID (NOT the client app — that is
      * external_agent_id). Values: 'claude_metadata', 'header', 'meta_header',
-     * 'openwebui_chat', 'codex_session', 'opencode_session',
+     * 'openwebui_chat', 'codex_session', 'opencode_session', 'kilo_session',
      * 'claude_code_header', 'appa_header', 'openai_user', null. Legacy rows may
      * carry 'claude_code' / 'claude_desktop'.
      */
@@ -296,6 +301,9 @@ const interactionsTable = pgTable(
       "interactions_session_thread_created_at_idx",
     ).on(table.sessionId, table.threadId, table.createdAt.desc()),
     parentIdIdx: index("interactions_parent_id_idx").on(table.parentId),
+    // The optional interactions_statistics_v2_idx is managed by the operator
+    // CLI db:create-statistics-index. Keep it out of Drizzle's transactional
+    // migrations so its build remains concurrent on existing large tables.
     // Note: interactions deliberately has NO trgm/GIN indexes on the request/
     // response payload columns. Migration 0116 used to create them for a
     // free-text log search that no longer exists (the LLM logs UI filters by

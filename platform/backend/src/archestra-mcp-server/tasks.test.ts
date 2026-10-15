@@ -3,6 +3,7 @@ import {
   TOOL_GET_RUN_FULL_NAME,
   TOOL_LIST_AGENT_RUNS_FULL_NAME,
   TOOL_POST_RUN_FILE_FULL_NAME,
+  TOOL_RUN_TOOL_FULL_NAME,
   TOOL_START_RUN_FULL_NAME,
 } from "@archestra/shared";
 import { vi } from "vitest";
@@ -134,12 +135,20 @@ describe("run tools", () => {
     // agentDetailHref would otherwise rewrite away along with `setup`.
     expect(text).toContain(`/agents/${target.id}?setup=credentials&keys=`);
     expect(text).toContain("GITHUB_TOKEN%2CCLAUDE_CODE_OAUTH_TOKEN");
+    // A question form shows the link as dead text, so the model is told to
+    // hand it over in its reply.
+    expect(text).toContain(
+      "Put this link in your reply text, never inside a question form",
+    );
     expect(
       await AgentRunModel.listForAgent({ agentId: target.id, organizationId }),
     ).toEqual([]);
   });
 
-  test("run controls remain callable without individual assignment", async ({
+  test.for([
+    false,
+    true,
+  ])("run controls remain callable without individual assignment (wrapped=%s)", async (wrapped, {
     makeAgent,
   }) => {
     const unassignedAgent = await makeAgent({
@@ -149,8 +158,13 @@ describe("run tools", () => {
     });
 
     const result = await executeArchestraTool(
-      TOOL_GET_RUN_FULL_NAME,
-      { task_id: crypto.randomUUID() },
+      wrapped ? TOOL_RUN_TOOL_FULL_NAME : TOOL_GET_RUN_FULL_NAME,
+      wrapped
+        ? {
+            tool_name: TOOL_GET_RUN_FULL_NAME,
+            tool_args: { task_id: crypto.randomUUID() },
+          }
+        : { task_id: crypto.randomUUID() },
       {
         ...context,
         agent: { id: unassignedAgent.id, name: unassignedAgent.name },

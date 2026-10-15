@@ -25,6 +25,8 @@ export interface SkillDraft {
   environmentIds: string[];
   /** Key/value labels, edited in the form like any other field. */
   labels: ProfileLabel[];
+  /** Emoji or image shown with the name; null = the source glyph. */
+  icon: string | null;
 }
 
 export interface SkillPreview {
@@ -54,6 +56,7 @@ export function blankSkillDraft(): SkillDraft {
     files: [],
     environmentIds: [],
     labels: [],
+    icon: null,
   };
 }
 
@@ -71,6 +74,7 @@ export function skillDraftFromSkill(skill: SkillDetail): SkillDraft {
     files: stripFileKinds(skill.files),
     environmentIds: skill.environments.map((environment) => environment.id),
     labels: skill.labels ?? [],
+    icon: skill.icon ?? null,
   };
 }
 
@@ -123,6 +127,7 @@ export function buildSkillSaveBody(
     ...(synced ? {} : { files: draft.files }),
     environmentIds: draft.environmentIds,
     labels: draft.labels,
+    icon: draft.icon,
     ...(skill && !synced && baseVersion !== undefined ? { baseVersion } : {}),
   };
 }
@@ -136,6 +141,7 @@ export function isSkillDraftDirty(draft: SkillDraft, seed: SkillDraft) {
     JSON.stringify(draft.initialGrants ?? []) !==
       JSON.stringify(seed.initialGrants ?? []) ||
     draft.manifest !== seed.manifest ||
+    draft.icon !== seed.icon ||
     !sameIds(draft.environmentIds, seed.environmentIds) ||
     draft.labels.length !== seed.labels.length ||
     draft.labels.some(

@@ -4,7 +4,7 @@ OpenAPPA evaluates tool calls and tool results at the LLM proxy. The proxy ident
 
 The runtime keys session state by session ID. Internal requests over loopback share session IDs. Chat requests require an authenticated user who owns the conversation. External requests require platform credentials. Uncredentialed loopback forms the platform trust boundary. Requests without a session ID fall back to a shared identity per credential and agent (`<caller-id>@<agent-id>`), which couples their histories and turn approvals.
 
-This guide explains Archestra's integration rather than OpenAPPA policy syntax. The native addon currently pins [OpenAPPA `85465feb`](https://github.com/archestra-ai/OpenAPPA/tree/85465feb8214f662dd21d40df2c01964e5b099fa). Examples use the default `archestra__` tool prefix. Client labels and branding can change this prefix on the wire.
+This guide explains Archestra's integration rather than OpenAPPA policy syntax. The native addon uses the OpenAPPA revision pinned in [`Cargo.toml`](../platform/archestra-rs/openappa-rs/Cargo.toml). Examples use the default `archestra__` tool prefix; client labels and branding can change it on the wire.
 
 Protocol jump links: [call rewriting](#tool-calls-and-results), [remedy execution](#remedies), [user questions](#ask_user-and-native-elicitation), [session and child markers](#protected-session-markers), and [yell reporting](#yell-and-diagnostic-tools).
 
@@ -257,7 +257,7 @@ The proxy restores the original call using the embedded ruling, without a databa
 
 If the client did not declare the notice tool, the proxy cannot deliver this protocol. A client can be in this state for a moment: Claude Code connects MCP servers in the background and can send a session's first request before the gateway tools are listed. In such a request, Claude Code declares its own `WaitForMcpServers` tool. The proxy then sends the denied call back as that wait call, once per session. The call keeps its ID and takes no arguments. The runtime answers its result with the ruling it recorded for that ID, so nothing the wait tool returns reaches the model. The proxy adds a line that says the model's own call did not run. The history keeps the wait call; the proxy does not restore the original call. The next request can declare the remedy tools.
 
-Without that tool, after the one wait, or when the runtime has no record of the denial (for example, a call with malformed arguments), the proxy refuses the call and attempts to cancel sibling calls. The first refusal in a session asks the user to send the message again. A repeat writes a client failure report. A missing notice tool does not authorize releasing the denied call.
+Without that tool, after the one wait, or when the runtime has no record of the denial (for example, a call with malformed arguments), the proxy refuses the call and attempts to cancel sibling calls. The refusal shows the ruling's reasons without its `Continue:` plans and its delegation advice: the session cannot make those calls, and a subagent of the same client has the same limit, so the model must not pass them on as options. The refusal ends with the client's own way to check the gateway, from its adapter: `/mcp` in Claude Code, which also covers a gateway that needs a sign-in; `codex mcp login` in Codex; `<binary> mcp auth` in OpenCode and Kilo Code. A client without an adapter is asked to send the message again on the first refusal in a session and to connect the gateway on a repeat. A repeat writes a client failure report. A missing notice tool does not authorize releasing the denied call.
 
 When a client uses a `run_tool` wrapper, OpenAPPA evaluates the call as the underlying target. The runtime receives the target tool name and arguments. This ensures that policy rules, annotators, and wildcards match the tool that runs, not the wrapper. If denied, the notice identifies the target tool. If allowed, the call uses the wrapper declared by the client.
 
@@ -794,17 +794,21 @@ Sources: [`runtime-crossing.ts`](../platform/backend/src/services/agent-runtime/
 
 The Rust binding stores event batches, policy snapshots, sessions, operations, and receipts in PostgreSQL.
 
-Execution follows three steps under a family advisory lock: insert a pending receipt, run the native hook to append events, and mark the receipt complete. A crash after committing events leaves a pending receipt, failing subsequent operations closed across the session family (except peer reads).
+Execution follows three steps: claim a pending receipt under a lease, run the native hook to append events, and mark the receipt complete. The lease names the dispatch and ends 30 seconds after its last renewal; the dispatch renews it every 5 seconds while it works. A crash leaves the receipt pending until its lease ends and the client resubmits that operation. Other operations in the family run at the same time.
 
-Completed receipts return saved decisions without re-running the engine. Reusing IDs with modified arguments causes an immediate rejection. The event log enforces strict sequence ordering via transaction advisory locks.
+A request for an operation that another live request is working on waits up to 45 seconds for that answer, without holding a connection, and then gets a retryable 503. Only the lease owner completes a pending receipt, so a dispatch that lost its lease to a takeover cannot overwrite the new owner's answer.
+
+On resubmission, the runtime replays a committed decision or continues work it did not record. Operational failures remain retryable; genuine policy denials stay saved. A failed dispatch removes the receipts it created when the family's event log did not change, and ends its leases on the rest, so the retry takes them over at once and earlier dispatches' recovery evidence stays.
+
+Completed receipts return saved decisions without re-running the engine. Reusing IDs with modified arguments causes an immediate rejection. The `(root, seq)` key of `openappa_events` rejects a write at a taken position. The runtime keeps each family's decoded log and validated view, so a step reads and validates only the batches written since.
 
 Notice restoration runs on Anthropic Messages (including Bedrock InvokeModel), OpenAI Responses, and OpenAI Chat Completions. Other protocols evaluate calls and results, but notices remain in history as notice calls. The proxy still removes their record, legacy signed offers, and execution frames before forwarding. Azure Responses tool traffic is refused while OpenAPPA is enabled.
 
 Subscription Responses translated to Chat Completions retain each tool's argument snapshots and deltas until completion. Conflicting identities or argument bytes fail closed. Incomplete generations do not release held tool calls. The translator does not replace malformed arguments with empty objects.
 
-The host acquires an in-process root lock before leasing a database connection. PostgreSQL advisory locks (`pg_advisory_lock`) serialize operations across instances. Root sessions run concurrently, while sibling sessions within a root run sequentially.
+No dispatch holds a database connection or a lock while it waits on a consult. Each read-decide-append step of a family's event log runs in one transaction that locks the family's row in `openappa_roots`, so writers of one family take turns for one step, not for a whole dispatch. Root sessions and the sessions within one root run concurrently. OpenAPPA uses no PostgreSQL advisory locks.
 
-The connection pool defaults to 4 connections (capped at 64). Calls wait up to 30 seconds for a connection. Connections enforce 30-second lock timeouts and 60-second statement timeouts. Pool exhaustion typically stems from slow external consults. Stale connections are replaced automatically. Modifying pool limits requires a backend restart.
+The connection pool defaults to 4 connections (capped at 64). A dispatch checks a connection out for each database step and waits up to 30 seconds for one. Connections enforce 30-second lock timeouts and 60-second statement timeouts. Stale connections are replaced automatically. Modifying pool limits requires a backend restart.
 
 OpenAPPA administration uses `openappaPolicy`, `openappaDiagnostics`, and `organizationSettings`. These are distinct resources in [`access-control.ts`](../platform/shared/access-control.ts).
 
@@ -826,11 +830,13 @@ Start new conversations after enabling OpenAPPA. Retained unenforced sessions an
 
 For schema history, inspect [`the migrations directory`](../platform/backend/src/database/migrations/). This includes `0477_appa_github_sync`, `0483_openappa_batteries`, and `0485_fine_silver_surfer`. Startup backfill behavior lives in [`declare-installs.ts`](../platform/backend/src/openappa/declare-installs.ts), not a separate runtime migration.
 
-There is no automated cleanup API for pending receipts. Do not delete pending rows or truncate database tables manually. Investigate the root cause and check external state first. `pnpm --dir backend db:reset-openappa` is a development command that wipes policy data. Never run it to fix stuck production sessions.
+Pending receipts recover through a matching operation retry, not a cleanup API. A result with no committed admission still requires the client to resubmit its bytes; recovery does not invent approvals or guarantee exactly-once external execution. Do not delete pending rows or truncate tables manually.
+
+Investigate persistent failures and check external state first. `pnpm --dir backend db:reset-openappa` is a development command that wipes policy data. Never run it to repair production sessions.
 
 ## Build and deployment
 
-The addon compiles with Archestra's native addons and ships inside the standard platform image. Cargo downloads OpenAPPA at the commit pinned in `openappa-rs/Cargo.toml` (`85465feb8214f662dd21d40df2c01964e5b099fa`) and `archestra-rs/Cargo.lock`. Archestra's standard release process remains unchanged, with no separate addon release.
+The addon compiles with Archestra's native addons and ships inside the standard platform image. Cargo downloads OpenAPPA at the commit pinned in `openappa-rs/Cargo.toml` and `archestra-rs/Cargo.lock`. Archestra's standard release process remains unchanged, with no separate addon release.
 
 | Setting | Default | Notes |
 | --- | --- | --- |

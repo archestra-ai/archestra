@@ -109,7 +109,9 @@ import { toConversationApiMessages } from "@/models/conversation";
 import { reportChatMessageFeedback } from "@/observability/metrics/chat";
 import { reportQuoteVerification } from "@/observability/metrics/rag";
 import { startActiveChatSpan } from "@/observability/tracing";
-import { getOpenappaStatus } from "@/openappa/service";
+import { enterOpenappaEncryptedChat } from "@/openappa/encrypted-chat";
+import { chatOpenAppaSession, getOpenappaStatus } from "@/openappa/service";
+import { startedUnenforced } from "@/openappa/unenforced";
 import { mcpGatewayTaskRunner } from "@/routes/mcp-gateway/tasks";
 import {
   ACTIVE_CHAT_RUN_TERMINAL_REPLAY_GRACE_MS,
@@ -434,13 +436,6 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      if ((await isGuardrailsV2Active()) && conversation.encryptedChat) {
-        throw new ApiError(
-          409,
-          "OpenAPPA does not yet support encrypted policy storage for encrypted chats",
-        );
-      }
-
       // Check if the agent was deleted
       if (!conversation.agentId || !conversation.agent) {
         throw new ApiError(
@@ -507,6 +502,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         encryptedChatKey && encryptedChatKeyInfo?.hasEscrow
           ? encryptedChatKey
           : null;
+      if (
+        encryptedChatKey &&
+        !encryptedChatAudit &&
+        (await isGuardrailsV2Active())
+      )
+        throw new ApiError(
+          409,
+          "Encrypted chat escrow is required for policy storage",
+        );
+      enterOpenappaEncryptedChat(
+        encryptedChatAudit
+          ? { organizationId, userId: user.id, audit: encryptedChatAudit }
+          : null,
+      );
       // Gate uploaded attachments before any bytes are persisted: anything
       // within the attachment storage cap is accepted — a file the model can't
       // ingest, or one too big for the sandbox, still lands in the
@@ -2545,8 +2554,27 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       if (!conversation) throw new ApiError(404, "Conversation not found");
-      if (conversation.encryptedChat) return reply.send(null);
+      const keyInfo = conversation.encryptedChat
+        ? await ConversationModel.getEncryptedChatKeyInfo(id)
+        : null;
+      const access = keyInfo
+        ? resolveEncryptedChatAccess({ request, conversation: keyInfo })
+        : null;
+      if (access?.state === "locked") return reply.send(null);
+      enterOpenappaEncryptedChat(
+        access?.state === "unlocked" && keyInfo?.hasEscrow
+          ? { organizationId, userId: user.id, audit: access.key }
+          : null,
+      );
       if (!(await isGuardrailsV2Active())) return reply.send(null);
+      // A superyelled conversation is out of OpenAPPA: its label no longer
+      // applies.
+      if (
+        await startedUnenforced(
+          chatOpenAppaSession(organizationId, user.id, id),
+        )
+      )
+        return reply.send(null);
       return reply.send(
         await getOpenappaStatus({ organizationId, sessionId: id }),
       );
@@ -2638,7 +2666,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         user,
         organizationId,
       } = request;
-      const conversation = await findReadableConversationById({
+      const conversation = await findReadableConversationMetadataById({
         conversationId: id,
         userId: user.id,
         organizationId,
@@ -2652,11 +2680,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // which is the same tombstone posture the transcript takes.
       const access = resolveEncryptedChatAccess({
         request,
-        conversation: (await ConversationModel.getEncryptedChatKeyInfo(id)) ?? {
-          id,
-          encryptedChat: conversation.encryptedChat,
-          encryptedChatDekFingerprint: null,
-        },
+        conversation,
       });
 
       return reply.send(
@@ -2702,7 +2726,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Verify the requester can read the conversation that owns this
       // attachment. Without this check, any org member with chat:read could
       // fetch any attachment in the org regardless of per-conversation ACLs.
-      const conversation = await findReadableConversationById({
+      const conversation = await findReadableConversationMetadataById({
         conversationId: meta.conversationId,
         userId: user.id,
         organizationId,
@@ -2718,13 +2742,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const attachmentKey = meta.encryptedChat
         ? requireEncryptedChatKey({
             request,
-            conversation: (await ConversationModel.getEncryptedChatKeyInfo(
-              meta.conversationId,
-            )) ?? {
-              id: meta.conversationId,
-              encryptedChat: true,
-              encryptedChatDekFingerprint: null,
-            },
+            conversation,
           })
         : null;
 
@@ -3104,47 +3122,55 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // Validate chatApiKeyId if provided
-      // Skip validation if it matches the agent's configured key (permission flows through agent access)
-      if (body.chatApiKeyId) {
-        if (body.chatApiKeyId !== currentConversation.agent?.llmApiKeyId) {
-          await validateChatApiKeyAccess(
-            body.chatApiKeyId,
+      // Validate agentId if provided
+      const nextAgent = body.agentId
+        ? await AgentModel.findById(
+            body.agentId,
             user.id,
-            organizationId,
-          );
-        }
+            await hasAnyAgentTypeAdminPermission({
+              userId: user.id,
+              organizationId,
+            }),
+          )
+        : null;
+      if (body.agentId && !nextAgent) {
+        throw new ApiError(404, "Agent not found");
       }
 
-      // Validate agentId if provided
-      if (body.agentId) {
-        const isAgentAdmin = await hasAnyAgentTypeAdminPermission({
-          userId: user.id,
+      // Validate chatApiKeyId if provided. Skip validation when it is the
+      // configured key of the agent the conversation will run on after this
+      // update (permission flows through agent access) — the new agent when
+      // this request switches agents, not the one being left.
+      const effectiveAgentLlmApiKeyId = nextAgent
+        ? nextAgent.llmApiKeyId
+        : currentConversation.agent?.llmApiKeyId;
+      if (
+        body.chatApiKeyId &&
+        body.chatApiKeyId !== effectiveAgentLlmApiKeyId
+      ) {
+        await validateChatApiKeyAccess(
+          body.chatApiKeyId,
+          user.id,
           organizationId,
+        );
+      }
+
+      if (
+        nextAgent &&
+        body.modelId === undefined &&
+        body.chatApiKeyId === undefined
+      ) {
+        const llmSelection = await resolveConversationLlmSelectionForAgent({
+          agent: {
+            llmApiKeyId: nextAgent.llmApiKeyId ?? null,
+            modelId: nextAgent.modelId ?? null,
+          },
+          organizationId,
+          userId: user.id,
         });
 
-        const agent = await AgentModel.findById(
-          body.agentId,
-          user.id,
-          isAgentAdmin,
-        );
-        if (!agent) {
-          throw new ApiError(404, "Agent not found");
-        }
-
-        if (body.modelId === undefined && body.chatApiKeyId === undefined) {
-          const llmSelection = await resolveConversationLlmSelectionForAgent({
-            agent: {
-              llmApiKeyId: agent.llmApiKeyId ?? null,
-              modelId: agent.modelId ?? null,
-            },
-            organizationId,
-            userId: user.id,
-          });
-
-          body.modelId = llmSelection.modelId;
-          body.chatApiKeyId = llmSelection.chatApiKeyId;
-        }
+        body.modelId = llmSelection.modelId;
+        body.chatApiKeyId = llmSelection.chatApiKeyId;
       }
 
       // A conversation's model and API key are a pair: persist both or
@@ -4785,38 +4811,73 @@ async function findReadableConversationById(params: {
   );
 }
 
+async function findReadableConversationMetadataById(params: {
+  conversationId: string;
+  userId: string;
+  organizationId: string;
+}) {
+  const conversation = await ConversationModel.findAccessibleMetadataById({
+    id: params.conversationId,
+    userId: params.userId,
+    organizationId: params.organizationId,
+    canReadOthersViaProject: () =>
+      ResourcePermissions.allows({
+        userId: params.userId,
+        organizationId: params.organizationId,
+        resource: "conversation",
+        scope: "*",
+        action: "read",
+      }),
+  });
+  if (conversation) return conversation;
+  if (!(await canReadScheduleRunConversation(params))) return null;
+  return ConversationModel.getReadAccessMetadata({
+    id: params.conversationId,
+    organizationId: params.organizationId,
+  });
+}
+
 async function findScheduleRunConversationForAdmin(params: {
   conversationId: string;
   userId: string;
   organizationId: string;
 }): Promise<z.infer<typeof SelectConversationSchema> | null> {
-  const isScheduledTaskAdmin = await ResourcePermissions.allows({
+  if (!(await canReadScheduleRunConversation(params))) return null;
+  return ConversationModel.findByIdInOrganization({
+    id: params.conversationId,
+    organizationId: params.organizationId,
+  });
+}
+
+async function canReadScheduleRunConversation(params: {
+  conversationId: string;
+  userId: string;
+  organizationId: string;
+}): Promise<boolean> {
+  const hasProjectOversight = await ResourcePermissions.allows({
     userId: params.userId,
     organizationId: params.organizationId,
-    resource: "scheduledTask",
+    resource: "project",
     scope: "*",
     action: "read",
   });
-  if (!isScheduledTaskAdmin) {
-    return null;
+  if (!hasProjectOversight) {
+    return false;
   }
 
   const run = await ScheduleTriggerRunModel.findByChatConversationId(
     params.conversationId,
   );
   if (!run || run.organizationId !== params.organizationId) {
-    return null;
+    return false;
   }
 
   const trigger = await ScheduleTriggerModel.findById(run.triggerId);
   if (!trigger || trigger.organizationId !== params.organizationId) {
-    return null;
+    return false;
   }
 
-  return await ConversationModel.findByIdInOrganization({
-    id: params.conversationId,
-    organizationId: params.organizationId,
-  });
+  return true;
 }
 
 async function forkConversation(params: {

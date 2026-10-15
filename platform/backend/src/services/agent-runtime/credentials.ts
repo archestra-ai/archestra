@@ -1,5 +1,6 @@
 import { isVaultReference } from "@archestra/shared";
 import { userHasPermission } from "@/auth";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import logger from "@/logging";
 import { AgentModel, SecretModel, UserCredentialModel } from "@/models";
 import { isByosEnabled, secretManager } from "@/secrets-manager";
@@ -7,6 +8,7 @@ import {
   deleteRuntimeCredentialConnection,
   setRuntimeCredentialConnection,
 } from "@/services/agent-runtime/runtime-credentials";
+import { CredentialAccess } from "@/services/credential-access";
 import { CredentialResolutionBatch } from "@/services/credentials";
 import type {
   AgentRuntime,
@@ -43,12 +45,16 @@ export async function resolveAgentRuntimeCredentials(params: {
     Partial<Pick<ResolvedAgentRuntime, "command">>;
   organizationId: string;
   userId: string | null;
+  authorizationUserId?: string | null;
 }): Promise<AgentRuntimeCredentialResolution> {
   const { shared, perUser } = splitDeclarations(applicableCredentials(params));
   await requireSharedCredentialAccess({
     shared,
     organizationId: params.organizationId,
-    userId: params.userId,
+    userId:
+      params.authorizationUserId === undefined
+        ? params.userId
+        : params.authorizationUserId,
   });
   const batch = await CredentialResolutionBatch.create({
     organizationId: params.organizationId,
@@ -150,6 +156,7 @@ export async function preflightAgentRuntimeCredentials(params: {
     Partial<Pick<ResolvedAgentRuntime, "command">>;
   organizationId: string;
   userId: string | null;
+  authorizationUserId?: string | null;
 }): Promise<{
   configured: string[];
   missing: MissingAgentRuntimeCredential[];
@@ -159,7 +166,10 @@ export async function preflightAgentRuntimeCredentials(params: {
   await requireSharedCredentialAccess({
     shared,
     organizationId: params.organizationId,
-    userId: params.userId,
+    userId:
+      params.authorizationUserId === undefined
+        ? params.userId
+        : params.authorizationUserId,
   });
   const batch = await CredentialResolutionBatch.create({
     organizationId: params.organizationId,
@@ -224,6 +234,15 @@ export async function preflightAgentRuntimeCredentials(params: {
         missing.push(toMissing(declaration));
       }
     }
+    const usable = await CredentialAccess.usableKeys({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      keys: missing.flatMap((entry) =>
+        entry.credentialId ? [entry.credentialId] : [],
+      ),
+    });
+    for (const entry of missing)
+      if (entry.credentialId) entry.canConnect = usable.has(entry.credentialId);
   }
 
   return { configured, missing, misconfigured };
@@ -240,6 +259,22 @@ async function requireSharedCredentialAccess(params: {
   ) {
     return;
   }
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  if (isServiceAccountUserId(params.userId)) {
+    for (const declaration of params.shared) {
+      if (!declaration.credentialId) continue;
+      await CredentialAccess.requireUseOfKey({
+        organizationId: params.organizationId,
+        userId: params.userId,
+        key: declaration.credentialId,
+        message: "Service account cannot use this shared credential.",
+      });
+    }
+    return;
+  }
+  // SPDX-SnippetEnd
   const permitted = await userHasPermission(
     params.userId,
     params.organizationId,
@@ -365,6 +400,17 @@ export async function setAgentRuntimeCredential(params: {
   }
   const declaration = requireDeclaration(params.runtime, params.key);
   assertCredentialValue(params.value);
+  // A value stored here is a value of the saved credential, so it takes the
+  // same grant the Credentials page asks for: `use` to add your own,
+  // `update` to set the organization's.
+  if (declaration.credentialId)
+    await CredentialAccess.requireOnKey({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      key: declaration.credentialId,
+      action: declaration.scope === "per_user" ? "use" : "update",
+      message: `You don't have access to the "${declaration.label}" credential. Ask an admin to share it with you.`,
+    });
 
   if (declaration.scope === "per_user") {
     if (declaration.credentialId) {

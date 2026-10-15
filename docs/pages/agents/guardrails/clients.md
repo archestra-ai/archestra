@@ -3,8 +3,8 @@ title: Guardrail Clients
 sidebarTitle: Clients
 description: Make Guardrails check your client, with built-in support or session headers
 order: 3
-alpha: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-12
+beta: "Policy syntax and behavior may change as OpenAPPA evolves."
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -19,72 +19,56 @@ These clients identify themselves to the proxy and work without extra configurat
 - **Claude Code**: terminal coding agent. Passes session identifiers through request headers.
 - **Codex CLI**: terminal coding agent. Sends conversation identifiers in request metadata.
 - **OpenCode**: terminal coding agent. Sends its session headers automatically.
+- **Kilo Code**: terminal coding agent built on OpenCode. Sends the same session headers automatically.
 
 All other clients, including workflow automations like [n8n](/docs/integrations/web-ui-and-automation#n8n) and custom API integrations, require [session headers](#session-headers).
 
 ## Connect a Client
 
+Route model requests through the proxy so Guardrails can check the tool calls the model asks for.
+
 1. [Connect the client](/docs/get-started/connect) to the [LLM Proxy](/docs/llm-proxy) and the [MCP Gateway](/docs/mcp/gateway). The proxy checks each tool call. The gateway gives the agent the tools to handle a block.
 2. For a client without built-in support, add the [session headers](#session-headers).
 
-The **Client coverage** card on **Guardrails → Overview** lists the supported clients, and sets what happens to [unrecognized ones](#unrecognized-clients).
+**Other clients** under **Settings → Guardrails** sets what happens to [unrecognized ones](#unrecognized-clients).
+
+- A block that says no remedy plan can be used in this session means the client sent no gateway tools: it is not signed in to the gateway, or the gateway is not connected. The message names the fix for your client. The steps are under [Finish Setup in Your Client](/docs/get-started/connect#finish-setup-in-your-client).
 
 ## Session Headers
 
-Give each conversation one session ID, and send it with every request. Guardrails then know which requests belong together.
+Send the same session ID with every model call in a conversation or workflow run. Guardrails use it to remember policy decisions and restrictions across turns, tool calls, and retries.
 
-- **`X-Appa-Session-ID`** (required): a new ID per conversation, such as a UUID. Keep it for every turn.
-- **`X-Appa-Parent-ID`**: the parent conversation's ID. Send it only from a subagent.
+- **`X-Appa-Session-ID`**: your app's conversation ID or workflow execution ID. If you do not have one, generate a UUID when the conversation starts and save it.
+- **`X-Appa-Parent-ID`**: optional parent session ID when running a subagent or child workflow. Keep both IDs stable for every call the child makes.
 
-In [n8n](/docs/integrations/web-ui-and-automation#n8n), configure the header depending on your node:
+For client examples, see [n8n](/docs/integrations/web-ui-and-automation#configure-guardrails) and the [SDK examples](/docs/integrations/sdks-and-frameworks#session-ids-for-guardrails).
 
-- **OpenAI Chat Model node**: open the model's OpenAI credential, turn on **Add Custom Header**, set **Header Name** to `X-Appa-Session-ID`, and enter a session identifier.
-- **HTTP Request node**: add `X-Appa-Session-ID` to the headers alongside `Authorization: Bearer <virtual-key>`. Use `{{ $execution.id }}` or a generated UUID for each execution.
-
-With the OpenAI Python SDK, create one client per conversation:
-
-```python
-import uuid
-from openai import OpenAI
-
-client = OpenAI(
-    base_url="https://archestra.example.com/v1/openai",
-    api_key="your-virtual-key",
-    default_headers={"X-Appa-Session-ID": str(uuid.uuid4())},
-)
-```
-
-With the OpenAI Node.js SDK:
-
-```typescript
-import { randomUUID } from "node:crypto";
-import OpenAI from "openai";
-
-const client = new OpenAI({
-  baseURL: "https://archestra.example.com/v1/openai",
-  apiKey: "your-virtual-key",
-  defaultHeaders: { "X-Appa-Session-ID": randomUUID() },
-});
-```
-
-With `curl`:
+With `curl`, generate an ID once and reuse it across requests:
 
 ```bash
+export SESSION_ID="$(uuidgen)"
+
 curl "https://archestra.example.com/v1/openai/chat/completions" \
   -H "Authorization: Bearer $ARCHESTRA_VIRTUAL_KEY" \
-  -H "X-Appa-Session-ID: $(uuidgen)" \
+  -H "X-Appa-Session-ID: $SESSION_ID" \
   -H "Content-Type: application/json" \
   -d '{"model":"gpt-4o","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
+Reuse `$SESSION_ID` when sending tool results back to the model.
+
+### What to Know
+
+- Reuse the same ID when resuming a chat. Start a new ID only when a separate conversation starts.
+- Any string up to 512 bytes works (no control characters). It does not need to be a UUID.
+- [`X-Archestra-Session-Id`](/docs/llm-proxy#custom-headers) labels requests in logs, but Guardrails ignore it. When you send both `X-Archestra-Session-Id` and `X-Appa-Session-ID`, use the same value for both.
+
 ## Unrecognized Clients
 
-By default, Guardrails let an unrecognized client through, unchecked. To change that, open the **Client coverage** card on **Guardrails → Overview**:
+By default, Guardrails let an unrecognized client through, unchecked. To change that, go to **Settings → Guardrails** and set **Other clients**:
 
 - **Allowed** (default): its requests reach the model without checks.
 - **Blocked:** the proxy rejects its requests with HTTP 400 and tells the user to add an `X-Appa-Session-ID` header.
-
-![The Client coverage card on the Guardrails Overview tab](/docs/automated_screenshots/platform-ai-tool-guardrails_client_coverage.webp)
 
 The setting also decides whether a client that Guardrails do not check can [hand work off](/docs/agents/runtime/handoff#hand-off-with-guardrails-on) to Agent Runtime.
 

@@ -132,6 +132,7 @@ describe("initialPolicy", () => {
           name: string;
           annotator?: string;
           delta?: Record<string, unknown>;
+          requires?: Record<string, unknown>;
         }>;
       };
     };

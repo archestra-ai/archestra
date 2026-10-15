@@ -51,6 +51,7 @@ export function ResourceAccessFilter({
   noun,
   offerBuiltIn = false,
   owned = true,
+  offerAdminAccess = true,
   navigate,
   queryParamsAdapter,
 }: {
@@ -65,6 +66,11 @@ export function ResourceAccessFilter({
    * Owner box, since neither could match anything.
    */
   owned?: boolean;
+  /**
+   * Off where other people's objects do not belong (Personal Settings): no
+   * "Admin access" option, and so no "Shared with" or "Owner" box.
+   */
+  offerAdminAccess?: boolean;
   /** Override navigation for lists that own local URL state without an RSC round trip. */
   navigate?: (url: string) => void;
   /** Optional logical-to-URL adapter shared by a page section. */
@@ -77,7 +83,7 @@ export function ResourceAccessFilter({
     sharedWith,
     owner,
     isDefault: isDefaultFilters,
-  } = useResourceAccessParam({ queryParamsAdapter });
+  } = useResourceAccessParam({ queryParamsAdapter, offerAdminAccess });
   const activeSearchParams = queryParamsAdapter?.searchParams ?? searchParams;
   const builtIn =
     offerBuiltIn && activeSearchParams.get(BUILT_IN_PARAM) === "true";
@@ -135,10 +141,11 @@ export function ResourceAccessFilter({
         builtIn={builtIn}
         offerBuiltIn={offerBuiltIn}
         owned={owned}
+        offerAdminAccess={offerAdminAccess}
         updateParams={updateParams}
         reset={reset}
       />
-      {(access.includes("others") || sharedWith) && (
+      {offerAdminAccess && (access.includes("others") || sharedWith) && (
         <ResourceSharedWithFilter
           resource={resource}
           value={sharedWith ?? []}
@@ -150,7 +157,7 @@ export function ResourceAccessFilter({
           footer={reset}
         />
       )}
-      {owned && (
+      {offerAdminAccess && owned && (access.includes("others") || owner) && (
         <ResourceOwnerFilter
           resource={resource}
           value={owner ?? []}
@@ -173,6 +180,8 @@ export function ResourceAccessFilter({
  */
 export function useResourceAccessParam(options?: {
   queryParamsAdapter?: QueryParamsAdapter;
+  /** False drops "Admin access" and its boxes, even from a bookmarked URL. */
+  offerAdminAccess?: boolean;
 }): {
   access: ResourceAccessRelation[];
   sharedWith: string[] | undefined;
@@ -184,17 +193,24 @@ export function useResourceAccessParam(options?: {
   const rawAccess = active.get(RESOURCE_ACCESS_PARAM);
   const rawSharedWith = active.get(SHARED_WITH_PARAM);
   const rawOwner = active.get(OWNER_PARAM);
+  const offerAdminAccess = options?.offerAdminAccess ?? true;
   return useMemo(() => {
-    const access = parseAccess(rawAccess);
-    const sharedWith = parseList(rawSharedWith);
-    const owner = parseList(rawOwner);
+    const parsed = parseAccess(rawAccess);
+    const withoutAdmin = parsed.filter((relation) => relation !== "others");
+    const access = offerAdminAccess
+      ? parsed
+      : withoutAdmin.length > 0
+        ? withoutAdmin
+        : DEFAULT_RESOURCE_ACCESS_RELATIONS;
+    const sharedWith = offerAdminAccess ? parseList(rawSharedWith) : undefined;
+    const owner = offerAdminAccess ? parseList(rawOwner) : undefined;
     return {
       access,
       sharedWith,
       owner,
       isDefault: serializeAccess(access) === null && !sharedWith && !owner,
     };
-  }, [rawAccess, rawSharedWith, rawOwner]);
+  }, [rawAccess, rawSharedWith, rawOwner, offerAdminAccess]);
 }
 
 /**
@@ -249,6 +265,7 @@ function AccessRelationFilter({
   builtIn,
   offerBuiltIn,
   owned,
+  offerAdminAccess,
   updateParams,
   reset,
 }: {
@@ -258,6 +275,7 @@ function AccessRelationFilter({
   builtIn: boolean;
   offerBuiltIn: boolean;
   owned: boolean;
+  offerAdminAccess: boolean;
   updateParams: (updates: Record<string, string | null>) => void;
   reset: ReactNode;
 }) {
@@ -273,7 +291,8 @@ function AccessRelationFilter({
   // the viewer can still clear it.
   const options = ACCESS_OPTION_IDS.filter(
     (id) =>
-      (id !== "others" || readsEveryObject || isOn("others")) &&
+      (id !== "others" ||
+        (offerAdminAccess && (readsEveryObject || isOn("others")))) &&
       (id !== "mine" || owned),
   );
   const onCount = options.filter(isOn).length;
@@ -290,9 +309,12 @@ function AccessRelationFilter({
     if (next.length === 0) return;
     updateParams({
       [RESOURCE_ACCESS_PARAM]: serializeAccess(next),
-      // "Shared with" is shown only with "Admin access"; never leave it
-      // filtering the list while hidden.
-      ...(!next.includes("others") && { [SHARED_WITH_PARAM]: null }),
+      // "Shared with" and "Owner" are shown only with "Admin access"; never
+      // leave them filtering the list while hidden.
+      ...(!next.includes("others") && {
+        [SHARED_WITH_PARAM]: null,
+        [OWNER_PARAM]: null,
+      }),
     });
   };
 

@@ -10,7 +10,7 @@ import {
   BatterySummarySchema,
   CreateBatteryInstallSchema,
   CredentialBindingParamsSchema,
-  EffectivePolicySchema,
+  EffectivePolicyViewSchema,
   PolicyBatteryViewSchema,
   PolicyDeclarationsViewSchema,
   SetCredentialBindingSchema,
@@ -85,11 +85,11 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.GetOpenappaEffectivePolicy,
         tags: ["OpenAPPA"],
-        response: constructResponseSchema(EffectivePolicySchema),
+        response: constructResponseSchema(EffectivePolicyViewSchema),
       },
     },
     async (request) =>
-      openappaBatteriesService.getEffectivePolicy(request.organizationId),
+      openappaBatteriesService.effectivePolicyView(request.organizationId),
   );
   app.get(
     "/api/openappa/battery-matches",
@@ -223,13 +223,10 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         response: constructResponseSchema(UploadedBatteryPackageSchema),
       },
     },
-    async (request) =>
-      openappaBatteriesService.uploadPackage({
-        userId: request.user.id,
-        organizationId: request.organizationId,
-        name: request.params.name,
-        files: request.body.files,
-      }),
+    // Only the batteries Archestra ships are supported for now.
+    async (): Promise<never> => {
+      throw new ApiError(501, "Uploading battery packages is not supported");
+    },
   );
   app.delete(
     "/api/openappa/battery-packages/:contentHash",

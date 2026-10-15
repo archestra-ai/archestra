@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 2
-lastUpdated: 2026-10-09
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -42,8 +42,8 @@ Archestra reads its configuration from environment variables. Pass them with `-e
   - The port in this URL sets the API listen port.
   - [Agent Runtime](#agent-runtime) pods use it to reach the API unless [`ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL) is set.
 
-- **`ARCHESTRA_FRONTEND_URL`** - Public URL of the Archestra web app. Setting it turns on origin validation for CORS and sign-in.
-  - Default: unset (all origins accepted)
+- **`ARCHESTRA_FRONTEND_URL`** - Public URL of the Archestra web app. Setting it restricts CORS and sign-in to the configured origins.
+  - Default: unset (only same-origin requests to the host the app is opened on are accepted)
   - Values: an origin, for example `https://archestra.example.com`
   - Set it in production. Users who open the app on a LAN IP need that URL here, for example `http://192.168.1.5:3000`.
 
@@ -62,9 +62,11 @@ Archestra reads its configuration from environment variables. Pass them with `-e
   - Values: a positive whole number of milliseconds, digits only, such as `620000`
   - Keep it above the keep-alive timeout of every proxy and load balancer in front of Archestra. See [Keep-Alive Timeouts](/docs/admin/deployment#keep-alive-timeouts).
 
-- **`ARCHESTRA_API_BODY_LIMIT`** - Maximum request body size for LLM Proxy and chat requests.
+- **`ARCHESTRA_API_BODY_LIMIT`** - Maximum HTTP request body size for LLM Proxy and chat requests.
   - Default: `70MB`
   - Values: bytes (`73400320`) or a size with `KB`, `MB`, or `GB` (`100MB`)
+  - When a policy omits `externals.max_body_bytes`, guardrails use this size for external helper responses and tool results.
+  - The policy setting accepts a positive integer of bytes, not a size string such as `70MB`. It overrides both caps without changing the HTTP request limit; oversized tool results are withheld.
   - All attachments of one chat message share this limit. Raise it when you raise [`ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT`](/docs/reference/configuration#ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT), or for very long conversations.
 
 - **`ARCHESTRA_PROCESS_TYPE`** - Which part of the backend this process runs.
@@ -77,7 +79,7 @@ Archestra reads its configuration from environment variables. Pass them with `-e
 - **`ARCHESTRA_BETA`** - Turns on beta features.
   - Default: `false`
   - Values: `true`, `false`
-  - Turns on plugins directly. Guardrails and Agent Runtime do not use this switch.
+  - Plugins, Guardrails, and Agent Runtime do not use this switch.
   - Also turns on [`ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED`](/docs/reference/configuration#ARCHESTRA_KNOWLEDGE_BASE_MFILES_CONNECTOR_ENABLED) when it is left blank. Set to `false`, it stays off.
 
 - **`ARCHESTRA_QUICKSTART`** - Runs MCP servers in a small Kubernetes (KinD) cluster inside the Docker container.
@@ -145,7 +147,7 @@ Archestra reads its configuration from environment variables. Pass them with `-e
 - **`ARCHESTRA_AUTH_ADDITIONAL_TRUSTED_ORIGINS`** - Extra origins allowed for CORS and sign-in, besides [`ARCHESTRA_FRONTEND_URL`](/docs/reference/configuration#ARCHESTRA_FRONTEND_URL).
   - Default: unset
   - Values: comma-separated origins, for example `https://idp.example.com,http://192.168.1.5:3000`
-  - Setting it turns on origin validation, even without [`ARCHESTRA_FRONTEND_URL`](/docs/reference/configuration#ARCHESTRA_FRONTEND_URL). Add your SSO identity provider and any other URL users open the app on.
+  - Setting it restricts origins to the configured list, even without [`ARCHESTRA_FRONTEND_URL`](/docs/reference/configuration#ARCHESTRA_FRONTEND_URL). Add your SSO identity provider and any other URL users open the app on.
 
 - **`ARCHESTRA_AUTH_COOKIE_DOMAIN`** - Domain the session cookie is scoped to. Set it when the frontend and backend run on different subdomains.
   - Default: unset (the cookie stays on the exact frontend host)
@@ -184,6 +186,7 @@ Archestra reads its configuration from environment variables. Pass them with `-e
 - **`ARCHESTRA_AUTH_RATE_LIMIT_DISABLED`** - Turns off rate limiting on the sign-in and auth endpoints.
   - Default: `false`
   - Values: `true`, `false`
+  - The OAuth token endpoint allows 100 requests per minute per client IP, shared across grants and replicas. On HTTP `429`, wait for the `Retry-After` delay. IP resolution follows [`ARCHESTRA_TRUST_PROXY`](/docs/reference/configuration#ARCHESTRA_TRUST_PROXY).
   - Use it only for load tests or automated test runs.
 
 - **`ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL`** - Skips the sign-in page in development by signing in as the user with this email.
@@ -732,9 +735,20 @@ Chat streams and A2A task streams wake through PostgreSQL `LISTEN/NOTIFY` across
   - Raise it for slow tools, such as a scraper or a report builder, that fail with a request-timeout error.
   - A call from a client that supports MCP Tasks becomes a background task after half this value, capped at 10 seconds.
 
+- **`ARCHESTRA_MCP_GATEWAY_STDIO_MAX_MESSAGE_BYTES`** - Largest reply, in bytes, that Archestra accepts from a stdio MCP server that runs in Kubernetes.
+  - Default: `10485760` (10 MB)
+  - A larger reply fails only the tool call that it answers. The model gets an error that names the limit, and the next call to the server works.
+  - Raise it only if a tool must return more data. Each reply up to this size is held in backend memory until it is complete.
+
 - **`ARCHESTRA_MCP_GATEWAY_WAKE_WAIT_TIMEOUT_MS`** - How long a tool call waits for a hibernated MCP server to wake before it returns a retryable "still starting" result, in milliseconds.
   - Default: `30000` (30 seconds)
   - Keep it below your clients' own request timeouts. Otherwise the client aborts first and sees a transport error.
+
+- **`ARCHESTRA_MCP_GATEWAY_SUBSCRIPTION_MAX_DURATION_MS`** - Optional limit, in milliseconds, on how long one notification stream stays open before the gateway ends it with a complete result.
+  - Default: `0` (no expiry). The stream stays open until the client disconnects.
+  - An abrupt proxy close can fail an open form. This setting is a partial mitigation, not a guarantee: clients can stop reconnecting after repeated clean ends, which stops tool-list change notifications. Enable it only after checking your client's behavior and accepting that limitation.
+  - Set a positive value below your proxy's maximum request duration. Heartbeats do not extend that maximum, and Archestra does not detect it. A GKE Ingress backend with no `timeoutSec` uses 30 seconds.
+  - Accepts whole numbers from `0` through `2147483647`. Invalid or larger values disable expiry, avoiding timer overflow.
 
 ## MCP Servers
 
@@ -945,6 +959,7 @@ Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox con
 
 - **`ARCHESTRA_AGENT_RUNTIME_IMAGE_TAG`** - Tag of the maintained images.
   - Default: `latest` on stable releases, otherwise the platform version
+  - Agents made from a catalog template run this tag, whatever tag was current when they were created. See [Upgrades](/docs/agents/runtime/setup#upgrades).
 
 - **`ARCHESTRA_AGENT_RUNTIME_ALLOW_PRIVILEGED`** - Lets Agent administrators enable privileged runtime pods, which have node-level access.
   - Default: `false`
@@ -1451,7 +1466,12 @@ Retention is an Enterprise feature: the backend does not start when a window is 
   - Default: `true` (when Guardrails are on)
   - Values: `true`, `false`
 
+- **`ARCHESTRA_OPENAPPA_KEPT_ANNOTATOR_HORIZON_DAYS`** - How long an annotator stays available to conversations that started under an earlier policy after the policy stops declaring it.
+  - Default: `30`
+  - Values: `0`–`3650` days. `0` keeps it for as long as such a policy is stored.
+  - The time counts from the last activity of any conversation that uses it. After that, such a conversation is told to start a new one when it next needs the annotator.
+
 - **`ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS`** - PostgreSQL connections each backend process opens for guardrail checks.
   - Default: `4`
   - Values: `1`–`64`
-  - A check that waits more than 30 seconds for a connection fails. Raise it when policies consult slow external authorities.
+  - A check holds a connection only for each database step, never while it waits on an external consult. A step that waits more than 30 seconds for a free connection fails.

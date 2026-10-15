@@ -7,7 +7,6 @@ import {
   GITHUB_REPO_NEW_ISSUE_URL,
   GITHUB_REPO_URL,
 } from "@archestra/shared";
-import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen,
@@ -56,13 +55,17 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { SHORTCUT_NEW_CHAT, SHORTCUT_SEARCH } from "@/consts";
 import { prefetchApps } from "@/lib/app.query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
-import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
-import { useFeature } from "@/lib/config/config.query";
 import { useDocsScreenshotMode } from "@/lib/docs-screenshot-mode";
 import { useGithubStars } from "@/lib/github/github.query";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
@@ -72,6 +75,7 @@ import type { NavDotKey } from "@/lib/onboarding/nav-onboarding";
 import { useNavOnboarding } from "@/lib/onboarding/use-nav-onboarding";
 import { cn } from "@/lib/utils/tailwind";
 import { getSettingsNavigationUrl } from "./settings-navigation";
+import { useNavPermissionMap } from "./use-settings-area-access";
 
 type SidebarMode = "chats" | "studio";
 
@@ -217,7 +221,16 @@ const NavPrimary = ({
         <SidebarPrefetchLink
           href={item.url}
           data-testid={item.testId}
-          className="relative"
+          className={cn(
+            "relative",
+            // The dot is pinned to the row's right edge, where a badge also
+            // ends; pad the row so the badge clears the dot instead of
+            // sitting underneath it.
+            item.beta &&
+              item.dotKey &&
+              unseenDotKeys.has(item.dotKey) &&
+              "pr-4",
+          )}
           onClick={() => {
             if (item.dotKey) onDotItemVisit(item.dotKey);
             if (isMobile) setOpenMobile(false);
@@ -226,12 +239,10 @@ const NavPrimary = ({
           <item.icon className={item.iconClassName} />
           <span className="min-w-0 flex-1 truncate">{item.title}</span>
           {item.beta && (
-            <Badge
-              variant="outline"
-              className="ml-auto shrink-0 border-transparent bg-sidebar-chip px-1.5 py-0 text-[10px] text-sidebar-emphasis dark:border-sidebar-emphasis dark:bg-sidebar group-data-[collapsible=icon]:hidden"
-            >
-              {item.badgeLabel ?? "New"}
-            </Badge>
+            <NavItemBadge
+              label={item.badgeLabel ?? "New"}
+              tooltip={item.badgeTooltip}
+            />
           )}
           {item.dotKey && (
             <OnboardingDot
@@ -337,11 +348,7 @@ const NavPrimary = ({
           <SidebarMenuButton
             tooltip="Search chats"
             onClick={() => {
-              window.dispatchEvent(
-                new CustomEvent("open-conversation-search", {
-                  detail: { recentChatsView: true },
-                }),
-              );
+              window.dispatchEvent(new CustomEvent("open-conversation-search"));
             }}
           >
             <MoreHorizontal />
@@ -408,6 +415,11 @@ const NavSecondary = ({
   const permittedItems = items.filter((item) =>
     isNavItemPermitted(item, permissionMap),
   );
+  // An empty group still takes its padding and gaps, leaving a blank band
+  // between the chat list and the footer.
+  if (permittedItems.length === 0 && !showCommunityLinks) {
+    return null;
+  }
 
   return (
     <SidebarGroup className={className}>
@@ -514,7 +526,7 @@ export function AppSidebar() {
     deferMs: 5000,
   });
   const formattedStarCount = starCount ?? "";
-  const permissionMap = usePermissionMap(requiredPagePermissionsMap);
+  const permissionMap = useNavPermissionMap();
   const appIconLogo = useAppIconLogo();
   // Connect is useful with either half: MCP-only (tools) or proxy-only
   // (inference). Org settings can hide a section without hiding the page.
@@ -525,7 +537,6 @@ export function AppSidebar() {
     mcpGateway: ["read"],
   });
   const showConnect = Boolean(canReadMcpGateway || canReadLlmProxy);
-  const pluginsEnabled = useFeature("plugins");
   const { data: guardrailsDeployment } = useGuardrailsDeployment();
 
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
@@ -558,7 +569,6 @@ export function AppSidebar() {
       contentNavGroups.map((group) => ({
         ...group,
         items: group.items
-          .filter((item) => item.url !== "/plugins" || pluginsEnabled === true)
           // Costs & Limits is one row over two pages, so it has to choose
           // which one it opens: a reader who may read limits but not costs
           // would otherwise land on a page they cannot see.
@@ -596,7 +606,7 @@ export function AppSidebar() {
             return item;
           }),
       })),
-    [pluginsEnabled, guardrailsDeployment?.enabled, permissionMap],
+    [guardrailsDeployment?.enabled, permissionMap],
   );
 
   return (
@@ -621,7 +631,18 @@ export function AppSidebar() {
           />
         )}
       </SidebarHeader>
-      <SidebarContent>
+      {/* The nav scrolls under the footer; the fade keeps the last row from
+          ending in a hard cut. It takes its own space at the end, so it covers
+          nothing once scrolled to the bottom or when nothing overflows. */}
+      <SidebarContent
+        className={cn(
+          "relative",
+          // The chat list scrolls and fades on its own; this fade would only
+          // add a blank band between it and the footer.
+          sidebarMode !== "chats" &&
+            "after:pointer-events-none after:sticky after:bottom-0 after:-mt-2 after:block after:h-4 after:shrink-0 after:bg-gradient-to-t after:from-sidebar after:to-transparent after:content-['']",
+        )}
+      >
         {isAuthenticated &&
           permissionMap &&
           (sidebarMode === "chats" ? (
@@ -637,12 +658,12 @@ export function AppSidebar() {
               />
               {/* Keep sessions scrollable while the navigation and community
                   links stay in place. The fade hints at more sessions below. */}
-              <SidebarGroup className="min-h-0 flex-1 overflow-hidden p-0 after:pointer-events-none after:absolute after:right-2.5 after:bottom-0 after:left-0 after:z-10 after:h-8 after:bg-gradient-to-t after:from-sidebar after:to-transparent">
+              <SidebarGroup className="min-h-0 flex-1 overflow-hidden p-0 after:pointer-events-none after:absolute after:right-2.5 after:bottom-0 after:left-0 after:z-10 after:h-4 after:bg-gradient-to-t after:from-sidebar after:to-transparent">
                 {/* group-data-[collapsible=icon]:overflow-hidden keeps this
                     scroller out of the tab order while collapsed — Chrome makes
                     scrollable containers keyboard-focusable, which otherwise
                     leaves an invisible tab stop on the icon rail (WCAG 2.4.3). */}
-                <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto group-data-[collapsible=icon]:overflow-hidden pb-8 [scrollbar-gutter:stable] scrollbar-sidebar">
+                <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto group-data-[collapsible=icon]:overflow-hidden pb-4 [scrollbar-gutter:stable] scrollbar-sidebar">
                   <ChatSidebarSection slots={15} flat fadeIn={chatListFadeIn} />
                 </SidebarGroupContent>
               </SidebarGroup>
@@ -791,6 +812,24 @@ function getPrefetchHref(href: React.ComponentProps<typeof Link>["href"]) {
 
 const NO_UNSEEN_KEYS: Set<NavDotKey> = new Set();
 
+function NavItemBadge({ label, tooltip }: { label: string; tooltip?: string }) {
+  const badge = (
+    <Badge
+      variant="outline"
+      className="ml-auto shrink-0 border-transparent bg-sidebar-chip px-1.5 py-0 text-[10px] text-sidebar-emphasis dark:border-sidebar-emphasis dark:bg-sidebar group-data-[collapsible=icon]:hidden"
+    >
+      {label}
+    </Badge>
+  );
+  if (!tooltip) return badge;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{badge}</TooltipTrigger>
+      <TooltipContent side="right">{tooltip}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 /**
  * The Chats sidebar's first action: an outlined button, set apart from the
  * plain rows below it, with the shortcut that does the same (Alt+N, handled
@@ -832,11 +871,8 @@ function SidebarSearchItem() {
         className="text-muted-foreground"
         onClick={() => {
           if (isMobile) setOpenMobile(false);
-          window.dispatchEvent(
-            new CustomEvent("open-conversation-search", {
-              detail: { recentChatsView: true },
-            }),
-          );
+          // The same palette as Cmd+K, which the row advertises.
+          window.dispatchEvent(new CustomEvent("open-conversation-search"));
         }}
       >
         <Search />

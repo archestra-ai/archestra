@@ -48,6 +48,53 @@ describe("service account routes", () => {
     await app.close();
   });
 
+  test("persists icons through create, list, edit, omission, and removal", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/service-accounts",
+      payload: { name: "Icon automation", role: "member", icon: "🤖" },
+    });
+    expect(created.statusCode).toBe(200);
+    expect(created.json().icon).toBe("🤖");
+    const id = created.json().id;
+    const readIcon = async () => {
+      const detail = await app.inject({
+        method: "GET",
+        url: `/api/service-accounts/${id}`,
+      });
+      expect(detail.statusCode).toBe(200);
+      const list = await app.inject({
+        method: "GET",
+        url: "/api/service-accounts",
+      });
+      expect(
+        list.json().find((item: { id: string }) => item.id === id).icon,
+      ).toBe(detail.json().icon);
+      return detail.json().icon;
+    };
+    expect(await readIcon()).toBe("🤖");
+    for (const icon of [
+      "logo:github",
+      "data:image/svg+xml;base64,PHN2Zy8+",
+      null,
+    ]) {
+      const changed = await app.inject({
+        method: "PATCH",
+        url: `/api/service-accounts/${id}`,
+        payload: { icon },
+      });
+      expect(changed.statusCode).toBe(200);
+      expect(await readIcon()).toBe(icon);
+      const renamed = await app.inject({
+        method: "PATCH",
+        url: `/api/service-accounts/${id}`,
+        payload: { name: "Renamed automation" },
+      });
+      expect(renamed.statusCode).toBe(200);
+      expect(await readIcon()).toBe(icon);
+    }
+  });
+
   test("persists and audits multiple roles and rejects an unknown component", async ({
     makeCustomRole,
   }) => {
@@ -223,6 +270,7 @@ describe("service account routes", () => {
     const created = createResponse.json();
     expect(created).toMatchObject({
       name: "Build Automation",
+      icon: null,
       role: ADMIN_ROLE_NAME,
       disabled: false,
       tokenCount: 0,

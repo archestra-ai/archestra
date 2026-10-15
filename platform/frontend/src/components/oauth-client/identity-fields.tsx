@@ -20,14 +20,20 @@ export function OAuthClientIdentityFields({
   onRotateSecret?: () => void;
 }) {
   return (
-    <dl className="divide-y rounded-lg border px-4 text-sm">
-      <div className="flex min-h-11 items-center gap-3 py-2">
-        <dt className="w-28 shrink-0 text-muted-foreground">Kind</dt>
+    <dl className="@container/identity divide-y rounded-lg border px-4 text-sm">
+      <div className="grid min-h-11 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 py-3 @[400px]/identity:grid-cols-[7rem_minmax(0,1fr)_auto] @[400px]/identity:py-2">
+        <dt className="col-span-2 text-muted-foreground @[400px]/identity:col-span-1">
+          Kind
+        </dt>
         <dd className="min-w-0 flex-1">{kindLabel}</dd>
-        <span className="text-xs text-muted-foreground">Set at creation</span>
+        <span className="text-xs text-muted-foreground whitespace-nowrap">
+          Set at creation
+        </span>
       </div>
-      <div className="flex min-h-11 items-center gap-3 py-2">
-        <dt className="w-28 shrink-0 text-muted-foreground">Client ID</dt>
+      <div className="grid min-h-11 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 py-3 @[400px]/identity:grid-cols-[7rem_minmax(0,1fr)_auto] @[400px]/identity:py-2">
+        <dt className="col-span-2 text-muted-foreground @[400px]/identity:col-span-1">
+          Client ID
+        </dt>
         <dd className="min-w-0 flex-1 truncate font-mono text-xs">
           {clientId}
         </dd>
@@ -35,6 +41,7 @@ export function OAuthClientIdentityFields({
           type="button"
           variant="ghost"
           size="icon-sm"
+          className="shrink-0"
           aria-label="Copy client ID"
           onClick={async () => {
             await copyToClipboard(clientId);
@@ -44,9 +51,11 @@ export function OAuthClientIdentityFields({
           <Copy />
         </Button>
       </div>
-      <div className="flex min-h-11 items-center gap-3 py-2">
-        <dt className="w-28 shrink-0 text-muted-foreground">Client secret</dt>
-        <dd className="min-w-0 flex-1 font-mono text-xs text-muted-foreground">
+      <div className="grid min-h-11 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 py-3 @[400px]/identity:grid-cols-[7rem_minmax(0,1fr)_auto] @[400px]/identity:py-2">
+        <dt className="col-span-2 text-muted-foreground @[400px]/identity:col-span-1">
+          Client secret
+        </dt>
+        <dd className="min-w-0 truncate font-mono text-xs text-muted-foreground">
           ••••••••••••
         </dd>
         {onRotateSecret && (
@@ -54,6 +63,7 @@ export function OAuthClientIdentityFields({
             type="button"
             variant="outline"
             size="sm"
+            className="shrink-0"
             onClick={onRotateSecret}
           >
             <RotateCw />

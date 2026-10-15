@@ -95,15 +95,13 @@ describe("AgentRuns", () => {
     expect(
       await screen.findByText("Started by Alex Rivera (you)"),
     ).toBeVisible();
-    expect(screen.getByRole("button", { name: "Permissions" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Share" })).toBeVisible();
   });
 
   it("explains session access without deriving visibility from retired share fields", async () => {
     renderRuns();
 
-    expect(
-      await screen.findByRole("button", { name: "Permissions" }),
-    ).toBeVisible();
+    expect(await screen.findByRole("button", { name: "Share" })).toBeVisible();
     fireEvent.focus(
       screen.getByRole("button", { name: "Who can access this run?" }),
     );
@@ -130,7 +128,7 @@ describe("AgentRuns", () => {
     fireEvent.click(screen.getByRole("button", { name: /Shared review/ }));
     expect(screen.getByText("Started by Sam Chen")).toBeVisible();
     expect(
-      screen.queryByRole("button", { name: "Permissions" }),
+      screen.queryByRole("button", { name: "Share" }),
     ).not.toBeInTheDocument();
     expect(screen.getByText("Retained output")).toBeVisible();
     expect(screen.queryByText("Live terminal")).not.toBeInTheDocument();
@@ -160,6 +158,41 @@ describe("AgentRuns", () => {
     renderRuns();
     expect(await screen.findByText("Started by automation")).toBeVisible();
   });
+  it("shows who started each run and narrows the history by search", async () => {
+    state.runs.push({
+      ...createRun(null),
+      id: "run-2",
+      taskId: "22345678-abcd-4000-8000-123456789abc",
+      actorUserId: "user-2",
+      actorId: "user-2",
+      initiatorName: "Sam Chen",
+      title: "Shared review",
+    });
+    renderRuns();
+
+    const own = await screen.findByRole("button", {
+      name: /Native TUI verification/,
+    });
+    expect(own).toHaveTextContent("You");
+    expect(
+      screen.getByRole("button", { name: /Shared review/ }),
+    ).toHaveTextContent("Sam Chen");
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search runs" }), {
+      target: { value: "sam" },
+    });
+    expect(screen.getByText("1 of 2")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /Native TUI verification/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Started by Sam Chen")).toBeVisible();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search runs" }), {
+      target: { value: "nothing like this" },
+    });
+    expect(screen.getByText("No runs match these filters.")).toBeVisible();
+  });
+
   it("links an empty run history to a new Chat with this Agent selected", async () => {
     state.runs = [];
 
@@ -196,6 +229,7 @@ function createRun(endedAt: string | null): AgentRunListItem {
     backend: "kubernetes",
     runtimeScope: "archestra-dev",
     virtualApiKeyId: null,
+    gatewayTokenId: null,
     startedAt: "2026-09-03T20:00:00.000Z",
     hardDeadlineAt: "2026-09-06T20:00:00.000Z",
     lastModelActivityAt: "2026-09-03T20:00:04.000Z",

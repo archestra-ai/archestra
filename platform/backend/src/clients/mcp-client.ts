@@ -33,17 +33,22 @@ import {
   StreamableHTTPError,
 } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import type {
-  ContentBlock,
-  ReadResourceResult,
-  Tool,
+import {
+  type ContentBlock,
+  ErrorCode,
+  McpError,
+  type ReadResourceResult,
+  type Tool,
+  ToolListChangedNotificationSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import QuickLRU from "quick-lru";
 import { unavailableThirdPartyToolMessage } from "@/archestra-mcp-server/tool-recovery-messages";
 import { getMcpCatalogPermissionChecker } from "@/auth/mcp-catalog-permissions";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
+import { browserStorageSync } from "@/features/browser-stream/services/browser-storage-sync";
 import {
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -102,6 +107,7 @@ import { findExternalIdentityProviderById } from "@/services/identity-providers/
 // biome-ignore lint/style/noRestrictedImports: runtime-gated EE model import
 import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
 // SPDX-SnippetEnd
+import { mcpToolListChangedSync } from "@/services/mcp-tools-list-changed";
 import {
   classifyThrownRefreshError,
   type OAuthRefreshOutcome,
@@ -199,6 +205,21 @@ class McpServerUnreachableError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "McpServerUnreachableError";
+  }
+}
+
+/**
+ * Ends a tool call whose MCP server stopped answering or closed the
+ * connection mid-call. Its message reaches the model and the chat task card.
+ */
+export class McpServerStoppedError extends Error {
+  constructor(reason: "not_answering" | "connection_closed") {
+    super(
+      reason === "not_answering"
+        ? "The MCP server stopped answering, so this tool call was stopped. Try again. If it keeps happening, restart the MCP server."
+        : "The connection to the MCP server closed, so this tool call was stopped. Try again. If it keeps happening, restart the MCP server.",
+    );
+    this.name = "McpServerStoppedError";
   }
 }
 
@@ -305,6 +326,7 @@ export type TokenAuthContext = {
   isSessionAuth?: boolean;
   /** OAuth client the caller signed in with, for OAuth tokens */
   oauthClientId?: string;
+  serviceAccountId?: string;
   /** Who sent the request over the HTTP gateway; unset for in-process calls */
   source?: McpGatewayCallSource;
   /** Headers to forward to downstream MCP servers (extracted from incoming request per gateway allowlist) */
@@ -331,6 +353,7 @@ type InstallCallerContext = Pick<TokenAuthContext, "userId"> &
  * been resolved — whose credential the upstream call ran under.
  */
 type ToolCallAuthInfo = {
+  serviceAccountId?: string;
   userId?: string;
   authMethod?: MCPGatewayAuthMethod;
   oauthClientId?: string;
@@ -621,6 +644,7 @@ class McpClient {
     tokenAuth?: TokenAuthContext,
     options?: ExecuteToolCallForOwnerOptions,
   ): Promise<CommonToolResult> {
+    const startedAt = performance.now();
     // Decided once here and handed to every path that persists a row (success,
     // error, retry, cancellation), so a concurrent call on another
     // conversation can never influence how this one's content is stored.
@@ -634,6 +658,7 @@ class McpClient {
       tokenAuth && Object.keys(tokenAuth).length
         ? {
             userId: tokenAuth.userId,
+            serviceAccountId: tokenAuth.serviceAccountId,
             authMethod: deriveAuthMethod(tokenAuth),
             oauthClientId: tokenAuth.oauthClientId,
             source: tokenAuth.source,
@@ -666,7 +691,9 @@ class McpClient {
       !isToolCatalogAccessible(
         tool,
         await getCallerAccessibleCatalogIds({
-          userId: tokenAuth?.userId,
+          userId: tokenAuth?.serviceAccountId
+            ? serviceAccountUserId(tokenAuth.serviceAccountId)
+            : tokenAuth?.userId,
           organizationId: tokenAuth?.organizationId,
         }),
       )
@@ -1043,6 +1070,22 @@ class McpClient {
             (this.clientRequestsInFlight.get(client) ?? 0) + 1,
           );
 
+          // Each Playwright session is a fresh browser context; load the
+          // user's saved logins into it before its first tool call.
+          const browserStorageTarget =
+            isPlaywrightCatalogItem(catalogItem.id) &&
+            tokenAuth?.userId &&
+            attemptSessionId
+              ? {
+                  client,
+                  sessionId: attemptSessionId,
+                  userId: tokenAuth.userId,
+                }
+              : null;
+          if (browserStorageTarget) {
+            await browserStorageSync.ensureRestored(browserStorageTarget);
+          }
+
           // Determine the actual upstream tool name. Prefer the stored raw name
           // (tools.raw_name): it is exact even when the slug's server-prefix was
           // truncated to fit the 64-char cap or the raw name itself contains the
@@ -1115,23 +1158,26 @@ class McpClient {
             options?.abortSignal,
           );
 
-          const result = await client.callTool(
-            {
-              name: targetToolName,
-              arguments: toolCall.arguments,
-            },
-            undefined,
-            {
-              signal: options?.abortSignal,
-              // A detached task answers its client immediately, so the
-              // synchronous patience window no longer applies — the task TTL
-              // does. Without this, a task outliving the sync timeout dies at
-              // the timeout even though nobody is waiting on it.
-              timeout:
-                options?.upstreamTimeoutMs ??
-                config.mcpGateway.toolCallTimeoutMs,
-            },
-          );
+          // A detached task answers its client immediately, so the
+          // synchronous patience window no longer applies — the task TTL
+          // does. Without this, a task outliving the sync timeout dies at
+          // the timeout even though nobody is waiting on it.
+          const upstreamTimeoutMs =
+            options?.upstreamTimeoutMs ?? config.mcpGateway.toolCallTimeoutMs;
+          const result = await callWhileServerAnswers({
+            client,
+            timeoutMs: upstreamTimeoutMs,
+            signal: options?.abortSignal,
+            request: (signal) =>
+              client.callTool(
+                {
+                  name: targetToolName,
+                  arguments: toolCall.arguments,
+                },
+                undefined,
+                { signal, timeout: upstreamTimeoutMs },
+              ),
+          });
 
           const isOAuthServer = !!catalogItem.oauthConfig;
           const toolResultAuthError = isAuthRelatedToolResult(result);
@@ -1185,6 +1231,10 @@ class McpClient {
             });
           }
 
+          if (browserStorageTarget && !result.isError) {
+            browserStorageSync.scheduleSave(browserStorageTarget);
+          }
+
           // Apply template and return
           await clearStaleOAuthRefreshError();
           return await this.createSuccessResult({
@@ -1227,6 +1277,42 @@ class McpClient {
               encryptedChatContent,
             });
             throw error;
+          }
+
+          const stopped =
+            asMcpServerStoppedError(error) ??
+            // No client yet: the server never finished the handshake, as when
+            // a call queued behind a wedged server reconnects to it.
+            (!attemptClient &&
+            error instanceof McpError &&
+            error.code === ErrorCode.RequestTimeout
+              ? new McpServerStoppedError("not_answering")
+              : undefined);
+          if (stopped) {
+            // Drop the dead client so the next call on this connection
+            // reconnects instead of failing on it too.
+            if (attemptClient) this.retireClient(connectionKey, attemptClient);
+            const stoppedResult = await this.createErrorResult({
+              toolCall,
+              owner,
+              error: stopped.message,
+              mcpServerName,
+              authInfo,
+              encryptedChatContent,
+            });
+            // A detachable call that has run past the synchronous timeout is
+            // a background task by now (it detaches well before that bound);
+            // throwing settles its task as failed rather than as a completed
+            // call. Earlier, the caller is still waiting inline and needs a
+            // result, not a throw.
+            const syncTimeoutMs = config.mcpGateway.toolCallTimeoutMs;
+            if (
+              (options?.upstreamTimeoutMs ?? 0) > syncTimeoutMs &&
+              performance.now() - startedAt >= syncTimeoutMs
+            ) {
+              throw stopped;
+            }
+            return stoppedResult;
           }
 
           // Handle stale HTTP session.  The MCP SDK skips the `initialize`
@@ -1659,8 +1745,13 @@ class McpClient {
           : undefined;
       // Health check idle clients to verify the connection is still alive.
       // Recently-used clients skip the ping and recover on actual call failure.
+      // A client whose transport already closed (the SDK clears it on close)
+      // cannot answer; its ping fails at once, so the catch replaces it.
       try {
-        if (this.shouldValidateActiveConnection(connectionKey)) {
+        if (
+          !reusableClient.transport ||
+          this.shouldValidateActiveConnection(connectionKey)
+        ) {
           await reusableClient.ping();
           this.activeConnectionLastValidatedAt.set(connectionKey, Date.now());
         }
@@ -1717,6 +1808,12 @@ class McpClient {
     if (elicitationHandler) {
       configureMcpElicitation(client, elicitationHandler);
     }
+    // The server announced a different tool list: re-sync its catalog's tool
+    // snapshot (coalesced per catalog, never wakes a hibernated server). The
+    // gateway's own subscriptions then notify downstream clients.
+    client.setNotificationHandler(ToolListChangedNotificationSchema, () => {
+      mcpToolListChangedSync.onToolListChanged(targetMcpServerId);
+    });
 
     // Track whether we're using a stored session ID (for stale session cleanup)
     const storedSessionId =
@@ -1725,7 +1822,11 @@ class McpClient {
         : undefined;
 
     try {
-      await client.connect(transport);
+      // The same patience as a tool call: a server that cannot finish the
+      // handshake in that time is not going to answer the call either.
+      await client.connect(transport, {
+        timeout: config.mcpGateway.toolCallTimeoutMs,
+      });
     } catch (error) {
       this.closeWhenIdle(connectionKey, client);
       // If we used a stored session ID and connection failed, the session is
@@ -2243,6 +2344,7 @@ class McpClient {
           tokenId: tokenAuth.tokenId,
           teamId: tokenAuth.teamId,
           userId: tokenAuth.userId,
+          serviceAccountId: tokenAuth.serviceAccountId,
           isOrganizationToken: tokenAuth.isOrganizationToken,
           isUserToken: tokenAuth.isUserToken,
           isExternalIdp: tokenAuth.isExternalIdp,
@@ -2814,6 +2916,8 @@ class McpClient {
         namespace: k8sDeployment.k8sNamespace,
         podName: podName,
         containerName: "mcp-server",
+        startTimeoutMs: config.mcpGateway.toolCallTimeoutMs,
+        maxMessageBytes: config.mcpGateway.stdioMaxMessageBytes,
       });
     }
 
@@ -5074,7 +5178,9 @@ class McpClient {
       );
     // A catalog the calling user cannot see is not listed through the agent.
     const tools = await filterToolsByCallerCatalogAccess(agentTools, {
-      userId: tokenAuth?.userId,
+      userId: tokenAuth?.serviceAccountId
+        ? serviceAccountUserId(tokenAuth.serviceAccountId)
+        : tokenAuth?.userId,
       organizationId: tokenAuth?.organizationId,
     });
     const assignedTools = await ToolModel.getMcpToolsAssignedToAgent(
@@ -5751,6 +5857,93 @@ async function waitForMcpServerWake(params: {
   }
 }
 
+/**
+ * Run an upstream request that may outlive the synchronous tool-call timeout
+ * (a background task waits up to the task TTL) while checking that the MCP
+ * server still answers. Without the check, a reply lost on the way back leaves
+ * the call waiting silently for the whole TTL.
+ *
+ * Once the request has waited the synchronous timeout, ping the server on the
+ * same client every half of it. A ping that stays unanswered for that long,
+ * or a lost connection, ends the request — so a server that goes silent is
+ * noticed within about one synchronous timeout. A server that keeps answering,
+ * even with an error, keeps the request alive up to its own timeout.
+ */
+async function callWhileServerAnswers<T>(params: {
+  client: Client;
+  timeoutMs: number;
+  signal?: AbortSignal;
+  request: (signal: AbortSignal | undefined) => Promise<T>;
+}): Promise<T> {
+  const { client, timeoutMs, signal, request } = params;
+  const checkAfterMs = config.mcpGateway.toolCallTimeoutMs;
+  // Nothing is scheduled yet, so this path needs no cleanup.
+  if (timeoutMs <= checkAfterMs) return request(signal);
+
+  const intervalMs = Math.max(1_000, Math.floor(checkAfterMs / 2));
+  const serverStopped = new AbortController();
+  const pings = new AbortController();
+  let timer: NodeJS.Timeout | undefined;
+  const check = async () => {
+    try {
+      await client.ping({ timeout: intervalMs, signal: pings.signal });
+    } catch (error) {
+      // An error reply (a server that does not implement ping) still proves
+      // the server answers; only silence or a lost connection ends the call.
+      if (!pings.signal.aborted && !isErrorReply(error)) {
+        serverStopped.abort(new McpServerStoppedError("not_answering"));
+        return;
+      }
+    }
+    if (!pings.signal.aborted) {
+      timer = setTimeout(() => void check(), intervalMs);
+    }
+  };
+  timer = setTimeout(() => void check(), checkAfterMs);
+
+  try {
+    return await request(
+      signal
+        ? AbortSignal.any([signal, serverStopped.signal])
+        : serverStopped.signal,
+    );
+  } catch (error) {
+    // The SDK wraps an abort reason in its own timeout error; surface ours.
+    throw serverStopped.signal.aborted ? serverStopped.signal.reason : error;
+  } finally {
+    clearTimeout(timer);
+    pings.abort();
+  }
+}
+
+/** A JSON-RPC error the server sent back, as opposed to one the SDK raised. */
+function isErrorReply(error: unknown): boolean {
+  return (
+    error instanceof McpError &&
+    error.code !== ErrorCode.RequestTimeout &&
+    error.code !== ErrorCode.ConnectionClosed
+  );
+}
+
+/**
+ * The failures that mean this client can no longer reach its MCP server: the
+ * liveness check gave up, or the connection closed under the call.
+ */
+function asMcpServerStoppedError(
+  error: unknown,
+): McpServerStoppedError | undefined {
+  if (error instanceof McpServerStoppedError) return error;
+  if (
+    (error instanceof McpError && error.code === ErrorCode.ConnectionClosed) ||
+    // The SDK's Protocol.request() raises this plain Error when the transport
+    // is already gone; recheck the text after an SDK upgrade.
+    (error instanceof Error && error.message === "Not connected")
+  ) {
+    return new McpServerStoppedError("connection_closed");
+  }
+  return undefined;
+}
+
 /** Race `work` against the tool call's abort signal, if there is one. */
 async function raceWithAbort<T>(
   work: Promise<T>,
@@ -5855,7 +6048,7 @@ function formatActionableAuthError(params: {
     params.detail,
     `To ${params.actionLabel}, visit this URL: ${params.url}`,
     "",
-    "IMPORTANT: You MUST display the URL above to the user exactly as shown. Do NOT omit it or paraphrase it.",
+    "IMPORTANT: You MUST display the URL above to the user exactly as shown, in your reply text, never inside a question form. Do NOT omit it or paraphrase it.",
     "",
     params.postAction,
   ].join("\n");

@@ -1,4 +1,6 @@
 import {
+  BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
+  BUILT_IN_AGENT_IDS,
   E2eTestId,
   getAgentCatalogImages,
   type SupportedProvider,
@@ -368,6 +370,7 @@ vi.mock("@/lib/a2a-remote-agents.query", () => ({
 }));
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  useMcpCatalogCredentialPreflight: () => ({ data: [] }),
   useInternalMcpCatalog: useInternalMcpCatalogMock,
 }));
 
@@ -547,12 +550,15 @@ vi.mock("@/components/system-prompt-editor", () => ({
   SystemPromptEditor: ({
     value,
     onChange,
+    headerExtra,
   }: {
     value?: string;
     onChange?: (value: string) => void;
+    headerExtra?: React.ReactNode;
   }) => (
     <div>
       Mock Instruction Editor
+      {headerExtra}
       <textarea
         aria-label="Instructions"
         value={value ?? ""}
@@ -2739,6 +2745,91 @@ describe("AgentForm save payload and failure handling", () => {
    * is what gates the button, and it only stays true while the awaited
    * mutation is still in flight.
    */
+
+  describe("a built-in agent", () => {
+    const builtInName = BUILT_IN_AGENT_IDS.CHAT_TITLE_GENERATION;
+    const defaultPrompt = BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS[builtInName];
+    const builtInAgent = {
+      ...baseAgent,
+      builtIn: true,
+      builtInAgentConfig: { name: builtInName },
+      systemPrompt: "Customized title prompt",
+    };
+
+    const renderBuiltIn = () =>
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={builtInAgent}
+          sections={["configuration"]}
+        />,
+      );
+
+    beforeEach(() => {
+      useProfileMock.mockReturnValue({ data: builtInAgent, refetch: vi.fn() });
+      updateAgent.mockResolvedValue(builtInAgent);
+    });
+
+    it("saves an edited prompt", async () => {
+      const user = userEvent.setup();
+      renderBuiltIn();
+
+      const editor = await screen.findByLabelText("Instructions");
+      await user.clear(editor);
+      await user.type(editor, "Write short titles");
+      await user.click(screen.getByRole("button", { name: /update/i }));
+
+      await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+      expect(savedBody()).toMatchObject({
+        builtInAgentConfig: { name: builtInName },
+        systemPrompt: "Write short titles",
+      });
+    });
+
+    it("saves the shipped prompt after Reset to default", async () => {
+      const user = userEvent.setup();
+      renderBuiltIn();
+
+      await user.click(
+        await screen.findByRole("button", { name: /reset to default/i }),
+      );
+      expect(screen.getByLabelText("Instructions")).toHaveValue(defaultPrompt);
+      expect(
+        screen.getByRole("button", { name: /reset to default/i }),
+      ).toBeDisabled();
+
+      await user.click(screen.getByRole("button", { name: /update/i }));
+      await waitFor(() => expect(updateAgent).toHaveBeenCalledTimes(1));
+      expect(savedBody().systemPrompt).toBe(defaultPrompt.trim());
+    });
+
+    it("offers no labels", async () => {
+      renderBuiltIn();
+
+      await screen.findByLabelText("Instructions");
+      expect(screen.queryByText("Labels", { exact: true })).toBeNull();
+    });
+
+    it("saves its assigned tools, without the All mode", async () => {
+      const user = userEvent.setup();
+      pendingSaveChanges.mockResolvedValue(undefined);
+      render(
+        <AgentForm
+          agentType="agent"
+          agent={builtInAgent}
+          sections={["configuration", "tools"]}
+        />,
+      );
+
+      expect(screen.getByText("Mock Tools Editor")).toBeInTheDocument();
+      expect(screen.queryByRole("tab", { name: "All" })).toBeNull();
+
+      await user.click(screen.getByRole("button", { name: /update/i }));
+
+      await waitFor(() => expect(pendingSaveChanges).toHaveBeenCalledTimes(1));
+      expect(savedBody()).not.toHaveProperty("accessAllTools");
+    });
+  });
   it("keeps Update disabled while a save is in flight", async () => {
     const user = userEvent.setup();
     let releaseSave: (agent: unknown) => void = () => {};
@@ -4125,16 +4216,16 @@ describe("AgentForm save payload and failure handling", () => {
 
     const name = screen.getByPlaceholderText("Enter agent name");
     await user.clear(name);
-    await user.type(name, "Incident helper");
+    await user.paste("Incident helper");
     // The variable editor beside it has a Description field of its own.
     const description = document.getElementById(
       "agentDescription",
     ) as HTMLTextAreaElement;
     await user.clear(description);
-    await user.type(description, "Investigate build failures");
+    await user.paste("Investigate build failures");
     const instructions = screen.getByRole("textbox", { name: "Instructions" });
     await user.clear(instructions);
-    await user.type(instructions, "Start with the failing build logs.");
+    await user.paste("Start with the failing build logs.");
 
     await user.click(screen.getByRole("radio", { name: /Codex/ }));
     expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();

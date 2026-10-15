@@ -10,11 +10,11 @@ export const ARCHESTRA_REFERENCE = `# OpenAPPA in Archestra
 
 ## The policy document
 
-Archestra stores one root policy per organization, \`organization.appa.toml\`. With GitHub sync the repository owns the text: publishing opens a pull request, and Archestra enforces it only after merge and a successful sync. Without sync, publishing saves a local revision in the database.
+Archestra stores one root policy per organization, \`organization.appa.toml\`. With Git sync the repository owns the text: publishing opens a pull request (a merge request on GitLab), and Archestra enforces it only after merge and a successful sync. Without sync, publishing saves a local revision in the database.
 
 The document's \`[policy] version = 2\` names the format. The API \`revision\` is a separate save number that prevents overwriting concurrent edits. Change a saved policy with \`edits\` that name only the text you replace; send the complete text only for a first policy or a full rewrite. Merge rules into the existing document and never add a second \`[policy]\` header.
 
-The supported format is \`[policy]\`, \`[policy.deployment]\`, \`[externals]\`, and battery declarations.
+The supported format is \`[policy]\`, \`[policy.deployment]\`, \`[externals]\`, and battery declarations. \`externals.max_body_bytes\` accepts a positive integer of bytes, not a size string such as \`70MB\`; omit it to inherit \`ARCHESTRA_API_BODY_LIMIT\`. One value caps both external helper responses and tool results, without changing the proxy HTTP request limit; oversized tool results are withheld.
 
 ## Tool names
 
@@ -44,7 +44,7 @@ Keep the existing \`[externals.annotators.noop]\` URL. It also declares the \`ar
 
 A rule declares either \`annotator\` or static fields such as \`requires\`, never both. To block \`archestra__run_command\` outright, replace its annotator rule with \`delta = {}\` and \`requires = { attention = ["blocked"] }\`; to block only some commands, put a selector rule with \`requires\` before the annotated rule.
 
-Without the catch-all, declare \`archestra__search_tools\`, \`archestra__load_skill\`, \`mcp/appa/yell\`, and the policy tools with \`delta = {}\` so agents can still find tools, load skills, and change the policy.
+Without the catch-all, declare \`archestra__search_tools\`, \`archestra__load_skill\`, and the policy tools with \`delta = {}\` so agents can still find tools, load skills, and change the policy.
 
 ## Batteries
 

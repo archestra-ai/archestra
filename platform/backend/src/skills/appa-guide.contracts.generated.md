@@ -34,11 +34,12 @@ max_body_bytes = 65536
 
 ## Tool contracts
 
-Each `[[policy.tool]]` entry is a tool contract. It answers three questions:
+Each `[[policy.tool]]` entry is a tool contract. It answers these questions:
 
 | Field | What to write | What OpenAPPA does |
 |---|---|---|
 | `delta` | Restrictions carried by the tool's result. | Applies those restrictions when the agent receives the result. |
+| `forwards` | Restrictions carried by content the tool sends beyond its arguments. | Adds them to the label that `requires` checks. |
 | `requires` | Conditions the call must satisfy. | Checks them before allowing the call. |
 | `effects` | Side effects of a successful call. | Records them in the trajectory's history. |
 
@@ -65,15 +66,26 @@ effects = ["egress"]
 | `parameters` | JSON Schema for the tool arguments. Some input mappings require it. |
 | `tags` | Names used to select applicable authorities and sanitizers. See [Tags](#tags). |
 | `delta` | Can restrict the audience or lower trust. It cannot make the trajectory less restricted. |
+| `forwards` | Same shape as `delta`, with literal entries only: no `$<argument_name>` placeholders. |
 | `requires` | Audience, trust, effects, or attention requirements for the call. |
 | `effects` | Effect names recorded after successful execution. Declare all relevant side effects. |
 | `annotator` | A registered component that supplies the complete annotation for each call. |
 
-An omitted `delta` adds no restriction. An omitted `requires` adds no requirement.
+An omitted `delta` or `forwards` adds no restriction. An omitted `requires` adds no requirement.
 
-Only one source of contract rules is allowed: static `delta`, `requires`, and `effects` fields, or an `annotator`. Combining them causes a load error.
+Only one source of contract rules is allowed: static `delta`, `forwards`, `requires`, and `effects` fields, or an `annotator`. Combining them causes a load error.
 
-OpenAPPA checks both `delta` and `requires` before allowing the tool call.
+OpenAPPA checks `requires` before the call runs. The check reads the label of what the call sends: the trajectory's current label, combined with the tool's `forwards` and with the file content the call sends. The `delta` is not part of this label. It labels only the result, so it never makes a requirement fail.
+
+Use `forwards` when the tool itself sends content that its arguments do not carry. In the example below, `mail_report` reads a stored report on the server and mails it. The report is `internal`, so a mail to an external recipient fails `contains`, whatever the trajectory has read:
+
+```toml
+[[policy.tool]]
+name = "mail_report"
+parameters = { type = "object", properties = { to = { type = "string" } }, required = ["to"] }
+forwards = { audience = ["internal"] }
+requires = { audience = { contains = ["$to"] } }
+```
 
 ### Tool names
 
@@ -243,10 +255,10 @@ Use `delta.audience` to restrict who can receive a tool's result. Use `requires.
 | Field | What OpenAPPA does |
 |---|---|
 | `delta.audience` | Restricts the result to the specified readers. |
-| `requires.audience.contains` | Checks that the current audience includes all specified readers. |
-| `requires.audience.within` | Checks that every reader in the current audience belongs to the specified audience. |
+| `forwards.audience` | Restricts the content the tool sends beyond its arguments to the specified readers. |
+| `requires.audience.contains` | Checks that the audience of what the call sends includes all specified readers. |
 
-In the example below, reading a ticket restricts the trajectory to `internal`. The `publish_update` call requires unrestricted sharing. The `process_internal_data` call requires the trajectory's audience to be within `internal`.
+In the example below, reading a ticket restricts the trajectory to `internal`. The `publish_update` call requires unrestricted sharing.
 
 ```toml
 [[policy.tool]]
@@ -256,10 +268,6 @@ delta = { audience = ["internal"] }
 [[policy.tool]]
 name = "publish_update"
 requires = { audience = { contains = ["public"] } }
-
-[[policy.tool]]
-name = "process_internal_data"
-requires = { audience = { within = ["internal"] } }
 ```
 
 Multiple entries combine readers from all entries. For example:
@@ -268,9 +276,8 @@ Multiple entries combine readers from all entries. For example:
 |---|---|
 | `delta = { audience = ["@finance", "@support"] }` | The result is for readers who belong to either group. |
 | `requires = { audience = { contains = ["@finance", "@support"] } }` | The current audience must include every member of both groups. |
-| `requires = { audience = { within = ["@finance", "@support"] } }` | Every current reader must belong to at least one of the two groups. |
 
-`within` checks the trajectory's audience, not the recipient of one call. Only `contains` and `within` are allowed under `requires.audience`. Other keys cause a load error.
+`contains` is the only requirement under `requires.audience`.
 
 Each audience entry can be one of the following:
 
@@ -323,7 +330,7 @@ url = "https://audience.corp/slack"
 selectors = [{ template = "viewer", feeds = "self" }, { template = "channel/<id>" }]
 ```
 
-A selector placeholder MAY be the only entry of `delta.audience` or of `requires.audience.contains`. It MAY also be an entry of an annotator's `audiences` mandate; see [Permits and hint](#permits-and-hint). It MUST NOT appear under `within`, beside other entries in one list, or in an annotator's answer.
+A selector placeholder MAY be the only entry of `delta.audience` or of `requires.audience.contains`. It MAY also be an entry of an annotator's `audiences` mandate; see [Permits and hint](#permits-and-hint). It MUST NOT appear beside other entries in one list or in an annotator's answer.
 
 Each `$<argument_name>` becomes a required top-level argument of the tool, as under `contains`, except that a selector placeholder also accepts an argument declared as an array of strings; see [Read an audience from a tool argument](#read-an-audience-from-a-tool-argument). The spelling, with each `$<argument_name>` read as a variable segment, MUST match one template the provider declares under `selectors`; see [Declare selector templates](#declare-selector-templates). A `$<argument_name>` segment matches only a `<variable>` segment of the template.
 
@@ -343,7 +350,7 @@ Under `[policy.audience]`, `self` and `internal` list the selectors that supply 
 
 A host that serves many people can name the person each session acts for. It passes that person's email address as the session's principal when the session starts. In that session, `self` is exactly that address. OpenAPPA does not ask the `self` selectors, and `internal` includes the principal beside its own sources. Children and root forks of the session act for the same principal. A session without a principal uses `[policy.audience] self` as usual.
 
-A host names the principal in process, through the embedded runtime API; the HTTP hook wire does not carry one. OpenAPPA takes the principal on the host's word; it does not authenticate it. Only a host that authenticated the person should name one, and the principal must be the address the membership services report for that person. A multi-user host usually leaves `[policy.audience] self` empty, so a session that names no principal cannot establish `self` and is denied as described below. A policy that names `self` in its boundary or starting label still needs a `self` source to load, because it is checked before any session names a principal.
+A host names the principal in process, through the embedded runtime API, or on the HTTP hook wire as the `principal` field of `session_start`. The wire carries one only under kagent, and only when the runtime sets `APPA_SESSION_PRINCIPAL=wire`; the default `none` refuses a `session_start` that carries one. The kagent plugins send the caller's `x-user-id` header. `/hook` does not authenticate its caller, so set `wire` only when kagent authenticates its users and no other client can reach `/hook`. OpenAPPA takes the principal on the host's word; it does not authenticate it. Only a host that authenticated the person should name one, and the principal must be the address the membership services report for that person. A multi-user host usually leaves `[policy.audience] self` empty, so a session that names no principal cannot establish `self` and is denied as described below. A policy that names `self` in its boundary or starting label still needs a `self` source to load, because it is checked before any session names a principal.
 
 A policy can omit `self` or `internal`. A check that needs the members of an omitted level — for example, `contains = ["internal"]` after a `delta` narrowed the audience to `self` — cannot be established. OpenAPPA denies that call and names the missing key; proposing the call again does not change the answer.
 
@@ -515,7 +522,8 @@ Use these fields to declare trust restrictions and requirements:
 | Field | Meaning | Example |
 |---|---|---|
 | `delta.trust` | Declares the result's trust rank. Reading it can lower the trajectory's trust. | `delta = { trust = "suspicious" }` |
-| `requires.trust` | Sets the minimum trust rank needed to allow the call. | `requires = { trust = "trusted" }` |
+| `forwards.trust` | Declares the trust rank of content the tool sends beyond its arguments. | `forwards = { trust = "suspicious" }` |
+| `requires.trust` | Sets the minimum trust rank of what the call sends. | `requires = { trust = "trusted" }` |
 
 Both fields must use a name from the policy's trust chain: the ordered list of ranks from least trusted to most trusted.
 
@@ -617,11 +625,11 @@ A deployment with one reviewer can permit every mark at once. `permits = { atten
 
 ## Annotators
 
-An annotator classifies a tool call. It can determine the call's output restrictions (`delta`), requirements (`requires`), and effects. The `jev` builtin determines audience and trust only: no effects, history, or attention marks. OpenAPPA checks the resulting contract before allowing the call.
+An annotator classifies a tool call. It can determine the call's output restrictions (`delta`), the restrictions of content it sends (`forwards`), requirements (`requires`), and effects. The `jev` builtin determines audience and trust only: no effects, history, or attention marks. OpenAPPA checks the resulting contract before allowing the call.
 
 Use an annotator when a script or service must determine the rules for a call. For example, a script can classify files by directory: files in `/srv/public-docs` can be shared publicly, while files in `/srv/customer-records` are restricted to internal users.
 
-A tool selects one annotator with `annotator = "<name>"`. The annotator supplies `delta`, `requires` (including attention marks), and emitted effects. A `jev` annotator supplies audience and trust only, so its effects, `requires.history`, and `requires.attention` are always empty. Do not also declare these fields on that tool.
+A tool selects one annotator with `annotator = "<name>"`. The annotator supplies `delta`, `forwards`, `requires` (including attention marks), and emitted effects. A `jev` annotator supplies audience and trust only, so its effects, `requires.history`, and `requires.attention` are always empty. Do not also declare these fields on that tool.
 
 ### Example: annotate a tool call with Claude Code
 
@@ -801,10 +809,11 @@ For the customer request, the service returns this response to classify the resu
 
 The response uses `emits` for effects and `requires.history` for history checks. These names differ from the policy TOML fields.
 
-- `answer` must contain exactly `delta`, `requires`, and `emits`.
+- `answer` must contain `delta`, `requires`, and `emits`, and can contain `forwards`. No other key is allowed.
+- `forwards` has the same shape and permits as `delta`. An omitted `forwards` forwards nothing.
 - `requires` must contain `history` and `attention` arrays, even when empty.
-- Audience and trust fields inside `delta` and `requires` are optional. An omitted field adds no restriction or requirement.
-- `requires.audience` can contain `contains`, `within`, or both.
+- Audience and trust fields inside `delta`, `forwards`, and `requires` are optional. An omitted field adds no restriction or requirement.
+- `requires.audience` must contain exactly `contains`.
 - Each history entry is `{"contains":"<effect>"}` or `{"excludes":"<effect>"}`.
 - JSON audience values use `"public"` or a list of permitted audiences. Do not put `public` inside a JSON audience list.
 - A restricted list cannot repeat entries or contain both `self` and `internal`.
@@ -883,7 +892,7 @@ When a tool result would restrict the agent, OpenAPPA can offer a sanitizer whos
 
 If the cleaned result still adds restrictions, the agent can accept them or select another compatible sanitizer. Cleaning a new result does not remove restrictions from data the agent has already read.
 
-Changing tool arguments can satisfy an audience `contains` requirement. For example, a sanitizer could replace an external recipient with an allowed internal recipient. It cannot satisfy `within` or trust requirements, because changing arguments does not change the data the agent has already read.
+Changing tool arguments can satisfy an audience `contains` requirement. For example, a sanitizer could replace an external recipient with an allowed internal recipient. It cannot satisfy a trust requirement, because changing arguments does not change the data the agent has already read. It replaces only the arguments: the tool's `forwards` and the file content the call sends still enter the check.
 
 OpenAPPA selects the contract that matches the new arguments and checks the call again, including its requirements, effects, and argument schema. If that contract uses an annotator, OpenAPPA requests a new annotation. Membership checks use the responses already recorded for this decision.
 
@@ -1321,7 +1330,7 @@ Each component uses these fields differently:
 |---|---|---|---|
 | `authority` | `hint`, `permits` | `tool`, `arguments`, `requirements` | `ruling`, optional `reason` |
 | `sanitizer` | `hint`, `on`, `permits`; `parameters` for input rewrites | `tool` when known, `body` | `body` |
-| `annotation` | `hint`, `inputs`, `trust_ranks`, `audiences`, `attention_marks`, `effects` | `args`, `context` | `delta`, `requires`, `emits` |
+| `annotation` | `hint`, `inputs`, `trust_ranks`, `audiences`, `attention_marks`, `effects` | `args`, `context` | `delta`, optional `forwards`, `requires`, `emits` |
 | `audience` | `templates` | `selector` or `member` | `members` or `principal` |
 | `context` | empty | `tool`, `arguments`, optional `cwd` | any JSON value, or `null` |
 

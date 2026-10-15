@@ -1,18 +1,11 @@
 "use client";
 
-import type { Permissions } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import {
-  AlertTriangle,
-  Pencil,
-  Plug,
-  Plus,
-  RefreshCw,
-  Trash2,
-  Unplug,
-} from "lucide-react";
+import { AlertTriangle, Plus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { AccountPageAction } from "@/app/account/_components/account-page-action";
+import { ClaudeCodeSubscription } from "@/app/account/_components/claude-code-subscription";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -23,31 +16,85 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { QueryLoadError } from "@/components/query-load-error";
+import {
+  RESOURCE_ACCESS_FILTER_PARAMS,
+  ResourceAccessFilter,
+  useResourceAccessParam,
+} from "@/components/resource-access-filter";
+import { ResourceListActions } from "@/components/resource-list-actions";
+import { RuntimeCredentialActions } from "@/components/runtime-credential-actions";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
 import { RuntimeCredentialDisconnectDialog } from "@/components/runtime-credential-disconnect-dialog";
-import { RuntimeCredentialIcon } from "@/components/runtime-credential-icon";
+import {
+  RuntimeCredentialIcon,
+  runtimeCredentialIconOf,
+} from "@/components/runtime-credential-icon";
 import { SearchInput } from "@/components/search-input";
 import { RuntimeCredentialDefinitionDialog } from "@/components/settings/runtime-credential-definition-dialog";
-import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { PermissionButton } from "@/components/ui/permission-button";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
+import { useGitCredentials } from "@/lib/git-credentials.query";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
   type RuntimeCredentialDefinition,
   useDeleteRuntimeCredential,
   useDeleteRuntimeCredentialConnection,
-  useRuntimeCredentials,
+  useFilteredRuntimeCredentials,
   useRuntimeCredentialUsage,
 } from "@/lib/runtime-credentials.query";
 
-const MANAGE_CREDENTIALS_PERMISSION: Permissions = {
-  credential: ["update"],
-};
-
-export function RuntimeCredentialsSection() {
-  const definitions = useRuntimeCredentials();
+/**
+ * The credentials table of Settings → Credentials and, with `mode="personal"`,
+ * of Personal Settings → Credentials. Each reader gets one of the two (see
+ * `useCredentialsPage`): Settings for whoever can open it, Personal Settings
+ * for everyone else. Both apply the same row rules and show the reader's
+ * Claude Code sign-in above the table; the personal table lists only
+ * credentials that take a personal value, offers no "Admin access" view of
+ * other people's credentials, and adds credentials just for the reader.
+ */
+export function RuntimeCredentialsSection({
+  mode = "organization",
+}: {
+  mode?: "organization" | "personal";
+}) {
+  const personalMode = mode === "personal";
+  const {
+    searchParams,
+    pageIndex,
+    pageSize,
+    updateQueryParams,
+    setPagination,
+  } = useDataTableQueryParams({ defaultPageSize: 10 });
+  const {
+    access,
+    sharedWith,
+    owner,
+    isDefault: isDefaultAccess,
+  } = useResourceAccessParam({ offerAdminAccess: !personalMode });
+  const definitions = useFilteredRuntimeCredentials({
+    access,
+    sharedWith,
+    owner,
+  });
+  // GitLab tokens name their host here: the definition list does not carry it.
+  const gitCredentials = useGitCredentials(
+    definitions.data?.some((entry) => entry.kind === "gitlab_token") ?? false,
+  );
+  const gitHosts = useMemo(
+    () =>
+      new Map(
+        (gitCredentials.data ?? []).map((entry) => [
+          entry.id,
+          new URL(entry.webUrl).host,
+        ]),
+      ),
+    [gitCredentials.data],
+  );
   const byosEnabled = useFeature("byosEnabled");
   const [definitionDialog, setDefinitionDialog] = useState<
     RuntimeCredentialDefinition | "new" | null
@@ -63,39 +110,66 @@ export function RuntimeCredentialsSection() {
   const disconnect = useDeleteRuntimeCredentialConnection();
 
   const setActionButton = useSetSettingsAction();
-  const [search, setSearch] = useState("");
-  const [kind, setKind] = useState("all");
-  const [scope, setScope] = useState("all");
-  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 10 });
+  // Settings → Credentials is the one credentials page for everyone who can
+  // open it, so a reader there without credential:create (Settings reached
+  // through a grant on one organization credential) still adds credentials
+  // just for themselves, as in Personal Settings.
+  const { data: canCreateShared } = useHasPermissions({
+    credential: ["create"],
+  });
+  const personalCreate = personalMode || canCreateShared === false;
+  const search = searchParams.get("search") ?? "";
+  const kind = searchParams.get("kind") ?? "all";
+  const scope = personalMode ? "all" : (searchParams.get("scope") ?? "all");
+  const kindLabels = personalMode
+    ? PERSONAL_CREDENTIAL_KIND_LABELS
+    : CREDENTIAL_KIND_LABELS;
   const hasActiveFilters =
-    Boolean(search.trim()) || kind !== "all" || scope !== "all";
-  const resetPage = () =>
-    setPagination((previous) => ({ ...previous, pageIndex: 0 }));
-  const clearFilters = () => {
-    setSearch("");
-    setKind("all");
-    setScope("all");
-    resetPage();
-  };
+    Boolean(search.trim()) ||
+    kind !== "all" ||
+    scope !== "all" ||
+    !isDefaultAccess;
+  const clearFilters = () =>
+    updateQueryParams({
+      search: null,
+      kind: null,
+      scope: null,
+      ...Object.fromEntries(
+        RESOURCE_ACCESS_FILTER_PARAMS.map((param) => [param, null]),
+      ),
+      page: "1",
+    });
 
   useEffect(() => {
+    if (personalMode) return;
     setActionButton(
-      <PermissionButton
-        permissions={{ credential: ["create"] }}
-        size="sm"
-        onClick={() => setDefinitionDialog("new")}
-      >
-        <Plus className="size-4" />
-        <span>Add credential</span>
-      </PermissionButton>,
+      <div className="flex items-center gap-2">
+        {canCreateShared === false ? (
+          <Button size="sm" onClick={() => setDefinitionDialog("new")}>
+            <Plus className="size-4" />
+            <span>Add credential</span>
+          </Button>
+        ) : (
+          <PermissionButton
+            permissions={{ credential: ["create"] }}
+            size="sm"
+            onClick={() => setDefinitionDialog("new")}
+          >
+            <Plus className="size-4" />
+            <span>Add credential</span>
+          </PermissionButton>
+        )}
+        <ResourceListActions resource="credential" />
+      </div>,
     );
     return () => setActionButton(null);
-  }, [setActionButton]);
+  }, [setActionButton, personalMode, canCreateShared]);
 
   const filteredDefinitions = useMemo(() => {
     const query = search.trim().toLowerCase();
     return (definitions.data ?? []).filter(
       (definition) =>
+        (!personalMode || definition.allowPersonal) &&
         (!query ||
           [definition.name, definition.key, definition.description].some(
             (value) => value.toLowerCase().includes(query),
@@ -106,7 +180,7 @@ export function RuntimeCredentialsSection() {
             ? definition.allowOrganization
             : definition.allowPersonal)),
     );
-  }, [definitions.data, search, kind, scope]);
+  }, [definitions.data, search, kind, scope, personalMode]);
 
   const columns = useMemo<ColumnDef<RuntimeCredentialDefinition>[]>(
     () => [
@@ -121,13 +195,7 @@ export function RuntimeCredentialsSection() {
             builtIn={definition.builtIn}
             icon={
               <RuntimeCredentialIcon
-                icon={
-                  definition.icon ??
-                  (definition.kind === "github_app" ||
-                  definition.kind === "github_app_user"
-                    ? "logo:github"
-                    : null)
-                }
+                icon={runtimeCredentialIconOf(definition)}
               />
             }
             extraBadges={
@@ -148,22 +216,45 @@ export function RuntimeCredentialsSection() {
         accessorKey: "kind",
         header: "Type",
         size: 140,
-        cell: ({ row }) => CREDENTIAL_KIND_LABELS[row.original.kind],
+        cell: ({ row }) => {
+          const host =
+            row.original.kind === "gitlab_token"
+              ? gitHosts.get(row.original.id)
+              : undefined;
+          return (
+            <span className="block min-w-0">
+              <span className="block">
+                {CREDENTIAL_KIND_LABELS[row.original.kind]}
+              </span>
+              {host ? (
+                <span className="block truncate text-xs text-muted-foreground">
+                  {host}
+                </span>
+              ) : null}
+            </span>
+          );
+        },
       },
-      {
-        id: "scope",
-        header: "Provided by",
-        size: 120,
-        cell: ({ row }) =>
-          row.original.allowOrganization ? "Organization" : "Each user",
-      },
+      // Every personal row would say "Each user".
+      ...(personalMode
+        ? []
+        : [
+            {
+              id: "scope",
+              header: "Provided by",
+              size: 120,
+              cell: ({ row }) =>
+                row.original.allowOrganization ? "Organization" : "Each user",
+            } satisfies ColumnDef<RuntimeCredentialDefinition>,
+          ]),
       {
         id: "actions",
         header: "Actions",
         size: 100,
         cell: ({ row: { original: definition } }) => (
-          <CredentialActions
+          <RuntimeCredentialActions
             definition={definition}
+            scope={definition.allowOrganization ? "organization" : "personal"}
             onConnect={() => setConnecting(definition)}
             onDisconnect={() => setDisconnecting(definition)}
             onEdit={() => setDefinitionDialog(definition)}
@@ -172,11 +263,20 @@ export function RuntimeCredentialsSection() {
         ),
       },
     ],
-    [],
+    [gitHosts, personalMode],
   );
 
   return (
     <>
+      {personalMode && (
+        <AccountPageAction>
+          <Button size="sm" onClick={() => setDefinitionDialog("new")}>
+            <Plus className="size-4" />
+            <span>Add credential</span>
+          </Button>
+        </AccountPageAction>
+      )}
+      <ClaudeCodeSubscription />
       <CollectionFilters>
         <FilterBar
           onClearFilters={hasActiveFilters ? clearFilters : undefined}
@@ -185,54 +285,64 @@ export function RuntimeCredentialsSection() {
               objectNamePlural="credentials"
               searchFields={["name", "key", "description"]}
               className={filterSearchClass}
-              syncQueryParams={false}
-              value={search}
-              onSearchChange={(value) => {
-                setSearch(value);
-                resetPage();
-              }}
+              paramName="search"
             />
           }
         >
+          <ResourceAccessFilter
+            resource="credential"
+            noun="credentials"
+            offerAdminAccess={!personalMode}
+          />
           <FilterSelect
             value={kind}
-            onValueChange={(value) => {
-              setKind(value);
-              resetPage();
-            }}
+            onValueChange={(value) =>
+              updateQueryParams({
+                kind: value === "all" ? null : value,
+                page: "1",
+              })
+            }
             placeholder="Filter by type"
             items={[
               { value: "all", label: "All types" },
-              ...Object.entries(CREDENTIAL_KIND_LABELS).map(
-                ([value, label]) => ({
-                  value,
-                  label,
-                  content: (
-                    <span className="flex items-center gap-2">
-                      <RuntimeCredentialIcon
-                        icon={value === "secret" ? null : "logo:github"}
-                        className="size-4"
-                      />
-                      <span>{label}</span>
-                    </span>
-                  ),
-                }),
-              ),
+              ...Object.entries(kindLabels).map(([value, label]) => ({
+                value,
+                label,
+                content: (
+                  <span className="flex items-center gap-2">
+                    <RuntimeCredentialIcon
+                      icon={
+                        value === "secret"
+                          ? null
+                          : value === "gitlab_token"
+                            ? "logo:gitlab"
+                            : "logo:github"
+                      }
+                      className="size-4"
+                    />
+                    <span>{label}</span>
+                  </span>
+                ),
+              })),
             ]}
           />
-          <FilterSelect
-            value={scope}
-            onValueChange={(value) => {
-              setScope(value);
-              resetPage();
-            }}
-            placeholder="Filter by scope"
-            items={[
-              { value: "all", label: "All scopes" },
-              { value: "organization", label: "Organization" },
-              { value: "personal", label: "Each user (personal)" },
-            ]}
-          />
+          {!personalMode && (
+            <FilterSelect
+              value={scope}
+              onValueChange={(value) =>
+                updateQueryParams({
+                  scope: value === "all" ? null : value,
+                  page: "1",
+                })
+              }
+              placeholder="Filter by scope"
+              items={[
+                { value: "all", label: "All scopes" },
+                { value: "organization", label: "Organization" },
+                { value: "personal", label: "Each user (personal)" },
+              ]}
+            />
+          )}
         </FilterBar>
       </CollectionFilters>
       {definitions.isError ? (
@@ -246,10 +356,20 @@ export function RuntimeCredentialsSection() {
           data={filteredDefinitions}
           getRowId={(definition) => definition.key}
           isLoading={definitions.isPending}
-          pagination={{ ...pagination, total: filteredDefinitions.length }}
+          pagination={{
+            pageIndex,
+            pageSize,
+            total: filteredDefinitions.length,
+          }}
           onPaginationChange={setPagination}
-          emptyMessage="No credentials yet"
-          emptyDescription="Add a credential to make it available to agents, MCP servers, skills, and knowledge."
+          emptyMessage={
+            personalMode ? "No personal credentials" : "No credentials yet"
+          }
+          emptyDescription={
+            personalMode
+              ? undefined
+              : "Add a credential to make it available to agents, MCP servers, skills, and knowledge."
+          }
           hasActiveFilters={hasActiveFilters}
           filteredEmptyMessage="No credentials match your filters"
           onClearFilters={clearFilters}
@@ -260,12 +380,19 @@ export function RuntimeCredentialsSection() {
       {definitionDialog && (
         <RuntimeCredentialDefinitionDialog
           definition={definitionDialog === "new" ? null : definitionDialog}
+          personal={personalCreate}
           onClose={() => setDefinitionDialog(null)}
           onCreated={async (id) => {
             setDefinitionDialog(null);
             const { data } = await definitions.refetch();
             const created = data?.find((entry) => entry.id === id);
-            if (created?.kind === "secret" && created.allowOrganization)
+            // A new secret has no value yet: connect the one the reader
+            // provides here, the organization's for an organization
+            // credential, yours for one just for you.
+            if (
+              created?.kind === "secret" &&
+              (personalCreate || created.allowOrganization)
+            )
               setConnecting(created);
           }}
         />
@@ -315,85 +442,6 @@ export function RuntimeCredentialsSection() {
         }}
       />
     </>
-  );
-}
-
-function CredentialActions({
-  definition,
-  onConnect,
-  onDisconnect,
-  onEdit,
-  onDelete,
-}: {
-  definition: RuntimeCredentialDefinition;
-  onConnect: () => void;
-  onDisconnect: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
-  const connected = definition.allowOrganization
-    ? definition.organizationConfigured
-    : definition.personalConfigured;
-  const primaryActions = [
-    {
-      icon: connected ? (
-        <RefreshCw className="size-4" />
-      ) : (
-        <Plug className="size-4" />
-      ),
-      label: connected ? "Replace" : "Connect",
-      onClick: onConnect,
-      permissions: definition.allowOrganization
-        ? MANAGE_CREDENTIALS_PERMISSION
-        : ({ credential: ["read"] } as Permissions),
-    },
-  ];
-  const dropdownActions = [
-    ...(!definition.builtIn
-      ? [
-          {
-            icon: <Pencil className="size-4" />,
-            label: "Edit",
-            onClick: onEdit,
-            permissions: MANAGE_CREDENTIALS_PERMISSION,
-          },
-        ]
-      : []),
-    ...(connected
-      ? [
-          {
-            icon: <Unplug className="size-4" />,
-            label: "Disconnect",
-            onClick: onDisconnect,
-            permissions: definition.allowOrganization
-              ? MANAGE_CREDENTIALS_PERMISSION
-              : ({ credential: ["read"] } as Permissions),
-            variant: "destructive" as const,
-          },
-        ]
-      : []),
-    ...(!definition.builtIn
-      ? [
-          {
-            icon: <Trash2 className="size-4" />,
-            label: "Delete",
-            onClick: onDelete,
-            permissions: { credential: ["delete"] } as Permissions,
-            variant: "destructive" as const,
-          },
-        ]
-      : []),
-  ];
-
-  if (primaryActions.length === 0 && dropdownActions.length === 0) return null;
-  return (
-    <div className="flex items-center gap-2 self-end sm:self-auto">
-      <TableRowActions
-        actions={primaryActions}
-        dropdownActions={dropdownActions}
-        itemName={definition.name}
-      />
-    </div>
   );
 }
 
@@ -485,5 +533,13 @@ const CREDENTIAL_KIND_LABELS: Record<
 > = {
   secret: "Custom secret",
   github_app: "GitHub App",
-  github_app_user: "GitHub user connection",
+  github_app_user: "GitHub user credential",
+  gitlab_token: "GitLab token",
 };
+
+/** The types that take a personal value: GitHub Apps and GitLab tokens are the organization's. */
+const PERSONAL_CREDENTIAL_KIND_LABELS: Partial<typeof CREDENTIAL_KIND_LABELS> =
+  {
+    secret: CREDENTIAL_KIND_LABELS.secret,
+    github_app_user: CREDENTIAL_KIND_LABELS.github_app_user,
+  };

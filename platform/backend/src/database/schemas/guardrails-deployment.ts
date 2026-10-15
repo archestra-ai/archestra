@@ -9,5 +9,7 @@ const guardrailsDeploymentTable = pgTable("guardrails_deployment", {
     .$type<UnsupportedAppaClientAction>()
     .notNull()
     .default("bypass"),
+  // Whether a yell also turns OpenAPPA off for the session that sends it.
+  breakTheGlassEnabled: boolean("superyell_enabled").notNull().default(true),
 });
 export default guardrailsDeploymentTable;

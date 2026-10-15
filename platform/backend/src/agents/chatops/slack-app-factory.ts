@@ -99,15 +99,8 @@ class SlackAppFactory {
       }),
     );
 
-    const created = await new WebClient().apps.manifest.create({
-      token,
-      manifest,
-    });
-    const appId = created.app_id;
-    const credentials = created.credentials;
-    if (!created.ok || !appId || !credentials?.signing_secret) {
-      throw new Error(created.error ?? "Slack did not return the new app");
-    }
+    const { appId, credentials, oauthAuthorizeUrl } =
+      await this.createFromManifest({ token, manifest });
 
     // A handle left at its default keeps following the agent's name.
     const agent = await AgentModel.findById(params.agentId);
@@ -139,42 +132,110 @@ class SlackAppFactory {
     // The agent's icon becomes the app's icon.
     await this.syncAgentIdentity(params.agentId);
 
-    if (!oauth || !created.oauth_authorize_url) {
-      return {
-        appId,
-        installUrl: `https://api.slack.com/apps/${appId}/oauth`,
-        installMode: "manual",
-      };
-    }
+    return this.installLink({
+      appId,
+      oauthAuthorizeUrl: oauth ? oauthAuthorizeUrl : undefined,
+      pending: {
+        agentId: params.agentId,
+        organizationId: params.organizationId,
+      },
+    });
+  }
 
-    const state = randomUUID();
-    await cacheManager.set(
-      installStateKey(state),
-      { agentId: params.agentId, organizationId: params.organizationId },
-      INSTALL_STATE_TTL_MS,
+  /**
+   * Create the router bot's Slack app — the one that answers as whichever
+   * agent each DM or channel picks — and save it, not yet installed. Unlike an
+   * agent's bot it has the /select-agent slash commands. Returns where the
+   * admin goes next to install it.
+   */
+  async createRouterApp(params: {
+    appName: string;
+    connectionMode: ChatOpsConnectionMode;
+    organizationId: string;
+    /** Whose configuration token creates the app. */
+    userId: string;
+  }): Promise<{
+    appId: string;
+    installUrl: string;
+    installMode: "oauth" | "manual";
+  }> {
+    const token = await this.getAccessToken(params.userId);
+    const webhookBase = `${this.publicBaseUrl()}/api/webhooks/chatops/slack`;
+    const oauth = this.canInstallWithOAuth();
+    const manifest = JSON.parse(
+      buildSlackManifest({
+        appName: params.appName,
+        connectionMode: params.connectionMode,
+        webhookUrl: webhookBase,
+        interactiveUrl: `${webhookBase}/interactive`,
+        slashCommandUrl: `${webhookBase}/slash-command`,
+        slashCommands: true,
+        ...(oauth && { redirectUrls: [this.callbackUrl()] }),
+      }),
     );
-    const installUrl = new URL(created.oauth_authorize_url);
-    installUrl.searchParams.set("redirect_uri", this.callbackUrl());
-    installUrl.searchParams.set("state", state);
-    return { appId, installUrl: installUrl.toString(), installMode: "oauth" };
+    const { appId, credentials, oauthAuthorizeUrl } =
+      await this.createFromManifest({ token, manifest });
+
+    // Saved disabled until installed: there is no bot token yet.
+    await ChatOpsConfigModel.saveSlackConfig({
+      enabled: false,
+      botToken: "",
+      signingSecret: credentials.signing_secret,
+      appId,
+      connectionMode: params.connectionMode,
+      appLevelToken: "",
+      clientId: credentials.client_id,
+      clientSecret: credentials.client_secret,
+      managed: true,
+      configTokenUserId: params.userId,
+    });
+    logger.info(
+      { appId },
+      "[SlackAppFactory] Created the router bot's Slack app",
+    );
+
+    return this.installLink({
+      appId,
+      oauthAuthorizeUrl: oauth ? oauthAuthorizeUrl : undefined,
+      pending: { organizationId: params.organizationId },
+    });
   }
 
   /**
    * Finish a one-click install: exchange Slack's code for the bot token and
    * enable the bot. `state` must be one this server issued, and is used once.
+   * Returns the agent whose bot it is, or null for the router bot.
    */
   async completeOAuthInstall(params: {
     code: string;
     state: string;
-  }): Promise<{ agentId: string }> {
+  }): Promise<{ agentId: string | null }> {
     const key = installStateKey(params.state);
-    const pending = await cacheManager.get<{ agentId: string }>(key);
+    const pending = await cacheManager.get<PendingInstall>(key);
     if (!pending) {
       throw new Error(
         `This install link expired. Start again from ${archestraMcpBranding.appName}.`,
       );
     }
     await cacheManager.delete(key);
+
+    if (!pending.agentId) {
+      const router = await ChatOpsConfigModel.getSlackConfig();
+      if (!router?.clientId || !router.clientSecret) {
+        throw new Error("The router bot's Slack app is no longer set up.");
+      }
+      const botToken = await this.exchangeInstallCode({
+        clientId: router.clientId,
+        clientSecret: router.clientSecret,
+        code: params.code,
+      });
+      await ChatOpsConfigModel.saveSlackConfig({
+        ...router,
+        botToken,
+        enabled: true,
+      });
+      return { agentId: null };
+    }
 
     const bot = (await ChatOpsConfigModel.getSlackAgentBots()).find(
       (candidate) => candidate.agentId === pending.agentId,
@@ -183,19 +244,14 @@ class SlackAppFactory {
       throw new Error("This agent's Slack app is no longer set up.");
     }
 
-    const access = await new WebClient().oauth.v2.access({
-      client_id: bot.clientId,
-      client_secret: bot.clientSecret,
+    const botToken = await this.exchangeInstallCode({
+      clientId: bot.clientId,
+      clientSecret: bot.clientSecret,
       code: params.code,
-      redirect_uri: this.callbackUrl(),
     });
-    if (!access.ok || !access.access_token) {
-      throw new Error(access.error ?? "Slack did not return a bot token");
-    }
-
     await ChatOpsConfigModel.saveSlackAgentBot({
       ...bot,
-      botToken: access.access_token,
+      botToken,
       enabled: true,
     });
     return { agentId: pending.agentId };
@@ -225,7 +281,10 @@ class SlackAppFactory {
    * events and scopes. From then on Archestra manages them like apps it
    * created. Each app is patched, not replaced, so its name, icon, and URLs
    * stay. Slack cannot switch an app back from the agent experience.
-   * Uses the given user's token, so only apps they collaborate on succeed.
+   *
+   * Uses the given user's token, which only works on apps they collaborate
+   * on. So it leaves alone the bots another person's token manages: Slack
+   * would refuse them, and their owner keeps them up to date.
    */
   async migrateExistingApps(
     userId: string,
@@ -235,7 +294,12 @@ class SlackAppFactory {
     const bots = await ChatOpsConfigModel.getSlackAgentBots();
     const targets: { appId: string; bot?: SlackAgentBotConfig }[] = [
       ...(main?.appId ? [{ appId: main.appId }] : []),
-      ...bots.flatMap((bot) => (bot.appId ? [{ appId: bot.appId, bot }] : [])),
+      ...bots.flatMap((bot) =>
+        bot.appId &&
+        (!bot.configTokenUserId || bot.configTokenUserId === userId)
+          ? [{ appId: bot.appId, bot }]
+          : [],
+      ),
     ];
 
     const results: SlackAppMigrationResult[] = [];
@@ -478,6 +542,88 @@ class SlackAppFactory {
   // Private Methods
   // ===========================================================================
 
+  /** Create an app from a manifest with a configuration token. */
+  private async createFromManifest(params: {
+    token: string;
+    manifest: Parameters<
+      WebClient["apps"]["manifest"]["create"]
+    >[0]["manifest"];
+  }): Promise<{
+    appId: string;
+    credentials: {
+      signing_secret: string;
+      client_id?: string;
+      client_secret?: string;
+    };
+    oauthAuthorizeUrl?: string;
+  }> {
+    const created = await new WebClient().apps.manifest.create(params);
+    const appId = created.app_id;
+    const credentials = created.credentials;
+    if (!created.ok || !appId || !credentials?.signing_secret) {
+      throw new Error(created.error ?? "Slack did not return the new app");
+    }
+    return {
+      appId,
+      credentials: {
+        ...credentials,
+        signing_secret: credentials.signing_secret,
+      },
+      oauthAuthorizeUrl: created.oauth_authorize_url,
+    };
+  }
+
+  /**
+   * Where the admin installs a new app: a one-click OAuth link that comes back
+   * to this server when Slack offered one, else the app's own Slack page.
+   */
+  private async installLink(params: {
+    appId: string;
+    oauthAuthorizeUrl: string | undefined;
+    pending: PendingInstall;
+  }): Promise<{
+    appId: string;
+    installUrl: string;
+    installMode: "oauth" | "manual";
+  }> {
+    const { appId } = params;
+    if (!params.oauthAuthorizeUrl) {
+      return {
+        appId,
+        installUrl: `https://api.slack.com/apps/${appId}/oauth`,
+        installMode: "manual",
+      };
+    }
+    const state = randomUUID();
+    await cacheManager.set(
+      installStateKey(state),
+      params.pending,
+      INSTALL_STATE_TTL_MS,
+    );
+    const installUrl = new URL(params.oauthAuthorizeUrl);
+    installUrl.searchParams.set("redirect_uri", this.callbackUrl());
+    installUrl.searchParams.set("state", state);
+    return { appId, installUrl: installUrl.toString(), installMode: "oauth" };
+  }
+
+  /** Trade the code Slack sent back after an install for the bot token. */
+  private async exchangeInstallCode(params: {
+    clientId: string;
+    clientSecret: string;
+    code: string;
+  }): Promise<string> {
+    const access = await new WebClient().oauth.v2.access({
+      client_id: params.clientId,
+      client_secret: params.clientSecret,
+      code: params.code,
+      redirect_uri: this.callbackUrl(),
+    });
+    if (!access.ok || !access.access_token) {
+      throw new Error(access.error ?? "Slack did not return a bot token");
+    }
+    return access.access_token;
+  }
+
   /**
    * A live configuration token, renewed when it is close to expiring: the
    * user's own, or without a user the organization-wide one.
@@ -620,6 +766,9 @@ const SLACK_ICON_SIZE = 512;
 const MAX_ICON_INPUT_PIXELS = 4096 * 4096;
 
 /** Slack's authorization code lives 10 minutes; the link a little longer. */
+/** An install in progress: the agent whose bot it is, or none for the router bot. */
+type PendingInstall = { agentId?: string; organizationId: string };
+
 const INSTALL_STATE_TTL_MS = 30 * TimeInMs.Minute;
 
 /**

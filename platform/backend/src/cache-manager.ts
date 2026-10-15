@@ -30,12 +30,18 @@ export const CacheKey = {
   WebhookRateLimit: "webhook-rate-limit",
   /** OAuth flow state during authentication */
   OAuthState: "oauth-state",
+  /** Token endpoint requests, before verifying client credentials. */
+  OAuthTokenRateLimit: "oauth-token-rate-limit",
   /** MCP Gateway session state */
   McpSession: "mcp-session",
   /** Legacy HTTP+SSE stream records for the MCP Gateway */
   LegacySseSession: "legacy-sse-session",
   /** Short-lived replies waiting for a legacy SSE stream on another replica */
   LegacySseMessages: "legacy-sse-messages",
+  /** Who an in-band gateway request (a form) was sent to, readable by every replica */
+  McpGatewayPendingRequest: "mcp-gateway-pending-request",
+  /** A client's answer to an in-band gateway request, waiting for the replica that sent it */
+  McpGatewayParkedAnswer: "mcp-gateway-parked-answer",
   /** IdP groups cache during login flow */
   IdpGroups: "idp-groups",
   /** Chat stream stop signal for cross-pod abort */
@@ -50,10 +56,13 @@ export const CacheKey = {
   OpenAppaNativeQuestion: "openappa-native-question",
   /** The proxy session behind a yell call it allowed, for the gateway that runs it (consume-once) */
   OpenAppaYellSession: "openappa-yell-session",
+  OpenAppaYellResult: "openappa-yell-result",
   /** OpenAPPA reviews waiting for a native client question */
   OpenAppaHitlReview: "openappa-hitl-review",
   /** One-use rulings returned by a native client question */
   OpenAppaHitlRuling: "openappa-hitl-ruling",
+  /** review_required results the proxy already asked the client to put to the user, once each */
+  OpenAppaHitlQuestionAsked: "openappa-hitl-question-asked",
   /** Per-call server-issued review status, for history only; never a ruling. */
   OpenAppaHitlReviewHistory: "openappa-hitl-review-history",
   /** Pending OpenAPPA review indexed by a verified runtime workspace */
@@ -62,6 +71,10 @@ export const CacheKey = {
   OpenAppaRemedyToolsMissing: "openappa-remedy-tools-missing",
   /** Ruling on a call to a tool the client had not loaded, answered on that call's result */
   OpenAppaNotLoadedRuling: "openappa-not-loaded-ruling",
+  /** Notice for a call whose annotator gave no answer, answered on that call's result */
+  OpenAppaUnansweredAnnotationNotice: "openappa-unanswered-annotation-notice",
+  /** Host clarification appended to a runtime-confirmed denied call's result. */
+  OpenAppaDeniedCallClarification: "openappa-denied-call-clarification",
   /** Sessions whose client already waited once for the gateway remedy tools to load */
   OpenAppaRemedyToolsAwaited: "openappa-remedy-tools-awaited",
   /** OpenAI credentials that cannot generate reasoning summaries (unverified org) */
@@ -74,6 +87,8 @@ export const CacheKey = {
   VirtualKeyRateLimit: "virtual-key-rate-limit",
   /** Connection-setup script token brute-force rate limiting per IP */
   ConnectionSetupScriptRateLimit: "connection-setup-script-rate-limit",
+  /** First native conversation to present a verified setup reference */
+  ConnectionSetupConversation: "connection-setup-conversation",
   /** Archestra VAF Add On package proxy rate limiting per IP */
   MfilesVafAddOnPackageRateLimit: "mfiles-vaf-add-on-package-rate-limit",
   /** Resolved release pin (package URL + ref) for the Archestra VAF Add On installer */
@@ -460,6 +475,27 @@ class CacheManager {
         getAndDeleteMany: take,
       });
     });
+  }
+
+  /**
+   * Read several keys in one statement. Unlike {@link getMany}, a storage
+   * failure throws so a caller cannot treat an outage as an empty poll.
+   */
+  async readMany<T>(keys: AllowedCacheKey[]): Promise<Map<AllowedCacheKey, T>> {
+    const entries = new Map<AllowedCacheKey, T>();
+    if (!this.keyv) throw new Error("CacheManager: Not started");
+    if (keys.length === 0) return entries;
+    const rows = await CacheEntryModel.getMany(
+      keys.map((key) => `keyv:${key}`),
+    );
+    const now = Date.now();
+    for (const row of rows) {
+      const data = await this.keyv.deserializeData<T>(row.value);
+      if (data?.value === undefined) continue;
+      if (typeof data.expires === "number" && now > data.expires) continue;
+      entries.set(row.key.slice("keyv:".length) as AllowedCacheKey, data.value);
+    }
+    return entries;
   }
 
   /**

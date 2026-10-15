@@ -5,6 +5,7 @@ import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { OrganizationModel } from "@/models";
 import AuditLogModel from "@/models/audit-log";
+import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
@@ -198,7 +199,7 @@ describe("knowledge file routes", () => {
       makeUser,
       makeMember,
     }) => {
-      await makeMember(user.id, organizationId, { role: "admin" });
+      await MemberModel.updateRole(user.id, organizationId, "admin");
       await upload({ initialGrants: everyone });
 
       const colleague = await makeUser({ email: "teammate@test.com" });
@@ -215,13 +216,12 @@ describe("knowledge file routes", () => {
   describe("team-scoped visibility", () => {
     test("a team-scoped file is visible to team members and invisible to others", async ({
       makeUser,
-      makeMember,
       makeTeam,
       makeTeamMember,
     }) => {
       // Sharing with a team is a delegation the uploader must be allowed to
       // make, so the uploader is an administrator here.
-      await makeMember(user.id, organizationId, { role: "admin" });
+      await MemberModel.updateRole(user.id, organizationId, "admin");
       const team = await makeTeam(organizationId, user.id, {
         name: "Security",
       });
@@ -263,10 +263,9 @@ describe("knowledge file routes", () => {
     });
 
     test("editing a team-shared file without touching teams keeps its team audience", async ({
-      makeMember,
       makeTeam,
     }) => {
-      await makeMember(user.id, organizationId, { role: "admin" });
+      await MemberModel.updateRole(user.id, organizationId, "admin");
       const team = await makeTeam(organizationId, user.id, { name: "Legal" });
       const uploaded = await upload({
         filename: "retainer.txt",
@@ -623,10 +622,9 @@ describe("knowledge file routes", () => {
     // The indexed documents' audience is the file's grants, never wider:
     // the team it is shared with and the uploader, not the organization.
     test("a new file's documents reach only the file's grant holders", async ({
-      makeMember,
       makeTeam,
     }) => {
-      await makeMember(user.id, organizationId, { role: "admin" });
+      await MemberModel.updateRole(user.id, organizationId, "admin");
       const team = await makeTeam(organizationId, user.id, { name: "Audit" });
       const uploaded = await upload({
         initialGrants: [
@@ -654,10 +652,9 @@ describe("knowledge file routes", () => {
     // Editing the file's permissions re-writes its documents' audience, so a
     // revocation reaches retrieval too.
     test("editing a file's grants rewrites its documents' audience", async ({
-      makeMember,
       makeTeam,
     }) => {
-      await makeMember(user.id, organizationId, { role: "admin" });
+      await MemberModel.updateRole(user.id, organizationId, "admin");
       const team = await makeTeam(organizationId, user.id, { name: "Ops" });
       const fileId = (
         await upload({
@@ -761,7 +758,7 @@ describe("knowledge file routes", () => {
       });
       const directoryId = directory.json().id;
 
-      await makeMember(user.id, organizationId, { role: "admin" });
+      await MemberModel.updateRole(user.id, organizationId, "admin");
       await upload({
         filename: "shared.txt",
         directoryId,
@@ -821,7 +818,7 @@ describe("knowledge file routes", () => {
       makeUser,
       makeMember,
     }) => {
-      await makeMember(user.id, organizationId, { role: "admin" });
+      await MemberModel.updateRole(user.id, organizationId, "admin");
       const named = (filename: string) => ({
         filename,
         content: textFile(`Notes kept in ${filename}.`),

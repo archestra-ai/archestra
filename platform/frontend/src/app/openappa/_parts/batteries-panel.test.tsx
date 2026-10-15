@@ -23,8 +23,9 @@ import {
   vi,
 } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { BatteriesPanel, BatteriesUploadAction } from "./batteries-panel";
+import { BatteriesPanel } from "./batteries-panel";
 
+vi.mock("@/app/_parts/use-settings-area-access");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("next/navigation");
 vi.mock("sonner");
@@ -37,6 +38,15 @@ type Install = Battery["installs"][number];
 type Declarations =
   archestraApiTypes.GetOpenappaPolicyDeclarationsResponses["200"];
 type PolicyBattery = Declarations["batteries"][number];
+/** The latest revision composed. */
+const CURRENT: Declarations["composition"] = {
+  served: {
+    kind: "current",
+    rootRevision: 3,
+    composedAt: "2026-09-18T12:00:00Z",
+  },
+  refusal: null,
+};
 
 const baseUrl = "http://localhost:9000";
 const catalogId = "5b6d2f1e-3c4a-4d5e-8f6a-7b8c9d0e1f2a";
@@ -57,6 +67,7 @@ const install = (fields: Partial<Install> = {}): Install => ({
   catalogId,
   batteryName: "github",
   enabled: true,
+  target: null,
   packageHash: null,
   lastError: null,
   credentialBindings: {},
@@ -78,28 +89,39 @@ const githubBattery = (installs: Install[] = []): Battery => ({
   setup: null,
   installs,
 });
-const declaredGithub = (
-  fields: Partial<PolicyBattery> = {},
+const declaredGithub = (fields: Partial<PolicyBattery> = {}): PolicyBattery =>
+  servedAsDeclared({
+    entry: "github",
+    name: "github",
+    source: "bundled",
+    packageHash: null,
+    status: "missing_credentials",
+    scope: "catalogs",
+    composed: false,
+    line: 4,
+    servers: [{ target: "code", catalogId }],
+    credentials: [
+      {
+        variable: "APPA_PROVIDER_GITHUB_TOKEN",
+        key: null,
+        source: null,
+        readers: ["github"],
+      },
+    ],
+    helpers: ["github_read_repo"],
+    ...fields,
+  });
+/** A declared battery the enforced composition holds as it is declared, unless `served` says otherwise. */
+const servedAsDeclared = (
+  battery: Omit<PolicyBattery, "served"> & {
+    served?: PolicyBattery["served"];
+  },
 ): PolicyBattery => ({
-  entry: "github",
-  name: "github",
-  source: "bundled",
-  packageHash: null,
-  status: "missing_credentials",
-  scope: "catalogs",
-  composed: false,
-  line: 4,
-  servers: [{ target: "code", catalogId }],
-  credentials: [
-    {
-      variable: "APPA_PROVIDER_GITHUB_TOKEN",
-      key: null,
-      source: null,
-      readers: ["github"],
-    },
-  ],
-  helpers: ["github_read_repo"],
-  ...fields,
+  ...battery,
+  served:
+    battery.served === undefined
+      ? { status: battery.status, composed: battery.composed }
+      : battery.served,
 });
 const emptyDeclarations = (
   fields: Partial<Declarations> = {},
@@ -108,6 +130,7 @@ const emptyDeclarations = (
   unusedAliases: [],
   rootRevision: 3,
   lastError: null,
+  composition: CURRENT,
   managedInGithub: false,
   heldPull: null,
   credentialBindings: [],
@@ -264,7 +287,6 @@ function show() {
   });
   render(
     <QueryClientProvider client={client}>
-      <BatteriesUploadAction />
       <BatteriesPanel />
     </QueryClientProvider>,
   );
@@ -276,13 +298,15 @@ function show() {
  */
 const dialogName = (name: string) => new RegExp(`^${name}(?![a-z0-9-])`);
 
-/** Open the battery's dialog from its row, Edit or View as the reader may. */
+/** Open the battery's dialog by clicking its row, as any reader may. */
 const entry = async (name: string) => {
   if (!screen.queryByRole("dialog", { name: dialogName(name) })) {
-    const open = await screen.findByRole("button", {
-      name: new RegExp(`^(Edit|View) ${name}$`),
-    });
-    fireEvent.click(open);
+    const rows = await screen.findAllByRole("row");
+    const row = rows.find((candidate) =>
+      within(candidate).queryByText(name, { exact: true }),
+    );
+    if (!row) throw new Error(`No row for ${name}`);
+    fireEvent.click(row);
   }
   return screen.findByRole("dialog", { name: dialogName(name) });
 };
@@ -302,6 +326,7 @@ const githubSyncSource = () =>
     HttpResponse.json({
       enabled: true,
       hasPolicy: true,
+      githubWebUrl: "https://github.com",
       source: {
         organizationId: "org-1",
         repo: "acme/policy",
@@ -360,27 +385,12 @@ test("an empty policy offers the installed servers to attach to", async () => {
   ).not.toBeInTheDocument();
 });
 
-test("asks before discarding a battery upload draft", async () => {
-  show();
-  fireEvent.click(
-    await screen.findByRole("button", { name: /upload package/i }),
-  );
-  fireEvent.change(screen.getByLabelText("Name"), {
-    target: { value: "acme" },
-  });
-  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-  expect(await screen.findByText("Discard unsaved changes?")).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
-  expect(screen.getByLabelText("Name")).toHaveValue("acme");
-});
-
 test("an included entry shows the status the declaration gives it", async () => {
   declarations = emptyDeclarations({
     batteries: [declaredGithub({ status: "active" })],
   });
   show();
   expect(await entry("github")).toHaveTextContent("Enforced");
-  expect(await entry("github")).toHaveTextContent("Bundled");
 });
 
 test("clicking a battery's row opens its dialog", async () => {
@@ -391,39 +401,94 @@ test("clicking a battery's row opens its dialog", async () => {
   ).toBeVisible();
 });
 
-test("a failed composition degrades every status and says what broke", async () => {
+test("a refused revision keeps the earlier composition's statuses and says which revision stays enforced", async () => {
   declarations = emptyDeclarations({
-    batteries: [declaredGithub({ status: "active" })],
+    rootRevision: 4,
+    batteries: [
+      declaredGithub({
+        status: "missing_credentials",
+        served: { status: "active", composed: true },
+      }),
+    ],
     lastError: "line 4: unknown battery",
+    composition: {
+      served: {
+        kind: "previous",
+        rootRevision: 3,
+        composedAt: "2026-09-18T12:00:00Z",
+        batteries: [
+          { name: "github", status: "active", composed: true },
+          { name: "jev", status: "active", composed: true },
+        ],
+      },
+      refusal: {
+        message: "line 4: unknown battery",
+        at: "2026-09-18T13:00:00Z",
+        rootRevision: 4,
+      },
+    },
+  });
+  show();
+  const notice = await screen.findByRole("alert");
+  expect(notice).toHaveTextContent("Revision 4 was refused");
+  expect(notice).toHaveTextContent("Revision 3");
+  expect(notice).toHaveTextContent("stays enforced until a revision composes");
+  expect(notice).toHaveTextContent("line 4: unknown battery");
+  const github = await tableRow("github");
+  expect(github).toHaveTextContent("Enforced");
+  expect(github).toHaveTextContent("From revision 3");
+  // The current text would hold it back, so it is not working as it should.
+  expect(github).toHaveTextContent("Now: Needs a credential");
+  // Held by the enforced composition though the text no longer declares it.
+  expect(await tableRow("jev")).toHaveTextContent(
+    "Still enforced from revision 3",
+  );
+});
+
+/** The table row of a battery, found by its name cell. */
+async function tableRow(name: string) {
+  const rows = await screen.findAllByRole("row");
+  const row = rows.find((candidate) =>
+    within(candidate).queryByText(name, { exact: true }),
+  );
+  if (!row) throw new Error(`No row for ${name}`);
+  return row;
+}
+
+test("a refusal with no earlier composition reads every battery as refused and says nothing is enforced", async () => {
+  declarations = emptyDeclarations({
+    batteries: [declaredGithub({ status: "active", served: null })],
+    lastError: "line 4: unknown battery",
+    composition: {
+      served: { kind: "root_only" },
+      refusal: {
+        message: "line 4: unknown battery",
+        at: "2026-09-18T13:00:00Z",
+        rootRevision: 3,
+      },
+    },
   });
   show();
   expect(await screen.findByRole("alert")).toHaveTextContent(
-    "line 4: unknown battery",
+    "Nothing is enforced",
   );
   const row = await entry("github");
   expect(row).toHaveTextContent("Refused by policy");
   expect(row).not.toHaveTextContent("Enforced");
 });
 
-test("an uploaded entry names the package bytes it is pinned to", async () => {
-  declarations = emptyDeclarations({
-    batteries: [declaredGithub({ source: "upload", packageHash: uploadHash })],
-  });
-  show();
-  expect(await entry("github")).toHaveTextContent(
-    `Upload ${uploadHash.slice(0, 12)}`,
-  );
-});
-
-test("a held pull naming only dropped batteries is accepted with policy permissions", async () => {
+test("a held pull reads as one approval notice, not a sync failure, and approves with policy permissions", async () => {
   let accepted = false;
   declarations = emptyDeclarations({
+    managedInGithub: true,
     heldPull: {
       contentHash: "b".repeat(64),
       sourceCommit: "c".repeat(40),
       reasons: ["drops_batteries"],
+      message: "The repository's policy removes batteries added here: github.",
     },
   });
+  // Policy access alone: the hold comes from the policy, not sync settings.
   grantOnly("openappaPolicy");
   server.use(
     http.post(`${baseUrl}/api/openappa/github-sync/accept-held`, () => {
@@ -440,27 +505,69 @@ test("a held pull naming only dropped batteries is accepted with policy permissi
     }),
   );
   show();
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Accept repository text" }),
+  expect(
+    await screen.findByText("A change from the repository needs approval"),
+  ).toBeVisible();
+  expect(
+    screen.getByText(/removes batteries added here: github\./),
+  ).toBeVisible();
+  expect(screen.queryByText("GitHub sync failed")).not.toBeInTheDocument();
+  server.use(
+    http.get(`${baseUrl}/api/openappa/github-sync/held`, () =>
+      HttpResponse.json({
+        sourceCommit: "c".repeat(40),
+        reasons: ["drops_batteries"],
+        grants: [],
+        droppedBatteries: ["github"],
+      }),
+    ),
   );
+  fireEvent.click(screen.getByRole("button", { name: "Review" }));
+  const dialog = await screen.findByRole("dialog");
+  expect(
+    await within(dialog).findByRole("region", { name: "Batteries it removes" }),
+  ).toHaveTextContent("github");
+  fireEvent.click(within(dialog).getByRole("button", { name: "Approve" }));
   await waitFor(() => expect(accepted).toBe(true));
 });
 
 test("a held pull that moves credentials needs the credential permission", async () => {
   declarations = emptyDeclarations({
+    managedInGithub: true,
     batteries: [declaredGithub()],
     heldPull: {
       contentHash: "b".repeat(64),
       sourceCommit: "c".repeat(40),
       reasons: ["drops_batteries", "changes_credentials"],
+      message: null,
     },
   });
   grantOnly("openappaPolicy");
+  server.use(
+    http.get(`${baseUrl}/api/openappa/github-sync/held`, () =>
+      HttpResponse.json({
+        sourceCommit: "c".repeat(40),
+        reasons: ["drops_batteries", "changes_credentials"],
+        grants: [
+          {
+            battery: "github",
+            variable: "APPA_PROVIDER_GITHUB_TOKEN",
+            key: "github-token",
+          },
+        ],
+        droppedBatteries: ["linear"],
+      }),
+    ),
+  );
   show();
-  await entry("github");
+  fireEvent.click(await screen.findByRole("button", { name: "Review" }));
+  const dialog = await screen.findByRole("dialog");
   expect(
-    screen.queryByRole("button", { name: "Accept repository text" }),
-  ).not.toBeInTheDocument();
+    await within(dialog).findByRole("region", { name: "Credential access" }),
+  ).toHaveTextContent("APPA_PROVIDER_GITHUB_TOKEN");
+  expect(
+    within(dialog).getByRole("button", { name: "Approve" }),
+  ).toBeDisabled();
 });
 
 test("binding a credential writes that variable alone", async () => {
@@ -554,7 +661,7 @@ test("a variable another entry reads is never unset, and the row says so", async
   await user.click(
     await screen.findByRole("combobox", { name: "APPA_PROVIDER_GITHUB_TOKEN" }),
   );
-  await user.click(screen.getByRole("option", { name: "Not bound" }));
+  await user.click(screen.getByRole("option", { name: "Not set" }));
   const row = await entry("github");
   await waitFor(() =>
     expect(within(row).getByRole("alert")).toBeInTheDocument(),
@@ -671,27 +778,28 @@ const jevBattery = (installs: Install[] = []): Battery => ({
   setup: null,
   installs,
 });
-const declaredJev = (fields: Partial<PolicyBattery> = {}): PolicyBattery => ({
-  entry: "batteries/jev/appa.toml",
-  name: "jev",
-  source: "bundled",
-  packageHash: null,
-  status: "missing_credentials",
-  scope: "organization",
-  composed: true,
-  line: 2,
-  servers: [],
-  credentials: [
-    {
-      variable: "APPA_PROVIDER_JEV_API_KEY",
-      key: null,
-      source: null,
-      readers: ["jev"],
-    },
-  ],
-  helpers: ["jev-annotator.py"],
-  ...fields,
-});
+const declaredJev = (fields: Partial<PolicyBattery> = {}): PolicyBattery =>
+  servedAsDeclared({
+    entry: "batteries/jev/appa.toml",
+    name: "jev",
+    source: "bundled",
+    packageHash: null,
+    status: "missing_credentials",
+    scope: "organization",
+    composed: true,
+    line: 2,
+    servers: [],
+    credentials: [
+      {
+        variable: "APPA_PROVIDER_JEV_API_KEY",
+        key: null,
+        source: null,
+        readers: ["jev"],
+      },
+    ],
+    helpers: ["jev-annotator.py"],
+    ...fields,
+  });
 
 test("an organization battery can be included and removed without an installed server", async () => {
   let body: unknown;
@@ -958,44 +1066,6 @@ test("an entry bound to no server this deployment carries is removed the same wa
   await waitFor(() => expect(removed).toEqual(["github"]));
 });
 
-test("a package the policy includes cannot be deleted", async () => {
-  batteries = [
-    {
-      ...githubBattery([install({ packageHash: uploadHash })]),
-      source: "upload",
-      contentHash: uploadHash,
-    },
-  ];
-  declarations = emptyDeclarations({
-    batteries: [declaredGithub({ source: "upload", packageHash: uploadHash })],
-  });
-  show();
-  expect(
-    within(await rowMenu("github")).getByRole("menuitem", {
-      name: "Delete package",
-    }),
-  ).toHaveAttribute("aria-disabled", "true");
-});
-
-test("a package no entry names can be deleted", async () => {
-  batteries = [
-    {
-      ...githubBattery(),
-      name: "acme",
-      source: "upload",
-      contentHash: uploadHash,
-      credentials: [],
-    },
-  ];
-  declarations = emptyDeclarations();
-  show();
-  expect(
-    within(await rowMenu("acme")).getByRole("menuitem", {
-      name: "Delete package",
-    }),
-  ).not.toHaveAttribute("aria-disabled", "true");
-});
-
 test("a personal-only credential is listed but cannot be bound", async () => {
   server.use(
     http.get(`${baseUrl}/api/credentials`, () =>
@@ -1122,14 +1192,12 @@ test("a policy the repository owns is read-only", async () => {
   });
   server.use(githubSyncSource());
   show();
+  expect(await screen.findByText("GitHub rules")).toBeVisible();
   expect(
-    await screen.findByRole("button", { name: "View github" }),
-  ).toBeVisible();
-  expect(
-    screen.queryByRole("button", { name: "More actions github" }),
+    screen.queryByRole("columnheader", { name: "Actions" }),
   ).not.toBeInTheDocument();
   expect(
-    screen.queryByRole("button", { name: /upload package/i }),
+    screen.queryByRole("button", { name: /^(Edit|View) github$/ }),
   ).not.toBeInTheDocument();
   const row = await entry("github");
   expect(
@@ -1250,14 +1318,12 @@ test("a key the policy text sets outside GitHub sync points at the configuration
 test("without the permission to manage guardrails the controls are read-only", async () => {
   grantOnly();
   show();
+  expect(await screen.findByText("GitHub rules")).toBeVisible();
   expect(
-    await screen.findByRole("button", { name: "View github" }),
-  ).toBeVisible();
-  expect(
-    screen.queryByRole("button", { name: "More actions github" }),
+    screen.queryByRole("columnheader", { name: "Actions" }),
   ).not.toBeInTheDocument();
   expect(
-    screen.queryByRole("button", { name: /upload package/i }),
+    screen.queryByRole("button", { name: /^(Edit|View) github$/ }),
   ).not.toBeInTheDocument();
   const row = await entry("github");
   expect(
@@ -1266,71 +1332,6 @@ test("without the permission to manage guardrails the controls are read-only", a
   expect(
     within(row).queryByRole("button", { name: /Detach|Attach/ }),
   ).not.toBeInTheDocument();
-});
-
-test("uploading a package sends the picked files by their path inside the folder", async () => {
-  let body: unknown;
-  declarations = emptyDeclarations();
-  batteries = [githubBattery()];
-  server.use(
-    http.put(
-      `${baseUrl}/api/openappa/battery-packages/acme`,
-      async ({ request }) => {
-        body = await request.json();
-        batteries = [
-          githubBattery(),
-          {
-            ...githubBattery(),
-            name: "acme",
-            description: "Acme rules",
-            source: "upload",
-            contentHash: uploadHash,
-            credentials: [],
-          },
-        ];
-        return HttpResponse.json({
-          name: "acme",
-          description: "Acme rules",
-          contentHash: uploadHash,
-          entry: "acme",
-          namespaces: [],
-          helpers: [],
-          credentials: [],
-          setup: null,
-        });
-      },
-    ),
-  );
-  show();
-  fireEvent.click(
-    await screen.findByRole("button", { name: /upload package/i }),
-  );
-  fireEvent.change(await screen.findByLabelText("Name"), {
-    target: { value: "acme" },
-  });
-  const folderInput = screen.getByLabelText("Package folder");
-  const openFolderPicker = vi.spyOn(folderInput, "click");
-  expect(screen.getByRole("button", { name: "Choose folder" })).toBeVisible();
-  fireEvent.click(screen.getByText("Select the whole package directory."));
-  expect(openFolderPicker).toHaveBeenCalledOnce();
-  const file = new File(["schema = 1"], "battery.toml", {
-    type: "application/toml",
-  });
-  Object.defineProperty(file, "webkitRelativePath", {
-    value: "acme/battery.toml",
-  });
-  fireEvent.change(folderInput, {
-    target: { files: [file] },
-  });
-  fireEvent.click(screen.getByRole("button", { name: "Upload" }));
-  await waitFor(() =>
-    expect(body).toEqual({
-      files: [{ path: "battery.toml", text: "schema = 1" }],
-    }),
-  );
-  expect(
-    await screen.findByRole("button", { name: "More actions acme" }),
-  ).toBeVisible();
 });
 
 test("an alias no entry declares is listed without a control to remove it", async () => {
@@ -1372,29 +1373,16 @@ test("search matches battery descriptions and clears the result set", async () =
   ).toBeVisible();
 });
 
-test("source and status filters narrow the battery table", async () => {
-  declarations = emptyDeclarations({ batteries: [declaredGithub()] });
-  batteries = [
-    githubBattery([install()]),
-    {
-      ...githubBattery(),
-      name: "custom",
-      source: "upload",
-      contentHash: uploadHash,
-    },
-  ];
+test("the enforcement filter narrows the battery table", async () => {
+  declarations = emptyDeclarations({
+    batteries: [declaredGithub({ status: "active" })],
+  });
   show();
   const user = userEvent.setup();
-  await screen.findByRole("row", { name: /custom GitHub rules/ });
-  await user.click(screen.getByRole("combobox", { name: "Filter by source" }));
-  await user.click(screen.getByRole("option", { name: "Uploaded" }));
-  expect(
-    screen.getByRole("row", { name: /custom GitHub rules/ }),
-  ).toBeVisible();
-  expect(
-    screen.queryByRole("row", { name: /github GitHub rules/ }),
-  ).not.toBeInTheDocument();
-  await user.click(screen.getByRole("combobox", { name: "Filter by status" }));
+  await screen.findByRole("row", { name: /github GitHub rules/ });
+  await user.click(
+    screen.getByRole("combobox", { name: "Filter by enforcement" }),
+  );
   await user.click(screen.getByRole("option", { name: "Not enforced" }));
   expect(screen.getByText("No batteries match your filters")).toBeVisible();
   await user.click(screen.getByRole("button", { name: "Clear filters" }));
@@ -1420,7 +1408,9 @@ test("the status filter groups statuses and keeps the group in the URL", async (
   show();
   const user = userEvent.setup();
   await screen.findByRole("row", { name: /docs Knowledge rules/ });
-  await user.click(screen.getByRole("combobox", { name: "Filter by status" }));
+  await user.click(
+    screen.getByRole("combobox", { name: "Filter by enforcement" }),
+  );
   await user.click(screen.getByRole("option", { name: "Not enforced" }));
   expect(url.get("status")).toBe("broken");
   // A missing credential and an unused battery are both broken.
@@ -1452,12 +1442,14 @@ test("the available batteries split into the ones that fit a server and the rest
   ).not.toBeInTheDocument();
 
   const user = userEvent.setup();
-  await user.click(screen.getByRole("combobox", { name: "Filter by status" }));
+  await user.click(
+    screen.getByRole("combobox", { name: "Filter by enforcement" }),
+  );
   await user.click(screen.getByRole("option", { name: "For other servers" }));
   expect(url.get("status")).toBe("other");
   expect(
     await screen.findByRole("row", { name: /github GitHub rules/ }),
-  ).toHaveTextContent("Available");
+  ).toHaveTextContent("Not included");
   expect(
     screen.queryByRole("row", { name: /docs Knowledge rules/ }),
   ).not.toBeInTheDocument();
@@ -1480,7 +1472,7 @@ test("filters in the URL apply on load, so a reload or a link keeps them", async
     screen.queryByRole("row", { name: /docs Knowledge rules/ }),
   ).not.toBeInTheDocument();
   expect(
-    screen.getByRole("combobox", { name: "Filter by status" }),
+    screen.getByRole("combobox", { name: "Filter by enforcement" }),
   ).toHaveTextContent("Enforced");
   expect(screen.getByPlaceholderText(/Search batteries by name/)).toHaveValue(
     "github",

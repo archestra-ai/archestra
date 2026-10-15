@@ -3,6 +3,7 @@ import type { AppaPreparedRequest } from "@/openappa/request";
 import type { AppaChatSource, OpenAppaSession } from "@/openappa/service";
 import type { AppaSessionIdentity } from "@/openappa/wire";
 import type { GatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
+import type { ApiError } from "@/types/api";
 import type { CommonToolResult } from "@/types/common-llm-format";
 
 export const APPA_PLUGIN_TRUSTED_CONTEXT: unique symbol = Symbol(
@@ -52,6 +53,15 @@ export type AppaTrustedContext = {
    * switch, so a change between requests does not land mid-stream.
    */
   enforcement?: "active" | "inactive";
+  /**
+   * The provider-thread step of this request, when it carries one. A continue
+   * is a delta: the thread already holds the system prompt, so guidance that
+   * is fixed for the session is not repeated and per-turn guidance travels in
+   * the new user turn.
+   */
+  thread?: "create" | "continue";
+  /** Deferred until the adapter has authenticated the unchanged session lineage. */
+  childReturnRefusal?: ApiError;
 };
 
 export type AppaMatchContext = {
@@ -114,7 +124,21 @@ export type AppaClientAdapter = {
     isAvailable?(headers: IncomingHttpHeaders): boolean;
     supportsMultiple?: boolean;
     fromAskUser?(args: AskUserArguments): Record<string, unknown>;
-    rulingFromResult?(result: NativeQuestionResult): NativeQuestionRuling;
+    /**
+     * Approve or Deny from the tool's result. `asked` is the question the
+     * platform wrote for the review; the ruling is read against it, never
+     * found by a search of the result text.
+     */
+    rulingFromResult?(
+      result: NativeQuestionResult,
+      asked: AskUserArguments,
+    ): NativeQuestionReading;
+    /**
+     * The client also shows the gateway's MCP form (elicitation), which
+     * returns the choice as data. An answer in a wording the proxy does not
+     * know is then asked once more there. A known no-answer is not asked again.
+     */
+    formFallback?: boolean;
   };
   /**
    * The client's own tool that waits for MCP servers which are still
@@ -123,6 +147,14 @@ export type AppaClientAdapter = {
    * can carry a denial while the gateway notice tool is not declared yet.
    */
   readonly pendingServersTool?: string;
+  /**
+   * What the person does when this client sends a request without the
+   * gateway's tools: where to see the gateway's state in the client, how to
+   * sign in to it, and whether to resend or start a new session. Shown with a
+   * denial the proxy cannot turn into a remedy. `serverName` is the gateway
+   * as the client lists it.
+   */
+  gatewayToolsHint?(serverName: string): string;
   /**
    * Reads the trajectory identity the client itself puts on the wire: the id
    * it keeps stable across a resumed or compacted conversation, so a resume
@@ -312,14 +344,15 @@ export type AppaRelayArrival = {
 export type AskUserArguments = {
   question: string;
   /**
-   * The question for hosts that show option previews (Claude Code), set when
-   * every option's preview carries what `question` spells out.
+   * For a server-held review only: the one-line question for hosts with
+   * option previews (Claude Code), and the markdown preview of the call each
+   * option shows. Together they carry what `question` spells out.
    */
-  previewQuestion?: string;
+  shortQuestion?: string;
+  callPreview?: string;
   /** Short tab label; unvalidated here, as the model wrote it. */
   header?: unknown;
-  /** `preview` is shown only by hosts with option previews (Claude Code). */
-  options: Array<{ label: string; description?: string; preview?: string }>;
+  options: Array<{ label: string; description?: string }>;
   allowMultiple?: boolean;
   remedy_offer_ids?: string[];
 };
@@ -330,3 +363,20 @@ export type NativeQuestionResult = {
 };
 
 export type NativeQuestionRuling = "approve" | "deny" | "none";
+
+/** A known terminal no-answer. It is not a human ruling and is not asked again. */
+export type NativeQuestionNoAnswer =
+  | "declined"
+  | "cancelled"
+  | "unanswered"
+  | "unavailable";
+
+/**
+ * A ruling, a known no-answer, or "unrecognized" for a wording the adapter
+ * does not know. An unrecognized answer is never read as a choice. Only that
+ * unrecognized wording may fall back to a form; a known no-answer may not.
+ */
+export type NativeQuestionReading =
+  | NativeQuestionRuling
+  | NativeQuestionNoAnswer
+  | "unrecognized";

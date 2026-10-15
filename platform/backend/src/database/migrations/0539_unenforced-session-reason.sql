@@ -1,0 +1,1 @@
+ALTER TABLE "openappa_unenforced_sessions" ADD COLUMN "reason" text DEFAULT 'enforcement_off' NOT NULL;

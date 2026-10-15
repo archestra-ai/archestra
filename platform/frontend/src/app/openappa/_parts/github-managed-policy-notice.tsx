@@ -1,33 +1,104 @@
 "use client";
 
-import { AlertTriangle, ExternalLink, LockKeyhole } from "lucide-react";
+import {
+  AlertTriangle,
+  ExternalLink,
+  GitPullRequestArrow,
+  LockKeyhole,
+} from "lucide-react";
 import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
+import { appaGitHost } from "./appa-git-host";
+import { type HeldPull, HeldPullNotice } from "./held-pull-notice";
 
-type AppaGithubSource = NonNullable<
-  NonNullable<ReturnType<typeof useAppaGithubSync>["data"]>["source"]
+type AppaGithubSyncStatus = NonNullable<
+  ReturnType<typeof useAppaGithubSync>["data"]
 >;
 
 export function GithubManagedPolicyNotice({
   validationDirectory,
+  held: heldFromPolicy,
 }: {
   validationDirectory?: string;
+  /** The hold as the policy reports it, for viewers who can't read sync settings. */
+  held?: HeldPull | null;
 } = {}) {
   const { data } = useAppaGithubSync();
+  const git = appaGitHost(data);
   const source = data?.source;
   const failed = Boolean(source?.lastSyncError);
   const validations = validationDirectory !== undefined;
   const href =
     validations && source?.repo
-      ? `https://github.com/${source.repo}/tree/${encodeURIComponent(source.ref ?? "HEAD")}/${validationDirectory.split("/").map(encodeURIComponent).join("/")}`
-      : githubPolicyFileUrl(source, "blob");
+      ? `${data?.githubWebUrl}/${source.repo}${gitPathSeparator(data)}/tree/${encodeURIComponent(source.ref ?? "HEAD")}/${validationDirectory.split("/").map(encodeURIComponent).join("/")}`
+      : githubPolicyFileUrl(data, "blob");
+
+  // A pull waiting for approval is not a failure: say what it waits for.
+  const held: HeldPull | null = source?.heldReasons?.length
+    ? { reasons: source.heldReasons, message: source.lastSyncError }
+    : (heldFromPolicy ?? null);
+  if (held?.reasons.length)
+    return <HeldPullNotice held={held} batteriesLink={!heldFromPolicy} />;
+
+  // Setup isn't finished until its pull (merge) request merges: ask for that.
+  if (!failed && source?.repo && source.setupPullRequestNumber)
+    return (
+      <InlineNotice variant="info">
+        <GitPullRequestArrow aria-hidden />
+        <span className="font-medium">Merge your initial policy</span>
+        <InlineNoticeText className="flex-1">
+          Your current policy stays active until it merges.
+        </InlineNoticeText>
+        <a
+          href={git
+            .urls(source.repo)
+            .changeRequest(source.setupPullRequestNumber)}
+          target="_blank"
+          rel="noreferrer"
+          data-slot="inline-notice-action"
+          className="ml-auto inline-flex shrink-0 items-center gap-0.5 font-medium underline-offset-4 hover:underline"
+        >
+          <span>Review and merge {git.changeRequestShort}</span>
+          <ExternalLink className="size-3" aria-hidden />
+        </a>
+      </InlineNotice>
+    );
+
+  // A healthy sync asks for nothing, so it is a chip, not a banner.
+  if (!failed && !(validations && validationDirectory === "")) {
+    const content = (
+      <>
+        <LockKeyhole aria-hidden />
+        <span>{`Managed in ${git.label}`}</span>
+        {href && <ExternalLink aria-hidden />}
+      </>
+    );
+    return (
+      <Badge
+        variant="outline"
+        className="font-normal"
+        title={`The ${git.repository} owns ${validations ? "these validations" : "this policy"}. Change ${validations ? "their files" : "it"} there.`}
+        asChild={Boolean(href)}
+      >
+        {href ? (
+          <a href={href} target="_blank" rel="noopener noreferrer">
+            {content}
+            <span className="sr-only">(opens in new tab)</span>
+          </a>
+        ) : (
+          <span>{content}</span>
+        )}
+      </Badge>
+    );
+  }
 
   return (
     <InlineNotice variant={failed ? "error" : "neutral"}>
       {failed ? <AlertTriangle /> : <LockKeyhole />}
       <span className="font-medium">
-        {failed ? "GitHub sync failed" : "Managed in GitHub"}
+        {failed ? "Git sync failed" : `Managed in ${git.label}`}
       </span>
       <InlineNoticeText>
         The{" "}
@@ -60,7 +131,7 @@ export function GithubManagedPolicyNotice({
           <>
             {" "}
             <Link
-              href="/settings/openappa"
+              href="/settings/guardrails"
               className="underline underline-offset-2 hover:no-underline"
             >
               Review sync settings
@@ -73,12 +144,20 @@ export function GithubManagedPolicyNotice({
   );
 }
 
-/** The synced policy file on GitHub, to read (`blob`) or to change (`edit`). */
+/** The synced policy file on GitHub or GitLab, to read (`blob`) or to change (`edit`). */
 export function githubPolicyFileUrl(
-  source: AppaGithubSource | null | undefined,
+  sync: AppaGithubSyncStatus | null | undefined,
   view: "blob" | "edit",
 ): string | null {
-  if (!source?.repo || !source.path) return null;
+  const source = sync?.source;
+  if (!sync || !source?.repo || !source.path) return null;
   const path = source.path.split("/").map(encodeURIComponent).join("/");
-  return `https://github.com/${source.repo}/${view}/${encodeURIComponent(source.ref ?? "HEAD")}/${path}`;
+  return `${sync.githubWebUrl}/${source.repo}${gitPathSeparator(sync)}/${view}/${encodeURIComponent(source.ref ?? "HEAD")}/${path}`;
+}
+
+/** GitLab puts `/-` before a project's tree, blob, and edit pages. */
+function gitPathSeparator(
+  sync: Pick<AppaGithubSyncStatus, "provider"> | null | undefined,
+) {
+  return sync?.provider === "gitlab" ? "/-" : "";
 }

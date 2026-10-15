@@ -28,6 +28,7 @@ import fastifyCors, { type FastifyCorsOptions } from "@fastify/cors";
 import fastifyFormbody from "@fastify/formbody";
 import fastifySwagger from "@fastify/swagger";
 import * as Sentry from "@sentry/node";
+import type { FastifyRequest } from "fastify";
 import {
   createJsonSchemaTransformObject,
   jsonSchemaTransform,
@@ -53,6 +54,7 @@ import { cacheManager } from "@/cache-manager";
 import { registerMcpClientHibernationInvalidation } from "@/clients/mcp-client";
 // SPDX-SnippetEnd
 import config, {
+  resolveAllowedOrigins,
   shouldRunRenderer,
   shouldRunWebServer,
   shouldRunWorker,
@@ -94,8 +96,12 @@ import { reportAbnormalPreviousTermination } from "@/observability/previous-term
 import { rumExporter } from "@/observability/rum/exporter.ee";
 import { createCachedOpenApiRouteHandler } from "@/openapi/cached-openapi-route";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
-import { declareOpenappaInstalls } from "@/openappa/service";
+import {
+  declareOpenappaInstalls,
+  recompileAllOnStart,
+} from "@/openappa/service";
 import { initializeLlmProxyPlugins } from "@/proxy/plugins/registry";
+import { captureClientRuntimeEvidence } from "@/routes/proxy/utils/client-runtime-evidence";
 import { activeChatRunService } from "@/services/active-chat-run";
 import { agentRunReconciler } from "@/services/agent-runtime/reconciler";
 import { warmRenderRuntime } from "@/services/apps/app-recording-render-runtime";
@@ -113,11 +119,13 @@ import { instanceAnalyticsService } from "@/services/instance-analytics";
 import { mcpActiveUseTracker } from "@/services/mcp-active-use.ee";
 // SPDX-SnippetEnd
 import { mcpGatewayTaskReaper } from "@/services/mcp-gateway-task-reaper";
+import { mcpImageUpdateChecker } from "@/services/mcp-image-update-checker";
 import { mcpToolsRefreshManager } from "@/services/mcp-tools-refresh";
 import { initializeManagedPlaywrightRuntime } from "@/services/playwright-runtime";
-import { runScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
+import { ensureScopedResourcePermissionCutover } from "@/services/resource-permissions-cutover";
 import { systemKeyManager } from "@/services/system-key-manager";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
+import { createStartupHealthServer } from "@/startup-health";
 import { taskQueueService } from "@/task-queue";
 import { registerTaskHandlers } from "@/task-queue/handlers";
 import {
@@ -161,6 +169,7 @@ import {
   READY_PATH,
   SKILL_MARKETPLACE_PREFIX,
 } from "./routes/route-paths";
+import { beginLlmProxyDrain } from "./server/llm-proxy-drain";
 import {
   UserConfigFieldDefaultSchema,
   UserConfigFieldSchema,
@@ -363,6 +372,9 @@ export async function registerSwaggerPlugin(fastify: FastifyInstanceWithZod) {
  * @param fastify - The Fastify instance to register routes on
  */
 export async function registerApiRoutes(fastify: FastifyInstanceWithZod) {
+  fastify.addHook("onRequest", async (request) => {
+    captureClientRuntimeEvidence(request);
+  });
   await initializeLlmProxyPlugins();
   for (const route of Object.values(routes)) {
     fastify.register(route);
@@ -808,6 +820,7 @@ const startMcpServerRuntime = async (
 
 const startWebServer = async () => {
   const fastify = createFastifyInstance();
+  const startupHealth = createStartupHealthServer();
 
   /**
    * Custom request logging hook that excludes noisy endpoints:
@@ -892,6 +905,9 @@ const startWebServer = async () => {
   registerAuditLogHook(fastify);
 
   try {
+    // Large upgrades may outlast Kubernetes' startup probe budget. Serve only
+    // liveness until the real API is ready; /ready and every API return 503.
+    await startupHealth.listen({ port, host });
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -924,6 +940,7 @@ const startWebServer = async () => {
     // a recompose rewrites those rows from the text and deletes every row the
     // text does not declare.
     await declareOpenappaInstalls();
+    void recompileAllOnStart();
 
     // With basic auth disabled, a password session that predates the flag
     // would otherwise stay valid until it expired. Runs after seeding so the
@@ -949,9 +966,8 @@ const startWebServer = async () => {
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    // Convert legacy visibility and role authority into grants. Each policy
-    // converts once so later permission edits survive a restart.
-    await runScopedResourcePermissionCutover();
+    // Complete the one-time permission upgrade before admitting API traffic.
+    await ensureScopedResourcePermissionCutover();
     // SPDX-SnippetEnd
 
     // Initialize metrics with keys of custom agent labels
@@ -1031,6 +1047,11 @@ const startWebServer = async () => {
     // Opt-in periodic re-discovery of installed MCP servers' tools
     // (no-op unless ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES is set).
     mcpToolsRefreshManager.start();
+
+    // Roll local MCP servers whose `:latest` (or untagged) image moved in the
+    // registry (ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_UPDATE_CHECK_INTERVAL_MINUTES,
+    // 0 disables).
+    mcpImageUpdateChecker.start();
 
     // Post-TTL lifecycle for gateway-minted MCP tasks: mark expired orphans
     // failed, purge rows past the retention grace (the two steps the Tasks
@@ -1118,8 +1139,10 @@ const startWebServer = async () => {
     //     clients on arbitrary origins can complete the OAuth handshake.
     //   - every other route keeps the restricted, credentialed policy bound to
     //     the configured origins. See isPublicOAuthCorsPath for the rationale.
-    const restrictedCorsOptions: FastifyCorsOptions = {
-      origin: corsOrigins,
+    const restrictedCorsOptions = (
+      req: FastifyRequest,
+    ): FastifyCorsOptions => ({
+      origin: allowedOriginsFor(req),
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders: [
         "Content-Type",
@@ -1129,7 +1152,7 @@ const startWebServer = async () => {
       ],
       exposedHeaders: ["Set-Cookie"],
       credentials: true,
-    };
+    });
     const publicOAuthCorsOptions: FastifyCorsOptions = {
       origin: true,
       methods: ["GET", "POST", "OPTIONS"],
@@ -1154,9 +1177,7 @@ const startWebServer = async () => {
 
     logger.debug(
       {
-        corsOrigins: corsOrigins.map((o) =>
-          o instanceof RegExp ? o.toString() : o,
-        ),
+        corsOrigins,
         trustedOrigins: config.auth.trustedOrigins,
       },
       "CORS and trusted origins configured",
@@ -1205,8 +1226,16 @@ const startWebServer = async () => {
     // Register all API routes (eeRoutes already loaded at module level)
     await registerApiRoutes(fastify);
 
+    await fastify.ready();
+    await startupHealth.close();
     await fastify.listen({ port, host });
     fastify.log.info(`${name} started on port ${port}`);
+    // Lets operators confirm an override without waiting for a reply to hit
+    // the limit.
+    logger.info(
+      { stdioMaxMessageBytes: config.mcpGateway.stdioMaxMessageBytes },
+      "Stdio MCP server replies larger than this are dropped (ARCHESTRA_MCP_GATEWAY_STDIO_MAX_MESSAGE_BYTES)",
+    );
 
     // If the previous container instance died abnormally (e.g. OOMKilled),
     // it could not report its own death — surface it now. Fire-and-forget.
@@ -1231,6 +1260,7 @@ const startWebServer = async () => {
       activeChatRunReaperIntervalId,
     });
   } catch (err) {
+    await startupHealth.close();
     fastify.log.error(err);
     process.exit(1);
   }
@@ -1239,20 +1269,40 @@ const startWebServer = async () => {
 async function registerMaintenanceModeRoutes(
   fastify: FastifyInstanceWithZod,
 ): Promise<void> {
-  await fastify.register(fastifyCors, {
-    origin: corsOrigins,
-    methods: ["GET", "OPTIONS"],
-    allowedHeaders: [
-      "Content-Type",
-      "X-Requested-With",
-      "Cookie",
-      apiKeyAuthorizationHeaderName,
-    ],
-    exposedHeaders: ["Set-Cookie"],
-    credentials: true,
-  });
+  await fastify.register(
+    fastifyCors,
+    () =>
+      (
+        req: FastifyRequest,
+        callback: (err: Error | null, options: FastifyCorsOptions) => void,
+      ) => {
+        callback(null, {
+          origin: allowedOriginsFor(req),
+          methods: ["GET", "OPTIONS"],
+          allowedHeaders: [
+            "Content-Type",
+            "X-Requested-With",
+            "Cookie",
+            apiKeyAuthorizationHeaderName,
+          ],
+          exposedHeaders: ["Set-Cookie"],
+          credentials: true,
+        });
+      },
+  );
   await fastify.register(routes.healthRoutes);
   await fastify.register(publicConfigRoutes);
+}
+
+function allowedOriginsFor(req: FastifyRequest): string[] {
+  const forwardedHost = req.headers["x-forwarded-host"];
+  return resolveAllowedOrigins({
+    configuredOrigins: corsOrigins,
+    forwardedHost: Array.isArray(forwardedHost)
+      ? forwardedHost[0]
+      : forwardedHost,
+    host: req.headers.host,
+  });
 }
 
 function registerWebServerShutdown(
@@ -1263,8 +1313,19 @@ function registerWebServerShutdown(
     activeChatRunReaperIntervalId?: NodeJS.Timeout;
   } = {},
 ): void {
+  let shuttingDown = false;
   const gracefulShutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     fastify.log.info(`Received ${signal}, shutting down gracefully...`);
+    beginLlmProxyDrain(fastify);
+    // Leave time after the 60s proxy drain for dependency cleanup, but never
+    // let unrelated long-lived connections or cleanup exceed the supervisor.
+    const shutdownDeadline = setTimeout(() => {
+      fastify.log.error("Graceful shutdown timed out");
+      process.exit(1);
+    }, 80_000);
+    shutdownDeadline.unref();
 
     // Stop accepting new runs before snapshotting, so nothing created after this
     // point escapes the cleanup below.
@@ -1340,6 +1401,8 @@ function registerWebServerShutdown(
 
       mcpToolsRefreshManager.stop();
 
+      mcpImageUpdateChecker.stop();
+
       mcpGatewayTaskReaper.stop();
 
       instanceAnalyticsService.stop();
@@ -1385,8 +1448,10 @@ function registerWebServerShutdown(
         );
       }
 
+      clearTimeout(shutdownDeadline);
       process.exit(0);
     } catch (error) {
+      clearTimeout(shutdownDeadline);
       fastify.log.error({ error }, "Error during shutdown");
       process.exit(1);
     }
@@ -1449,6 +1514,7 @@ const startWorker = async () => {
     // deletes every install row the policy text does not declare: the worker
     // carries the legacy rows into the text first, exactly as `start` does.
     await declareOpenappaInstalls();
+    void recompileAllOnStart();
 
     registerTaskHandlers(taskQueueService);
     await taskQueueService.seedPeriodicTasks();

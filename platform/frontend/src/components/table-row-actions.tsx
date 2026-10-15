@@ -39,6 +39,8 @@ type TableRowAction = {
   /** The href leaves the app: open it in a new tab, as a link out should. */
   external?: boolean;
   testId?: string;
+  /** Structured form of `disabledTooltip`, shown in its place on hover. */
+  disabledTooltipContent?: React.ReactNode;
 };
 
 type TableRowActionsProps = {
@@ -187,6 +189,9 @@ function ActionButton({
         permissions={action.permissions as Permissions}
         permissionScope={action.permissionScope}
         tooltip={tooltipText}
+        reasonContent={
+          action.disabled ? action.disabledTooltipContent : undefined
+        }
         aria-label={accessibleLabel}
         variant="outline"
         size={size}
@@ -249,7 +254,9 @@ function ActionButton({
           button
         )}
       </TooltipTrigger>
-      <TooltipContent>{tooltipText}</TooltipContent>
+      <TooltipContent>
+        {(action.disabled && action.disabledTooltipContent) || tooltipText}
+      </TooltipContent>
     </Tooltip>
   );
 }

@@ -4,6 +4,7 @@ import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
 import ApiKeyModel from "@/models/api-key";
 import AppModel from "@/models/app";
+import BrowserStorageStateModel from "@/models/browser-storage-state";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import chatOpsConfigModel from "@/models/chatops-config";
 import EnvironmentModel from "@/models/environment";
@@ -22,6 +23,7 @@ import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import LimitModel from "@/models/limit";
 import LlmOauthClientModel from "@/models/llm-oauth-client";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import ManagedOauthClientModel from "@/models/managed-oauth-client";
 import McpOauthClientModel from "@/models/mcp-oauth-client";
 import McpServerModel from "@/models/mcp-server";
 import MemberModel from "@/models/member";
@@ -682,6 +684,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) => GithubAppConfigModel.findByIdForAudit(id, orgId),
   },
 
+  // GitLab access tokens, stored as organization credentials
+  "/api/git-credentials/gitlab": {
+    resourceType: "credential",
+    fetchById: (id, orgId) =>
+      RuntimeCredentialDefinitionModel.findByIdForAudit(id, orgId),
+  },
   // Stored GitHub personal access tokens
   "/api/github-pats": {
     resourceType: "credential",
@@ -813,6 +821,22 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceIdSource: "organizationContext",
     fetchById: (id, orgId) =>
       OpenAppaGithubSyncModel.findByIdForAudit(id, orgId),
+  },
+  // Creating and installing the App only touch GitHub and a short-lived setup
+  // record; the stored credential is audited when installation completes.
+  "/api/openappa/github-app/manifest": {
+    resourceType: "credential",
+    action: "credential.created",
+  },
+  "/api/openappa/github-app/manifest/complete": {
+    resourceType: "credential",
+    action: "credential.created",
+  },
+  "/api/openappa/github-app/install": {
+    resourceType: "credential",
+    action: "credential.created",
+    fetchById: (id, orgId) =>
+      RuntimeCredentialDefinitionModel.findByIdForAudit(id, orgId),
   },
   // A POST walk-up is discarded, so the accept action registers its own path.
   "/api/openappa/github-sync/accept-held": {
@@ -988,21 +1012,45 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) => VirtualApiKeyModel.findByIdForAudit(id, orgId),
   },
 
+  // Saved browser logins (admin "Sign out" on the Playwright server page)
+  "/api/browser-storage-states/:userId": {
+    resourceType: "browserStorageState",
+    resourceIdParam: "userId",
+    fetchById: (id, orgId) =>
+      BrowserStorageStateModel.findByIdForAudit(id, orgId),
+  },
+
+  "/api/oauth-clients": {
+    resourceType: "oauthClient",
+    fetchById: (id, orgId) =>
+      ManagedOauthClientModel.findByIdForAudit(id, orgId),
+  },
+  "/api/oauth-clients/:id": {
+    resourceType: "oauthClient",
+    fetchById: (id, orgId) =>
+      ManagedOauthClientModel.findByIdForAudit(id, orgId),
+  },
+  "/api/oauth-clients/:id/rotate-secret": {
+    resourceType: "oauthClient",
+    action: "oauthClient.rotated",
+    fetchById: (id, orgId) =>
+      ManagedOauthClientModel.findByIdForAudit(id, orgId),
+  },
   "/api/llm-oauth-clients": {
-    resourceType: "llmOauthClient",
+    resourceType: "oauthClient",
     fetchById: (id, orgId) => LlmOauthClientModel.findByIdForAudit(id, orgId),
   },
   "/api/llm-oauth-clients/:id": {
-    resourceType: "llmOauthClient",
+    resourceType: "oauthClient",
     fetchById: (id, orgId) => LlmOauthClientModel.findByIdForAudit(id, orgId),
   },
 
   "/api/mcp-oauth-clients": {
-    resourceType: "mcpOauthClient",
+    resourceType: "oauthClient",
     fetchById: (id, orgId) => McpOauthClientModel.findByIdForAudit(id, orgId),
   },
   "/api/mcp-oauth-clients/:id": {
-    resourceType: "mcpOauthClient",
+    resourceType: "oauthClient",
     fetchById: (id, orgId) => McpOauthClientModel.findByIdForAudit(id, orgId),
   },
 
@@ -1101,8 +1149,21 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (_id, _orgId) =>
       chatOpsConfigModel.getRedactedSnapshotForAudit(),
   },
+  "/api/chatops/config/slack/router/app": {
+    resourceType: "chatOpsConfig",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, _orgId) =>
+      chatOpsConfigModel.getRedactedSnapshotForAudit(),
+  },
   // Joining a channel claims its binding for the bot's agent when unowned.
   "/api/chatops/config/slack/agents/:agentId/channels/:channelId/join": {
+    resourceType: "chatOpsBinding",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, orgId) =>
+      ChatOpsChannelBindingModel.findBindingsFingerprintForOrganization(orgId),
+  },
+  // Joining records the channel's binding, with no agent when it is new.
+  "/api/chatops/config/slack/router/channels/:channelId/join": {
     resourceType: "chatOpsBinding",
     resourceIdSource: "organizationContext",
     fetchById: (_id, orgId) =>
@@ -1321,13 +1382,13 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
 
   // OAuth client secret rotation — security-critical.
   "/api/llm-oauth-clients/:id/rotate-secret": {
-    resourceType: "llmOauthClient",
-    action: "llmOauthClient.rotated",
+    resourceType: "oauthClient",
+    action: "oauthClient.rotated",
     fetchById: (id, orgId) => LlmOauthClientModel.findByIdForAudit(id, orgId),
   },
   "/api/mcp-oauth-clients/:id/rotate-secret": {
-    resourceType: "mcpOauthClient",
-    action: "mcpOauthClient.rotated",
+    resourceType: "oauthClient",
+    action: "oauthClient.rotated",
     fetchById: (id, orgId) => McpOauthClientModel.findByIdForAudit(id, orgId),
   },
 
@@ -1403,10 +1464,15 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceIdSource: "organizationContext",
     actionByMethod: { DELETE: "virtualApiKey.bulk_deleted" },
   },
-  "/api/llm-oauth-clients/bulk": {
-    resourceType: "llmOauthClient",
+  "/api/oauth-clients/bulk": {
+    resourceType: "oauthClient",
     resourceIdSource: "organizationContext",
-    actionByMethod: { DELETE: "llmOauthClient.bulk_deleted" },
+    actionByMethod: { DELETE: "oauthClient.bulk_deleted" },
+  },
+  "/api/llm-oauth-clients/bulk": {
+    resourceType: "oauthClient",
+    resourceIdSource: "organizationContext",
+    actionByMethod: { DELETE: "oauthClient.bulk_deleted" },
   },
   "/api/llm-models/bulk": {
     resourceType: "llmModel",

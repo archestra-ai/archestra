@@ -859,14 +859,20 @@ export function isModelSyncStateStale(params: {
     now = new Date(),
   } = params;
 
-  // no usable linked models yet (unlinked key, empty provider, or failed sync):
-  // re-sync unless we already attempted recently, else we'd hammer the provider.
+  // an attempt within the TTL settles the key whatever its outcome: a failed
+  // sync leaves the links as they were, so without this the key reads stale on
+  // every request and each one hits the provider again.
+  if (recentlyAttempted) {
+    return false;
+  }
+
+  // no usable linked models yet (unlinked key, empty provider, or failed sync)
   if (
     !syncState ||
     syncState.linkedModelCount === 0 ||
     !syncState.oldestLastSyncedAt
   ) {
-    return !recentlyAttempted;
+    return true;
   }
 
   const ttl =

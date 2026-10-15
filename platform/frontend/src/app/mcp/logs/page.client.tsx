@@ -10,6 +10,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Boxes, MessagesSquare, User } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLogsHeaderAction } from "@/app/_parts/logs-section-layout";
 import { AgentSelector } from "@/components/agent-selector";
 import { EncryptedChatContentUnavailableLabel } from "@/components/encrypted-chat-content-unavailable";
 import { ExecutedAsBadge } from "@/components/executed-as-badge";
@@ -20,12 +21,13 @@ import {
 } from "@/components/filter-bar";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { QueryLoadError } from "@/components/query-load-error";
+import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
-import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { UserFilterSelect } from "@/components/user-client-filter-selects";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { useProfiles } from "@/lib/agent.query";
+import { useAgentOptions } from "@/lib/agent.query";
 import { resourceOwnerLabel } from "@/lib/agent-owner-label";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
@@ -41,6 +43,7 @@ import {
   canShowMcpToolCallStatus,
   resolveMcpToolCallStatus,
 } from "@/lib/mcp-logs/tool-call-status";
+import { useOrganizationMembers } from "@/lib/organization.query";
 import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { ErrorBoundary } from "../../_parts/error-boundary";
 
@@ -80,6 +83,7 @@ function McpToolCallsTable({
   const profileIdFromUrl =
     searchParams.get("profileId") || searchParams.get("profileID");
   const mcpServerNameFromUrl = searchParams.get("mcpServerName") ?? "all";
+  const userIdFromUrl = searchParams.get("userId") ?? "all";
   const searchFromUrl = searchParams.get("search");
   const cursorFromUrl = searchParams.get("cursor");
   const pageFromUrl = searchParams.get("page");
@@ -153,6 +157,14 @@ function McpToolCallsTable({
     [cursorPagination.goNewest, updateUrlParams],
   );
 
+  const handleUserFilterChange = useCallback(
+    (value: string) => {
+      cursorPagination.goNewest();
+      updateUrlParams({ userId: value === "all" ? null : value });
+    },
+    [cursorPagination.goNewest, updateUrlParams],
+  );
+
   // Date time range picker hook
   const dateTimePicker = useDateTimeRangePicker({
     startDateFromUrl,
@@ -168,6 +180,22 @@ function McpToolCallsTable({
       [cursorPagination.goNewest, updateUrlParams],
     ),
   });
+  // Every log page keeps its time range in the header's top-right corner.
+  const timeRangePicker = useMemo(
+    () => (
+      <TimeRangePicker
+        value={dateTimePicker.range}
+        onChange={dateTimePicker.setRange}
+        onClear={dateTimePicker.clearDateRange}
+      />
+    ),
+    [
+      dateTimePicker.range,
+      dateTimePicker.setRange,
+      dateTimePicker.clearDateRange,
+    ],
+  );
+  useLogsHeaderAction(timeRangePicker);
 
   const {
     data: mcpToolCallsResponse,
@@ -178,6 +206,7 @@ function McpToolCallsTable({
     agentId: profileFilter !== "all" ? profileFilter : undefined,
     mcpServerName:
       mcpServerNameFromUrl !== "all" ? mcpServerNameFromUrl : undefined,
+    userId: userIdFromUrl !== "all" ? userIdFromUrl : undefined,
     limit: cursorPagination.pageSize,
     cursor: cursorPagination.cursor,
     startDate: dateTimePicker.startDateParam,
@@ -185,11 +214,15 @@ function McpToolCallsTable({
     initialData: initialData?.mcpToolCalls,
   });
 
-  const { data: agents } = useProfiles({
+  const { data: agents } = useAgentOptions({
     filters: { agentTypes: ["agent", "mcp_gateway"] },
   });
 
-  const { data: mcpServers } = useMcpServers();
+  const { data: mcpServers } = useMcpServers({ includeAssignedAgents: false });
+  // Without log:admin the server scopes every listing to the caller's own
+  // rows, so a user picker would have nothing to choose between.
+  const { data: canSeeAllLogs } = useHasPermissions({ log: ["admin"] });
+  const { data: members } = useOrganizationMembers(canSeeAllLogs === true);
   const { data: canReadMcpRegistry } = useHasPermissions({
     mcpRegistry: ["read"],
   });
@@ -494,6 +527,7 @@ function McpToolCallsTable({
   const hasFilters =
     profileFilter !== "all" ||
     mcpServerNameFromUrl !== "all" ||
+    userIdFromUrl !== "all" ||
     dateTimePicker.startDate !== undefined ||
     dateTimePicker.endDate !== undefined;
 
@@ -505,6 +539,7 @@ function McpToolCallsTable({
       profileId: null,
       profileID: null,
       mcpServerName: null,
+      userId: null,
       startDate: null,
       endDate: null,
       search: null,
@@ -513,26 +548,6 @@ function McpToolCallsTable({
       pageSize: null,
     });
   }, [cursorPagination.goNewest, dateTimePicker, updateUrlParams]);
-
-  // Shared date picker component
-  const datePickerComponent = (
-    <DateTimeRangePicker
-      startDate={dateTimePicker.startDate}
-      endDate={dateTimePicker.endDate}
-      isDialogOpen={dateTimePicker.isDateDialogOpen}
-      tempStartDate={dateTimePicker.tempStartDate}
-      tempEndDate={dateTimePicker.tempEndDate}
-      displayText={dateTimePicker.getDateRangeDisplay()}
-      onDialogOpenChange={dateTimePicker.setIsDateDialogOpen}
-      onTempStartDateChange={dateTimePicker.setTempStartDate}
-      onTempEndDateChange={dateTimePicker.setTempEndDate}
-      onOpenDialog={dateTimePicker.openDateDialog}
-      onApply={dateTimePicker.handleApplyDateRange}
-      className={filterControlClass({
-        active: dateTimePicker.startDate !== undefined,
-      })}
-    />
-  );
 
   if (isMcpToolCallsLoadError) {
     return (
@@ -587,7 +602,16 @@ function McpToolCallsTable({
             })}
             contentClassName="min-w-[min(20rem,calc(100vw-2rem))]"
           />
-          {datePickerComponent}
+          {canSeeAllLogs ? (
+            <UserFilterSelect
+              value={userIdFromUrl}
+              onValueChange={handleUserFilterChange}
+              users={members?.map((member) => ({
+                id: member.id,
+                name: member.name,
+              }))}
+            />
+          ) : null}
         </FilterBar>
       </CollectionFilters>
 
@@ -626,7 +650,7 @@ function McpToolCallsTable({
 
 function getGatewayDisplayName(
   row: Pick<McpToolCallData, "ownerType" | "agentId" | "appName">,
-  agents: archestraApiTypes.GetAllAgentsResponses["200"] | undefined,
+  agents: archestraApiTypes.GetAgentOptionsResponses["200"] | undefined,
 ) {
   // App-owned calls have no agent by design — attribute them to the app
   // instead of falling through to the deleted-gateway label.

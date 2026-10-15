@@ -166,7 +166,7 @@ export class MarketplaceMaterializer {
       const currentContentHash = computeContentHash(currentFiles);
 
       if (latest && latest.contentHash === currentContentHash) {
-        await this.syncDiskToRevisions(req.ref);
+        await this.syncDiskToRevisions(req.ref, latest.commitSha);
         return {
           repoPath,
           commitHash: latest.commitSha,
@@ -178,7 +178,7 @@ export class MarketplaceMaterializer {
       const sequence = currentSequence + 1;
       const files = computeLayout(req, sequence);
       const contentHash = computeContentHash(files);
-      await this.syncDiskToRevisions(req.ref);
+      await this.syncDiskToRevisions(req.ref, latest?.commitSha ?? null);
 
       const createdAt = roundToSeconds(new Date());
       const message = formatMessage(sequence, contentHash);
@@ -229,11 +229,14 @@ export class MarketplaceMaterializer {
     }
   }
 
-  private async syncDiskToRevisions(ref: MarketplaceRepoRef): Promise<void> {
-    const revisions = await SkillShareLinkRevisionModel.list(ref);
-    const expectedHead = revisions.at(-1)?.commitSha ?? null;
+  private async syncDiskToRevisions(
+    ref: MarketplaceRepoRef,
+    expectedHead: string | null,
+  ): Promise<void> {
     const repoPath = this.repoPathFor(ref);
 
+    // every git request of a clone lands here; only load the full revision
+    // history (all file payloads) when the disk actually needs a replay
     const diskHead = await this.readDiskHead(repoPath);
     if (diskHead === expectedHead) {
       // already in sync — but a brand-new repo still needs `.git` initialized
@@ -242,6 +245,7 @@ export class MarketplaceMaterializer {
       return;
     }
 
+    const revisions = await SkillShareLinkRevisionModel.list(ref);
     await fs.rm(repoPath, { recursive: true, force: true });
     await this.initEmptyRepo(repoPath);
 
@@ -320,16 +324,23 @@ export class MarketplaceMaterializer {
       cwd: params.repoPath,
       args: ["add", "--all", "."],
     });
-    for (const file of params.files) {
+    // one update-index per mode, paths over stdin: a per-file spawn rewrites
+    // the whole index each time, so cost grew quadratically with file count
+    for (const executable of [true, false]) {
+      const paths = params.files
+        .filter((file) => (file.mode === "100755") === executable)
+        .map((file) => file.path);
+      if (paths.length === 0) continue;
       await runGit({
         binary: this.gitBinaryPath,
         cwd: params.repoPath,
         args: [
           "update-index",
-          file.mode === "100755" ? "--chmod=+x" : "--chmod=-x",
-          "--",
-          file.path,
+          executable ? "--chmod=+x" : "--chmod=-x",
+          "-z",
+          "--stdin",
         ],
+        input: `${paths.join("\0")}\0`,
       });
     }
     const treeRes = await runGit({
@@ -439,6 +450,7 @@ interface RunGitParams {
   cwd: string;
   args: string[];
   env?: Record<string, string>;
+  input?: string;
 }
 
 function runGit(
@@ -460,6 +472,7 @@ function runGit(
       stderr += chunk.toString();
     });
     proc.once("error", reject);
+    proc.stdin?.end(params.input);
     proc.once("close", (code, signal) => {
       // a signal-killed process has code=null; never treat that as success
       if (signal) {

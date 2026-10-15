@@ -27,6 +27,8 @@ export interface AfterConnectRun {
   client: ConnectClient;
   /** The installer command was copied, not the prompt. */
   script: boolean;
+  /** The gateway's server name in that agent, when the setup sets it. */
+  serverName: string | null;
 }
 
 export function AfterConnect({

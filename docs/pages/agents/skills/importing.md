@@ -1,33 +1,56 @@
 ---
 title: Importing Skills
-description: Bring skills in from GitHub, MCP servers, and plugins
+description: Bring skills in from GitHub, GitLab, MCP servers, and plugins
 order: 2
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-14
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 You can bring skills in from three places:
 
-- **GitHub:** import skills from a repository and keep them in sync.
+- **Git:** import skills from a GitHub or GitLab repository and keep them in sync.
 - **MCP servers:** skills that a server publishes with its tools.
 - **Plugins:** skills inside a [plugin](/docs/agents/plugins).
 
-## Import from GitHub
+<span id="import-from-github"></span>
 
-1. Go to **Skills** and click **Add new skill**. Pick a popular repository, search the skill index, or click **Custom GitHub URL**.
-2. In **Repository URL**, paste `owner/repo` or a GitHub link. A link to a folder imports only that folder.
-3. Pick a **Keep in sync** schedule, and choose who gets access.
-4. For a private repository, open **Authentication & subpath** and pick a saved token or GitHub App, or paste a token.
-5. Click **Discover**, select the skills you want, and click **Import**.
+## Import from GitHub or GitLab
 
-![The Import skills from GitHub dialog with a repository URL, the Keep in sync schedule, and the permissions for the imported skills](/docs/automated_screenshots/platform-agent-skills_import-from-github.webp)
+Point Archestra at a repository, and it finds every folder with a `SKILL.md`, however deep. `skills/security/appsec/threat-model/` works as well as `skills/pdf/`.
+
+1. Go to **Skills** and click **Add new skill**. Pick a popular repository, search the skill index, or click **Git repository**.
+2. Pick **GitHub** or **GitLab**.
+3. Pick how to sign in: a GitHub App, a GitLab token, or **Public repository** (**Public project** on GitLab).
+4. Pick the repository, or paste its URL. A link to a folder imports only that folder. To set a branch or folder, open **Advanced**.
+5. Click **Find skills**. Search the list and select the skills. **Selected** shows your selection across searches.
+6. Open **Import settings** to change the **Keep in sync** schedule or who can use the skills, then click **Import**.
+
+The skills created by that import show on **Skills**, marked **synced**. Click **Show all skills** to clear the import filter.
+
+![The Import skills dialog, asking whether the repository is on GitHub or GitLab](/docs/automated_screenshots/platform-agent-skills_import-from-github.webp)
 
 A skill can have up to 500 files of up to 10 MB each. Larger files are skipped.
 
-### GitHub Enterprise Server
+### Private Repositories
 
-Add a GitHub App for your Enterprise host under **Settings → Credentials**, with its API URL, such as `https://git.example.com/api/v3`. When you import, paste the repository's full URL and pick that App under **Authentication & subpath**. Tokens and public imports work only with github.com.
+A private repository needs a credential that the whole organization shares:
+
+- **GitHub:** a GitHub App installed on the repository. Add one under **Settings → Credentials**.
+- **GitLab:** an access token. Click **Add a GitLab token**, and enter the GitLab URL, a name, and a project, group, or personal access token with the `read_api` scope.
+
+Picking a saved credential needs [`credential:read`](/docs/reference/permissions#credential:read). Saving one needs [`credential:create`](/docs/reference/permissions#credential:create).
+
+<span id="github-enterprise-server"></span>
+
+### Self-Hosted GitHub and GitLab
+
+Public imports work only with github.com and gitlab.com. For your own host, save a credential for it:
+
+- **GitHub Enterprise Server:** add a GitHub App with your host's API URL, such as `https://git.example.com/api/v3`.
+- **Self-managed GitLab:** add a GitLab token with your GitLab URL, such as `https://gitlab.example.com`.
+
+Then pick that credential when you import.
 
 ### Sync
 
@@ -37,9 +60,11 @@ Imported skills stay in sync with their repository: every 15 minutes, every hour
 - **Sync now** pulls right away. **Stop syncing** makes the skill editable.
 - If a pull fails, the skill keeps its last good content and shows the error.
 
-### Turn GitHub Imports Off
+<span id="turn-github-imports-off"></span>
 
-Set **Settings → Skills → Online skill catalog** to **Disabled**. This hides the popular repositories, the skill index, and GitHub imports. Existing imports keep syncing.
+### Turn Git Imports Off
+
+Set **Settings → Skills → Online skill catalog** to **Disabled**. This hides the popular repositories, the skill index, and Git imports. Existing imports keep syncing.
 
 ## Skills from MCP Servers
 

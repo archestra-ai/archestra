@@ -62,12 +62,12 @@ import {
   type ToolWithAssignmentsData,
   useToolsWithAssignments,
 } from "@/lib/tools/tool.query";
-import { CatalogBatteryToggles } from "./catalog-battery-toggles";
 import { InstallationProgress } from "./installation-progress";
 import {
   LocalServerInstallDialog,
   type LocalServerInstallResult,
 } from "./local-server-install-dialog";
+import { mcpServerLogsHref } from "./mcp-server-actions-model";
 import type { CatalogItem } from "./mcp-server-card";
 import {
   RemoteServerInstallDialog,
@@ -82,21 +82,26 @@ export const SETUP_STEPS: Array<{ id: SetupStepId; title: string }> = [
   { id: "tools", title: "Tools & Guardrails" },
 ];
 
+/**
+ * The header stepper, drawn the way the Agents create/edit pages draw theirs.
+ * An edit page passes `allReached`: every step already has its values.
+ */
 export function SetupStepper({
   activeStep,
   onStepClick,
-  compact = false,
+  allReached = false,
 }: {
   activeStep: SetupStepId;
   onStepClick?: (step: SetupStepId) => void;
-  compact?: boolean;
+  allReached?: boolean;
 }) {
   return (
     <WizardStepper
+      variant="progress"
       steps={SETUP_STEPS}
       activeStep={activeStep}
       onStepClick={onStepClick}
-      compact={compact}
+      allReached={allReached}
     />
   );
 }
@@ -251,6 +256,10 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
     }
   };
 
+  // The failed connection's own pod logs. A remote server has no logs view;
+  // its failure reason is the inline error above, so it gets Retry only.
+  const failureLogsHref = mcpServerLogsHref({ item, serverId: target?.id });
+
   const isInstalling =
     installMutation.isPending ||
     status === "pending" ||
@@ -311,9 +320,11 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
             <Button variant="outline" size="sm" onClick={startInstall}>
               Retry
             </Button>
-            <Button variant="ghost" size="sm" asChild>
-              <Link href={`/mcp/registry/${item.id}?tab=logs`}>View logs</Link>
-            </Button>
+            {failureLogsHref && (
+              <Button variant="ghost" size="sm" asChild>
+                <Link href={failureLogsHref}>View logs</Link>
+              </Button>
+            )}
           </div>
         </div>
       ) : (
@@ -322,6 +333,7 @@ export function TestConnectionStep({ item }: { item: CatalogItem }) {
             status={isInstalling && !status ? "pending" : (status ?? null)}
             serverId={target?.id}
             deploymentStatuses={deploymentStatuses}
+            serverType={item.serverType}
           />
         </div>
       )}
@@ -454,7 +466,6 @@ export function ToolsAndGuardrailsStep({ item }: { item: CatalogItem }) {
         </p>
         {refreshToolsButton}
       </div>
-      <CatalogBatteryToggles catalogId={item.id} />
       {tools.length > 5 && (
         <SearchInput
           placeholder="Filter tools by name"
@@ -530,12 +541,6 @@ function ToolReviewCard({ tool }: { tool: ToolWithAssignmentsData }) {
               {label}
             </Badge>
           ))}
-          {tool.assignmentCount > 0 && (
-            <Badge variant="secondary" className="font-normal">
-              {tool.assignmentCount}{" "}
-              {tool.assignmentCount === 1 ? "assignment" : "assignments"}
-            </Badge>
-          )}
         </div>
         {tool.description && (
           <p className="text-sm text-muted-foreground">{tool.description}</p>

@@ -2,7 +2,7 @@
 title: Deployment
 description: Install Archestra with Docker or Helm and configure production access
 order: 1
-lastUpdated: 2026-10-09
+lastUpdated: 2026-10-15
 ---
 
 Use Docker to try Archestra locally. Use Helm to run it in Kubernetes with a persistent database, workers, and MCP server workloads. The UI listens on port 3000; the backend listens on port 9000.
@@ -28,7 +28,7 @@ You need a Kubernetes cluster, Helm 3 or later, and `kubectl` access. Self-hoste
 Pin the chart version and review its defaults:
 
 ```bash
-export ARCHESTRA_VERSION="1.4.0-rc.37" # x-release-please-version
+export ARCHESTRA_VERSION="1.4.0-rc.42" # x-release-please-version
 helm show values \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --version "$ARCHESTRA_VERSION" > values.yaml
@@ -87,6 +87,20 @@ Provide the same database URL to the migration Job and application. The chart ru
 For Knowledge Base vector storage, PostgreSQL must have the pgvector extension available and the migration user must be able to create the extension, or an administrator must install it first.
 
 Set `archestra.database.connectionBudget` to size query pools across peak web and worker pods, including rollout overlap. Leave room in PostgreSQL for other clients and reserved connections. Each peak pod needs at least 13 budgeted connections; the chart rejects smaller budgets. A fixed `archestra.database.poolMax` or [`ARCHESTRA_DATABASE_POOL_MAX`](/docs/reference/configuration#ARCHESTRA_DATABASE_POOL_MAX) overrides budget sizing. Complete one rollout before starting another.
+
+### Cost Statistics Index
+
+For large interaction histories, an optional covering index reduces database reads for Costs statistics. It adds index storage and maintenance work to interaction inserts.
+
+After the database migrations finish, run this command once from `/app/backend` in the application container during a database maintenance window:
+
+```bash
+node scripts/create-statistics-index.mjs
+```
+
+The command uses [`ARCHESTRA_DATABASE_URL`](/docs/reference/configuration#ARCHESTRA_DATABASE_URL). Connect directly to PostgreSQL or through session pooling, using credentials that can create indexes. Transaction pooling is unsupported.
+
+The build runs concurrently with interaction writes and consumes database I/O while it scans. It stops after a five-second lock wait or a thirty-minute statement timeout. Rerunning preserves a valid index and rebuilds an invalid index left by an interrupted build. Successful output reports `created`, `already_valid`, or `rebuilt_invalid`.
 
 ### Scaling
 
@@ -150,6 +164,16 @@ Pin an exact chart version or image tag from [GitHub Releases](https://github.co
 2. Read release notes for migration requirements.
 3. Test the selected version in staging.
 4. Apply the Helm upgrade above and check rollout and migration Job status.
+
+On the first v1.4 startup, Archestra converts legacy sharing and role permissions before serving API traffic. One replica performs the conversion; other replicas wait, and later restarts skip it. During startup, `/health` responds successfully while `/ready` returns HTTP 503 until the API is ready, so large conversions do not exhaust the Kubernetes startup probe budget.
+
+During shutdown, Archestra stops accepting new model requests and gives active requests up to 60 seconds to finish. Requests that outlast this window can still lose their connection. The Helm chart sets `archestra.terminationGracePeriodSeconds` to 120; keep it at least this high so the container can finish shutdown.
+
+For Docker, use `docker stop --time 120` or set Compose's `stop_grace_period: 120s`. A shorter host deadline can kill the container before requests finish.
+
+The proxy retries a provider connection failure at most twice before receiving the first response chunk. It does not retry provider error responses, timeouts, or failures after output starts. Recovery after partial output depends on your client's retry policy.
+
+Gemini is excluded from these proxy retries because its SDK can report an interrupted error response as a connection failure.
 
 Rolling back a container image does not reverse database migrations. Restore a compatible database backup when required by the release's rollback procedure.
 
@@ -278,16 +302,24 @@ Admins configure the page under **Settings → Connect Page**, or with **Connect
 
 | Setting | Effect |
 | --- | --- |
-| Available agents | Choose the agents offered on Connect and their order. Click **+** to add an agent, remove a choice with **Remove**, and click **Save** to apply your changes. **Generic client** is always shown last. |
+| Default client, Default MCP Gateway | Pre-selected for everyone. Users can still switch. |
 | LLM Proxy, Skills, and Plugins on Connect | Turning one off removes it from new setups. Existing setups keep working. |
-| Default MCP Gateway, Default client | Pre-selected for everyone. Users can still switch. |
-| Default provider keys | The provider key a setup's virtual key maps to, per provider. |
-| Managed instructions | Appends your organization’s instructions to an agent’s system prompt when users connect through the Connect page. CLI wrappers fetch saved changes before the next launch. |
+| Agents users can connect | The agents offered on Connect, in order. Drag to reorder, click **✕** to remove one, and use **Add back** to restore it. Click an agent to pick the provider keys its setup command shares with everyone who connects it. An agent with no keys picked uses each user's own. **Generic client** is always shown last. |
+| Instructions for connected agents | Added to the system prompt of every agent users connect from the Connect page. The default asks agents to offer moving a session to your deployment's Cloud runtime. CLI wrappers fetch saved changes before the next launch. |
 
-Claude Code, Codex, Copilot CLI, and OpenCode refresh managed instructions before launch. Changes replace the managed copy and preserve the user’s own instructions.
+Claude Code, Codex, Copilot CLI, OpenCode, and Kilo Code refresh these instructions before launch. Changes replace the managed copy and preserve the user’s own instructions.
 
 - **Existing connections:** Run setup once to install the refresh capability. Unix wrappers require Python 3 to fetch updates.
 - **Temporary outages:** The client uses its last fetched copy.
 - **Other clients:** Cursor’s User Rules and Claude Desktop’s organization instructions still need a setup update.
 
 Setup reads `/connect.md`, `/llms.txt`, and the setup endpoints under `/api/client-connections` and `/api/connection-setups/script` without a session. A proxy in front of Archestra that requires login for every URL must let these through. It must also allow `/v1/connection-instructions`; this endpoint checks the installation’s read-only credential and current access.
+
+
+## Upgrade OAuth Clients
+
+Deploy the unified OAuth Clients release to all replicas together, with the older replicas stopped before the updated application starts. Mixed versions and rolling back to the older authorization model are unsupported. Back up the database before the upgrade.
+
+Existing client IDs, secrets, provider keys, gateway assignments, and issued tokens carry over. MCP clients retain MCP Gateway and A2A access; LLM clients retain LLM Proxy access. The upgrade combines each custom role action and wildcard grant across the two former client resources. A read grant never becomes edit or delete, and grants on individual clients keep their scope. See [OAuth client access control](/docs/admin/access-control#oauth-clients).
+
+After the upgrade, open **Settings → OAuth Clients** and check the clients' capabilities and permissions. Request tokens with the scopes the application needs. Repeat startups preserve permission changes made after the upgrade.

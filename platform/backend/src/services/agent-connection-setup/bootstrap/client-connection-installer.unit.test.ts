@@ -15,6 +15,7 @@ import { createServer, type Server } from "node:http";
 import { createServer as createSecureServer } from "node:https";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
+import { performance } from "node:perf_hooks";
 import { promisify } from "node:util";
 import { runInNewContext } from "node:vm";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -32,6 +33,7 @@ let transientFailure: boolean;
 let readFaultStatus: number;
 let interval: number;
 let startedAt: number;
+let startedAtMono: number;
 let firstPollDelay: number;
 let starts: number;
 let startBody: Record<string, unknown>;
@@ -46,10 +48,20 @@ beforeEach(async () => {
   await writeFile(
     clockPath,
     `const schedule = globalThis.setTimeout;
+const realHrtime = process.hrtime.bigint;
+let advancedNs = 0n;
+process.hrtime.bigint = () => realHrtime() + advancedNs;
 globalThis.setTimeout = (callback, timeout, ...args) => {
-  const installerCall = new Error().stack?.includes('connect.cjs:');
+  const stack = new Error().stack ?? '';
+  const installerCall = stack.includes('connect.cjs:');
+  const pollSleep = stack.includes('sleepAtLeast');
   const pollOrRetry = timeout === 1000 || timeout === 7000;
-  return schedule(callback, installerCall && pollOrRetry ? 1 : timeout, ...args);
+  if (installerCall && (pollSleep || pollOrRetry)) {
+    const ms = Number(timeout);
+    if (pollSleep && Number.isFinite(ms) && ms > 0) advancedNs += BigInt(Math.ceil(ms)) * 1000000n;
+    return schedule(callback, 1, ...args);
+  }
+  return schedule(callback, timeout, ...args);
 };
 `,
   );
@@ -61,12 +73,14 @@ globalThis.setTimeout = (callback, timeout, ...args) => {
   readFaultStatus = 0;
   interval = 1;
   startedAt = 0;
+  startedAtMono = 0;
   firstPollDelay = 0;
   starts = 0;
   server = createServer(async (req, res) => {
     if (req.url === "/api/client-connections") {
       starts++;
       startedAt = Date.now();
+      startedAtMono = performance.now();
       let raw = "";
       req.on("data", (chunk) => {
         raw += chunk;
@@ -85,7 +99,7 @@ globalThis.setTimeout = (callback, timeout, ...args) => {
       );
     } else if (req.url === "/api/client-connections/poll") {
       polls++;
-      if (polls === 1) firstPollDelay = Date.now() - startedAt;
+      if (polls === 1) firstPollDelay = performance.now() - startedAtMono;
       if ((readFaultStatus !== 0 || transientFailure) && polls === 1) {
         res.writeHead(readFaultStatus || 503);
         res.end();
@@ -225,7 +239,7 @@ test("Copilot prints saved credentials once in the final instructions, after the
   const credentials = result.output.indexOf(
     "export COPILOT_PROVIDER_API_KEY='test-key'",
   );
-  const signIn = result.output.indexOf("Sign in to Test tools");
+  const signIn = result.output.indexOf("Authorize Copilot CLI for the");
   expect(summary).toBeGreaterThan(-1);
   expect(optional).toBeGreaterThan(summary);
   expect(credentials).toBeGreaterThan(optional);
@@ -234,7 +248,7 @@ test("Copilot prints saved credentials once in the final instructions, after the
     result.output.match(/^ {2}export COPILOT_PROVIDER_API_KEY=/gm),
   ).toHaveLength(1);
   expect(result.output).toContain(
-    "copilot -i 'What can you do with my Test tools?'",
+    "copilot -i 'What can you do with my Test tools from the test MCP server? Do not call, test, reconnect or sign in to my other MCP servers. Leave them out of your answer.'",
   );
 });
 
@@ -390,6 +404,7 @@ test("writes the approved Windows setup with a UTF-8 BOM so powershell.exe -File
     runInNewContext(CLIENT_CONNECTION_INSTALLER, {
       __filename: join(directory, "connect.cjs"),
       process: {
+        hrtime: process.hrtime,
         argv: [
           process.execPath,
           "connect.cjs",
@@ -440,6 +455,98 @@ test("writes the approved Windows setup with a UTF-8 BOM so powershell.exe -File
   expect(bytes.subarray(3).toString("utf8")).toBe(scriptBody);
 });
 
+test.each([
+  { serverName: "prod_gateway", runs: true },
+  { serverName: "r&d_(prod)", runs: false },
+])("Windows sign-in for $serverName gives cmd.exe one command line, never an argument list", async ({
+  serverName,
+  runs,
+}) => {
+  const command = ["opencode", "mcp", "auth", serverName];
+  const ending = {
+    label: "OpenCode",
+    appName: "Test",
+    parts: [],
+    signIn: {
+      command,
+      text: command.join(" "),
+      howTo: "Sign in later.",
+      gatewayName: "test",
+    },
+    launch: null,
+    notes: [],
+  };
+  scriptBody = `# archestra-ending: ${Buffer.from(JSON.stringify(ending)).toString("base64")}\nWrite-Host 'setup'\n`;
+  const calls: Array<{ command: string; args: unknown }> = [];
+  const output: string[] = [];
+  await new Promise<void>((resolve, reject) => {
+    runInNewContext(CLIENT_CONNECTION_INSTALLER, {
+      __filename: join(directory, "connect.cjs"),
+      process: {
+        hrtime: process.hrtime,
+        argv: [
+          process.execPath,
+          "connect.cjs",
+          "--url",
+          namedLoopbackOrigin(),
+          "--client",
+          "opencode",
+          "--no-open",
+        ],
+        platform: "win32",
+        execPath: process.execPath,
+        env: { NO_COLOR: "1" },
+        stdout: { isTTY: true, write: (text: string) => output.push(text) },
+      },
+      Buffer,
+      URL,
+      fetch,
+      AbortSignal,
+      setTimeout,
+      clearTimeout,
+      console: {
+        log: (message: string) => {
+          output.push(message);
+          if (message.includes("Next: open")) resolve();
+        },
+        error: (message: string) => reject(new Error(message)),
+      },
+      require: (name: string) => {
+        if (name === "node:crypto") return { createHash };
+        // The terminal answers the sign-in question with Enter (yes).
+        if (name === "node:fs")
+          return { openSync: () => 7, readSync: () => 0, closeSync() {} };
+        if (name === "node:fs/promises") return fileSystem;
+        if (name === "node:path") return { join };
+        if (name === "node:os")
+          return { hostname: () => "test-host", tmpdir: () => directory };
+        if (name === "node:child_process")
+          return {
+            spawn,
+            spawnSync: (command: string, args: unknown) => {
+              calls.push({ command, args });
+              return { status: 0 };
+            },
+          };
+        throw new Error(`Unexpected module ${name}`);
+      },
+    });
+  });
+  expect(calls[0]?.command).toBe("powershell.exe");
+  const signIn = calls.slice(1);
+  if (runs) {
+    expect(signIn).toEqual([
+      {
+        command: "opencode mcp auth prod_gateway",
+        args: expect.objectContaining({ shell: true }),
+      },
+    ]);
+  } else {
+    expect(signIn).toEqual([]);
+    expect(output).toContain("  opencode mcp auth r&d_(prod)");
+  }
+});
+
 test("a downloaded Desktop setup redeems its reviewed ticket without another approval flow", async () => {
   const token = `archestra_con_${"A".repeat(43)}`;
   const result = await promisify(execFile)(process.execPath, [
@@ -467,6 +574,7 @@ test.each([
     runInNewContext(CLIENT_CONNECTION_INSTALLER, {
       __filename: join(directory, "connect.cjs"),
       process: {
+        hrtime: process.hrtime,
         argv: [
           process.execPath,
           "connect.cjs",
@@ -590,6 +698,33 @@ test("uses named localhost for browser approval and loopback IP for network requ
 test("waits for the server-provided polling interval before requesting approval status", async () => {
   interval = 4;
   const result = await runInstaller({ url: origin, clientId: "cursor" });
+  expect(result.code).toBe(0);
+  expect(firstPollDelay).toBeGreaterThanOrEqual(4_000);
+  expect(downloads).toBe(1);
+});
+
+test("still waits out the server polling interval when the wait timer returns early", async () => {
+  interval = 4;
+  const earlyClock = join(directory, "early-clock.cjs");
+  await writeFile(
+    earlyClock,
+    `const schedule = globalThis.setTimeout;
+let shortened = false;
+globalThis.setTimeout = (callback, timeout, ...args) => {
+  const installerCall = new Error().stack?.includes('connect.cjs:');
+  if (!shortened && installerCall && timeout >= 4000) {
+    shortened = true;
+    return schedule(callback, 1, ...args);
+  }
+  return schedule(callback, timeout, ...args);
+};
+`,
+  );
+  const result = await runInstaller({
+    url: origin,
+    clientId: "cursor",
+    nodeArgs: ["--require", earlyClock],
+  });
   expect(result.code).toBe(0);
   expect(firstPollDelay).toBeGreaterThanOrEqual(4_000);
   expect(downloads).toBe(1);
@@ -908,6 +1043,7 @@ function installWithBrowser(params: {
     runInNewContext(CLIENT_CONNECTION_INSTALLER, {
       __filename: join(directory, "connect.cjs"),
       process: {
+        hrtime: process.hrtime,
         argv: [
           process.execPath,
           join(directory, "connect.cjs"),

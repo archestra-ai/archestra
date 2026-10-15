@@ -14,13 +14,13 @@ import {
   normalizeValues,
   validateValues,
 } from "./mcp-elicitation-fields";
+import { getReviewDecisionContent } from "./openappa-review-presentation";
 
 /**
  * Modal form for an elicitation that is not a plain multiple-choice question
  * (free text, numbers, a URL to open). Multiple-choice questions render inline
  * in the chat instead, see `McpElicitationCard`.
  */
-type ElicitationAction = "accept" | "decline" | "cancel";
 type ElicitationResponder = (response: ElicitationResponse) => Promise<boolean>;
 
 export function McpElicitationDialog({
@@ -187,40 +187,44 @@ function RemedyReviewDialog({
   isSubmitting: boolean;
   onRespond: ElicitationResponder;
 }) {
-  const respond = (action: ElicitationAction) =>
-    onRespond(
-      action === "accept"
-        ? { id: request.id, action, content: { action: "approve" } }
-        : { id: request.id, action },
-    );
+  const decide = (decision: "approve" | "deny") =>
+    onRespond({
+      id: request.id,
+      action: "accept",
+      content: getReviewDecisionContent({
+        requestedSchema: request.requestedSchema,
+        decision,
+      }),
+    });
+  const cancel = () => onRespond({ id: request.id, action: "cancel" });
 
   return (
     <StandardFormDialog
       open={true}
       onOpenChange={(open) => {
-        if (!open && !isSubmitting) void respond("cancel");
+        if (!open && !isSubmitting) void cancel();
       }}
       title="Approval Required"
       description="Review this tool call before it can run."
       size="medium"
       preventCloseOnInteractOutside
-      onSubmit={() => void respond("accept")}
+      onSubmit={() => void decide("approve")}
       footer={
         <>
           <Button
             type="button"
             variant="ghost"
             disabled={isSubmitting}
-            onClick={() => void respond("decline")}
+            onClick={() => void decide("deny")}
           >
             <XIcon />
-            Decline
+            Deny
           </Button>
           <Button
             type="button"
             variant="outline"
             disabled={isSubmitting}
-            onClick={() => void respond("cancel")}
+            onClick={() => void cancel()}
           >
             Cancel
           </Button>

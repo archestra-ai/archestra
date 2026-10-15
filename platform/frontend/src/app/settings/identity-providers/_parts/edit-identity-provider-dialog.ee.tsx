@@ -17,7 +17,6 @@ import {
   useIdentityProvider,
   useUpdateIdentityProvider,
 } from "@/lib/auth/identity-provider.query.ee";
-import { IdTokenClaimsDebugger } from "./id-token-claims-debugger.ee";
 import { getIdentityProviderDialogNavItems } from "./identity-provider-dialog-nav-items.ee";
 import {
   type IdentityProviderDialogSection,
@@ -171,9 +170,7 @@ export function EditIdentityProviderDialog({
     return null;
   }
 
-  const navItems = getIdentityProviderDialogNavItems(providerType, {
-    includeTokenDebugger: true,
-  });
+  const navItems = getIdentityProviderDialogNavItems(providerType);
   const validActiveSection = navItems.some((item) => item.id === activeSection)
     ? activeSection
     : "general";
@@ -190,7 +187,7 @@ export function EditIdentityProviderDialog({
         activeSection={validActiveSection}
         navItems={navItems}
         onActiveSectionChange={setActiveSection}
-        onSubmit={form.handleSubmit(onSubmit)}
+        onSubmit={onSubmit}
         sidebarFooter={
           <PermissionButton
             type="button"
@@ -222,16 +219,14 @@ export function EditIdentityProviderDialog({
           </>
         }
       >
-        {validActiveSection === "token-debugger" ? (
-          <IdTokenClaimsDebugger identityProviderId={provider.id} />
-        ) : providerType === "saml" ? (
+        {providerType === "saml" ? (
           <SamlConfigForm
             form={form}
             identityProviderId={provider.id}
             activeSection={
               validActiveSection as Exclude<
                 IdentityProviderDialogSection,
-                "enterprise-managed-credentials" | "token-debugger"
+                "enterprise-managed-credentials"
               >
             }
           />

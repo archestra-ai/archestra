@@ -39,6 +39,7 @@ export { default as AppRenderScreenshotModel } from "./app-render-screenshot";
 export { default as AppToolModel } from "./app-tool";
 export { default as AppVersionModel } from "./app-version";
 export { default as AuditLogModel } from "./audit-log";
+export { default as BrowserStorageStateModel } from "./browser-storage-state";
 export { default as BrowserTabStateModel } from "./browser-tab-state";
 export { default as ActiveChatRunModel } from "./chat-active-run";
 export { default as ChatOpsChannelBindingModel } from "./chatops-channel-binding";
@@ -98,6 +99,7 @@ export {
   default as LlmProviderApiKeyModelLinkModel,
   selectionKey,
 } from "./llm-provider-api-key-model";
+export { default as ManagedOauthClientModel } from "./managed-oauth-client";
 export { default as McpCatalogLabelModel } from "./mcp-catalog-label";
 export { default as McpCatalogSkillModel } from "./mcp-catalog-skill";
 export type { ClusterLeaseGuard } from "./mcp-deployment-lease";
@@ -170,6 +172,7 @@ export { default as TeamLabelModel } from "./team-label";
 export { default as TeamTokenModel } from "./team-token";
 export { default as ToolModel } from "./tool";
 export { default as ToolObservationModel } from "./tool-observation";
+export { default as UsageStatisticsModel } from "./usage-statistics";
 export { default as UserModel } from "./user";
 export { default as UserCredentialModel } from "./user-credential";
 export { default as UserOnboardingSeenItemModel } from "./user-onboarding-seen-item";

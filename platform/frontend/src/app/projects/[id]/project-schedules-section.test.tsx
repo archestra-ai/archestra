@@ -88,7 +88,7 @@ function mockSchedulePermissions(granted: {
   delete?: boolean;
 }) {
   vi.mocked(useHasPermissions).mockImplementation((permissions) => {
-    const actions = permissions.scheduledTask ?? [];
+    const actions = permissions.project ?? [];
     const allGranted = actions.every(
       (action) => granted[action as keyof typeof granted] === true,
     );
@@ -150,7 +150,7 @@ beforeEach(() => {
   } as unknown as ReturnType<typeof useRunScheduleTriggerNow>);
 });
 
-describe("ProjectSchedulesSection without scheduledTask:read", () => {
+describe("ProjectSchedulesSection without project:read", () => {
   beforeEach(() => {
     mockSchedulePermissions({ read: false });
   });
@@ -178,30 +178,9 @@ describe("ProjectSchedulesSection without scheduledTask:read", () => {
 
     expect(useScheduleTrigger).not.toHaveBeenCalled();
   });
-
-  it("still offers permissions for a wildcard grantee without starting the forbidden schedule query", async () => {
-    vi.mocked(useScopedCapabilities).mockReturnValue({
-      data: [
-        {
-          organizationId: "org-1",
-          resource: "scheduledTask",
-          scope: "*",
-          action: "read",
-        },
-      ],
-    } as unknown as ReturnType<typeof useScopedCapabilities>);
-
-    const user = userEvent.setup();
-    render(<ProjectSchedulesSection projectId="project-1" />);
-
-    expect(screen.getByText("Schedules")).toBeInTheDocument();
-    expect(useScheduleTriggers).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "More actions" }));
-    expect(screen.getByRole("menuitem", { name: "Permissions" })).toBeVisible();
-  });
 });
 
-describe("ProjectSchedulesSection with scheduledTask:read only", () => {
+describe("ProjectSchedulesSection with project:read only", () => {
   beforeEach(() => {
     mockSchedulePermissions({ read: true, create: false });
   });
@@ -212,7 +191,7 @@ describe("ProjectSchedulesSection with scheduledTask:read only", () => {
     expect(screen.getByText("Schedules")).toBeInTheDocument();
   });
 
-  it("hides the New schedule button without scheduledTask:create", () => {
+  it("hides the New schedule button without project:create", () => {
     render(<ProjectSchedulesSection projectId="project-1" canCreate />);
 
     expect(
@@ -221,7 +200,7 @@ describe("ProjectSchedulesSection with scheduledTask:read only", () => {
   });
 });
 
-describe("ProjectSchedulesSection with scheduledTask read+create", () => {
+describe("ProjectSchedulesSection with project read+create", () => {
   beforeEach(() => {
     mockSchedulePermissions({
       read: true,
@@ -275,6 +254,55 @@ describe("ProjectSchedulesSection with scheduledTask read+create", () => {
     expect(screen.getAllByText("Reporter")).toHaveLength(2);
     expect(screen.getByText("Active")).toBeInTheDocument();
     expect(screen.getByText("Paused")).toBeInTheDocument();
+  });
+
+  it("keeps another actor's schedule read-only for a project collaborator", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useScheduleTriggers).mockReturnValue({
+      data: { data: [{ ...SCHEDULE, actorUserId: "another-user" }] },
+    } as unknown as ReturnType<typeof useScheduleTriggers>);
+    render(<ProjectSchedulesSection projectId="project-1" />);
+    expect(
+      screen.queryByRole("button", { name: "Edit Weekly summary" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Pause Weekly summary" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Permissions" }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Actions for Weekly summary" }),
+    );
+    expect(screen.getByRole("menuitem", { name: "Run now" })).toHaveAttribute(
+      "data-disabled",
+    );
+    expect(
+      screen.queryByRole("menuitem", { name: "Delete schedule" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("allows Projects oversight to edit another actor's schedule", () => {
+    vi.mocked(useScheduleTriggers).mockReturnValue({
+      data: { data: [{ ...SCHEDULE, actorUserId: "another-user" }] },
+    } as unknown as ReturnType<typeof useScheduleTriggers>);
+    vi.mocked(useScopedCapabilities).mockReturnValue({
+      data: [
+        {
+          organizationId: "org-1",
+          resource: "project",
+          scope: "*",
+          action: "update",
+        },
+      ],
+    } as unknown as ReturnType<typeof useScopedCapabilities>);
+    render(<ProjectSchedulesSection projectId="project-1" />);
+    expect(
+      screen.getByRole("button", { name: "Edit Weekly summary" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Pause Weekly summary" }),
+    ).toBeVisible();
   });
 
   it("opens the latest run chat and provides direct edit and pause controls", async () => {

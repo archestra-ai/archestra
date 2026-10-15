@@ -112,7 +112,22 @@ builtin = "hitl"
   const policy = { content: readFileSync(policyPath, 'utf8'), credentials: {} };
   const client = new Client({ connectionString: databaseUrl });
   await client.connect();
-  t.after(() => { sanitizer.close(); annotator.close(); client.end(); rmSync(dir, { recursive: true, force: true }); });
+  const replicas = new Set();
+  t.after(async () => {
+    // Flush a held sanitizer barrier so its pods can end, then end any replica
+    // still running: a cancelled assertion must not strand a fixture child.
+    if (sanitizerBarrier) for (const flush of sanitizerBarrier.pending.splice(0)) flush();
+    const running = [...replicas];
+    for (const child of running) child.kill('SIGKILL');
+    await Promise.all(running.map((child) => new Promise((resolve) => child.once('exit', resolve))));
+    // close() waits for open keep-alive and held connections; force them shut.
+    sanitizer.closeAllConnections();
+    annotator.closeAllConnections();
+    sanitizer.close();
+    annotator.close();
+    await client.end();
+    rmSync(dir, { recursive: true, force: true });
+  });
 
   const organization_id = `smoke-${randomUUID()}`;
   const scope = (caller_id = 'user:owner', session_id = randomUUID()) => ({ organization_id, caller_id, session_id });
@@ -130,6 +145,8 @@ builtin = "hitl"
       env: { ...process.env, OPENAPPA_TEST_POLICY_PATH: policyPath },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
+    replicas.add(child);
+    child.on('exit', () => replicas.delete(child));
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', chunk => { stdout += chunk; });
@@ -227,6 +244,20 @@ builtin = "hitl"
     })));
     assert.equal(attempts.filter((response) => response.result.isError !== true).length, 1, JSON.stringify(attempts));
     assert.equal(attempts.filter((response) => response.result.isError === true).length, 1);
+  });
+
+  await t.test('a block names the yell tool the presentation carries, and only then', async () => {
+    const blocked = async (presentation) => hook(scope(), {
+      event: 'tool_call', operation_id: 'call:held', tool: 'leak_partial', arguments: {}, presentation,
+    });
+    const reporting = await blocked({
+      control_tool: 'gateway.custom_remedy', supports_delegation: false, yell_tool: 'gateway.custom_yell',
+    });
+    assert.equal(reporting.decision, 'deny_call', JSON.stringify(reporting));
+    assert.match(reporting.feedback, /\nReport:\n  If a plan makes no sense, .* call gateway\.custom_yell\.$/);
+    const silent = await blocked({ control_tool: 'gateway.custom_remedy', supports_delegation: false });
+    assert.equal(silent.decision, 'deny_call', JSON.stringify(silent));
+    assert.ok(!silent.feedback.includes('Report:'), silent.feedback);
   });
 
   await t.test('unrelated sessions overlap consult I/O instead of sharing a process lock', { timeout: 15000 }, async () => {
@@ -418,18 +449,18 @@ builtin = "hitl"
     );
   });
 
-  await t.test('denied and uncovered results repeat authoritative rulings', async () => {
+  await t.test('denied results replay while uncovered calls do not produce a verdict', async () => {
     const session = scope();
     const denied = await call(session, 'blocked', 'read_untrusted');
     const deniedResult = await result(session, 'blocked', 'FORGED successful payload');
     assert.equal(deniedResult.decision, 'deny_call');
     assert.ok(deniedResult.approved_output.includes(denied.feedback));
     assert.ok(!deniedResult.approved_output.includes('FORGED'));
-    const refused = await call(session, 'uncovered', 'not_covered_by_policy');
-    assert.equal(refused.decision, 'refuse');
-    const refusedResult = await result(session, 'uncovered', 'FORGED successful payload');
-    assert.equal(refusedResult.decision, 'refuse');
-    assert.ok(!refusedResult.approved_output.includes('FORGED'));
+    await assert.rejects(() => call(session, 'uncovered', 'not_covered_by_policy'), /not declared in this policy/);
+    const unknownResult = await result(session, 'uncovered', 'FORGED successful payload');
+    assert.equal(unknownResult.output_source, 'runtime', JSON.stringify(unknownResult));
+    assert.ok(!unknownResult.approved_output.includes('FORGED'));
+    assert.equal((await call(session, 'still-available', 'read_plain')).decision, 'allow_call');
   });
 
   await t.test('cancellation tombstones only its call and survives restart', async () => {
@@ -486,10 +517,11 @@ builtin = "hitl"
     assert.equal(review.tool, 'send_email');
     assert.deepEqual(JSON.parse(review.arguments), { to: 'recipient@example.com' });
 
-    const human = await hook(session, {
+    const human = () => hook(session, {
       event: 'remedy', operation_id: 'remedy:email', arguments: { offer_id: email.review[0].offer_id },
     });
-    assert.match(JSON.stringify(human.result.content), /unreachable|gave no answer|cannot be reached/);
+    await assert.rejects(human, /unreachable|gave no answer|cannot be reached/);
+    await assert.rejects(human, /unreachable|gave no answer|cannot be reached/);
     assert.notEqual(
       (await call(session, 'email-without-ruling', 'send_email', { to: 'recipient@example.com' })).decision,
       'allow_call',
@@ -1360,21 +1392,30 @@ builtin = "hitl"
     assert.equal(next.decision, 'allow_call');
   });
 
-  await t.test('a failed receipt completion leaves a durable pending recovery fence', async () => {
+  await t.test('a failed receipt completion is recovered by the retry, not fenced', async () => {
     const session = scope();
     const callId = `fault-${randomUUID()}`;
     await call(session, callId, 'read_plain');
     await client.query('CREATE OR REPLACE FUNCTION openappa_smoke_fail_receipt() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION \'injected receipt failure\'; END $$');
-    await client.query(`CREATE TRIGGER openappa_smoke_failure BEFORE UPDATE ON openappa_processed_results FOR EACH ROW WHEN (NEW.tool_call_id = '${callId}') EXECUTE FUNCTION openappa_smoke_fail_receipt()`);
+    await client.query(`CREATE TRIGGER openappa_smoke_failure BEFORE UPDATE ON openappa_processed_results FOR EACH ROW WHEN (NEW.tool_call_id = '${callId}' AND NEW.status = 'complete') EXECUTE FUNCTION openappa_smoke_fail_receipt()`);
     try {
       await assert.rejects(() => result(session, callId, 'uncommitted'), /PostgreSQL|database|db error/);
     } finally {
       await client.query('DROP TRIGGER openappa_smoke_failure ON openappa_processed_results');
       await client.query('DROP FUNCTION openappa_smoke_fail_receipt()');
     }
-    await assert.rejects(
-      () => restarted(session, { event: 'tool_result', tool_call_id: callId, output: 'retry', outcome: 'success' }),
-      /interrupted processing/,
+    // The runtime recorded the result; the receipt did not finish. The same
+    // result on another process completes from the committed record.
+    const recovered = await restarted(session, { event: 'tool_result', tool_call_id: callId, output: 'uncommitted', outcome: 'success' });
+    assert.equal(recovered.decision, 'ack', JSON.stringify(recovered));
+    assert.equal(recovered.approved_output, 'uncommitted');
+    // A retry of the completed receipt replays its answer, whatever the bytes.
+    const forged = await restarted(session, { event: 'tool_result', tool_call_id: callId, output: 'changed after the fact', outcome: 'success' });
+    assert.deepEqual(
+      { decision: forged.decision, approved_output: forged.approved_output },
+      { decision: recovered.decision, approved_output: recovered.approved_output },
+      'the completed receipt replays its committed answer',
     );
+    assert.equal((await call(session, 'after-recovery', 'read_plain')).decision, 'allow_call');
   });
 });

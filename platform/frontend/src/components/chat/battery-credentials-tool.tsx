@@ -3,6 +3,7 @@
 import {
   type BatteryCredentialRequest,
   BatteryCredentialRequestSchema,
+  DEFAULT_CREDENTIAL_GRANTS,
 } from "@archestra/shared";
 import {
   BatteryCharging,
@@ -10,13 +11,11 @@ import {
   ChevronLeftIcon,
   ChevronRight,
   ChevronRightIcon,
+  PlusIcon,
 } from "lucide-react";
 import { Fragment, useEffect, useState } from "react";
 import { RuntimeCredentialConnectionDialog } from "@/components/runtime-credential-connection-dialog";
-import {
-  RuntimeCredentialDefinitionDialog,
-  slugifyCredentialKey,
-} from "@/components/settings/runtime-credential-definition-dialog";
+import { slugifyCredentialKey } from "@/components/settings/runtime-credential-definition-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -28,26 +27,28 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import { useFeature } from "@/lib/config/config.query";
 import {
   type RuntimeCredentialDefinition,
+  useCreateRuntimeCredential,
   useRuntimeCredentials,
 } from "@/lib/runtime-credentials.query";
 import { cn } from "@/lib/utils/tailwind";
 
 type Battery = BatteryCredentialRequest["batteries"][number];
-type Choice = { kind: "key"; key: string } | { kind: "skipped" };
-type Adding =
-  | { battery: Battery; variable: string; step: "define" }
-  | { battery: Battery; variable: string; step: "connect"; id: string };
+type Choice = { key: string };
+/** A token "Add new token" will make once its value is submitted. */
+type Adding = { battery: Battery; variable: string; name: string };
 
 /**
  * One step per battery the configuration agent asked credentials for: each
  * variable is bound to an organization credential, a new one made through the
- * Settings dialogs, or skipped. Done sends one message naming only keys.
+ * Settings dialogs, or skipped by leaving it unpicked. Done sends one message
+ * naming only keys.
  */
 export function BatteryCredentialsTool({
   request,
@@ -64,24 +65,43 @@ export function BatteryCredentialsTool({
   const [choices, setChoices] = useState<Record<string, Choice>>({});
   const [adding, setAdding] = useState<Adding | null>(null);
   const credentials = useRuntimeCredentials();
+  // The dropdown shows the new token, so no toast repeats it.
+  const create = useCreateRuntimeCredential({ silent: true });
   const byosEnabled = useFeature("byosEnabled") === true;
   useEffect(() => setSent(sessionStorage.getItem(sentKey)), [sentKey]);
   const all = credentials.data ?? [];
   const options = all.filter(
     (entry) => entry.allowOrganization && entry.organizationConfigured,
   );
-  const connecting =
-    adding?.step === "connect"
-      ? all.find((entry) => entry.id === adding.id)
-      : undefined;
+  // A new token is an organization secret named for its variable, shared as
+  // the Settings form would share it, and made only once its value is given.
+  const createToken = ({ battery, name }: Adding) =>
+    create.mutateAsync({
+      key: slugifyCredentialKey(name),
+      kind: "secret",
+      githubUrl: null,
+      appId: null,
+      installationId: null,
+      githubClientId: null,
+      githubAppCredentialKey: null,
+      name,
+      description: tokenDescription(battery),
+      icon: null,
+      allowPersonal: false,
+      allowOrganization: true,
+      initialGrants: DEFAULT_CREDENTIAL_GRANTS.map(({ subject, actions }) => ({
+        subject,
+        actions,
+      })),
+    });
   const battery = request.batteries[index] ?? request.batteries[0];
   const total = request.batteries.length;
   const isLast = index === total - 1;
   const variables = request.batteries.flatMap((entry) =>
     entry.credentials.map((variable) => ({ battery: entry, variable })),
   );
-  const complete = variables.every(
-    ({ battery, variable }) => choices[choiceId(battery, variable)],
+  const answered = battery.credentials.every(
+    (variable) => choices[choiceId(battery, variable)],
   );
   const choose = (battery: Battery, variable: string, choice: Choice) =>
     setChoices((current) => ({
@@ -94,7 +114,7 @@ export function BatteryCredentialsTool({
       variables
         .map(({ battery, variable }) => {
           const choice = choices[choiceId(battery, variable)];
-          return `${battery.title} ${variable} → ${choice?.kind === "key" ? choice.key : "skipped"}`;
+          return `${battery.title} ${variable} → ${choice?.key ?? "skipped"}`;
         })
         .join("; ") || "nothing to bind"
     }.`;
@@ -106,7 +126,7 @@ export function BatteryCredentialsTool({
   return (
     <div
       data-testid="battery-credentials-card"
-      className="not-prose relative mb-4 w-full max-w-2xl overflow-hidden rounded-lg border border-border/60 bg-card shadow-sm"
+      className="not-prose relative mb-4 w-full overflow-hidden rounded-lg border border-border/60 bg-card shadow-sm"
     >
       <div className="flex items-center gap-3 px-4 pt-3">
         {total > 1 ? (
@@ -137,32 +157,31 @@ export function BatteryCredentialsTool({
         {battery.credentials.map((variable) => {
           const choice = choices[choiceId(battery, variable)];
           const id = `battery-credential-${toolCallId}-${choiceId(battery, variable)}`;
-          const existing = existingDefinition({
-            battery,
-            variable,
-            credentials: all,
-          });
           return (
             <div key={variable} className="space-y-1">
               <Label htmlFor={id} className="font-mono text-xs">
                 {variable}
               </Label>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2">
                 <Select
-                  value={choice?.kind === "key" ? choice.key : ""}
+                  value={choice?.key ?? ""}
                   disabled={sent !== null}
                   onValueChange={(key) =>
-                    choose(battery, variable, { kind: "key", key })
+                    key === ADD_TOKEN
+                      ? setAdding({
+                          battery,
+                          variable,
+                          name: freeTokenName({
+                            battery,
+                            variable,
+                            credentials: all,
+                          }),
+                        })
+                      : choose(battery, variable, { key })
                   }
                 >
                   <SelectTrigger id={id} size="sm" className="min-w-48 flex-1">
-                    <SelectValue
-                      placeholder={
-                        choice?.kind === "skipped"
-                          ? "Skipped"
-                          : "Pick a credential"
-                      }
-                    />
+                    <SelectValue placeholder="Pick existing credential" />
                   </SelectTrigger>
                   <SelectContent position="popper">
                     {options.map((entry) => (
@@ -170,38 +189,15 @@ export function BatteryCredentialsTool({
                         {entry.name}
                       </SelectItem>
                     ))}
+                    {options.length > 0 ? <SelectSeparator /> : null}
+                    <SelectItem
+                      value={ADD_TOKEN}
+                      icon={<PlusIcon className="size-4" aria-hidden />}
+                    >
+                      <span>Add new token</span>
+                    </SelectItem>
                   </SelectContent>
                 </Select>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={sent !== null}
-                  onClick={() =>
-                    setAdding(
-                      existing
-                        ? {
-                            battery,
-                            variable,
-                            step: "connect",
-                            id: existing.id,
-                          }
-                        : { battery, variable, step: "define" },
-                    )
-                  }
-                >
-                  <span>
-                    {existing ? `Connect ${existing.name}` : "Add new token"}
-                  </span>
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={sent !== null}
-                  aria-label={`Skip ${variable}`}
-                  onClick={() => choose(battery, variable, { kind: "skipped" })}
-                >
-                  <span>Skip</span>
-                </Button>
               </div>
             </div>
           );
@@ -229,7 +225,7 @@ export function BatteryCredentialsTool({
             key="done"
             type="button"
             size="sm"
-            disabled={!complete || sent !== null}
+            disabled={sent !== null}
             onClick={done}
           >
             <CheckIcon aria-hidden />
@@ -239,40 +235,35 @@ export function BatteryCredentialsTool({
           <Button
             key="next"
             type="button"
-            variant="secondary"
+            // Leaving a variable unpicked skips it.
+            variant={answered ? "secondary" : "outline"}
             size="sm"
             onClick={() => setIndex(index + 1)}
           >
-            <span>Next</span>
+            <span>{answered ? "Next" : "Skip"}</span>
             <ChevronRightIcon aria-hidden />
           </Button>
         )}
       </div>
-      {adding?.step === "define" ? (
-        <RuntimeCredentialDefinitionDialog
-          definition={null}
-          initialKind="secret"
-          initialScope="organization"
-          initialValues={{
-            name: tokenName(adding.battery, adding.variable),
-            description: `Read by the ${adding.battery.title} battery's helpers.`,
-            icon: null,
-          }}
-          hideProvidedBy
-          onClose={() => setAdding(null)}
-          onCreated={(id) => setAdding({ ...adding, step: "connect", id })}
-        />
-      ) : null}
-      {adding?.step === "connect" && connecting ? (
+      {adding ? (
         <RuntimeCredentialConnectionDialog
-          definition={connecting}
+          definition={{
+            key: slugifyCredentialKey(adding.name),
+            name: adding.name,
+            kind: "secret",
+            icon: null,
+            description: tokenDescription(adding.battery),
+            githubClientId: null,
+          }}
           scope="organization"
           useExternalSecretsManager={byosEnabled}
+          // The dropdown shows the connected token instead of a toast.
+          silent
+          create={() => createToken(adding)}
           onClose={() => setAdding(null)}
           onConnected={() =>
             choose(adding.battery, adding.variable, {
-              kind: "key",
-              key: connecting.key,
+              key: slugifyCredentialKey(adding.name),
             })
           }
         />
@@ -354,25 +345,32 @@ function StepText({ text }: { text: string }) {
 }
 
 /**
- * The organization secret an earlier "Add new token" made for this variable,
- * so a second attempt connects it instead of making a duplicate.
+ * The name for another token: the variable's token name, numbered from 2 once
+ * a credential holds it, so each "Add new token" makes a new one.
  */
-function existingDefinition(params: {
+function freeTokenName(params: {
   battery: Battery;
   variable: string;
   credentials: RuntimeCredentialDefinition[];
 }) {
-  const name = tokenName(params.battery, params.variable);
-  const key = slugifyCredentialKey(name);
-  return params.credentials.find(
-    (entry) =>
-      entry.kind === "secret" &&
-      entry.allowOrganization &&
-      (entry.key === key || entry.name === name),
-  );
+  const base = tokenName(params.battery, params.variable);
+  for (let n = 1; ; n++) {
+    const name = n === 1 ? base : `${base} ${n}`;
+    const key = slugifyCredentialKey(name);
+    if (
+      !params.credentials.some(
+        (entry) => entry.name === name || entry.key === key,
+      )
+    )
+      return name;
+  }
 }
 
-/** One token per variable: a battery reading two gets two definitions. */
+function tokenDescription(battery: Battery) {
+  return `Read by the ${battery.title} battery's helpers.`;
+}
+
+/** A variable's token name: a battery reading two variables names two tokens. */
 function tokenName(battery: Battery, variable: string) {
   return battery.credentials.length > 1
     ? `${battery.title} ${variable} token`
@@ -382,6 +380,9 @@ function tokenName(battery: Battery, variable: string) {
 function choiceId(battery: Battery, variable: string) {
   return `${battery.name}:${variable}`;
 }
+
+// The Select item that opens the add-token dialogs instead of picking a key.
+const ADD_TOKEN = "__add-token__";
 
 // A URL stops before trailing sentence punctuation.
 const STEP_TOKEN = /(`[^`]+`|https?:\/\/[^\s`]*[^\s`.,:;)])/;

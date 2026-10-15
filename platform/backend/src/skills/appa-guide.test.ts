@@ -288,6 +288,10 @@ describe("APPA Guide feature availability", () => {
     });
   });
 
+  test("the shipped body carries no frontmatter of its own, so SKILL.md shows one block", () => {
+    expect(APPA_GUIDE_SKILL.content.startsWith("---")).toBe(false);
+  });
+
   test("every file the skill points to is bundled with it", () => {
     const bundled = new Set(APPA_GUIDE_SKILL.files.map((file) => file.path));
     const referenced = [

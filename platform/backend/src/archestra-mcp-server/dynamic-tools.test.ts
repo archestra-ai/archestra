@@ -2,6 +2,7 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   getArchestraToolFullName,
   TOOL_LIST_AGENTS_FULL_NAME,
+  TOOL_LIST_PLUGINS_FULL_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
   TOOL_READ_FILE_FULL_NAME,
   TOOL_RUN_COMMAND_FULL_NAME,
@@ -424,6 +425,18 @@ describe("isDynamicallyAvailableArchestraTool", () => {
     });
   });
 
+  test("plugin tools remain dynamically available with beta disabled", async () => {
+    config.beta = false;
+    expect(
+      await isDynamicallyAvailableArchestraTool({
+        toolName: TOOL_LIST_PLUGINS_FULL_NAME,
+        agentId: agent.id,
+        userId,
+        organizationId,
+      }),
+    ).toBe(true);
+  });
+
   describe("sandbox built-ins", () => {
     const originalSandboxEnabled = config.skillsSandbox.enabled;
     beforeEach(() => {
@@ -472,6 +485,23 @@ describe("isDynamicallyAvailableArchestraTool", () => {
       });
 
       expect(available).toBe(true);
+    });
+    test("with the runtime off, a persistent-files tool stays available and run_command does not", async () => {
+      const original = config.skillsSandbox.enabled;
+      (config.skillsSandbox as { enabled: boolean }).enabled = false;
+      try {
+        const check = (toolName: string) =>
+          isDynamicallyAvailableArchestraTool({
+            toolName,
+            agentId: agent.id,
+            userId,
+            organizationId,
+          });
+        expect(await check(TOOL_READ_FILE_FULL_NAME)).toBe(true);
+        expect(await check(TOOL_RUN_COMMAND_FULL_NAME)).toBe(false);
+      } finally {
+        (config.skillsSandbox as { enabled: boolean }).enabled = original;
+      }
     });
   });
 
@@ -602,6 +632,7 @@ describe("isDynamicallyAvailableArchestraTool", () => {
     for (const toolName of [
       getArchestraToolFullName(TOOL_WHOAMI_SHORT_NAME),
       TOOL_LIST_AGENTS_FULL_NAME,
+      TOOL_LIST_PLUGINS_FULL_NAME,
     ]) {
       const available = await isDynamicallyAvailableArchestraTool({
         toolName,

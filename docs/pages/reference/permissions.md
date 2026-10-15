@@ -2,7 +2,7 @@
 title: "Permissions"
 description: "Built-in role grants, available permissions, and LLM API access requirements"
 order: 6
-lastUpdated: 2026-10-09
+lastUpdated: 2026-10-15
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -37,20 +37,17 @@ Full access to core resources, but cannot change organization settings or manage
 | Skills | `read`, `create`, `delete` |
 | Plugins | `read`, `create`, `update`, `delete` |
 | Apps | `read`, `create` |
-| Scheduled Tasks | `read`, `create`, `update`, `delete` |
 | LLM Proxy | `read`, `update` |
 | LLM Provider API Keys | `read`, `create` |
 | LLM Virtual Keys | `read`, `create` |
-| LLM OAuth Clients | `read`, `create` |
 | LLM Models | `read`, `update` |
 | LLM Limits | `read`, `create`, `update`, `delete` |
 | LLM Cost Analytics | `read` |
 | MCP Gateways | `read`, `create`, `delete` |
-| MCP OAuth Clients | `read`, `create` |
 | MCP Registry | `read`, `create` |
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
 | Environments | `read`, `create`, `update`, `delete` |
-| Credentials | `read`, `create`, `update`, `delete` |
+| Credentials | `read`, `create` |
 | OpenAPPA Policy | `read`, `update` |
 | OpenAPPA Diagnostics | `read`, `update` |
 | Knowledge Sources | `read`, `create`, `update`, `delete`, `query` |
@@ -58,6 +55,7 @@ Full access to core resources, but cannot change organization settings or manage
 | Projects | `read`, `create`, `update`, `delete` |
 | LLM & MCP Logs | `read` |
 | API Keys | `read`, `create`, `delete` |
+| OAuth Clients | `read`, `create` |
 | Users | `read` |
 | Roles | `read` |
 | Teams | `read` |
@@ -72,23 +70,20 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Agents | `read`, `create`, `delete` |
 | Skills | `read`, `create`, `delete` |
 | Apps | `read`, `create` |
-| Scheduled Tasks | `read`, `create`, `update`, `delete` |
 | LLM Proxy | `read` |
 | LLM Provider API Keys | `read` |
 | LLM Virtual Keys | `read`, `create` |
-| LLM OAuth Clients | `read` |
 | LLM Models | `read` |
 | MCP Gateways | `read`, `create`, `delete` |
-| MCP OAuth Clients | `read` |
 | MCP Registry | `read` |
 | MCP Server Installations | `read`, `create`, `delete` |
 | Environments | `read` |
 | Credentials | `read` |
-| OpenAPPA Policy | `read` |
 | Knowledge Sources | `read`, `query` |
 | Chats | `read`, `create`, `update`, `delete`, `full-view` |
 | Projects | `read`, `create`, `update`, `delete` |
 | API Keys | `read`, `create`, `delete` |
+| OAuth Clients | `read` |
 | Teams | `read` |
 
 
@@ -119,10 +114,8 @@ These permissions can be selected in custom roles. Per-resource actions and scop
 | <span id="chat:update"></span>`chat:update` | Edit chat messages and conversation settings |
 | <span id="chat:delete"></span>`chat:delete` | Delete chat conversations |
 | <span id="chat:full-view"></span>`chat:full-view` | Show the full chat: the agent picker, model and API key selectors, and expandable tool calls. Without it, chat shows a simpler view |
-| <span id="credential:read"></span>`credential:read` | View saved credentials |
+| <span id="credential:read"></span>`credential:read` | Open Credentials |
 | <span id="credential:create"></span>`credential:create` | Create saved credentials |
-| <span id="credential:update"></span>`credential:update` | Modify saved credentials |
-| <span id="credential:delete"></span>`credential:delete` | Delete saved credentials |
 | <span id="environment:read"></span>`environment:read` | View and list deployment environments |
 | <span id="environment:create"></span>`environment:create` | Create deployment environments |
 | <span id="environment:update"></span>`environment:update` | Modify deployment environments, including the org default environment |
@@ -143,8 +136,6 @@ These permissions can be selected in custom roles. Per-resource actions and scop
 | <span id="llmLimit:delete"></span>`llmLimit:delete` | Remove usage limits |
 | <span id="llmModel:read"></span>`llmModel:read` | View synced LLM models and capabilities |
 | <span id="llmModel:update"></span>`llmModel:update` | Sync the model catalog and see every model, including ones not shared with you |
-| <span id="llmOauthClient:read"></span>`llmOauthClient:read` | Open LLM OAuth client registrations |
-| <span id="llmOauthClient:create"></span>`llmOauthClient:create` | Create LLM OAuth client registrations |
 | <span id="llmProviderApiKey:read"></span>`llmProviderApiKey:read` | Open LLM provider API keys |
 | <span id="llmProviderApiKey:create"></span>`llmProviderApiKey:create` | Add new LLM provider API keys |
 | <span id="llmProxy:read"></span>`llmProxy:read` | View the LLM Proxy and its connection details |
@@ -156,8 +147,6 @@ These permissions can be selected in custom roles. Per-resource actions and scop
 | <span id="mcpGateway:read"></span>`mcpGateway:read` | Open MCP Gateways |
 | <span id="mcpGateway:create"></span>`mcpGateway:create` | Create new MCP gateways |
 | <span id="mcpGateway:delete"></span>`mcpGateway:delete` | Open the trash of deleted MCP gateways |
-| <span id="mcpOauthClient:read"></span>`mcpOauthClient:read` | Open MCP OAuth client registrations |
-| <span id="mcpOauthClient:create"></span>`mcpOauthClient:create` | Create MCP OAuth client registrations |
 | <span id="mcpRegistry:read"></span>`mcpRegistry:read` | Open the MCP registry and use its built-in servers |
 | <span id="mcpRegistry:create"></span>`mcpRegistry:create` | Add servers to the MCP registry |
 | <span id="mcpServerInstallation:read"></span>`mcpServerInstallation:read` | View installed MCP servers and their status |
@@ -169,6 +158,8 @@ These permissions can be selected in custom roles. Per-resource actions and scop
 | <span id="member:update"></span>`member:update` | Change member roles and settings |
 | <span id="member:delete"></span>`member:delete` | Remove members from the organization |
 | <span id="member:impersonate"></span>`member:impersonate` | Temporarily sign in as another member to see the app with their access (role debugging) |
+| <span id="mcpOauthClient:read"></span><span id="llmOauthClient:read"></span><span id="oauthClient:read"></span>`oauthClient:read` | Open OAuth client registrations |
+| <span id="mcpOauthClient:create"></span><span id="llmOauthClient:create"></span><span id="oauthClient:create"></span>`oauthClient:create` | Create OAuth client registrations |
 | <span id="openappaDiagnostics:read"></span>`openappaDiagnostics:read` | Read all organization yells and your own consult logs |
 | <span id="openappaDiagnostics:update"></span>`openappaDiagnostics:update` | Resolve and reopen organization yells |
 | <span id="openappaDiagnostics:admin"></span>`openappaDiagnostics:admin` | Read consult logs across the organization |
@@ -180,14 +171,10 @@ These permissions can be selected in custom roles. Per-resource actions and scop
 | <span id="plugin:create"></span>`plugin:create` | Create plugins |
 | <span id="plugin:update"></span>`plugin:update` | Modify plugin metadata and files |
 | <span id="plugin:delete"></span>`plugin:delete` | Delete plugins |
-| <span id="project:read"></span>`project:read` | View projects and your own sessions inside them |
-| <span id="project:create"></span>`project:create` | Create projects |
-| <span id="project:update"></span>`project:update` | Edit project descriptions, instructions, and sharing |
-| <span id="project:delete"></span>`project:delete` | Delete projects |
-| <span id="scheduledTask:read"></span>`scheduledTask:read` | View scheduled tasks and their run history |
-| <span id="scheduledTask:create"></span>`scheduledTask:create` | Create new scheduled tasks and trigger runs |
-| <span id="scheduledTask:update"></span>`scheduledTask:update` | Modify scheduled task configuration |
-| <span id="scheduledTask:delete"></span>`scheduledTask:delete` | Delete scheduled tasks |
+| <span id="scheduledTask:read"></span><span id="project:read"></span>`project:read` | View projects, their schedules, and your own sessions inside them |
+| <span id="scheduledTask:create"></span><span id="project:create"></span>`project:create` | Create projects and schedules, and trigger schedule runs |
+| <span id="scheduledTask:update"></span><span id="project:update"></span>`project:update` | Edit project descriptions, instructions, sharing, and schedules |
+| <span id="scheduledTask:delete"></span><span id="project:delete"></span>`project:delete` | Delete projects and schedules |
 | <span id="serviceAccount:read"></span>`serviceAccount:read` | Open Service Accounts |
 | <span id="serviceAccount:create"></span>`serviceAccount:create` | Create service accounts |
 | <span id="skill:read"></span>`skill:read` | Open Skills |
@@ -211,6 +198,7 @@ These permissions can be selected in custom roles. Per-resource actions and scop
 | User cost statistics for all users | `llmCost:read` and `member:read` | Identified users in the active organization |
 | App cost statistics | `llmCost:read` and `app:read` | Apps allowed by the caller’s read grants |
 | Skill cost statistics | `llmCost:read` and `skill:read` | Skills allowed by the caller’s read grants |
+| Tool-call, app, and skill usage (`/api/statistics/mcp-tool-calls`, `app-usage`, `skill-usage`) | `llmCost:read`, plus `app:read` or `skill:read` for apps and skills | The caller's usage; add `member:read` for everyone's |
 | LLM and MCP logs for the caller | `log:read` | Records attributed to the caller |
 | All LLM and MCP logs | `log:read` and `log:admin` | All records in the active organization, including unattributed traffic |
 

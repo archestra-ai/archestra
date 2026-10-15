@@ -52,6 +52,7 @@ test.each([
     http.get("http://localhost:9000/api/openappa/github-sync", () =>
       HttpResponse.json({
         enabled: true,
+        githubWebUrl: "https://github.com",
         source: {
           repo: "example/policies",
           ref: "policy/update",
@@ -69,10 +70,10 @@ test.each([
       <GithubManagedPolicyNotice validationDirectory={validationDirectory} />
     </QueryClientProvider>,
   );
-  expect(await screen.findByText("GitHub sync failed")).toBeVisible();
+  expect(await screen.findByText("Git sync failed")).toBeVisible();
   expect(
     screen.getByRole("link", { name: "Review sync settings" }),
-  ).toHaveAttribute("href", "/settings/openappa");
+  ).toHaveAttribute("href", "/settings/guardrails");
   expect(screen.getByRole("link", { name: /repository/ })).toHaveAttribute(
     "href",
     `https://github.com/example/policies/${path}`,
@@ -84,12 +85,57 @@ test.each([
   lastSyncError = null;
   await client.invalidateQueries();
   await waitFor(() =>
-    expect(screen.queryByText("GitHub sync failed")).not.toBeInTheDocument(),
+    expect(screen.queryByText("Git sync failed")).not.toBeInTheDocument(),
   );
   expect(
     screen.queryByRole("link", { name: "Review sync settings" }),
   ).not.toBeInTheDocument();
-  expect(screen.getByText("Managed in GitHub")).toBeVisible();
-  expect(screen.getByRole("link", { name: /repository/ })).toBeVisible();
+  // A healthy sync is a chip linking to the same source, not a banner.
+  expect(
+    screen.getByRole("link", { name: /Managed in GitHub/ }),
+  ).toHaveAttribute("href", `https://github.com/example/policies/${path}`);
+  client.clear();
+});
+
+test("a pending setup pull request asks for the merge on the configured GitHub host", async () => {
+  let lastSyncError: string | null = null;
+  server.use(
+    http.get("http://localhost:9000/api/openappa/github-sync", () =>
+      HttpResponse.json({
+        enabled: true,
+        githubWebUrl: "https://github.example.com",
+        source: {
+          repo: "example/policies",
+          ref: "main",
+          path: "appa.toml",
+          setupPullRequestNumber: 7,
+          lastSyncError,
+        },
+      }),
+    ),
+  );
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={client}>
+      <GithubManagedPolicyNotice />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByText("Merge your initial policy")).toBeVisible();
+  expect(
+    screen.getByRole("link", { name: "Review and merge PR" }),
+  ).toHaveAttribute(
+    "href",
+    "https://github.example.com/example/policies/pull/7",
+  );
+  expect(screen.queryByText("Managed in GitHub")).not.toBeInTheDocument();
+  // A failed sync outranks the merge request: the error is what to act on.
+  lastSyncError = "GitHub returned HTTP 403";
+  await client.invalidateQueries();
+  expect(await screen.findByText("Git sync failed")).toBeVisible();
+  expect(
+    screen.queryByRole("link", { name: "Review and merge PR" }),
+  ).not.toBeInTheDocument();
   client.clear();
 });

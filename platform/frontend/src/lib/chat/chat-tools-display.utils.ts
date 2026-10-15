@@ -10,6 +10,11 @@ import { resolveEnabledToolIds } from "@/lib/chat/enabled-tools-selection";
 import { parseAuthRequired, parseExpiredAuth } from "@/lib/chat/mcp-error-ui";
 import type { PendingToolAction } from "@/lib/chat/pending-tool-state";
 
+const POLICY_PREVIEW_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
+  "preview_guardrails_policy_change",
+  "preview_guardrails_validation_change",
+]);
+
 /**
  * Compute the default set of enabled tool IDs for a conversation.
  * All tools assigned to the agent are enabled by default.
@@ -182,6 +187,13 @@ export function isCompactEligible(params: {
     }
 
     return true;
+  }
+
+  // A proposed policy is what the operator is asked to approve: its preview
+  // stays open in the reply instead of folding into a circle. A saved change
+  // folds as usual; its banner reports the save.
+  if (shortName && POLICY_PREVIEW_TOOL_SHORT_NAMES.has(shortName)) {
+    return false;
   }
 
   const rawOutput = toolResultPart?.output ?? part.output;

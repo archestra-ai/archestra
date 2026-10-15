@@ -7,6 +7,7 @@ import { RowClickShield } from "@/components/agent-pages/row-click-shield";
 import { BuiltInAgentBadge } from "@/components/built-in-agent-badge";
 import { LabelTags } from "@/components/label-tags";
 import { PersonalResourceOwner } from "@/components/personal-resource-owner";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 
 type AgentLabels =
   archestraApiTypes.GetAgentsResponses["200"]["data"][number]["labels"];
@@ -14,6 +15,7 @@ type AgentLabels =
 export function AgentNameCell({
   name,
   href,
+  onClick,
   builtIn = false,
   description,
   labels,
@@ -27,6 +29,8 @@ export function AgentNameCell({
    * with no page to open, such as trashed records.
    */
   href?: string;
+  /** Open an entity dialog when it has no separate detail page. */
+  onClick?: () => void;
   builtIn?: boolean;
   description?: string | null;
   labels?: AgentLabels;
@@ -66,6 +70,18 @@ export function AgentNameCell({
           >
             {name}
           </Link>
+        ) : onClick ? (
+          <UnstyledButton
+            type="button"
+            className="max-w-full shrink-0 truncate leading-tight hover:underline"
+            title={name}
+            onClick={(event) => {
+              event.stopPropagation();
+              onClick();
+            }}
+          >
+            {name}
+          </UnstyledButton>
         ) : (
           <span
             className="max-w-full shrink-0 truncate leading-tight"

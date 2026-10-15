@@ -9,6 +9,8 @@
  */
 
 import { EventEmitter } from "node:events";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import McpServerModel from "@/models/mcp-server";
 import { describe, expect, test } from "@/test";
@@ -22,11 +24,12 @@ import {
 function makeStreamHarness() {
   const written: string[] = [];
   const requestRaw = new EventEmitter();
+  const replyRaw = new EventEmitter();
   let ended = false;
 
   const reply = {
     hijack: () => {},
-    raw: {
+    raw: Object.assign(replyRaw, {
       writeHead: () => {},
       write: (chunk: string) => {
         written.push(chunk);
@@ -34,8 +37,9 @@ function makeStreamHarness() {
       },
       end: () => {
         ended = true;
+        replyRaw.emit("close");
       },
-    },
+    }),
   } as unknown as FastifyReply;
 
   const request = { raw: requestRaw } as unknown as FastifyRequest;
@@ -48,7 +52,16 @@ function makeStreamHarness() {
           JSON.parse(chunk.split("data: ")[1]) as Record<string, unknown>,
       );
 
-  return { reply, request, requestRaw, written, events, isEnded: () => ended };
+  return {
+    reply,
+    request,
+    requestRaw,
+    written,
+    events,
+    isEnded: () => ended,
+    // Client disconnect is the response closing, not the request body finishing.
+    disconnect: () => replyRaw.emit("close"),
+  };
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -116,7 +129,7 @@ describe("runSubscriptionStream", () => {
     });
 
     await sleep(120);
-    harness.requestRaw.emit("close");
+    harness.disconnect();
 
     const events = harness.events();
     expect(events[0]).toMatchObject({
@@ -154,7 +167,7 @@ describe("runSubscriptionStream", () => {
     });
 
     await sleep(50);
-    harness.requestRaw.emit("close");
+    harness.disconnect();
     const callsAtClose = calls;
     await sleep(60);
 
@@ -191,6 +204,110 @@ describe("runSubscriptionStream", () => {
     expect(harness.isEnded()).toBe(true);
   });
 
+  test("an unset or zero duration does not end the stream", async () => {
+    for (const maxDurationMs of [undefined, 0]) {
+      const harness = makeStreamHarness();
+      await runSubscriptionStream({
+        request: harness.request,
+        reply: harness.reply,
+        agentId: "agent-1",
+        subscriptionId: 12,
+        requested: { promptsListChanged: true },
+        pollIntervalMs: 10_000,
+        heartbeatMs: 10_000,
+        ...(maxDurationMs === undefined ? {} : { maxDurationMs }),
+      });
+      await sleep(40);
+      expect(harness.isEnded()).toBe(false);
+      expect(harness.events().some((event) => event.id === 12)).toBe(false);
+      harness.disconnect();
+    }
+  });
+
+  test("rotates at the duration cap with the ack first and a terminal result last", async () => {
+    const harness = makeStreamHarness();
+    const heartbeats: string[] = [];
+    const originalWrite = harness.reply.raw.write.bind(harness.reply.raw);
+    harness.reply.raw.write = ((chunk: string) => {
+      if (chunk.startsWith(":")) heartbeats.push(chunk);
+      return originalWrite(chunk);
+    }) as typeof harness.reply.raw.write;
+
+    await runSubscriptionStream({
+      request: harness.request,
+      reply: harness.reply,
+      agentId: "agent-1",
+      subscriptionId: 11,
+      requested: { toolsListChanged: true },
+      computeFingerprint: async () => "stable",
+      pollIntervalMs: 10_000,
+      heartbeatMs: 15,
+      maxDurationMs: 50,
+    });
+
+    await sleep(120);
+
+    const events = harness.events();
+    expect(events[0]).toMatchObject({
+      method: "notifications/subscriptions/acknowledged",
+      params: {
+        _meta: { "io.modelcontextprotocol/subscriptionId": 11 },
+        notifications: { toolsListChanged: true },
+      },
+    });
+    expect(heartbeats.length).toBeGreaterThan(0);
+    const terminal = events.find((event) => event.id === 11);
+    expect(terminal).toMatchObject({
+      result: {
+        resultType: "complete",
+        _meta: { "io.modelcontextprotocol/subscriptionId": 11 },
+      },
+    });
+    expect(events.at(-1)).toBe(terminal);
+    expect(harness.isEnded()).toBe(true);
+    const writesAtEnd = harness.written.length;
+    await sleep(40);
+    expect(harness.written.length).toBe(writesAtEnd);
+  });
+
+  test("a fingerprint resolving after rotation does not write", async () => {
+    const harness = makeStreamHarness();
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let started = 0;
+
+    await runSubscriptionStream({
+      request: harness.request,
+      reply: harness.reply,
+      agentId: "agent-1",
+      subscriptionId: 4,
+      requested: { toolsListChanged: true },
+      computeFingerprint: async () => {
+        started += 1;
+        if (started === 1) return "a";
+        await gate;
+        return "b";
+      },
+      pollIntervalMs: 10,
+      heartbeatMs: 10_000,
+      maxDurationMs: 40,
+    });
+
+    await sleep(80);
+    expect(harness.isEnded()).toBe(true);
+    const eventsAtRotation = harness.events().length;
+    release();
+    await sleep(30);
+    expect(
+      harness
+        .events()
+        .filter((event) => event.method === "notifications/tools/list_changed"),
+    ).toHaveLength(0);
+    expect(harness.events()).toHaveLength(eventsAtRotation);
+  });
+
   test("a subscription honoring nothing still acknowledges", async () => {
     const harness = makeStreamHarness();
 
@@ -203,12 +320,133 @@ describe("runSubscriptionStream", () => {
       pollIntervalMs: 20,
       heartbeatMs: 10_000,
     });
-    harness.requestRaw.emit("close");
+    harness.disconnect();
 
     expect(harness.events()[0]).toMatchObject({
       method: "notifications/subscriptions/acknowledged",
       params: { notifications: {} },
     });
+  });
+
+  test("a real socket rotates on the duration timer and stops when the client disconnects", async () => {
+    let polls = 0;
+    const server = http.createServer((req, res) => {
+      void runSubscriptionStream({
+        request: { raw: req } as unknown as FastifyRequest,
+        reply: { hijack: () => {}, raw: res } as unknown as FastifyReply,
+        agentId: "agent-1",
+        subscriptionId: 8,
+        requested: { toolsListChanged: true },
+        computeFingerprint: async () => {
+          polls += 1;
+          return "stable";
+        },
+        pollIntervalMs: 20,
+        heartbeatMs: 15,
+        maxDurationMs: 70,
+      });
+    });
+    await new Promise<void>((resolve) => {
+      server.listen(0, "127.0.0.1", () => resolve());
+    });
+    const { port } = server.address() as AddressInfo;
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/listen`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      const body = await response.text();
+      const frames = body
+        .split("\n\n")
+        .filter((frame) => frame.includes("data: "))
+        .map(
+          (frame) =>
+            JSON.parse(frame.split("data: ")[1]) as Record<string, unknown>,
+        );
+
+      expect(frames[0]).toMatchObject({
+        method: "notifications/subscriptions/acknowledged",
+      });
+      expect(body).toContain(": keep-alive");
+      expect(frames.at(-1)).toMatchObject({
+        id: 8,
+        result: { resultType: "complete" },
+      });
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
+
+    const pollsAtEnd = polls;
+    await sleep(50);
+    expect(polls).toBe(pollsAtEnd);
+
+    polls = 0;
+    let writesAfterDisconnect = 0;
+    let disconnected = false;
+    const abortServer = http.createServer((req, res) => {
+      const write = res.write.bind(res);
+      res.write = ((chunk: string | Uint8Array, ...args: unknown[]) => {
+        if (disconnected) writesAfterDisconnect += 1;
+        return write(chunk, ...(args as []));
+      }) as typeof res.write;
+      void runSubscriptionStream({
+        request: { raw: req } as unknown as FastifyRequest,
+        reply: { hijack: () => {}, raw: res } as unknown as FastifyReply,
+        agentId: "agent-1",
+        subscriptionId: 9,
+        requested: { toolsListChanged: true },
+        computeFingerprint: async () => {
+          polls += 1;
+          return String(polls);
+        },
+        pollIntervalMs: 20,
+        heartbeatMs: 10_000,
+        maxDurationMs: 160,
+      });
+    });
+    await new Promise<void>((resolve) => {
+      abortServer.listen(0, "127.0.0.1", () => resolve());
+    });
+    const abortPort = (abortServer.address() as AddressInfo).port;
+    const controller = new AbortController();
+    try {
+      const response = await fetch(`http://127.0.0.1:${abortPort}/listen`, {
+        method: "POST",
+        signal: controller.signal,
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("no response body");
+      let buffer = "";
+      while (!buffer.includes("\n\n")) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += new TextDecoder().decode(value);
+      }
+      expect(buffer).toContain("notifications/subscriptions/acknowledged");
+      const armed = Date.now() + 100;
+      while (polls < 2 && Date.now() < armed) {
+        await sleep(5);
+      }
+      expect(polls).toBeGreaterThanOrEqual(2);
+      const pollsAtDisconnect = polls;
+      disconnected = true;
+      controller.abort();
+      // Past the duration cap, so a timer that was not cleared would write.
+      await sleep(200);
+      expect(polls).toBe(pollsAtDisconnect);
+      expect(writesAfterDisconnect).toBe(0);
+    } finally {
+      controller.abort();
+      await new Promise<void>((resolve, reject) => {
+        abortServer.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
   });
 });
 

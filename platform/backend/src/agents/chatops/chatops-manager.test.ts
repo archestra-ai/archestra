@@ -43,6 +43,7 @@ import {
 import { RouteCategory } from "@/observability/tracing";
 import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import type {
   ChatOpsApprovalDecision,
   ChatOpsProvider,
@@ -52,6 +53,7 @@ import type {
   SkippedAttachment,
 } from "@/types";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
+import { autoProvisionUser } from "./auto-provision";
 import {
   buildChatOpsSessionId,
   ChatOpsManager,
@@ -67,6 +69,7 @@ import {
   THREAD_MUTE_HINT,
 } from "./constants";
 import MSTeamsProvider from "./ms-teams-provider";
+import SlackProvider from "./slack-provider";
 import { buildHistorySkippedAttachmentsNote } from "./utils";
 
 describe("matchesAgentName", () => {
@@ -1775,6 +1778,144 @@ describe("ChatOpsManager security validation", () => {
     expect(await ownerOf("C_CODING")).toBe(coding.id);
   });
 
+  test("'list' to the router bot names the agents a person can reach, without asking one", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const execute = mockA2AExecutor();
+    const user = await makeUser({ email: "router-list@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const marketing = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Marketing",
+    });
+    await AgentTeamModel.assignTeamsToAgent(marketing.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "slack",
+      channelId: "C_LIST",
+      workspaceId: "T_TEST",
+      agentId: marketing.id,
+    });
+    const sendReply = vi.fn(async () => "reply-id");
+    const router: ChatOpsProvider = {
+      ...createMockProvider({ sendReply }),
+      providerId: "slack",
+    };
+    const manager = new ChatOpsManager();
+
+    await manager.processMessage({
+      provider: router,
+      message: {
+        ...createMockMessage({ messageId: "router-list-1", text: "list" }),
+        channelId: "C_LIST",
+        workspaceId: "T_TEST",
+        senderEmail: user.email,
+      },
+    });
+
+    expect(execute).not.toHaveBeenCalled();
+    expect(sendReply).toHaveBeenCalledTimes(1);
+    const reply = (sendReply.mock.calls[0] as unknown as [ChatReplyOptions])[0]
+      .text;
+    expect(reply).toContain("• Marketing");
+    expect(reply).toContain("Marketing > ");
+
+    // An agent's own bot passes "list" to its agent like any message.
+    await manager.processMessage({
+      provider: { ...router, pinnedAgentId: marketing.id },
+      message: {
+        ...createMockMessage({ messageId: "router-list-2", text: "list" }),
+        channelId: "C_LIST",
+        workspaceId: "T_TEST",
+        senderEmail: user.email,
+      },
+    });
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  test("a person's DMs with the router bot and with agent bots stay separate", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    mockA2AExecutor();
+    const user = await makeUser({ email: "router-dm@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const marketing = await makeInternalAgent({ organizationId: org.id });
+    await AgentTeamModel.assignTeamsToAgent(marketing.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "slack",
+      channelId: "D_MARKETING_BOT",
+      workspaceId: "T_TEST",
+      isDm: true,
+      dmOwnerEmail: user.email,
+      agentId: marketing.id,
+    });
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { slackAgentBots: Map<string, ChatOpsProvider> }
+    ).slackAgentBots.set(marketing.id, createMockProvider());
+    const router: ChatOpsProvider = {
+      ...createMockProvider({ getUserEmail: async () => user.email }),
+      providerId: "slack",
+      parseWebhookNotification: async (payload) =>
+        payload as IncomingChatMessage,
+    };
+
+    await manager.handleIncomingMessage(router, {
+      ...createMockMessage({ messageId: "router-dm-1" }),
+      channelId: "D_ROUTER",
+      workspaceId: "T_TEST",
+      metadata: { channelType: "im" },
+    });
+
+    const findDm = (channelId: string) =>
+      ChatOpsChannelBindingModel.findByChannel({
+        provider: "slack",
+        channelId,
+        workspaceId: "T_TEST",
+      });
+    // The router's first DM does not take over the agent bot's DM...
+    expect((await findDm("D_MARKETING_BOT"))?.agentId).toBe(marketing.id);
+    const routerDm = await findDm("D_ROUTER");
+    expect(routerDm).not.toBeNull();
+
+    // ...and a first DM with another agent bot keeps the agent picked in the
+    // router's DM.
+    const research = await makeInternalAgent({ organizationId: org.id });
+    await ChatOpsChannelBindingModel.update(routerDm?.id ?? "", {
+      agentId: research.id,
+    });
+    const coding = await makeInternalAgent({ organizationId: org.id });
+    const codingBot: ChatOpsProvider = {
+      ...router,
+      pinnedAgentId: coding.id,
+      stateScope: `agent:${coding.id}`,
+    };
+    await manager.handleIncomingMessage(codingBot, {
+      ...createMockMessage({ messageId: "coding-dm-1" }),
+      channelId: "D_CODING_BOT",
+      workspaceId: "T_TEST",
+      metadata: { channelType: "im" },
+    });
+
+    expect((await findDm("D_ROUTER"))?.agentId).toBe(research.id);
+    expect((await findDm("D_MARKETING_BOT"))?.agentId).toBe(marketing.id);
+    expect((await findDm("D_CODING_BOT"))?.agentId).toBe(coding.id);
+  });
+
   test("a background result for a pinned bot's thread is posted by that bot", async ({
     makeOrganization,
   }) => {
@@ -2135,6 +2276,59 @@ describe("ChatOpsManager security validation", () => {
     );
   });
 
+  for (const fails of [false, true]) {
+    test(`pending Teams execution keeps an admission until completion (failure=${fails})`, async ({
+      makeOrganization,
+      makeInternalAgent,
+    }) => {
+      const org = await makeOrganization();
+      const pending = await autoProvisionUser({
+        email: "pending@example.com",
+        name: "Pending User",
+        provider: "ms-teams",
+      });
+      const agent = await makeInternalAgent({ organizationId: org.id });
+      await ChatOpsChannelBindingModel.create({
+        organizationId: org.id,
+        provider: "ms-teams",
+        channelId: "test-channel-id",
+        workspaceId: "test-workspace-id",
+        agentId: agent.id,
+      });
+      let executionObserved = false;
+      mockA2AExecutor().mockImplementation(async () => {
+        executionObserved = true;
+        const admissions = await db
+          .select()
+          .from(schema.chatopsUserAdmissionsTable)
+          .where(eq(schema.chatopsUserAdmissionsTable.userId, pending.userId));
+        expect(admissions).toHaveLength(1);
+        if (fails) throw new Error("Execution failed");
+        return {
+          text: "Response",
+          messageId: "test-message-id",
+          finishReason: "stop",
+          responseUiMessage: {
+            id: "test-message-id",
+            role: "assistant",
+            parts: [{ type: "text", text: "Response" }],
+          },
+        };
+      });
+      const provider = createMockProvider({
+        getUserEmail: async () => "pending@example.com",
+      });
+      const result = await makeManagerWith(provider).processMessage({
+        message: createMockMessage(),
+        provider,
+      });
+      expect(executionObserved).toBe(true);
+      expect(result.success).toBe(!fails);
+      expect(
+        await db.select().from(schema.chatopsUserAdmissionsTable),
+      ).toHaveLength(0);
+    });
+  }
   test("uses verified user ID for agent run (not synthetic ID)", async ({
     makeUser,
     makeOrganization,
@@ -2239,12 +2433,13 @@ describe("ChatOpsManager security validation", () => {
     }
   });
 
-  test("resuming after an approval decision keeps the ChatOps route category", async ({
+  test("approval after an email change uses stable reviewer identity and rejects bystanders", async ({
     makeUser,
     makeOrganization,
     makeTeam,
     makeTeamMember,
     makeInternalAgent,
+    makeMember,
   }) => {
     const sendMessageSpy = vi
       .spyOn(A2AManager.prototype, "sendMessage")
@@ -2286,6 +2481,21 @@ describe("ChatOpsManager security validation", () => {
       }),
     };
 
+    await A2ATaskApprovalRequestModel.attachChatReviewer({
+      taskId: decision.taskId,
+      approvalId: decision.approvalId,
+      userId: user.id,
+      channelId: decision.channelId,
+    });
+    await UserModel.patch(user.id, { email: "updated@example.com" });
+    const bystander = await makeUser({ email: "bystander@example.com" });
+    await makeMember(bystander.id, org.id);
+    await manager.handleInteractiveApprovalDecision(mockProvider, {
+      ...decision,
+      approverEmail: bystander.email,
+    });
+    expect(sendMessageSpy).not.toHaveBeenCalled();
+    decision.approverEmail = "updated@example.com";
     try {
       await manager.handleInteractiveApprovalDecision(mockProvider, decision);
 
@@ -2722,6 +2932,160 @@ describe("ChatOpsManager.getAccessibleChatopsAgents personal agent filtering", (
     });
 
     expect(agents.some((a) => a.id === otherPersonalAgent.id)).toBe(false);
+  });
+});
+
+describe("ChatOpsManager Slack quoted report replay", () => {
+  setupTestCacheManager();
+  test("delivers a rich-text quote to the executor on the root turn and its follow-up", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const user = await makeUser({ email: "quoted-report@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const agent = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Support Agent",
+    });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "slack",
+      channelId: "CQUOTE",
+      workspaceId: "TQUOTE",
+      agentId: agent.id,
+    });
+    const report = "A user outside the support team is routed to its server.";
+    const blocks = [
+      {
+        type: "rich_text",
+        elements: [
+          {
+            type: "rich_text_quote",
+            elements: [{ type: "text", text: report }],
+          },
+          {
+            type: "rich_text_section",
+            elements: [
+              { type: "user", user_id: "UBOT123" },
+              { type: "text", text: " create a task from the report above" },
+            ],
+          },
+        ],
+      },
+    ];
+    const provider = new SlackProvider({
+      enabled: true,
+      botToken: "xoxb-test",
+      signingSecret: "test-secret",
+      appId: "AQUOTE",
+    });
+    // biome-ignore lint/suspicious/noExplicitAny: establish the test bot identity
+    (provider as any).botUserId = "UBOT123";
+    // Only Slack API calls are stubbed; parsing, routing and history replay are real.
+    // biome-ignore lint/suspicious/noExplicitAny: inject the external Slack boundary
+    (provider as any).client = {
+      users: {
+        info: vi.fn().mockResolvedValue({
+          user: {
+            id: "UQUOTE",
+            real_name: "Test User",
+            profile: { email: user.email },
+          },
+        }),
+      },
+      conversations: {
+        info: vi.fn().mockResolvedValue({
+          channel: { name: "support", purpose: { value: "" } },
+        }),
+        replies: vi.fn().mockResolvedValue({
+          messages: [{ ts: "1800000000.000001", user: "UQUOTE", blocks }],
+        }),
+      },
+      chat: {
+        getPermalink: vi
+          .fn()
+          .mockResolvedValue({ permalink: "https://example.com/message" }),
+      },
+    };
+    const executor = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockResolvedValue({
+        text: "Report received",
+        messageId: "quote-response",
+        finishReason: "stop",
+        responseUiMessage: {
+          id: "quote-response",
+          role: "assistant",
+          parts: [{ type: "text", text: "Report received" }],
+        },
+      });
+    const manager = new ChatOpsManager();
+    const root = await provider.parseWebhookNotification(
+      {
+        type: "event_callback",
+        team_id: "TQUOTE",
+        event: {
+          type: "app_mention",
+          channel: "CQUOTE",
+          channel_type: "channel",
+          user: "UQUOTE",
+          ts: "1800000000.000001",
+          blocks,
+        },
+      },
+      {},
+    );
+    expect(root?.text).toContain(report);
+    if (!root) throw new Error("Quoted root was dropped");
+    expect(
+      (
+        await manager.processMessage({
+          provider,
+          message: root,
+          sendReply: false,
+        })
+      ).success,
+    ).toBe(true);
+    expect(executor.mock.calls[0]?.[0].message).toContain(report);
+    expect(executor.mock.calls[0]?.[0].message).toContain(
+      "create a task from the report above",
+    );
+    const followUp = await provider.parseWebhookNotification(
+      {
+        type: "event_callback",
+        team_id: "TQUOTE",
+        event: {
+          type: "message",
+          channel: "CQUOTE",
+          channel_type: "channel",
+          user: "UQUOTE",
+          ts: "1800000000.000002",
+          thread_ts: root.threadId,
+          text: "see the report above",
+        },
+      },
+      {},
+    );
+    if (!followUp) throw new Error("Follow-up was dropped");
+    expect(
+      (
+        await manager.processMessage({
+          provider,
+          message: followUp,
+          sendReply: false,
+        })
+      ).success,
+    ).toBe(true);
+    expect(executor.mock.calls[1]?.[0].message).toContain(report);
+    expect(executor.mock.calls[1]?.[0].message).toContain(
+      "see the report above",
+    );
   });
 });
 

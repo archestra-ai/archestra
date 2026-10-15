@@ -12,9 +12,11 @@ import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import MemberModel from "@/models/member";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { AppaCodexAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/codex";
+import { anthropicAdapterFactory } from "@/routes/proxy/adapters/anthropic";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { recordQueries } from "@/test/query-counter";
 import { ApiError } from "@/types/api";
+import { toolEntries } from "./policy-text";
 import {
   addressRuntimeChild,
   admitPeerMessage,
@@ -35,7 +37,12 @@ import {
   sessionFromHeaders,
   startRuntimeChild,
 } from "./service";
-import { rememberYellSession } from "./yell-session";
+import { startedUnenforced } from "./unenforced";
+import {
+  isReportingToolCall,
+  rememberYellSession,
+  reportingToolSpellings,
+} from "./yell-session";
 
 /** Proxy-written run. Not an offer JWS and not a model-selected session. */
 function remedyTrajectory(sessionId: string, parentId?: string) {
@@ -100,6 +107,7 @@ const native = vi.hoisted(() => ({
     runtimeCredentials: [],
     errors: [],
   })),
+  validateHostedOpenappaPolicy: vi.fn(async () => []),
   composeOpenappaPolicy: vi.fn(async (input: { root: string }) => ({
     content: input.root,
     errors: [],
@@ -128,6 +136,7 @@ beforeEach(async ({ makeOrganization }) => {
     yellEnabled: false,
     offerSigningSecret: "test-offer-signing-secret-32chars",
     postgresMaxConnections: 10,
+    keptAnnotatorHorizonDays: 30,
   };
   await GuardrailsDeploymentModel.setEnabled(true);
   vi.spyOn(database, "getDatabaseConnectionString").mockReturnValue(
@@ -166,6 +175,130 @@ afterEach(() => {
 });
 
 describe("APPA feature boundary", () => {
+  test("reporting recovery recognizes trusted dispatch targets, not foreign lookalikes or unrelated wrapped operations", () => {
+    const resolution = {
+      looseRunToolDispatch: false,
+      canonicalize: (name: string, namespace?: string) =>
+        namespace === "trusted" && name === "dispatch"
+          ? "archestra__run_tool"
+          : namespace
+            ? `foreign:${namespace}.${name}`
+            : name,
+    };
+    const dispatch = {
+      name: "dispatch",
+      namespace: "trusted",
+      arguments: {
+        tool_name: "archestra__yell",
+        tool_args: { message: "Please report the bug", with_trajectory: true },
+      },
+    };
+    expect(isReportingToolCall({ call: dispatch, resolution })).toBe(true);
+    expect(
+      isReportingToolCall({
+        call: { ...dispatch, namespace: "foreign" },
+        resolution,
+      }),
+    ).toBe(false);
+    expect(
+      isReportingToolCall({
+        call: {
+          ...dispatch,
+          arguments: { tool_name: "other__write", tool_args: {} },
+        },
+        resolution,
+      }),
+    ).toBe(false);
+    expect(
+      isReportingToolCall({
+        call: { name: "yell", arguments: {} },
+        resolution,
+      }),
+    ).toBe(false);
+    expect(
+      reportingToolSpellings({
+        identity: resolution,
+        declarations: [
+          { name: "dispatch", namespace: "trusted" },
+          { name: "yell", namespace: "foreign" },
+        ],
+      }),
+    ).toEqual([{ name: "dispatch", namespace: "trusted" }]);
+  });
+  test.for([
+    true,
+    false,
+  ])("returns the executed yell result even when ordinary tool output is withheld (break the glass %s)", async (breakTheGlassEnabled) => {
+    const name = "yell";
+    config.openappa.yellEnabled = true;
+    await GuardrailsDeploymentModel.set({ breakTheGlassEnabled });
+    const originalDispatch = native.dispatchHook.getMockImplementation();
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      if (JSON.parse(raw).event === "yell")
+        return JSON.stringify({
+          decision: "mcp_result",
+          result: { content: [{ type: "text", text: "Report delivered" }] },
+        });
+      if (!originalDispatch) throw new Error("Missing native mock");
+      return originalDispatch(raw);
+    });
+    const callId = `executed-${name}`;
+    const result = await executeArchestraTool(
+      `archestra__${name}`,
+      {
+        message: "The guardrails failure was confusing",
+        with_trajectory: true,
+      },
+      {
+        agent: { id: "agent", name: "Assistant" },
+        organizationId,
+        userId: "alice",
+        openappaSession: session,
+        currentToolCallId: callId,
+      },
+    );
+    expect(result.isError).not.toBe(true);
+    const content = result.content
+      .flatMap((part) => (part.type === "text" ? [part.text] : []))
+      .join("\n");
+    const processed = await processProxyResults({
+      session,
+      results: [
+        {
+          id: callId,
+          name: `archestra__${name}`,
+          content: "CLIENT-SPOOFED REPORT OUTPUT",
+          isError: false,
+        },
+      ],
+      canonicalize: (tool) => tool,
+    });
+    expect(processed.toolResultUpdates[callId]).toEqual({
+      content,
+      outputSource: "runtime",
+    });
+    expect(JSON.stringify(processed)).not.toContain("CLIENT-SPOOFED");
+    expect(
+      native.dispatchHook.mock.calls
+        .map(([raw]) => JSON.parse(raw))
+        .filter(
+          (event) =>
+            event.event === "tool_result" &&
+            event.operation_id === `result:${callId}`,
+        ),
+    ).toEqual([]);
+    const otherSession = await processProxyResults({
+      session: { ...session, session_id: "unrelated" },
+      results: [
+        { id: callId, name: `archestra__${name}`, content, isError: false },
+      ],
+      canonicalize: (tool) => tool,
+    });
+    expect(otherSession.toolResultUpdates[callId].content).toBe(
+      "APPA: withheld; remedy offer-123",
+    );
+  });
+
   test("reporting is hidden and direct execution is refused until explicitly enabled", async () => {
     expect(
       getArchestraMcpTools().some((tool) => tool.name === "archestra__yell"),
@@ -324,6 +457,7 @@ describe("APPA feature boundary", () => {
   test("reports through the authenticated native session after policy checking", async () => {
     config.openappa.yellEnabled = true;
     config.analytics.enabled = true;
+    await GuardrailsDeploymentModel.set({ breakTheGlassEnabled: false });
     const args = { message: "Confusing feedback", with_trajectory: true };
     native.dispatchHook
       .mockResolvedValueOnce(JSON.stringify({ decision: "allow_call" }))
@@ -351,9 +485,10 @@ describe("APPA feature boundary", () => {
     expect(result.content).toEqual([
       {
         type: "text",
-        text: expect.stringContaining("Report saved"),
+        text: "Report recorded for review in Guardrails → Yells.\nGuardrails are unchanged for this session.",
       },
     ]);
+    expect(await startedUnenforced(session)).toBe(false);
     const saved = await OpenAppaYellModel.list({
       organizationId,
       status: "all",
@@ -379,9 +514,11 @@ describe("APPA feature boundary", () => {
         tool: "yell",
         arguments: args,
         spawn: false,
+        // Reporting is on, so a block names yell the way the model calls it.
         presentation: {
           control_tool: "archestra__execute_remedy_plan",
           supports_delegation: false,
+          yell_tool: "archestra__yell",
         },
         withhold_consult_content: false,
       },
@@ -482,6 +619,7 @@ describe("APPA feature boundary", () => {
   test("a gateway yell reports under the session and call the proxy allowed", async () => {
     config.openappa.yellEnabled = true;
     config.analytics.enabled = true;
+    await GuardrailsDeploymentModel.set({ breakTheGlassEnabled: false });
     const args = { message: "Confusing feedback", with_trajectory: false };
     native.dispatchHook.mockResolvedValue(
       JSON.stringify({
@@ -511,9 +649,10 @@ describe("APPA feature boundary", () => {
     expect(result.content).toEqual([
       {
         type: "text",
-        text: expect.stringContaining("Report saved"),
+        text: "Report recorded for review in Guardrails → Yells.\nGuardrails are unchanged for this session.",
       },
     ]);
+    expect(await startedUnenforced(session)).toBe(false);
     const saved = await OpenAppaYellModel.list({
       organizationId,
       status: "all",
@@ -544,6 +683,100 @@ describe("APPA feature boundary", () => {
     await expect(
       executeArchestraTool("archestra__yell", args, gateway),
     ).rejects.toThrow("requires an authenticated session");
+  });
+
+  test("with break the glass on, a gateway yell reports, then takes the session and its children out of OpenAPPA", async () => {
+    config.openappa.yellEnabled = true;
+    config.analytics.enabled = true;
+    await GuardrailsDeploymentModel.set({ breakTheGlassEnabled: true });
+    const args = {
+      message: "Turn it off, it blocks the demo",
+      with_trajectory: true,
+    };
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({
+        decision: "mcp_result",
+        result: { content: [{ type: "text", text: "Receipt report-2" }] },
+      }),
+    );
+    await rememberYellSession({
+      session,
+      call: { id: "toolu_yell", name: "archestra__yell", arguments: args },
+      resolution: {
+        canonicalize: (name: string) => name,
+        looseRunToolDispatch: false,
+      },
+    });
+    const result = await executeArchestraTool("archestra__yell", args, {
+      agent: { id: "agent", name: "Assistant" },
+      organizationId,
+    });
+
+    expect(result.content).toEqual([
+      {
+        type: "text",
+        text: expect.stringMatching(
+          /Report recorded[\s\S]*Guardrails are now off for this session/,
+        ),
+      },
+    ]);
+    expect(JSON.parse(native.dispatchHook.mock.calls[0][0])).toMatchObject({
+      event: "yell",
+      operation_id: "yell:toolu_yell",
+      arguments: args,
+    });
+    const saved = await OpenAppaYellModel.list({
+      organizationId,
+      status: "all",
+      limit: 20,
+    });
+    expect(saved.data).toEqual([
+      expect.objectContaining({
+        message: args.message,
+        sessionId: "conversation",
+        superyell: true,
+      }),
+    ]);
+    expect(await startedUnenforced(session)).toBe(true);
+    // A child it starts is out, and so is the child's own child.
+    const child = {
+      ...session,
+      session_id: "conversation/worker",
+      parent_id: "conversation",
+    };
+    expect(await startedUnenforced(child)).toBe(true);
+    expect(
+      await startedUnenforced({
+        ...session,
+        session_id: "conversation/worker/helper",
+        parent_id: "conversation/worker",
+      }),
+    ).toBe(true);
+    // Other sessions stay governed.
+    expect(await startedUnenforced({ ...session, session_id: "another" })).toBe(
+      false,
+    );
+  });
+
+  test("a yell never takes a session out while Guardrails enforcement is off", async () => {
+    config.openappa.yellEnabled = true;
+    await GuardrailsDeploymentModel.set({
+      enabled: false,
+      breakTheGlassEnabled: true,
+    });
+    const result = await executeArchestraTool(
+      "archestra__yell",
+      { message: "Turn it off", with_trajectory: false },
+      {
+        agent: { id: "agent", name: "Assistant" },
+        organizationId,
+        userId: "alice",
+        sessionId: "conversation",
+        currentToolCallId: "toolu_yell",
+      },
+    );
+    expect(result.isError).toBe(true);
+    expect(await startedUnenforced(session)).toBe(false);
   });
 
   test("a gateway yell finds only the platform's yell, in its organization, with its arguments", async () => {
@@ -684,7 +917,7 @@ describe("APPA feature boundary", () => {
       {
         kind: "deny",
         feedback: "[appa] a call is already outstanding",
-        offers: [],
+        offers: undefined,
         recorded: true,
       },
     ]);
@@ -995,7 +1228,7 @@ describe("APPA feature boundary", () => {
         {
           kind: "deny",
           feedback: "Policy denied",
-          offers: [],
+          offers: undefined,
           recorded: true,
         },
         { kind: "allow" },
@@ -1175,6 +1408,126 @@ describe("APPA feature boundary", () => {
     expect(result.toolResultUpdates["ask-call"]?.content).toBe(
       reported ? "APPA: withheld; remedy offer-123" : undefined,
     );
+  });
+
+  test("hands the runtime a marker, not the bytes, for a result with an image", async () => {
+    const data = Buffer.alloc(300_000, 5).toString("base64");
+    const adapter = anthropicAdapterFactory.createRequestAdapter({
+      model: "claude-sonnet-4-5",
+      max_tokens: 10,
+      messages: [
+        { role: "user", content: "look" },
+        {
+          role: "assistant",
+          content: [
+            { type: "tool_use", id: "toolu_img", name: "Read", input: {} },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_img",
+              content: [
+                { type: "text", text: "the file" },
+                {
+                  type: "image",
+                  source: { type: "base64", media_type: "image/png", data },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    } as never);
+
+    await processProxyResults({
+      session,
+      canonicalize: (each) => each,
+      results: adapter.getToolResults(),
+    });
+
+    const [event] = native.dispatchHook.mock.calls
+      .map(([raw]) => JSON.parse(raw))
+      .filter((each) => each.event === "tool_result");
+    expect(event.output).toContain("the file");
+    expect(event.output).toContain("[binary image/png, 300000 bytes, sha256 ");
+    expect(event.output).not.toContain(data.slice(0, 64));
+  });
+
+  test("a rewritten text beside an image goes upstream as text with the marker, first and on replay", async () => {
+    const data = Buffer.alloc(300_000, 5).toString("base64");
+    const request = () =>
+      anthropicAdapterFactory.createRequestAdapter({
+        model: "claude-sonnet-4-5",
+        max_tokens: 10,
+        messages: [
+          { role: "user", content: "look" },
+          {
+            role: "assistant",
+            content: [
+              { type: "tool_use", id: "toolu_img", name: "Read", input: {} },
+            ],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "toolu_img",
+                content: [
+                  { type: "text", text: "the file" },
+                  {
+                    type: "image",
+                    source: { type: "base64", media_type: "image/png", data },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      } as never);
+    // The sanitizer rewrote the text part of the body the runtime was handed.
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      if (event.event !== "tool_result")
+        return JSON.stringify({ decision: "ack" });
+      const parts = JSON.parse(event.output);
+      parts[0].text = "[redacted]";
+      const rewritten = JSON.stringify(parts);
+      return JSON.stringify({
+        decision: "deliver_value",
+        value: rewritten,
+        approved_output: rewritten,
+        output_source: "tool",
+      });
+    });
+
+    // The same stored decision answers both requests.
+    for (const _request of ["first", "replay"]) {
+      const adapter = request();
+      const { toolResultUpdates } = await processProxyResults({
+        session,
+        canonicalize: (each) => each,
+        results: adapter.getToolResults(),
+      });
+      adapter.applyToolResultUpdates(
+        Object.fromEntries(
+          Object.entries(toolResultUpdates).map(([id, update]) => [
+            id,
+            update.content,
+          ]),
+        ),
+      );
+      const upstream = adapter.toProviderRequest().messages[2]
+        .content as Array<{ content: unknown }>;
+      const sent = upstream[0].content;
+      expect(typeof sent).toBe("string");
+      expect(sent).toContain("[redacted]");
+      expect(sent).toContain("[binary image/png, 300000 bytes, sha256 ");
+      expect(sent).not.toContain(data.slice(0, 64));
+    }
   });
 
   describe("a remedy call the gateway never ran", () => {
@@ -1359,6 +1712,50 @@ describe("APPA feature boundary", () => {
     expect(native.dispatchHook).not.toHaveBeenCalled();
   });
 
+  test("releases authorized control and notice aliases but evaluates foreign namespaces", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "deny_call", feedback: "Foreign" }),
+    );
+    const controlAliases = ["mcp__gateway", "mcp__legacy"].map((namespace) => ({
+      name: "archestra__execute_remedy_plan",
+      namespace,
+    }));
+    const noticeAliases = ["mcp__gateway", "mcp__legacy"].map((namespace) => ({
+      name: "archestra__get_remedy_plans",
+      namespace,
+    }));
+    const calls = [
+      ...controlAliases,
+      ...noticeAliases,
+      { name: "archestra__execute_remedy_plan", namespace: "mcp__foreign" },
+    ].map((member, index) => ({
+      ...member,
+      id: `alias-${index}`,
+      arguments: {},
+    }));
+    const decisions = await evaluateToolCalls(session, calls, {
+      canonicalize: () => "archestra__execute_remedy_plan",
+      control: controlAliases[0],
+      controlAliases,
+      notice: noticeAliases[0],
+      noticeAliases,
+    });
+    expect(decisions).toEqual([
+      { kind: "control" },
+      { kind: "control" },
+      { kind: "allow" },
+      { kind: "allow" },
+      {
+        kind: "deny",
+        feedback: "Foreign",
+        offers: undefined,
+        recorded: true,
+        review: undefined,
+      },
+    ]);
+    expect(native.dispatchHook).toHaveBeenCalledTimes(1);
+  });
+
   test("releases the control call only in the namespace its tool was declared in", async () => {
     // Codex calls a namespace member by its bare name. A server beside the
     // gateway can declare a member spelled like the control tool; its call is
@@ -1387,7 +1784,12 @@ describe("APPA feature boundary", () => {
 
     expect(decisions).toEqual([
       { kind: "control" },
-      { kind: "deny", feedback: "Not declared", offers: [], recorded: true },
+      {
+        kind: "deny",
+        feedback: "Not declared",
+        offers: undefined,
+        recorded: true,
+      },
     ]);
     expect(
       native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
@@ -1429,7 +1831,12 @@ describe("APPA feature boundary", () => {
     );
     expect(decisions).toEqual([
       { kind: "allow" },
-      { kind: "deny", feedback: "Not declared", offers: [], recorded: true },
+      {
+        kind: "deny",
+        feedback: "Not declared",
+        offers: undefined,
+        recorded: true,
+      },
     ]);
     expect(
       native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
@@ -1472,7 +1879,12 @@ describe("APPA feature boundary", () => {
     );
 
     expect(decisions).toEqual([
-      { kind: "deny", feedback: "Not declared", offers: [], recorded: true },
+      {
+        kind: "deny",
+        feedback: "Not declared",
+        offers: undefined,
+        recorded: true,
+      },
     ]);
     expect(
       native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
@@ -2075,7 +2487,7 @@ describe("APPA feature boundary", () => {
       {
         kind: "deny",
         feedback: "Parent policy denied",
-        offers: [],
+        offers: undefined,
         recorded: true,
       },
     ]);
@@ -2806,16 +3218,23 @@ test("dispatch loads the latest saved policy text from the organization database
     contentHash: "first",
     expectedRevision: 0,
   });
+  // The served text is the saved one as composed: the platform adds its rule
+  // for yell, so the dispatch is read by the rules it carries.
+  const servedTools = () => {
+    const served = vi.mocked(native.dispatchHook).mock.lastCall?.[1] as {
+      content: string;
+      credentials: Record<string, string>;
+    };
+    expect(served.credentials).toEqual({});
+    return toolEntries(served.content).map((tool) => tool.name);
+  };
   await processProxyResults({
     session: scoped,
     results: [],
     canonicalize: (name) => name,
   });
-  expect(native.dispatchHook).toHaveBeenLastCalledWith(expect.any(String), {
-    content,
-    credentials: {},
-  });
-  const updated = `${content}# updated`;
+  expect(servedTools()).toEqual(["mcp/appa/yell"]);
+  const updated = `${content}\n[[policy.tool]]\nname = "probe"\ndelta = {}\n`;
   await GuardrailsPolicyModel.save({
     organizationId: organization.id,
     updatedBy: user.id,
@@ -2828,10 +3247,7 @@ test("dispatch loads the latest saved policy text from the organization database
     results: [],
     canonicalize: (name) => name,
   });
-  expect(native.dispatchHook).toHaveBeenLastCalledWith(expect.any(String), {
-    content: updated,
-    credentials: {},
-  });
+  expect(servedTools()).toEqual(["mcp/appa/yell", "probe"]);
 });
 
 describe("remedy by offer", () => {
@@ -3253,6 +3669,7 @@ describe("remedy by offer", () => {
       organizationId,
       "user:alice|child",
       "offer-1",
+      undefined,
     );
     expect(elicit).not.toHaveBeenCalled();
     const input = JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]);

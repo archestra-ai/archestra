@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
+import config from "@/config";
 import db, { schema } from "@/database";
 import {
   createFastifyInstance,
@@ -15,6 +16,10 @@ import {
 import { resolveCredential } from "@/services/credentials";
 import { afterEach, beforeEach, expect, test } from "@/test";
 import { useMswServer as setupMswServer } from "@/test/msw";
+import {
+  declareGithub,
+  storedHostMembers,
+} from "@/test/openappa-github-roster";
 import type { User } from "@/types";
 
 const server = setupMswServer();
@@ -128,6 +133,19 @@ test("connects the verified account once, binds PKCE, and resolves only its acce
     await resolveCredential({ ...owner, userId: "another-user" }),
   ).toBeNull();
   expect(await resolveCredential({ ...owner, userId: null })).toBeNull();
+  const [connection] = await db
+    .select({ githubId: schema.runtimeCredentialConnectionsTable.githubId })
+    .from(schema.runtimeCredentialConnectionsTable)
+    .where(
+      and(
+        eq(schema.runtimeCredentialConnectionsTable.userId, user.id),
+        eq(
+          schema.runtimeCredentialConnectionsTable.credentialId,
+          "github-user",
+        ),
+      ),
+    );
+  expect(connection.githubId).toBe(12345);
   expect((await complete(url)).statusCode).toBe(400);
   expect(exchanges).toHaveLength(1);
   expect(response.body).not.toContain("access-1");
@@ -277,6 +295,31 @@ test("does not save tokens when GitHub cannot verify the user", async () => {
       scope: "personal",
     }),
   ).toBeNull();
+});
+
+test("a connected account joins the member roster of GitHub's deployed target", async ({
+  makeInternalMcpCatalog,
+  makeTool,
+}) => {
+  const openappa = { ...config.openappa };
+  const sandbox = config.daggerRuntime.enabled;
+  try {
+    await declareGithub({
+      organizationId,
+      userId: user.id,
+      makeInternalMcpCatalog,
+      makeTool,
+    });
+    expect(await storedHostMembers(organizationId)).toEqual({});
+
+    expect((await complete(await start())).statusCode).toBe(200);
+    expect(await storedHostMembers(organizationId)).toEqual({
+      "github:12345": user.email,
+    });
+  } finally {
+    config.openappa = openappa;
+    config.daggerRuntime.enabled = sandbox;
+  }
 });
 
 async function start() {

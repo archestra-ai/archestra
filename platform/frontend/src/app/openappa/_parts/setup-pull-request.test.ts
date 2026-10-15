@@ -8,6 +8,7 @@ const source = {
   path: "appa.toml",
   interval: "1h" as const,
   githubPatId: null,
+  gitlabTokenId: null,
   githubAppConfigId: null,
   revision: "revision",
   sourceCommit: null,

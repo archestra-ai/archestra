@@ -12,6 +12,7 @@ import type {
   AppaSpawnPromptField,
   AppaTeammateLaunch,
   AskUserArguments,
+  NativeQuestionResult,
 } from "../types";
 import { questionHeader, readHeader } from "../utils";
 import {
@@ -50,6 +51,10 @@ const CHILD_PATHS = [
   { prefix: "subagents/agent-", suffix: ".jsonl" },
 ] as const;
 const ASYNC_LAUNCH_STATUS = "Async agent launched successfully.";
+// Claude returns this client status when its handback retries are exhausted.
+// No child output crossed, and SendMessage can still resume the child.
+const NO_HANDBACK_STATUS =
+  "The subagent ended without delivering a report through SubagentHandback, so no report was delivered.";
 /**
  * The Agent tool also acknowledges a teammate and a cloud agent when they
  * start. Like the background launch, these carry no child output: the child
@@ -79,37 +84,38 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   readonly childTranscriptPaths = CHILD_PATHS;
   readonly nativeQuestion = {
     toolName: "AskUserQuestion",
+    // A review shows its call in full in each option's preview, inside the
+    // form, and asks one line about it.
     fromAskUser: (args: AskUserArguments) => {
-      // AskUserQuestion shows option previews for single-select questions only.
-      const previews =
-        args.allowMultiple !== true &&
-        args.options.some((option) => typeof option.preview === "string");
+      const preview = showsCallPreview(args) ? args.callPreview : undefined;
       return {
         questions: [
           {
-            question:
-              previews && typeof args.previewQuestion === "string"
-                ? args.previewQuestion
-                : args.question,
+            question: shownQuestion(args),
             // Claude Code's AskUserQuestion tab label is at most 12 characters.
             header: questionHeader(args.header, 12),
             options: args.options.map((option) => ({
               label: option.label,
               description: option.description ?? option.label,
-              ...(previews && typeof option.preview === "string"
-                ? { preview: option.preview }
-                : {}),
+              ...(preview ? { preview } : {}),
             })),
             multiSelect: args.allowMultiple === true,
           },
         ],
       };
     },
-    rulingFromResult: structuredQuestionRuling,
+    rulingFromResult: (result: NativeQuestionResult, asked: AskUserArguments) =>
+      structuredQuestionRuling(result, shownQuestion(asked)),
+    formFallback: true,
   };
   // Claude Code connects MCP servers in the background and declares this tool
   // in the requests it sends before they are ready.
   readonly pendingServersTool = "WaitForMcpServers";
+  // A gateway that needs a sign-in is not pending, so the wait tool is not
+  // declared and never carries the denial: /mcp is where the person sees that.
+  gatewayToolsHint(serverName: string): string {
+    return `Run /mcp in Claude Code. If "${serverName}" is still connecting, wait for it. If it needs authentication, select it and sign in. If it is not listed, connect Claude Code again and start a new session. Then send your message again.`;
+  }
   matches(context: AppaMatchContext): boolean {
     const userAgent = (
       readHeader(context.headers, "user-agent") ?? ""
@@ -273,8 +279,11 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
     if (!CHILD_SPAWN_TOOLS.has(localToolName(result.name)) || result.isError)
       return undefined;
     const identifier = childLaunchIdentifier(result.content);
+    const status = launchText(result.content)?.startsWith(NO_HANDBACK_STATUS)
+      ? NO_HANDBACK_STATUS
+      : ASYNC_LAUNCH_STATUS;
     return identifier
-      ? `${ASYNC_LAUNCH_STATUS}\n${identifier.label}: ${identifier.value}`
+      ? `${status}\n${identifier.label}: ${identifier.value}`
       : launchAcknowledgement(result.content);
   }
 
@@ -406,6 +415,35 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   }
 }
 
+/**
+ * A review whose call each option previews, so the form can ask in one line.
+ * AskUserQuestion shows previews for single-select questions only, and the
+ * terminal withholds a preview that is too long or has control characters.
+ * Such a review asks the full question, which carries the call itself.
+ */
+function showsCallPreview(
+  args: AskUserArguments,
+): args is AskUserArguments & { callPreview: string; shortQuestion: string } {
+  return (
+    args.allowMultiple !== true &&
+    typeof args.callPreview === "string" &&
+    args.callPreview.length <= PREVIEW_MAX_LENGTH &&
+    !CONTROL_CHARACTERS.test(args.callPreview) &&
+    typeof args.shortQuestion === "string"
+  );
+}
+
+/** The longest option preview Claude Code shows instead of withholding it. */
+const PREVIEW_MAX_LENGTH = 2000;
+/** Control characters other than tab and newline. */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: the characters are what this matches
+const CONTROL_CHARACTERS = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/;
+
+/** The question text Claude Code shows, and repeats before the answer. */
+function shownQuestion(args: AskUserArguments): string {
+  return showsCallPreview(args) ? args.shortQuestion : args.question;
+}
+
 function parentSessionId(context: AppaMatchContext): string | undefined {
   const metadata = claudeUserMetadata(context);
   const description = "Claude Code parent session id";
@@ -481,7 +519,12 @@ function childLaunchIdentifier(
   if (record?.status === "async_launched") {
     return launchIdentifierFromRecord(record);
   }
-  if (!text || !text.startsWith(ASYNC_LAUNCH_STATUS)) return undefined;
+  if (
+    !text ||
+    (!text.startsWith(ASYNC_LAUNCH_STATUS) &&
+      !text.startsWith(NO_HANDBACK_STATUS))
+  )
+    return undefined;
   const match =
     /^(agentId|agent_id|taskId|task_id):[ \t]*([^\s()]+)(?:[ \t]+\([^\r\n]*\))?[ \t]*$/im.exec(
       text,

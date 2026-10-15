@@ -19,6 +19,10 @@ import { cn } from "@/lib/utils/tailwind";
  * when the width requires it, which is what keeps the strip one line tall in
  * the common case.
  *
+ * When the explanation runs to a sentence or more, wrap the title and text in
+ * `<InlineNoticeBody>`: the title sits on its own line with the explanation
+ * directly below, and the icon and action centre on the pair.
+ *
  * The variant carries every colour, including the explanation's: never hand a
  * child its own amber/red class, or the two drift apart the next time a
  * palette moves.
@@ -32,14 +36,14 @@ const inlineNoticeVariants = cva(
     variants: {
       variant: {
         warning:
-          "border-[#EBCB8B] bg-[#FFFAEE] text-[#6A3E0E] dark:border-amber-500/30 dark:bg-amber-950/50 dark:text-amber-200 [&>svg]:text-[#A25E07] dark:[&>svg]:text-amber-400 *:data-[slot=inline-notice-text]:text-[#8A5A1C] dark:*:data-[slot=inline-notice-text]:text-amber-300",
+          "border-[#EBCB8B] bg-[#FFFAEE] text-[#6A3E0E] dark:border-amber-500/30 dark:bg-amber-950/50 dark:text-amber-200 [&>svg]:text-[#A25E07] dark:[&>svg]:text-amber-400 **:data-[slot=inline-notice-text]:text-[#8A5A1C] dark:**:data-[slot=inline-notice-text]:text-amber-300",
         error:
-          "border-destructive/40 bg-destructive/5 text-destructive [&>svg]:text-destructive *:data-[slot=inline-notice-text]:text-destructive/90",
+          "border-destructive/40 bg-destructive/5 text-destructive [&>svg]:text-destructive **:data-[slot=inline-notice-text]:text-destructive/90",
         success:
-          "border-emerald-500/40 bg-emerald-50 text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-950/50 dark:text-emerald-200 [&>svg]:text-emerald-600 dark:[&>svg]:text-emerald-400 *:data-[slot=inline-notice-text]:text-emerald-800 dark:*:data-[slot=inline-notice-text]:text-emerald-300",
-        info: "border-blue-500/50 bg-blue-50 text-blue-900 dark:border-blue-500/30 dark:bg-blue-950/50 dark:text-blue-200 [&>svg]:text-blue-600 dark:[&>svg]:text-blue-400 *:data-[slot=inline-notice-text]:text-blue-800 dark:*:data-[slot=inline-notice-text]:text-blue-300",
+          "border-emerald-500/40 bg-emerald-50 text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-950/50 dark:text-emerald-200 [&>svg]:text-emerald-600 dark:[&>svg]:text-emerald-400 **:data-[slot=inline-notice-text]:text-emerald-800 dark:**:data-[slot=inline-notice-text]:text-emerald-300",
+        info: "border-blue-500/50 bg-blue-50 text-blue-900 dark:border-blue-500/30 dark:bg-blue-950/50 dark:text-blue-200 [&>svg]:text-blue-600 dark:[&>svg]:text-blue-400 **:data-[slot=inline-notice-text]:text-blue-800 dark:**:data-[slot=inline-notice-text]:text-blue-300",
         neutral:
-          "bg-muted/40 text-foreground [&>svg]:text-muted-foreground *:data-[slot=inline-notice-text]:text-muted-foreground",
+          "bg-muted/40 text-foreground [&>svg]:text-muted-foreground **:data-[slot=inline-notice-text]:text-muted-foreground",
       },
       /**
        * The notice sits over content that scrolls under it, such as a sticky
@@ -108,7 +112,24 @@ export function InlineNoticeText({
   return (
     <div
       data-slot="inline-notice-text"
-      className={cn("min-w-0", className)}
+      className={cn("min-w-0 flex-1", className)}
+      {...props}
+    />
+  );
+}
+
+/**
+ * A title over its explanation, for notices longer than a phrase. The strip
+ * keeps icon and action centred beside it.
+ */
+export function InlineNoticeBody({
+  className,
+  ...props
+}: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="inline-notice-body"
+      className={cn("flex min-w-0 flex-1 flex-col gap-0.5", className)}
       {...props}
     />
   );

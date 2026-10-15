@@ -1,9 +1,9 @@
 "use client";
 
 import type { SupportedProvider } from "@archestra/shared";
-import { Plus, X } from "lucide-react";
+import { Info, Plus, X } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import {
   isSubscriptionKey,
   keysByProvider,
@@ -17,6 +17,12 @@ import { ProviderIcon } from "@/components/provider-icon";
 import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useModelsWithApiKeys } from "@/lib/llm-models.query";
 import { cn } from "@/lib/utils/tailwind";
@@ -26,15 +32,33 @@ import { cn } from "@/lib/utils/tailwind";
  * per provider. Every provider starts on with its primary key; a line changes
  * the key or stops using the provider, and providers that are off stay listed
  * underneath with a way to add them back.
+ *
+ * With `emptyLabel`, using no provider is a valid choice that the label
+ * describes, rather than a gap to fill.
  */
 export function ProviderKeyList({
   value,
   onChange,
   providerApiKeys,
+  label = "Provider keys",
+  showLabel = true,
+  allowBulkAdd = true,
+  emptyLabel,
+  alwaysOpen = false,
 }: {
   value: ProviderApiKeyMappings;
   onChange: (value: ProviderApiKeyMappings) => void;
   providerApiKeys: LlmProviderApiKeyResponse[];
+  label?: ReactNode;
+  /** A surrounding disclosure can supply the visible heading. */
+  showLabel?: boolean;
+  allowBulkAdd?: boolean;
+  emptyLabel?: string;
+  /**
+   * Always show the editable list, with no Change/Done toggle. For a dialog
+   * whose own Done button already ends the edit.
+   */
+  alwaysOpen?: boolean;
 }) {
   const catalog = useModelProviderCatalog();
   const modelIdsByKey = useModelIdsByKey();
@@ -49,9 +73,6 @@ export function ProviderKeyList({
   const byLabel = (a: SupportedProvider, b: SupportedProvider) =>
     catalog.label(a).localeCompare(catalog.label(b));
   const providers = [...grouped.keys()].sort(byLabel);
-  const unavailable = catalog.visibleIds
-    .filter((provider) => !grouped.has(provider))
-    .sort(byLabel);
 
   const chosenKeys = (provider: SupportedProvider) => {
     const keys = grouped.get(provider) ?? [];
@@ -82,12 +103,10 @@ export function ProviderKeyList({
   });
   const onLines = lines.filter((line) => line.on);
   const offLines = lines.filter((line) => !line.on);
-  const noneOn = providers.length > 0 && onLines.length === 0;
-  const showList = open || noneOn;
+  const noneOn =
+    providers.length > 0 && onLines.length === 0 && emptyLabel === undefined;
+  const showList = alwaysOpen || open || noneOn;
   const notPrimaryCount = onLines.filter((line) => line.notPrimary).length;
-  const noModelNames = onLines
-    .filter((line) => line.noModels)
-    .map((line) => line.label);
 
   const primaryKey = (provider: SupportedProvider) =>
     grouped.get(provider)?.[0];
@@ -95,7 +114,7 @@ export function ProviderKeyList({
     const key = primaryKey(provider);
     if (key) onChange([...value, { provider, providerApiKeyId: key.id }]);
   };
-  const enableAll = () =>
+  const addAll = () =>
     onChange([
       ...value,
       ...offLines.flatMap((line) => {
@@ -114,33 +133,29 @@ export function ProviderKeyList({
 
   if (providers.length === 0) {
     return (
-      <section aria-label="Provider keys" className="space-y-2">
-        <span className="font-medium text-sm">Provider keys</span>
-        <NoProviderKeys unavailable={unavailable} />
+      <section
+        aria-label={typeof label === "string" ? label : "Provider keys"}
+        className="space-y-2"
+      >
+        <span className={cn("font-medium text-sm", !showLabel && "sr-only")}>
+          {label}
+        </span>
+        <NoProviderKeys />
       </section>
     );
   }
 
   return (
-    <section aria-label="Provider keys" className="space-y-2">
-      <div className="flex min-h-8 items-center justify-between gap-2">
-        <span className="font-medium text-sm">Provider keys</span>
-        <div className="flex gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={offLines.length === 0}
-            title={
-              offLines.length === 0
-                ? "All providers are enabled"
-                : `Enable all ${providers.length} providers`
-            }
-            onClick={enableAll}
-          >
-            Enable all
-          </Button>
-          {!noneOn && (
+    <section
+      aria-label={typeof label === "string" ? label : "Provider keys"}
+      className="space-y-2"
+    >
+      {(showLabel || (!noneOn && !alwaysOpen)) && (
+        <div className="flex min-h-8 items-center justify-between gap-2">
+          <span className={cn("font-medium text-sm", !showLabel && "sr-only")}>
+            {label}
+          </span>
+          {!noneOn && !alwaysOpen && (
             <Button
               type="button"
               variant="outline"
@@ -148,13 +163,21 @@ export function ProviderKeyList({
               aria-expanded={open}
               onClick={() => setOpen(!open)}
             >
-              {open ? "Done" : "Change"}
+              <span>{open ? "Done" : "Change"}</span>
             </Button>
           )}
         </div>
-      </div>
+      )}
 
-      {!showList && (
+      {(!showList || alwaysOpen) &&
+        onLines.length === 0 &&
+        emptyLabel !== undefined && (
+          <p className="text-xs text-muted-foreground">
+            <span>{emptyLabel}</span>
+          </p>
+        )}
+
+      {!showList && onLines.length > 0 && (
         <div className="space-y-2">
           <div className="flex flex-wrap gap-1.5">
             {onLines.map((line) => (
@@ -162,9 +185,7 @@ export function ProviderKeyList({
                 key={line.provider}
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded-full border py-0.5 pr-2.5 pl-1.5 text-xs",
-                  line.noModels
-                    ? "border-amber-500/50 bg-amber-50 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200"
-                    : "bg-muted",
+                  "bg-muted",
                 )}
               >
                 <span aria-hidden className="shrink-0">
@@ -180,6 +201,7 @@ export function ProviderKeyList({
                     </span>
                   )}
                 </span>
+                {line.noModels && <NoModelsInfo label={line.label} />}
               </span>
             ))}
           </div>
@@ -196,12 +218,10 @@ export function ProviderKeyList({
       )}
 
       {showList && (
-        <div className="space-y-3 rounded-lg border bg-muted/40 p-3">
+        <div className="@container/provider-keys space-y-3 rounded-lg border bg-muted/40 p-3">
           {noneOn && (
             <div className="space-y-0.5">
-              <p className="font-semibold text-sm">
-                Pick the providers this key can use
-              </p>
+              <p className="font-semibold text-sm">Choose providers to use</p>
               <p className="text-xs text-muted-foreground">
                 Add at least one. Each starts with its primary key.
               </p>
@@ -244,21 +264,36 @@ export function ProviderKeyList({
           )}
           {offLines.length > 0 && (
             <fieldset
-              className={cn("min-w-0 space-y-1.5", !noneOn && "border-t pt-3")}
+              className={cn(
+                "min-w-0 space-y-1.5",
+                // Divide from the used providers only when any are listed above.
+                onLines.length > 0 && "border-t pt-3",
+              )}
               aria-label="Providers not used"
             >
-              {!noneOn && (
+              <div className="flex items-center justify-between gap-2">
                 <p className="text-xs text-muted-foreground">
-                  Not used · {offLines.length}
+                  <span>Not used · {offLines.length}</span>
                 </p>
-              )}
+                {allowBulkAdd && offLines.length > 1 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    onClick={addAll}
+                  >
+                    <Plus />
+                    <span>Add all</span>
+                  </Button>
+                )}
+              </div>
               {offLines.map((line) => {
                 const key = primaryKey(line.provider);
                 return (
                   <div
                     key={line.provider}
                     className={cn(
-                      "flex min-h-10 items-center gap-2 rounded-md border pr-1.5 pl-3",
+                      "grid min-h-10 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 @[480px]/provider-keys:flex @[480px]/provider-keys:pr-1.5 @[480px]/provider-keys:py-0",
                       noneOn
                         ? "bg-background"
                         : "border-dashed bg-background/60",
@@ -269,13 +304,14 @@ export function ProviderKeyList({
                       label={line.label}
                       muted={!noneOn}
                     />
-                    <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                    <span className="col-start-1 row-start-2 min-w-0 flex-1 truncate text-xs text-muted-foreground">
                       {key ? keyLine([key]) : null}
                     </span>
                     <Button
                       type="button"
                       variant="outline"
                       size="xs"
+                      className="col-start-2 row-span-2 row-start-1 shrink-0"
                       aria-label={`Add ${line.label}`}
                       onClick={() => addProvider(line.provider)}
                     >
@@ -287,24 +323,7 @@ export function ProviderKeyList({
               })}
             </fieldset>
           )}
-          {unavailable.length > 0 && (
-            <p className="text-xs text-muted-foreground">
-              <span>
-                No key you can use for{" "}
-                {unavailable
-                  .map((provider) => catalog.label(provider))
-                  .join(", ")}
-                . Ask an admin to share one.
-              </span>
-            </p>
-          )}
         </div>
-      )}
-
-      {noModelNames.length > 0 && (
-        <p className="text-xs text-amber-700 dark:text-amber-400">
-          <span>{noModelNames.join(", ")}: no models on the chosen key.</span>
-        </p>
       )}
     </section>
   );
@@ -350,13 +369,13 @@ function ProviderLine({
       description: `${ownerLabel(key)} · ${isSubscriptionKey(key) ? "Subscription" : "Metered"}`,
       checked: several && chosenIds.includes(key.id),
       content: (
-        <span className="flex min-w-0 items-center gap-2">
-          <span className="truncate">{key.name}</span>
+        <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="min-w-0 basis-full break-words">{key.name}</span>
           {key.isPrimary && <PrimaryBadge />}
           {!modelsPending && (
             <span
               className={cn(
-                "ml-auto shrink-0 text-xs tabular-nums",
+                "shrink-0 text-xs tabular-nums",
                 count
                   ? "text-muted-foreground"
                   : "text-amber-700 dark:text-amber-400",
@@ -379,13 +398,10 @@ function ProviderLine({
   });
 
   return (
-    <div className="flex items-center gap-2">
-      <ProviderName provider={provider} label={label} />
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 @[480px]/provider-keys:flex">
+      <ProviderName provider={provider} label={label} noModels={noModels} />
       <SearchableSelect
-        className={cn(
-          "min-w-0 flex-1 bg-background",
-          noModels && "border-amber-500/60",
-        )}
+        className="col-span-2 row-start-2 w-full min-w-0 flex-1 bg-background @[480px]/provider-keys:w-auto"
         ariaLabel={`${label} key`}
         value={several ? "" : (chosenIds[0] ?? "")}
         placeholder={summary}
@@ -404,7 +420,7 @@ function ProviderLine({
         type="button"
         variant="ghost"
         size="icon-sm"
-        className="text-muted-foreground"
+        className="col-start-2 row-start-1 shrink-0 text-muted-foreground"
         aria-label={`Stop using ${label}`}
         onClick={onRemove}
       >
@@ -418,15 +434,17 @@ function ProviderName({
   provider,
   label,
   muted = false,
+  noModels = false,
 }: {
   provider: SupportedProvider;
   label: string;
   muted?: boolean;
+  noModels?: boolean;
 }) {
   return (
     <span
       className={cn(
-        "flex w-36 shrink-0 items-center gap-2 text-sm",
+        "flex min-w-0 items-center gap-2 text-sm @[480px]/provider-keys:w-36 @[480px]/provider-keys:shrink-0",
         muted ? "text-muted-foreground" : "text-foreground",
       )}
     >
@@ -434,7 +452,30 @@ function ProviderName({
         <ProviderIcon provider={provider} size={16} />
       </span>
       <span className="truncate">{label}</span>
+      {noModels && <NoModelsInfo label={label} />}
     </span>
+  );
+}
+
+function NoModelsInfo({ label }: { label: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <UnstyledButton
+          type="button"
+          aria-label={`${label}: no models discovered`}
+          className="shrink-0 cursor-help rounded-full text-amber-600 outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-amber-400"
+        >
+          <Info className="size-3.5" />
+        </UnstyledButton>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs">
+        <span>
+          This key has no discovered models. Refresh its model list or check the
+          key's provider permissions.
+        </span>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -462,95 +503,18 @@ function PrimaryNote({ notPrimaryCount }: { notPrimaryCount: number }) {
 }
 
 /** No provider key the caller can use yet: where to get one. */
-function NoProviderKeys({ unavailable }: { unavailable: SupportedProvider[] }) {
-  const shown = unavailable.slice(0, 4);
-  const more = unavailable.length - shown.length;
+function NoProviderKeys() {
   return (
-    <div className="flex items-center gap-6 rounded-xl border border-dashed bg-muted/40 p-6">
-      <svg
-        width="112"
-        height="96"
-        viewBox="0 0 112 96"
-        fill="none"
-        aria-hidden="true"
-        className="shrink-0 text-foreground"
-      >
-        <rect
-          x="22"
-          y="6"
-          width="68"
-          height="44"
-          rx="10"
-          className="fill-muted stroke-border"
-        />
-        <rect
-          x="12"
-          y="22"
-          width="76"
-          height="48"
-          rx="11"
-          className="fill-muted/60 stroke-border"
-        />
-        <rect
-          x="2"
-          y="40"
-          width="84"
-          height="52"
-          rx="12"
-          className="fill-background"
-          stroke="currentColor"
-          strokeWidth="1.5"
-        />
-        <circle cx="26" cy="66" r="9" stroke="currentColor" strokeWidth="2" />
-        <path
-          d="M35 66h30M57 66v7M64 66v5"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-        />
-        <circle cx="98" cy="26" r="12" fill="currentColor" />
-        <path
-          d="M98 20v12M92 26h12"
-          className="stroke-background"
-          strokeWidth="2"
-          strokeLinecap="round"
-        />
-      </svg>
-      <div className="min-w-0 space-y-2">
-        <p className="font-semibold text-base">
-          Connect your first model provider
-        </p>
-        <p className="text-sm text-muted-foreground">
-          A virtual key sends requests through your provider keys. Add a key for
-          Anthropic, OpenAI or another provider, and this key can call its
-          models.
-        </p>
-        {shown.length > 0 && (
-          <div className="flex gap-1.5">
-            {shown.map((provider) => (
-              <span
-                key={provider}
-                className="flex size-7 items-center justify-center rounded-full border bg-background"
-              >
-                <ProviderIcon provider={provider} size={14} />
-              </span>
-            ))}
-            {more > 0 && (
-              <span className="flex h-7 items-center rounded-full border bg-background px-2 font-medium text-[10px]">
-                +{more}
-              </span>
-            )}
-          </div>
-        )}
-        <div className="flex flex-wrap items-center gap-3 pt-1">
-          <Button asChild size="sm">
-            <Link href="/llm/model-providers">Add provider key</Link>
-          </Button>
-          <span className="text-xs text-muted-foreground">
-            Or ask an admin to share one.
-          </span>
-        </div>
-      </div>
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        <span>
+          No provider keys are available. Add a key or ask an admin to share
+          one.
+        </span>
+      </p>
+      <Button asChild size="sm">
+        <Link href="/llm/model-providers">Add provider key</Link>
+      </Button>
     </div>
   );
 }

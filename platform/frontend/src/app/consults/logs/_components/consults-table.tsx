@@ -3,17 +3,17 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Download, Loader2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
+import { useLogsHeaderAction } from "@/app/_parts/logs-section-layout";
 import {
   CollectionFilters,
   FilterBar,
   FilterSelect,
-  filterControlClass,
 } from "@/components/filter-bar";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
+import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
@@ -52,6 +52,22 @@ export function ConsultsTable() {
       [cursorPagination.goNewest, updateUrlParams],
     ),
   });
+  // Every log page keeps its time range in the header's top-right corner.
+  const timeRangePicker = useMemo(
+    () => (
+      <TimeRangePicker
+        value={dateTimePicker.range}
+        onChange={dateTimePicker.setRange}
+        onClear={dateTimePicker.clearDateRange}
+      />
+    ),
+    [
+      dateTimePicker.range,
+      dateTimePicker.setRange,
+      dateTimePicker.clearDateRange,
+    ],
+  );
+  useLogsHeaderAction(timeRangePicker);
 
   const filters: ExternalConsultFilters = {
     externalName: searchParams.get("externalName") || undefined,
@@ -98,7 +114,7 @@ export function ConsultsTable() {
   if (isLoadingError) {
     return (
       <QueryLoadError
-        title="Couldn't load guardrail consults"
+        title="Couldn't load Guardrails consults"
         onRetry={() => refetch()}
       />
     );
@@ -152,22 +168,6 @@ export function ConsultsTable() {
             items={OUTCOME_OPTIONS}
             inactiveValue={ALL_VALUE}
           />
-          <DateTimeRangePicker
-            startDate={dateTimePicker.startDate}
-            endDate={dateTimePicker.endDate}
-            isDialogOpen={dateTimePicker.isDateDialogOpen}
-            tempStartDate={dateTimePicker.tempStartDate}
-            tempEndDate={dateTimePicker.tempEndDate}
-            displayText={dateTimePicker.getDateRangeDisplay()}
-            onDialogOpenChange={dateTimePicker.setIsDateDialogOpen}
-            onTempStartDateChange={dateTimePicker.setTempStartDate}
-            onTempEndDateChange={dateTimePicker.setTempEndDate}
-            onOpenDialog={dateTimePicker.openDateDialog}
-            onApply={dateTimePicker.handleApplyDateRange}
-            className={filterControlClass({
-              active: dateTimePicker.startDate !== undefined,
-            })}
-          />
         </FilterBar>
       </CollectionFilters>
 
@@ -192,10 +192,13 @@ export function ConsultsTable() {
         manualPagination
         isLoading={isFetching}
         hasActiveFilters={hasFilters}
-        emptyMessage="No guardrail consults recorded yet. Annotator and authority calls will appear here as they happen."
+        emptyMessage="No Guardrails consults recorded yet. Annotator and authority calls will appear here as they happen."
         filteredEmptyMessage="No consults match your filters"
         onClearFilters={clearFilters}
         onRowClick={(row) => setSelected(row)}
+        getRowClassName={(row) =>
+          row.consult.id === selected?.consult.id ? "bg-muted" : undefined
+        }
       />
 
       <ConsultDetailSheet view={selected} onClose={() => setSelected(null)} />

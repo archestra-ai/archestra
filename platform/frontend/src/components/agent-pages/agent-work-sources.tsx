@@ -10,8 +10,10 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useState } from "react";
+import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import { channelDisplayName } from "@/app/settings/messaging-channels/_components/channel-details-dialog";
 import { ChannelIcon } from "@/components/channel-icon";
+import { SettingsLink } from "@/components/settings-link";
 import { SlackBotEditDialog } from "@/components/slack-bot-edit-dialog";
 import { Button } from "@/components/ui/button";
 import { useAgentRuntimePreflight } from "@/lib/agent-runtime.query";
@@ -202,8 +204,13 @@ function AgentChannelsCard({
   const slackPerAgent =
     slackOffered && !!slackBots.data && slackBots.data.unassignedApp === null;
   const slackBot = slackBots.data?.bots.find((bot) => bot.agentId === agentId);
+  // Only a bot Archestra named follows the default handle; guessing one for
+  // a converted app shows a name nobody can @mention.
   const slackHandle = slackBot
-    ? (slackBot.handle ?? slackHandleFor(appName, slackBot.agentName))
+    ? (slackBot.handle ??
+      (slackBot.createdByArchestra
+        ? slackHandleFor(appName, slackBot.agentName)
+        : null))
     : null;
   const botChannels = useSlackAgentBotChannels(
     slackBot?.installed ? agentId : undefined,
@@ -332,12 +339,12 @@ function AgentChannelsCard({
           {slackWithoutBot && <SlackWithoutBotNotice href={addBotHref} />}
         </span>
       )}
-      {slackBot && slackHandle && (
+      {slackBot && (
         <SlackBotEditDialog
           open={editingBot}
           onOpenChange={setEditingBot}
           agentId={agentId}
-          handle={slackHandle}
+          handle={slackHandle ?? slackBot.agentName}
           appId={slackBot.appId}
           installed={slackBot.installed}
           reinstallUrl={slackBot.reinstallUrl}
@@ -370,7 +377,10 @@ function EmptyChannelActions({
   addBotHref: string;
   manageHref: string;
 }) {
+  // Chat apps and Slack bots are set up in Settings, which not everyone sees.
+  const canSeeSettings = useSettingsAreaAccess() === true;
   if (connectedApps.length === 0) {
+    if (!canSeeSettings) return null;
     return (
       <Button size="sm" variant="outline" asChild>
         <Link href="/settings/messaging-channels">Set up a chat app</Link>
@@ -379,20 +389,25 @@ function EmptyChannelActions({
   }
   return (
     <>
-      {connectedApps.map((provider) => (
-        <Button key={provider} size="sm" variant="outline" asChild>
-          <Link
-            href={
-              provider === "slack" && slackPerAgent ? addBotHref : manageHref
-            }
-          >
-            <ChannelIcon channel={provider} className="size-4" />
-            {provider === "slack" && slackPerAgent
-              ? "Add Slack bot"
-              : `Add ${MESSAGING_CHANNEL_LABELS[provider]} channel`}
-          </Link>
-        </Button>
-      ))}
+      {connectedApps
+        .filter(
+          (provider) =>
+            canSeeSettings || !(provider === "slack" && slackPerAgent),
+        )
+        .map((provider) => (
+          <Button key={provider} size="sm" variant="outline" asChild>
+            <Link
+              href={
+                provider === "slack" && slackPerAgent ? addBotHref : manageHref
+              }
+            >
+              <ChannelIcon channel={provider} className="size-4" />
+              {provider === "slack" && slackPerAgent
+                ? "Add Slack bot"
+                : `Add ${MESSAGING_CHANNEL_LABELS[provider]} channel`}
+            </Link>
+          </Button>
+        ))}
     </>
   );
 }
@@ -408,9 +423,12 @@ function SlackWithoutBotNotice({ href }: { href: string }) {
     <span className="text-amber-800 dark:text-amber-300">
       Some Slack channels are assigned to this agent, but no bot answers as it
       there.{" "}
-      <Link href={href} className="font-medium underline underline-offset-2">
+      <SettingsLink
+        href={href}
+        className="font-medium underline underline-offset-2"
+      >
         Add its Slack bot
-      </Link>
+      </SettingsLink>
     </span>
   );
 }

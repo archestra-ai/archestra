@@ -100,7 +100,7 @@ export function streamAgentRuntimeCommand(params: {
         ),
       );
     })
-    .catch(finish);
+    .catch((error: unknown) => finish(normalizeConnectionError(error)));
   return { stdout, completed };
 }
 
@@ -191,6 +191,53 @@ export function execAgentRuntimeCommand(params: {
           ),
         );
       })
-      .catch(finish);
+      .catch((error: unknown) => finish(normalizeConnectionError(error)));
   });
+}
+
+// The Kubernetes WebSocket client rejects failed handshakes with ErrorEvent,
+// whose fields disappear in JSON and whose string representation is unhelpful.
+// Keep only bounded protocol diagnostics: the event target, cause, arbitrary
+// message and response may contain credentials or private runtime output.
+// This is deliberately not a transport-retry classification: an unsuccessful
+// handshake can also mean denied access or invalid connection configuration.
+function normalizeConnectionError(error: unknown): Error {
+  if (error instanceof Error) return error;
+  let detail: string | undefined;
+  if (error && typeof error === "object") {
+    if ("message" in error && typeof error.message === "string") {
+      const status = /^Unexpected server response: ([1-5]\d{2})$/.exec(
+        error.message,
+      )?.[1];
+      if (status) detail = `HTTP ${status}`;
+    }
+    if (!detail && "error" in error) {
+      const cause = error.error;
+      if (
+        cause &&
+        typeof cause === "object" &&
+        "code" in cause &&
+        typeof cause.code === "string" &&
+        [
+          "ECONNRESET",
+          "ECONNREFUSED",
+          "ETIMEDOUT",
+          "EPIPE",
+          "EAI_AGAIN",
+          "ENOTFOUND",
+          "ENETUNREACH",
+          "EHOSTUNREACH",
+          "CERT_HAS_EXPIRED",
+          "DEPTH_ZERO_SELF_SIGNED_CERT",
+          "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+          "ERR_TLS_CERT_ALTNAME_INVALID",
+        ].includes(cause.code)
+      ) {
+        detail = cause.code;
+      }
+    }
+  }
+  return new Error(
+    `Agent Runtime exec connection failed${detail ? ` (${detail})` : ""}`,
+  );
 }

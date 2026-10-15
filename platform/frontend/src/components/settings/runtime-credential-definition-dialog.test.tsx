@@ -44,7 +44,7 @@ it.each([
       },
     ],
   },
-])("explains why GitHub user connections are unavailable with $name", async ({
+])("explains why GitHub user credentials are unavailable with $name", async ({
   apps,
 }) => {
   server.use(
@@ -64,7 +64,7 @@ it.each([
   );
   await user.click(screen.getByRole("combobox", { name: "Credential type" }));
   const userConnection = screen.getByRole("option", {
-    name: /GitHub user connection/,
+    name: /GitHub user credential/,
   });
   expect(userConnection).toHaveAttribute("aria-disabled", "true");
   expect(userConnection).toHaveTextContent(/OAuth client ID/);
@@ -102,7 +102,7 @@ it("enables a personal connection after an organization OAuth App is connected",
   );
   await user.click(screen.getByRole("combobox", { name: "Credential type" }));
   await user.click(
-    screen.getByRole("option", { name: /GitHub user connection/ }),
+    screen.getByRole("option", { name: /GitHub user credential/ }),
   );
   expect(
     screen.getByRole("combobox", { name: "Organization GitHub App" }),
@@ -117,7 +117,7 @@ it("creates the guided OpenAPPA GitHub App with its organization identity", asyn
     http.post("http://localhost:9000/api/credentials", async ({ request }) => {
       const body = await request.json();
       expect(body).toMatchObject({
-        name: "OpenAPPA GitHub sync",
+        name: "OpenAPPA Git sync",
         description:
           "Creates the OpenAPPA policy repository and opens pull requests for policy changes.",
         icon: "logo:openappa",
@@ -139,7 +139,7 @@ it("creates the guided OpenAPPA GitHub App with its organization identity", asyn
         initialKind="github_app"
         initialScope="organization"
         initialValues={{
-          name: "OpenAPPA GitHub sync",
+          name: "OpenAPPA Git sync",
           description:
             "Creates the OpenAPPA policy repository and opens pull requests for policy changes.",
           icon: "logo:openappa",
@@ -153,11 +153,11 @@ it("creates the guided OpenAPPA GitHub App with its organization identity", asyn
   );
 
   expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue(
-    "OpenAPPA GitHub sync",
+    "OpenAPPA Git sync",
   );
   expect(screen.queryByText("Provided by")).not.toBeInTheDocument();
   expect(
-    screen.queryByText(/GitHub user connections need/),
+    screen.queryByText(/GitHub user credentials need/),
   ).not.toBeInTheDocument();
   await user.type(screen.getByRole("textbox", { name: "App ID" }), "123");
   await user.type(
@@ -166,4 +166,66 @@ it("creates the guided OpenAPPA GitHub App with its organization identity", asyn
   );
   await user.click(screen.getByRole("button", { name: "Add" }));
   await waitFor(() => expect(onCreated).toHaveBeenCalledWith("new-credential"));
+});
+
+it.each([
+  {
+    name: "starts shared with everyone for someone who may share that widely",
+    offered: [
+      {
+        subject: { type: "organization", id: "*" },
+        name: "Everyone in the organization",
+      },
+    ],
+    initialGrants: [
+      { subject: { type: "organization", id: "*" }, actions: ["read", "use"] },
+    ],
+  },
+  {
+    name: "starts with its creator alone for someone who may not",
+    offered: [{ subject: { type: "team", id: "team-1" }, name: "Platform" }],
+    initialGrants: [],
+  },
+])("a new credential $name", async ({ offered, initialGrants }) => {
+  let created: unknown;
+  server.use(
+    http.get("http://localhost:9000/api/credentials", () =>
+      HttpResponse.json([]),
+    ),
+    http.get(
+      "http://localhost:9000/api/resource-permissions/credential/creation-subjects",
+      () => HttpResponse.json(offered),
+    ),
+    http.post("http://localhost:9000/api/credentials", async ({ request }) => {
+      created = await request.json();
+      return HttpResponse.json({ id: "new-credential" });
+    }),
+  );
+  const onCreated = vi.fn();
+  const user = userEvent.setup();
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <RuntimeCredentialDefinitionDialog
+        definition={null}
+        initialKind="github_app"
+        initialScope="organization"
+        initialValues={{ name: "Deploy bot", description: "", icon: null }}
+        onClose={() => {}}
+        onCreated={onCreated}
+      />
+    </QueryClientProvider>,
+  );
+  await user.type(screen.getByRole("textbox", { name: "App ID" }), "123");
+  await user.type(
+    screen.getByRole("textbox", { name: "Installation ID" }),
+    "456",
+  );
+  await waitFor(() =>
+    expect(
+      screen.queryAllByText("Everyone in the organization").length > 0,
+    ).toBe(initialGrants.length > 0),
+  );
+  await user.click(screen.getByRole("button", { name: "Add" }));
+  await waitFor(() => expect(onCreated).toHaveBeenCalledWith("new-credential"));
+  expect(created).toMatchObject({ initialGrants });
 });

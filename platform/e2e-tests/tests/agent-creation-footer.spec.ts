@@ -58,6 +58,18 @@ for (const viewport of [
 
       try {
         await expect(next).toBeDisabled();
+        if (family.title === "Agent" && viewport.width === 320) {
+          // The bundled default instructions grow the editor from its 200px
+          // loading placeholder to its 560px ceiling. Scroll only after that
+          // real layout is ready; otherwise a late editor mount moves the
+          // footer after the scroll, or this assertion tests only the loader.
+          await expect(
+            page.getByRole("textbox", { name: "Instructions", exact: true }),
+          ).toBeVisible();
+          await expect(
+            page.getByRole("separator", { name: "Resize instructions" }),
+          ).toHaveAttribute("aria-valuenow", "560");
+        }
         if (mobile) await next.scrollIntoViewIfNeeded();
         await expect(next).toBeInViewport({ ratio: 1 });
         // An enabled Next after filling proves React registered the value,

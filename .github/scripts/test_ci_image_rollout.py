@@ -26,10 +26,10 @@ class ImageReuseTests(unittest.TestCase):
         self.git("init", "-q")
         self.git("config", "user.email", "ci@example.test")
         self.git("config", "user.name", "CI")
-        context = self.repo / "platform/p4_shim_docker_image"
+        context = self.repo / "platform/docker_images/p4_shim"
         context.mkdir(parents=True)
         (context / "Dockerfile").write_text("FROM scratch\n")
-        agent = self.repo / "platform/agent_images"
+        agent = self.repo / "platform/docker_images/agent"
         agent.mkdir()
         (agent / "Dockerfile").write_text("FROM scratch AS agent-test\n")
         shared = self.repo / "platform/backend/src/static/workspace-files.py"
@@ -82,7 +82,7 @@ class ImageReuseTests(unittest.TestCase):
             "SOURCE_VERSION": self.previous_sha,
             "VERSION": self.current_sha,
             "REUSE_PATHS": json.dumps(
-                paths or ["platform/p4_shim_docker_image"]
+                paths or ["platform/docker_images/p4_shim"]
             ),
             "MAX_AGE_DAYS": "7",
             "GITHUB_OUTPUT": str(self.output),
@@ -111,12 +111,12 @@ class ImageReuseTests(unittest.TestCase):
         helper.write_text("print('changed agent helper')\n")
         self.git("add", ".")
         self.git("commit", "-qm", "change shared agent helper")
-        self.reuse(paths=["platform/agent_images", "platform/backend/src/static/workspace-files.py"])
+        self.reuse(paths=["platform/docker_images/agent", "platform/backend/src/static/workspace-files.py"])
         self.assertFalse(self.marker.exists())
         self.assertFalse(self.output.exists())
 
     def test_changed_context_builds_instead(self):
-        context_file = self.repo / "platform/p4_shim_docker_image/Dockerfile"
+        context_file = self.repo / "platform/docker_images/p4_shim/Dockerfile"
         context_file.write_text("FROM scratch\nCOPY changed /changed\n")
         self.git("add", ".")
         self.git("commit", "-qm", "change image")

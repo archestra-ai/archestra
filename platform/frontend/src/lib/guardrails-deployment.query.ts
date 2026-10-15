@@ -75,3 +75,23 @@ export function useUpdateUnsupportedClientAction() {
     },
   });
 }
+
+export function useUpdateBreakTheGlassEnabled() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (breakTheGlassEnabled: boolean) => {
+      const { data, error } = await archestraApiSdk.updateGuardrailsDeployment({
+        body: { breakTheGlassEnabled },
+      });
+      if (error) {
+        handleApiError(error);
+        throw toApiError(error);
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      client.setQueryData(queryKey, data);
+      client.invalidateQueries({ queryKey });
+    },
+  });
+}

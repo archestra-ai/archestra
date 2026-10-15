@@ -10,7 +10,6 @@ import {
   HOOK_RUN_PART_TYPE,
   MCP_TASK_PART_TYPE,
   type McpTaskPartData,
-  OPENAPPA_POLICY_CHANGE_TOOL_SHORT_NAMES,
   parseArchestraAppResourceUri,
   parseFullToolName,
   type ResourceVisibilityScope,
@@ -94,7 +93,7 @@ import {
   PERSISTED_MESSAGE_ID_METADATA_KEY,
 } from "@/lib/chat/chat-utils";
 import { isActionAvailableForConversation } from "@/lib/chat/encrypted-chat";
-import { useGlobalChat } from "@/lib/chat/global-chat.context";
+import { useChatSessionSnapshot } from "@/lib/chat/global-chat.context";
 import {
   hasToolPartsWithAuthErrors,
   isAuthInstructionText,
@@ -189,6 +188,8 @@ interface ChatMessagesProps {
    * When set, the inline error card shows a "Try again" button.
    */
   onChatErrorRetry?: () => void | Promise<void>;
+  /** Focuses the composer so a pending question can be answered in free text. */
+  onTypeAnswer?: () => void;
   error?: Error | null;
   chatErrors?: archestraApiTypes.GetChatConversationResponses["200"]["chatErrors"];
   compactions?: archestraApiTypes.GetChatConversationResponses["200"]["compactions"];
@@ -260,6 +261,7 @@ export function ChatMessages({
   onRegenerateUserMessage,
   onProviderConnected,
   onChatErrorRetry,
+  onTypeAnswer,
   error = null,
   chatErrors = [],
   compactions = [],
@@ -292,11 +294,6 @@ export function ChatMessages({
         // A question renders as its own answer summary, not a circle.
         TOOL_ASK_USER_FULL_NAME,
         getToolName(TOOL_ASK_USER_SHORT_NAME),
-        // A policy change shows its diff before the user is asked to approve.
-        ...OPENAPPA_POLICY_CHANGE_TOOL_SHORT_NAMES.flatMap((shortName) => [
-          getArchestraToolFullName(shortName),
-          getToolName(shortName),
-        ]),
         // Owned-app management tools render the app inline; compact grouping
         // would swallow their parts before MessageTool sees them.
         ...APP_RENDERING_ARCHESTRA_TOOL_SHORT_NAMES.flatMap((shortName) => [
@@ -331,8 +328,7 @@ export function ChatMessages({
   );
 
   // Get early UI data from the chat session
-  const { getSession } = useGlobalChat();
-  const session = conversationId ? getSession(conversationId) : null;
+  const session = useChatSessionSnapshot(conversationId);
   const earlyToolUiStarts = session?.earlyToolUiStarts || {};
   const contextCompaction = session?.contextCompaction;
   const pendingMcpElicitations = session?.pendingMcpElicitations ?? [];
@@ -822,6 +818,7 @@ export function ChatMessages({
                                 session?.resolveMcpElicitation ??
                                 (async () => false)
                               }
+                              onTypeAnswer={onTypeAnswer}
                             />
                           </ErrorBoundary>
                         );
@@ -1129,9 +1126,8 @@ export function ChatMessages({
                               className="w-full"
                               isStreaming={isStreamingThisReasoning}
                               // Nothing has rendered below the run yet, so more
-                              // thinking may still join it — hold it open until
-                              // something does, rather than collapsing between
-                              // the tool calls it spans.
+                              // thinking may still join it — keep reading
+                              // "Thinking…" until something does.
                               keepOpen={
                                 status === "streaming" &&
                                 isLastMessage &&
@@ -1611,6 +1607,7 @@ export function ChatMessages({
               <McpElicitationCard
                 requests={ungroupedPendingChoiceElicitations}
                 onRespond={session.resolveMcpElicitation}
+                onTypeAnswer={onTypeAnswer}
               />
             ) : null}
             <ContextCompactionStatus
@@ -1839,8 +1836,8 @@ const MessageTool = memo(
     const errorText = getToolErrorText({ part, toolResultPart });
     const policyToolName = parseFullToolName(mcpAppToolName).toolName;
     const validationChange = [
-      "preview_openappa_validation_change",
-      "publish_openappa_validation_change",
+      "preview_guardrails_validation_change",
+      "update_guardrails_validation",
     ].includes(getToolShortName(mcpAppToolName) ?? "");
     const policyChange =
       (validationChange ||

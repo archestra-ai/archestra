@@ -61,6 +61,10 @@ export type AppaRequestTools = {
   notice: DeclaredToolSpelling;
   /** The ask_user tool's declaration, when this session declares one. */
   askUser: DeclaredToolSpelling | undefined;
+  /** Exact accepted members; absent for an ordinary singleton declaration. */
+  controlAliases?: readonly DeclaredToolSpelling[];
+  noticeAliases?: readonly DeclaredToolSpelling[];
+  askUserAliases?: readonly DeclaredToolSpelling[];
   /** Declared spellings that resolve to the platform's ask_user. */
   platformToolNames: ReadonlySet<string>;
   /** Tool name to declaration namespace mapping (Codex). */
@@ -126,7 +130,8 @@ export function prepareAppaRequest(params: {
     | "verified"
     | "unverifiedMarkerCount"
     | "gatewayConnected"
-  >;
+  > &
+    Partial<Pick<GatewayToolIdentity, "aliasesOf" | "spellingOf">>;
   /**
    * Markers the proxy already collected before it stripped them
    * unconditionally at request entry.
@@ -305,11 +310,28 @@ export function prepareAppaRequest(params: {
       entries: clientEntries,
       identity: params.identity,
     });
-  let control = remedyTool(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME);
-  let notice = remedyTool(TOOL_GET_REMEDY_PLANS_SHORT_NAME);
-  const heldWhenIncomplete = [control, notice, ...askUserDeclarations].filter(
-    (each): each is DeclaredToolSpelling => each !== undefined,
-  );
+  const controlAliases = remedyTool(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME);
+  const noticeAliases = remedyTool(TOOL_GET_REMEDY_PLANS_SHORT_NAME);
+  const select = (members: readonly DeclaredToolSpelling[]) => {
+    const first = members[0];
+    if (!first) return undefined;
+    const stable = params.identity.spellingOf?.(
+      params.identity.canonicalize(first.name, first.namespace),
+    );
+    return (
+      members.find(
+        (member) =>
+          member.name === stable?.name && member.namespace === stable.namespace,
+      ) ?? first
+    );
+  };
+  let control = select(controlAliases);
+  let notice = select(noticeAliases);
+  const heldWhenIncomplete = [
+    ...controlAliases,
+    ...noticeAliases,
+    ...askUserDeclarations,
+  ];
   if (params.identity.mode === "attested" && control && notice) {
     // Control and notice status come from one gateway: each declaration must
     // still hold its attestation after demotion, and both must name the same
@@ -419,7 +441,10 @@ export function prepareAppaRequest(params: {
     const short =
       name === undefined
         ? null
-        : control && name === control.name && namespace === control.namespace
+        : controlAliases.some(
+              (member) =>
+                member.name === name && member.namespace === namespace,
+            )
           ? TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME
           : isAskUser
             ? TOOL_ASK_USER_SHORT_NAME
@@ -438,13 +463,19 @@ export function prepareAppaRequest(params: {
   // tool was declared in, so restoration can put the call back under it.
   const namespaces = declaredToolNamespaces(params.body);
   // Strip notice tool from provider request so the model cannot invoke it directly.
-  stripAppaTools({ body: params.body, tools: [notice] });
-  stripToolReferences({ body: params.body, tools: [notice] });
+  const notices = noticeAliases.length > 0 ? noticeAliases : [notice];
+  stripAppaTools({ body: params.body, tools: notices });
+  stripToolReferences({ body: params.body, tools: notices });
   return {
     tools: {
       control,
       notice,
-      askUser: askUserDeclarations[0],
+      askUser: select(askUserDeclarations),
+      ...(controlAliases.length > 1 ? { controlAliases } : {}),
+      ...(noticeAliases.length > 1 ? { noticeAliases } : {}),
+      ...(askUserDeclarations.length > 1
+        ? { askUserAliases: askUserDeclarations }
+        : {}),
       platformToolNames,
       namespaces,
     },
@@ -548,25 +579,6 @@ export function sanitizeForwardedRequest(body: object): boolean {
     interactionType,
   });
   return marks || stamps + sanitized > 0;
-}
-
-/**
- * Resolves an OpenCode tool spelling where the gateway label is joined to the
- * tool name with an underscore (`my_gateway_archestra__run_tool`).
- * Only resolves when the label matches one of the organization's gateways.
- */
-export function underscoreLabeledPlatformToolName(
-  name: string,
-  canonicalize: (name: string) => string,
-): string | null {
-  for (let at = name.indexOf("_"); at > 0; at = name.indexOf("_", at + 1)) {
-    const rest = name.slice(at + 1);
-    if (rest.startsWith("_") || !archestraMcpBranding.isToolName(rest))
-      continue;
-    const canonical = canonicalize(`mcp__${name.slice(0, at)}__${rest}`);
-    if (archestraMcpBranding.isToolName(canonical)) return canonical;
-  }
-  return null;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -877,7 +889,13 @@ function platformDeclarationsOf(
       .filter(
         (declaration) =>
           declaration.kind === "b" &&
-          shortToolName(declaration.advertisedName) === shortName,
+          shortToolName(declaration.advertisedName) === shortName &&
+          identity.attestationOf(declaration.name, declaration.namespace)
+            ?.advertisedName === declaration.advertisedName &&
+          identity.attestationOf(declaration.name, declaration.namespace)
+            ?.gatewayId === declaration.gatewayId &&
+          identity.attestationOf(declaration.name, declaration.namespace)
+            ?.kind === "b",
       )
       .map((declaration) => ({
         name: declaration.name,
@@ -898,7 +916,7 @@ function platformDeclarationsOf(
 }
 
 /**
- * The one declaration of a remedy tool this session makes, if any.
+ * Exact declarations of a remedy tool, including explicitly authorized aliases.
  *
  * With attestations, only a declaration the gateway attested as that built-in
  * counts, whatever its spelling, and a lookalike under any label stays a
@@ -907,15 +925,19 @@ function platformDeclarationsOf(
  * demotion, so a replayed marker or a second gateway reads as the conflict it
  * is. Without attestations the identity's own resolution decides.
  *
- * A second declaration of the same tool leaves the session ambiguous about
- * which name to render and which call to trust, so it is refused with the way
- * out, as is a declaration that takes free-form input.
+ * Copyable markers do not authorize an alias group. Only the identity's
+ * client-bound alias proof can admit its surviving members. Other duplicates
+ * are refused, as are accepted declarations that take free-form input.
  */
 function oneRemedyDeclaration(params: {
   shortName: ArchestraToolShortName;
   entries: ReturnType<typeof declaredToolEntries>;
-  identity: Pick<GatewayToolIdentity, "mode" | "canonicalize" | "verified">;
-}): DeclaredToolSpelling | undefined {
+  identity: Pick<
+    GatewayToolIdentity,
+    "mode" | "canonicalize" | "verified" | "attestationOf"
+  > &
+    Partial<Pick<GatewayToolIdentity, "aliasesOf">>;
+}): DeclaredToolSpelling[] {
   const { shortName, entries, identity } = params;
   const found =
     identity.mode === "attested"
@@ -938,18 +960,49 @@ function oneRemedyDeclaration(params: {
     });
   }
   const [first, second] = candidates.values();
-  if (second) {
+  const raw = identity.verified.filter(
+    (declaration) =>
+      declaration.kind === "b" &&
+      shortToolName(declaration.advertisedName) === shortName,
+  );
+  const authorized =
+    identity.mode === "attested" && raw[0]
+      ? identity.aliasesOf?.(raw[0].advertisedName)
+      : undefined;
+  const grouped =
+    authorized !== undefined &&
+    raw.every(
+      (declaration) =>
+        declaration.gatewayId === raw[0].gatewayId &&
+        declaration.advertisedName === raw[0].advertisedName,
+    );
+  if (second && !grouped) {
     throw new ApiError(
       400,
       `OpenAPPA needs exactly one declaration of ${shortName}. This request declares both ${spellingLabel(first)} and ${spellingLabel(second)}. Connect this client to one gateway of this platform at a time.`,
     );
   }
-  if (!first) return undefined;
+  if (!first) return [];
+  const members = grouped
+    ? authorized.filter((member) => {
+        const attestation = identity.attestationOf(
+          member.name,
+          member.namespace,
+        );
+        return (
+          candidates.has(`${member.namespace ?? ""}\u0000${member.name}`) &&
+          attestation?.kind === "b" &&
+          attestation.gatewayId === raw[0].gatewayId &&
+          attestation.advertisedName === raw[0].advertisedName
+        );
+      })
+    : [first];
   const custom = entries.some(
     (entry) =>
-      entry.name === first.name &&
-      entry.namespace === first.namespace &&
-      asToolDeclaration(entry.tool)?.type === "custom",
+      members.some(
+        (member) =>
+          entry.name === member.name && entry.namespace === member.namespace,
+      ) && asToolDeclaration(entry.tool)?.type === "custom",
   );
   if (custom) {
     throw new ApiError(
@@ -957,7 +1010,7 @@ function oneRemedyDeclaration(params: {
       "OpenAPPA control tools require structured function arguments, not free-form custom input",
     );
   }
-  return first;
+  return [...members];
 }
 
 /** The gateway that attested this exact declaration, after demotion. */

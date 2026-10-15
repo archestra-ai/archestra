@@ -1,6 +1,6 @@
 "use client";
 
-import { InfoIcon, KeyRound } from "lucide-react";
+import { InfoIcon, KeyRound, Lock } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { AgentRuntimeCredentialsDialog } from "@/components/agent-runtime-credentials-dialog";
@@ -13,6 +13,7 @@ type MissingCredential = {
   credentialId?: string;
   label: string;
   description?: string;
+  canConnect?: boolean;
 };
 
 type CredentialDeclaration = MissingCredential & {
@@ -34,8 +35,12 @@ export function AgentRuntimeCredentialPrompt({
   onConnected: () => void;
 }) {
   const [connecting, setConnecting] = useState(false);
+  // Credentials the person may not use: no value of theirs can fix these, so
+  // they get a plain "ask an admin" notice rather than a Connect button.
+  const blocked = missing.filter((entry) => entry.canConnect === false);
+  const connectable = missing.filter((entry) => entry.canConnect !== false);
   const helperText =
-    missing.length > 1
+    connectable.length > 1
       ? "Set up the missing credentials to continue."
       : "Connect it once to use it with every compatible Agent.";
 
@@ -69,24 +74,41 @@ export function AgentRuntimeCredentialPrompt({
 
   return (
     <>
-      <InlineNotice className="mt-2">
-        <KeyRound />
-        <span className="font-medium">
-          {missing.length === 1
-            ? `${missing[0].label} is required`
-            : `${missing.length} connections are required`}
-        </span>
-        <InlineNoticeText>{helperText}</InlineNoticeText>
-        <Button
-          type="button"
-          size="xs"
-          variant="outline"
-          className="ml-auto shrink-0 bg-background"
-          onClick={() => setConnecting(true)}
-        >
-          Connect
-        </Button>
-      </InlineNotice>
+      {blocked.length > 0 && (
+        <InlineNotice className="mt-2">
+          <Lock />
+          <span className="font-medium">
+            {blocked.length === 1
+              ? `You don't have access to ${blocked[0].label}`
+              : `You don't have access to ${blocked.length} credentials this Agent needs`}
+          </span>
+          <InlineNoticeText>
+            {blocked.length === 1
+              ? "This Agent needs it to run. Ask an admin to share it with you."
+              : `${blocked.map(({ label }) => label).join(", ")}. Ask an admin to share them with you.`}
+          </InlineNoticeText>
+        </InlineNotice>
+      )}
+      {connectable.length > 0 && (
+        <InlineNotice className="mt-2">
+          <KeyRound />
+          <span className="font-medium">
+            {connectable.length === 1
+              ? `${connectable[0].label} is required`
+              : `${connectable.length} connections are required`}
+          </span>
+          <InlineNoticeText>{helperText}</InlineNoticeText>
+          <Button
+            type="button"
+            size="xs"
+            variant="outline"
+            className="ml-auto shrink-0 bg-background"
+            onClick={() => setConnecting(true)}
+          >
+            Connect
+          </Button>
+        </InlineNotice>
+      )}
       {connecting && (
         <AgentRuntimeCredentialsDialog
           agentId={agentId}

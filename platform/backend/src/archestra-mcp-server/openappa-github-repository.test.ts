@@ -20,6 +20,7 @@ import { type ArchestraContext, executeArchestraTool } from ".";
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle fixture, not a React hook
 const server = useMswServer();
 const CONNECT = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}connect_guardrails_repository`;
+const SYNC = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}sync_guardrails_repository`;
 const commit = "d".repeat(40);
 const repositoryPolicy =
   '[policy]\nversion = 2\n[[policy.tool]]\nname = "read"\ndelta = {}\n[externals]\ntimeout_ms = 2000\nmax_body_bytes = 65536\n';
@@ -157,8 +158,9 @@ describe("connect_guardrails_repository", () => {
     );
 
     expect(response.isError).toBe(true);
+    // A missing policy file is named as such, not as a bare HTTP status.
     expect(JSON.stringify(response.content)).toContain(
-      "Could not connect example/existing-policy: GitHub returned HTTP 404",
+      "Could not connect example/existing-policy: Policy file not found: appa.toml in example/existing-policy.",
     );
     expect((await guardrailsPolicyService.get(organizationId)).content).toBe(
       currentPolicy,
@@ -186,6 +188,24 @@ describe("connect_guardrails_repository", () => {
     expect(await OpenAppaGithubSyncModel.find(organizationId)).toBeNull();
   });
 
+  test("explains a repository the source cannot use and saves nothing", async () => {
+    // The tool advertises `repo` as a plain string, so the source schema's
+    // owner/repository check is what refuses it.
+    for (const repo of ["example", "example//policy", "/example/policy"]) {
+      const response = await executeArchestraTool(
+        CONNECT,
+        { repo, githubAppConfigId },
+        context,
+      );
+
+      expect(response.isError).toBe(true);
+      expect(JSON.stringify(response.content)).toContain(
+        "Use owner/repository, or group/project on GitLab",
+      );
+    }
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toBeNull();
+  });
+
   test("refuses to replace a sync that is already running", async () => {
     await OpenAppaGithubSyncModel.save(organizationId, {
       repo: "example/current-policy",
@@ -204,10 +224,50 @@ describe("connect_guardrails_repository", () => {
 
     expect(response.isError).toBe(true);
     expect(JSON.stringify(response.content)).toContain(
-      "Stop the existing GitHub sync before connecting another repository",
+      "Stop the current Git sync before connecting another repository",
     );
     expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
       repo: "example/current-policy",
     });
+  });
+
+  test("pulls the connected repository's policy on demand", async () => {
+    let served = repositoryPolicy;
+    server.use(
+      http.get(
+        "https://api.github.com/repos/example/existing-policy/contents/appa.toml",
+        () => HttpResponse.text(served),
+      ),
+    );
+    const connected = await executeArchestraTool(
+      CONNECT,
+      { repo: "example/existing-policy", githubAppConfigId },
+      context,
+    );
+    expect(connected.isError).toBeFalsy();
+
+    served = `${repositoryPolicy}# Merged after the repository was connected\n`;
+    const response = await executeArchestraTool(SYNC, {}, context);
+
+    expect(response.isError).toBeFalsy();
+    expect(response.structuredContent).toMatchObject({
+      source: { repo: "example/existing-policy", lastSyncError: null },
+      hasPolicy: true,
+    });
+    expect((await guardrailsPolicyService.get(organizationId)).content).toBe(
+      served,
+    );
+  });
+
+  test("explains that there is nothing to sync without a connected repository", async () => {
+    const response = await executeArchestraTool(SYNC, {}, context);
+
+    expect(response.isError).toBe(true);
+    expect(JSON.stringify(response.content)).toContain(
+      "Connect a GitHub source first",
+    );
+    expect((await guardrailsPolicyService.get(organizationId)).content).toBe(
+      currentPolicy,
+    );
   });
 });

@@ -22,6 +22,7 @@ export const RouteId = {
   GetAgents: "getAgents",
   GetAgentCatalog: "getAgentCatalog",
   GetAllAgents: "getAllAgents",
+  GetAgentOptions: "getAgentOptions",
   GetAgentCredentialReadiness: "getAgentCredentialReadiness",
   CreateAgent: "createAgent",
   CloneAgent: "cloneAgent",
@@ -114,6 +115,8 @@ export const RouteId = {
   GetInternalMcpCatalog: "getInternalMcpCatalog",
   CreateInternalMcpCatalogItem: "createInternalMcpCatalogItem",
   GetInternalMcpCatalogItem: "getInternalMcpCatalogItem",
+  GetInternalMcpCatalogCredentialPreflight:
+    "getInternalMcpCatalogCredentialPreflight",
   GetInternalMcpCatalogTools: "getInternalMcpCatalogTools",
   GetInternalMcpCatalogToolsBatch: "getInternalMcpCatalogToolsBatch",
   UpdateInternalMcpCatalogItem: "updateInternalMcpCatalogItem",
@@ -528,6 +531,10 @@ export const RouteId = {
   GetAgentRunOpenappaReview: "getAgentRunOpenappaReview",
   DecideAgentRunOpenappaReview: "decideAgentRunOpenappaReview",
 
+  // Saved browser login routes (Playwright)
+  GetBrowserStorageStates: "getBrowserStorageStates",
+  DeleteBrowserStorageState: "deleteBrowserStorageState",
+
   // Virtual API Key Routes
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
   GetVirtualApiKeyLabelValues: "virtualApiKeyLabelValues",
@@ -538,6 +545,16 @@ export const RouteId = {
   UpdateVirtualApiKey: "updateVirtualApiKey",
   DeleteVirtualApiKey: "deleteVirtualApiKey",
   BulkDeleteVirtualApiKeys: "bulkDeleteVirtualApiKeys",
+
+  // Unified OAuth Client Routes
+  GetOauthClients: "getOauthClients",
+  GetOauthClientLabelKeys: "oauthClientLabelKeys",
+  GetOauthClientLabelValues: "oauthClientLabelValues",
+  CreateOauthClient: "createOauthClient",
+  UpdateOauthClient: "updateOauthClient",
+  RotateOauthClientSecret: "rotateOauthClientSecret",
+  DeleteOauthClient: "deleteOauthClient",
+  BulkDeleteOauthClients: "bulkDeleteOauthClients",
 
   // LLM OAuth Client Routes
   GetLlmOauthClients: "getLlmOauthClients",
@@ -640,6 +657,10 @@ export const RouteId = {
   DeleteGithubAppConfig: "deleteGithubAppConfig",
 
   // Stored GitHub personal access tokens
+  ListGitCredentials: "listGitCredentials",
+  CreateGitlabToken: "createGitlabToken",
+  ListGitCredentialRepositories: "listGitCredentialRepositories",
+  ListGitCredentialNamespaces: "listGitCredentialNamespaces",
   ListGithubPats: "listGithubPats",
   CreateGithubPat: "createGithubPat",
   UpdateGithubPat: "updateGithubPat",
@@ -698,7 +719,11 @@ export const RouteId = {
   GetAppStatistics: "getAppStatistics",
   GetSkillStatistics: "getSkillStatistics",
   GetOverviewStatistics: "getOverviewStatistics",
+  GetCostStatistics: "getCostStatistics",
   GetCostSavingsStatistics: "getCostSavingsStatistics",
+  GetMcpToolCallUsage: "getMcpToolCallUsage",
+  GetAppUsage: "getAppUsage",
+  GetSkillUsage: "getSkillUsage",
 
   // Secrets Routes
   GetSecretsType: "getSecretsType",
@@ -727,10 +752,13 @@ export const RouteId = {
   DeleteSlackAgentBot: "deleteSlackAgentBot",
   UpdateSlackAppConfigToken: "updateSlackAppConfigToken",
   CreateSlackAgentBotApp: "createSlackAgentBotApp",
+  CreateSlackRouterBotApp: "createSlackRouterBotApp",
   MigrateSlackApps: "migrateSlackApps",
   ConvertSlackAppToAgentBot: "convertSlackAppToAgentBot",
   ListSlackAgentBotChannels: "listSlackAgentBotChannels",
   JoinSlackAgentBotChannel: "joinSlackAgentBotChannel",
+  ListSlackRouterBotChannels: "listSlackRouterBotChannels",
+  JoinSlackRouterBotChannel: "joinSlackRouterBotChannel",
   UpdateTelegramChatOpsConfig: "updateTelegramChatOpsConfig",
   LinkTelegramChatOpsAccount: "linkTelegramChatOpsAccount",
   UnlinkTelegramChatOpsAccount: "unlinkTelegramChatOpsAccount",
@@ -838,6 +866,14 @@ export const RouteId = {
   GetAppaGithubSync: "getAppaGithubSync",
   ConfigureAppaGithubSync: "configureAppaGithubSync",
   CreateAppaGithubRepository: "createAppaGithubRepository",
+  StartAppaGithubApp: "startAppaGithubApp",
+  CompleteAppaGithubApp: "completeAppaGithubApp",
+  GetPendingAppaGithubApp: "getPendingAppaGithubApp",
+  DiscardAppaGithubApp: "discardAppaGithubApp",
+  InstallAppaGithubApp: "installAppaGithubApp",
+  GetAppaGithubAppAccounts: "getAppaGithubAppAccounts",
+  GetAppaGithubAppRepositories: "getAppaGithubAppRepositories",
+  GetAppaGithubRepositoryStatus: "getAppaGithubRepositoryStatus",
   UpdateAppaGithubSync: "updateAppaGithubSync",
   GetOpenappaBatteries: "getOpenappaBatteries",
   GetOpenappaBatteryPolicySource: "getOpenappaBatteryPolicySource",
@@ -852,6 +888,7 @@ export const RouteId = {
   SetOpenappaCredentialBinding: "setOpenappaCredentialBinding",
   GetOpenappaPolicyDeclarations: "getOpenappaPolicyDeclarations",
   AcceptHeldAppaGithubPull: "acceptHeldAppaGithubPull",
+  GetHeldAppaGithubPull: "getHeldAppaGithubPull",
   ConsultOpenappaBatteryHelper: "consultOpenappaBatteryHelper",
   // white-label-ok: operation id for the builtin = "archestra" annotator route, a wire identifier
   AnnotateOpenappaToolWithArchestra: "annotateOpenappaToolWithArchestra",
@@ -958,6 +995,7 @@ export const RouteId = {
   CreateConnectionVirtualKey: "createConnectionVirtualKey",
   CreateConnectionPassthroughKey: "createConnectionPassthroughKey",
   GetConnectionInstructions: "getConnectionInstructions",
+  GetConnectionRuntime: "getConnectionRuntime",
   GetConnectionHealth: "getConnectionHealth",
   GetConnectedClients: "getConnectedClients",
   DisconnectConnectedClient: "disconnectConnectedClient",

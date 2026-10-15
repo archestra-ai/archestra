@@ -1,4 +1,5 @@
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+
 /**
  * LLM Proxy Handler Tests
  *
@@ -25,6 +26,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import db, { schema } from "@/database";
 import {
   InteractionModel,
@@ -259,6 +261,51 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
       // returns data immediately (TTFT = 0, which is invalid).
     });
 
+    test("service-account virtual keys attribute both streaming and nonstreaming requests to the account", async ({
+      makeServiceAccount,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      const account = await makeServiceAccount(testAgent.organizationId);
+      const secret = await makeSecret({ secret: { apiKey: "sk-test" } });
+      const providerKey = await makeLlmProviderApiKey(
+        testAgent.organizationId,
+        secret.id,
+        { provider: "openai" },
+      );
+      const { value, virtualKey } = await VirtualApiKeyModel.create({
+        organizationId: testAgent.organizationId,
+        name: "worker key",
+        authorId: serviceAccountUserId(account.id),
+        providerApiKeys: [
+          { provider: "openai", providerApiKeyId: providerKey.id },
+        ],
+      });
+      expect(virtualKey.createdByServiceAccountId).toBe(account.id);
+      for (const stream of [false, true]) {
+        const response = await app.inject({
+          method: "POST",
+          url: `/v1/openai/${testAgent.id}/chat/completions`,
+          headers: { authorization: `Bearer ${value}` },
+          payload: {
+            model: "gpt-4o",
+            messages: [{ role: "user", content: "Hello" }],
+            stream,
+          },
+        });
+        expect(response.statusCode, response.body).toBe(200);
+      }
+      const interactions = await db
+        .select()
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.virtualKeyId, virtualKey.id));
+      expect(interactions).toHaveLength(2);
+      expect(
+        interactions.every(
+          (row) => row.serviceAccountId === account.id && row.userId === null,
+        ),
+      ).toBe(true);
+    });
     test("non-streaming request increments cost metrics", async () => {
       // Token metrics are NOT reported for these non-streaming stubbed requests
       // because the test clients don't use getObservableFetch(). In production,
@@ -626,6 +673,62 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
           ["ses_root_main", "opencode:main"],
           ["ses_child", "opencode:subagent"],
         ]),
+      );
+    });
+    test("persists Kilo Code main, title, and child-session sources under its own prefix", async () => {
+      const run = (params: {
+        sessionId: string;
+        agent: string;
+        parentSessionId?: string;
+      }) =>
+        app.inject({
+          method: "POST",
+          url: `/v1/openai/${testAgent.id}/chat/completions`,
+          headers: {
+            "content-type": "application/json",
+            authorization: "Bearer test-key",
+            [EXTERNAL_AGENT_ID_HEADER]: "kilo",
+            [OPENCODE_AGENT_HEADER]: params.agent,
+            "x-opencode-session": params.sessionId,
+            ...(params.parentSessionId
+              ? { "x-parent-session-id": params.parentSessionId }
+              : {}),
+          },
+          payload: {
+            model: "gpt-4o",
+            messages: [{ role: "user", content: "Hello" }],
+          },
+        });
+
+      for (const params of [
+        { sessionId: "ses_kilo_title", agent: "title" },
+        { sessionId: "ses_kilo_main", agent: "build" },
+        {
+          sessionId: "ses_kilo_child",
+          agent: "explore",
+          parentSessionId: "ses_kilo_main",
+        },
+      ]) {
+        expect((await run(params)).statusCode).toBe(200);
+      }
+
+      const rows = await db
+        .select({
+          sessionId: schema.interactionsTable.sessionId,
+          sessionSource: schema.interactionsTable.sessionSource,
+          source: schema.interactionsTable.source,
+        })
+        .from(schema.interactionsTable)
+        .where(eq(schema.interactionsTable.profileId, testAgent.id));
+      expect(new Map(rows.map((row) => [row.sessionId, row.source]))).toEqual(
+        new Map([
+          ["ses_kilo_title", "kilo:title"],
+          ["ses_kilo_main", "kilo:main"],
+          ["ses_kilo_child", "kilo:subagent"],
+        ]),
+      );
+      expect(new Set(rows.map((row) => row.sessionSource))).toEqual(
+        new Set(["kilo_session"]),
       );
     });
   });

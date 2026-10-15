@@ -17,25 +17,44 @@ import {
 import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
+import { encryptEncryptedChatValue } from "@/content-encryption/encrypted-chat";
 import { getDatabaseConnectionString } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 import { resolveLogContentMode } from "@/log-content";
 import logger from "@/logging";
 import MemberModel from "@/models/member";
+import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
+import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import {
   expandCommandExecutionPolicyRules,
   normalizeCommandExecutionArguments,
 } from "@/openappa/command-normalization";
+import { compositionView } from "@/openappa/composition-view";
 import { currentTrajectory } from "@/openappa/current-trajectory";
-import { openappaDeclarations } from "@/openappa/declarations";
+import {
+  helperUrlBase,
+  openappaDeclarations,
+  type UnreadableCredential,
+} from "@/openappa/declarations";
 import {
   declareExistingInstalls,
   seedCredentialBindings,
 } from "@/openappa/declare-installs";
-import { openappaFailure } from "@/openappa/failure";
+import {
+  openappaEncryptedChat,
+  withOpenappaContentEncryption,
+} from "@/openappa/encrypted-chat";
+import {
+  OpenappaRetiredAnnotatorError,
+  OpenappaRootOnlyError,
+  openappaFailure,
+  unansweredAnnotationNotice,
+} from "@/openappa/failure";
+import { unservedAnnotator } from "@/openappa/retired-annotators";
 import { captureYellReport } from "@/openappa/yell-receiver";
+import { readYellResult } from "@/openappa/yell-session";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import type { ToolNameCanonicalizer } from "@/routes/proxy/utils/gateway-tool-names";
 import {
@@ -43,6 +62,7 @@ import {
   isGuardrailsV2Active,
 } from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
+import { policyView } from "./result-view";
 import type { DeclaredToolSpelling } from "./wire";
 
 export { APPA_PARENT_HEADER, APPA_SESSION_HEADER };
@@ -193,6 +213,9 @@ type ProcessedToolResult = {
   code?: string;
   /** The runtime denied this call, so `content` is its ruling, not an output. */
   denied?: true;
+  /** Current denial metadata; omitted offers are unknown, not an empty list. */
+  offers?: string[];
+  review?: Array<{ offer_id: string; text: string }>;
 };
 type ChildEndOutcome =
   | { decision: "release"; crossed: true }
@@ -235,9 +258,15 @@ export async function getOpenappaStatus(params: {
   if (!openappaEnabled()) return null;
   try {
     const module = await binding();
-    return await module.getOpenappaStatus(
+    return await withOpenappaContentEncryption(
       params.organizationId,
       params.sessionId,
+      (encryption) =>
+        module.getOpenappaStatus(
+          params.organizationId,
+          params.sessionId,
+          encryption,
+        ),
     );
   } catch (error) {
     throw openappaFailure(error);
@@ -277,10 +306,26 @@ export async function declareOpenappaInstalls(): Promise<void> {
   }
 }
 
+/**
+ * Recompose every organization once the declarations are carried over, so a
+ * composition an earlier build stored takes in what this build composes, such
+ * as the member roster. Never rejects: a server starts whatever it finds.
+ */
+export async function recompileAllOnStart(): Promise<void> {
+  if (!openappaEnabled()) return;
+  try {
+    await openappaBatteriesService.recompileAll();
+  } catch (error) {
+    logger.error({ err: error }, "Recomposing the OpenAPPA policies failed");
+  }
+}
+
 export async function executeYell(params: {
   session: OpenAppaSession;
   toolCallId: string;
   args: { message: string; with_trajectory: boolean };
+  /** Break the glass is on, so this yell also turns OpenAPPA off for the session. */
+  brokeTheGlass?: boolean;
 }): Promise<CallToolResult> {
   if (!openappaYellEnabled()) {
     return {
@@ -288,18 +333,31 @@ export async function executeYell(params: {
       content: [{ type: "text", text: "OpenAPPA reporting is disabled" }],
     };
   }
+  const encryptedChat = openappaEncryptedChat(
+    params.session.organization_id,
+    params.session.session_id,
+  );
   const record = await OpenAppaYellModel.record({
     organizationId: params.session.organization_id,
     callerId: params.session.caller_id ?? "unknown",
     sessionId: params.session.session_id,
     toolCallId: params.toolCallId,
-    message: params.args.message,
+    message: encryptedChat
+      ? JSON.stringify(
+          encryptEncryptedChatValue(params.args.message, {
+            ...encryptedChat.audit,
+            context: "openappa_yells.message",
+          }),
+        )
+      : params.args.message,
     withTrajectory: params.args.with_trajectory,
+    superyell: params.brokeTheGlass ?? false,
   });
   try {
     const result = await captureYellReport({
       id: record.id,
       organizationId: record.organizationId,
+      encryptedChat: encryptedChat?.audit,
       send: async (receiver) =>
         runtimeToolResult(
           await dispatch(params.session, {
@@ -323,7 +381,7 @@ export async function executeYell(params: {
         content: [
           {
             type: "text",
-            text: "Report saved. You can download it or investigate it in chat from Guardrails → Yells.",
+            text: "Report recorded for review in Guardrails → Yells.",
           },
         ],
       };
@@ -420,17 +478,24 @@ async function dispatchWithPrincipal(params: {
   return withRuntime(
     session.organization_id,
     (module, policy) =>
-      module.dispatchHook(
-        JSON.stringify({
-          ...session,
-          ...event,
-          ...principal,
-          // Last, so nothing spread above can override the host's reading.
-          withhold_consult_content: withholdConsultContent(),
-        }),
-        policy,
+      withOpenappaContentEncryption(
+        session.organization_id,
+        session.session_id,
+        (encryption) =>
+          module.dispatchHook(
+            JSON.stringify({
+              ...session,
+              ...event,
+              ...principal,
+              // Last, so nothing spread above can override the host's reading.
+              withhold_consult_content: withholdConsultContent(),
+            }),
+            policy,
+            encryption,
+          ),
       ),
     policy,
+    session,
   );
 }
 
@@ -496,6 +561,7 @@ async function withRuntime(
     policy: DispatchPolicy,
   ) => Promise<string>,
   batchPolicy?: DispatchPolicy,
+  session?: OpenAppaSession,
 ) {
   const policy = batchPolicy ?? (await effectivePolicy(organizationId));
   try {
@@ -503,7 +569,77 @@ async function withRuntime(
     const rawResult = await call(module, policy);
     return NativeDecisionSchema.parse(JSON.parse(rawResult));
   } catch (error) {
-    throw openappaFailure(error);
+    throw await dispatchFailure({
+      organizationId,
+      session,
+      served: policy.content,
+      error,
+    });
+  }
+}
+
+async function dispatchFailure(params: {
+  organizationId: string;
+  session?: OpenAppaSession;
+  served: string;
+  error: unknown;
+}): Promise<ApiError> {
+  const missing = await missingOpeningAnnotator(params.session, params.served);
+  if (missing !== null)
+    return openappaFailure(new OpenappaRetiredAnnotatorError(missing));
+  return openappaFailure(
+    (await rootOnlyRefusal(params.organizationId)) ?? params.error,
+  );
+}
+
+/**
+ * When the runtime refuses the served document because it is the root text
+ * alone (no composition ever opened), what was refused, said plainly: the
+ * runtime's own words only name the `include` list it cannot open.
+ */
+async function rootOnlyRefusal(
+  organizationId: string,
+): Promise<OpenappaRootOnlyError | null> {
+  try {
+    const stored = await OpenAppaEffectivePolicyModel.find(organizationId);
+    return stored && compositionView(stored).served.kind === "root_only"
+      ? new OpenappaRootOnlyError(stored.lastError ?? "")
+      : null;
+  } catch (error) {
+    logger.warn(
+      { organizationId, err: error },
+      "OpenAPPA could not read the stored composition after a refused dispatch",
+    );
+    return null;
+  }
+}
+
+async function missingOpeningAnnotator(
+  session: OpenAppaSession | undefined,
+  served: string,
+): Promise<string | null> {
+  if (!session) return null;
+  try {
+    const root = await OpenAppaSessionModel.root({
+      organizationId: session.organization_id,
+      sessionId: session.session_id,
+    });
+    if (!root) return null;
+    const module = await binding();
+    const opening = await withOpenappaContentEncryption(
+      session.organization_id,
+      session.session_id,
+      (encryption) => module.readOpenappaOpeningPolicy(root, encryption),
+    );
+    return opening === null
+      ? null
+      : unservedAnnotator({ opening, served, helperBase: helperUrlBase("") });
+  } catch (error) {
+    logger.warn(
+      { err: error },
+      "OpenAPPA could not compare the opening policy with the served policy",
+    );
+    return null;
   }
 }
 
@@ -519,16 +655,53 @@ async function effectivePolicy(
   organizationId: string,
 ): Promise<DispatchPolicy> {
   try {
-    const rawContent = (
-      await openappaBatteriesService.getEffectivePolicy(organizationId)
-    ).content;
+    const { policy, readable } =
+      await openappaBatteriesService.readForDispatch(organizationId);
+    let unreadable: UnreadableCredential[] = [];
+    let dispatch: DispatchPolicy | null = null;
+    try {
+      dispatch = await openappaDeclarations.dispatchPolicy({
+        organizationId,
+        content: expandCommandExecutionPolicyRules(policy.content),
+        onUnreadable: (found) => {
+          unreadable = found;
+        },
+      });
+    } catch (error) {
+      if (!retainedKeyLost({ unreadable, readable })) throw error;
+    }
+    if (dispatch && !retainedKeyLost({ unreadable, readable })) return dispatch;
+    // A credential the policy was composed to read is unreadable now. Compose
+    // again first, as a fresh read would have: a kept annotator that needed it
+    // is dropped, so its sessions are told to start a new conversation instead
+    // of failing their consults on a key that is not set.
+    logger.info(
+      { organizationId, keys: unreadable.map(({ key }) => key) },
+      "OpenAPPA composes again before a dispatch: a credential the served policy reads cannot be read",
+    );
+    const recompiled = await openappaBatteriesService.recompile(organizationId);
     return await openappaDeclarations.dispatchPolicy({
       organizationId,
-      content: expandCommandExecutionPolicyRules(rawContent),
+      content: expandCommandExecutionPolicyRules(recompiled.content),
     });
   } catch (error) {
     throw openappaFailure(error);
   }
+}
+
+/**
+ * Whether a key the served policy's retirement inputs held readable cannot be
+ * read now. With no snapshot to compare against, any unreadable key counts.
+ */
+function retainedKeyLost(params: {
+  unreadable: UnreadableCredential[];
+  readable: ReadonlySet<string> | null;
+}): boolean {
+  const { unreadable, readable } = params;
+  return (
+    unreadable.length > 0 &&
+    (readable === null || unreadable.some(({ key }) => readable.has(key)))
+  );
 }
 
 /** One policy read shared by a batch of dispatches, taken by the first of them. */
@@ -756,7 +929,13 @@ async function approveToolResult(params: {
     outputSource,
     ...(reason ? { reason } : {}),
     ...(code ? { code } : {}),
-    ...(decision.decision === "deny_call" ? { denied: true as const } : {}),
+    ...(decision.decision === "deny_call"
+      ? {
+          denied: true as const,
+          offers: decision.offers?.map((offer) => offer.offer_id),
+          review: decision.review,
+        }
+      : {}),
   };
 }
 // SPDX-SnippetEnd
@@ -786,6 +965,18 @@ function unexecutedControlResult(content: unknown): ProcessedToolResult {
 
 const UNEXECUTED_REMEDY_QUESTION_HINT =
   "[appa] If the user must decide, ask with a question tool, not in plain text: the client's own question tool if it has one, otherwise ask_user. Quote the ruling's reason and the plan in the ruling's own words, and offer Approve and Deny.";
+
+/**
+ * The body handed to the runtime for a result: a string as it is, anything
+ * else as JSON. The runtime records this body, so the payload of each binary
+ * part the client sent is a marker here, never its bytes.
+ */
+function resultOutput(result: CommonToolResult): string {
+  if (typeof result.content === "string") return result.content;
+  return JSON.stringify(
+    result.structured ? policyView(result.content) : result.content,
+  );
+}
 
 function toolResultText(content: unknown): string {
   if (typeof content === "string") return content;
@@ -841,7 +1032,7 @@ function isOutputDecision(
 export async function processProxyResults(params: {
   session: OpenAppaSession;
   results: CommonToolResult[];
-  canonicalize: (name: string) => string;
+  canonicalize: ToolNameCanonicalizer;
   /** The proxy verifies that this exact result belongs to an issued question. */
   isUserQuestion?: (result: CommonToolResult) => boolean;
   controlToolName?: string;
@@ -877,6 +1068,21 @@ export async function processProxyResults(params: {
   });
   const updates: Record<string, ProcessedToolResult> = {};
   for (const result of params.results) {
+    const reportingName = archestraMcpBranding.getToolShortName(
+      params.canonicalize(result.name, result.namespace),
+    );
+    const reportingResult = ["yell", "run_tool"].some(
+      (name) => name === reportingName,
+    )
+      ? await readYellResult(params.session, result.id)
+      : undefined;
+    if (reportingResult !== undefined) {
+      updates[result.id] = {
+        content: reportingResult,
+        outputSource: "runtime",
+      };
+      continue;
+    }
     if (params.trustedChat && isSeededAppRenderToolResult(result.content))
       continue;
     // The runtime released no question call, so it would withhold the answer.
@@ -894,10 +1100,7 @@ export async function processProxyResults(params: {
     const approved = await approveToolResult({
       session: params.session,
       toolCallId: result.id,
-      output:
-        typeof result.content === "string"
-          ? result.content
-          : JSON.stringify(result.content),
+      output: resultOutput(result),
       outcome,
       controlToolName: params.controlToolName,
       policy,
@@ -935,6 +1138,11 @@ type AppaCallDecision =
        * that id's result with the ruling.
        */
       recorded?: true;
+      /**
+       * The call's annotator gave no answer. The runtime has no record of
+       * the call, so its result is answered by the proxy, not the runtime.
+       */
+      unanswered?: true;
     };
 
 // SPDX-SnippetBegin
@@ -955,8 +1163,10 @@ export async function evaluateToolCalls(
     looseRunToolDispatch?: boolean;
     /** This session's control tool declaration, as the client spells it. */
     control?: DeclaredToolSpelling;
+    controlAliases?: readonly DeclaredToolSpelling[];
     /** This session's notice tool declaration, as the client spells it. */
     notice?: DeclaredToolSpelling;
+    noticeAliases?: readonly DeclaredToolSpelling[];
     /** True for a call that names a child trajectory (Task, spawn_agent, task). */
     isSpawn?: (name: string, namespace?: string) => boolean;
     /** Runtime launches are resolved per call, including run_tool targets. */
@@ -1010,16 +1220,22 @@ export async function evaluateToolCalls(
       // Only the declared control tool itself, in its own namespace: a
       // same-named tool elsewhere is someone else's and is evaluated.
       if (
-        options.control &&
-        call.name === options.control.name &&
-        call.namespace === options.control.namespace
+        (
+          options.controlAliases ?? (options.control ? [options.control] : [])
+        ).some(
+          (member) =>
+            call.name === member.name && call.namespace === member.namespace,
+        )
       ) {
         return { kind: "control" as const };
       }
       if (
-        options.notice &&
-        call.name === options.notice.name &&
-        call.namespace === options.notice.namespace
+        (
+          options.noticeAliases ?? (options.notice ? [options.notice] : [])
+        ).some(
+          (member) =>
+            call.name === member.name && call.namespace === member.namespace,
+        )
       ) {
         return { kind: "allow" as const };
       }
@@ -1080,7 +1296,30 @@ export async function evaluateToolCalls(
         });
         if (refusal) return refusal;
       }
-      const decision = await dispatchCall(event);
+      let decision: Awaited<ReturnType<typeof dispatchCall>>;
+      try {
+        decision = await dispatchCall(event);
+      } catch (error) {
+        // An annotator that gives no answer refuses only this call. Failing the
+        // batch would cancel the calls already admitted, and an admitted call
+        // that spent an approval would lose it.
+        const notice = unansweredAnnotationNotice(error);
+        if (notice === null) throw error;
+        logger.warn(
+          {
+            err: error,
+            toolCallId: call.id,
+            sessionId: session.session_id,
+            tool,
+          },
+          "OpenAPPA could not rule on a tool call because its annotator gave no answer; the call is returned as a notice",
+        );
+        return {
+          kind: "deny" as const,
+          feedback: notice,
+          unanswered: true as const,
+        };
+      }
       if (
         spawn &&
         (decision.decision === "pass_control" ||
@@ -1107,8 +1346,8 @@ export async function evaluateToolCalls(
         feedback: decisionMessage(decision),
         offers:
           decision.decision === "deny_call"
-            ? (decision.offers ?? [])
-                .map((offer) => offer.offer_id)
+            ? decision.offers
+                ?.map((offer) => offer.offer_id)
                 .filter((id) => id.length > 0)
             : [],
         review:
@@ -1545,26 +1784,32 @@ export async function executeRemedyByOffer(params: {
   known: boolean;
 }> {
   const decision = await withRuntime(params.organizationId, (module, policy) =>
-    module.executeRemedyByOffer(
-      JSON.stringify({
-        organization_id: params.organizationId,
-        trajectory: currentTrajectory({
-          session_id: params.sessionId,
-          ...(params.parentId ? { parent_id: params.parentId } : {}),
-        }),
-        ...(params.callerId ? { caller_id: params.callerId } : {}),
-        execution_mode: params.toolCallId ? "tracked" : "untracked",
-        ...(params.toolCallId ? { tool_call_id: params.toolCallId } : {}),
-        original_arguments: params.originalArguments,
-        arguments: params.args,
-        presentation: nativePresentation(params.controlToolName),
-        ...(params.ruling ? { ruling: params.ruling } : {}),
-        ...(params.precheckRefusal
-          ? { precheck_refusal: params.precheckRefusal }
-          : {}),
-        withhold_consult_content: withholdConsultContent(),
-      }),
-      policy,
+    withOpenappaContentEncryption(
+      params.organizationId,
+      params.sessionId,
+      (encryption) =>
+        module.executeRemedyByOffer(
+          JSON.stringify({
+            organization_id: params.organizationId,
+            trajectory: currentTrajectory({
+              session_id: params.sessionId,
+              ...(params.parentId ? { parent_id: params.parentId } : {}),
+            }),
+            ...(params.callerId ? { caller_id: params.callerId } : {}),
+            execution_mode: params.toolCallId ? "tracked" : "untracked",
+            ...(params.toolCallId ? { tool_call_id: params.toolCallId } : {}),
+            original_arguments: params.originalArguments,
+            arguments: params.args,
+            presentation: nativePresentation(params.controlToolName),
+            ...(params.ruling ? { ruling: params.ruling } : {}),
+            ...(params.precheckRefusal
+              ? { precheck_refusal: params.precheckRefusal }
+              : {}),
+            withhold_consult_content: withholdConsultContent(),
+          }),
+          policy,
+          encryption,
+        ),
     ),
   );
   if (decision.decision !== "mcp_result" || !decision.offer) {
@@ -1880,10 +2125,16 @@ export async function loadOfferReview(params: {
     )
       return null;
     const module = await binding();
-    const result = await module.loadOfferReview(
+    const result = await withOpenappaContentEncryption(
       params.organizationId,
       params.sessionId,
-      params.offerId,
+      (encryption) =>
+        module.loadOfferReview(
+          params.organizationId,
+          params.sessionId,
+          params.offerId,
+          encryption,
+        ),
     );
     if (!result) return null;
     return {
@@ -2023,13 +2274,31 @@ function nativePresentation(
 ): {
   control_tool: string;
   supports_delegation: boolean;
+  yell_tool?: string;
 } {
+  const controlTool =
+    controlToolName ??
+    archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME);
+  const yellTool = openappaYellEnabled()
+    ? yellSpelling(controlTool)
+    : undefined;
   return {
-    control_tool:
-      controlToolName ??
-      archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
+    control_tool: controlTool,
     supports_delegation: supportsDelegation,
+    ...(yellTool ? { yell_tool: yellTool } : {}),
   };
+}
+
+/**
+ * yell as the model calls it. The gateway always lists yell beside
+ * execute_remedy_plan, so a client spells both with the same prefix
+ * (`mcp__gateway__archestra__…`); a control tool spelled any other way names
+ * no yell.
+ */
+function yellSpelling(controlTool: string): string | undefined {
+  return controlTool.endsWith(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME)
+    ? `${controlTool.slice(0, -TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME.length)}yell`
+    : undefined;
 }
 
 /**

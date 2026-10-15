@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import { assert, vi } from "vitest";
 import { A2AProtocolRole } from "@/agents/a2a/a2a-protocol";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
@@ -19,6 +20,7 @@ import {
   InteractionModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
+  RuntimeCredentialDefinitionModel,
 } from "@/models";
 import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
@@ -809,6 +811,119 @@ describe("Agent Runtime routes", () => {
     });
   });
 
+  test("keeps legacy ordering and pages sidebar runs by their latest state change", async () => {
+    const oldTask = await createTask(agent.id, new Date("2026-01-03"));
+    const newTask = await createTask(agent.id, new Date("2026-01-02"));
+    await createRun({
+      taskId: oldTask.id,
+      actorUserId: user.id,
+    });
+    await createRun({
+      taskId: newTask.id,
+      actorUserId: user.id,
+    });
+    const legacy = await app.inject({
+      method: "GET",
+      url: "/api/agent-runs?limit=1",
+    });
+    expect(legacy.statusCode).toBe(200);
+    expect(legacy.json().data[0].taskId).toBe(newTask.id);
+    const recent = await app.inject({
+      method: "GET",
+      url: "/api/agent-runs?sort=recent&limit=1",
+    });
+    expect(recent.statusCode).toBe(200);
+    expect(recent.json().data[0].taskId).toBe(oldTask.id);
+    expect(recent.json().pagination.hasNext).toBe(true);
+    const next = await app.inject({
+      method: "GET",
+      url: "/api/agent-runs?sort=recent&limit=1&offset=1",
+    });
+    expect(next.json().data[0].taskId).toBe(newTask.id);
+  });
+
+  test("pages pinned runs by pin time rather than activity time", async () => {
+    const recentlyPinned = await createTask(agent.id, new Date("2020-01-01"));
+    const recentlyActive = await createTask(agent.id, new Date("2026-01-01"));
+    await createRun({
+      taskId: recentlyPinned.id,
+      actorUserId: user.id,
+      pinnedAt: new Date("2026-01-02"),
+    });
+    await createRun({
+      taskId: recentlyActive.id,
+      actorUserId: user.id,
+      pinnedAt: new Date("2020-01-02"),
+    });
+    const first = await app.inject({
+      method: "GET",
+      url: "/api/agent-runs?pinned=true&sort=pinned&limit=1",
+    });
+    expect(first.statusCode).toBe(200);
+    expect(first.json().data[0].taskId).toBe(recentlyPinned.id);
+    expect(first.json().pagination.hasNext).toBe(true);
+    const next = await app.inject({
+      method: "GET",
+      url: "/api/agent-runs?pinned=true&sort=pinned&limit=1&offset=1",
+    });
+    expect(next.json().data[0].taskId).toBe(recentlyActive.id);
+  });
+
+  test("finds older pinned and searched runs without exposing another actor's sessions", async ({
+    makeUser,
+  }) => {
+    const oldTask = await createTask(agent.id);
+    const ordinaryTask = await createTask(agent.id);
+    const foreignTask = await createTask(agent.id);
+    const foreignUser = await makeUser();
+    await createRun({
+      taskId: oldTask.id,
+      actorUserId: user.id,
+      title: "Old 100% report",
+      pinnedAt: new Date("2020-01-02"),
+    });
+    await createRun({
+      taskId: ordinaryTask.id,
+      actorUserId: user.id,
+      title: "Ordinary report",
+    });
+    await createRun({
+      taskId: foreignTask.id,
+      actorUserId: foreignUser.id,
+      title: "Foreign 100% report",
+      pinnedAt: new Date(),
+    });
+    const pinned = await app.inject({
+      method: "GET",
+      url: "/api/agent-runs?pinned=true&sort=recent&limit=1",
+    });
+    expect(pinned.statusCode).toBe(200);
+    expect(
+      pinned.json().data.map((run: { taskId: string }) => run.taskId),
+    ).toEqual([oldTask.id]);
+    expect(pinned.json().pagination.total).toBe(1);
+    const unpinned = await app.inject({
+      method: "GET",
+      url: "/api/agent-runs?pinned=false",
+    });
+    expect(
+      unpinned.json().data.map((run: { taskId: string }) => run.taskId),
+    ).toEqual([ordinaryTask.id]);
+    const searched = await app.inject({
+      method: "GET",
+      url: "/api/agent-runs?search=%25",
+    });
+    expect(searched.statusCode).toBe(200);
+    expect(
+      searched.json().data.map((run: { taskId: string }) => run.taskId),
+    ).toEqual([oldTask.id]);
+    const invalid = await app.inject({
+      method: "GET",
+      url: "/api/agent-runs?pinned=invalid",
+    });
+    expect(invalid.statusCode).toBe(400);
+  });
+
   test("lets only the initiating user cancel an active run and audits the transition", async ({
     makeAdmin,
     makeMember,
@@ -1152,6 +1267,49 @@ describe("Agent Runtime routes", () => {
       url: `/api/agents/${agent.id}/runtime/preflight`,
     });
     expect(preflight.statusCode).toBe(403);
+  });
+
+  test("refuses a personal value for a credential the caller may not use", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    // Keep the saved credential behind PERSONAL_TOKEN from members: no
+    // grant on it reaches them, so neither does storing a value of it.
+    const definition = await RuntimeCredentialDefinitionModel.find({
+      organizationId,
+      key: "github",
+    });
+    assert(definition);
+    const scope = {
+      organizationId,
+      resource: "credential" as const,
+      scope: definition.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(scope);
+    await ResourcePermissionPolicyModel.replace({
+      ...scope,
+      revision: policy?.revision ?? 0,
+      grants: [],
+    });
+    const member = await makeUser();
+    await makeMember(member.id, organizationId, { role: "member" });
+    user = member;
+
+    const refused = await app.inject({
+      method: "PUT",
+      url: `/api/agents/${agent.id}/runtime/credentials/PERSONAL_TOKEN`,
+      payload: { value: "personal-value" },
+    });
+
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json().error.message).toBe(
+      'You don\'t have access to the "Personal token" credential. Ask an admin to share it with you.',
+    );
+    const rows = await db
+      .select({ userId: schema.runtimeCredentialConnectionsTable.userId })
+      .from(schema.runtimeCredentialConnectionsTable)
+      .where(eq(schema.runtimeCredentialConnectionsTable.userId, member.id));
+    expect(rows).toEqual([]);
   });
 
   test("reuses a typed personal connection across Agents without copying its value", async ({
@@ -2103,7 +2261,112 @@ describe("Agent Runtime routes", () => {
     expect(remove).not.toHaveBeenCalled();
   });
 
-  async function createTask(agentId: string) {
+  test("service accounts read, update, cancel and delete only their own run workspace", async ({
+    makeServiceAccount,
+  }) => {
+    const account = await makeServiceAccount(organizationId);
+    const other = await makeServiceAccount(organizationId);
+    const task = await A2ATaskModel.create({
+      contextId: (
+        await A2AContextModel.create({
+          actorKind: "serviceAccount",
+          actorId: account.id,
+        })
+      ).id,
+      agentId: agent.id,
+      state: "TASK_STATE_SUBMITTED",
+    });
+    const run = await AgentRunModel.create({
+      organizationId,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "serviceAccount",
+      actorId: account.id,
+      actorUserId: null,
+      workloadName: `agent-run-${task.id}`,
+      backend: "kubernetes",
+      runtimeScope: "archestra-dev",
+    });
+    const workspace = await AgentWorkspaceModel.create({
+      organizationId,
+      agentId: agent.id,
+      actorKind: "serviceAccount",
+      actorId: account.id,
+      backend: "kubernetes",
+      runtimeScope: run.runtimeScope,
+      workloadName: run.workloadName,
+      state: "suspended",
+      lastTaskId: task.id,
+      expiresAt: new Date(Date.now() + 3600000),
+    });
+    const human = user;
+    user = { ...human, id: serviceAccountUserId(other.id) };
+    for (const [method, suffix, payload] of [
+      ["GET", "", undefined],
+      ["PATCH", "", { title: "forbidden" }],
+      ["POST", "/cancel", undefined],
+      ["DELETE", "/workspace", undefined],
+    ] as const) {
+      const denied = await app.inject({
+        method,
+        url: `/api/agent-runs/${task.id}${suffix}`,
+        payload,
+      });
+      expect(denied.statusCode, denied.body).toBe(404);
+    }
+    user = { ...human, id: serviceAccountUserId(account.id) };
+    const listed = await app.inject({ method: "GET", url: "/api/agent-runs" });
+    expect(listed.statusCode, listed.body).toBe(200);
+    expect(
+      listed.json().data.map((row: { taskId: string }) => row.taskId),
+    ).toContain(task.id);
+    const read = await app.inject({
+      method: "GET",
+      url: `/api/agent-runs/${task.id}`,
+    });
+    expect(read.statusCode, read.body).toBe(200);
+    const renamed = await app.inject({
+      method: "PATCH",
+      url: `/api/agent-runs/${task.id}`,
+      payload: { title: "worker run" },
+    });
+    expect(renamed.statusCode, renamed.body).toBe(200);
+    expect((await AgentRunModel.findByTaskId(task.id))?.title).toBe(
+      "worker run",
+    );
+    vi.mocked(cancelDetachedAgentTask).mockResolvedValue({
+      id: task.id,
+      contextId: task.contextId,
+      status: { state: "TASK_STATE_CANCELED" },
+    });
+    const canceled = await app.inject({
+      method: "POST",
+      url: `/api/agent-runs/${task.id}/cancel`,
+    });
+    expect(canceled.statusCode, canceled.body).toBe(200);
+    expect(cancelDetachedAgentTask).toHaveBeenCalledWith({
+      actor: { kind: "serviceAccount", id: account.id, organizationId },
+      agentId: agent.id,
+      taskId: task.id,
+    });
+    await AgentRunModel.close({ id: run.id, logs: "retained transcript" });
+    vi.spyOn(agentRuntimeManager, "deleteWorkspace").mockResolvedValue(
+      undefined,
+    );
+    vi.spyOn(agentRuntimeManager, "releaseRun").mockResolvedValue(undefined);
+    const removed = await app.inject({
+      method: "DELETE",
+      url: `/api/agent-runs/${task.id}/workspace`,
+    });
+    expect(removed.statusCode, removed.body).toBe(200);
+    expect((await AgentWorkspaceModel.findById(workspace.id))?.state).toBe(
+      "deleted",
+    );
+    expect((await AgentRunModel.findByTaskId(task.id))?.logs).toBe(
+      "retained transcript",
+    );
+  });
+  async function createTask(agentId: string, stateChangedAt?: Date) {
     const context = await A2AContextModel.create({
       actorKind: "user",
       actorId: user.id,
@@ -2112,6 +2375,7 @@ describe("Agent Runtime routes", () => {
       contextId: context.id,
       agentId,
       state: "TASK_STATE_SUBMITTED",
+      stateChangedAt,
     });
   }
 
@@ -2119,6 +2383,8 @@ describe("Agent Runtime routes", () => {
     taskId: string;
     actorUserId: string;
     projectId?: string;
+    title?: string;
+    pinnedAt?: Date;
   }) {
     return await AgentRunModel.create({
       organizationId,
@@ -2128,6 +2394,8 @@ describe("Agent Runtime routes", () => {
       actorId: params.actorUserId,
       actorUserId: params.actorUserId,
       projectId: params.projectId,
+      title: params.title,
+      pinnedAt: params.pinnedAt,
       workloadName: `agent-run-${params.taskId}`,
       backend: "kubernetes",
       runtimeScope: "archestra-dev",

@@ -1,4 +1,8 @@
-import { archestraApiSdk, type PaginationMeta } from "@archestra/shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  type PaginationMeta,
+} from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { handleApiError, throwOnApiError } from "./utils";
@@ -51,6 +55,7 @@ export type ScheduleTrigger = {
 };
 
 export type ScheduleTriggerRun = {
+  blockedBy?: archestraApiTypes.GetScheduleTriggerRunResponses["200"]["blockedBy"];
   id: string;
   organizationId: string;
   triggerId: string;

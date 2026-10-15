@@ -12,6 +12,7 @@ import {
 import { vi } from "vitest";
 import config, { parseOpenAppaConfig } from "@/config";
 import * as database from "@/database";
+import { enterpriseTier } from "@/enterprise-tier";
 import {
   A2AContextModel,
   A2ATaskModel,
@@ -51,6 +52,7 @@ const native = vi.hoisted(() => ({
     runtimeCredentials: [],
     errors: [],
   })),
+  validateHostedOpenappaPolicy: vi.fn(async () => []),
   composeOpenappaPolicy: vi.fn(async (input: { root: string }) => ({
     content: input.root,
     errors: [],
@@ -444,6 +446,89 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
     expect(native.executeRemedyByOffer).not.toHaveBeenCalled();
   });
 
+  test("application runtimes discover tools with OpenAPPA disabled and reject forged bindings", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    await GuardrailsDeploymentModel.setEnabled(false);
+    vi.spyOn(enterpriseTier, "isOpenappaActive").mockReturnValue(false);
+    config.openappa.offerSigningSecret = "test-runtime-binding-secret-32chars";
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const current = await persistBoundRun({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorKind: "oauthClient",
+      actorId: "mcp_oauth_automation",
+    });
+    const spec = {
+      env: {},
+      secretEnv: {} as Record<string, string>,
+      activeDeadlineSeconds: 120,
+    };
+    await stampRuntimeBinding({
+      spec,
+      organizationId: org.id,
+      workspaceId: current.workspace.id,
+      taskId: current.task.id,
+    });
+    const { value } = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Runtime token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+    const headers = {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+      authorization: `Bearer ${value}`,
+      [RUNTIME_BINDING_HEADER]: spec.secretEnv[RUNTIME_BINDING_ENV],
+      "x-archestra-run-id": current.task.id,
+    };
+    for (const method of [
+      "initialize",
+      "tools/list",
+      "resources/list",
+      "prompts/list",
+    ]) {
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers,
+        payload: {
+          jsonrpc: "2.0",
+          id: 1,
+          method,
+          ...(method === "initialize"
+            ? {
+                params: {
+                  protocolVersion: "2025-03-26",
+                  capabilities: {},
+                  clientInfo: { name: "test", version: "1" },
+                },
+              }
+            : {}),
+        },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().error, response.body).toBeUndefined();
+    }
+    const forged = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: { ...headers, [RUNTIME_BINDING_HEADER]: "forged" },
+      payload: { jsonrpc: "2.0", id: 2, method: "tools/list" },
+    });
+    expect(forged.statusCode).toBe(400);
+    const sibling = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: { ...headers, "x-archestra-run-id": crypto.randomUUID() },
+      payload: { jsonrpc: "2.0", id: 3, method: "tools/list" },
+    });
+    expect(sibling.statusCode).toBe(400);
+  });
+
   test("a stamped launch binding reaches the gateway through the Claude wrapper", async ({
     makeAgent,
     makeOrganization,
@@ -698,7 +783,7 @@ async function stampSibling(
 async function persistBoundRun(params: {
   organizationId: string;
   agentId: string;
-  actorKind: "team" | "system";
+  actorKind: "team" | "system" | "oauthClient";
   actorId: string;
 }) {
   const task = await A2ATaskModel.create({
@@ -744,7 +829,13 @@ async function persistContinuation(current: {
     id: string;
     organizationId: string;
     agentId: string;
-    actorKind: "team" | "system" | "organization" | "user";
+    actorKind:
+      | "team"
+      | "system"
+      | "organization"
+      | "user"
+      | "oauthClient"
+      | "serviceAccount";
     actorId: string;
     workloadName: string;
   };
@@ -790,7 +881,7 @@ async function claudeWrapperHeaders(params: {
   await chmod(stub, 0o755);
   const script = join(
     process.cwd(),
-    "../agent_images/bin/archestra-claude-code",
+    "../docker_images/agent/bin/archestra-claude-code",
   );
   const result = spawnSync(script, [], {
     encoding: "utf8",

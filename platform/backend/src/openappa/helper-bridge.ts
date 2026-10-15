@@ -4,12 +4,15 @@ import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtim
 import { withDeadline } from "@/k8s/mcp-server-runtime";
 import logger from "@/logging";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
+import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OrganizationModel from "@/models/organization";
 import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service";
 import { resolveCredentialValue } from "@/services/credentials";
 import { skillRootPath } from "@/skills-sandbox/runtime-image";
 import { shellQuote } from "@/utils/shell-quote";
 import { archestraAudience } from "./archestra-audience";
+import { deployedFromRow } from "./battery-target";
+import { servedHelperSource } from "./composition-view";
 import { openappaDeclarations } from "./declarations";
 
 /**
@@ -99,18 +102,17 @@ class OpenAppaHelperBridge {
     externalName: string;
     request: string;
   }): Promise<HelperConsultOutcome> {
-    const install = await OpenAppaBatteryInstallModel.findById(
-      params.installId,
-    );
-    // A row the recompose deleted takes its helper endpoint with it.
+    const install = await this.helperSource(params.installId);
     if (!install) return { kind: "not_found" };
     const battery = await openappaDeclarations.resolveInstalled({
       organizationId: install.organizationId,
       name: install.batteryName,
       packageHash: install.packageHash,
     });
+    // The row records the target the composition deployed, whose helpers it serves.
+    const deployed = battery && deployedFromRow(battery, install.target);
     const matches =
-      battery?.externals.filter(
+      deployed?.externals.filter(
         (candidate) => candidate.name === params.externalName,
       ) ?? [];
     const kind = consultKind(params.request);
@@ -118,7 +120,7 @@ class OpenAppaHelperBridge {
       matches.length === 1
         ? matches[0]
         : matches.find((candidate) => candidate.kind === sectionForKind(kind));
-    if (!battery || !external) return { kind: "not_found" };
+    if (!battery || !deployed || !external) return { kind: "not_found" };
     if (
       archestraAudience.serves({
         batteryName: install.batteryName,
@@ -132,7 +134,7 @@ class OpenAppaHelperBridge {
       });
 
     const resolved = await Promise.all(
-      battery.credentials.map((credential) =>
+      deployed.credentials.map((credential) =>
         this.resolveCredential({ install, credential }),
       ),
     );
@@ -200,6 +202,40 @@ class OpenAppaHelperBridge {
           reason: "the helper did not print a JSON object",
           diagnostics,
         };
+  }
+
+  /**
+   * The install a helper URL names, as the composition the runtime enforces
+   * deployed it. While a refusal holds, the install rows already describe
+   * the refused plan, so the enforced composition's record answers: its
+   * package, target and credential keys, even for a row the refused plan
+   * deleted. Otherwise the row answers, and a deleted row takes its helper
+   * endpoint with it.
+   */
+  private async helperSource(installId: string): Promise<{
+    id: string;
+    organizationId: string;
+    batteryName: string;
+    packageHash: string | null;
+    target: "multi-user" | null;
+    credentialBindings: Record<string, string>;
+  } | null> {
+    const row = await OpenAppaBatteryInstallModel.findById(installId);
+    const stored = row
+      ? await OpenAppaEffectivePolicyModel.findServed(row.organizationId)
+      : await OpenAppaEffectivePolicyModel.findServingInstall(installId);
+    const served = stored ? servedHelperSource(stored, installId) : null;
+    if (served) return served;
+    return row
+      ? {
+          id: row.id,
+          organizationId: row.organizationId,
+          batteryName: row.batteryName,
+          packageHash: row.packageHash,
+          target: row.target,
+          credentialBindings: row.credentialBindings,
+        }
+      : null;
   }
 
   private async resolveCredential(params: {

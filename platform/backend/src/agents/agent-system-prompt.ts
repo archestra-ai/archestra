@@ -65,6 +65,8 @@ export const TOOL_DENIAL_INSTRUCTION =
  */
 export function buildAppaRemedyInstruction(params: {
   canAskUser: boolean;
+  /** The session sees yell, so it can report instead of retrying. */
+  canYell?: boolean;
 }): string {
   const executeRemedyPlan = archestraMcpBranding.getToolName(
     TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
@@ -73,7 +75,13 @@ export function buildAppaRemedyInstruction(params: {
   const noFit = params.canAskUser
     ? `If no plan fits, ask the user with ${askUser}, pass the offer ids, and say in the question which part of their request the plan would prevent.`
     : "If no plan fits, or the plan is not authorized, describe the block and the available plans, and stop.";
-  return `The organization's guardrails policy can block a tool call. The call then returns a ruling as its result. The ruling explains the block and can offer remedy plans, each with an offer id. In your questions and replies, describe the block and each plan in the ruling's own words, and do not guess who the readers are beyond the audiences the ruling names. A ruling is a policy decision, not a user decision, so the rule above about unapproved tools does not apply to it. A plan that narrows who may read this session's results, or lowers its trust, is one the policy already permits. It fits unless the narrower session could no longer do what the user asked for or will clearly ask next, for example post, share, or send to people outside the audiences the ruling names. Apply a fitting plan with ${executeRemedyPlan}, using the plan's offer id and plan. ${executeRemedyPlan} routes the plan to review when the policy requires approval. ${noFit} After the plan is authorized, make the exact retry your next call: until it runs, the session keeps its current label and calls that need the plan stay blocked. In your reply, name the plan that was applied and who chose it. If the plan is denied or dismissed, tell the user briefly that the action stays blocked, and stop that action. Do not offer the same plan again, ask the same question again, or invite the user to reconsider. If the ruling offers no plan, explain the block to the user.`;
+  const report = params.canYell ? ` ${buildYellInstruction()}` : "";
+  return `The organization's guardrails policy can block a tool call. The call then returns a ruling as its result. The ruling explains the block and can offer remedy plans, each with an offer id. In your questions and replies, describe the block and each plan in the ruling's own words, and do not guess who the readers are beyond the audiences the ruling names. A ruling is a policy decision, not a user decision, so the rule above about unapproved tools does not apply to it. A plan that narrows who may read this session's results, or lowers its trust, is one the policy already permits. It fits unless the narrower session could no longer do what the user asked for or will clearly ask next, for example post, share, or send to people outside the audiences the ruling names. Apply a fitting plan with ${executeRemedyPlan}, using the plan's offer id and plan. ${executeRemedyPlan} routes the plan to review when the policy requires approval. ${noFit} After the plan is authorized, make the exact retry your next call: until it runs, the session keeps its current label and calls that need the plan stay blocked. In your reply, name the plan that was applied and who chose it. If the plan is denied or dismissed, tell the user briefly that the action stays blocked, and stop that action. Do not offer the same plan again, ask the same question again, or invite the user to reconsider. If the ruling offers no plan, explain the block to the user.${report}`;
+}
+
+/** @public — when to report, shared with external clients' guidance. */
+export function buildYellInstruction(): string {
+  return `If a plan makes no sense, you keep getting blocked, the user keeps being asked to approve similar calls, or the user is frustrated, call ${archestraMcpBranding.getToolName("yell")}.`;
 }
 
 /** @public — canonical preamble for a project's instructions, asserted by the
@@ -268,7 +276,10 @@ export async function buildAgentSystemPrompt(params: {
   // Only while OpenAPPA is enforcing: with it off there are no rulings to act
   // on and the instruction would describe tools the session cannot see.
   const appaRemedyInstruction = (await isGuardrailsV2Active())
-    ? buildAppaRemedyInstruction({ canAskUser: askUserAvailable })
+    ? buildAppaRemedyInstruction({
+        canAskUser: askUserAvailable,
+        canYell: archestraMcpBranding.getToolName("yell") in mcpTools,
+      })
     : null;
 
   const openedAppPrompt = openedApp
@@ -671,12 +682,13 @@ function buildFileHandlingInstruction(
     const deliver = hasSandbox
       ? `To hand a file to the user it must land there: compose inline content with \`${saveFile}\`, or export something already on the sandbox disk (a script's output, an attachment) with \`${downloadFile}\` by its path. Never read a file's bytes back and paste them into your reply or \`${saveFile}\` — export by path so the bytes never pass through your context. Use \`${uploadFile}\` to pull a persistent or inline file into the sandbox to process it.`
       : `To hand a file to the user, write it to the persistent files with \`${saveFile}\`; it then appears in their Files panel.`;
-    paragraphs.push(
-      `The files the user can see live in the conversation's persistent files (their Files panel), not in the sandbox workspace. ${deliver}`,
-    );
+    const where = hasSandbox
+      ? "The files the user can see live in the conversation's persistent files (their Files panel), not in the sandbox workspace."
+      : "The files the user can see live in the conversation's persistent files (their Files panel).";
+    paragraphs.push(`${where} ${deliver}`);
   } else if (hasSandbox) {
-    // Sandbox runtime without the persistent-file tools (Projects off): the only
-    // way to surface a file to the user is to export it from the sandbox.
+    // Sandbox runtime without the persistent-file tools (not assigned): the
+    // only way to surface a file to the user is to export it from the sandbox.
     paragraphs.push(
       `To hand a file to the user, export it from the sandbox with \`${downloadFile}\` by its path; its bytes are recorded for the user's Files panel without passing through your reply.`,
     );
@@ -708,8 +720,11 @@ function buildFileHandlingInstruction(
     const readBinary = hasSandbox
       ? ` For other binary types (PDF, docx, xlsx, archives), \`${uploadFile}\` it into the sandbox and inspect with \`${runCommand}\`.`
       : "";
+    const notOnDisk = hasSandbox
+      ? `, not on the sandbox disk. Call \`${searchFiles}\` first (omit the query to list them; matching is on filename only, so list and scan when the description isn't a filename), then act on the \`ref\` it returns; don't \`ls ${SKILL_SANDBOX_HOME}\` for it, since files the user dropped into the Files panel never appear there.`
+      : `. Call \`${searchFiles}\` first (omit the query to list them; matching is on filename only, so list and scan when the description isn't a filename), then act on the \`ref\` it returns.`;
     paragraphs.push(
-      `If the user points at a file they did not attach this turn — "my report", "the doc from earlier", "update the spreadsheet" — it is in the persistent files, not on the sandbox disk. Call \`${searchFiles}\` first (omit the query to list them; matching is on filename only, so list and scan when the description isn't a filename), then act on the \`ref\` it returns; don't \`ls ${SKILL_SANDBOX_HOME}\` for it, since files the user dropped into the Files panel never appear there. To read it, \`${readFile}\` returns text as numbered lines and PNG/JPEG/WebP/GIF inline, straight from the persistent store.${readBinary} If a text or image attachment is already visible to you inline, use it as-is rather than re-fetching it.`,
+      `If the user points at a file they did not attach this turn — "my report", "the doc from earlier", "update the spreadsheet" — it is in the persistent files${notOnDisk} To read it, \`${readFile}\` returns text as numbered lines and PNG/JPEG/WebP/GIF inline, straight from the persistent store.${readBinary} If a text or image attachment is already visible to you inline, use it as-is rather than re-fetching it.`,
     );
   }
 

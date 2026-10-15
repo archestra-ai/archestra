@@ -22,6 +22,7 @@ import {
 import {
   createContext,
   type ReactNode,
+  startTransition,
   useCallback,
   useContext,
   useEffect,
@@ -66,6 +67,7 @@ import {
   resolveCanonicalMessageId,
 } from "@/lib/chat/chat-utils";
 import { encryptedChatRequestHeaders } from "@/lib/chat/encrypted-chat";
+import { useStreamStall } from "@/lib/chat/stream-stall.hook";
 import { readThinkingEffort } from "@/lib/chat/thinking-effort-cache";
 import appConfig from "@/lib/config/config";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -73,6 +75,8 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 const SESSION_CLEANUP_TIMEOUT = 10 * 60 * 1000; // 10 min
 const MAX_AUTO_RETRIES = 2;
 const AUTO_RETRY_DELAY_MS = 1500;
+// Reattach attempts per stall episode. A successful stream resets the count.
+const MAX_STALL_RECOVERIES = 3;
 const MCP_ELICITATION_FAILURE_CLEAR_MS = 30_000;
 
 export type ContextCompactionState = {
@@ -126,6 +130,8 @@ interface ChatSession {
   transportActivitySequence: number;
   /** Monotonic signal advanced only when the assistant response progresses. */
   responseProgressSequence: number;
+  /** True once silent-stall reattaches are used up; the stall notice shows only then. */
+  stallRecoveryExhausted: boolean;
   sendMessage: (
     message: Parameters<ReturnType<typeof useChat>["sendMessage"]>[0],
   ) => void;
@@ -215,11 +221,15 @@ interface ChatContextValue {
     conversationId: string;
     initialMessages?: UIMessage[];
   }) => void;
+  /** Latest session snapshot. Not reactive: render through useChatSessionSnapshot. */
   getSession: (conversationId: string) => ChatSession | undefined;
   clearSession: (conversationId: string) => void;
-  notifySessionUpdate: () => void;
+  /** Subscribe to session snapshot changes (fires on every streamed chunk). */
+  subscribeSessionUpdates: (listener: () => void) => () => void;
   scheduleCleanup: (conversationId: string) => void;
   cancelCleanup: (conversationId: string) => void;
+  /** Conversation IDs whose session is submitting or streaming. Changes only on status transitions. */
+  generatingConversationIds: ReadonlySet<string>;
   /** Conversation IDs whose title should currently play the typing animation */
   animatingTitleIds: Set<string>;
   /** Mark a conversation's title to play the typing animation (auto-clears after a few seconds) */
@@ -241,8 +251,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const cleanupTimersRef = useRef(new Map<string, NodeJS.Timeout>());
   const usageCountRef = useRef(new Map<string, number>());
   const [sessions, setSessions] = useState<Set<string>>(new Set());
-  // Version counter to trigger re-renders when sessions update
-  const [sessionVersion, setSessionVersion] = useState(0);
+  const sessionUpdateListenersRef = useRef(new Set<() => void>());
+  const [generatingConversationIds, setGeneratingConversationIds] = useState<
+    ReadonlySet<string>
+  >(new Set());
   // Conversation IDs currently playing the title typing animation
   const [animatingTitleIds, setAnimatingTitleIds] = useState<Set<string>>(
     new Set(),
@@ -250,10 +262,31 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   // Per-conversation timers that clear the animation, so they don't cancel each other
   const titleAnimationTimersRef = useRef(new Map<string, NodeJS.Timeout>());
 
-  // Increment version when sessions change (triggers re-renders in consumers)
-  const notifySessionUpdate = useCallback(() => {
-    setSessionVersion((v) => v + 1);
+  const subscribeSessionUpdates = useCallback((listener: () => void) => {
+    sessionUpdateListenersRef.current.add(listener);
+    return () => {
+      sessionUpdateListenersRef.current.delete(listener);
+    };
   }, []);
+
+  // Session snapshots change on every streamed chunk. Only subscribers re-render
+  // for those; the context value changes just when a conversation starts or
+  // stops generating, so global consumers such as the sidebar stay put.
+  const notifySessionUpdate = useCallback(
+    (update?: { conversationId: string; status: ChatSession["status"] }) => {
+      for (const listener of sessionUpdateListenersRef.current) {
+        listener();
+      }
+      if (update) {
+        setConversationGenerating(
+          setGeneratingConversationIds,
+          update.conversationId,
+          update.status === "submitted" || update.status === "streaming",
+        );
+      }
+    },
+    [],
+  );
 
   const markTitleAnimating = useCallback((conversationId: string) => {
     setAnimatingTitleIds((prev) => new Set(prev).add(conversationId));
@@ -320,6 +353,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           next.delete(conversationId);
           return next;
         });
+        setConversationGenerating(
+          setGeneratingConversationIds,
+          conversationId,
+          false,
+        );
       }
     }, SESSION_CLEANUP_TIMEOUT);
 
@@ -355,14 +393,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  // Get a session
-  // biome-ignore lint/correctness/useExhaustiveDependencies: sessionVersion as dependency to make this reactive
   const getSession = useCallback(
-    (conversationId: string) => {
-      const session = sessionsRef.current.get(conversationId);
-      return session;
-    },
-    [sessionVersion],
+    (conversationId: string) => sessionsRef.current.get(conversationId),
+    [],
   );
 
   // Clear a session manually
@@ -381,6 +414,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         next.delete(conversationId);
         return next;
       });
+      setConversationGenerating(
+        setGeneratingConversationIds,
+        conversationId,
+        false,
+      );
       notifySessionUpdate();
     },
     [notifySessionUpdate],
@@ -405,9 +443,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       registerSession,
       getSession,
       clearSession,
-      notifySessionUpdate,
+      subscribeSessionUpdates,
       scheduleCleanup,
       cancelCleanup,
+      generatingConversationIds,
       animatingTitleIds,
       markTitleAnimating,
     }),
@@ -415,9 +454,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       registerSession,
       getSession,
       clearSession,
-      notifySessionUpdate,
+      subscribeSessionUpdates,
       scheduleCleanup,
       cancelCleanup,
+      generatingConversationIds,
       animatingTitleIds,
       markTitleAnimating,
     ],
@@ -451,7 +491,10 @@ function ChatSessionHook({
   conversationId: string;
   initialMessages: UIMessage[];
   sessionsRef: React.MutableRefObject<Map<string, ChatSession>>;
-  notifySessionUpdate: () => void;
+  notifySessionUpdate: (update: {
+    conversationId: string;
+    status: ChatSession["status"];
+  }) => void;
   markTitleAnimating: (conversationId: string) => void;
 }) {
   const queryClient = useQueryClient();
@@ -557,6 +600,10 @@ function ChatSessionHook({
   // Auto-retry state for transient errors
   const retryCountRef = useRef(0);
   const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Silent recovery from a stalled connection: "aborting" while the hung request
+  // is being cancelled, "replaying" while the active-run replay streams back.
+  const stallRecoveryPhaseRef = useRef<"aborting" | "replaying" | null>(null);
+  const stallRecoveryCountRef = useRef(0);
   // Set while auto-retrying a *structured* (backend-persisted) error, so a
   // successful retry can wipe the now-stale persisted error card the backend
   // never clears on its own.
@@ -754,7 +801,14 @@ function ChatSessionHook({
       // either keeps a recovery in flight or clears the flag for terminal
       // errors.
       if (!isError) {
-        setIsRecovering(false);
+        if (!isAbort) {
+          stallRecoveryCountRef.current = 0;
+        }
+        // The stall recovery's own abort ends this stream, but the reattach is
+        // still in flight: its promise clears the flag once the replay ends.
+        if (stallRecoveryPhaseRef.current === null) {
+          setIsRecovering(false);
+        }
         // A structured error we silently auto-retried just succeeded — clear the
         // stale persisted error card the backend leaves behind (it never clears it
         // on a new run). Reset the flag first so a re-entrant finish can't double-fire.
@@ -1230,6 +1284,59 @@ function ChatSessionHook({
     });
   }, [status, setMessages]);
 
+  // A silent stall is treated like a dropped connection. The hung request is
+  // aborted client-side (the backend run keeps going: a client disconnect only
+  // stops it when a stop flag is set), then the run is reattached through the
+  // active-run replay, the same path the duplicate-run 409 uses.
+  const { isTransportStalled } = useStreamStall({
+    status,
+    transportActivitySequence: streamActivity.transportSequence,
+    responseProgressSequence: streamActivity.responseProgressSequence,
+    messages,
+  });
+  // Keyed on the stall alone: re-running on identity changes of `stop` would
+  // start a second recovery for the same stall.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: fires once per stall
+  useEffect(() => {
+    if (
+      !isTransportStalled ||
+      stallRecoveryCountRef.current >= MAX_STALL_RECOVERIES
+    ) {
+      return;
+    }
+    stallRecoveryCountRef.current += 1;
+    stallRecoveryPhaseRef.current = "aborting";
+    // Same queued follow-ups an explicit steering stop keeps.
+    preserveQueuedMessagesOnAbortRef.current = {
+      userMessageId: latestMessagesRef.current.findLast(
+        (message) => message.role === "user",
+      )?.id,
+    };
+    if (previousMessagesRef.current.length > 0) {
+      frozenMessagesRef.current = previousMessagesRef.current;
+    }
+    previousMessagesRef.current = [];
+    setIsRecovering(true);
+    stop();
+  }, [isTransportStalled]);
+
+  // Reattach once the aborted request has settled and the status is ready.
+  useEffect(() => {
+    if (status !== "ready" || stallRecoveryPhaseRef.current !== "aborting") {
+      return;
+    }
+    stallRecoveryPhaseRef.current = "replaying";
+    const errorSeq = errorSeqRef.current;
+    void resumeStream().then(() => {
+      stallRecoveryPhaseRef.current = null;
+      // Same as the duplicate-run reattach: no onError means the replay ended
+      // cleanly, so nothing else would clear the recovery flag.
+      if (recoveringRef.current && errorSeqRef.current === errorSeq) {
+        setIsRecovering(false);
+      }
+    });
+  }, [status, resumeStream, setIsRecovering]);
+
   const resumeAttemptedRef = useRef(false);
   useEffect(() => {
     if (!shouldResume || resumeAttemptedRef.current) {
@@ -1357,11 +1464,19 @@ function ChatSessionHook({
       return;
     }
     queueDrainInFlightRef.current = true;
+    const fileParts = (next.files ?? []).map((file) => ({
+      type: "file" as const,
+      ...file,
+    }));
     sendMessageRef.current?.({
       role: "user",
-      // a bare skill command carries no text; keep an empty text part so the
-      // message is well-formed and the backend can inject the skill
-      parts: [{ type: "text", text: next.text }],
+      // Text first, then attachments — the same order as a direct send. A
+      // bare skill command carries no text; keep an empty text part so the
+      // message is well-formed and the backend can inject the skill.
+      parts:
+        next.text.trim() || fileParts.length === 0
+          ? [{ type: "text", text: next.text }, ...fileParts]
+          : fileParts,
       metadata: {
         createdAt: new Date().toISOString(),
         ...(next.skill ? { skill: next.skill } : {}),
@@ -1565,6 +1680,8 @@ function ChatSessionHook({
     messages: displayedMessages,
     transportActivitySequence: streamActivity.transportSequence,
     responseProgressSequence: streamActivity.responseProgressSequence,
+    stallRecoveryExhausted:
+      stallRecoveryCountRef.current >= MAX_STALL_RECOVERIES,
     sendMessage,
     regenerateUserMessage,
     stop: stopSession,
@@ -1613,7 +1730,7 @@ function ChatSessionHook({
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional — deps trigger the sync, ref provides the snapshot
   useEffect(() => {
     sessionsRef.current.set(conversationId, sessionRef.current);
-    notifySessionUpdate();
+    notifySessionUpdate({ conversationId, status });
   }, [
     conversationId,
     stableMessages,
@@ -1726,8 +1843,8 @@ export function useChatSession(params: {
   enabled?: boolean;
 }) {
   const { conversationId, initialMessages, enabled = true } = params;
-  const { registerSession, getSession, scheduleCleanup, cancelCleanup } =
-    useGlobalChat();
+  const { registerSession, scheduleCleanup, cancelCleanup } = useGlobalChat();
+  const session = useChatSessionSnapshot(conversationId);
 
   useEffect(() => {
     if (!conversationId || !enabled) return;
@@ -1747,5 +1864,67 @@ export function useChatSession(params: {
     scheduleCleanup,
   ]);
 
-  return conversationId ? getSession(conversationId) : null;
+  return session;
+}
+
+/**
+ * The latest snapshot of a conversation's chat session, re-rendering as it
+ * changes. Snapshots change on every streamed chunk, so those re-renders run as
+ * transitions: a keystroke in the composer interrupts an in-progress transcript
+ * render instead of queueing behind it.
+ */
+export function useChatSessionSnapshot(
+  conversationId: string | undefined,
+): ChatSession | null {
+  const { getSession, subscribeSessionUpdates } = useGlobalChat();
+  // Held in state, never read from the session map during render. A render
+  // that bails out — an unrelated urgent update landing while this transition
+  // is still pending — keeps the hook values it computed but drops its
+  // effects. Reading the map there would record the new session in effect
+  // dependencies without running those effects, so an effect keyed on the
+  // session's stable functions (sendMessage, setMessages) or an unchanged
+  // status would never fire: a just-created chat would never send its
+  // opening message.
+  const [snapshot, setSnapshot] = useState(() => ({
+    conversationId,
+    session: conversationId ? (getSession(conversationId) ?? null) : null,
+  }));
+
+  useEffect(() => {
+    const sync = () => {
+      const session = conversationId
+        ? (getSession(conversationId) ?? null)
+        : null;
+      setSnapshot((current) =>
+        current.conversationId === conversationId && current.session === session
+          ? current
+          : { conversationId, session },
+      );
+    };
+    // The session may have been registered between the first render and
+    // this subscription.
+    sync();
+    return subscribeSessionUpdates(() => {
+      startTransition(sync);
+    });
+  }, [conversationId, getSession, subscribeSessionUpdates]);
+
+  return snapshot.conversationId === conversationId ? snapshot.session : null;
+}
+
+function setConversationGenerating(
+  setIds: React.Dispatch<React.SetStateAction<ReadonlySet<string>>>,
+  conversationId: string,
+  generating: boolean,
+) {
+  setIds((prev) => {
+    if (prev.has(conversationId) === generating) return prev;
+    const next = new Set(prev);
+    if (generating) {
+      next.add(conversationId);
+    } else {
+      next.delete(conversationId);
+    }
+    return next;
+  });
 }

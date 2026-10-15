@@ -298,6 +298,77 @@ describe("chat agent roster", () => {
   });
 });
 
+describe("agent detail", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("never seeds an editing form from selector-only metadata", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    queryClient.setQueryData(
+      ["agents", "options", {}],
+      [{ id: "agent-1", name: "Only a name" }],
+    );
+    let finish: ((value: never) => void) | undefined;
+    sdk.getAgent.mockImplementation(
+      () =>
+        new Promise<never>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const { result } = setup(() => useProfile("agent-1"), queryClient);
+    expect(result.current.data).toBeUndefined();
+    await act(async () => {
+      finish?.({
+        data: {
+          id: "agent-1",
+          name: "Full Agent",
+          systemPrompt: "Configured prompt",
+          tools: [{ id: "tool-1" }],
+        },
+      } as never);
+    });
+    await waitFor(() =>
+      expect(result.current.data?.systemPrompt).toBe("Configured prompt"),
+    );
+    expect(result.current.data?.tools).toEqual([{ id: "tool-1" }]);
+  });
+
+  it("fetches the agent's tools instead of trusting a list fetched without them", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    // The roster every picker loads: complete agents except for their tools.
+    queryClient.setQueryData(
+      [
+        "agents",
+        "all",
+        { agentType: "agent", excludeBuiltIn: true, includeTools: false },
+      ],
+      [{ id: "agent-1", name: "Agent", tools: [] }],
+    );
+    sdk.getAgent.mockResolvedValue({
+      data: {
+        id: "agent-1",
+        name: "Agent",
+        tools: [{ id: "tool-1", catalogId: "catalog-1" }],
+      },
+      error: undefined,
+    } as never);
+
+    const { result } = setup(() => useProfile("agent-1"), queryClient);
+
+    await waitFor(() =>
+      expect(result.current.data?.tools).toEqual([
+        { id: "tool-1", catalogId: "catalog-1" },
+      ]),
+    );
+    expect(sdk.getAgent).toHaveBeenCalledWith({ path: { id: "agent-1" } });
+  });
+});
+
 describe("agent pin mutation", () => {
   beforeEach(() => {
     vi.clearAllMocks();

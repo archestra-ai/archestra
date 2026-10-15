@@ -159,4 +159,60 @@ describe("virtual key billing team and spend cap", () => {
       spendCap: { limitValue: 250, cleanupInterval: "1w" },
     });
   });
+  test("enables future providers without reminting the token and records the configuration change", async ({
+    makeUser,
+    makeMember,
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    caller = await makeUser();
+    await makeMember(caller.id, organizationId, { role: "admin" });
+    const provider = await makeLlmProviderApiKey(
+      organizationId,
+      (await makeSecret()).id,
+      { provider: "openai" },
+    );
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "future",
+        providerApiKeys: [
+          { provider: "openai", providerApiKeyId: provider.id },
+        ],
+      },
+    });
+    expect(created.statusCode).toBe(200);
+    const key = created.json();
+    const updated = await app.inject({
+      method: "PATCH",
+      url: `/api/llm-virtual-keys/${key.id}`,
+      payload: {
+        name: "future",
+        includeFutureProviders: true,
+        providerApiKeys: [],
+      },
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json()).toMatchObject({
+      id: key.id,
+      includeFutureProviders: true,
+    });
+    expect(updated.json()).not.toHaveProperty("value");
+    const [audit] = await db
+      .select({
+        before: schema.auditLogsTable.before,
+        after: schema.auditLogsTable.after,
+      })
+      .from(schema.auditLogsTable)
+      .where(
+        and(
+          eq(schema.auditLogsTable.resourceId, key.id),
+          eq(schema.auditLogsTable.httpMethod, "PATCH"),
+        ),
+      );
+    expect(audit.before).toMatchObject({ includeFutureProviders: false });
+    expect(audit.after).toMatchObject({ includeFutureProviders: true });
+    expect(JSON.stringify(audit)).not.toContain(key.value);
+  });
 });

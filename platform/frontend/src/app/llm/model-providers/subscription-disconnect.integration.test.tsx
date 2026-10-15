@@ -37,6 +37,9 @@ vi.mock("sonner");
 vi.mock("@/lib/clients/auth/auth-client");
 
 const server = setupServer(
+  // Exercise the individual reads, including per-test organization overrides.
+  http.get("/api/bootstrap", () => HttpResponse.json(null, { status: 401 })),
+  http.get("/api/resource-permissions", () => HttpResponse.json([])),
   http.get("/api/llm-provider-api-keys/labels/keys", () =>
     HttpResponse.json([]),
   ),
@@ -47,16 +50,21 @@ const server = setupServer(
   http.get("/api/organization", () => HttpResponse.json(organizationSeed)),
   http.get("/api/teams", () => HttpResponse.json([])),
 );
+const unhandledRequests: string[] = [];
+server.events.on("request:unhandled", ({ request }) => {
+  unhandledRequests.push(`${request.method} ${new URL(request.url).pathname}`);
+});
 const memberId = "test-member";
 const permissions = {
   llmProviderApiKey: ["read"],
   llmVirtualKey: ["read"],
-  llmOauthClient: ["read"],
+  oauthClient: ["read"],
 };
 let queryClient: QueryClient;
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
+  unhandledRequests.length = 0;
   vi.clearAllMocks();
   archestraApiClient.setConfig({ baseUrl: window.location.origin });
   vi.mocked(usePathname).mockReturnValue("/llm/model-providers");
@@ -84,6 +92,7 @@ afterEach(() => {
   cleanup();
   queryClient.clear();
   server.resetHandlers();
+  expect(unhandledRequests).toEqual([]);
 });
 afterAll(() => {
   server.close();

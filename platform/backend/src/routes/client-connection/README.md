@@ -36,7 +36,7 @@ The frontend root document also links to `/llms.txt` with `rel="describedby"`.
 This is an application-specific approval protocol, not an OAuth device-grant
 implementation. The configured MCP client still performs native OAuth separately.
 The installer never receives the browser's login cookie or an OAuth access token.
-Cursor's existing model and marketplace setup remains manual.
+Cursor's model settings are written to its settings database (`state.vscdb`) by the setup script, pointing at the Model Router with a multi-provider virtual key. Its marketplace setup remains manual.
 
 ## Claude Desktop
 

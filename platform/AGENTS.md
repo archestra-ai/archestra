@@ -60,8 +60,7 @@ Load these project skills when the task matches their domain:
 - **Drizzle Studio**: <https://local.drizzle.studio/>
 - **MCP Gateway**: <http://localhost:9000/v1/mcp/:profileId> (POST for JSON-RPC stateless mode; GET with Accept: text/event-stream opens the legacy HTTP+SSE stream, other GETs return 405; requires Bearer archestra_token auth)
 - **MCP Proxy**: <http://localhost:9000/mcp_proxy/:id> (POST for JSON-RPC requests to K8s pods)
-- **MCP Logs**: <http://localhost:9000/api/mcp_server/:id/logs> (GET container logs, ?lines=N to limit, ?follow=true for streaming)
-- **MCP Restart**: <http://localhost:9000/api/mcp_server/:id/restart> (POST to restart pod)
+- **MCP Reinstall**: <http://localhost:9000/api/mcp_server/:id/reinstall> (POST to recreate the server's pod)
 - **Tempo API**: <http://localhost:3200/> (Tempo HTTP API for distributed tracing)
 - **Grafana**: <http://localhost:3002/> (metrics and trace visualization, manual start via Tilt)
 - **Tempo API**: <http://localhost:3200/> (Tempo HTTP API for distributed tracing)
@@ -277,14 +276,14 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 
 **Backend**:
 
-- Refer to backend/architecture.md for backend architecture guidelines.
+- Refer to the `archestra-dev-backend` skill in `../.agents/skills/` for backend architecture guidelines.
 - Use Drizzle ORM for database operations through MODELS ONLY!
 - Table exports: Use plural names with "Table" suffix (e.g., `profileLabelsTable`, `sessionsTable`)
 - **Route permissions (IMPORTANT)**: When adding new API endpoints, you MUST add the route to `requiredEndpointPermissionsMap` in `shared/access-control.ts` or requests will return 403 Forbidden. Match permissions with similar existing routes (e.g., interaction endpoints use `interaction: ["read"]`).
 - **Audit logging**: When you add or change a state-mutating route, ensure it produces a correct audit record — registered with the right action, non-secret, and a non-empty before/after diff — and assert on that record in the route's existing integration test.
 - **MCP Tool Impact (IMPORTANT)**: When updating an API endpoint's request/response schema, also check if there is an associated Archestra MCP tool in `backend/src/archestra-mcp-server/` that exposes the same functionality. If so, update the MCP tool's `inputSchema` and handler to match the new API schema. Ask the user if you're unsure whether an MCP tool is affected.
 - Only export public APIs
-- **knip --production (IMPORTANT)**: Backend `check:ci` runs `pnpm knip` = `knip:dev && knip:production`. The `--production` pass ignores `*.test.ts` and cross-workspace consumers (e.g. the `standalone-scripts/` index generator), so an export used only by tests or those scripts fails CI even though plain `knip` passes. Before pushing backend export changes, run `cd backend && pnpm knip` (the full dev+production combo). Tag intentionally-public exports consumed only outside knip's view with a JSDoc `/** @public — reason */` tag (see `config.ts`, `middleware.ts`).
+- **knip --production (IMPORTANT)**: Backend `check:ci` runs `pnpm knip` = `knip:dev && knip:production`. The `--production` pass ignores `*.test.ts` and cross-workspace consumers (e.g. the `scripts/` index generator), so an export used only by tests or those scripts fails CI even though plain `knip` passes. Before pushing backend export changes, run `cd backend && pnpm knip` (the full dev+production combo). Tag intentionally-public exports consumed only outside knip's view with a JSDoc `/** @public — reason */` tag (see `config.ts`, `middleware.ts`).
 - **Module Code Order (CRITICAL)**: Always place exports at TOP of file, internal helpers at BOTTOM. Use section comments (`// ===`) to separate. Function declarations are hoisted, so helpers can be called before defined.
 - Use the `logger` instance from `@/logging` for all logging (replaces console.log/error/warn/info)
 - **Backend Testing Best Practices**: Never mock database interfaces in backend tests - use the existing `backend/src/test/setup.ts` PGlite setup for real database testing, and use model methods to create/manipulate test data for integration-focused testing. For module mocking and global stubs, read `archestra-dev-testing/references/backend-tests.md`: mock-free files run in a shared-worker fast path, `@/auth`/`@/logging` mocks go through their `__mocks__` dirs (bare `vi.mock("@/auth")`), `@/config` through `configModuleMock(overrides)`, and `vi.stubGlobal` must be (re-)applied in `beforeEach` because stubs auto-revert after every test
@@ -358,9 +357,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 - Two transport types supported:
   - **stdio** (default): JSON-RPC proxy communication via `/mcp_proxy/:id` using `kubectl attach`
   - **streamable-http**: Native HTTP/SSE transport using K8s Service (better performance, concurrent requests)
-- Pod logs available via `/api/mcp_server/:id/logs` endpoint
-  - Query parameters: `?lines=N` to limit output, `?follow=true` for real-time streaming
-  - Streaming uses chunked transfer encoding similar to `kubectl logs -f`
+- Pod logs stream to the server page's Logs tab over the WebSocket; there is no REST logs endpoint
 - K8s configuration: ARCHESTRA_ORCHESTRATOR_K8S_NAMESPACE, ARCHESTRA_ORCHESTRATOR_KUBECONFIG, ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER, ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE
 - Custom Docker images supported per MCP server (overrides ARCHESTRA_ORCHESTRATOR_MCP_SERVER_BASE_IMAGE)
 - When using Docker image, command is optional (uses image's default CMD if not specified)

@@ -5,6 +5,7 @@ import {
   type ClientWebSocketMessage,
   ClientWebSocketMessageSchema,
   type ClientWebSocketMessageType,
+  LOCAL_MCP_INSTALLATION_STATES,
   type LocalMcpInstallationState,
   MCP_DEFAULT_LOG_LINES,
   type McpDeploymentStatusEntry,
@@ -13,7 +14,8 @@ import {
 import type * as k8s from "@kubernetes/client-node";
 import type { WebSocket, WebSocketServer } from "ws";
 import { WebSocket as WS, WebSocketServer as WSS } from "ws";
-import { betterAuth } from "@/auth";
+import { z } from "zod";
+import { betterAuth, userHasPermission } from "@/auth";
 import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
 import config from "@/config";
 import { BrowserStreamSocketClientContext } from "@/features/browser-stream/websocket/browser-stream.websocket";
@@ -35,6 +37,12 @@ import {
 } from "@/services/agent-runtime/output-capture";
 import { agentRunTranscriptStore } from "@/services/agent-runtime/transcript-store";
 import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
+import {
+  createPollingNotifyHub,
+  createPostgresNotifyHub,
+  type FanoutChannel,
+  type PgNotifyHub,
+} from "@/services/pg-notify-hub";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import type { AgentRunRecord } from "@/types";
 
@@ -101,8 +109,19 @@ type MessageHandler = (
   clientContext: WebSocketClientContext,
 ) => Promise<void> | void;
 
-class WebSocketService {
+/** @public — exported for testability (one instance per simulated replica) */
+export class WebSocketService {
   private wss: WebSocketServer | null = null;
+  /**
+   * Relays MCP status events to every replica. A browser holds its socket on
+   * whichever pod the load balancer picked, which is rarely the pod doing the
+   * install, so a local-only broadcast leaves it waiting for a refetch.
+   */
+  private crossReplica: {
+    hub: PgNotifyHub;
+    channel: FanoutChannel;
+    unsubscribe: () => void;
+  } | null = null;
   private mcpLogsSubscriptions: Map<WebSocket, McpLogsSubscription> = new Map();
   private mcpExecSubscriptions: Map<WebSocket, McpExecSubscription> = new Map();
   private agentRunAttachSubscriptions: Map<
@@ -290,6 +309,8 @@ class WebSocketService {
     }
 
     logger.debug(`WebSocket server started on path ${path}`);
+
+    this.enableCrossReplicaDelivery(createCrossReplicaNotifyHub());
 
     this.startDeploymentMetricsPolling();
 
@@ -1093,6 +1114,28 @@ class WebSocketService {
       return;
     }
 
+    // A shell runs commands inside the server's container in the cluster, so
+    // it takes the right to manage installations, not just to see one: a
+    // member's own installation does not open a shell.
+    const mayOpenShell =
+      clientContext.userIsMcpServerAdmin ||
+      (await userHasPermission(
+        clientContext.userId,
+        clientContext.organizationId,
+        "mcpServerInstallation",
+        "update",
+      ));
+    if (!mayOpenShell) {
+      this.sendToClient(ws, {
+        type: "mcp_exec_error",
+        payload: {
+          serverId,
+          error: "Opening a shell needs permission to manage MCP servers.",
+        },
+      });
+      return;
+    }
+
     logger.info(
       { serverId, userId: clientContext.userId },
       "Exec session starting",
@@ -1353,6 +1396,22 @@ class WebSocketService {
       return result;
     };
 
+    // A full refresh can take many seconds on a large cluster, and clients
+    // re-subscribe on every page navigation. When an earlier refresh already
+    // filled the summary, answer with it right away so the page does not sit
+    // on "Checking…"; the fresh statuses follow below only if they differ.
+    let cachedStatusesJson: string | null = null;
+    if (this.lastMcpDeploymentRefreshAt > 0 && ws.readyState === WS.OPEN) {
+      const cachedStatuses = buildStatuses(
+        McpServerRuntimeManager.statusSummary,
+      );
+      cachedStatusesJson = JSON.stringify(cachedStatuses);
+      this.sendToClient(ws, {
+        type: "mcp_deployment_statuses",
+        payload: { statuses: cachedStatuses },
+      });
+    }
+
     // Refresh (through the shared in-flight guard) and build initial statuses
     await this.refreshMcpDeploymentStates();
 
@@ -1363,16 +1422,19 @@ class WebSocketService {
     }
 
     const statuses = buildStatuses(McpServerRuntimeManager.statusSummary);
+    const statusesJson = JSON.stringify(statuses);
 
-    // Send initial statuses
-    this.sendToClient(ws, {
-      type: "mcp_deployment_statuses",
-      payload: { statuses },
-    });
+    // Send initial statuses, unless the cached answer above already said so
+    if (statusesJson !== cachedStatusesJson) {
+      this.sendToClient(ws, {
+        type: "mcp_deployment_statuses",
+        payload: { statuses },
+      });
+    }
 
     this.mcpDeploymentStatusSubscriptions.set(ws, {
       buildStatuses,
-      lastStatusesJson: JSON.stringify(statuses),
+      lastStatusesJson: statusesJson,
     });
     this.startMcpDeploymentStatusPollingIfNeeded();
 
@@ -1577,7 +1639,22 @@ class WebSocketService {
     );
   }
 
+  /**
+   * Route MCP status broadcasts through `hub` so clients on every replica
+   * receive them. Without it (tests, a process that never started the server)
+   * broadcasts reach this process's clients only.
+   */
+  enableCrossReplicaDelivery(hub: PgNotifyHub): void {
+    this.disableCrossReplicaDelivery();
+    const channel = hub.fanout(CROSS_REPLICA_CHANNEL);
+    const unsubscribe = channel.subscribe((message) =>
+      this.deliverCrossReplicaEvent(message),
+    );
+    this.crossReplica = { hub, channel, unsubscribe };
+  }
+
   stop() {
+    this.disableCrossReplicaDelivery();
     this.mcpDeploymentStatusRefreshUnsubscribe?.();
     this.mcpDeploymentStatusRefreshUnsubscribe = null;
     // SPDX-SnippetBegin
@@ -1697,10 +1774,12 @@ class WebSocketService {
     status: LocalMcpInstallationState,
     error: string | null,
   ): void {
-    if (!this.wss) return;
-    this.broadcast({
-      type: "mcp_installation_status",
-      payload: { serverId, status, error },
+    this.relayToAllReplicas({
+      kind: "mcp_installation_status",
+      serverId,
+      status,
+      // Bounded so the event always fits a NOTIFY payload.
+      error: error === null ? null : error.slice(0, MAX_RELAYED_ERROR_LENGTH),
     });
   }
 
@@ -1709,25 +1788,29 @@ class WebSocketService {
     serverIds?: string[];
     catalogIds?: string[];
   }): void {
-    if (!this.wss) return;
     const serverIds = [...new Set(params.serverIds ?? [])];
     const catalogIds = [...new Set(params.catalogIds ?? [])];
     if (serverIds.length === 0 && catalogIds.length === 0) return;
 
-    this.sendToClients(
-      {
-        type: "mcp_servers_changed",
-        payload: { change: "uninstalled", serverIds, catalogIds },
-      },
-      (client) => {
-        const context = this.clientContexts.get(client);
-        return (
-          context !== undefined &&
-          (params.organizationId === null ||
-            context.organizationId === params.organizationId)
-        );
-      },
-    );
+    // A bulk uninstall can name more ids than one NOTIFY payload holds; split
+    // it, since clients evict each id independently.
+    for (let start = 0; ; start += MAX_RELAYED_IDS_PER_EVENT) {
+      const serverChunk = serverIds.slice(
+        start,
+        start + MAX_RELAYED_IDS_PER_EVENT,
+      );
+      const catalogChunk = catalogIds.slice(
+        start,
+        start + MAX_RELAYED_IDS_PER_EVENT,
+      );
+      if (serverChunk.length === 0 && catalogChunk.length === 0) break;
+      this.relayToAllReplicas({
+        kind: "mcp_servers_changed",
+        organizationId: params.organizationId,
+        serverIds: serverChunk,
+        catalogIds: catalogChunk,
+      });
+    }
   }
 
   broadcastConversationUpdated(
@@ -1748,12 +1831,80 @@ class WebSocketService {
       },
     );
   }
+
+  private relayToAllReplicas(event: CrossReplicaEvent): void {
+    if (!this.crossReplica) {
+      this.deliverToLocalClients(event);
+      return;
+    }
+    // Publishing delivers to this replica's subscriber synchronously, then
+    // fans out to the others; the hub drops its own echo.
+    void this.crossReplica.channel.publish(JSON.stringify(event));
+  }
+
+  private deliverCrossReplicaEvent(message: string): void {
+    let event: CrossReplicaEvent;
+    try {
+      event = CrossReplicaEventSchema.parse(JSON.parse(message));
+    } catch (error) {
+      logger.warn({ error }, "Ignoring a malformed cross-replica MCP event");
+      return;
+    }
+    this.deliverToLocalClients(event);
+  }
+
+  private deliverToLocalClients(event: CrossReplicaEvent): void {
+    if (!this.wss) return;
+
+    if (event.kind === "mcp_installation_status") {
+      // Clients classify runtime alerts from both feeds together. A reinstall
+      // reports "success" only after the installing replica has seen the new
+      // pod ready, but the deployment feed is pushed on watch events and can
+      // still carry the restart gap ("not_created"), which reads as "Not
+      // running" until the next push. Send this replica's current deployment
+      // states first so a client never pairs a fresh installation status with
+      // a stale runtime state.
+      this.pushMcpDeploymentStatusesToSubscribers();
+      this.broadcast({
+        type: "mcp_installation_status",
+        payload: {
+          serverId: event.serverId,
+          status: event.status,
+          error: event.error,
+        },
+      });
+      return;
+    }
+
+    const { organizationId, serverIds, catalogIds } = event;
+    this.sendToClients(
+      {
+        type: "mcp_servers_changed",
+        payload: { change: "uninstalled", serverIds, catalogIds },
+      },
+      (client) => {
+        const context = this.clientContexts.get(client);
+        return (
+          context !== undefined &&
+          (organizationId === null || context.organizationId === organizationId)
+        );
+      },
+    );
+  }
+
+  private disableCrossReplicaDelivery(): void {
+    if (!this.crossReplica) return;
+    const { hub, unsubscribe } = this.crossReplica;
+    this.crossReplica = null;
+    unsubscribe();
+    void hub.close();
+  }
 }
 
 const websocketService = new WebSocketService();
 
 /**
- * Push an install-status update to all connected clients. Call this from
+ * Push an install-status update to connected clients on every replica. Call this from
  * any code path that writes mcp_server.local_installation_status so the UI
  * doesn't depend on the 2s React Query poll catching the change.
  */
@@ -1765,7 +1916,10 @@ export function broadcastMcpInstallationStatus(
   websocketService.broadcastMcpInstallationStatus(serverId, status, error);
 }
 
-/** Push MCP removals to every open client in the affected organization. */
+/**
+ * Push MCP removals to every open client in the affected organization, on
+ * every replica.
+ */
 export function broadcastMcpServersChanged(params: {
   organizationId: string | null;
   serverIds?: string[];
@@ -1841,4 +1995,42 @@ function describeExecFailure(
   }
 
   return undefined;
+}
+
+// =============================================================================
+// Internal
+// =============================================================================
+
+const CROSS_REPLICA_CHANNEL = "websocket_mcp_events";
+const MAX_RELAYED_ERROR_LENGTH = 4_000;
+const MAX_RELAYED_IDS_PER_EVENT = 50;
+
+const CrossReplicaEventSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("mcp_installation_status"),
+    serverId: z.string(),
+    status: z.enum(LOCAL_MCP_INSTALLATION_STATES),
+    error: z.string().nullable(),
+  }),
+  z.object({
+    kind: z.literal("mcp_servers_changed"),
+    organizationId: z.string().nullable(),
+    serverIds: z.array(z.string()),
+    catalogIds: z.array(z.string()),
+  }),
+]);
+
+type CrossReplicaEvent = z.infer<typeof CrossReplicaEventSchema>;
+
+/**
+ * Same endpoint choice as the chat and A2A notifiers: polling compatibility
+ * describes the database endpoint (a transaction pooler cannot hold a
+ * LISTEN), so it applies here too and degrades to same-replica delivery.
+ */
+function createCrossReplicaNotifyHub(): PgNotifyHub {
+  return config.chat.activeRun.pollingCompatibilityEnabled
+    ? createPollingNotifyHub()
+    : createPostgresNotifyHub(
+        config.chat.activeRun.notifyDatabaseUrl || config.database.url,
+      );
 }

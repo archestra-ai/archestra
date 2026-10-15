@@ -239,6 +239,14 @@ export const handlers: HttpHandler[] = [
   ),
   ...getJson("/api/user/permissions", adminPermissionsSeed),
   ...getJson("/api/resource-permissions", adminScopedCapabilitiesSeed),
+  // Recipients for an object not created yet: the admin may share with
+  // everyone. Registered before the per-object route, which would match it.
+  ...getJson("/api/resource-permissions/:resource/creation-subjects", [
+    {
+      subject: { type: "organization", id: "*" },
+      name: "Everyone in the organization",
+    },
+  ]),
   // An object's own permissions: none beyond the admin's, who may edit them.
   ...paths("/api/resource-permissions/:resource/:scope").map((url) =>
     http.get(url, ({ params }) =>
@@ -248,6 +256,7 @@ export const handlers: HttpHandler[] = [
         name: "",
         revision: 0,
         actorSubjects: [],
+        canShareOrganizationWide: true,
         grants: [],
         inheritedGrants: [],
         effectiveActions: [
@@ -269,6 +278,10 @@ export const handlers: HttpHandler[] = [
     },
   ]),
   ...getJson("/api/credentials", []),
+  // GitHub Apps and GitLab tokens offered by the Git setup steps.
+  ...getJson("/api/git-credentials", []),
+  ...getJson("/api/git-credentials/:id/repositories", []),
+  ...getJson("/api/git-credentials/:id/namespaces", []),
   ...getJson("/api/config", configSeed),
   ...getJson("/api/config/public", publicConfigSeed),
   ...getJson("/api/guardrails-deployment", {
@@ -302,6 +315,7 @@ export const handlers: HttpHandler[] = [
       "nav:connect",
       "nav:model-providers",
       "nav:mcp-registry",
+      "nav:guardrails",
       "feedback:popup",
     ],
   }),
@@ -452,6 +466,7 @@ export const handlers: HttpHandler[] = [
     }),
   ),
   ...getJson("/api/agents/all", []),
+  ...getJson("/api/agents/options", []),
   // Keep literal agent routes before `:id`, or MSW treats the literal segment
   // as an id and returns an agent-shaped response to the activation editor.
   ...getJson("/api/agents/activation-skills", {
@@ -549,6 +564,8 @@ export const handlers: HttpHandler[] = [
 
   // Skills (list page, the "new skill" chooser, and the GitHub import dialog)
   ...getJson("/api/skills", skillsListSeed),
+  ...getJson("/api/skills/plugins", []),
+  ...getJson("/api/plugins", []),
   ...paths("/api/skills/:id").map((url) =>
     http.get(url, ({ params }) =>
       HttpResponse.json(makeSkillDetail(String(params.id))),
@@ -580,8 +597,10 @@ export const handlers: HttpHandler[] = [
         repoUrl?: string;
         skillPaths?: string[];
       };
+      // The dialog sends the repository's full address.
       const isExpectedPayload =
-        body.repoUrl === catalogSkillSeed.repo &&
+        body.repoUrl?.replace(/^https:\/\/github\.com\//, "") ===
+          catalogSkillSeed.repo &&
         body.skillPaths?.length === 1 &&
         body.skillPaths[0] === catalogSkillSeed.skillPath;
       return HttpResponse.json(

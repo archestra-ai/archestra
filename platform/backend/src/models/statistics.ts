@@ -33,6 +33,7 @@ import type {
   AppStatisticsSortBy,
   ChatCostBaseline,
   CostSavingsStatistics,
+  CostStatistics,
   InteractionAuthMethod,
   ModelStatistics,
   MyClientUsage,
@@ -83,6 +84,9 @@ class StatisticsModel {
       inArray(a.agentType, ["llm_proxy", "profile"]),
       params.authMethod ? eq(method, params.authMethod) : undefined,
       params.credentialId ? eq(credential, params.credentialId) : undefined,
+      params.serviceAccountId
+        ? eq(i.serviceAccountId, params.serviceAccountId)
+        : undefined,
     );
     const aggregates = {
       requests: sql<number>`COUNT(*)::double precision`,
@@ -387,6 +391,8 @@ class StatisticsModel {
     const { timeframe, organizationId } = params;
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
 
+    const teamAssignments = AgentTeamModel.readAssignments(organizationId);
+
     // Base query for team statistics
     // Use stored cost from interactions instead of recalculating with average prices
     const query = db
@@ -409,16 +415,20 @@ class StatisticsModel {
           notDeleted(schema.agentsTable),
         ),
       )
-      // A credential billed to a team charges only that team; everything else
-      // is shared by the teams the LLM proxy or agent is granted to.
+      // Resolve grants once per agent/team instead of probing every candidate
+      // team for each interaction. Explicit billing teams bypass sharing.
+      .leftJoin(
+        teamAssignments,
+        and(
+          isNull(schema.interactionsTable.billingTeamId),
+          eq(teamAssignments.agentId, schema.agentsTable.id),
+        ),
+      )
       .innerJoin(
         schema.teamsTable,
-        or(
-          eq(schema.interactionsTable.billingTeamId, schema.teamsTable.id),
-          and(
-            isNull(schema.interactionsTable.billingTeamId),
-            AgentTeamModel.grantsReadToTeamColumn(schema.teamsTable.id),
-          ),
+        eq(
+          schema.teamsTable.id,
+          sql`COALESCE(${schema.interactionsTable.billingTeamId}, ${teamAssignments.teamId})`,
         ),
       )
       .where(
@@ -463,22 +473,22 @@ class StatisticsModel {
     const teamAgentCounts = await db
       .select({
         teamId: schema.teamsTable.id,
-        agentCount: sql<number>`CAST(COUNT(DISTINCT ${schema.agentsTable.id}) AS INTEGER)`,
+        agentCount: sql<number>`CAST(COUNT(DISTINCT ${teamAssignments.agentId}) AS INTEGER)`,
       })
       .from(schema.teamsTable)
       .leftJoin(
-        schema.agentsTable,
-        and(
-          eq(
-            schema.agentsTable.organizationId,
-            schema.teamsTable.organizationId,
-          ),
-          notDeleted(schema.agentsTable),
-          AgentTeamModel.grantsReadToTeamColumn(schema.teamsTable.id),
-        ),
+        teamAssignments,
+        eq(teamAssignments.teamId, schema.teamsTable.id),
       )
       .where(eq(schema.teamsTable.organizationId, organizationId))
       .groupBy(schema.teamsTable.id);
+
+    const membersByTeam = new Map(
+      teamMemberCounts.map((row) => [row.teamId, row.memberCount]),
+    );
+    const agentsByTeam = new Map(
+      teamAgentCounts.map((row) => [row.teamId, row.agentCount]),
+    );
 
     // Aggregate data by team
     const teamMap = new Map<string, TeamStatistics>();
@@ -488,11 +498,8 @@ class StatisticsModel {
       const cost = Number(row.cost) || 0;
 
       if (!teamMap.has(row.teamId)) {
-        const memberCount =
-          teamMemberCounts.find((t) => t.teamId === row.teamId)?.memberCount ||
-          0;
-        const agentCount =
-          teamAgentCounts.find((t) => t.teamId === row.teamId)?.agentCount || 0;
+        const memberCount = membersByTeam.get(row.teamId) ?? 0;
+        const agentCount = agentsByTeam.get(row.teamId) ?? 0;
 
         teamMap.set(row.teamId, {
           teamId: row.teamId,
@@ -532,6 +539,8 @@ class StatisticsModel {
     const { timeframe, organizationId } = params;
     const timeBucket = StatisticsModel.getTimeBucket(timeframe);
 
+    const teamAssignments = AgentTeamModel.readAssignments(organizationId);
+
     // Use stored cost from interactions instead of recalculating with average prices
     const query = db
       .select({
@@ -558,8 +567,12 @@ class StatisticsModel {
         ),
       )
       .leftJoin(
+        teamAssignments,
+        eq(teamAssignments.agentId, schema.agentsTable.id),
+      )
+      .leftJoin(
         schema.teamsTable,
-        AgentTeamModel.grantsReadToTeamColumn(schema.teamsTable.id),
+        eq(teamAssignments.teamId, schema.teamsTable.id),
       )
       .where(
         and(
@@ -680,57 +693,10 @@ class StatisticsModel {
       );
 
     const rawTimeSeriesData = await query;
-    const timeSeriesData = StatisticsModel.groupTimeSeries(
-      rawTimeSeriesData,
+    return StatisticsModel.modelStatisticsFromRows({
+      rows: rawTimeSeriesData,
       timeframe,
-      "model",
-    );
-
-    // Aggregate data by model
-    const modelMap = new Map<string, ModelStatistics>();
-    let totalCost = 0;
-
-    for (const row of timeSeriesData) {
-      if (!row.model) continue;
-
-      // Use stored cost from interactions (already calculated per-model)
-      const cost = Number(row.cost) || 0;
-
-      totalCost += cost;
-
-      if (!modelMap.has(row.model)) {
-        modelMap.set(row.model, {
-          model: row.model,
-          requests: 0,
-          inputTokens: 0,
-          outputTokens: 0,
-          cacheReadTokens: 0,
-          cost: 0,
-          percentage: 0,
-          timeSeries: [],
-        });
-      }
-
-      const model = modelMap.get(row.model);
-      if (!model) continue;
-      model.requests += Number(row.requests);
-      model.inputTokens += Number(row.inputTokens);
-      model.outputTokens += Number(row.outputTokens);
-      model.cacheReadTokens += Number(row.cacheReadTokens) || 0;
-      model.cost += cost;
-      model.timeSeries.push({
-        timestamp: row.timeBucket,
-        value: cost,
-      });
-    }
-
-    // Calculate percentages
-    const models = Array.from(modelMap.values());
-    models.forEach((model) => {
-      model.percentage = totalCost > 0 ? (model.cost / totalCost) * 100 : 0;
     });
-
-    return models;
   }
 
   /**
@@ -1617,6 +1583,63 @@ class StatisticsModel {
     };
   }
 
+  /** Initial Costs view: one shared model/cost aggregation and a count, no roster. */
+  static async getCostStatistics(params: {
+    timeframe: StatisticsTimeFrame;
+    organizationId: string;
+    requestingUserId: string;
+    canReadAllUsers: boolean;
+  }): Promise<CostStatistics> {
+    const { timeframe, organizationId, requestingUserId, canReadAllUsers } =
+      params;
+    const i = schema.interactionsTable;
+    const bucket = sql<string>`DATE_TRUNC(${sql.raw(`'${StatisticsModel.getTimeBucket(timeframe)}'`)}, ${i.createdAt})`;
+    const scope = and(
+      ...StatisticsModel.timeframeConditions(timeframe),
+      interactionBelongsToOrganization(organizationId),
+    );
+    const activeUsers = db
+      .select({ userId: i.userId })
+      .from(i)
+      .where(
+        and(
+          scope,
+          isNotNull(i.userId),
+          canReadAllUsers ? undefined : eq(i.userId, requestingUserId),
+        ),
+      )
+      .groupBy(i.userId)
+      .as("active_users");
+    const [rows, [people]] = await Promise.all([
+      db
+        .select({
+          model: i.model,
+          timeBucket: bucket,
+          requests: sql<number>`COUNT(*)::integer`,
+          inputTokens: tokenSum(i.inputTokens),
+          outputTokens: tokenSum(i.outputTokens),
+          cacheReadTokens: tokenSum(i.cacheReadTokens),
+          cost: billedSum(i.cost, "DOUBLE PRECISION"),
+          baselineCost: billedSum(i.baselineCost, "DECIMAL"),
+          actualCost: billedSum(i.cost, "DECIMAL"),
+          cacheSavings: billedSum(i.cacheSavings, "DECIMAL"),
+          subscriptionCost: subscriptionCostSum("DECIMAL"),
+        })
+        .from(i)
+        .where(scope)
+        .groupBy(i.model, bucket)
+        .orderBy(bucket),
+      db
+        .select({ activeUsers: sql<number>`COUNT(*)::integer` })
+        .from(activeUsers),
+    ]);
+    return {
+      models: StatisticsModel.modelStatisticsFromRows({ rows, timeframe }),
+      costSavings: StatisticsModel.costSavingsFromRows({ rows, timeframe }),
+      activeUsers: Number(people.activeUsers),
+    };
+  }
+
   /**
    * Get cost savings statistics
    */
@@ -1661,21 +1684,90 @@ class StatisticsModel {
 
     const rawTimeSeriesData = await query;
 
-    // Custom grouping for cost savings data
-    interface CostSavingsRow {
-      timeBucket: string;
-      baselineCost: number;
-      actualCost: number;
-      cacheSavings: number;
-      subscriptionCost: number;
+    return StatisticsModel.costSavingsFromRows({
+      rows: rawTimeSeriesData,
+      timeframe,
+    });
+  }
+
+  private static modelStatisticsFromRows({
+    rows,
+    timeframe,
+  }: {
+    rows: ModelStatisticsRow[];
+    timeframe: StatisticsTimeFrame;
+  }): ModelStatistics[] {
+    const timeSeriesData = StatisticsModel.groupTimeSeries(
+      rows,
+      timeframe,
+      "model",
+    );
+
+    // Aggregate data by model
+    const modelMap = new Map<string, ModelStatistics>();
+    let totalCost = 0;
+
+    for (const row of timeSeriesData) {
+      if (!row.model) continue;
+
+      // Use stored cost from interactions (already calculated per-model)
+      const cost = Number(row.cost) || 0;
+
+      totalCost += cost;
+
+      if (!modelMap.has(row.model)) {
+        modelMap.set(row.model, {
+          model: row.model,
+          requests: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          cacheReadTokens: 0,
+          cost: 0,
+          percentage: 0,
+          timeSeries: [],
+        });
+      }
+
+      const model = modelMap.get(row.model);
+      if (!model) continue;
+      model.requests += Number(row.requests);
+      model.inputTokens += Number(row.inputTokens);
+      model.outputTokens += Number(row.outputTokens);
+      model.cacheReadTokens += Number(row.cacheReadTokens) || 0;
+      model.cost += cost;
+      model.timeSeries.push({
+        timestamp: row.timeBucket,
+        value: cost,
+        requests: Number(row.requests),
+        inputTokens: Number(row.inputTokens),
+        outputTokens: Number(row.outputTokens),
+        cacheReadTokens: Number(row.cacheReadTokens) || 0,
+      });
     }
 
+    // Calculate percentages
+    const models = Array.from(modelMap.values());
+    models.forEach((model) => {
+      model.percentage = totalCost > 0 ? (model.cost / totalCost) * 100 : 0;
+    });
+
+    return models;
+  }
+
+  private static costSavingsFromRows({
+    rows,
+    timeframe,
+  }: {
+    rows: CostSavingsRow[];
+    timeframe: StatisticsTimeFrame;
+  }): CostSavingsStatistics {
+    // Custom grouping for cost savings data
     const intervalMinutes = getStatisticsBucketIntervalMinutes(timeframe);
 
     // Group by custom intervals if needed
     const grouped = new Map<string, CostSavingsRow>();
 
-    for (const row of rawTimeSeriesData) {
+    for (const row of rows) {
       const bucketKey = StatisticsModel.needsRebucketing(
         timeframe,
         intervalMinutes,
@@ -1794,7 +1886,7 @@ class StatisticsModel {
    * `interactions.created_at`; pass another timestamp column to bound a
    * different table (e.g. `skill_usage_events.created_at`) on the same window.
    */
-  private static timeframeConditions(
+  static timeframeConditions(
     timeframe: StatisticsTimeFrame,
     column: AnyColumn = schema.interactionsTable.createdAt,
   ): SQL[] {
@@ -2593,3 +2685,21 @@ function userUsageTimeSeriesPoint(row: {
     subscriptionCost: Number(row.subscriptionCost) || 0,
   };
 }
+
+// Aggregated query rows, shared by the legacy endpoints and the Costs view.
+type ModelStatisticsRow = {
+  model: string | null;
+  timeBucket: string;
+  requests: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cost: number;
+};
+type CostSavingsRow = {
+  timeBucket: string;
+  baselineCost: number;
+  actualCost: number;
+  cacheSavings: number;
+  subscriptionCost: number;
+};

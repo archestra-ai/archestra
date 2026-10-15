@@ -150,6 +150,7 @@ const serviceAccountRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const serviceAccount = await ServiceAccountModel.create({
         organizationId: request.organizationId,
         name: request.body.name,
+        icon: request.body.icon,
         role: request.body.role,
         labels: request.body.labels,
         createdBy: request.user.id,

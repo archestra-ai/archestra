@@ -30,6 +30,8 @@ export const AgentRunActorKindSchema = z.enum([
   "user",
   "team",
   "organization",
+  "oauthClient",
+  "serviceAccount",
   "system",
 ]);
 export type AgentRunActorKind = z.infer<typeof AgentRunActorKindSchema>;
@@ -148,6 +150,11 @@ export const MissingAgentRuntimeCredentialSchema = z.object({
   credentialId: z.string().optional(),
   label: z.string(),
   description: z.string().optional(),
+  /**
+   * False when the caller may not use the saved credential, so they cannot
+   * add their value and an admin has to share it with them first.
+   */
+  canConnect: z.boolean().optional(),
 });
 export type MissingAgentRuntimeCredential = z.infer<
   typeof MissingAgentRuntimeCredentialSchema

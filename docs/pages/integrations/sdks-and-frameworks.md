@@ -2,7 +2,7 @@
 title: AI SDKs and Frameworks
 description: Route Vercel AI SDK, Pydantic AI, and Mastra model requests through Archestra
 order: 5
-lastUpdated: 2026-10-06
+lastUpdated: 2026-10-13
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -14,6 +14,12 @@ You can route requests from any OpenAI-compatible AI SDK or framework through Ar
 You need a running [Archestra deployment](/docs/admin/deployment), an OpenAI provider key configured in Archestra, and a standard [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) mapped to that provider. Use the virtual key as the client API key.
 
 The client application must be able to reach Archestra's API. The examples use `http://localhost:9000/v1/openai`; replace this with your deployment's base URL. Applications running inside Docker containers should use a reachable network host such as `host.docker.internal` rather than `localhost`.
+
+## Session IDs for Guardrails
+
+Send the same `X-Appa-Session-ID` for every model call in a conversation. Guardrails use this ID to keep policy state, approvals, and restrictions across follow-up turns, tool results, and retries.
+
+If your app already has a conversation or thread ID, use it. If not, generate a UUID when the conversation starts, save it in your database, and load it again when the user replies. Never generate a new ID on every request, and never share one client instance across different users.
 
 ## Vercel AI SDK
 
@@ -56,24 +62,27 @@ Add the session header to `createOpenAI`:
 import { randomUUID } from "node:crypto";
 import { createOpenAI } from "@ai-sdk/openai";
 
+// Create once per conversation; save and reuse across all its turns.
+const sessionId = randomUUID();
 const openai = createOpenAI({
   baseURL: "http://localhost:9000/v1/openai",
   apiKey: process.env.OPENAI_API_KEY,
   headers: {
-    "X-Appa-Session-ID": randomUUID(),
+    "X-Appa-Session-ID": sessionId,
   },
 });
 ```
 
-For subagents or child workflows, also include `X-Appa-Parent-ID`:
+Reuse `openai` for every model call in this conversation. For a subagent, pass its own ID along with the parent's `sessionId`:
 
 ```typescript
+const childSessionId = randomUUID();
 const childOpenai = createOpenAI({
   baseURL: "http://localhost:9000/v1/openai",
   apiKey: process.env.OPENAI_API_KEY,
   headers: {
-    "X-Appa-Session-ID": randomUUID(),
-    "X-Appa-Parent-ID": parentSessionId,
+    "X-Appa-Session-ID": childSessionId,
+    "X-Appa-Parent-ID": sessionId,
   },
 });
 ```
@@ -125,24 +134,27 @@ from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
+# Create once per conversation; save and reuse across all its turns.
+session_id = str(uuid.uuid4())
 client = AsyncOpenAI(
     base_url="http://localhost:9000/v1/openai",
     api_key=os.environ["OPENAI_API_KEY"],
-    default_headers={"X-Appa-Session-ID": str(uuid.uuid4())},
+    default_headers={"X-Appa-Session-ID": session_id},
 )
 model = OpenAIChatModel("gpt-4o", provider=OpenAIProvider(openai_client=client))
 agent = Agent(model)
 ```
 
-For subagents, also pass `X-Appa-Parent-ID` with the parent agent's session ID:
+Reuse `agent` and `client` for all calls in this conversation. For a subagent, create its own ID and pass the parent's `session_id`:
 
 ```python
-client = AsyncOpenAI(
+child_session_id = str(uuid.uuid4())
+child_client = AsyncOpenAI(
     base_url="http://localhost:9000/v1/openai",
     api_key=os.environ["OPENAI_API_KEY"],
     default_headers={
-        "X-Appa-Session-ID": str(uuid.uuid4()),
-        "X-Appa-Parent-ID": parent_session_id,
+        "X-Appa-Session-ID": child_session_id,
+        "X-Appa-Parent-ID": session_id,
     },
 )
 ```
@@ -189,6 +201,8 @@ Add the session header to the model configuration:
 import { randomUUID } from "node:crypto";
 import { Agent } from "@mastra/core/agent";
 
+// Create once per conversation; save and reuse across all its turns.
+const sessionId = randomUUID();
 const agent = new Agent({
   id: "connection-check",
   name: "Connection Check",
@@ -198,15 +212,16 @@ const agent = new Agent({
     url: "http://localhost:9000/v1/openai",
     apiKey: process.env.OPENAI_API_KEY,
     headers: {
-      "X-Appa-Session-ID": randomUUID(),
+      "X-Appa-Session-ID": sessionId,
     },
   },
 });
 ```
 
-For subagents, also pass `X-Appa-Parent-ID` with the parent session ID:
+Reuse `agent` for every call in this conversation. For a subagent, create its own ID and pass the parent's `sessionId`:
 
 ```typescript
+const childSessionId = randomUUID();
 const subagent = new Agent({
   id: "subagent",
   name: "Subagent",
@@ -216,12 +231,14 @@ const subagent = new Agent({
     url: "http://localhost:9000/v1/openai",
     apiKey: process.env.OPENAI_API_KEY,
     headers: {
-      "X-Appa-Session-ID": randomUUID(),
-      "X-Appa-Parent-ID": parentSessionId,
+      "X-Appa-Session-ID": childSessionId,
+      "X-Appa-Parent-ID": sessionId,
     },
   },
 });
 ```
+
+Keep the child agent instance for all requests in that child's task. Only create a new ID when starting a different child agent.
 
 ## Verify the Connection
 

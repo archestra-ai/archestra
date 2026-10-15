@@ -11,7 +11,11 @@ import {
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
-import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
+import {
+  breakTheGlassActiveIn,
+  getGuardrailsDeployment,
+  isGuardrailsV2Active,
+} from "@/services/guardrails-deployment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { registerRoutePermissions } from "@/test/route-permissions";
 import routes from "./guardrails-deployment.routes";
@@ -65,6 +69,7 @@ describe("Deployment-wide Guardrails v2 switch", () => {
         expect(response.json()).toEqual({
           enabled,
           unsupportedClientAction: "bypass",
+          breakTheGlassEnabled: true,
           featureEnabled,
           active: enabled && featureEnabled,
         });
@@ -106,6 +111,26 @@ describe("Deployment-wide Guardrails v2 switch", () => {
       enabled: true,
       unsupportedClientAction: "bypass",
     });
+  });
+
+  test("administrators can turn break the glass off without changing enforcement", async () => {
+    await set(true);
+    const response = await app.inject({
+      method: "PUT",
+      url: "/api/guardrails-deployment",
+      payload: { breakTheGlassEnabled: false },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      enabled: true,
+      active: true,
+      breakTheGlassEnabled: false,
+    });
+    expect(breakTheGlassActiveIn(await getGuardrailsDeployment())).toBe(false);
+    await GuardrailsDeploymentModel.set({ breakTheGlassEnabled: true });
+    expect(breakTheGlassActiveIn(await getGuardrailsDeployment())).toBe(true);
+    await set(false);
+    expect(breakTheGlassActiveIn(await getGuardrailsDeployment())).toBe(false);
   });
 
   test("rejects an unsupported action without changing the saved setting", async () => {

@@ -28,14 +28,27 @@ export async function isGuardrailsV2Active(): Promise<boolean> {
   return (await readGuardrailsV2Activation()) === "active";
 }
 export async function getGuardrailsDeployment() {
-  const { enabled, unsupportedClientAction } =
+  const { enabled, unsupportedClientAction, breakTheGlassEnabled } =
     await GuardrailsDeploymentModel.get();
   return {
     enabled,
     unsupportedClientAction,
+    breakTheGlassEnabled,
     featureEnabled: enterpriseTier.isOpenappaActive(),
     active: enterpriseTier.isOpenappaActive() && enabled,
   };
+}
+
+/**
+ * Whether a yell also turns OpenAPPA off for the session that sends it:
+ * enforcement is on and an administrator left break the glass on in
+ * Guardrails settings.
+ */
+export function breakTheGlassActiveIn(deployment: {
+  active: boolean;
+  breakTheGlassEnabled: boolean;
+}): boolean {
+  return deployment.active && deployment.breakTheGlassEnabled;
 }
 
 /**
@@ -49,6 +62,7 @@ export async function getGuardrailsDeployment() {
 export async function setGuardrailsDeployment(update: {
   enabled?: boolean;
   unsupportedClientAction?: UnsupportedAppaClientAction;
+  breakTheGlassEnabled?: boolean;
 }) {
   if (update.enabled && enterpriseTier.isOpenappaActive()) {
     const refusals = await refusedPolicies();

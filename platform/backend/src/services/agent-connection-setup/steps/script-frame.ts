@@ -72,7 +72,15 @@ cli() { "$@" </dev/null 2>&1 | cat; }`;
 function setupParts(ctx: SetupScriptContext): string[] {
   const parts: string[] = [];
   if (ctx.mcp) parts.push("Tools");
-  if (ctx.proxy) parts.push(`LLM proxy (${ctx.proxy.providerLabel})`);
+  if (ctx.proxy) {
+    // A multi-provider setup routes every provider it maps, so naming the one
+    // `provider` it was created with would misdescribe it.
+    parts.push(
+      ctx.proxy.authMode === "primary-providers"
+        ? "LLM proxy"
+        : `LLM proxy (${ctx.proxy.providerLabel})`,
+    );
+  }
   if (ctx.skills) {
     const { hasSkills, hasPlugins } = describeMarketplaceContents(ctx.skills);
     if (hasSkills) parts.push("Skills");

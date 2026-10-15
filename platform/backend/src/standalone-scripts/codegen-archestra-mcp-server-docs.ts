@@ -83,22 +83,24 @@ const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
     "Beyond `team:read`, the caller must be an organization-level team manager (a role granting `team:create`) or an **admin** of the target team.",
   remove_team_member:
     "Beyond `team:read`, the caller must be an organization-level team manager (a role granting `team:create`) or an **admin** of the target team.",
+  create_schedule_trigger:
+    "Requires an acting user. Omitting `project_id` creates a private project with the task prompt as its instructions. Repeating the same new-project task returns the existing schedule. An existing project must be accessible to the caller.",
   get_schedule_trigger:
-    "Requires a user token. The caller must be the schedule actor, a project member, or a scheduled-task administrator.",
+    "Requires a user token. The caller must be the schedule actor, a project member, or someone with organization-wide Projects **Can read** access.",
   list_schedule_trigger_runs:
-    "Requires a user token. The caller must be the schedule actor, a project member, or a scheduled-task administrator.",
+    "Requires a user token. The caller must be the schedule actor, a project member, or someone with organization-wide Projects **Can read** access.",
   get_schedule_trigger_run:
-    "Requires a user token. The caller must be the schedule actor, a project member, or a scheduled-task administrator.",
+    "Requires a user token. The caller must be the schedule actor, a project member, or someone with organization-wide Projects **Can read** access.",
   update_schedule_trigger:
-    "Requires a user token. Only the schedule actor or a scheduled-task administrator can change or run it. Project membership alone permits reading.",
+    "Requires a user token. Only the schedule actor or someone with organization-wide Projects **Can update** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).",
   delete_schedule_trigger:
-    "Requires a user token. Only the schedule actor or a scheduled-task administrator can change or run it. Project membership alone permits reading.",
+    "Requires a user token. Only the schedule actor or someone with organization-wide Projects **Full access** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).",
   enable_schedule_trigger:
-    "Requires a user token. Only the schedule actor or a scheduled-task administrator can change or run it. Project membership alone permits reading.",
+    "Requires a user token. Only the schedule actor or someone with organization-wide Projects **Can update** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).",
   disable_schedule_trigger:
-    "Requires a user token. Only the schedule actor or a scheduled-task administrator can change or run it. Project membership alone permits reading.",
+    "Requires a user token. Only the schedule actor or someone with organization-wide Projects **Can update** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).",
   run_schedule_trigger_now:
-    "Requires a user token. Only the schedule actor or a scheduled-task administrator can change or run it. Project membership alone permits reading.",
+    "Requires a user token. Only the schedule actor or someone with organization-wide Projects **Can use** access can perform this action. Project membership alone permits reading. See [Granular Access Control](/docs/admin/access-control#granular-access-control).",
   // Reads are scoped: non-managers only see teams they belong to.
   get_team:
     "Callers without organization-level team management (`team:create`) can only read teams they are a member of.",
@@ -126,10 +128,6 @@ const CODE_RUNTIME_PREREQUISITE =
 
 const groupAvailabilityNotes: Partial<Record<ArchestraToolGroupId, string>> = {
   skill_sandbox: `These tools are ${CODE_RUNTIME_PREREQUISITE} The [Code Sandbox](/docs/agents#code-sandbox) page covers what the runtime is and how an agent uses it.`,
-  // Same gate as the sandbox, since these tools ship from the same module —
-  // but they read and write saved files rather than entering a container, so
-  // the note says what they are instead of pointing at the runtime page.
-  files: `These tools are ${CODE_RUNTIME_PREREQUISITE} They operate on the conversation's persistent files, not inside the sandbox container.`,
 };
 
 const HOOK_RUNTIME_NOTE =

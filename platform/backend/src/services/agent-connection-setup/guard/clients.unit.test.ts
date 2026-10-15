@@ -21,11 +21,13 @@ import {
   openCodePassthroughBaseUrl,
 } from "@archestra/shared/opencode-provider-routes";
 import { describe, expect, test } from "vitest";
+import { KILO_CLIENT, OPENCODE_CLIENT } from "../opencode-family";
 import { CODEX_HANDOFF_HELPER } from "../payloads/codex-handoff";
 import {
   CLAUDE_CODE_GUARD_CLIENT,
   CODEX_GUARD_CLIENT,
   COPILOT_GUARD_CLIENT,
+  KILO_GUARD_CLIENT,
   OPENCODE_GUARD_CLIENT,
 } from "./clients";
 import {
@@ -61,6 +63,86 @@ const CTX: StartupGuardContext = {
       "https://archestra.example.com/skill-marketplace/archestra_skl_token123/repo.git",
   },
 };
+
+test.each([
+  { guard: KILO_GUARD_CLIENT, client: KILO_CLIENT, orphan: false },
+  { guard: KILO_GUARD_CLIENT, client: KILO_CLIENT, orphan: true },
+  { guard: OPENCODE_GUARD_CLIENT, client: OPENCODE_CLIENT, orphan: false },
+  { guard: OPENCODE_GUARD_CLIENT, client: OPENCODE_CLIENT, orphan: true },
+])("$client.label disconnect disables matching JSONC aliases and verifies both files (orphan: $orphan)", async ({
+  guard,
+  client,
+  orphan,
+}) => {
+  const ownedPath = `.config/${client.dir}/${client.configFile}`;
+  const siblingPath = `.config/${client.dir}/${client.commentedConfigFile}`;
+  const registration = {
+    type: "remote",
+    url: CTX.mcp?.url,
+    enabled: true,
+    oauth: false,
+    headers: { Authorization: "Bearer example-test-token" },
+  };
+  const result = await runGuardSnippet({
+    client: guard,
+    functions: ["disconnect_actions", "disconnect_verify"],
+    invoke: "disconnect_actions mcp\ndisconnect_verify mcp",
+    files: {
+      [ownedPath]: JSON.stringify(
+        orphan ? {} : { mcp: { prod_gateway: registration } },
+      ),
+      [siblingPath]: JSON.stringify({
+        mcp: {
+          ...(orphan ? {} : { prod_gateway: registration }),
+          my_gateway: registration,
+          other: { type: "remote", url: "https://other.example.com/mcp" },
+        },
+      }),
+    },
+    readFiles: [ownedPath, siblingPath],
+  });
+  expect(result.code).toBe(0);
+  expect(JSON.parse(result.files[ownedPath] ?? "{}").mcp).toBeUndefined();
+  const sibling = JSON.parse(result.files[siblingPath] ?? "{}");
+  expect(sibling.mcp.prod_gateway).toEqual(
+    orphan ? undefined : { ...registration, enabled: false },
+  );
+  expect(sibling.mcp.my_gateway).toEqual({ ...registration, enabled: false });
+  expect(sibling.mcp.other).toEqual({
+    type: "remote",
+    url: "https://other.example.com/mcp",
+  });
+});
+
+test.each([
+  "kilo.json",
+  "kilo.jsonc",
+])("Kilo refuses to claim disconnect succeeded without a runtime to inspect %s", async (filename) => {
+  const configPath = `.config/kilo/${filename}`;
+  const config = JSON.stringify({
+    mcp: { prod_gateway: { type: "remote", url: CTX.mcp?.url, enabled: true } },
+  });
+  const result = await runGuardSnippet({
+    client: KILO_GUARD_CLIENT,
+    functions: ["disconnect_actions", "disconnect_verify"],
+    invoke: "disconnect_actions mcp\ndisconnect_verify mcp",
+    files: { [configPath]: config },
+    readFiles: [configPath],
+    isolatePath: true,
+  });
+  expect(result.code).toBe(1);
+  expect(result.files[configPath]).toBe(config);
+});
+
+test("Kilo disconnect verification refuses malformed JSONC rather than reporting success", async () => {
+  const result = await runGuardSnippet({
+    client: KILO_GUARD_CLIENT,
+    functions: ["disconnect_verify"],
+    invoke: "disconnect_verify mcp",
+    files: { ".config/kilo/kilo.jsonc": '{"mcp": { /* incomplete' },
+  });
+  expect(result.code).toBe(1);
+});
 
 async function expectValidBash(script: string): Promise<void> {
   const dir = await mkdtemp(path.join(tmpdir(), "archestra-guard-"));
@@ -442,6 +524,7 @@ async function runGuardSnippet(params: {
         "line_reset() { :; }",
         'C_WARN=""; C_RESET=""; C_DIM=""; C_ERR=""; C_ACCENT=""',
         `MCP_SERVER_NAME=${JSON.stringify(CTX.mcp?.serverName)}`,
+        `MCP_SERVER_URL=${JSON.stringify(CTX.mcp?.url)}`,
         `SKILLS_MARKETPLACE_NAME=${JSON.stringify(CTX.skills?.marketplaceName)}`,
         ...params.functions.map((name) => extractShellFunction(script, name)),
         params.invoke,
@@ -686,6 +769,27 @@ else
 fi
 grep -F '[tools]' "$CODEX_HOME/config.toml" || exit 9
 ! grep -F '[model_providers.acme_proxy]' "$CODEX_HOME/config.toml" || exit 10
+`,
+    });
+
+    expect(code).toBe(0);
+  });
+
+  test("keeps a table Codex added inside the provider block", async () => {
+    // Codex 0.162 writes a new table before the comments at the end of the
+    // file, so a marketplace added after the provider sits inside its block.
+    const { code } = await runGuardSnippet({
+      client: CODEX_GUARD_CLIENT,
+      functions: ["disconnect_proxy", "codex_logout_if_ours"],
+      files: {
+        "config.toml": `model_provider = "acme_proxy"\n# >>> archestra:acme_proxy >>>\n[model_providers.acme_proxy]\nname = "acme_proxy"\n\n[model_providers.acme_proxy.http_headers]\n"X-Archestra-Agent-Id" = "codex"\n\n[marketplaces.acme-skills]\nsource_type = "git"\n# <<< archestra:acme_proxy <<<\n`,
+      },
+      env: { CODEX_HOME: "{HOME}" },
+      invoke: `disconnect_proxy
+grep -Fx '[marketplaces.acme-skills]' "$CODEX_HOME/config.toml" || exit 7
+grep -Fx 'source_type = "git"' "$CODEX_HOME/config.toml" || exit 8
+! grep -F 'model_providers' "$CODEX_HOME/config.toml" || exit 9
+! grep -F 'archestra:acme_proxy' "$CODEX_HOME/config.toml" || exit 10
 `,
     });
 

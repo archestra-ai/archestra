@@ -21,6 +21,7 @@ import {
   MAX_SUGGESTED_PROMPT_TEXT_LENGTH,
   MAX_SUGGESTED_PROMPT_TITLE_LENGTH,
   MAX_SUGGESTED_PROMPTS,
+  providerSupportsChat,
   resolveAgentCatalogId,
   SUBSCRIPTION_CREDENTIALS,
   type SupportedProvider,
@@ -1455,6 +1456,9 @@ export function AgentForm({
     useFeature("anthropicVertexAiEnabled") === true;
   const isClaudeCodeRuntime = runtime?.command?.[0] === "archestra-claude-code";
   const agentRuntimeEnabled = useFeature("agentRuntime") === true;
+  // A runtime saved before the deployment turned Agent Runtime off stays
+  // editable, so it can be switched off.
+  const runtimeEditable = agentRuntimeEnabled || !!agent?.runtime;
   const runtimePreflight = useAgentRuntimePreflight(
     agent?.id ?? "",
     agentRuntimeEnabled && !!agent?.runtime,
@@ -1529,11 +1533,13 @@ export function AgentForm({
   // Who may reach it — the scope picker, plus the caller's own default-agent
   // toggle. A built-in belongs to the organization and offers neither, so the
   // section would be empty.
+  // A built-in offers its assigned tools and nothing else: the backend keeps a
+  // built-in's other fields at their shipped values, so the All mode,
+  // knowledge sources and tool behavior would not save.
   const showTools =
-    !isBuiltIn &&
-    (agentType === "mcp_gateway" ||
-      agentType === "agent" ||
-      agentType === "profile");
+    agentType === "mcp_gateway" ||
+    agentType === "agent" ||
+    agentType === "profile";
   const showSubagents = !isBuiltIn && supportsSubagents;
   // The delegation targets and the disabled-subagent set each arrive from their
   // own request. Until both have succeeded the editors would render a
@@ -1896,10 +1902,16 @@ export function AgentForm({
       }).compatible,
     [runtime],
   );
+  // The agent's key answers its conversations, so only providers that can
+  // chat are offered; a runtime narrows that further.
+  const apiKeyProviderFilter = useCallback(
+    (provider: SupportedProvider) =>
+      providerSupportsChat(provider) && runtimeProviderFilter(provider),
+    [runtimeProviderFilter],
+  );
   const allowedApiKeyProviders = useMemo(
-    () =>
-      runtime ? SupportedProviders.filter(runtimeProviderFilter) : undefined,
-    [runtime, runtimeProviderFilter],
+    () => SupportedProviders.filter(apiKeyProviderFilter),
+    [apiKeyProviderFilter],
   );
   // A runtime with no explicit model inherits the organization default. Validate
   // that effective model locally before allowing a create or runtime change.
@@ -2183,8 +2195,7 @@ export function AgentForm({
       let updateConfirmed = false;
 
       // Save tool changes FIRST (before agent update triggers refetch that clears pending changes)
-      // Skip for built-in agents as they don't have editable tools
-      if (agent && !isBuiltIn) {
+      if (agent) {
         await agentToolsEditorRef.current?.saveChanges({
           resourceLabel: agentTypeDisplayName[agentType] || "resource",
         });
@@ -2197,6 +2208,9 @@ export function AgentForm({
           id: agent.id,
           data: {
             builtInAgentConfig,
+            // An emptied prompt is stored as null, which the runtime reads as
+            // the shipped default.
+            systemPrompt: trimmedSystemPrompt || null,
             ...(llmSelectionChanged && {
               llmApiKeyId: llmApiKeyId || null,
               modelId: llmModel || null,
@@ -2260,7 +2274,7 @@ export function AgentForm({
                   passthroughHeaders.length > 0 ? passthroughHeaders : null,
               }),
             }),
-            ...(showRuntimeSection && agentRuntimeEnabled && { runtime }),
+            ...(showRuntimeSection && runtimeEditable && { runtime }),
             // The tools group: what the agent may reach, and how.
             ...(showToolsSections && {
               knowledgeBaseIds: knowledgeBaseIds,
@@ -2595,6 +2609,7 @@ export function AgentForm({
     supportsEnvironment,
     supportsSubagents,
     agentRuntimeEnabled,
+    runtimeEditable,
     runtime,
     channelAssignmentsDirty,
     isClaudeCodeRuntime,
@@ -2799,7 +2814,7 @@ export function AgentForm({
         }}
         onAddApiKey={onAddApiKey}
         currentProvider={currentLlmProvider ?? undefined}
-        providerFilter={runtime ? runtimeProviderFilter : undefined}
+        providerFilter={apiKeyProviderFilter}
         triggerVariant="button"
         triggerClassName="h-8 max-w-[250px] text-xs"
         popoverClassName="w-96"
@@ -3227,23 +3242,6 @@ export function AgentForm({
                     )}
                 </SettingsSection>
               )}
-
-              {/* Labels for built-in agents (the Advanced step that holds
-                them for everyone else does not exist for a built-in). */}
-              {isBuiltIn && (
-                <SettingsSection
-                  title="Labels"
-                  description="Use key-value labels to organize and filter this resource."
-                >
-                  <ProfileLabels
-                    ref={agentLabelsRef}
-                    labels={labels}
-                    onLabelsChange={setLabels}
-                    showLabel={false}
-                    showDescription={false}
-                  />
-                </SettingsSection>
-              )}
             </SettingsSectionGroup>
           )}
 
@@ -3352,23 +3350,25 @@ export function AgentForm({
                             )
                           : assignedToolsSummary(assignedToolCount)}
                       </p>
-                      <Tabs
-                        value={autoToolsMode ? "auto" : "custom"}
-                        onValueChange={(value) => {
-                          const auto = value === "auto";
-                          setAccessAllTools(auto);
-                          // Dynamic access only works through the search/run
-                          // dispatch surface, so picking it enables that mode.
-                          if (auto) {
-                            setToolExposureMode("search_and_run_only");
-                          }
-                        }}
-                      >
-                        <TabsList size="sm">
-                          <TabsTrigger value="auto">All</TabsTrigger>
-                          <TabsTrigger value="custom">Manual</TabsTrigger>
-                        </TabsList>
-                      </Tabs>
+                      {!isBuiltIn && (
+                        <Tabs
+                          value={autoToolsMode ? "auto" : "custom"}
+                          onValueChange={(value) => {
+                            const auto = value === "auto";
+                            setAccessAllTools(auto);
+                            // Dynamic access only works through the search/run
+                            // dispatch surface, so picking it enables that mode.
+                            if (auto) {
+                              setToolExposureMode("search_and_run_only");
+                            }
+                          }}
+                        >
+                          <TabsList size="sm">
+                            <TabsTrigger value="auto">All</TabsTrigger>
+                            <TabsTrigger value="custom">Manual</TabsTrigger>
+                          </TabsList>
+                        </Tabs>
+                      )}
                     </div>
                     {/* Auto and Custom are the same pair of fields inversed —
                         every tool and source minus a set, or exactly a set — so
@@ -3477,7 +3477,7 @@ export function AgentForm({
                           includeAppCatalogs={shouldOfferAppCatalogs(agentType)}
                         />
                       </div>
-                      {canReadKnowledgeBase && (
+                      {canReadKnowledgeBase && !isBuiltIn && (
                         <div className="space-y-2">
                           {/* At zero the editor's own empty state names the
                               count and the tool assigning one produces, so
@@ -3545,7 +3545,7 @@ export function AgentForm({
                       // inset past the icon column, and the two together
                       // stacked one line on another.
                       "mt-2 border-t pt-2",
-                      autoToolsMode && "hidden",
+                      (autoToolsMode || isBuiltIn) && "hidden",
                     )}
                     data-testid={E2eTestId.AgentToolLoadingSection}
                   >
@@ -3686,7 +3686,7 @@ export function AgentForm({
           {agent &&
             showRuntimeSection &&
             agentType === "agent" &&
-            agentRuntimeEnabled &&
+            runtimeEditable &&
             !isBuiltIn && (
               <div className={cn(!isActiveSection("runtime") && "hidden")}>
                 <AgentRuntimeFields

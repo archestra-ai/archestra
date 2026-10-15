@@ -4,7 +4,6 @@ import {
   TOOL_RUN_COMMAND_SHORT_NAME,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import { userHasPermission } from "@/auth";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
 import logger from "@/logging";
@@ -19,7 +18,9 @@ import {
   openappaDeclarations,
   type PolicyResolution,
 } from "@/openappa/declarations";
+import type { Rebinding } from "@/openappa/retired-annotators";
 import { GUARDRAILS_NOOP_ANNOTATOR_PATH } from "@/routes/route-paths";
+import { CredentialAccess } from "@/services/credential-access";
 import { ApiError } from "@/types";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
 import type { PolicyTestFile } from "@/types/openappa-policy-tests";
@@ -76,7 +77,12 @@ function duplicateEntryErrors(resolution: PolicyResolution): string[] {
  * it; one the document introduces is an error. Either way the held-back
  * batteries are named with it, since they are what the refusal is fixed by.
  * A held-back battery the document composes without is no refusal; its status
- * is the effective policy's to report.
+ * is the effective policy's to report. A document that composes is warned
+ * about each annotator the effective policy declares and it would drop. A
+ * name it binds differently from a policy sessions opened under is an error,
+ * since those sessions would be redirected; one the revision being replaced
+ * already binds that way is a warning, since the document changes nothing
+ * for them.
  */
 async function deploymentRefusal(params: {
   organizationId: string;
@@ -87,33 +93,74 @@ async function deploymentRefusal(params: {
   const submitted = await openappaBatteriesService.composeInDeployment({
     organizationId,
     content,
+    previous,
   });
-  if (submitted.refusal.length === 0) return { errors: [], warnings: [] };
-  const kept = new Set(
+  const inDeployment = (line: string) => `in this deployment: ${line}`;
+  // What the revision being replaced already meets is not this document's
+  // doing: it is warned about, while what this document introduces is an error.
+  const before =
     previous === content
-      ? submitted.refusal
-      : (
-          await openappaBatteriesService.composeInDeployment({
+      ? submitted
+      : submitted.refusal.length === 0 && submitted.rebound.length === 0
+        ? null
+        : await openappaBatteriesService.composeInDeployment({
             organizationId,
             content: previous,
-          })
-        ).refusal,
+          });
+  // A rebinding is carried only while the name stays bound as the revision
+  // being replaced binds it; binding it a third way redirects sessions again.
+  const carried = new Map(
+    (before?.rebound ?? []).map((rebinding) => [
+      rebinding.name,
+      rebinding.current,
+    ]),
   );
+  const isCarried = (rebinding: Rebinding) =>
+    carried.get(rebinding.name) === rebinding.current;
+  const rebindingErrors = submitted.rebound
+    .filter((rebinding) => !isCarried(rebinding))
+    .map((rebinding) => inDeployment(rebindingError(rebinding)));
+  const rebindingWarnings = submitted.rebound
+    .filter(isCarried)
+    .map((rebinding) => inDeployment(rebindingWarning(rebinding)));
+  if (submitted.refusal.length === 0)
+    return {
+      errors: rebindingErrors,
+      warnings: [...submitted.retiring, ...rebindingWarnings],
+    };
+  const kept = new Set(before?.refusal ?? []);
   const introduced = submitted.refusal.filter((error) => !kept.has(error));
-  const inDeployment = (line: string) => `in this deployment: ${line}`;
   const keptNote =
     " (the current revision is refused the same way; the runtime keeps enforcing the last composition that opened)";
   if (introduced.length > 0)
     return {
-      errors: [...introduced, ...submitted.heldBack].map(inDeployment),
+      errors: [
+        ...[...introduced, ...submitted.heldBack].map(inDeployment),
+        ...rebindingErrors,
+      ],
       warnings: [],
     };
   return {
-    errors: [],
-    warnings: [...submitted.refusal, ...submitted.heldBack].map(
-      (line) => inDeployment(line) + keptNote,
-    ),
+    errors: rebindingErrors,
+    warnings: [
+      ...[...submitted.refusal, ...submitted.heldBack].map(
+        (line) => inDeployment(line) + keptNote,
+      ),
+      ...rebindingWarnings,
+    ],
   };
+}
+
+/** A rebinding this document introduces: sessions opened earlier would be redirected. */
+function rebindingError(rebinding: Rebinding): string {
+  const { name, current, earlier } = rebinding;
+  return `annotator "${name}" is bound to ${current} in this revision, but sessions opened under earlier policies were answered by ${earlier.join(" or ")} and would be redirected. Declare the new binding under a new annotator name so those sessions keep theirs.`;
+}
+
+/** A rebinding the revision being replaced already carries: this document changes nothing for those sessions. */
+function rebindingWarning(rebinding: Rebinding): string {
+  const { name, current, earlier } = rebinding;
+  return `annotator "${name}" stays bound to ${current}; sessions opened under earlier policies were answered by ${earlier.join(" or ")} and have been answered by ${current} since the revision that rebound it. This revision changes nothing for them.`;
 }
 
 /** The 409 a lost revision race answers with; a retrying writer waits for this one. */
@@ -201,6 +248,10 @@ export const guardrailsPolicyService = {
       const composed = await openappaDeclarations.composeForCheck({
         root: content,
         resolution,
+        deployed: await openappaBatteriesService.deployedBatteries({
+          organizationId,
+          resolution,
+        }),
       });
       if ((composed.content ?? null) === null) errors.push(...composed.errors);
       else {
@@ -236,10 +287,7 @@ export const guardrailsPolicyService = {
     requireEnabled();
     const { organizationId, userId, content } = params;
     if ((await OpenAppaGithubSyncModel.find(organizationId))?.interval)
-      throw new ApiError(
-        409,
-        "Stop GitHub syncing before editing this policy.",
-      );
+      throw new ApiError(409, "Stop Git sync before editing this policy.");
     const latest = await this.get(organizationId);
     const resolved = await resolveBoth({
       organizationId,
@@ -292,23 +340,28 @@ export const guardrailsPolicyService = {
   },
 };
 
-/** A write that adds or rekeys a credential grant takes `credential:update`. */
+/**
+ * A write that adds or rekeys a credential grant hands that credential's value
+ * to helper code, so it takes `use` on the credential. A key with no credential
+ * behind it yet would hand over whichever one is created under it later, so it
+ * takes `use` on every credential.
+ */
 export async function requireGrantPermission(params: {
   organizationId: string;
   userId: string;
   granted: ReturnType<typeof addedGrants>;
 }): Promise<void> {
   const { organizationId, userId, granted } = params;
-  if (
-    granted.length > 0 &&
-    !(await userHasPermission(userId, organizationId, "credential", "update"))
-  )
-    throw new ApiError(
-      403,
-      `Credential update permission is required: this policy hands ${granted
-        .map((grant) => `${grant.variable} to ${grant.battery}`)
-        .join(", ")}`,
-    );
+  const message = `Use access to the credential is required: this policy hands ${granted
+    .map((grant) => `${grant.variable} to ${grant.battery}`)
+    .join(", ")}`;
+  for (const key of new Set(granted.map((grant) => grant.key)))
+    await CredentialAccess.requireUseOfKey({
+      organizationId,
+      userId,
+      key,
+      message,
+    });
 }
 
 function requireEnabled() {

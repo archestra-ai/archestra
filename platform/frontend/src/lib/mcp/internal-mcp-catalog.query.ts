@@ -20,6 +20,7 @@ const {
   deleteInternalMcpCatalogItem,
   getDeploymentYamlPreview,
   getInternalMcpCatalog,
+  getInternalMcpCatalogCredentialPreflight,
   getInternalMcpCatalogLabelKeys,
   getInternalMcpCatalogLabelValues,
   getInternalMcpCatalogTools,
@@ -136,6 +137,31 @@ export function useInternalMcpCatalogAccessIds(filters: {
   });
 }
 
+/**
+ * The saved credentials that would stop the caller installing a catalog item
+ * at this scope, so the install dialog can explain before they press Install.
+ */
+export function useMcpCatalogCredentialPreflight(params: {
+  catalogId: string | undefined;
+  scope: "personal" | "team" | "org";
+  enabled?: boolean;
+}) {
+  const { catalogId, scope } = params;
+  return useQuery({
+    queryKey: ["mcp-catalog", catalogId, "credential-preflight", scope],
+    enabled: !!catalogId && (params.enabled ?? true),
+    refetchOnMount: "always",
+    queryFn: async () => {
+      const { data, error } = await getInternalMcpCatalogCredentialPreflight({
+        path: { id: catalogId ?? "" },
+        query: { scope },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data?.blockers ?? [];
+    },
+  });
+}
+
 export function useMcpCatalogLabelKeys() {
   return useQuery({
     queryKey: ["mcp-catalog", "labels", "keys"],
@@ -241,7 +267,6 @@ export function useUpdateInternalMcpCatalogItem() {
       queryClient.invalidateQueries({ queryKey: ["tools"] });
       queryClient.invalidateQueries({ queryKey: ["tools-with-assignments"] });
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
-      toast.success("Catalog item updated successfully");
     },
     onError: (error) => {
       // The network-policy error is shown inline on the Server URL field and

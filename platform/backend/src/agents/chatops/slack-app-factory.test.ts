@@ -202,6 +202,53 @@ describe("SlackAppFactory", () => {
     ).rejects.toThrow("expired");
   });
 
+  test("creates the router bot's app with slash commands and installs it in one click", async () => {
+    vi.spyOn(ngrokTunnelManager, "getPublicDomain").mockReturnValue(
+      "team.ngrok.app",
+    );
+    await saveToken();
+
+    const result = await slackAppFactory.createRouterApp({
+      appName: "archestra",
+      connectionMode: "webhook",
+      organizationId: "org-1",
+      userId: USER_ID,
+    });
+
+    const { manifest } = slack.create.mock.calls[0][0];
+    // People pick their agent with /select-agent, so the router keeps it.
+    expect(manifest.features.slash_commands).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          command: expect.stringMatching(/select-agent$/),
+          url: "https://team.ngrok.app/api/webhooks/chatops/slack/slash-command",
+        }),
+      ]),
+    );
+    expect(manifest.settings.event_subscriptions.request_url).toBe(
+      "https://team.ngrok.app/api/webhooks/chatops/slack",
+    );
+    expect(await ChatOpsConfigModel.getSlackConfig()).toEqual(
+      expect.objectContaining({
+        enabled: false,
+        botToken: "",
+        appId: "A_NEW",
+        clientId: "client-1",
+        configTokenUserId: USER_ID,
+      }),
+    );
+    // Agent bots are untouched.
+    expect(await ChatOpsConfigModel.getSlackAgentBots()).toEqual([]);
+
+    const state = new URL(result.installUrl).searchParams.get("state") ?? "";
+    await expect(
+      slackAppFactory.completeOAuthInstall({ code: "code-1", state }),
+    ).resolves.toEqual({ agentId: null });
+    expect(await ChatOpsConfigModel.getSlackConfig()).toEqual(
+      expect.objectContaining({ botToken: "xoxb-installed", enabled: true }),
+    );
+  });
+
   test("an install link this server never issued is refused", async () => {
     await expect(
       slackAppFactory.completeOAuthInstall({ code: "c", state: "forged" }),
@@ -408,5 +455,44 @@ describe("SlackAppFactory", () => {
       { appId: "A_NOT_MINE", ok: false, error: "no_permission" },
       { appId: "A_HANDMADE", agentId: AGENT_ID, ok: true },
     ]);
+  });
+
+  test("updates only the bots this person manages, and those nobody manages yet", async () => {
+    await saveToken();
+    const bot = (agentId: string, appId: string, owner?: string) =>
+      ChatOpsConfigModel.saveSlackAgentBot({
+        agentId,
+        enabled: true,
+        botToken: "xoxb",
+        signingSecret: "s",
+        appId,
+        managed: Boolean(owner),
+        ...(owner && { configTokenUserId: owner }),
+      });
+    await bot(AGENT_ID, "A_MINE", USER_ID);
+    await bot("33333333-3333-4333-8333-333333333333", "A_TEAMMATE", "user-2");
+    await bot("44444444-4444-4444-8444-444444444444", "A_UNOWNED");
+    slack.exportManifest.mockResolvedValue({
+      ok: true,
+      manifest: { features: {} },
+    });
+    slack.update.mockResolvedValue({ ok: true });
+
+    const results = await slackAppFactory.migrateExistingApps(USER_ID);
+
+    // A teammate's app is theirs: Slack would refuse this token for it.
+    expect(results.map((result) => result.appId)).toEqual([
+      "A_MINE",
+      "A_UNOWNED",
+    ]);
+    expect(slack.exportManifest).not.toHaveBeenCalledWith(
+      expect.objectContaining({ app_id: "A_TEAMMATE" }),
+    );
+    // The unowned bot is now managed with this person's token.
+    expect(
+      (await ChatOpsConfigModel.getSlackAgentBots()).find(
+        (candidate) => candidate.appId === "A_UNOWNED",
+      ),
+    ).toMatchObject({ managed: true, configTokenUserId: USER_ID });
   });
 });

@@ -9172,9 +9172,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(message).toContain("tool call toolu_unprotected_agent");
     });
 
-    // Claude Code acknowledges a teammate or a cloud agent when it starts. The
-    // acknowledgement carries no subagent output, so no retained return exists
-    // for it, and later requests of the session must not be refused for it.
+    // Native lifecycle statuses carry no subagent output. They need no retained
+    // return, and must not poison later requests that replay the same history.
     test.for([
       [
         "a teammate",
@@ -9188,7 +9187,13 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         "Cloud agent launched.\\ntaskId: r1",
         "session_url",
       ],
-    ] as const)("forwards only the status and ids of the launch acknowledgement of %s", async ([
+      [
+        "a subagent that did not deliver a handback",
+        "  The subagent ended without delivering a report through SubagentHandback, so no report was delivered. Its unsent text is not shown. Send the agent a message (SendMessage) to ask it to deliver its report.\n  \nagentId: a1 (use SendMessage with to: 'a1', summary: '<5-10 word recap>' to continue this agent)\n<usage>subagent_tokens: 1234\ntool_uses: 3\nduration_ms: 1000</usage>",
+        "The subagent ended without delivering a report through SubagentHandback, so no report was delivered.\\nagentId: a1",
+        "subagent_tokens",
+      ],
+    ] as const)("forwards only the status and ids of %s", async ([
       _kind,
       acknowledgement,
       forwarded,
@@ -9243,6 +9248,28 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       // Other text never crosses as a launch, so a launch cannot carry output.
       expect(JSON.stringify(providerRequests)).toContain(forwarded);
       expect(JSON.stringify(providerRequests)).not.toContain(dropped);
+      expect(events.filter((event) => event.event === "tool_result")).toEqual(
+        [],
+      );
+
+      providerRequests.length = 0;
+      const replayed = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: {
+          ...externalClientHeaders(),
+          "user-agent": "claude-cli/2.1.299 (external, cli)",
+          "x-claude-code-session-id": "launched-agent",
+        },
+        payload: body,
+      });
+      expect(replayed.statusCode, replayed.body).toBe(200);
+      expect(JSON.stringify(providerRequests)).toContain(forwarded);
+      expect(JSON.stringify(providerRequests)).not.toContain(dropped);
+      expect(events.filter((event) => event.event === "tool_result")).toEqual(
+        [],
+      );
     });
 
     // Retained returns are looked up by the session that ran the subagent, so

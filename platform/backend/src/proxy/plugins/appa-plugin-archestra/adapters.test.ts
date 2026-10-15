@@ -497,6 +497,62 @@ describe("APPA child trajectory adapters", () => {
     }
   });
 
+  test("normalizes a missing handback to client status without admitting a report", () => {
+    const status =
+      "The subagent ended without delivering a report through SubagentHandback, so no report was delivered.";
+    const content = `  ${status} Its unsent text is not shown. Send the agent a message (SendMessage) to ask it to deliver its report.\n  \nagentId: a1 (use SendMessage with to: 'a1', summary: '<5-10 word recap>' to continue this agent)
+<usage>subagent_tokens: 1234
+tool_uses: 3
+duration_ms: 1000</usage>`;
+    const result = {
+      id: "no-handback",
+      name: "Agent",
+      content,
+      isError: false,
+    };
+    const canonical = `${status}\nagentId: a1`;
+    expect(
+      claudeCode.normalizeChildLaunchResult({ ...result, content: canonical }),
+    ).toBe(canonical);
+    for (const name of ["Agent", "Task"]) {
+      for (const returned of [
+        content,
+        [{ type: "text", text: content }],
+        `${content}\nUNCHECKED-REPORT`,
+      ]) {
+        const native = { ...result, name, content: returned };
+        expect(claudeCode.normalizeChildLaunchResult(native)).toBe(canonical);
+        expect(claudeCode.isChildCompletionResult(native)).toBe(false);
+      }
+    }
+    for (const returned of [
+      status,
+      `${status}\nagentId: bad id`,
+      `${status}\nagentId: ${"a".repeat(129)}`,
+      `UNCHECKED-REPORT\n${content}`,
+      `${status}\nUNCHECKED-REPORT`,
+      [
+        { type: "text", text: content },
+        { type: "text", text: "UNCHECKED-REPORT" },
+      ],
+      [
+        { type: "text", text: content },
+        { type: "image", source: { type: "url", url: "https://example.com" } },
+      ],
+    ]) {
+      const malformed = { ...result, content: returned };
+      expect(claudeCode.normalizeChildLaunchResult(malformed)).toBeUndefined();
+      expect(claudeCode.isChildCompletionResult(malformed)).toBe(true);
+    }
+    for (const other of [
+      { ...result, name: "Bash" },
+      { ...result, isError: true },
+    ]) {
+      expect(claudeCode.normalizeChildLaunchResult(other)).toBeUndefined();
+      expect(claudeCode.isChildCompletionResult(other)).toBe(false);
+    }
+  });
+
   test("distinguishes completed child returns from launch acknowledgments", () => {
     const safeLaunch = "Async agent launched successfully.\nagentId: a1";
     const claudeLaunch = {

@@ -154,7 +154,7 @@ describe("syncBuiltInAgents", () => {
     const originalToolIds = await AgentToolModel.findToolIdsByAgent(
       agent?.id ?? "",
     );
-    expect(originalToolIds).toHaveLength(33);
+    expect(originalToolIds).toHaveLength(29);
     const [resolveYellTool] = await ToolModel.findBuiltInToolIdsByNames([
       archestraMcpBranding.getToolName("resolve_openappa_yell"),
     ]);
@@ -346,12 +346,12 @@ The archive is a gzipped JSON file attached to the chat as openappa-yell-<id>.js
       organization.id,
     );
     if (!agent) throw new Error("Configuration agent was not seeded");
-    const previousPrompt = `You configure this deployment's OpenAPPA policy and lightweight validations, and investigate yells, which are reports about how the policy behaved. You can publish policy changes, manage credentials, and create the policy repository; other agents can only preview.
+    const previousPrompt = `You configure this deployment's OpenAPPA policy and lightweight validations, and investigate yells, which are reports about how the policy behaved. You can publish policy changes and manage credentials; other agents can only preview.
 
 Be neurodiversity friendly.
 
 1. Load the appa-guide skill before policy or validation work and follow it. If it cannot be loaded, say so and still follow the rules below.
-2. Inspect before you answer. Read the current policy and the agents, MCP gateways, and MCP server tools involved.
+2. Inspect before you answer. Read the current policy and the MCP server tools involved.
 3. When the request names a target with its type and ID, look it up by that ID first and keep changes scoped to it. Ask when it is missing or unavailable.
 4. Answering a question or reviewing the policy or validations changes nothing. Publish only a change the user approved. Validation-only requests authorize changes to validation files only: omit policyContent or pass null. Include policyContent only when the user explicitly requested a policy change. For policy-only work, change a saved policy with edits. For a combined policy and validation proposal, derive the complete policyContent from the current root text and reviewed exact-text edits, preserving unrelated lines.
 5. The policy text is not a file in the sandbox, and run_command cannot call policy tools. Do not build a policy draft there.
@@ -423,7 +423,7 @@ Be neurodiversity friendly.
     ).toHaveLength(1);
     expect(
       await AgentToolModel.findToolIdsByAgent(agent?.id ?? ""),
-    ).toHaveLength(33);
+    ).toHaveLength(29);
     await syncOpenAppaConfigAgentCapabilities();
     expect(
       (
@@ -463,8 +463,6 @@ Be neurodiversity friendly.
       const loadSkillIds = await ToolModel.findBuiltInToolIdsByNames([
         archestraMcpBranding.getToolName("load_skill"),
         archestraMcpBranding.getToolName("get_guardrails_policy"),
-        archestraMcpBranding.getToolName("get_agent"),
-        archestraMcpBranding.getToolName("get_mcp_gateway"),
         archestraMcpBranding.getToolName("ask_user"),
       ]);
       expect(assignedIds).toEqual(expect.arrayContaining(loadSkillIds));
@@ -542,7 +540,7 @@ Be neurodiversity friendly.
     const managedToolIds = (
       await AgentToolModel.findToolIdsByAgent(guidedAgentId)
     ).sort();
-    expect(managedToolIds).toHaveLength(33);
+    expect(managedToolIds).toHaveLength(29);
     expect((await AgentToolModel.findToolIdsByAgent(agentId)).sort()).toEqual(
       managedToolIds,
     );
@@ -588,7 +586,7 @@ Be neurodiversity friendly.
     expect(await ToolModel.findBuiltInToolIdsByNames(sandboxToolNames)).toEqual(
       [],
     );
-    expect(await AgentToolModel.findToolIdsByAgent(agentId)).toHaveLength(30);
+    expect(await AgentToolModel.findToolIdsByAgent(agentId)).toHaveLength(26);
 
     config.skillsSandbox.enabled = true;
     await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
@@ -598,7 +596,7 @@ Be neurodiversity friendly.
       await ToolModel.findBuiltInToolIdsByNames(sandboxToolNames);
     expect(sandboxToolIds).toHaveLength(3);
     const assigned = await AgentToolModel.findToolIdsByAgent(agentId);
-    expect(assigned).toHaveLength(33);
+    expect(assigned).toHaveLength(29);
     expect(assigned).toEqual(expect.arrayContaining(sandboxToolIds));
   });
 

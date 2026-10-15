@@ -24,6 +24,7 @@ import {
   TeamModel,
 } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
+import type { Model } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 
 /** A fully dereferenced selection ready for an LLM call. */
@@ -460,41 +461,62 @@ export async function resolveAgentLlmOrDefault(params: {
   return resolveDefaultLlmSelection(params);
 }
 
-/**
- * Output-token budget for a one-off call on `modelName`. `catalogued` when the
- * catalog knows the model's output cap: the cap clamped by the operator
- * ceiling. `uncatalogued` otherwise: a safe fallback. Never exceeds a known
- * cap, so a provider that forwards `max_tokens` unchanged never rejects it.
- */
+/** Output-token budget for a one-off call on `modelName`; see modelOutputBudget. */
 export async function resolveModelOutputBudget(params: {
   provider: SupportedProvider;
   modelName: string;
-  /** Output cap to assume when the catalog has none for the model. */
   unknownOutputLength?: number;
 }): Promise<ModelOutputBudget> {
-  const model = await ModelModel.findByProviderAndModelId(
-    params.provider,
-    params.modelName,
-  );
+  return modelOutputBudget({
+    provider: params.provider,
+    model: await ModelModel.findByProviderAndModelId(
+      params.provider,
+      params.modelName,
+    ),
+    unknownOutputLength: params.unknownOutputLength,
+  });
+}
+
+/**
+ * Output-token budget for a one-off call on a catalog row: the model's output
+ * cap clamped by the operator ceiling, or a safe fallback when the catalog has
+ * none. Never exceeds a known cap, so a provider that forwards `max_tokens`
+ * unchanged never rejects it.
+ */
+export function modelOutputBudget(params: {
+  provider: SupportedProvider;
+  model: Model | null;
+  /** Output cap to assume when the catalog has none for the model. */
+  unknownOutputLength?: number;
+}): ModelOutputBudget {
+  const { model } = params;
   const outputLength = model
     ? ModelModel.resolveEffectiveOutputLength(model)
     : null;
+  const contextLength = model
+    ? ModelModel.resolveEffectiveContextLength(model)
+    : null;
   const tokens = resolveAgentMaxOutputTokens({
     outputLength: outputLength ?? params.unknownOutputLength ?? null,
-    contextLength: model
-      ? ModelModel.resolveEffectiveContextLength(model)
-      : null,
+    contextLength,
     ceiling: config.chat.maxOutputTokensCeiling,
     rateMeteredCeiling: config.chat.rateMeteredMaxOutputTokensCeiling,
     provider: params.provider,
   });
-  return outputLength === null
-    ? { kind: "uncatalogued", tokens }
+  if (outputLength === null) return { kind: "uncatalogued", tokens };
+  return contextLength !== null && outputLength >= contextLength
+    ? { kind: "shared-window", tokens }
     : { kind: "catalogued", tokens };
 }
 
+/**
+ * `catalogued`: the catalog knows an output cap separate from the context
+ * window. `shared-window`: the output draws on the prompt's window, so any
+ * fixed reservation can push a long prompt over it. `uncatalogued`: the
+ * catalog has no output cap, so `tokens` is a fallback.
+ */
 export type ModelOutputBudget = {
-  kind: "catalogued" | "uncatalogued";
+  kind: "catalogued" | "shared-window" | "uncatalogued";
   tokens: number;
 };
 

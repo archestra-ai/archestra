@@ -1249,10 +1249,11 @@ function createOllamaNativeFetch(
 
 /**
  * Default output budget for calls that set no `maxOutputTokens`. When the
- * model catalog knows the model's output cap, every provider gets the catalog
- * budget (see resolveModelOutputBudget), so a model that reasons by default
- * never runs into a small provider or SDK default. Otherwise the provider's
- * own default stands, except for Anthropic: its SDK substitutes a per-model
+ * model catalog knows an output cap separate from the context window, every
+ * provider gets the catalog budget (see modelOutputBudget), so a model that
+ * reasons by default never runs into a small provider or SDK default.
+ * Otherwise the provider's own default stands, since it can spend the
+ * prompt's leftover window, except for Anthropic: its SDK substitutes a per-model
  * table that lags new model ids and Vertex `@` spellings (4096 for unknown
  * ids on older SDKs, 128k on newer ones, which older models reject), so it
  * gets the safe fallback. Explicit per-call values still win.
@@ -1274,6 +1275,7 @@ function withCatalogOutputBudget(
         switch (budget.kind) {
           case "catalogued":
             return { ...params, maxOutputTokens: budget.tokens };
+          case "shared-window":
           case "uncatalogued":
             return target.provider === "anthropic"
               ? { ...params, maxOutputTokens: budget.tokens }

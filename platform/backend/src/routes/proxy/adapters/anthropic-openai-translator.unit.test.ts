@@ -30,7 +30,9 @@ describe("openaiToAnthropic — multimodal user content", () => {
       // biome-ignore lint/suspicious/noExplicitAny: minimal multimodal message
     } as any);
 
-    const { anthropicBody } = openaiToAnthropic(request);
+    const { anthropicBody } = openaiToAnthropic(request, {
+      defaultMaxTokens: 8_192,
+    });
 
     expect(anthropicBody.messages[0].content).toEqual([
       { type: "text", text: "describe this" },
@@ -57,7 +59,9 @@ describe("openaiToAnthropic — multimodal user content", () => {
       // biome-ignore lint/suspicious/noExplicitAny: minimal multimodal message
     } as any);
 
-    const { anthropicBody } = openaiToAnthropic(request);
+    const { anthropicBody } = openaiToAnthropic(request, {
+      defaultMaxTokens: 8_192,
+    });
 
     expect(anthropicBody.messages[0].content).toEqual([
       {
@@ -86,7 +90,9 @@ describe("openaiToAnthropic — multimodal user content", () => {
       // biome-ignore lint/suspicious/noExplicitAny: minimal multimodal message
     } as any);
 
-    const { anthropicBody } = openaiToAnthropic(request);
+    const { anthropicBody } = openaiToAnthropic(request, {
+      defaultMaxTokens: 8_192,
+    });
 
     expect(anthropicBody.messages[0].content).toEqual([
       {
@@ -101,7 +107,9 @@ describe("openaiToAnthropic — multimodal user content", () => {
   });
 
   test("still passes a plain string user message through unchanged", () => {
-    const { anthropicBody } = openaiToAnthropic(req());
+    const { anthropicBody } = openaiToAnthropic(req(), {
+      defaultMaxTokens: 8_192,
+    });
     expect(anthropicBody.messages[0].content).toBe("hello");
   });
 
@@ -124,7 +132,9 @@ describe("openaiToAnthropic — multimodal user content", () => {
       // biome-ignore lint/suspicious/noExplicitAny: minimal tool-result message
     } as any);
 
-    const { anthropicBody } = openaiToAnthropic(request);
+    const { anthropicBody } = openaiToAnthropic(request, {
+      defaultMaxTokens: 8_192,
+    });
     // messages[0] is the user turn; messages[1] carries the tool_result.
     expect(anthropicBody.messages[1].content).toEqual([
       {
@@ -154,7 +164,9 @@ describe("openaiToAnthropic — multimodal user content", () => {
       // biome-ignore lint/suspicious/noExplicitAny: minimal tool-result message
     } as any);
 
-    const { anthropicBody } = openaiToAnthropic(request);
+    const { anthropicBody } = openaiToAnthropic(request, {
+      defaultMaxTokens: 8_192,
+    });
     expect(anthropicBody.messages[1].content).toEqual([
       {
         type: "tool_result",

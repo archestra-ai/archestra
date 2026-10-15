@@ -23,6 +23,25 @@ describe("resolveModelOutputBudget", () => {
     ).toEqual({ kind: "catalogued", tokens: 4_096 });
   });
 
+  test("marks a model whose output shares the prompt's window, leaving the prompt half of it", async () => {
+    await ModelModel.create({
+      externalId: "openai/gpt-4",
+      provider: "openai",
+      modelId: "gpt-4",
+      outputLength: 8_192,
+      contextLength: 8_192,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+
+    expect(
+      await resolveModelOutputBudget({
+        provider: "openai",
+        modelName: "gpt-4",
+      }),
+    ).toEqual({ kind: "shared-window", tokens: 4_096 });
+  });
+
   test("clamps a large catalogued cap to the operator ceiling", async () => {
     await ModelModel.create({
       externalId: "anthropic/claude-sonnet-5",

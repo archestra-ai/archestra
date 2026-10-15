@@ -25,6 +25,22 @@ describe("default output budget", () => {
     }
   });
 
+  test("a shared-window model keeps its provider default, so a long prompt can use the leftover window", async () => {
+    await ModelModel.create({
+      externalId: "openai/gpt-4",
+      provider: "openai",
+      modelId: "gpt-4",
+      outputLength: 8_192,
+      contextLength: 8_192,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+
+    expect(
+      await sentMaxTokens({ provider: "openai", modelName: "gpt-4" }),
+    ).toBeUndefined();
+  });
+
   test("an uncatalogued model keeps its provider default", async () => {
     expect(
       await sentMaxTokens({ provider: "openai", modelName: "gpt-unknown" }),

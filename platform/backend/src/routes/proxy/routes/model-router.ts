@@ -45,7 +45,7 @@ import {
   OpenAi,
   UuidIdSchema,
 } from "@/types";
-import { resolveModelOutputBudget } from "@/utils/llm-resolution";
+import type { ModelOutputBudget } from "@/utils/llm-resolution";
 import { selectMappedProviderKey } from "@/utils/provider-key-mappings";
 import {
   azureAdapterFactory,
@@ -486,10 +486,10 @@ async function routeChatCompletion(
     allowedProviders: getMappedProviders(auth),
     allowedApiKeyIds: getMappedApiKeyIds(auth),
   });
-  const routedBody = await withDefaultOutputBudget(resolution, {
+  const routedBody = {
     ...body,
     model: resolution.modelId,
-  });
+  };
 
   logger.info(
     {
@@ -503,7 +503,7 @@ async function routeChatCompletion(
   assertModelServesChatCompletions(resolution);
 
   const provider = getOpenAiChatProviderForResolution({
-    provider: resolution.provider,
+    resolution,
     body: routedBody,
   });
   await applyModelRouterAuthOverride({
@@ -558,13 +558,13 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
   const { chatBody, responsesContext } = responsesToOpenaiChat(body, {
     preserveContentParts: resolution.provider === "bedrock",
   });
-  const routedChatBody = await withDefaultOutputBudget(resolution, {
+  const routedChatBody = {
     ...chatBody,
     model: resolution.modelId,
-  });
+  };
 
   const provider = getOpenAiChatProviderForResolution({
-    provider: resolution.provider,
+    resolution,
     body: routedChatBody,
   });
   await applyModelRouterAuthOverride({
@@ -712,58 +712,42 @@ function modelRequiresResponses(resolution: ModelRouterResolution): boolean {
   );
 }
 
-/**
- * Anthropic requires `max_tokens`, so a client that sets no cap gets the
- * model's catalog budget instead of the translator's fixed fallback, which
- * adaptive thinking can exhaust. Other upstreams default to the model's own
- * maximum when the field is absent.
- */
-async function withDefaultOutputBudget(
-  resolution: { provider: SupportedProvider; modelId: string },
-  body: OpenAi.Types.ChatCompletionsRequest,
-): Promise<OpenAi.Types.ChatCompletionsRequest> {
-  if (
-    resolution.provider !== "anthropic" ||
-    body.max_tokens != null ||
-    body.max_completion_tokens != null
-  )
-    return body;
-  const { tokens } = await resolveModelOutputBudget({
-    provider: resolution.provider,
-    modelName: resolution.modelId,
-  });
-  return { ...body, max_tokens: tokens };
-}
-
 function getOpenAiChatProviderForResolution(params: {
-  provider: SupportedProvider;
+  resolution: ModelRouterResolution;
   body: OpenAi.Types.ChatCompletionsRequest;
 }): ModelRouterProvider {
-  const provider = openAiWireProviders[params.provider];
+  const { provider: providerName, outputBudget } = params.resolution;
+  const provider = openAiWireProviders[providerName];
   if (provider) {
     return { kind: "openai-wire", body: params.body, adapter: provider };
   }
 
-  if (isTranslatedModelRouterProvider(params.provider)) {
+  if (isTranslatedModelRouterProvider(providerName)) {
     return getTranslatedModelRouterProvider({
-      provider: params.provider,
+      provider: providerName,
       body: params.body,
+      outputBudget,
     });
   }
 
   throw new ApiError(
     501,
-    `Provider "${params.provider}" is not yet available through the OpenAI-compatible model router.`,
+    `Provider "${providerName}" is not yet available through the OpenAI-compatible model router.`,
   );
 }
 
 function getTranslatedModelRouterProvider(params: {
   provider: TranslatedModelRouterProvider;
   body: OpenAi.Types.ChatCompletionsRequest;
+  outputBudget: ModelOutputBudget;
 }): ModelRouterProvider {
   switch (params.provider) {
     case "anthropic": {
-      const { anthropicBody, openaiContext } = openaiToAnthropic(params.body);
+      // Anthropic requires `max_tokens`; other upstreams default to the
+      // model's own maximum when the client sets none.
+      const { anthropicBody, openaiContext } = openaiToAnthropic(params.body, {
+        defaultMaxTokens: params.outputBudget.tokens,
+      });
       return {
         kind: "anthropic",
         body: anthropicBody,

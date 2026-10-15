@@ -1,4 +1,4 @@
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import type { LabelGetResponse, LabelWithDetails } from "@/types";
 import {
@@ -6,6 +6,7 @@ import {
   getOrCreateLabelValue,
   pruneLabelKeysAndValues,
 } from "./entity-label";
+import { idArrayCondition } from "./id-array-condition";
 
 class AgentLabelModel {
   /**
@@ -156,7 +157,7 @@ class AgentLabelModel {
         schema.labelValuesTable,
         eq(schema.agentLabelsTable.valueId, schema.labelValuesTable.id),
       )
-      .where(inArray(schema.agentLabelsTable.agentId, agentIds))
+      .where(idArrayCondition(schema.agentLabelsTable.agentId, agentIds))
       .orderBy(asc(schema.labelKeysTable.key));
 
     const labelsMap = new Map<string, LabelWithDetails[]>();

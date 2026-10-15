@@ -71,6 +71,8 @@ export const CacheKey = {
   OpenAppaRemedyToolsMissing: "openappa-remedy-tools-missing",
   /** Ruling on a call to a tool the client had not loaded, answered on that call's result */
   OpenAppaNotLoadedRuling: "openappa-not-loaded-ruling",
+  /** Notice for a call whose annotator gave no answer, answered on that call's result */
+  OpenAppaUnansweredAnnotationNotice: "openappa-unanswered-annotation-notice",
   /** Host clarification appended to a runtime-confirmed denied call's result. */
   OpenAppaDeniedCallClarification: "openappa-denied-call-clarification",
   /** Sessions whose client already waited once for the gateway remedy tools to load */

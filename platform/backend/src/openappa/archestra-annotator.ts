@@ -17,6 +17,8 @@ import {
 import logger from "@/logging";
 import AgentModel from "@/models/agent";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
+import MemberModel from "@/models/member";
+import OpenAppaSessionModel from "@/models/openappa-session";
 import OrganizationModel from "@/models/organization";
 import { applyPromptCacheBreakpoints } from "@/routes/chat/normalization/apply-prompt-cache";
 import {
@@ -28,14 +30,35 @@ import {
   resolveAgentLlmOrDefault,
   resolveModelOutputBudget,
 } from "@/utils/llm-resolution";
+import { clientSessionId } from "./actor";
 import type { OpenappaEncryptedChat } from "./encrypted-chat";
+import { callerUserId } from "./service";
+
+/** The trajectory a consult is made for, absent for one made off a session. */
+type ConsultAttribution = {
+  root: string;
+  trajectory: string;
+  call_id?: string;
+};
 
 /** The prompt the runtime's `builtin = "archestra"` annotator renders. */
 type ArchestraAnnotationRequest = {
   system: string;
   input: string;
   schema: Record<string, unknown>;
+  attribution?: ConsultAttribution;
 };
+
+/** Whose session the consult's model call is filed under. */
+type CallOwner =
+  | { kind: "encrypted-chat"; chat: OpenappaEncryptedChat }
+  | {
+      kind: "session";
+      organizationId: string;
+      sessionId: string;
+      userId: string | undefined;
+    }
+  | { kind: "unattributed" };
 
 type ArchestraAnnotationOutcome =
   | { kind: "answered"; answer: Record<string, unknown> }
@@ -55,9 +78,10 @@ class OpenAppaArchestraAnnotator {
     request: ArchestraAnnotationRequest,
     encryptedChat: OpenappaEncryptedChat | null = null,
   ): Promise<ArchestraAnnotationOutcome> {
-    const organization = encryptedChat
-      ? await OrganizationModel.getById(encryptedChat.organizationId)
-      : await OrganizationModel.getFirst();
+    const owner: CallOwner = encryptedChat
+      ? { kind: "encrypted-chat", chat: encryptedChat }
+      : await sessionOwner(request.attribution);
+    const organization = await ownerOrganization(owner);
     if (!organization)
       return { kind: "unconfigured", reason: "No organization exists yet." };
     const agent = await AgentModel.getBuiltInAgent(
@@ -88,13 +112,7 @@ class OpenAppaArchestraAnnotator {
       modelName: selection.modelName,
       source: "guardrail:annotator",
       internalCall: true,
-      ...(encryptedChat
-        ? {
-            sessionId: encryptedChat.audit.conversationId,
-            userId: encryptedChat.userId,
-            encryptedChatKey: encryptedChat.audit.dek,
-          }
-        : {}),
+      ...ownerIdentity(owner),
       baseUrl: selection.baseUrl,
       chatApiKeyId: selection.chatApiKeyId,
     });
@@ -183,6 +201,57 @@ class OpenAppaArchestraAnnotator {
 export const openappaArchestraAnnotator = new OpenAppaArchestraAnnotator();
 
 // === Internal ===
+
+/**
+ * The session row the runtime's attribution names, with its user when that
+ * user still belongs to the session's organization. Anything else leaves the
+ * call unattributed, as a consult made off a session is.
+ */
+async function sessionOwner(
+  attribution: ConsultAttribution | undefined,
+): Promise<CallOwner> {
+  if (!attribution) return { kind: "unattributed" };
+  const session = await OpenAppaSessionModel.findByTrajectory(attribution);
+  if (!session) return { kind: "unattributed" };
+  const userId = callerUserId(session.callerId);
+  if (
+    userId &&
+    !(await MemberModel.getByUserId(userId, session.organizationId))
+  )
+    return { kind: "unattributed" };
+  return {
+    kind: "session",
+    organizationId: session.organizationId,
+    sessionId: clientSessionId(session.sessionId),
+    userId,
+  };
+}
+
+function ownerOrganization(owner: CallOwner) {
+  switch (owner.kind) {
+    case "encrypted-chat":
+      return OrganizationModel.getById(owner.chat.organizationId);
+    case "session":
+      return OrganizationModel.getById(owner.organizationId);
+    case "unattributed":
+      return OrganizationModel.getFirst();
+  }
+}
+
+function ownerIdentity(owner: CallOwner) {
+  switch (owner.kind) {
+    case "encrypted-chat":
+      return {
+        sessionId: owner.chat.audit.conversationId,
+        userId: owner.chat.userId,
+        encryptedChatKey: owner.chat.audit.dek,
+      };
+    case "session":
+      return { sessionId: owner.sessionId, userId: owner.userId };
+    case "unattributed":
+      return {};
+  }
+}
 
 type AnnotationCall = {
   model: LLMModel;

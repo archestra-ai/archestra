@@ -1,4 +1,9 @@
-import { BUILT_IN_AGENT_IDS, SOURCE_HEADER } from "@archestra/shared";
+import {
+  BUILT_IN_AGENT_IDS,
+  SESSION_ID_HEADER,
+  SOURCE_HEADER,
+  USER_ID_HEADER,
+} from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
 import { takeInternalCall } from "@/clients/internal-call";
@@ -9,6 +14,7 @@ import {
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
 import { LlmProviderApiKeyModelLinkModel, ModelModel } from "@/models";
+import { openappaActor } from "@/openappa/actor";
 import { openappaDeclarations } from "@/openappa/declarations";
 import { OPENAPPA_ARCHESTRA_ANNOTATOR_PATH } from "@/routes/route-paths";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -31,31 +37,68 @@ describe("archestra annotator", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let agentId: string;
+  let useDefaultModel: (params: {
+    provider: "openai" | "openrouter";
+    modelId: string;
+    organizationId?: string;
+  }) => Promise<void>;
 
-  beforeEach(async ({ makeOrganization, makeAgent }) => {
-    config.openappa.enabled = true;
-    organizationId = (await makeOrganization()).id;
-    agentId = (
-      await makeAgent({
-        organizationId,
-        agentType: "agent",
-        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
-      })
-    ).id;
-    app = createFastifyInstance();
-    await app.register(routes);
-  });
+  beforeEach(
+    async ({
+      makeOrganization,
+      makeAgent,
+      makeSecret,
+      makeLlmProviderApiKey,
+    }) => {
+      config.openappa.enabled = true;
+      organizationId = (await makeOrganization()).id;
+      agentId = (
+        await makeAgent({
+          organizationId,
+          agentType: "agent",
+          builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+        })
+      ).id;
+      app = createFastifyInstance();
+      await app.register(routes);
+      useDefaultModel = async (params) => {
+        const orgId = params.organizationId ?? organizationId;
+        const secret = await makeSecret({ secret: { apiKey: "provider-key" } });
+        const key = await makeLlmProviderApiKey(orgId, secret.id, {
+          provider: params.provider,
+          name: "Provider",
+        });
+        const model = await ModelModel.create({
+          externalId: `${params.provider}/${params.modelId}`,
+          provider: params.provider,
+          modelId: params.modelId,
+          contextLength: 128_000,
+          inputModalities: ["text"],
+          outputModalities: ["text"],
+          supportsToolCalling: true,
+          lastSyncedAt: new Date(),
+        });
+        await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
+          model.id,
+        ]);
+        await db
+          .update(schema.organizationsTable)
+          .set({ defaultModelId: model.id, defaultLlmApiKeyId: key.id })
+          .where(eq(schema.organizationsTable.id, orgId));
+      };
+    },
+  );
   afterEach(async () => {
     await app.close();
   });
 
-  const annotate = (authorization?: string) =>
+  const annotate = (authorization?: string, payload: object = request) =>
     app.inject({
       method: "POST",
       url: OPENAPPA_ARCHESTRA_ANNOTATOR_PATH,
       headers: authorization === undefined ? {} : { authorization },
       remoteAddress: "127.0.0.1",
-      payload: request,
+      payload,
     });
   const bearer = () => `Bearer ${openappaDeclarations.bridgeToken}`;
 
@@ -66,41 +109,12 @@ describe("archestra annotator", () => {
     );
   });
 
-  const useDefaultModel = async (
-    makeSecret: Parameters<Parameters<typeof test>[1]>[0]["makeSecret"],
-    makeLlmProviderApiKey: Parameters<
-      Parameters<typeof test>[1]
-    >[0]["makeLlmProviderApiKey"],
-    params: { provider: "openai" | "openrouter"; modelId: string },
-  ) => {
-    const secret = await makeSecret({ secret: { apiKey: "provider-key" } });
-    const key = await makeLlmProviderApiKey(organizationId, secret.id, {
-      provider: params.provider,
-      name: "Provider",
-    });
-    const model = await ModelModel.create({
-      externalId: `${params.provider}/${params.modelId}`,
-      provider: params.provider,
-      modelId: params.modelId,
-      contextLength: 128_000,
-      inputModalities: ["text"],
-      outputModalities: ["text"],
-      supportsToolCalling: true,
-      lastSyncedAt: new Date(),
-    });
-    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
-      model.id,
-    ]);
-    await db
-      .update(schema.organizationsTable)
-      .set({ defaultModelId: model.id, defaultLlmApiKeyId: key.id })
-      .where(eq(schema.organizationsTable.id, organizationId));
-  };
-
   type SentRequest = {
     body: Record<string, unknown>;
     source: string | null;
     internal: boolean;
+    user: string | null;
+    session: string | null;
   };
   const answerAt = (
     path: string,
@@ -116,6 +130,8 @@ describe("archestra annotator", () => {
             body,
             source: proxied.headers.get(SOURCE_HEADER),
             internal: takeInternalCall(Object.fromEntries(proxied.headers)),
+            user: proxied.headers.get(USER_ID_HEADER),
+            session: proxied.headers.get(SESSION_ID_HEADER),
           });
           return answer(body);
         },
@@ -141,11 +157,8 @@ describe("archestra annotator", () => {
   const systemOf = (body: Record<string, unknown>) =>
     (body.messages as Array<{ role: string; content: unknown }>)[0];
 
-  test("answers under the provider's structured-output format, through the LLM proxy", async ({
-    makeSecret,
-    makeLlmProviderApiKey,
-  }) => {
-    await useDefaultModel(makeSecret, makeLlmProviderApiKey, {
+  test("answers under the provider's structured-output format, through the LLM proxy", async () => {
+    await useDefaultModel({
       provider: "openai",
       modelId: "gpt-4o-mini",
     });
@@ -177,11 +190,8 @@ describe("archestra annotator", () => {
     expect(internal).toBe(true);
   });
 
-  test("falls back to a tagged answer for a model that refuses the format, and stops asking it", async ({
-    makeSecret,
-    makeLlmProviderApiKey,
-  }) => {
-    await useDefaultModel(makeSecret, makeLlmProviderApiKey, {
+  test("falls back to a tagged answer for a model that refuses the format, and stops asking it", async () => {
+    await useDefaultModel({
       provider: "openai",
       modelId: "gpt-refuses-schemas",
     });
@@ -209,11 +219,8 @@ describe("archestra annotator", () => {
     expect(tagged.length).toBeGreaterThan(request.system.length);
   });
 
-  test("marks the constant system prompt as a cache breakpoint for Claude through OpenRouter", async ({
-    makeSecret,
-    makeLlmProviderApiKey,
-  }) => {
-    await useDefaultModel(makeSecret, makeLlmProviderApiKey, {
+  test("marks the constant system prompt as a cache breakpoint for Claude through OpenRouter", async () => {
+    await useDefaultModel({
       provider: "openrouter",
       modelId: "anthropic/claude-sonnet-5",
     });
@@ -228,6 +235,110 @@ describe("archestra annotator", () => {
       role: "system",
       cache_control: { type: "ephemeral" },
     });
+  });
+
+  const ROOT = "archestra:root";
+  const openSession = (params: {
+    organizationId: string;
+    callerId: string;
+    sessionId: string;
+    parentId?: string;
+  }) =>
+    db.insert(schema.openappaSessionsTable).values({
+      ...params,
+      actor: openappaActor(params.sessionId),
+      root: ROOT,
+      startDecision: { decision: "ack" },
+    });
+
+  test("files an attributed consult under its session's organization, user and session", async ({
+    makeOrganization,
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    const owner = (await makeOrganization()).id;
+    const ownerAgent = await makeAgent({
+      organizationId: owner,
+      agentType: "agent",
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+    });
+    await useDefaultModel({
+      provider: "openai",
+      modelId: "gpt-4o-mini",
+      organizationId: owner,
+    });
+    const user = await makeUser();
+    await makeMember(user.id, owner);
+    const root = `user:${user.id}|conversation`;
+    const child = `${root}:subagent`;
+    await openSession({
+      organizationId: owner,
+      callerId: `user:${user.id}`,
+      sessionId: root,
+    });
+    await openSession({
+      organizationId: owner,
+      callerId: `user:${user.id}`,
+      sessionId: child,
+      parentId: root,
+    });
+    const sent = answerAt(`/v1/openai/${ownerAgent.id}/chat/completions`, () =>
+      completion('{"rank":"trusted"}'),
+    );
+
+    const fromRoot = await annotate(bearer(), {
+      ...request,
+      attribution: { root: ROOT, trajectory: ROOT, call_id: "toolu_1" },
+    });
+    const fromChild = await annotate(bearer(), {
+      ...request,
+      attribution: { root: ROOT, trajectory: openappaActor(child) },
+    });
+
+    expect(fromRoot.json()).toEqual({ rank: "trusted" });
+    expect(fromChild.json()).toEqual({ rank: "trusted" });
+    expect(sent.map(({ user, session }) => ({ user, session }))).toEqual([
+      { user: user.id, session: "conversation" },
+      { user: user.id, session: "conversation:subagent" },
+    ]);
+  });
+
+  test("answers unattributed when the attribution names no session, or a user outside its organization", async ({
+    makeUser,
+  }) => {
+    await useDefaultModel({
+      provider: "openai",
+      modelId: "gpt-4o-mini",
+    });
+    const outsider = await makeUser();
+    await openSession({
+      organizationId,
+      callerId: `user:${outsider.id}`,
+      sessionId: `user:${outsider.id}|conversation`,
+    });
+    const sent = answerAt(`/v1/openai/${agentId}/chat/completions`, () =>
+      completion('{"rank":"trusted"}'),
+    );
+
+    const unknown = await annotate(bearer(), {
+      ...request,
+      attribution: {
+        root: "archestra:unknown",
+        trajectory: "archestra:unknown",
+      },
+    });
+    const outside = await annotate(bearer(), {
+      ...request,
+      attribution: { root: ROOT, trajectory: ROOT },
+    });
+
+    expect(unknown.json()).toEqual({ rank: "trusted" });
+    expect(outside.json()).toEqual({ rank: "trusted" });
+    expect(sent.map(({ user, session }) => ({ user, session }))).toEqual([
+      { user: null, session: null },
+      { user: null, session: null },
+    ]);
   });
 
   test("names the key and the upstream rejection when the model call fails", async ({

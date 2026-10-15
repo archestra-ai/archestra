@@ -540,9 +540,7 @@ function withholdConsultContent(): boolean {
 async function sessionPrincipal(
   session: OpenAppaSession,
 ): Promise<{ principal?: string }> {
-  const userId = session.caller_id?.startsWith(USER_CALLER_PREFIX)
-    ? session.caller_id.slice(USER_CALLER_PREFIX.length)
-    : undefined;
+  const userId = callerUserId(session.caller_id);
   if (!userId) return {};
   const member = await MemberModel.findByIdOrEmail(
     userId,
@@ -552,6 +550,15 @@ async function sessionPrincipal(
 }
 
 const USER_CALLER_PREFIX = "user:";
+
+/** The user a caller id names; app and virtual-key callers name none. */
+export function callerUserId(
+  callerId: string | null | undefined,
+): string | undefined {
+  return callerId?.startsWith(USER_CALLER_PREFIX)
+    ? callerId.slice(USER_CALLER_PREFIX.length)
+    : undefined;
+}
 
 /** Executes a callback with the loaded native runtime and organization policy. */
 async function withRuntime(

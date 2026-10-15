@@ -97,26 +97,32 @@ class McpServerAgentUsageModel {
         FROM ranked_assigned WHERE position > ${params.offset} AND position <= ${params.offset + params.limit}
         GROUP BY catalog_id
       )
+      , auto_only_candidates AS MATERIALIZED (
+        SELECT r.catalog_id, a.*
+        FROM requested r CROSS JOIN auto_candidates a CROSS JOIN auto_total total
+        LEFT JOIN assigned_totals t ON t.catalog_id = r.catalog_id
+        WHERE total.total - COALESCE(t.overlap, 0) > ${params.offset}
+          AND a.ordinal <= ${params.offset + params.limit} + COALESCE(t.overlap, 0)
+          AND NOT EXISTS (
+            SELECT 1 FROM assigned x WHERE x.catalog_id = r.catalog_id AND x.agent_id = a.id
+          )
+      ), ranked_automatic AS (
+        SELECT *, row_number() OVER (PARTITION BY catalog_id ORDER BY ordinal) AS position
+        FROM auto_only_candidates
+      ), automatic_previews AS (
+        SELECT catalog_id, jsonb_agg(jsonb_build_object('id', id, 'name', name, 'agentType', agent_type, 'scope', scope,
+          'ownerId', author_id, 'ownerEmail', owner_email, 'access', 'auto') ORDER BY position) AS entries
+        FROM ranked_automatic WHERE position > ${params.offset} AND position <= ${params.offset + params.limit}
+        GROUP BY catalog_id
+      )
       SELECT r.catalog_id AS "catalogId", COALESCE(t.total, 0) + automatic.total - COALESCE(t.overlap, 0) AS total,
         COALESCE(t.total, 0) AS "assignedCount", automatic.total - COALESCE(t.overlap, 0) AS "autoCount",
-        COALESCE(manual.entries, '[]'::jsonb) || auto.entries AS data,
-        COALESCE(manual.entries, '[]'::jsonb) AS "assignedPreview", auto.entries AS "autoPreview"
+        COALESCE(manual.entries, '[]'::jsonb) || COALESCE(auto.entries, '[]'::jsonb) AS data,
+        COALESCE(manual.entries, '[]'::jsonb) AS "assignedPreview", COALESCE(auto.entries, '[]'::jsonb) AS "autoPreview"
       FROM requested r CROSS JOIN auto_total automatic
       LEFT JOIN assigned_totals t ON t.catalog_id = r.catalog_id
       LEFT JOIN manual_previews manual ON manual.catalog_id = r.catalog_id
-      CROSS JOIN LATERAL (
-        SELECT COALESCE(jsonb_agg(entry ORDER BY sort_name ${direction}, sort_owner ${direction}, sort_id ${direction}), '[]'::jsonb) AS entries FROM (
-          SELECT jsonb_build_object('id', a.id, 'name', a.name, 'agentType', a.agent_type, 'scope', a.scope,
-            'ownerId', a.author_id, 'ownerEmail', a.owner_email, 'access', 'auto') AS entry,
-            a.name AS sort_name, COALESCE(a.owner_email, '') AS sort_owner, a.id AS sort_id
-          FROM auto_candidates a
-          WHERE automatic.total - COALESCE(t.overlap, 0) > ${params.offset}
-            AND a.ordinal <= ${params.offset + params.limit} + COALESCE(t.overlap, 0)
-            AND NOT EXISTS (SELECT 1 FROM assigned x WHERE x.catalog_id = r.catalog_id AND x.agent_id = a.id)
-          ORDER BY a.name ${direction}, COALESCE(a.owner_email, '') ${direction}, a.id ${direction}
-          LIMIT ${params.limit} OFFSET ${params.offset}
-        ) preview
-      ) auto`;
+      LEFT JOIN automatic_previews auto ON auto.catalog_id = r.catalog_id`;
     }
     return sql`${common}, usage AS MATERIALIZED (
         SELECT x.catalog_id, a.*, 'assigned'::text AS access

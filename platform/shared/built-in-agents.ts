@@ -139,7 +139,7 @@ export const APP_RUNTIME_SYSTEM_PROMPT = `You answer prompts sent by an Archestr
 
 // Workflow lives in the appa-guide skill; this prompt keeps only what must hold
 // even when the skill cannot be loaded.
-const OPENAPPA_CONFIG_SYSTEM_PROMPT = `You configure this deployment's OpenAPPA policy and lightweight validations, and investigate yells, which are reports about how the policy behaved. You can publish policy changes, manage credentials, and create the policy repository; other agents can only preview.
+const OPENAPPA_CONFIG_SYSTEM_PROMPT = `You configure this deployment's OpenAPPA policy and lightweight validations, and investigate yells, which are reports about how the policy behaved. You can publish policy changes and manage credentials; other agents can only preview.
 
 Be neurodiversity friendly.
 

@@ -6,8 +6,6 @@ import {
   SKILL_TOOL_PREFIX,
   slugify,
   TOOL_ASK_USER_FULL_NAME,
-  TOOL_CANCEL_RUN_FULL_NAME,
-  TOOL_GET_RUN_FULL_NAME,
   TOOL_LIST_RUNS_FULL_NAME,
   TOOL_LIST_SKILLS_FULL_NAME,
   TOOL_LOAD_SKILL_FULL_NAME,
@@ -16,7 +14,6 @@ import {
   TOOL_RUN_TOOL_FULL_NAME,
   TOOL_SAVE_FILE_FULL_NAME,
   TOOL_SEARCH_TOOLS_FULL_NAME,
-  TOOL_STEER_RUN_FULL_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
 } from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -1476,16 +1473,12 @@ describe("MCP Gateway (stateless mode)", () => {
       const toolNames = response
         .json()
         .result.tools.map((tool: { name: string }) => tool.name);
-      // Capability tools are deferred; session controls remain directly callable.
+      // Questions stay direct; capability and run controls use search/run.
       expect(toolNames.sort()).toEqual(
         [
           TOOL_ASK_USER_FULL_NAME,
-          TOOL_CANCEL_RUN_FULL_NAME,
-          TOOL_GET_RUN_FULL_NAME,
-          TOOL_LIST_RUNS_FULL_NAME,
           TOOL_RUN_TOOL_FULL_NAME,
           TOOL_SEARCH_TOOLS_FULL_NAME,
-          TOOL_STEER_RUN_FULL_NAME,
         ].sort(),
       );
 
@@ -1502,7 +1495,9 @@ describe("MCP Gateway (stateless mode)", () => {
         return result.json().result;
       };
       const discovery = await call(TOOL_SEARCH_TOOLS_FULL_NAME, {
-        query: "^archestra__(list_skills|save_file|read_file|run_command)$",
+        query:
+          "^archestra__(list_skills|save_file|read_file|run_command|get_run|list_runs|steer_run|cancel_run)$",
+        limit: 20,
         mode: "regex",
       });
       expect(
@@ -1515,11 +1510,30 @@ describe("MCP Gateway (stateless mode)", () => {
           TOOL_SAVE_FILE_FULL_NAME,
           TOOL_READ_FILE_FULL_NAME,
           TOOL_RUN_COMMAND_FULL_NAME,
+          "archestra__get_run",
+          TOOL_LIST_RUNS_FULL_NAME,
+          "archestra__steer_run",
+          "archestra__cancel_run",
         ]),
       );
       await call(TOOL_RUN_TOOL_FULL_NAME, {
         tool_name: TOOL_LIST_SKILLS_FULL_NAME,
       });
+      const runs = await call(TOOL_RUN_TOOL_FULL_NAME, {
+        tool_name: TOOL_LIST_RUNS_FULL_NAME,
+        tool_args: { agent_id: agent.id },
+      });
+      expect(runs.structuredContent).toMatchObject({ runs: [], total: 0 });
+      const searchDescription = response
+        .json()
+        .result.tools.find(
+          (tool: { name: string }) => tool.name === TOOL_SEARCH_TOOLS_FULL_NAME,
+        ).description;
+      expect(searchDescription).toContain("Files");
+      expect(searchDescription).toContain("Skills");
+      expect(searchDescription).toContain("Code Sandbox");
+      expect(searchDescription).toContain("Agent Runtime");
+      expect(searchDescription).toContain("'read file'");
       const project = await ProjectModel.create({
         organizationId: org.id,
         userId: adminUser.id,

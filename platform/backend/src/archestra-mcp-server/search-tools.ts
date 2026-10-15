@@ -4,6 +4,7 @@ import {
   isChatOnlyArchestraToolShortName,
   isImplicitOpenAppaReadToolShortName,
   isRequiredOpenAppaToolShortName,
+  isRunControlArchestraToolShortName,
   isYellToolShortName,
   parseFullToolName,
   TOOL_ASK_USER_SHORT_NAME,
@@ -13,6 +14,7 @@ import {
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
+  TOOL_START_RUN_SHORT_NAME,
 } from "@archestra/shared";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import safeRegex from "safe-regex2";
@@ -29,6 +31,7 @@ import {
   openappaEnabled,
   openappaYellEnabled,
 } from "@/openappa/service";
+import { isAnyAgentRuntimeBackendDriverEnabled } from "@/services/agent-runtime/backends";
 import {
   type AgentToolExclusionSets,
   agentToolExclusionsService,
@@ -59,6 +62,7 @@ import {
 import { isOpenappaTool, tools as openappaMcpTools } from "./openappa";
 import { filterToolNamesByPermission } from "./rbac";
 import { getSkillDelegationTools } from "./skill-delegation";
+import { tools as runtimeMcpTools } from "./tasks";
 
 const SearchToolsArgsSchema = z
   .object({
@@ -443,8 +447,48 @@ async function getSearchableTools(params: {
   const injectedOpenappaNames = new Set(
     injectedOpenappaTools.map((tool) => tool.name),
   );
+  const delegationTools =
+    organizationId != null
+      ? await getAgentTools({
+          agentId,
+          organizationId,
+          userId,
+          skipAccessCheck: userId === "system",
+        })
+      : [];
+  const hasTaskStarter =
+    delegationTools.length > 0 ||
+    assignedTools.some(
+      (tool) =>
+        archestraMcpBranding.getToolShortName(tool.name) ===
+        TOOL_START_RUN_SHORT_NAME,
+    );
+  // Match tools/list's implicit run-handle controls, including gateways with
+  // no assigned tools. They are assignment-exempt at dispatch, but still pass
+  // RBAC here and actor/proof checks in their handlers. Internal chat already
+  // has their direct declarations and needs no extra search contribution.
+  const implicitRuntimeControls =
+    agent?.agentType !== "agent" &&
+    (isAnyAgentRuntimeBackendDriverEnabled() || hasTaskStarter)
+      ? runtimeMcpTools.flatMap((tool) => {
+          const shortName = archestraMcpBranding.getToolShortName(tool.name);
+          return shortName && isRunControlArchestraToolShortName(shortName)
+            ? [
+                {
+                  name: archestraMcpBranding.getToolName(shortName),
+                  description: archestraMcpBranding.brandBuiltInText(
+                    tool.description ?? "",
+                  ),
+                  catalogId: ARCHESTRA_MCP_CATALOG_ID,
+                  parameters: tool.inputSchema as Record<string, unknown>,
+                },
+              ]
+            : [];
+        })
+      : [];
   const searchSpace = [
     ...injectedOpenappaTools,
+    ...implicitRuntimeControls,
     ...assignedTools.filter((tool) => !injectedOpenappaNames.has(tool.name)),
     ...discoverableTools.filter(
       (tool) => !injectedOpenappaNames.has(tool.name),
@@ -472,15 +516,6 @@ async function getSearchableTools(params: {
       !tool.name.startsWith("agent__"),
   );
 
-  const delegationTools =
-    organizationId != null
-      ? await getAgentTools({
-          agentId,
-          organizationId,
-          userId,
-          skipAccessCheck: userId === "system",
-        })
-      : [];
   // Agent-designated skills are searchable through their skill__<slug>
   // delegation tools, resolved per calling user like agent delegations.
   const skillDelegationTools =

@@ -1158,8 +1158,10 @@ export function isPrefillExemptArchestraToolShortName(
 }
 
 /**
- * tools that stay top-level in `tools/list` regardless of an agent's
- * exposure mode. `ask_user` is a conversation primitive (choice form /
+ * Tools kept top-level by internal chat in progressive exposure mode.
+ * External MCP gateways keep only `ask_user` from this set; they discover the
+ * skill, sandbox and file capabilities through search_tools/run_tool.
+ * `ask_user` is a conversation primitive (choice form /
  * native elicitation), not a capability to discover. skills and sandbox
  * runtime interaction are progressive-disclosure mechanisms, so hiding their
  * discover/activate/read/run and file-transfer path behind
@@ -1203,6 +1205,23 @@ export function isChatOnlyArchestraToolShortName(
 ): boolean {
   return (
     shortName !== null && CHAT_ONLY_ARCHESTRA_TOOL_SHORT_NAMES.has(shortName)
+  );
+}
+
+// Run handles remain usable without an assignment row. Gateways discover these
+// controls through search/run; internal chat keeps their direct declarations.
+export const RUN_CONTROL_ARCHESTRA_TOOL_SHORT_NAMES = [
+  TOOL_GET_RUN_SHORT_NAME,
+  TOOL_LIST_RUNS_SHORT_NAME,
+  TOOL_STEER_RUN_SHORT_NAME,
+  TOOL_CANCEL_RUN_SHORT_NAME,
+] as const satisfies readonly ArchestraToolShortName[];
+
+export function isRunControlArchestraToolShortName(
+  shortName: string | null,
+): boolean {
+  return RUN_CONTROL_ARCHESTRA_TOOL_SHORT_NAMES.some(
+    (candidate) => candidate === shortName,
   );
 }
 

@@ -35,7 +35,10 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { type MockInstance, onTestFinished, vi } from "vitest";
 import { ZodError } from "zod";
-import { archestraMcpBranding } from "@/archestra-mcp-server";
+import {
+  archestraMcpBranding,
+  executeArchestraTool,
+} from "@/archestra-mcp-server";
 import {
   takeLeadingAttestation,
   verifyToolAttestation,
@@ -2090,14 +2093,26 @@ describe("createAgentServer tools/list", () => {
     if (!list) throw new Error("Missing tool list handler");
     const response = await list({ method: "tools/list", params: {} });
     const names = response.tools.map((tool) => tool.name);
-    expect(names).toEqual(
-      expect.arrayContaining([
-        archestraMcpBranding.getToolName("get_run"),
-        archestraMcpBranding.getToolName("list_runs"),
-        archestraMcpBranding.getToolName("steer_run"),
-        archestraMcpBranding.getToolName("cancel_run"),
-      ]),
+    const controlNames = (
+      ["get_run", "list_runs", "steer_run", "cancel_run"] as const
+    ).map((name) => archestraMcpBranding.getToolName(name));
+    for (const name of controlNames) expect(names).not.toContain(name);
+    const found = await executeArchestraTool(
+      archestraMcpBranding.getToolName("search_tools"),
+      { query: "(get_run|list_runs|steer_run|cancel_run)$", mode: "regex" },
+      {
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId: org.id,
+        userId: user.id,
+      },
     );
+    expect(found.isError).not.toBe(true);
+    expect(
+      (found.structuredContent as { tools: { toolName: string }[] }).tools
+        .map((tool) => tool.toolName)
+        .sort(),
+    ).toEqual(controlNames.sort());
     expect(names).not.toContain(archestraMcpBranding.getToolName("start_run"));
     const discovery = response.tools.find(
       (tool) => tool.name === archestraMcpBranding.getToolName("search_tools"),
@@ -2111,7 +2126,7 @@ describe("createAgentServer tools/list", () => {
     expect(discovery?.description).toContain("resume locally");
   });
 
-  test("advertises task controls when the gateway can start delegated tasks", async ({
+  test("defers task controls when the gateway can start delegated tasks", async ({
     makeAgent,
     makeAgentTool,
     makeMember,
@@ -2162,10 +2177,6 @@ describe("createAgentServer tools/list", () => {
         TOOL_ASK_USER_FULL_NAME,
         TOOL_RUN_TOOL_FULL_NAME,
         TOOL_SEARCH_TOOLS_FULL_NAME,
-        TOOL_GET_RUN_FULL_NAME,
-        TOOL_LIST_RUNS_FULL_NAME,
-        TOOL_STEER_RUN_FULL_NAME,
-        TOOL_CANCEL_RUN_FULL_NAME,
       ]),
     );
   });
@@ -2237,6 +2248,10 @@ describe("createAgentServer tools/list", () => {
         TOOL_RUN_COMMAND_FULL_NAME,
         TOOL_DOWNLOAD_FILE_FULL_NAME,
         TOOL_UPLOAD_FILE_FULL_NAME,
+        TOOL_GET_RUN_FULL_NAME,
+        TOOL_LIST_RUNS_FULL_NAME,
+        TOOL_STEER_RUN_FULL_NAME,
+        TOOL_CANCEL_RUN_FULL_NAME,
       ]) {
         expect(names.has(runtimeTool)).toBe(agentType === "agent");
       }
@@ -3562,6 +3577,148 @@ describe("createAgentServer tools/list", () => {
     const chatResponse = await callRenderApp(chatAgent.id);
     expect(chatResponse.isError).not.toBe(true);
     expect(chatResponse.structuredContent).toMatchObject({ id: app.id });
+  });
+
+  test.for([
+    false,
+    true,
+  ])("search_tools capability summary respects RBAC in Auto mode=%s", async (accessAllTools, {
+    makeAgent,
+    makeCustomRole,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const previousSandboxEnabled = config.skillsSandbox.enabled;
+    config.skillsSandbox.enabled = true;
+    onTestFinished(() => {
+      config.skillsSandbox.enabled = previousSandboxEnabled;
+    });
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const role = await makeCustomRole(org.id, { permission: {} });
+    await makeMember(user.id, org.id, { role: role.role });
+    const gateway = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      toolExposureMode: "search_and_run_only",
+      accessAllTools,
+    });
+    // Auto mode discovers these from a different agent's seed, without any
+    // assignment on the gateway. Both sources must produce the same RBAC-safe
+    // summary. Identity is public; skill/file/runtime tools require a grant.
+    const seedAgent = accessAllTools
+      ? await makeAgent({ organizationId: org.id })
+      : gateway;
+    await seedAndAssignArchestraTools(seedAgent.id);
+    const { server } = await createAgentServer({
+      agentId: gateway.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: user.id,
+      },
+    });
+    const handler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+    if (!handler) throw new Error("Missing tool list handler");
+    const response = await handler({ method: "tools/list", params: {} });
+    const description = response.tools.find(
+      (tool) => tool.name === TOOL_SEARCH_TOOLS_FULL_NAME,
+    )?.description;
+    expect(description).toContain(
+      "Available built-in capabilities to discover: Identity",
+    );
+    for (const hidden of [
+      "Files",
+      "Skills",
+      "Code Sandbox",
+      "Agent Runtime",
+      "'read file'",
+      "'load skill'",
+      "'run command'",
+    ]) {
+      expect(description).not.toContain(hidden);
+    }
+  });
+
+  test.for([
+    false,
+    true,
+  ])("search_tools summarizes knowledge only when the caller has sources (visible=%s)", async (visible, {
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeKnowledgeBase,
+    makeKnowledgeBaseConnector,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeTool,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const owner = await makeUser();
+    const viewer = await makeUser();
+    await makeMember(owner.id, org.id, { role: "member" });
+    await makeMember(viewer.id, org.id, { role: "member" });
+    const team = await makeTeam(org.id, owner.id);
+    await makeTeamMember(team.id, owner.id);
+    if (visible) await makeTeamMember(team.id, viewer.id);
+    const kb = await makeKnowledgeBase(org.id, {
+      name: "Restricted handbook",
+      access: { teams: [team.id] },
+    });
+    await makeKnowledgeBaseConnector(kb.id, org.id, {
+      access: { teams: [team.id] },
+    });
+    const gateway = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      toolExposureMode: "search_and_run_only",
+      knowledgeBaseIds: [kb.id],
+    });
+    await makeInternalMcpCatalog({
+      id: ARCHESTRA_MCP_CATALOG_ID,
+      name: "Archestra",
+      serverType: "builtin",
+    });
+    const knowledge = await makeTool({
+      catalogId: ARCHESTRA_MCP_CATALOG_ID,
+      name: archestraMcpBranding.getToolName("query_knowledge_sources"),
+    });
+    await makeAgentTool(gateway.id, knowledge.id);
+    const { server } = await createAgentServer({
+      agentId: gateway.id,
+      tokenAuth: {
+        tokenId: `${OAUTH_TOKEN_ID_PREFIX}${crypto.randomUUID()}`,
+        teamId: null,
+        isOrganizationToken: false,
+        organizationId: org.id,
+        isUserToken: true,
+        userId: viewer.id,
+      },
+    });
+    const handler = (
+      server.server as unknown as {
+        _requestHandlers: Map<string, TestListToolsHandler>;
+      }
+    )._requestHandlers.get("tools/list");
+    if (!handler) throw new Error("Missing tool list handler");
+    const response = await handler({ method: "tools/list", params: {} });
+    const description =
+      response.tools.find((tool) => tool.name === TOOL_SEARCH_TOOLS_FULL_NAME)
+        ?.description ?? "";
+    expect(description.includes("Knowledge Management")).toBe(visible);
+    expect(description.includes(kb.name)).toBe(visible);
   });
 
   test("adds assigned MCP server names and descriptions to search_tools description", async ({

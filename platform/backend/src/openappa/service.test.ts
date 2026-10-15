@@ -3247,7 +3247,7 @@ test("dispatch loads the latest saved policy text from the organization database
     results: [],
     canonicalize: (name) => name,
   });
-  expect(servedTools()).toEqual(["probe", "mcp/appa/yell"]);
+  expect(servedTools()).toEqual(["mcp/appa/yell", "probe"]);
 });
 
 describe("remedy by offer", () => {

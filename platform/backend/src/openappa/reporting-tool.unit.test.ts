@@ -28,13 +28,13 @@ describe("withReportingTool", () => {
     });
 
     expect(toolEntries(text)).toEqual([
-      expect.objectContaining({ name: "*", annotator: "tool-call" }),
       expect.objectContaining({
         name: "mcp/appa/yell",
         delta: {},
         annotator: undefined,
         requires: undefined,
       }),
+      expect.objectContaining({ name: "*", annotator: "tool-call" }),
     ]);
   });
 

@@ -23,9 +23,11 @@ export async function withReportingTool(params: {
   const document = parsePolicyToml(composed);
   const policy = asRecord(document?.policy);
   if (!document || !policy) return composed;
+  // An exact name beats the catch-all wherever it is declared; first, it would
+  // also win under a resolver that took the first match.
   policy.tool = [
-    ...(Array.isArray(policy.tool) ? policy.tool : []),
     { name: REPORTING_TOOL, delta: {} },
+    ...(Array.isArray(policy.tool) ? policy.tool : []),
   ];
   const text = stringifyToml(document);
   const errors = await params.validate(text);

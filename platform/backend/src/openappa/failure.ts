@@ -52,6 +52,8 @@ export function unansweredAnnotationNotice(error: unknown): string | null {
   if (!match) return null;
   const [, annotator, reason, status] = match;
   const name = JSON.stringify(summarize(annotator, MAX_NAME));
+  // A helper error without a status may pass; one more attempt costs little,
+  // and the notice stops the model after it fails the same way.
   const transient =
     TRANSIENT_NO_ANSWER.has(reason) ||
     (reason === "non_success" &&

@@ -118,6 +118,6 @@ export function compositionNotice(declarations: PolicyDeclarations): {
   return {
     variant: "warning",
     title: `${refused} was refused`,
-    body: `Revision ${served.rootRevision}${composed} stays enforced ${until}. Statuses below are revision ${served.rootRevision}'s; a Now line shows what the current text would change.`,
+    body: `Revision ${served.rootRevision}${composed} stays enforced ${until}. Statuses below are revision ${served.rootRevision}'s.`,
   };
 }

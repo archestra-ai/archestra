@@ -89,10 +89,10 @@ resolve_platform_image() {
   # Clean checkout: reuse the image CI already built for this exact tree.
   # Two candidate tags cover both generations of the CI reuse key (full
   # ./platform tree, and ./platform minus e2e-tests).
-  if [[ -z "$(cd "${REPO_ROOT}" && git status --porcelain -- platform ':(exclude)platform/e2e-tests' ':(exclude)platform/docs-screenshots')" ]]; then
+  if [[ -z "$(cd "${REPO_ROOT}" && git status --porcelain -- platform ':(exclude)platform/e2e-tests' ':(exclude)platform/tools/docs-screenshots')" ]]; then
     local full_tree excl_tree tag
     full_tree=$(cd "${REPO_ROOT}" && git rev-parse "HEAD:platform")
-    excl_tree=$(cd "${REPO_ROOT}" && git ls-tree "HEAD:platform" | grep -v -e $'\te2e-tests$' -e $'\tdocs-screenshots$' | git hash-object --stdin)
+    excl_tree=$(cd "${REPO_ROOT}" && git ls-tree -r "HEAD:platform" | awk -F '\t' '$2 !~ /^e2e-tests\// && $2 !~ /^tools\/docs-screenshots\//' | git hash-object --stdin)
     for tag in "tree-${excl_tree}" "tree-${full_tree}"; do
       if pull_public "${REGISTRY}/platform:${tag}" 2> /dev/null; then
         echo "${REGISTRY}/platform:${tag}"

@@ -183,7 +183,7 @@ RUN skopeo copy --override-os linux --override-arch "${TARGETARCH}" \
 # emulation — and the same bytes land in every target arch.
 FROM --platform=$BUILDPLATFORM ${DOTNET_SDK_IMAGE} AS vaf-add-on-builder
 WORKDIR /src
-COPY integrations/m-files-vaf-add-on/ ./
+COPY backend/src/knowledge-base/connectors/mfiles/vaf-add-on/ ./
 # The csproj's packaging target writes exactly one versioned
 # archestra-m-files-vaf-add-on-<version>.mfappx (it deletes older ones
 # first); ship it alongside a stable-named copy — the name the installer and
@@ -631,7 +631,7 @@ COPY --from=builder /app/frontend/.next/standalone ./
 
 # Copy previous version's static assets first (from CI build context)
 # Content-hashed filenames ensure no conflicts between versions
-COPY prev-static-assets/ ./frontend/.next/static/
+COPY docker/prev-static-assets/ ./frontend/.next/static/
 
 # Copy current build's assets on top
 COPY --from=builder /app/frontend/.next/static ./frontend/.next/static

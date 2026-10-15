@@ -66,7 +66,7 @@ Bundled text files are returned as text. A `<skill_file encoding="base64">` cont
 
 In the default TUI mode, the maintained images wait for their native client's gateway catalog before submitting a delegated task. A failed connection, catalog request, or discovery timeout fails the run instead of starting it with only local tools. Claude Code checks its own TUI's registered gateway tools before submitting the prompt. Custom clients must also complete gateway discovery before assembling their first model request; checking tool assignments or making a separate preflight connection does not establish that the client's tool catalog is ready.
 
-The real-client tests in `agent_images/tests/mcp-startup.py` run during image builds. They hold discovery behind a barrier, execute all three OpenAPPA recovery tools, resume a saved conversation, and check discovery errors and timeouts. The MCP and model endpoints are synthetic; the pinned clients, wrappers, tmux sessions, and tool execution paths are real.
+The real-client tests in `docker_images/agent/tests/mcp-startup.py` run during image builds. They hold discovery behind a barrier, execute all three OpenAPPA recovery tools, resume a saved conversation, and check discovery errors and timeouts. The MCP and model endpoints are synthetic; the pinned clients, wrappers, tmux sessions, and tool execution paths are real.
 
 ## Readable Transcript
 

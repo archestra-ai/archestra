@@ -16,7 +16,7 @@
  * skipped for the same reason: those are wire header names.
  *
  * Usage:
- *   tsx standalone-scripts/check-white-label-copy.ts
+ *   tsx scripts/check-white-label-copy.ts
  *
  * Two escape hatches, in order of preference:
  *

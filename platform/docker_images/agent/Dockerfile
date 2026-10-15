@@ -13,7 +13,7 @@ ENV PATH=$PNPM_HOME/bin:$PNPM_HOME:$PATH
 ENV COREPACK_DEFAULT_TO_LATEST=0
 RUN corepack enable && corepack prepare pnpm@11.9.0 --activate
 
-COPY agent_images/bin /usr/local/bin
+COPY docker_images/agent/bin /usr/local/bin
 # The backend sends this program to the workspace inline, so the image needs no
 # copy to serve file transfers. One is installed anyway: it keeps the image's
 # own test honest and gives anyone debugging inside a pod the same tool.
@@ -27,7 +27,7 @@ USER 1000:1000
 WORKDIR /home/node/workspace
 
 RUN --network=none \
-    --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \
+    --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/workspace-files.py \
  && python3 /tmp/agent-image-tests/interactive-resume.py
 
@@ -45,16 +45,16 @@ RUN pnpm --config.ignore-scripts=false add --global @anthropic-ai/claude-code@2.
 ENV DISABLE_AUTOUPDATER=1
 USER 1000:1000
 RUN --network=none \
-    --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \
+    --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/claude-tui-start.py \
  && python3 /tmp/agent-image-tests/claude-auth.py
 
 RUN --network=none \
-    --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \
+    --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/mcp-startup.py claude-code
 
 RUN --network=none \
-    --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \
+    --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/claude-background-agents.py
 
 FROM agent-base AS agent-codex
@@ -64,11 +64,11 @@ RUN pnpm add --global @openai/codex@0.153.0 \
  && chown -R 1000:1000 /home/node
 USER 1000:1000
 RUN --network=none \
-    --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \
+    --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/codex-failure.py
 
 RUN --network=none \
-    --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \
+    --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/mcp-startup.py codex
 
 FROM agent-base AS agent-opencode
@@ -83,7 +83,7 @@ ENV OPENCODE_DISABLE_PROJECT_CONFIG=1
 USER 1000:1000
 
 RUN --network=none \
-    --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \
+    --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/mcp-startup.py opencode
 
 FROM agent-base AS agent-hermes
@@ -96,15 +96,15 @@ RUN python3 -m venv /opt/hermes \
  && hermes --version \
  && chown -R 1000:1000 /home/node
 RUN --network=none \
-    --mount=type=bind,source=agent_images/patches,target=/tmp/agent-image-patches \
+    --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
     /opt/hermes/bin/python /tmp/agent-image-patches/hermes-tui-mcp-discovery.py
 USER 1000:1000
 RUN --network=none \
-    --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \
+    --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/hermes-startup.py
 
 RUN --network=none \
-    --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \
+    --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/mcp-startup.py hermes
 
 FROM agent-base AS agent-openclaw
@@ -113,9 +113,9 @@ RUN pnpm add --global openclaw@2026.7.1-2 \
  && openclaw --version \
  && chown -R 1000:1000 /home/node
 RUN --network=none \
-    --mount=type=bind,source=agent_images/patches,target=/tmp/agent-image-patches \
+    --mount=type=bind,source=docker_images/agent/patches,target=/tmp/agent-image-patches \
     python3 /tmp/agent-image-patches/openclaw-mcp-required.py
 USER 1000:1000
 RUN --network=none \
-    --mount=type=bind,source=agent_images/tests,target=/tmp/agent-image-tests \
+    --mount=type=bind,source=docker_images/agent/tests,target=/tmp/agent-image-tests \
     python3 /tmp/agent-image-tests/mcp-startup.py openclaw

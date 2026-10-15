@@ -140,13 +140,13 @@ export function getComposerAnswer({
   text: string;
 }): ElicitationResponse | null {
   const typed = text.trim();
-  if (requests.length !== 1 || !typed) {
+  if (!typed || !takesComposerAnswer(requests)) {
     return null;
   }
   const [request] = requests;
   const fields = getElicitationFields(request.requestedSchema);
   const other = fields.find(isOtherTextField);
-  if (!other || !isSingleChoiceForm(fields)) {
+  if (!other) {
     return null;
   }
   return {
@@ -157,6 +157,17 @@ export function getComposerAnswer({
       [other.name]: typed,
     }),
   };
+}
+
+/** Whether the chat composer takes the open question's typed answer (see `getComposerAnswer`). */
+export function takesComposerAnswer(
+  requests: ChatMcpElicitationRequest[],
+): boolean {
+  if (requests.length !== 1) {
+    return false;
+  }
+  const fields = getElicitationFields(requests[0].requestedSchema);
+  return fields.some(isOtherTextField) && isSingleChoiceForm(fields);
 }
 
 export function getDefaultValues(fields: ElicitationField[]) {

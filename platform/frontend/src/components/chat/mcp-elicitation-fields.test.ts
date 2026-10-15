@@ -8,6 +8,7 @@ import {
   getDefaultValues,
   getElicitationFields,
   hasChoiceSelection,
+  takesComposerAnswer,
   validateValues,
 } from "./mcp-elicitation-fields";
 
@@ -99,5 +100,21 @@ describe("getComposerAnswer", () => {
         text: "Cello",
       }),
     ).toBeNull();
+  });
+
+  it("marks the composer as answering only while one typed-answer question waits", () => {
+    expect(takesComposerAnswer([question("q-1", withTypedAnswer)])).toBe(true);
+    expect(takesComposerAnswer([])).toBe(false);
+    expect(
+      takesComposerAnswer([
+        question("q-1", withTypedAnswer),
+        question("q-2", withTypedAnswer),
+      ]),
+    ).toBe(false);
+    expect(
+      takesComposerAnswer([
+        question("q-1", { choice: { type: "string", enum: ["A", "B"] } }),
+      ]),
+    ).toBe(false);
   });
 });

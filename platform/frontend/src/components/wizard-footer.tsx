@@ -12,13 +12,18 @@ import { cn } from "@/lib/utils/tailwind";
  * Shared action row for full-page create/edit wizards. It sticks to the
  * bottom of the window, so it holds a slot the app's version line moves
  * into: otherwise the line would scroll away underneath it.
+ *
+ * `notice` sits above the buttons, inside the sticky bar, for a message the
+ * buttons act on, such as a save that will restart a server.
  */
 export function WizardFooter({
   children,
   className,
+  notice,
 }: {
   children: ReactNode;
   className?: string;
+  notice?: ReactNode;
 }) {
   useOffersVersionSlot();
   return (
@@ -29,6 +34,7 @@ export function WizardFooter({
       // while it sticks, instead of floating on a strip of background.
       className="flex flex-col border-t bg-background sm:sticky sm:bottom-0 sm:z-10 sm:-mb-6"
     >
+      {notice ? <div className="pt-4">{notice}</div> : null}
       {/* No side padding: the buttons line up with the edges of the fields
           above. */}
       <div

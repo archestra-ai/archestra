@@ -2438,6 +2438,7 @@ export function McpCatalogForm({
             // we honor that decision even if dirty state shifts while
             // the bar is up (e.g., user tweaks labels mid-confirm).
             mode={pendingSubmit.mode}
+            layout={wizardPanel ? "page" : "dialog"}
             renamed={pendingSubmit.renamed}
             newName={pendingSubmit.values.name}
             isMultitenant={isMultitenant}

@@ -78553,6 +78553,36 @@
             "in": "query",
             "name": "offset",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "in": "query",
+            "name": "search",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "pinned",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "started",
+                "recent",
+                "pinned"
+              ]
+            },
+            "in": "query",
+            "name": "sort",
+            "required": false
           }
         ],
         "responses": {

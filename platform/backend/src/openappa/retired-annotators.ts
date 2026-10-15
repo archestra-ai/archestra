@@ -289,7 +289,9 @@ function keptFrom(params: {
 
 /** `binding` with the credentials it uses, so two bindings read apart in a message. */
 function described(annotator: KeptAnnotator): string {
-  const entries = Object.entries(annotator.credentials);
+  const entries = Object.entries(annotator.credentials).sort(([a], [b]) =>
+    a.localeCompare(b),
+  );
   return entries.length === 0
     ? annotator.binding
     : `${annotator.binding} with ${entries
@@ -337,8 +339,9 @@ function atThisHost(params: {
 
 /** Whether a table has the shape the host writes for its helpers: a URL and its bearer variable. */
 function hostShaped(table: Record<string, unknown>): boolean {
-  return Object.keys(table).every(
-    (key) => key === "url" || key === "token_env",
+  return (
+    typeof table.url === "string" &&
+    Object.keys(table).every((key) => key === "url" || key === "token_env")
   );
 }
 

@@ -95,20 +95,9 @@ const delegationTargetAgentsQuery = {
 } as const;
 
 export function useDelegationTargetAgents(params?: { enabled?: boolean }) {
-  return useQuery({
-    queryKey: ["agents", "all", delegationTargetAgentsQuery],
-    queryFn: async () => {
-      const { data, error } = await getAllAgents({
-        query: delegationTargetAgentsQuery,
-      });
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? [];
-    },
+  return useAgentOptions({
+    filters: delegationTargetAgentsQuery,
     enabled: params?.enabled,
-    // No staleTime override: inherit the client default so several components
-    // mounting this hook during one page load share a single fetch instead of
-    // each observer refetching the whole roster. Agent mutations invalidate
-    // ["agents"] queries, so edits still show up immediately.
   });
 }
 
@@ -874,19 +863,8 @@ export function useChatAgents(params?: { enabled?: boolean }) {
 }
 
 export function useOrgScopedAgents() {
-  return useQuery({
-    queryKey: [
-      "agents",
-      "all",
-      { agentType: "agent", excludeBuiltIn: true, scope: "org" as const },
-    ],
-    queryFn: async () => {
-      const { data, error } = await getAllAgents({
-        query: { agentType: "agent", excludeBuiltIn: true, scope: "org" },
-      });
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? [];
-    },
+  return useAgentOptions({
+    filters: { agentType: "agent", excludeBuiltIn: true, scope: "org" },
   });
 }
 

@@ -89202,6 +89202,10 @@ export type GetOpenappaPolicyDeclarationsResponses = {
                 readers: Array<string>;
             }>;
             helpers: Array<string>;
+            served: {
+                status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
+                composed: boolean;
+            } | null;
         }>;
         unusedAliases: Array<{
             namespace: string;
@@ -89210,6 +89214,29 @@ export type GetOpenappaPolicyDeclarationsResponses = {
         }>;
         rootRevision: number;
         lastError: string | null;
+        composition: {
+            served: {
+                kind: 'current';
+                rootRevision: number;
+                composedAt: string;
+            } | {
+                kind: 'previous';
+                rootRevision: number | null;
+                composedAt: string | null;
+                batteries: Array<{
+                    name: string;
+                    status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
+                    composed: boolean;
+                }> | null;
+            } | {
+                kind: 'root_only';
+            };
+            refusal: {
+                message: string;
+                at: string;
+                rootRevision: number | null;
+            } | null;
+        };
         managedInGithub: boolean;
         heldPull: {
             contentHash: string;
@@ -89404,6 +89431,29 @@ export type GetOpenappaEffectivePolicyResponses = {
         compiledAt: string;
         lastError: string | null;
         lastErrorAt: string | null;
+        composition: {
+            served: {
+                kind: 'current';
+                rootRevision: number;
+                composedAt: string;
+            } | {
+                kind: 'previous';
+                rootRevision: number | null;
+                composedAt: string | null;
+                batteries: Array<{
+                    name: string;
+                    status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
+                    composed: boolean;
+                }> | null;
+            } | {
+                kind: 'root_only';
+            };
+            refusal: {
+                message: string;
+                at: string;
+                rootRevision: number | null;
+            } | null;
+        };
     };
 };
 
@@ -90013,6 +90063,10 @@ export type SetOpenappaCredentialBindingResponses = {
                 readers: Array<string>;
             }>;
             helpers: Array<string>;
+            served: {
+                status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
+                composed: boolean;
+            } | null;
         }>;
         unusedAliases: Array<{
             namespace: string;
@@ -90021,6 +90075,29 @@ export type SetOpenappaCredentialBindingResponses = {
         }>;
         rootRevision: number;
         lastError: string | null;
+        composition: {
+            served: {
+                kind: 'current';
+                rootRevision: number;
+                composedAt: string;
+            } | {
+                kind: 'previous';
+                rootRevision: number | null;
+                composedAt: string | null;
+                batteries: Array<{
+                    name: string;
+                    status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
+                    composed: boolean;
+                }> | null;
+            } | {
+                kind: 'root_only';
+            };
+            refusal: {
+                message: string;
+                at: string;
+                rootRevision: number | null;
+            } | null;
+        };
         managedInGithub: boolean;
         heldPull: {
             contentHash: string;
@@ -90451,7 +90528,7 @@ export type GetOpenappaCoverageToolsResponses = {
                 source: 'root' | 'battery' | 'catchall';
                 battery: string | null;
                 batteryEntry: string | null;
-                batteryStatus: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
+                batteryStatus: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active' | 'pending' | null;
                 line: number | null;
                 name: string;
                 selector: string | null;
@@ -90593,7 +90670,7 @@ export type GetOpenappaCoverageSummaryResponses = {
             }>;
             broken: Array<{
                 name: string;
-                status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused';
+                status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'pending';
                 tools: number;
             }>;
             available: Array<{
@@ -90601,6 +90678,12 @@ export type GetOpenappaCoverageSummaryResponses = {
                 servers: Array<string>;
                 tools: number;
             }>;
+        };
+        composition: {
+            kind: 'current' | 'previous' | 'root_only';
+            servedRootRevision: number | null;
+            refusedRootRevision: number | null;
+            rulesMayDiffer: boolean;
         };
     };
 };

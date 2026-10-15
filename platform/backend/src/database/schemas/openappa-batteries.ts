@@ -111,6 +111,11 @@ export const openappaEffectivePoliciesTable = pgTable(
     compiledAt: timestamp("compiled_at", { withTimezone: true }).notNull(),
     lastError: text("last_error"),
     lastErrorAt: timestamp("last_error_at", { withTimezone: true }),
+    // What `content` was composed from: its revision, time and battery
+    // statuses, or that it is the root text alone. Trusted only while its
+    // `contentHash` equals `content_hash`, so a build that does not write it
+    // leaves a value nobody reads. See src/openappa/composition-view.ts.
+    served: jsonb("served").$type<unknown>(),
   },
 );
 

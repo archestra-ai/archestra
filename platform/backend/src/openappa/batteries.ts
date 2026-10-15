@@ -42,10 +42,13 @@ import type {
   BatteryPackageFile,
   BatteryScope,
   BatterySummary,
+  CompositionView,
   CreateBatteryInstall,
   EffectivePolicy,
+  EffectivePolicyView,
   PolicyBatteryView,
   PolicyDeclarationsView,
+  ServedComposition,
   UpdateBatteryInstall,
   UploadedBatteryPackage,
 } from "@/types/openappa-batteries";
@@ -60,6 +63,14 @@ import {
   prospectiveDeployment,
   viewedDeployment,
 } from "./battery-target";
+import {
+  carriedServed,
+  composes,
+  compositionView,
+  enforcedBattery,
+  helperOwner,
+  servedSnapshot,
+} from "./composition-view";
 import {
   addedGrants,
   bundledEntry,
@@ -264,11 +275,16 @@ class OpenAppaBatteriesService {
       OpenAppaGithubSyncModel.find(organizationId),
       OpenAppaCredentialBindingModel.list(organizationId),
     ]);
+    const composition = compositionView(policy);
     return {
-      batteries,
+      batteries: batteries.map((battery) => ({
+        ...battery,
+        served: servedOf(composition, battery),
+      })),
       unusedAliases,
       rootRevision: policy.rootRevision,
       lastError: policy.lastError,
+      composition,
       managedInGithub: sync?.interval != null,
       heldPull:
         sync?.heldContentHash && sync.heldSourceCommit
@@ -293,7 +309,7 @@ class OpenAppaBatteriesService {
     batteries: PolicyBatteryView[];
     viewed: DeployedEntries;
     rootRevision: number;
-    lastError: string | null;
+    composition: CompositionView;
   }> {
     const { root, resolution, batteries, policy } =
       await this.current(organizationId);
@@ -306,8 +322,8 @@ class OpenAppaBatteriesService {
         resolution,
         deploy: viewedDeployment,
       }),
-      rootRevision: policy.rootRevision,
-      lastError: policy.lastError,
+      rootRevision: root.revision,
+      composition: compositionView(policy),
     };
   }
 
@@ -342,6 +358,15 @@ class OpenAppaBatteriesService {
    */
   async getEffectivePolicy(organizationId: string): Promise<EffectivePolicy> {
     return (await this.sharedRead(organizationId, { fresh: true })).policy;
+  }
+
+  /** The effective policy as the API shows it: the row and what it serves. */
+  async effectivePolicyView(
+    organizationId: string,
+  ): Promise<EffectivePolicyView> {
+    const policy = await this.getEffectivePolicy(organizationId);
+    const { served: _served, ...row } = policy;
+    return { ...row, composition: compositionView(policy) };
   }
 
   /**
@@ -974,6 +999,21 @@ class OpenAppaBatteriesService {
         409,
         `Remove this package from the policy ${spelled} before deleting it`,
       );
+    // A refused text keeps an earlier composition enforced, and its helpers
+    // run from the packages that composition used.
+    const stored =
+      await OpenAppaEffectivePolicyModel.findServed(organizationId);
+    const served = stored?.served;
+    if (
+      stored?.lastError != null &&
+      served?.kind === "composition" &&
+      served.contentHash === stored.contentHash &&
+      served.batteries?.some((battery) => battery.packageHash === contentHash)
+    )
+      throw new ApiError(
+        409,
+        "The composition the runtime still enforces uses this package. Delete it once a revision composes without it.",
+      );
     if (!(await OpenAppaBatteryPackageModel.delete(params)))
       throw new ApiError(404, "Battery package not found");
   }
@@ -1157,6 +1197,7 @@ class OpenAppaBatteriesService {
           installs: await OpenAppaBatteryInstallModel.list(organizationId),
         };
       }
+      const now = new Date();
       const { values, retired } = await this.compose({
         organizationId,
         root: planned.root,
@@ -1164,32 +1205,42 @@ class OpenAppaBatteriesService {
         planned: planned.batteries,
         composed,
         installFingerprint,
-        previousContent: expected?.content ?? null,
+        expected,
+        previousInstalls: previous,
         installs,
         snapshot,
+        now,
       });
-      if (values.error === null) {
-        // The kept rows still carry the refusal this composition lifts.
-        if (settled && held !== null)
-          installs = await OpenAppaBatteryInstallModel.replaceAll({
-            organizationId,
-            rows: planned.rows,
-          });
-        if (expected)
-          this.logGrantGrowth({ organizationId, previous, next: planned.rows });
-      } else if (!settled || held !== values.error) {
-        await OpenAppaBatteryInstallModel.markRefused({
-          organizationId,
-          lastError: values.error,
-        });
-      }
       const policy = await OpenAppaEffectivePolicyModel.save({
         organizationId,
         values,
         expected,
+        now,
       });
-      if (policy) logRetired({ organizationId, ...retired });
-      if (policy)
+      // Rows are marked only for the composition that was stored: a lost
+      // store says nothing about what the next attempt composes.
+      if (policy) {
+        if (values.error === null) {
+          // The kept rows still carry the refusal this composition lifts.
+          if (settled && held !== null)
+            installs = await OpenAppaBatteryInstallModel.replaceAll({
+              organizationId,
+              rows: planned.rows,
+            });
+          if (expected)
+            this.logGrantGrowth({
+              organizationId,
+              previous,
+              next: planned.rows,
+            });
+        } else if (!settled || held !== values.error) {
+          await OpenAppaBatteryInstallModel.markRefused({
+            organizationId,
+            lastError: values.error,
+          });
+        }
+        logRetired({ organizationId, ...retired });
+        logComposition({ organizationId, held, policy });
         return {
           ...planned,
           policy,
@@ -1198,6 +1249,7 @@ class OpenAppaBatteriesService {
               ? installs
               : await OpenAppaBatteryInstallModel.list(organizationId),
         };
+      }
       // Another composition stored its result between this attempt's read and
       // its write. Reading again at once tends to lose the same race, so wait
       // first, jittered so simultaneous losers do not line up again. The last
@@ -1263,12 +1315,15 @@ class OpenAppaBatteriesService {
     planned: readonly PlannedBattery[];
     composed: ComposeBatteryInput[];
     installFingerprint: string;
-    previousContent: string | null;
+    /** The stored row this composition replaces, and the install rows it read. */
+    expected: EffectivePolicy | null;
+    previousInstalls: readonly BatteryInstall[];
     installs: readonly BatteryInstall[];
     snapshot: RetirementSnapshot;
+    /** When this composition is stored; its record says it was composed then. */
+    now: Date;
   }): Promise<{ values: EffectivePolicyValues; retired: Retirement }> {
-    const { root, planned, composed, installFingerprint, previousContent } =
-      params;
+    const { root, planned, composed, installFingerprint, expected } = params;
     const native = await loadNative();
     const result = await native.composeOpenappaPolicy({
       root: root.content,
@@ -1280,24 +1335,45 @@ class OpenAppaBatteriesService {
     // before deciding whether the runtime refused: an identity test against
     // `null` alone silently stores a refusal as a clean composition.
     const accepted = result.content ?? null;
-    const values = (content: string, error: string | null) => ({
-      content,
-      contentHash: hash(content),
-      rootRevision: root.revision,
-      installFingerprint,
-      error,
-    });
-    if (accepted === null)
+    const values = (
+      content: string,
+      error: string | null,
+      served: (contentHash: string) => ServedComposition,
+    ) => {
+      const contentHash = hash(content);
       return {
-        // The root alone is no longer enforceable — its include entries are
-        // the host's to answer — so a refusal keeps the last composition
-        // that opened.
-        values: values(
-          previousContent ?? root.content,
-          [...result.errors, ...heldBack(planned).map(heldBackNote)].join("\n"),
-        ),
+        content,
+        contentHash,
+        rootRevision: root.revision,
+        installFingerprint,
+        error,
+        served: served(contentHash),
+      };
+    };
+    if (accepted === null) {
+      const error = [
+        ...result.errors,
+        ...heldBack(planned).map(heldBackNote),
+      ].join("\n");
+      // The root alone is no longer enforceable — its include entries are the
+      // host's to answer — so a refusal keeps the last composition that
+      // opened, and says which one that is.
+      const carried = expected
+        ? carriedServed({ expected, installs: params.previousInstalls })
+        : null;
+      return {
+        values:
+          expected && carried
+            ? values(expected.content, error, () => carried)
+            : values(root.content, error, (contentHash) => ({
+                v: 1,
+                kind: "root_only",
+                contentHash,
+                rootRevision: root.revision,
+              })),
         retired: NOTHING_RETIRED,
       };
+    }
     const retired = await this.retiredAnnotators({
       organizationId: params.organizationId,
       composed: accepted,
@@ -1333,7 +1409,15 @@ class OpenAppaBatteriesService {
       if (content === null) kept = [];
     }
     return {
-      values: values(content ?? accepted, null),
+      values: values(content ?? accepted, null, (contentHash) =>
+        servedSnapshot({
+          batteries: planned,
+          installs: params.installs,
+          contentHash,
+          rootRevision: root.revision,
+          composedAt: params.now,
+        }),
+      ),
       retired: { ...retired, kept, dropped },
     };
   }
@@ -2366,29 +2450,6 @@ type BatteryGovernance =
       conflicting: boolean;
     };
 
-/**
- * Whether a battery composes its own policy rather than the empty stub: an
- * active one, and an organization-wide one whose package resolves, since its
- * annotator must stay declared for the rules that route to it.
- */
-function composes(battery: {
-  status: BatteryInstallStatus;
-  scope: BatteryScope;
-}): boolean {
-  switch (battery.status) {
-    case "active":
-    case "unrouted":
-      return true;
-    case "missing_credentials":
-      return battery.scope === "organization";
-    case "unavailable":
-    case "naming_conflict":
-    case "server_missing":
-    case "refused":
-      return false;
-  }
-}
-
 type HeldBackStatus = Exclude<
   BatteryInstallStatus,
   "active" | "unrouted" | "refused"
@@ -2435,8 +2496,8 @@ function heldBackRemedy(battery: HeldBackBattery): string {
 // (v4), rows without retained original annotator bindings (v5), rows a
 // same-name rebinding refused and pinned to an earlier composition (v6), and
 // rows whose retirement suffix covers credential keys but not the stored
-// opening policies (v7).
-const COMPOSITION_VERSION = "v7:";
+// opening policies (v7), and rows that do not record what they serve (v8).
+const COMPOSITION_VERSION = "v8:";
 
 /**
  * How long a process reuses an organization's retirement snapshot on the
@@ -2557,22 +2618,6 @@ function batteryScope(battery: NativeBatteryPackage | null): BatteryScope {
     declaredAnnotators(battery).length > 0
     ? "organization"
     : "catalogs";
-}
-
-/** The row whose helpers a battery's composed externals consult: its earliest one. */
-function helperOwner(
-  installs: BatteryInstall[],
-  name: string,
-): BatteryInstall | null {
-  return (
-    installs
-      .filter((install) => install.batteryName === name)
-      .sort(
-        (a, b) =>
-          a.createdAt.getTime() - b.createdAt.getTime() ||
-          a.id.localeCompare(b.id),
-      )[0] ?? null
-  );
 }
 
 /**
@@ -2770,6 +2815,56 @@ const NOTHING_RETIRED: Retirement = {
   conflicts: [],
   rebound: [],
 };
+
+/**
+ * How the enforced composition holds a battery the current text declares;
+ * null when it does not hold it, or when nothing is enforced.
+ */
+function servedOf(
+  composition: CompositionView,
+  battery: PolicyBatteryView,
+): { status: BatteryInstallStatus; composed: boolean } | null {
+  if (composition.served.kind === "root_only") return null;
+  const enforced = enforcedBattery(composition, battery);
+  return enforced.status === "pending"
+    ? null
+    : { status: enforced.status, composed: enforced.composed };
+}
+
+/**
+ * One line when a stored composition is refused or opens again: a refusal
+ * keeps serving an earlier composition, or, with none, refuses every governed
+ * call. Repeating the same refusal logs nothing.
+ */
+function logComposition(params: {
+  organizationId: string;
+  held: string | null;
+  policy: EffectivePolicy;
+}): void {
+  const { organizationId, held, policy } = params;
+  if (policy.lastError === null) {
+    if (held !== null)
+      logger.info(
+        { organizationId, rootRevision: policy.rootRevision },
+        "OpenAPPA composition opened again",
+      );
+    return;
+  }
+  if (held === policy.lastError) return;
+  const { served } = compositionView(policy);
+  logger.warn(
+    {
+      organizationId,
+      refusedRootRevision: policy.rootRevision,
+      servedRootRevision:
+        served.kind === "previous" ? served.rootRevision : null,
+      error: policy.lastError,
+    },
+    served.kind === "root_only"
+      ? "OpenAPPA composition refused; no earlier composition exists, so governed calls are refused"
+      : "OpenAPPA composition refused; the runtime keeps enforcing an earlier composition",
+  );
+}
 
 /**
  * Per recompose: one warning listing the annotators it keeps, one per name

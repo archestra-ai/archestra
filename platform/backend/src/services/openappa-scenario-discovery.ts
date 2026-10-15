@@ -4,6 +4,7 @@ import config from "@/config";
 import { LRUCacheManager } from "@/in-memory-lru-cache";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import { openappaBatteriesService } from "@/openappa/batteries";
+import { compositionView } from "@/openappa/composition-view";
 import { openappaDeclarations } from "@/openappa/declarations";
 import {
   scenarioContent,
@@ -117,13 +118,18 @@ export async function discoverOpenAppaScenarios(
       message:
         "No policy has been saved. Set up a policy before choosing current-policy validations.",
     };
+  const { served } = compositionView(current.effective);
+  // An earlier composition the runtime still enforces is what scenarios
+  // replay against; only the root text alone has nothing to replay.
   const error =
-    current.effective.lastError ||
+    (served.kind === "root_only" ? current.effective.lastError : null) ||
     current.suite.error ||
     (current.suite.source === "github" && !current.suite.activeDirectory
       ? "Set a validation directory in GitHub source settings first."
       : null);
   if (error) return { ...result, status: "unavailable", message: error };
+  if (served.kind === "previous")
+    result.message = `${result.message} The latest attempt was refused, so these come from the earlier composition the runtime still enforces.`;
   if (Buffer.byteLength(current.effective.content) > 256 * 1024)
     return {
       ...result,

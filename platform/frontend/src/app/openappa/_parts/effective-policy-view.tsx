@@ -9,14 +9,16 @@ import {
   usePolicyDeclarations,
 } from "@/lib/openappa-batteries.query";
 import { BATTERY_STATUS } from "./battery-status";
+import { compositionOf } from "./composition-view";
 import { POLICY_EDITOR_OPTIONS } from "./policy-editor-options";
 
 /**
  * The composed document the runtime actually enforces: the organization's text
  * with every included battery's policy folded in. Read-only — the way to change
  * it is to change the text or the batteries it includes. A text the host
- * refused composes to nothing, so the document shown then is the last one that
- * opened, kept until a text composes again.
+ * refused composes to nothing, so the document shown then is the earlier
+ * composition the runtime keeps enforcing, or, when none ever opened, the
+ * organization's text alone, which enforces nothing.
  */
 export function EffectivePolicyView() {
   const effective = useEffectivePolicy();
@@ -31,21 +33,32 @@ export function EffectivePolicyView() {
       />
     );
   const { content, contentHash, rootRevision, lastError } = effective.data;
-  const refused = lastError !== null;
+  const { served, refusal } = compositionOf(effective.data);
   const hash = contentHash.slice(0, 12);
   // A battery the host holds back folds in as the empty stub, which the
-  // document itself does not show. Under a refusal every battery is out, so
-  // the stubs are not listed twice.
-  const stubs = refused
-    ? []
-    : (declarations.data?.batteries ?? []).filter(
-        (battery) => !battery.composed,
-      );
+  // document itself does not show. Under an earlier composition the stubs
+  // are the ones it composed; the root text alone composes none.
+  const stubs =
+    served.kind === "current"
+      ? (declarations.data?.batteries ?? []).flatMap((battery) =>
+          battery.composed
+            ? []
+            : [{ name: battery.name, status: battery.status }],
+        )
+      : served.kind === "previous"
+        ? (served.batteries ?? []).filter((battery) => !battery.composed)
+        : [];
+  const state =
+    served.kind === "current"
+      ? "composed"
+      : served.kind === "previous"
+        ? "refused-serving-previous"
+        : "refused-root-only";
   return (
     <div
       className="overflow-hidden rounded-b-lg border bg-background"
       data-testid="effective-policy"
-      data-refused={refused}
+      data-composition={state}
     >
       {stubs.length > 0 && (
         <div className="border-b px-4 py-3">
@@ -69,10 +82,16 @@ export function EffectivePolicyView() {
       )}
       {lastError && (
         <div className="border-b px-4 py-3">
-          <InlineNotice variant="error" data-testid="effective-policy-error">
+          <InlineNotice
+            variant={served.kind === "root_only" ? "error" : "warning"}
+            data-testid="effective-policy-error"
+          >
             <span className="font-medium">
-              The current text was refused and composes to nothing; this is the
-              last document that opened.
+              {served.kind === "root_only"
+                ? `${refused(refusal?.rootRevision ?? null)} was refused and no composition opened before it. This is the organization's text alone, which the runtime cannot open, so governed calls are refused.`
+                : served.kind === "previous" && served.rootRevision !== null
+                  ? `${refused(refusal?.rootRevision ?? null)} was refused. The runtime still enforces this document, composed from revision ${served.rootRevision}.`
+                  : `${refused(refusal?.rootRevision ?? null)} was refused. The runtime still enforces this document, the last one that opened.`}
             </span>
             <InlineNoticeText className="whitespace-pre-wrap font-mono">
               {lastError}
@@ -92,11 +111,20 @@ export function EffectivePolicyView() {
       />
       <div className="border-t px-4 py-3 text-xs text-muted-foreground">
         <span>
-          {refused
-            ? `Revision ${rootRevision} refused · kept ${hash}`
-            : `Composed from revision ${rootRevision} · ${hash}`}
+          {served.kind === "current"
+            ? `Composed from revision ${rootRevision} · ${hash}`
+            : served.kind === "root_only"
+              ? `Revision ${rootRevision} refused · nothing enforced · ${hash}`
+              : served.rootRevision === null
+                ? `Revision ${rootRevision} refused · enforcing an earlier composition · ${hash}`
+                : `Revision ${rootRevision} refused · enforcing revision ${served.rootRevision} · ${hash}`}
         </span>
       </div>
     </div>
   );
+}
+
+/** How a refused attempt is named: its revision, or the latest one for a row marked stale. */
+function refused(revision: number | null): string {
+  return revision === null ? "The latest revision" : `Revision ${revision}`;
 }

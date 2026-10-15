@@ -10,9 +10,10 @@ import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import ToolModel from "@/models/tool";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
-import type { BatteryInstallStatus } from "@/types/openappa-batteries";
+import type { CompositionView } from "@/types/openappa-batteries";
 import type {
   CoverageBatteryFit,
+  CoverageBatteryStatus,
   CoverageEntitiesPage,
   CoverageEntitiesQuery,
   CoverageEntity,
@@ -30,6 +31,7 @@ import {
   deployedFiles,
   effectiveToolRules,
 } from "./battery-target";
+import { enforcedBattery } from "./composition-view";
 import {
   asRecord,
   type ToolEntry,
@@ -169,7 +171,8 @@ class OpenAppaCoverageService {
   async summary(
     params: { organizationId: string } & CoverageVisibility,
   ): Promise<CoverageSummary> {
-    const { listed, toolsByCatalog, included } = await listedTools(params);
+    const { listed, toolsByCatalog, included, composition, rootRevision } =
+      await listedTools(params);
     const fitting = await openappaBatteriesService.batteriesForCatalogs({
       organizationId: params.organizationId,
       catalogIds: [...toolsByCatalog.keys()],
@@ -180,7 +183,7 @@ class OpenAppaCoverageService {
         (
           battery,
         ): battery is typeof battery & {
-          status: Exclude<BatteryInstallStatus, "active">;
+          status: Exclude<CoverageBatteryStatus, "active">;
         } => battery.status !== "active",
       )
       .map((battery) => ({
@@ -221,12 +224,25 @@ class OpenAppaCoverageService {
 
     const byTools = (a: { name: string; tools: number }, b: typeof a) =>
       b.tools - a.tools || a.name.localeCompare(b.name);
+    const { served, refusal } = composition;
     return {
       totals: { tools: listed.length, ...countRules(listed) },
       batteries: {
         active: active.sort(byTools),
         broken: broken.sort(byTools),
         available: [...available.values()].sort(byTools),
+      },
+      composition: {
+        kind: served.kind,
+        servedRootRevision:
+          served.kind === "root_only" ? null : served.rootRevision,
+        refusedRootRevision: refusal?.rootRevision ?? null,
+        // The rows follow the current text. An earlier composition of
+        // another revision, or of an unknown one, may hold other rules.
+        rulesMayDiffer:
+          served.kind === "previous" &&
+          (served.rootRevision === null ||
+            served.rootRevision !== rootRevision),
       },
     };
   }
@@ -319,10 +335,10 @@ export async function coverageVisibility(
 async function listedTools(
   params: { organizationId: string } & CoverageVisibility,
 ) {
-  const { tools, included } = await buildReport(params.organizationId, {
-    ...params,
-    includeAutoModeTools: false,
-  });
+  const { tools, included, composition, rootRevision } = await buildReport(
+    params.organizationId,
+    { ...params, includeAutoModeTools: false },
+  );
   const visibleCatalogIds = new Set(params.visibleCatalogIds ?? []);
   const listed = tools
     .filter((row) => row.own && visibleCatalogIds.has(row.tool.catalogId))
@@ -333,7 +349,7 @@ async function listedTools(
       ...(toolsByCatalog.get(tool.catalogId) ?? []),
       tool,
     ]);
-  return { listed, toolsByCatalog, included };
+  return { listed, toolsByCatalog, included, composition, rootRevision };
 }
 
 /**
@@ -429,8 +445,15 @@ type Report = {
   /** Every table row, sorted; `own` marks the row a tool is judged by without a selector. */
   tools: Array<{ tool: CoverageTool; own: boolean }>;
   entities: CoverageEntity[];
-  /** The batteries the policy includes, `refused` while its composition fails. */
-  included: Array<{ name: string; status: BatteryInstallStatus }>;
+  /**
+   * The batteries the policy includes, as the enforced composition holds
+   * them: `refused` when only the root text is served, `pending` when an
+   * earlier composition is enforced that did not hold them.
+   */
+  included: Array<{ name: string; status: CoverageBatteryStatus }>;
+  composition: CompositionView;
+  /** The current root revision the rows were classified against. */
+  rootRevision: number;
 };
 
 type CoverageVisibility = {
@@ -483,12 +506,19 @@ async function buildReport(
     }),
   ]);
   const { resolution, rootContent, viewed } = snapshot;
-  const refused = snapshot.lastError !== null;
-  const statusOf = new Map<string, BatteryInstallStatus>(
+  const { composition } = snapshot;
+  // Nothing is enforced only when the root text alone is served. A refusal
+  // that keeps an earlier composition keeps its rules enforced, with the
+  // statuses that composition was composed with.
+  const refused = composition.served.kind === "root_only";
+  const enforcedOf = new Map(
     snapshot.batteries.map((battery) => [
       battery.name,
-      refused ? "refused" : battery.status,
+      enforcedBattery(composition, battery),
     ]),
+  );
+  const statusOf = new Map<string, CoverageBatteryStatus>(
+    [...enforcedOf].map(([name, enforced]) => [name, enforced.status]),
   );
 
   // Root rules in text order, then every battery's in include order.
@@ -540,7 +570,9 @@ async function buildReport(
   );
   // A base waiting only on its target's credentials composes, and so enforces.
   const composed = new Set(
-    snapshot.batteries.filter((each) => each.composed).map((each) => each.name),
+    [...enforcedOf].flatMap(([name, enforced]) =>
+      enforced.composed ? [name] : [],
+    ),
   );
   for (const included of resolution.entries) {
     if (!included.battery) continue;
@@ -784,6 +816,8 @@ async function buildReport(
     tools: rows,
     entities,
     included: [...statusOf].map(([name, status]) => ({ name, status })),
+    composition,
+    rootRevision: snapshot.rootRevision,
   };
 }
 

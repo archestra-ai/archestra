@@ -40,6 +40,17 @@ export class OpenappaRetiredAnnotatorError extends Error {
   }
 }
 
+/**
+ * The organization's text was refused and no composition ever opened, so the
+ * runtime has nothing to enforce: every governed call is refused.
+ */
+export class OpenappaRootOnlyError extends Error {
+  constructor(readonly refusal: string) {
+    super("no composition of the organization's policy has opened");
+    this.name = "OpenappaRootOnlyError";
+  }
+}
+
 export class OpenappaCredentialError extends Error {
   constructor(
     readonly variable: string,
@@ -79,6 +90,7 @@ const POLICY_REFUSALS = [
   /^annotator \S+ names /,
   /^root policy: /,
   /^battery \S+: /,
+  /^a hosted document declares /,
 ];
 
 function classify(error: unknown): {
@@ -89,6 +101,11 @@ function classify(error: unknown): {
     return {
       statusCode: 409,
       detail: `this conversation started under a policy that no longer declares annotator "${summarize(error.annotator, MAX_NAME)}". Start a new conversation, or an administrator can declare "${summarize(error.annotator, MAX_NAME)}" again on the ${POLICY_PAGE} page.`,
+    };
+  if (error instanceof OpenappaRootOnlyError)
+    return {
+      statusCode: 500,
+      detail: `the organization's guardrails policy was refused and no earlier composition exists (${summarize(error.refusal)}). An administrator can fix it on the ${POLICY_PAGE} page.`,
     };
   if (error instanceof OpenappaCredentialError)
     return {

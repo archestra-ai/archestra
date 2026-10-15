@@ -11,6 +11,14 @@ function declarations(
     unusedAliases: [],
     rootRevision: 3,
     lastError: null,
+    composition: {
+      served: {
+        kind: "current",
+        rootRevision: 3,
+        composedAt: "2026-09-18T12:00:00Z",
+      },
+      refusal: null,
+    },
     managedInGithub: false,
     heldPull: null,
     credentialBindings: [],
@@ -33,6 +41,10 @@ function battery(
     servers: [],
     credentials: [],
     helpers: [],
+    served: {
+      status: overrides.status ?? "active",
+      composed: overrides.composed ?? true,
+    },
     ...overrides,
   };
 }
@@ -57,21 +69,53 @@ test("annotates every declared battery and unclaimed alias, in reading order", (
   ]);
 });
 
-test("a failed composition reads every battery as refused", () => {
+test("a refusal reads each battery as the composition the runtime still enforces holds it", () => {
+  const refusal = {
+    message: "acme: unknown trust rank",
+    at: "2026-09-18T13:00:00Z",
+    rootRevision: 4,
+  };
+  const batteries = [
+    battery({ name: "acme", status: "active", line: 2 }),
+    battery({
+      name: "globex",
+      status: "missing_credentials",
+      composed: false,
+      line: 5,
+      served: null,
+    }),
+  ];
   expect(
     policyAnnotations(
       declarations({
-        batteries: [
-          battery({ name: "acme", status: "active", line: 2 }),
-          battery({ name: "globex", status: "missing_credentials", line: 5 }),
-        ],
-        lastError: "acme: unknown trust rank",
+        batteries,
+        lastError: refusal.message,
+        composition: {
+          served: {
+            kind: "previous",
+            rootRevision: 3,
+            composedAt: "2026-09-18T12:00:00Z",
+            batteries: [{ name: "acme", status: "active", composed: true }],
+          },
+          refusal,
+        },
       }),
     ),
   ).toEqual([
-    { kind: "battery", line: 2, name: "acme", status: "refused" },
-    { kind: "battery", line: 5, name: "globex", status: "refused" },
+    { kind: "battery", line: 2, name: "acme", status: "active" },
+    { kind: "battery", line: 5, name: "globex", status: "pending" },
   ]);
+  expect(
+    policyAnnotations(
+      declarations({
+        batteries,
+        lastError: refusal.message,
+        composition: { served: { kind: "root_only" }, refusal },
+      }),
+    ).map((annotation) =>
+      annotation.kind === "battery" ? annotation.status : null,
+    ),
+  ).toEqual(["refused", "refused"]);
 });
 
 test("a policy that declares nothing annotates nothing", () => {

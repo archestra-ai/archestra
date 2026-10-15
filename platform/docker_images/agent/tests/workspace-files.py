@@ -26,7 +26,7 @@ def locate_helper():
     assumed.
     """
     candidates = [
-        Path(__file__).resolve().parent.parent.parent
+        Path(__file__).resolve().parents[3]
         / "backend"
         / "src"
         / "static"

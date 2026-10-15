@@ -1,3 +1,9 @@
+# Platform Scripts
+
+Run these commands from `platform/`. Development and worktree helpers live here
+alongside maintenance and code-generation scripts. Package-based tooling lives
+under `tools/`.
+
 # License Compliance
 
 Scans dependencies for GPL/AGPL licenses incompatible with proprietary software.
@@ -5,9 +11,9 @@ Scans dependencies for GPL/AGPL licenses incompatible with proprietary software.
 ## Usage
 
 ```bash
-tsx license-check.ts           # Full report
-tsx license-check.ts --ci      # CI mode (fails on GPL/AGPL)
-tsx license-check.ts lookup react  # Check specific package
+pnpm exec tsx scripts/license-check.ts           # Full report
+pnpm exec tsx scripts/license-check.ts --ci      # CI mode (fails on GPL/AGPL)
+pnpm exec tsx scripts/license-check.ts lookup react  # Check specific package
 ```
 
 ## Adding Verified Licenses

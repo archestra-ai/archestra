@@ -166,8 +166,8 @@ jobs:
         include:
           - name: MCP Server Base
             runner: ubuntu-latest
-            context: ./platform/mcp_server_docker_image
-            dockerfile: ./platform/mcp_server_docker_image/Dockerfile
+            context: ./platform/docker_images/mcp_server
+            dockerfile: ./platform/docker_images/mcp_server/Dockerfile
             local-tag-prefix: mcp-server-base
             use-build-action: false
             scan-exit-code: "true"
@@ -178,8 +178,8 @@ jobs:
             e2e-slim-tag-suffix: ""
           - name: p4 Shim
             runner: ubuntu-latest
-            context: ./platform/p4_shim_docker_image
-            dockerfile: ./platform/p4_shim_docker_image/Dockerfile
+            context: ./platform/docker_images/p4_shim
+            dockerfile: ./platform/docker_images/p4_shim/Dockerfile
             local-tag-prefix: p4-shim
             use-build-action: false
             scan-exit-code: "true"
@@ -274,8 +274,8 @@ jobs:
       - name: Build p4 Shim image
         uses: ./.github/actions/build-docker-image
         with:
-          context: ./platform/p4_shim_docker_image
-          dockerfile: ./platform/p4_shim_docker_image/Dockerfile
+          context: ./platform/docker_images/p4_shim
+          dockerfile: ./platform/docker_images/p4_shim/Dockerfile
           platforms: linux/amd64
           push: "false"
           load: "true"

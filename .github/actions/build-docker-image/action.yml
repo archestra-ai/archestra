@@ -89,9 +89,9 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Ensure prev-static-assets directory exists
+    - name: Ensure docker/prev-static-assets directory exists
       shell: bash
-      run: mkdir -p "${INPUT_CONTEXT}/prev-static-assets"
+      run: mkdir -p "${INPUT_CONTEXT}/docker/prev-static-assets"
       env:
         INPUT_CONTEXT: ${{ inputs.context }}
 
@@ -108,7 +108,7 @@ runs:
         CID=$(docker create "$INPUT_PREVIOUS_IMAGE" 2>/dev/null) || true
         if [ -n "$CID" ]; then
           echo "Extracting previous static assets from container $CID"
-          docker cp "${CID}:/static-assets-source/." "${INPUT_CONTEXT}/prev-static-assets/" || echo "Warning: Failed to copy previous assets"
+          docker cp "${CID}:/static-assets-source/." "${INPUT_CONTEXT}/docker/prev-static-assets/" || echo "Warning: Failed to copy previous assets"
           docker rm "$CID"
           echo "Successfully extracted previous static assets"
         else

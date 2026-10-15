@@ -78,7 +78,13 @@ for (const version of ['v1', 'v2']) {
     const pg = new Client({ connectionString: databaseUrl });
     await pg.connect();
     try {
+      // One transaction, so a failed insert leaves no half-restored root behind.
+      await pg.query('BEGIN');
       await restore(pg, fixture);
+      await pg.query('COMMIT');
+    } catch (error) {
+      await pg.query('ROLLBACK');
+      throw error;
     } finally {
       await pg.end();
     }

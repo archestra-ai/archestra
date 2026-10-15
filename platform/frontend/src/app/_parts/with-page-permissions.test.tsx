@@ -70,6 +70,14 @@ describe("WithPagePermissions", () => {
     expect(screen.queryByText(/permission/i)).not.toBeInTheDocument();
   });
 
+  it("keeps the query string when it sends a member to their credentials", () => {
+    signInAs(predefinedPermissionsMap.member);
+    window.history.pushState({}, "", "/settings/credentials?search=github");
+    renderAt("/settings/credentials");
+    expect(replace).toHaveBeenCalledWith("/account/credentials?search=github");
+    window.history.pushState({}, "", "/");
+  });
+
   it("keeps Settings for an editor", () => {
     signInAs(predefinedPermissionsMap.editor);
     renderAt("/settings/users");

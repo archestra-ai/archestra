@@ -40,7 +40,15 @@ export const WithPagePermissions: React.FC<React.PropsWithChildren> = ({
   if (isSettingsAreaPath(pathname)) {
     if (canSeeSettings === null) return null;
     if (!canSeeSettings) {
-      return <ClientRedirect to={settingsAreaFallbackUrl(pathname)} />;
+      const fallback = settingsAreaFallbackUrl(pathname);
+      // Credentials links carry state in the query (filters, GitHub connect
+      // results); Personal Settings → Credentials reads the same parameters.
+      return (
+        <ClientRedirect
+          to={fallback}
+          keepQuery={fallback === "/account/credentials"}
+        />
+      );
     }
   }
 

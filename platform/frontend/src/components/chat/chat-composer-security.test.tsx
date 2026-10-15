@@ -16,7 +16,7 @@ import {
   it,
   vi,
 } from "vitest";
-import { OpenappaSessionStatus } from "./openappa-session-status";
+import { ChatComposerSecurity } from "./chat-composer-security";
 
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/guardrails-deployment.query", () => ({
@@ -52,7 +52,7 @@ it("hides retained labels after a failed refresh and recovers on reconnect", asy
   });
   const view = render(
     <QueryClientProvider client={client}>
-      <OpenappaSessionStatus conversationId="first" />
+      <ChatComposerSecurity conversationId="first" />
     </QueryClientProvider>,
   );
   await screen.findByRole("status", {
@@ -83,7 +83,7 @@ it("reads the newly selected session as a noninteractive status", async () => {
   });
   const content = (id: string) => (
     <QueryClientProvider client={client}>
-      <OpenappaSessionStatus key={id} conversationId={id} />
+      <ChatComposerSecurity key={id} conversationId={id} />
     </QueryClientProvider>
   );
   const view = render(content("first"));
@@ -115,7 +115,7 @@ it("hides the whole tab when a conversation has no APPA session", async () => {
   });
   const view = render(
     <QueryClientProvider client={client}>
-      <OpenappaSessionStatus conversationId={id} />
+      <ChatComposerSecurity conversationId={id} />
     </QueryClientProvider>,
   );
   await waitFor(() =>
@@ -142,7 +142,7 @@ it("hides the tab while the first status is loading, then shows it", async () =>
   const client = new QueryClient();
   const view = render(
     <QueryClientProvider client={client}>
-      <OpenappaSessionStatus conversationId="loading" />
+      <ChatComposerSecurity conversationId="loading" />
     </QueryClientProvider>,
   );
   await waitFor(() =>

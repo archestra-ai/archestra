@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { type ReactNode, useEffect, useId } from "react";
 import type { UseFormReturn } from "react-hook-form";
+import { SettingsLink } from "@/components/settings-link";
 import {
   FormControl,
   FormDescription,
@@ -169,9 +169,9 @@ export function GithubConfigFields({
           </Select>
           <FormDescription>
             Organization credentials support scheduled syncs.{" "}
-            <Link href="/settings/credentials" className="underline">
+            <SettingsLink href="/settings/credentials" className="underline">
               Manage credentials
-            </Link>
+            </SettingsLink>
             . {appConfigDescription}
           </FormDescription>
           {appConfigError && (

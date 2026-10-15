@@ -1776,7 +1776,13 @@ test("policy readers cannot select directories or edit files", async () => {
 });
 
 test("inventory rows open files while selection and compact actions stay independent", async () => {
-  showPage();
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+  showPage(client);
   await screen.findByRole("link", { name: scenario.path });
   fireEvent.click(
     screen.getByRole("checkbox", { name: `Select ${scenario.path}` }),
@@ -1802,20 +1808,24 @@ test("inventory rows open files while selection and compact actions stay indepen
     screen.queryByRole("button", { name: `Run ${scenario.path}` }),
   ).not.toBeInTheDocument();
   expect(currentHref).toBe("/openappa/validation");
-  // The list re-renders when inspection lands, which can close a menu opened
-  // just before it; reopen until the menu stays.
+  // Inspection replaces the row actions, so wait for its result before opening
+  // the menu rather than clicking a menu item that can be unmounted mid-click.
   await waitFor(
-    async () => {
-      const trigger = screen.getByRole("button", {
-        name: `More actions ${scenario.path}`,
-      });
-      if (trigger.getAttribute("aria-expanded") !== "true")
-        await userEvent.click(trigger);
-      expect(screen.getByRole("menuitem", { name: "Delete" })).toBeVisible();
-    },
+    () =>
+      expect(
+        client
+          .getMutationCache()
+          .getAll()
+          .some((mutation) => mutation.state.status === "success"),
+      ).toBe(true),
     { timeout: 5000 },
   );
-  await userEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+  await userEvent.click(
+    screen.getByRole("button", { name: `More actions ${scenario.path}` }),
+  );
+  await userEvent.click(
+    await screen.findByRole("menuitem", { name: "Delete" }),
+  );
   const dialog = await screen.findByRole("dialog", {
     name: "Delete 1 validation file?",
   });

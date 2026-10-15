@@ -9,7 +9,7 @@ import { expect, test } from "@/test";
 
 const statements = fs
   .readFileSync(
-    path.join(__dirname, "0551_remove-scheduled-task-permissions.sql"),
+    path.join(__dirname, "0552_remove-scheduled-task-permissions.sql"),
     "utf8",
   )
   .split("--> statement-breakpoint")

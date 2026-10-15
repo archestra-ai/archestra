@@ -3,6 +3,10 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { openappaArchestraAnnotator } from "@/openappa/archestra-annotator";
 import { openappaDeclarations } from "@/openappa/declarations";
+import {
+  OPENAPPA_CONTEXT_HEADER,
+  openappaAnnotatorContext,
+} from "@/openappa/encrypted-chat";
 import { openappaEnabled } from "@/openappa/service";
 import { OPENAPPA_ARCHESTRA_ANNOTATOR_PATH } from "@/routes/route-paths";
 import { ApiError, constructResponseSchema } from "@/types";
@@ -49,7 +53,12 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async (request) => {
-      const outcome = await openappaArchestraAnnotator.annotate(request.body);
+      const outcome = await openappaArchestraAnnotator.annotate(
+        request.body,
+        openappaAnnotatorContext(
+          request.headers[OPENAPPA_CONTEXT_HEADER] as string | undefined,
+        ),
+      );
       switch (outcome.kind) {
         case "answered":
           return outcome.answer;

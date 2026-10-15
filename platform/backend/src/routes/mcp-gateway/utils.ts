@@ -120,10 +120,7 @@ import {
   sanitizeAppNameForToolMetadata,
 } from "@/services/apps/app-run-link";
 import { filterToolsByCallerCatalogAccess } from "@/services/caller-catalog-access";
-import {
-  getGuardrailsDeployment,
-  superyellAvailableIn,
-} from "@/services/guardrails-deployment";
+import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import {
   discoverOidcJwksUrl,
@@ -312,7 +309,7 @@ const ANTHROPIC_ALWAYS_LOAD_META_KEY = "anthropic/alwaysLoad";
 
 /**
  * OpenAPPA's session tools: the notice and control tools of a remedy, ask_user
- * for a remedy that needs a person, the peer inbox, yell and superyell. A tool the
+ * for a remedy that needs a person, the peer inbox, and yell. A tool the
  * request does not declare is one the proxy cannot verify, and a session must
  * not have to search for the tools that explain a block, so these are declared
  * from the first request. The policy tools stay behind the search: only a
@@ -452,11 +449,8 @@ export async function buildAgentMcpToolList(params: {
       ? getImplicitTaskControlTools()
       : [];
   // A thrown switch read must fail the list, not look like the switch is off.
-  // One read serves both the remedy tools and superyell.
   const deployment = await getGuardrailsDeployment();
   const remediesActive = deployment.active;
-  // superyell can also arrive assigned, so it is dropped from the whole list.
-  const superyellAvailable = superyellAvailableIn(deployment);
   const implicitOpenAppaTools = getArchestraMcpTools().filter((tool) => {
     const shortName = archestraMcpBranding.getToolShortName(tool.name);
     if (APPA_IMPLICIT_TOOL_SHORT_NAMES.has(shortName ?? "")) {
@@ -497,10 +491,6 @@ export async function buildAgentMcpToolList(params: {
         },
       })),
     ].map(toMcpListTool),
-  ).filter(
-    (tool) =>
-      superyellAvailable ||
-      archestraMcpBranding.getToolShortName(tool.name) !== "superyell",
   );
 
   // Filter Archestra tools based on user RBAC permissions

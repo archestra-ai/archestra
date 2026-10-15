@@ -338,12 +338,14 @@ function YellsCard() {
             </span>
             <span className="text-sm text-muted-foreground">unresolved</span>
           </p>
-          {deployment.data?.superyellEnabled && summary.data && (
+          {deployment.data?.breakTheGlassEnabled && summary.data && (
             <p className="flex items-baseline gap-1.5">
               <span className="text-lg font-semibold tabular-nums">
                 {summary.data.superyells}
               </span>
-              <span className="text-sm text-muted-foreground">superyells</span>
+              <span className="text-sm text-muted-foreground">
+                broke the glass
+              </span>
             </p>
           )}
         </div>

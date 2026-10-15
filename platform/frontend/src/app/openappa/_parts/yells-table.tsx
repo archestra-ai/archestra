@@ -77,7 +77,7 @@ export function YellsTable() {
       cell: ({ row }) => (
         <div className="min-w-0 space-y-1">
           <div className="flex items-start gap-2">
-            {row.original.superyell && <SuperyellMark />}
+            {row.original.superyell && <BrokeTheGlassMark />}
             <p className="min-w-0 whitespace-pre-wrap break-words text-sm leading-relaxed">
               {row.original.message}
             </p>
@@ -332,9 +332,9 @@ function YellCaller({ yell }: { yell: OpenAppaYell }) {
   return <span className="text-xs text-muted-foreground">{label}</span>;
 }
 
-/** Marks a yell sent through superyell, which also turned guardrails off. */
-function SuperyellMark() {
-  const label = "Superyell: guardrails turned off for this session";
+/** Marks a yell sent with break the glass on, which also turned guardrails off. */
+function BrokeTheGlassMark() {
+  const label = "Broke the glass: guardrails turned off for this session";
   return (
     <Tooltip>
       <TooltipTrigger asChild>

@@ -1356,6 +1356,14 @@ Additional access requirement: Requires a user token. The caller must be the sch
 | `pagination.nextCursor` | `string \| null` | Yes |  |
 | `pagination.hasNext` | `boolean` | Yes |  |
 | `runs` | `object[]` | Yes | Matching runs, newest first. |
+| `runs[].blocked_by` | `object \| null` | Yes | Why this tick was skipped, including the blocking run and its frozen deadline. |
+| `runs[].blocked_by.phase` | `"starting" \| "running" \| "stopping"` | Yes |  |
+| `runs[].blocked_by.runId` | `string \| null` | Yes |  |
+| `runs[].blocked_by.runtimeTaskId` | `string \| null` | Yes |  |
+| `runs[].blocked_by.startedAt` | `string` | Yes |  |
+| `runs[].blocked_by.elapsedSeconds` | `integer` | Yes |  |
+| `runs[].blocked_by.deadline` | `string \| null` | Yes |  |
+| `runs[].blocked_by.maximumDurationSeconds` | `integer \| null` | Yes |  |
 | `runs[].id` | `string` | Yes | The run's id — pass it to get_schedule_trigger_run. |
 | `runs[].trigger_id` | `string` | Yes | Id of the schedule this run belongs to. |
 | `runs[].run_kind` | `"due" \| "manual"` | Yes | `due` = fired by the schedule; `manual` = started by a person. |
@@ -1384,6 +1392,14 @@ Additional access requirement: Requires a user token. The caller must be the sch
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
+| `blocked_by` | `object \| null` | Yes | Why this tick was skipped, including the blocking run and its frozen deadline. |
+| `blocked_by.phase` | `"starting" \| "running" \| "stopping"` | Yes |  |
+| `blocked_by.runId` | `string \| null` | Yes |  |
+| `blocked_by.runtimeTaskId` | `string \| null` | Yes |  |
+| `blocked_by.startedAt` | `string` | Yes |  |
+| `blocked_by.elapsedSeconds` | `integer` | Yes |  |
+| `blocked_by.deadline` | `string \| null` | Yes |  |
+| `blocked_by.maximumDurationSeconds` | `integer \| null` | Yes |  |
 | `id` | `string` | Yes | The run's id — pass it to get_schedule_trigger_run. |
 | `trigger_id` | `string` | Yes | Id of the schedule this run belongs to. |
 | `run_kind` | `"due" \| "manual"` | Yes | `due` = fired by the schedule; `manual` = started by a person. |
@@ -1469,6 +1485,14 @@ Additional access requirement: Requires a user token. Only the schedule actor or
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
+| `blocked_by` | `object \| null` | Yes | Why this tick was skipped, including the blocking run and its frozen deadline. |
+| `blocked_by.phase` | `"starting" \| "running" \| "stopping"` | Yes |  |
+| `blocked_by.runId` | `string \| null` | Yes |  |
+| `blocked_by.runtimeTaskId` | `string \| null` | Yes |  |
+| `blocked_by.startedAt` | `string` | Yes |  |
+| `blocked_by.elapsedSeconds` | `integer` | Yes |  |
+| `blocked_by.deadline` | `string \| null` | Yes |  |
+| `blocked_by.maximumDurationSeconds` | `integer \| null` | Yes |  |
 | `id` | `string` | Yes | The run's id — pass it to get_schedule_trigger_run. |
 | `trigger_id` | `string` | Yes | Id of the schedule this run belongs to. |
 | `run_kind` | `"due" \| "manual"` | Yes | `due` = fired by the schedule; `manual` = started by a person. |
@@ -2942,8 +2966,7 @@ Required RBAC permission: `update` on the MCP gateway (granted per item)
 | `list_openappa_consults` | List the external consults OpenAPPA recorded for one session, newest first: every annotator, context provider, authority, sanitizer and audience source it asked, with the outcome, the HTTP status, ... | [`openappaDiagnostics:read`](/docs/reference/permissions#openappaDiagnostics:read) |
 | `create_guardrails_repository` | Create a private policy repository from the OpenAPPA configuration template, seed it with the current policy and battery declarations, and start Git sync. | [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) |
 | `connect_guardrails_repository` | Make a policy file in an existing GitHub repository or GitLab project the organization's OpenAPPA policy source, pull it now, and keep it in sync. | [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) |
-| `yell` | Send feedback about OpenAPPA, such as a confusing block, remedy or ruling, or the user's complaint, with a diagnostic archive for review in the Guardrails Yells tab. | None (no additional RBAC permission required) |
-| `superyell` | Do what yell does, then turn OpenAPPA off for this session, after the person running it approves. | None (no additional RBAC permission required) |
+| `yell` | Send feedback about OpenAPPA, with a diagnostic archive for review in the Guardrails Yells tab. | None (no additional RBAC permission required) |
 | `get_guardrails_policy` | Read organization.appa.toml and its revision before changing guardrails. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `inspect_guardrails_server` | Inspect one caller-readable MCP catalog's stored tools and current policy coverage. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `list_guardrails_battery_fits` | List the batteries that fit the MCP servers you can see and are not declared yet, or only those fitting one server when mcpServerId is a catalog ID. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
@@ -3068,18 +3091,6 @@ Required RBAC permission: [`organizationSettings:update`](/docs/reference/permis
 
 
 #### yell
-
-Required RBAC permission: None (no additional RBAC permission required)
-
-##### Input
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `message` | `string` | Yes |  |
-| `with_trajectory` | `boolean` | Yes |  |
-
-
-#### superyell
 
 Required RBAC permission: None (no additional RBAC permission required)
 

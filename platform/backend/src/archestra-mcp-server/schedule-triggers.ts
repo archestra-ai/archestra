@@ -29,7 +29,11 @@ import {
   updateScheduleTrigger,
 } from "@/services/schedule-trigger-management";
 import type { ScheduleTrigger, ScheduleTriggerRun } from "@/types";
-import { ApiError, ScheduleTriggerRunStatusSchema } from "@/types";
+import {
+  ApiError,
+  ScheduleRunBlockerSchema,
+  ScheduleTriggerRunStatusSchema,
+} from "@/types";
 import {
   CreateScheduleTriggerBodySchema,
   UpdateScheduleTriggerBodySchema,
@@ -104,6 +108,9 @@ const GetScheduleTriggerOutputSchema = ScheduleTriggerSummarySchema.extend({
 });
 
 const ScheduleTriggerRunSummarySchema = z.object({
+  blocked_by: ScheduleRunBlockerSchema.nullable().describe(
+    "Why this tick was skipped, including the blocking run and its frozen deadline.",
+  ),
   id: z
     .string()
     .describe("The run's id — pass it to get_schedule_trigger_run."),
@@ -703,6 +710,7 @@ function toTriggerSummary(trigger: ScheduleTrigger) {
 
 function toRunSummary(run: ScheduleTriggerRun) {
   return {
+    blocked_by: run.blockedBy ?? null,
     id: run.id,
     trigger_id: run.triggerId,
     run_kind: run.runKind,

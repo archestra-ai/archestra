@@ -1,12 +1,13 @@
 import type { UIMessage } from "@ai-sdk/react";
 import { act, render, waitFor } from "@testing-library/react";
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   ChatProvider,
+  useChatSession,
   useChatSessionSnapshot,
   useGlobalChat,
 } from "./global-chat.context";
@@ -2948,6 +2949,58 @@ function RegisterChatSession({
 
   return null;
 }
+
+describe("useChatSession snapshot", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.resumeStream.mockReturnValue(new Promise(() => {}));
+    const messages: UIMessage[] = [];
+    mocks.useChat.mockImplementation(() => ({
+      addToolApprovalResponse: mocks.addToolApprovalResponse,
+      addToolResult: mocks.addToolResult,
+      clearError: mocks.clearError,
+      error: undefined,
+      messages,
+      regenerate: mocks.regenerate,
+      resumeStream: mocks.resumeStream,
+      sendMessage: mocks.sendMessage,
+      setMessages: mocks.setMessages,
+      status: "ready",
+      stop: mocks.stop,
+    }));
+  });
+
+  it("runs effects keyed on the session's functions once it appears, even when an urgent re-render lands at the same time", async () => {
+    // What a just-created chat waits for before sending its opening message.
+    // An unrelated urgent state update arriving with the session snapshot must
+    // not leave those effects believing the functions were already there.
+    const seenSendMessage: string[] = [];
+    function SessionConsumer() {
+      const { subscribeSessionUpdates } = useGlobalChat();
+      const [, setUnrelated] = useState(0);
+      const session = useChatSession({ conversationId: "conversation-1" });
+      // Subscribed after the snapshot's own listener, so this urgent no-op
+      // update lands while the snapshot's transition update is still pending.
+      useEffect(
+        () => subscribeSessionUpdates(() => setUnrelated((value) => value)),
+        [subscribeSessionUpdates],
+      );
+      const sendMessage = session?.sendMessage;
+      useEffect(() => {
+        seenSendMessage.push(typeof sendMessage);
+      }, [sendMessage]);
+      return null;
+    }
+
+    render(
+      <ChatProvider>
+        <SessionConsumer />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(seenSendMessage).toContain("function"));
+  });
+});
 
 function CaptureChatSession({
   conversationId = "conversation-1",

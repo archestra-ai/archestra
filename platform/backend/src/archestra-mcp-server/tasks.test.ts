@@ -3,6 +3,7 @@ import {
   TOOL_GET_RUN_FULL_NAME,
   TOOL_LIST_AGENT_RUNS_FULL_NAME,
   TOOL_POST_RUN_FILE_FULL_NAME,
+  TOOL_RUN_TOOL_FULL_NAME,
   TOOL_START_RUN_FULL_NAME,
 } from "@archestra/shared";
 import { vi } from "vitest";
@@ -144,7 +145,10 @@ describe("run tools", () => {
     ).toEqual([]);
   });
 
-  test("run controls remain callable without individual assignment", async ({
+  test.for([
+    false,
+    true,
+  ])("run controls remain callable without individual assignment (wrapped=%s)", async (wrapped, {
     makeAgent,
   }) => {
     const unassignedAgent = await makeAgent({
@@ -154,8 +158,13 @@ describe("run tools", () => {
     });
 
     const result = await executeArchestraTool(
-      TOOL_GET_RUN_FULL_NAME,
-      { task_id: crypto.randomUUID() },
+      wrapped ? TOOL_RUN_TOOL_FULL_NAME : TOOL_GET_RUN_FULL_NAME,
+      wrapped
+        ? {
+            tool_name: TOOL_GET_RUN_FULL_NAME,
+            tool_args: { task_id: crypto.randomUUID() },
+          }
+        : { task_id: crypto.randomUUID() },
       {
         ...context,
         agent: { id: unassignedAgent.id, name: unassignedAgent.name },

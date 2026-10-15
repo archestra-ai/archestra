@@ -376,6 +376,40 @@ describe("McpServerCard uninstall permission", () => {
     expect(dialog).not.toHaveTextContent("Org Assistant");
   });
 
+  it("summarizes agent usage only for someone who manages installations", () => {
+    useMcpServersMock.mockReturnValue({
+      data: [
+        {
+          ...personalInstall,
+          scope: "personal",
+          assignedAgents: [
+            {
+              agentType: "agent",
+              ownerId: null,
+              ownerEmail: null,
+              id: "a-org",
+              name: "Org Assistant",
+              scope: "org",
+              pinned: false,
+            },
+          ],
+        },
+      ],
+    });
+    const usageLink = () =>
+      screen.queryByRole("link", { name: /can use .*, view usage/ });
+
+    const { unmount } = renderCard(card);
+    expect(usageLink()).toHaveTextContent("1");
+    unmount();
+
+    // A member's usage would be only their own agents; the server page has no
+    // Usage tab for them to link to.
+    grantAllExcept({ mcpServerInstallation: ["update"] });
+    renderCard(card);
+    expect(usageLink()).toBeNull();
+  });
+
   it("opens server settings once from the keyboard without activating the card", async () => {
     const user = userEvent.setup();
     renderCard(card);

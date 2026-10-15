@@ -1067,6 +1067,39 @@ pub async fn read_openappa_opening_policy(
     .map_err(error)?
 }
 
+/// The policy file key each root's first stored batch names, in the order given:
+/// none for a batch that does not open a root this build can read. The host reads
+/// the batches; only this decoding knows how the runtime encodes them.
+#[napi(js_name = "openappaOpeningKeys")]
+pub fn openappa_opening_keys(batches: Vec<napi::bindgen_prelude::Buffer>) -> Vec<Option<String>> {
+    batches
+        .iter()
+        .map(|batch| opening_policy_file_key(batch))
+        .collect()
+}
+
+/// The policy file key a root's first batch names, read the way the event log
+/// encodes it: a bare array of facts, or a host record holding `facts`, whose
+/// first fact is `TrajectoryOpened`. None for anything else.
+fn opening_policy_file_key(payload: &[u8]) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_slice(payload).ok()?;
+    let facts = match &value {
+        serde_json::Value::Array(_) => &value,
+        serde_json::Value::Object(row) => row.get("facts")?,
+        _ => return None,
+    };
+    let key = facts
+        .get(0)?
+        .get("TrajectoryOpened")?
+        .get("policy_file_key")?
+        .as_str()?;
+    (key.len() == 64
+        && key
+            .bytes()
+            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f')))
+    .then(|| key.to_owned())
+}
+
 /// Read the current label of a started session without mutating its trajectory.
 #[napi(js_name = "getOpenappaStatus")]
 pub async fn get_openappa_status(
@@ -1811,6 +1844,30 @@ fn rebind_child(root: &TrajectoryId, stored_actor: String) -> HookEvent {
 }
 
 impl State {
+    /// Retention can read this non-content mapping without a conversation key.
+    /// It cannot derive it later from an encrypted opening event.
+    fn record_encrypted_opening(&self, root: &str, organization_id: &str) -> napi::Result<()> {
+        if !self.store.cipher().is_encrypted() {
+            return Ok(());
+        }
+        let log = self
+            .store
+            .log(&TrajectoryId(root.to_owned()))
+            .map_err(error)?;
+        let first = log
+            .facts()
+            .get(..1)
+            .ok_or_else(|| error("root has no opening event"))?;
+        let payload = serde_json::to_vec(first).map_err(error)?;
+        let policy_file_key = opening_policy_file_key(&payload)
+            .ok_or_else(|| error("root has no opening policy identity"))?;
+        let (root, organization_id) = (root.to_owned(), organization_id.to_owned());
+        Sql(&self.store).with_client(move |client| {
+            client.execute("INSERT INTO openappa_root_openings (root, organization_id, policy_file_key) VALUES ($1,$2,$3) ON CONFLICT (root) DO NOTHING", &[&root, &organization_id, &policy_file_key])?;
+            Ok(())
+        }).map_err(error)
+    }
+
     /// Opens this session's root as a fork of `fork_of`.
     /// Freezes the parent session's policy revision, labels, effects, and
     /// denials into the new root. Returns the parent watermark bounding inherited results.
@@ -2107,6 +2164,7 @@ impl State {
             check_session_identity(&stored, &root, &input)?;
         }
 
+        self.record_encrypted_opening(&root, &key.organization_id)?;
         let receipts = lease::Receipts::new(self.store.clone());
         let began = lease::log_end(pg, &root).map_err(error)?;
         let work = self.handle_event(pg, &receipts, input, root.clone(), key, actor);
@@ -4946,5 +5004,50 @@ mod stored_approved_output_tests {
             stored_approved_output(&long, &decision("another text")),
             long
         );
+    }
+}
+
+#[cfg(test)]
+mod opening_key_tests {
+    use super::opening_policy_file_key;
+
+    const KEY: &str = "9f2c0a5b1e7d4c3a8b6f0e1d2c3b4a5968778695a4b3c2d1e0f9a8b7c6d5e4f3";
+
+    #[test]
+    fn reads_the_key_from_a_bare_batch_and_from_a_host_record() {
+        let opened =
+            format!(r#"{{"TrajectoryOpened":{{"trajectory":"r","policy_file_key":"{KEY}"}}}}"#);
+        assert_eq!(
+            opening_policy_file_key(format!("[{opened}]").as_bytes()).as_deref(),
+            Some(KEY)
+        );
+        assert_eq!(
+            opening_policy_file_key(format!(r#"{{"facts":[{opened}],"host":{{}}}}"#).as_bytes())
+                .as_deref(),
+            Some(KEY)
+        );
+    }
+
+    #[test]
+    fn answers_no_key_for_anything_that_does_not_open_a_root() {
+        for payload in [
+            "".to_string(),
+            "[".to_string(),
+            "\"not a batch\"".to_string(),
+            "[]".to_string(),
+            r#"[{"CallRecorded":{}}]"#.to_string(),
+            r#"[{"TrajectoryOpened":{"policy_file_key":"ABCDEF"}}]"#.to_string(),
+            format!(
+                r#"[{{"TrajectoryOpened":{{"policy_file_key":"{}"}}}}]"#,
+                KEY.to_uppercase()
+            ),
+            r#"{"host":{}}"#.to_string(),
+        ] {
+            assert_eq!(
+                opening_policy_file_key(payload.as_bytes()),
+                None,
+                "{payload}"
+            );
+        }
     }
 }

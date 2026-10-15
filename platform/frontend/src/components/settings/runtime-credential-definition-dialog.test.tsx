@@ -167,3 +167,65 @@ it("creates the guided OpenAPPA GitHub App with its organization identity", asyn
   await user.click(screen.getByRole("button", { name: "Add" }));
   await waitFor(() => expect(onCreated).toHaveBeenCalledWith("new-credential"));
 });
+
+it.each([
+  {
+    name: "starts shared with everyone for someone who may share that widely",
+    offered: [
+      {
+        subject: { type: "organization", id: "*" },
+        name: "Everyone in the organization",
+      },
+    ],
+    initialGrants: [
+      { subject: { type: "organization", id: "*" }, actions: ["read", "use"] },
+    ],
+  },
+  {
+    name: "starts with its creator alone for someone who may not",
+    offered: [{ subject: { type: "team", id: "team-1" }, name: "Platform" }],
+    initialGrants: [],
+  },
+])("a new credential $name", async ({ offered, initialGrants }) => {
+  let created: unknown;
+  server.use(
+    http.get("http://localhost:9000/api/credentials", () =>
+      HttpResponse.json([]),
+    ),
+    http.get(
+      "http://localhost:9000/api/resource-permissions/credential/creation-subjects",
+      () => HttpResponse.json(offered),
+    ),
+    http.post("http://localhost:9000/api/credentials", async ({ request }) => {
+      created = await request.json();
+      return HttpResponse.json({ id: "new-credential" });
+    }),
+  );
+  const onCreated = vi.fn();
+  const user = userEvent.setup();
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <RuntimeCredentialDefinitionDialog
+        definition={null}
+        initialKind="github_app"
+        initialScope="organization"
+        initialValues={{ name: "Deploy bot", description: "", icon: null }}
+        onClose={() => {}}
+        onCreated={onCreated}
+      />
+    </QueryClientProvider>,
+  );
+  await user.type(screen.getByRole("textbox", { name: "App ID" }), "123");
+  await user.type(
+    screen.getByRole("textbox", { name: "Installation ID" }),
+    "456",
+  );
+  await waitFor(() =>
+    expect(
+      screen.queryAllByText("Everyone in the organization").length > 0,
+    ).toBe(initialGrants.length > 0),
+  );
+  await user.click(screen.getByRole("button", { name: "Add" }));
+  await waitFor(() => expect(onCreated).toHaveBeenCalledWith("new-credential"));
+  expect(created).toMatchObject({ initialGrants });
+});

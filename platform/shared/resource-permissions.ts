@@ -94,6 +94,35 @@ export const ResourcePermissionGrantSchema = z.object({
 });
 
 export type ScopedResource = z.infer<typeof ScopedResourceSchema>;
+
+/** Singular, for sentences. `resourceLabels` is plural and reads as "every agents". */
+export const scopedResourceNouns: Record<ScopedResource, string> = {
+  conversation: "chat session",
+  agentRun: "runtime session",
+  agent: "agent",
+  skill: "skill",
+  app: "app",
+  llmModel: "model",
+  mcpGateway: "MCP gateway",
+  mcpRegistry: "MCP registry entry",
+  project: "project",
+  plugin: "plugin",
+  knowledgeBase: "knowledge base",
+  knowledgeConnector: "connector",
+  knowledgeFile: "file",
+  llmVirtualKey: "virtual key",
+  llmProviderApiKey: "provider key",
+  externalAgent: "external agent",
+  oauthClient: "OAuth client",
+  mcpOauthClient: "OAuth client",
+  llmOauthClient: "OAuth client",
+  environment: "environment",
+  scheduledTask: "scheduled task",
+  log: "log",
+  auditLog: "audit log entry",
+  serviceAccount: "service account",
+  credential: "credential",
+};
 export type ResourcePermissionAction = z.infer<
   typeof ResourcePermissionActionSchema
 >;

@@ -45,6 +45,12 @@ Granular access control is an Enterprise feature, including the [small-team allo
 
 To share a resource, add recipients in its permissions, next to its other settings. One field adds everyone in the organization, a role, a team, a person, or a service account. Each recipient gets its own level: **Can read**, **Can use**, **Can update**, or **Full access**. A new recipient starts at **Can use** when you may grant it. Save, then confirm the recipient appears with the intended level.
 
+Sharing with everyone or a role makes a resource Org-wide. That takes **Full access** on every resource of that kind, or [`accessPolicies:update`](/docs/reference/permissions#accessPolicies:update). By default, Admin and Platform Admin hold it for every kind, and Editor for models and credentials. Without it:
+
+- You share with people and with the teams you belong to, not with everyone, a role, or another team.
+- You can still lower or remove such a grant.
+- Service accounts appear in the field only with [`serviceAccount:read`](/docs/reference/permissions#serviceAccount:read).
+
 For grants covering every object of a kind, open **Permissions** beside **Create** or **Add** on the resource list. These grants also cover other people's objects. Global policy administration requires [`accessPolicies:read`](/docs/reference/permissions#accessPolicies:read) to view or [`accessPolicies:update`](/docs/reference/permissions#accessPolicies:update) to edit. An individual resource requires `manage-permissions` on that resource.
 
 Keep at least one recipient with **Manage access**, either through **Full access** or a custom level. **Save** is disabled if you remove the last recipient who can change this policy.
@@ -53,7 +59,7 @@ Keep at least one recipient with **Manage access**, either through **Full access
 
 **Can read** permits reading. **Can use** adds execution. **Can update** adds configuration changes. **Full access** also includes deletion and **Manage access**, which lets the recipient change other people's grants. OAuth clients omit execution from these levels.
 
-MCP registry entries add **Full access + deploy**, which permits deployment specification, service account, and secret-source changes. Admin and Platform Admin receive this access by default. The creator's ordinary Full access does not include deployment changes. OAuth client registrations have no **Can use** preset.
+MCP registry entries add **Full access + deploy**, which permits deployment specification, service account, and secret-source changes. Admin and Platform Admin receive this access by default. The creator's ordinary Full access does not include deployment changes. Changing what an entry runs or connects to, such as its image, command, URL, or authentication, takes **Full access + deploy** or [`mcpRegistry:create`](/docs/reference/permissions#mcpRegistry:create). OAuth client registrations have no **Can use** preset.
 
 A grant applies to one resource or to `*`: every current and future resource of that kind in the organization. Actions and scopes stay paired. Giving someone read access to all entries and edit access to one entry lets them edit only that entry.
 
@@ -71,6 +77,7 @@ What to know:
 
 - Grants to people and service accounts do not change the level.
 - Organization-wide grants on every resource of a kind do not count, such as Admin's full access.
+- Chats and agent runs are the exception to [who can make a resource Org-wide](#granular-access-control): their owner can share them with anyone.
 
 ### Find Resources by Access
 

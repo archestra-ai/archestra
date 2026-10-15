@@ -89454,6 +89454,25 @@ export type GetOpenappaEffectivePolicyResponses = {
                 rootRevision: number | null;
             } | null;
         };
+        retained: {
+            horizonDays: number;
+            livenessKnown: boolean;
+            kept: Array<{
+                name: string;
+                binding: string;
+                liveRoots: number;
+                lastActivityAt: string | null;
+                retiresAt: string | null;
+            }>;
+            inactive: Array<{
+                name: string;
+                binding: string;
+            }>;
+            dropped: Array<{
+                name: string;
+                reason: string;
+            }>;
+        } | null;
     };
 };
 
@@ -120580,6 +120599,7 @@ export type GetResourcePermissionsResponses = {
             sourceScope?: '*' | string;
         }>;
         effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        canShareOrganizationWide: boolean;
         actorSubjects: Array<{
             type: 'user';
             id: string;
@@ -120752,6 +120772,7 @@ export type UpdateResourcePermissionsResponses = {
             sourceScope?: '*' | string;
         }>;
         effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        canShareOrganizationWide: boolean;
         actorSubjects: Array<{
             type: 'user';
             id: string;

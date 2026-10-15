@@ -735,16 +735,23 @@ export async function handleLLMProxy<
         headers: headers as Record<string, string | string[] | undefined>,
         requestBody: body,
       }),
-    )?.id;
-    childReturns = collectAndStripChildReturns(body, {
+    );
+    const childReturnOptions = {
       // Kilo Code frames its background tasks as OpenCode does.
       openCodeBackgroundReturns:
-        !!nativeClient && isOpenCodeFamilyClient(nativeClient),
-      codexMailboxReturns: nativeClient === "codex",
-      onRefusal: (refusal) => {
+        !!nativeClient && isOpenCodeFamilyClient(nativeClient.id),
+      codexMailboxReturns: nativeClient?.id === "codex",
+      onRefusal: (refusal: ApiError) => {
         childReturnRefusal ??= refusal;
       },
-    });
+    };
+    try {
+      childReturns = collectAndStripChildReturns(body, childReturnOptions);
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.statusCode !== 400) throw error;
+      childReturnRefusal = error;
+      childReturns = { completions: [] };
+    }
   }
   // Restores original provider call IDs before request processing, logging,
   // or plugin rulings: the trajectory stamps first, then any stamp a
@@ -2064,9 +2071,6 @@ export async function handleLLMProxy<
         openappaSession = undefined;
       }
       if (openappaSession) {
-        // OpenAPPA governs this request, so a child return the proxy could not
-        // read at its entry is refused now.
-        if (childReturnRefusal) throw childReturnRefusal;
         // A Chat session is a conversation, and the request must name the
         // user whose conversation it is: without one there is nothing to
         // check the binding against, so the request is refused rather than
@@ -2229,6 +2233,7 @@ export async function handleLLMProxy<
           ...(runtimeSessionId ? { runtimeSessionId, runtimeTaskId } : {}),
           compaction: clientCompaction && !isInternalChat,
           enforcement: "active",
+          childReturnRefusal,
           ...(threadRequest ? { thread: threadRequest.type } : {}),
           ...(isInternalChat ? { chatSource: source } : {}),
         } satisfies AppaTrustedContext);

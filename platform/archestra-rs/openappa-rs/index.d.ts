@@ -249,6 +249,13 @@ export interface OfferReviewOutput {
   arguments?: string
 }
 
+/**
+ * The policy file key each root's first stored batch names, in the order given:
+ * none for a batch that does not open a root this build can read. The host reads
+ * the batches; only this decoding knows how the runtime encodes them.
+ */
+export declare function openappaOpeningKeys(batches: Array<Buffer>): Array<string | undefined | null>
+
 export interface OpenappaStatus {
   trust: string
   audience: string

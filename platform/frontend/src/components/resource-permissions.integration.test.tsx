@@ -574,16 +574,16 @@ it("lets someone who cannot make an entry org-wide lower an everyone grant, but 
     }),
   );
   // Only the levels at or below the stored grant stay on offer.
-  await screen.findByRole("option", { name: /^Can view/ });
+  await screen.findByRole("option", { name: /^Can read/ });
   const offered = screen
     .getAllByRole("option")
     .filter((option) => option.getAttribute("aria-disabled") !== "true")
     .map((option) => option.textContent);
   expect(offered).toEqual([
-    expect.stringMatching(/^Can view/),
+    expect.stringMatching(/^Can read/),
     expect.stringMatching(/^Can use/),
   ]);
-  await user.click(screen.getByRole("option", { name: /^Can view/ }));
+  await user.click(screen.getByRole("option", { name: /^Can read/ }));
   await user.click(screen.getByRole("button", { name: "Save changes" }));
   await waitFor(() =>
     expect(saved).toEqual({

@@ -8,6 +8,7 @@ import {
 import {
   getOpenAppaPolicyTests,
   inspectOpenAppaPolicyTests,
+  replayOpenAppaDraft,
 } from "@/services/openappa-policy-tests";
 import { ApiError } from "@/types";
 import { PolicyTestFilesSchema } from "@/types/openappa-policy-tests";
@@ -83,8 +84,7 @@ async function prepare(params: Caller & PreviewOpenAppaValidationChange) {
       before: root.content,
       after: policyContent,
     });
-  // Preview and publication check the text only; replaying the suite is
-  // run_openappa_policy_tests' job, so every result lands in run history.
+  // Preview and publication both check the text; only preview replays.
   const [policyCheck, inspection] = await Promise.all([
     policyChanged
       ? guardrailsPolicyService.validate(policyContent, {
@@ -135,6 +135,31 @@ export async function previewOpenAppaValidationChange(
   params: Caller & PreviewOpenAppaValidationChange,
 ) {
   const proposal = await prepare(params);
+  // Replay only the added or edited files, against the proposed policy when
+  // there is one; nothing is recorded. Null when a check failed or no file
+  // was upserted.
+  const upserted = proposal.request.changes.upsert;
+  const tests =
+    proposal.validation.valid && upserted.length
+      ? await replayOpenAppaDraft(
+          {
+            organizationId: params.organizationId,
+            userId: params.userId,
+            files: upserted,
+            sourceVersion: proposal.collection.version,
+            directory: proposal.collection.directory,
+            ...(proposal.policyChanged
+              ? {
+                  proposedPolicy: {
+                    content: proposal.policyContent,
+                    expectedRevision: proposal.root.revision,
+                  },
+                }
+              : {}),
+          },
+          proposal.collection,
+        )
+      : null;
   return {
     stage: "preview" as const,
     delivery:
@@ -154,6 +179,7 @@ export async function previewOpenAppaValidationChange(
     changes: proposal.request.changes,
     validation: proposal.validation,
     files: proposal.inspected,
+    tests,
     directory: proposal.collection.activeDirectory,
     sourceCommit: proposal.collection.sourceCommit,
   };

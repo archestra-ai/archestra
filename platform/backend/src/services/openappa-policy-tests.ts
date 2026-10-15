@@ -333,6 +333,14 @@ async function evaluateOpenAppaPolicyTests(
     },
   };
 }
+/** Replays draft files without recording a run, reusing an already-loaded suite. */
+export async function replayOpenAppaDraft(
+  params: Parameters<typeof evaluateOpenAppaPolicyTests>[0],
+  collection: PolicyTestCollection,
+) {
+  const { result } = await evaluateOpenAppaPolicyTests(params, collection);
+  return result.files;
+}
 export async function previewOpenAppaPolicyTest(
   params: Parameters<typeof evaluateOpenAppaPolicyTests>[0] & {
     userId: string;

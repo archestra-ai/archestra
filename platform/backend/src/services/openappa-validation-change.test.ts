@@ -80,7 +80,29 @@ describe("source-aware validation proposals", () => {
     version = suite.version;
   });
 
-  test("preview checks syntax and the candidate policy without replaying or saving anything", async () => {
+  test("a validation-only preview replays just the changed files against the saved policy", async () => {
+    const preview = await previewOpenAppaValidationChange(request());
+    // The saved policy still requires trust to send mail, so the draft fails.
+    expect(preview.tests).toEqual([
+      expect.objectContaining({ path: added.path, status: "failed" }),
+    ]);
+    expect(
+      await OpenAppaPolicyTestsModel.find(ctx.organizationId),
+    ).toMatchObject({ version, files: [existing] });
+    expect(
+      await OpenAppaPolicyTestsModel.listRuns(ctx.organizationId),
+    ).toHaveLength(0);
+  });
+
+  test("a preview that only deletes replays nothing", async () => {
+    const preview = await previewOpenAppaValidationChange({
+      ...request(),
+      changes: { upsert: [], delete: [existing.path] },
+    });
+    expect(preview.tests).toBeNull();
+  });
+
+  test("a policy preview replays the changed files against the candidate policy without saving anything", async () => {
     const unsupported = {
       path: "traces/unknown.appa",
       content: "mcp/unknown/tool {}\nexpect allow\n",
@@ -96,13 +118,17 @@ describe("source-aware validation proposals", () => {
       errors: [],
       warnings: [],
     });
-    // Only the changed files are inspected, and nothing is replayed.
+    // Only the changed files are inspected and replayed; the loosened mail
+    // rule lets the new check pass.
     expect(preview.files.map((file) => file.path)).toEqual([
       added.path,
       unsupported.path,
     ]);
-    expect(preview).not.toHaveProperty("tests");
-    expect(preview).not.toHaveProperty("counts");
+    expect(preview.tests?.map((file) => file.path)).toEqual([
+      added.path,
+      unsupported.path,
+    ]);
+    expect(preview.tests?.[0]).toMatchObject({ status: "passed" });
     expect(await guardrailsPolicyService.get(ctx.organizationId)).toMatchObject(
       { content: policy, revision: 1 },
     );

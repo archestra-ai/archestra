@@ -78,6 +78,8 @@ export function McpElicitationCard({
   const [otherOpenById, setOtherOpenById] = useState<Record<string, boolean>>(
     {},
   );
+  // Lone question whose typed answer the user chose to write in the chat composer.
+  const [composerAnswerId, setComposerAnswerId] = useState<string | null>(null);
   // Request whose just-opened "Type something" box takes focus after it renders.
   const focusOtherRef = useRef<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -574,7 +576,14 @@ export function McpElicitationCard({
             : answersOnClick(question)
               ? // The chat composer takes a lone question's typed answer.
                 onTypeAnswer
-                ? { selected: false, onSelect: onTypeAnswer }
+                ? {
+                    selected: composerAnswerId === question.request.id,
+                    selectedLabel: "Type your answer below",
+                    onSelect: () => {
+                      setComposerAnswerId(question.request.id);
+                      onTypeAnswer();
+                    },
+                  }
                 : undefined
               : {
                   selected: otherOpen,

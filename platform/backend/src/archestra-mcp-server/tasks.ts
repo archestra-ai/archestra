@@ -483,8 +483,9 @@ const registry = defineArchestraTools([
           read,
         });
         if (crossed.kind === "pending") {
+          // Nothing about the file has crossed yet, not even its size.
           return structuredSuccessResult({
-            ...crossed.metadata,
+            path: args.path,
             status: "pending",
             message: pendingFileNotice(TOOL_READ_WORKSPACE_FILE_SHORT_NAME),
           });
@@ -572,11 +573,10 @@ const registry = defineArchestraTools([
             operationId: access.crossing.callId,
           });
           if (crossed.kind === "pending") {
+            // Nothing about the file has crossed yet, not even its size.
             return structuredSuccessResult({
               direction: args.direction,
               path: args.path,
-              size: crossed.size,
-              sha256: crossed.sha256,
               status: "pending",
               message: pendingFileNotice(
                 TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,

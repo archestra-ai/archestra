@@ -6,6 +6,7 @@ import type { A2AActor } from "@/agents/a2a/a2a-base";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
+import { AgentRunModel, AgentWorkspaceModel } from "@/models";
 import {
   addressRuntimeChild,
   type OpenAppaSession,
@@ -39,8 +40,6 @@ export type ProtectedExportProgress = {
   snapshot: WorkspaceSnapshot;
   /** Digests of the chunks admitted so far, in order. */
   digests: string[];
-  /** Admission attempts so far; each one crosses under fresh operation ids. */
-  attempt: number;
 };
 
 /**
@@ -152,7 +151,7 @@ class WorkspaceTransferTickets {
         });
         if (result.kind === "held" && result.busy) {
           keepSnapshot = true;
-          throw new ProtectedExportBusy({ snapshot, digests: [], attempt: 1 });
+          throw new ProtectedExportBusy({ snapshot, digests: [] });
         }
         assertAdmittedUnchanged({ result, value, child: crossing.child });
         // HTTP ranges must serve the exact admitted copy, never the mutable file.
@@ -164,8 +163,9 @@ class WorkspaceTransferTickets {
         path: params.path,
         child: crossing.child,
         operationBase: `file-export:${crossing.operationId}:${snapshot.sha256}`,
-        progress: { snapshot, digests: [], attempt: 0 },
-        budgetBytes: Number.POSITIVE_INFINITY,
+        progress: { snapshot, digests: [] },
+        maxChunks: Number.POSITIVE_INFINITY,
+        timeoutMs: TRANSFER_TIMEOUT_MS,
       });
       if (advanced.kind === "waiting") {
         keepSnapshot = true;
@@ -195,7 +195,60 @@ class WorkspaceTransferTickets {
   }
 
   /**
-   * Continues admitting a pinned export, at most `budgetBytes` of it. Each
+   * Pins the current version of a file for a later protected read. The bytes
+   * stay in the runtime's workspace; nothing about them leaves it here.
+   */
+  async pinFile(params: {
+    actor: A2AActor;
+    taskId: string;
+    path: string;
+  }): Promise<WorkspaceSnapshot> {
+    const session = await authorizeAgentWorkspaceAccess(params);
+    return WorkspaceSnapshotSchema.parse(
+      camelize(
+        await resolveAgentRuntimeBackendDriver(
+          session.backend,
+        ).runWorkspaceTransferCommand({
+          session,
+          args: ["snapshot", params.path],
+          timeoutMs: CONTROL_TIMEOUT_MS,
+        }),
+      ),
+    );
+  }
+
+  /**
+   * The exact bytes of a pinned file, or a conflict when they no longer hash
+   * to the pinned version. `drain` reads on the runtime's own request: it
+   * never wakes or touches the workspace and gives up quickly.
+   */
+  async readPinned(params: {
+    actor: A2AActor;
+    taskId: string;
+    snapshot: WorkspaceSnapshot;
+    drain?: boolean;
+  }): Promise<Buffer> {
+    const session = params.drain
+      ? await runningRuntimeSession(params)
+      : await authorizeAgentWorkspaceAccess(params);
+    const bytes = await readSnapshotRange({
+      driver: resolveAgentRuntimeBackendDriver(session.backend),
+      session,
+      transferId: params.snapshot.transferId,
+      offset: 0,
+      length: params.snapshot.size,
+      timeoutMs: params.drain ? DRAIN_READ_TIMEOUT_MS : TRANSFER_TIMEOUT_MS,
+    });
+    if (
+      createHash("sha256").update(bytes).digest("hex") !==
+      params.snapshot.sha256
+    )
+      throw new ApiError(409, PINNED_VERSION_CHANGED);
+    return bytes;
+  }
+
+  /**
+   * Continues admitting a pinned export, at most `maxChunks` of it. Each
    * chunk crosses under an operation id no earlier attempt used, because the
    * runtime answers a repeated operation with the decision it already gave.
    */
@@ -206,17 +259,21 @@ class WorkspaceTransferTickets {
     child: OpenAppaSession;
     operationBase: string;
     progress: ProtectedExportProgress;
-    budgetBytes: number;
+    maxChunks: number;
+    drain?: boolean;
   }): Promise<{
     kind: "complete" | "waiting";
     progress: ProtectedExportProgress;
     busy: boolean;
   }> {
-    const session = await authorizeAgentWorkspaceAccess(params);
+    const session = params.drain
+      ? await runningRuntimeSession(params)
+      : await authorizeAgentWorkspaceAccess(params);
     return advanceExportOn({
       ...params,
       driver: resolveAgentRuntimeBackendDriver(session.backend),
       session,
+      timeoutMs: params.drain ? DRAIN_READ_TIMEOUT_MS : TRANSFER_TIMEOUT_MS,
     });
   }
 
@@ -250,13 +307,17 @@ class WorkspaceTransferTickets {
     });
   }
 
-  /** Releases a pinned export that will never be served. */
+  /**
+   * Releases a pinned version that will never be served. Best effort: it never
+   * wakes a workspace, and the in-pod sweep removes what this misses.
+   */
   async discardExport(params: {
     actor: A2AActor;
     taskId: string;
     transferId: string;
   }): Promise<void> {
-    const session = await authorizeAgentWorkspaceAccess(params);
+    const session = await runningRuntimeSession(params).catch(() => null);
+    if (!session) return;
     await discardSnapshot({
       driver: resolveAgentRuntimeBackendDriver(session.backend),
       session,
@@ -523,6 +584,48 @@ const PROTECTED_EXPORT_CHUNK_BYTES = 4 * 1024 * 1024;
 const SNAPSHOT_MISMATCH =
   "The pinned export no longer matches its admitted bytes";
 
+const PINNED_VERSION_CHANGED =
+  "The pinned version of this file changed or is gone";
+
+/** A drain runs inside the runtime's own model request, so a slow pod is given up on fast. */
+const DRAIN_READ_TIMEOUT_MS = 15 * 1000;
+
+/**
+ * The run behind a pinned file, for work done on the runtime's own request:
+ * the same ownership check as any file access, but it never resumes a
+ * suspended workspace or counts as activity.
+ */
+async function runningRuntimeSession(params: {
+  actor: A2AActor;
+  taskId: string;
+}): Promise<TransferSession> {
+  const session = await AgentRunModel.findByTaskId(params.taskId);
+  if (
+    !session ||
+    session.organizationId !== params.actor.organizationId ||
+    session.actorKind !== params.actor.kind ||
+    session.actorId !== params.actor.id
+  ) {
+    throw new ApiError(404, "Workspace not found");
+  }
+  const workspace = await AgentWorkspaceModel.findByWorkloadName(
+    session.workloadName,
+  );
+  if (
+    !workspace ||
+    !["active", "idle"].includes(workspace.state) ||
+    workspace.expiresAt.getTime() <= Date.now()
+  ) {
+    throw new ApiError(409, "The workspace is not running");
+  }
+  return session;
+}
+
+/** Unique per crossing attempt, so a retry never meets a decision already given. */
+function operationNonce(): string {
+  return randomBytes(6).toString("hex");
+}
+
 type TransferDriver = ReturnType<typeof resolveAgentRuntimeBackendDriver>;
 type TransferSession = Awaited<
   ReturnType<typeof authorizeAgentWorkspaceAccess>
@@ -540,7 +643,8 @@ async function advanceExportOn(params: {
   child: OpenAppaSession;
   operationBase: string;
   progress: ProtectedExportProgress;
-  budgetBytes: number;
+  maxChunks: number;
+  timeoutMs: number;
 }): Promise<{
   kind: "complete" | "waiting";
   progress: ProtectedExportProgress;
@@ -552,16 +656,15 @@ async function advanceExportOn(params: {
     Math.ceil(snapshot.size / PROTECTED_EXPORT_CHUNK_BYTES),
   );
   const digests = [...params.progress.digests];
-  const attempt = params.progress.attempt + 1;
-  const progress = () => ({ snapshot, digests: [...digests], attempt });
-  let spent = 0;
+  const progress = () => ({ snapshot, digests: [...digests] });
+  let crossed = 0;
   for (let index = digests.length; index < count; index++) {
     const start = index * PROTECTED_EXPORT_CHUNK_BYTES;
     const length = Math.min(
       PROTECTED_EXPORT_CHUNK_BYTES,
       snapshot.size - start,
     );
-    if (spent > 0 && spent + length > params.budgetBytes) {
+    if (crossed >= params.maxChunks) {
       return { kind: "waiting", progress: progress(), busy: false };
     }
     const chunk = await readSnapshotRange({
@@ -570,6 +673,7 @@ async function advanceExportOn(params: {
       transferId: snapshot.transferId,
       offset: start,
       length,
+      timeoutMs: params.timeoutMs,
     });
     const digest = createHash("sha256").update(chunk).digest("hex");
     const value = JSON.stringify({
@@ -580,7 +684,7 @@ async function advanceExportOn(params: {
     });
     const result = await returnRuntimeValue({
       session: params.child,
-      operationId: `${params.operationBase}:${index}/${count}:${attempt}`,
+      operationId: `${params.operationBase}:${index}/${count}:${operationNonce()}`,
       value,
     });
     if (result.kind === "held" && result.busy) {
@@ -588,7 +692,7 @@ async function advanceExportOn(params: {
     }
     assertAdmittedUnchanged({ result, value, child: params.child });
     digests.push(digest);
-    spent += length;
+    crossed++;
   }
   return { kind: "complete", progress: progress(), busy: false };
 }
@@ -621,7 +725,10 @@ async function verifyAdmittedSnapshot(params: {
   for await (const piece of stream.stdout) {
     let bytes = Buffer.isBuffer(piece) ? piece : Buffer.from(piece);
     size += bytes.length;
-    if (size > snapshot.size) break;
+    if (size > snapshot.size) {
+      stream.stdout.destroy();
+      break;
+    }
     file.update(bytes);
     while (bytes.length > 0) {
       const take = Math.min(
@@ -638,7 +745,8 @@ async function verifyAdmittedSnapshot(params: {
       }
     }
   }
-  await stream.completed;
+  // An oversized snapshot ends the read early; the refusal below names why.
+  if (size <= snapshot.size) await stream.completed;
   if (inChunk > 0 || snapshot.size === 0) seen.push(chunk.digest("hex"));
   if (
     size !== snapshot.size ||
@@ -696,13 +804,14 @@ async function readSnapshotRange(params: {
   transferId: string;
   offset: number;
   length: number;
+  timeoutMs?: number;
 }): Promise<Buffer> {
   const range = await params.driver.readWorkspaceTransferRange({
     session: params.session,
     transferId: params.transferId,
     offset: params.offset,
     length: params.length,
-    timeoutMs: TRANSFER_TIMEOUT_MS,
+    timeoutMs: params.timeoutMs ?? TRANSFER_TIMEOUT_MS,
   });
   // Cancellation can reject this before the normal await below.
   void range.completed.catch(() => undefined);

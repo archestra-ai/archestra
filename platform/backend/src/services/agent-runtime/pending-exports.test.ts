@@ -4,6 +4,7 @@ import {
   TOOL_READ_WORKSPACE_FILE_SHORT_NAME,
   TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
 } from "@archestra/shared";
+import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { executeArchestraTool } from "@/archestra-mcp-server";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
@@ -42,6 +43,7 @@ const BUSY = {
     "the child has a call still open; report its outcome before the child ends",
   busy: true as const,
 };
+const CHUNK = 4 * 1024 * 1024;
 
 describe("files pinned while their runtime is mid-call", () => {
   const originalOpenappa = config.openappa.enabled;
@@ -54,9 +56,10 @@ describe("files pinned while their runtime is mid-call", () => {
 
   afterEach(() => {
     config.openappa.enabled = originalOpenappa;
+    vi.useRealTimers();
   });
 
-  test("a read pinned while the runtime is busy is served once the runtime's next request releases it", async ({
+  test("a read pinned while the runtime is busy tells the parent nothing about the file, then serves what crossed", async ({
     makeAgent,
     makeMember,
     makeOrganization,
@@ -70,6 +73,7 @@ describe("files pinned while their runtime is mid-call", () => {
       makeUser,
       seedAndAssignArchestraTools,
     });
+    const pod = fakePod("progress: step 1");
     const read = vi
       .spyOn(workspaceFiles, "accessAgentWorkspaceFile")
       .mockResolvedValue(fileResult("progress: step 1"));
@@ -79,15 +83,16 @@ describe("files pinned while their runtime is mid-call", () => {
 
     const pinned = await readFile(seeded);
     expect(pinned.isError).not.toBe(true);
-    expect(pinned.structuredContent).toMatchObject({
-      status: "pending",
+    // A busy runtime must not be able to signal through the result.
+    expect(pinned.structuredContent).toEqual({
       path: "reports/progress.md",
-      sha256: digest("progress: step 1"),
+      status: "pending",
+      message: expect.stringContaining(
+        "Call read_workspace_file again with the same arguments",
+      ),
     });
     expect(JSON.stringify(pinned)).not.toContain("progress: step 1");
-    expect(JSON.stringify(pinned)).toContain(
-      "Call read_workspace_file again with the same arguments",
-    );
+    expect(JSON.stringify(pinned)).not.toContain(digest("progress: step 1"));
 
     // The runtime's next model request: no call open, so the file crosses.
     crossing.mockImplementationOnce(async ({ value }) => ({
@@ -95,6 +100,19 @@ describe("files pinned while their runtime is mid-call", () => {
       value,
     }));
     await pendingExports.drain(seeded.child);
+    const drained = crossing.mock.calls[1][0];
+    expect(drained.session).toEqual(seeded.child);
+    expect(drained.value).toBe("progress: step 1");
+    expect(drained.operationId).toMatch(/^file-read:[0-9a-f]+:[0-9a-f]+$/);
+    // What crossed lives in the runtime's store, and the pin is released.
+    expect(pod.discarded).toEqual(["pinned-1"]);
+    const store = vi.spyOn(openappa, "loadChildReturns").mockResolvedValue([
+      {
+        childSessionId: seeded.child.session_id,
+        operationId: drained.operationId,
+        value: "progress: step 1",
+      },
+    ]);
 
     const served = await readFile(seeded);
     expect(served.isError).not.toBe(true);
@@ -102,13 +120,17 @@ describe("files pinned while their runtime is mid-call", () => {
       path: "reports/progress.md",
       encoding: "utf8",
       content: "progress: step 1",
+      sha256: digest("progress: step 1"),
+      pinned_at: expect.any(String),
     });
-    // The parent gets the version it was told was pinned, read once.
+    expect(store).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parentSessionId: PARENT,
+        childSessionId: seeded.child.session_id,
+        operationPrefix: expect.stringMatching(/^file-read:[0-9a-f]+:$/),
+      }),
+    );
     expect(read).toHaveBeenCalledOnce();
-    const operations = crossing.mock.calls.map((call) => call[0].operationId);
-    expect(operations[0]).toBe("call-1");
-    expect(operations[1]).toMatch(/^file-read:[0-9a-f]+:1$/);
-    expect(crossing.mock.calls[1][0].session).toEqual(seeded.child);
 
     // The entry is gone: the next call reads the file again.
     crossing.mockImplementationOnce(async ({ value }) => ({
@@ -119,7 +141,7 @@ describe("files pinned while their runtime is mid-call", () => {
     expect(read).toHaveBeenCalledTimes(2);
   });
 
-  test("each retry of a pinned read crosses under an operation id no earlier attempt used", async ({
+  test("each attempt crosses under an operation id no earlier attempt used", async ({
     makeAgent,
     makeMember,
     makeOrganization,
@@ -133,6 +155,7 @@ describe("files pinned while their runtime is mid-call", () => {
       makeUser,
       seedAndAssignArchestraTools,
     });
+    fakePod("partial");
     vi.spyOn(workspaceFiles, "accessAgentWorkspaceFile").mockResolvedValue(
       fileResult("partial"),
     );
@@ -148,11 +171,8 @@ describe("files pinned while their runtime is mid-call", () => {
 
     expect(again.structuredContent).toMatchObject({ status: "pending" });
     const operations = crossing.mock.calls.map((call) => call[0].operationId);
-    expect(new Set(operations).size).toBe(operations.length);
-    expect(operations.slice(1)).toEqual([
-      expect.stringMatching(/:1$/),
-      expect.stringMatching(/:2$/),
-    ]);
+    expect(operations).toHaveLength(3);
+    expect(new Set(operations).size).toBe(3);
   });
 
   test("a pinned read the runtime rules against reaches the parent as the ruling", async ({
@@ -169,6 +189,7 @@ describe("files pinned while their runtime is mid-call", () => {
       makeUser,
       seedAndAssignArchestraTools,
     });
+    fakePod("secret notes");
     vi.spyOn(workspaceFiles, "accessAgentWorkspaceFile").mockResolvedValue(
       fileResult("secret notes"),
     );
@@ -192,7 +213,7 @@ describe("files pinned while their runtime is mid-call", () => {
     expect(text).not.toContain("secret notes");
   });
 
-  test("the parent's own retry crosses a pinned read when the runtime has gone idle", async ({
+  test("the parent's own retry crosses a pinned read once the runtime is idle", async ({
     makeAgent,
     makeMember,
     makeOrganization,
@@ -206,6 +227,7 @@ describe("files pinned while their runtime is mid-call", () => {
       makeUser,
       seedAndAssignArchestraTools,
     });
+    fakePod("final report");
     vi.spyOn(workspaceFiles, "accessAgentWorkspaceFile").mockResolvedValue(
       fileResult("final report"),
     );
@@ -221,10 +243,11 @@ describe("files pinned while their runtime is mid-call", () => {
 
     expect(served.structuredContent).toMatchObject({
       content: "final report",
+      pinned_at: expect.any(String),
     });
   });
 
-  test("a download pinned while the runtime is busy is ticketed from its snapshot after the drain", async ({
+  test("another user on the same parent session never gets a file pinned for the first", async ({
     makeAgent,
     makeMember,
     makeOrganization,
@@ -238,78 +261,193 @@ describe("files pinned while their runtime is mid-call", () => {
       makeUser,
       seedAndAssignArchestraTools,
     });
-    const bytes = Buffer.from("deliverable bytes");
-    const sha256 = digest(bytes);
-    const helper = vi
-      .spyOn(backend, "runWorkspaceTransferCommand")
-      .mockResolvedValue({
-        transfer_id: "pinned",
-        path: "out/report.txt",
-        size: bytes.length,
-        sha256,
-        mtime_ns: "1",
-        ino: "1",
-      });
-    vi.spyOn(backend, "readWorkspaceTransferRange").mockImplementation(
-      async ({ offset, length }) => ({
-        stdout: Readable.from([
-          bytes.subarray(offset, length < 0 ? undefined : offset + length),
-        ]),
-        completed: Promise.resolve(),
-      }),
+    fakePod("owner's notes");
+    vi.spyOn(workspaceFiles, "accessAgentWorkspaceFile").mockImplementation(
+      async ({ actor }) => {
+        if (actor.id !== seeded.context.userId)
+          throw new Error("Workspace not found");
+        return fileResult("owner's notes");
+      },
     );
+    const crossing = vi
+      .spyOn(openappa, "returnRuntimeValue")
+      .mockResolvedValueOnce(BUSY);
+    await readFile(seeded);
+    crossing.mockImplementation(async ({ value }) => ({
+      kind: "admitted",
+      value,
+    }));
+    await pendingExports.drain(seeded.child);
+    const store = vi.spyOn(openappa, "loadChildReturns");
+
+    const other = await fixturesUser(makeUser, makeMember, seeded);
+    const intruder = await readFile({
+      ...seeded,
+      context: { ...seeded.context, userId: other },
+    });
+
+    expect(intruder.isError).toBe(true);
+    expect(JSON.stringify(intruder)).not.toContain("owner's notes");
+    expect(store).not.toHaveBeenCalled();
+  });
+
+  test("a runtime that stopped mid-call gets a refusal, not a pin that never crosses", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    });
+    const pod = fakePod("half written");
+    vi.spyOn(workspaceFiles, "accessAgentWorkspaceFile").mockResolvedValue(
+      fileResult("half written"),
+    );
+    vi.spyOn(openappa, "returnRuntimeValue").mockResolvedValue(BUSY);
+    // The turn ended without its call reporting: the dispatch stays open.
+    await db
+      .update(schema.agentWorkspacesTable)
+      .set({ state: "idle", activeTaskId: null })
+      .where(eq(schema.agentWorkspacesTable.id, seeded.taskId));
+
+    const result = await readFile(seeded);
+
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(
+      "stopped in the middle of a tool call",
+    );
+    expect(pod.snapshots).toBe(0);
+  });
+
+  test("a crossed file waiting longer than ten minutes is read afresh, not served", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    });
+    fakePod("old version");
+    const read = vi
+      .spyOn(workspaceFiles, "accessAgentWorkspaceFile")
+      .mockResolvedValueOnce(fileResult("old version"))
+      .mockResolvedValueOnce(fileResult("new version"));
+    const crossing = vi
+      .spyOn(openappa, "returnRuntimeValue")
+      .mockResolvedValueOnce(BUSY);
+    await readFile(seeded);
+    crossing.mockImplementation(async ({ value }) => ({
+      kind: "admitted",
+      value,
+    }));
+    await pendingExports.drain(seeded.child);
+    const store = vi.spyOn(openappa, "loadChildReturns");
+
+    const now = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(now + 11 * 60 * 1000);
+    const later = await readFile(seeded);
+
+    expect(later.structuredContent).toMatchObject({ content: "new version" });
+    expect(later.structuredContent).not.toHaveProperty("pinned_at");
+    expect(store).not.toHaveBeenCalled();
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
+  test("one pinned file that cannot be read does not keep the others from crossing", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    });
+    const pod = fakePod("readable");
+    vi.spyOn(workspaceFiles, "accessAgentWorkspaceFile").mockResolvedValue(
+      fileResult("readable"),
+    );
+    const crossing = vi
+      .spyOn(openappa, "returnRuntimeValue")
+      .mockResolvedValueOnce(BUSY)
+      .mockResolvedValueOnce(BUSY);
+    await readFile(seeded, "reports/first.md");
+    await readFile(seeded, "reports/second.md");
+    pod.failRead("pinned-1");
+    crossing.mockImplementation(async ({ value }) => ({
+      kind: "admitted",
+      value,
+    }));
+
+    await expect(pendingExports.drain(seeded.child)).resolves.toBeUndefined();
+
+    // The second file still crossed on the same request.
+    expect(crossing).toHaveBeenCalledTimes(3);
+    expect(pod.discarded).toEqual(["pinned-2"]);
+  });
+
+  test("a download pinned while busy is ticketed from its snapshot after the drain", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    });
+    const pod = fakePod("deliverable bytes");
     const crossing = vi
       .spyOn(openappa, "returnRuntimeValue")
       .mockResolvedValueOnce(BUSY);
 
     const pinned = await transfer(seeded);
     expect(pinned.isError).not.toBe(true);
-    expect(pinned.structuredContent).toMatchObject({
+    expect(pinned.structuredContent).toEqual({
+      direction: "download",
+      path: "out/report.txt",
       status: "pending",
-      size: bytes.length,
-      sha256,
+      message: expect.any(String),
     });
-    expect(JSON.stringify(pinned)).not.toContain("Authorization: Bearer");
-    // The pinned version must survive until it is served.
-    expect(helper).not.toHaveBeenCalledWith(
-      expect.objectContaining({ args: ["discard", "pinned"] }),
-    );
+    expect(pod.discarded).toEqual([]);
 
     crossing.mockImplementation(async ({ value }) => ({
       kind: "admitted",
       value,
     }));
     await pendingExports.drain(seeded.child);
-    const drained = JSON.parse(crossing.mock.calls[1][0].value);
-    expect(drained).toMatchObject({
+    expect(JSON.parse(crossing.mock.calls[1][0].value)).toMatchObject({
       encoding: "utf8",
       content: "deliverable bytes",
-      chunk: { index: 0, count: 1, sha256 },
+      chunk: { index: 0, count: 1, sha256: digest("deliverable bytes") },
     });
 
     const ticketed = await transfer(seeded);
     expect(ticketed.isError).not.toBe(true);
-    expect(ticketed.structuredContent).toMatchObject({
-      direction: "download",
-      sha256,
-    });
-    const command = String(
-      (ticketed.structuredContent as { command: string }).command,
-    );
-    const ticketId = /\/([0-9a-f]{32})\/content/.exec(command)?.[1];
-    const token = /Bearer ([A-Za-z0-9_-]+)/.exec(command)?.[1];
-    if (!ticketId || !token) throw new Error("no ticket in the command");
-    const stream = await workspaceTransferTickets.read({
-      ticket: workspaceTransferTickets.resolve(ticketId, token),
-      offset: 0,
-      length: -1,
-    });
-    const parts: Buffer[] = [];
-    for await (const part of stream.stdout) parts.push(Buffer.from(part));
-    expect(Buffer.concat(parts).toString()).toBe("deliverable bytes");
+    expect(await downloaded(ticketed)).toBe("deliverable bytes");
   });
 
-  test("a drain does not fail the runtime's request when a pinned file cannot be read", async ({
+  test("a large download pauses while the runtime is busy and resumes one chunk per runtime request", async ({
     makeAgent,
     makeMember,
     makeOrganization,
@@ -323,32 +461,92 @@ describe("files pinned while their runtime is mid-call", () => {
       makeUser,
       seedAndAssignArchestraTools,
     });
-    const bytes = Buffer.from("x");
-    vi.spyOn(backend, "runWorkspaceTransferCommand").mockResolvedValue({
-      transfer_id: "gone",
-      path: "out/x",
-      size: bytes.length,
-      sha256: digest(bytes),
-      mtime_ns: "1",
-      ino: "1",
-    });
-    const range = vi
-      .spyOn(backend, "readWorkspaceTransferRange")
-      .mockResolvedValueOnce({
-        stdout: Readable.from([bytes]),
-        completed: Promise.resolve(),
-      });
-    vi.spyOn(openappa, "returnRuntimeValue").mockResolvedValueOnce(BUSY);
-    await transfer(seeded);
+    // Exactly three chunks, so the last chunk ends on the boundary.
+    const bytes = Buffer.alloc(3 * CHUNK);
+    for (let i = 0; i < bytes.length; i += 4093) bytes[i] = (i * 7) & 0xff;
+    fakePod(bytes);
+    const crossing = vi
+      .spyOn(openappa, "returnRuntimeValue")
+      .mockImplementationOnce(async ({ value }) => ({
+        kind: "admitted",
+        value,
+      }))
+      .mockResolvedValueOnce(BUSY);
 
-    range.mockRejectedValue(new Error("pod is gone"));
-    await expect(pendingExports.drain(seeded.child)).resolves.toBeUndefined();
+    const pinned = await transfer(seeded);
+    expect(pinned.structuredContent).toMatchObject({ status: "pending" });
+
+    crossing.mockImplementation(async ({ value }) => ({
+      kind: "admitted",
+      value,
+    }));
+    await pendingExports.drain(seeded.child);
+    const afterOne = crossing.mock.calls.length;
+    await pendingExports.drain(seeded.child);
+    expect(afterOne).toBe(3);
+    expect(crossing.mock.calls.length).toBe(4);
+    const chunks = crossing.mock.calls.map(
+      (call) => JSON.parse(call[0].value).chunk.index,
+    );
+    expect(chunks).toEqual([0, 1, 1, 2]);
+
+    const ticketed = await transfer(seeded);
+    expect(ticketed.isError).not.toBe(true);
+    const served = Buffer.from(await downloaded(ticketed, "base64"), "base64");
+    expect(served.equals(bytes)).toBe(true);
   });
 });
 
 // =============================================================================
 // Helpers
 // =============================================================================
+
+type Seeded = Awaited<ReturnType<typeof seededRun>>;
+
+/**
+ * The runtime's in-pod transfer helper: pins snapshots, serves their ranges,
+ * and records which were discarded.
+ */
+function fakePod(content: string | Buffer) {
+  const bytes = Buffer.isBuffer(content) ? content : Buffer.from(content);
+  const state = {
+    snapshots: 0,
+    discarded: [] as string[],
+    failing: new Set<string>(),
+    failRead(id: string) {
+      state.failing.add(id);
+    },
+  };
+  vi.spyOn(backend, "runWorkspaceTransferCommand").mockImplementation(
+    async ({ args }) => {
+      if (args[0] === "snapshot") {
+        state.snapshots++;
+        return {
+          transfer_id: `pinned-${state.snapshots}`,
+          path: args[1],
+          size: bytes.length,
+          sha256: digest(bytes),
+          mtime_ns: "1",
+          ino: "1",
+        };
+      }
+      if (args[0] === "discard") state.discarded.push(args[1]);
+      return {};
+    },
+  );
+  vi.spyOn(backend, "readWorkspaceTransferRange").mockImplementation(
+    async ({ transferId, offset, length }) => {
+      if (state.failing.has(transferId)) throw new Error("pod is gone");
+      return {
+        stdout: Readable.from([
+          bytes.subarray(offset, length < 0 ? undefined : offset + length),
+        ]),
+        completed: Promise.resolve(),
+      };
+    },
+  );
+  return state;
+}
 
 function fileResult(text: string) {
   return {
@@ -363,12 +561,13 @@ function digest(value: string | Buffer): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-type Seeded = Awaited<ReturnType<typeof seededRun>>;
-
-function readFile(seeded: Seeded) {
+function readFile(
+  seeded: Pick<Seeded, "taskId" | "context">,
+  path = "reports/progress.md",
+) {
   return executeArchestraTool(
     READ,
-    { task_id: seeded.taskId, path: "reports/progress.md" },
+    { task_id: seeded.taskId, path },
     seeded.context,
   );
 }
@@ -384,6 +583,42 @@ function transfer(seeded: Seeded) {
     },
     seeded.context,
   );
+}
+
+/** Follows a ticket the way the returned command would. */
+async function downloaded(
+  result: Awaited<ReturnType<typeof transfer>>,
+  encoding: "utf8" | "base64" = "utf8",
+): Promise<string> {
+  const command = String(
+    (result.structuredContent as { command: string }).command,
+  );
+  const ticketId = /\/([0-9a-f]{32})\/content/.exec(command)?.[1];
+  const token = /Bearer ([A-Za-z0-9_-]+)/.exec(command)?.[1];
+  if (!ticketId || !token) throw new Error("no ticket in the command");
+  const stream = await workspaceTransferTickets.read({
+    ticket: workspaceTransferTickets.resolve(ticketId, token),
+    offset: 0,
+    length: -1,
+  });
+  const parts: Buffer[] = [];
+  for await (const part of stream.stdout) parts.push(Buffer.from(part));
+  return Buffer.concat(parts).toString(encoding);
+}
+
+/** A second member of the organization who does not own the run. */
+async function fixturesUser(
+  makeUser: () => Promise<{ id: string }>,
+  makeMember: (
+    userId: string,
+    organizationId: string,
+    role: { role: "member" },
+  ) => Promise<unknown>,
+  seeded: Seeded,
+): Promise<string> {
+  const other = await makeUser();
+  await makeMember(other.id, seeded.organizationId, { role: "member" });
+  return other.id;
 }
 
 /** A user's run whose runtime is bound to the parent session `PARENT`. */
@@ -472,6 +707,7 @@ async function seededRun(params: {
     startDecision: { decision: "ack" },
   });
   return {
+    organizationId: org.id,
     taskId: task.id,
     child,
     context: {

@@ -2,8 +2,13 @@ import { createHash, randomBytes } from "node:crypto";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
+import { AgentRunModel, AgentWorkspaceModel } from "@/models";
 import { reportAgentRuntimePendingExport } from "@/observability/metrics/agent-runtime";
-import { type OpenAppaSession, returnRuntimeValue } from "@/openappa/service";
+import {
+  loadChildReturns,
+  type OpenAppaSession,
+  returnRuntimeValue,
+} from "@/openappa/service";
 import {
   crossingRefusal,
   crossRuntimeFile,
@@ -11,6 +16,7 @@ import {
   reportCrossingRefusal,
   runtimeCrossingRefusal,
 } from "./runtime-crossing";
+import { authorizeAgentWorkspaceAccess } from "./workspace-files";
 import {
   ProtectedExportBusy,
   type ProtectedExportProgress,
@@ -22,16 +28,19 @@ import {
  *
  * Guardrails cannot release a runtime's bytes to its parent while the runtime
  * has a call open: that call's output is not labelled yet and may be what the
- * file holds. Refusing would leave the parent nothing to act on, so the file
- * is pinned instead and the parent is told to call again.
+ * file holds. Refusing would leave the parent nothing to act on, so the
+ * version is pinned in the runtime's workspace instead and the parent is told
+ * to call again. Until something crosses, the parent learns nothing about the
+ * file, not even its size.
  *
  * The runtime's next model request is the first moment it has no call open:
  * its tool results are in and its next calls are not out. `drain` crosses the
  * pinned files there. The parent's next call serves what crossed, or crosses
- * it then if the runtime is idle. Nothing ever crosses around the check.
+ * it then if the runtime has gone idle. Nothing ever crosses around the check.
  *
- * Entries live in the shared cache, one per runtime session, so whichever
- * replica serves either side sees them.
+ * Only small entries live in the shared cache, one record per runtime session,
+ * so whichever replica serves either side sees them. File bytes stay pinned in
+ * the workspace, and what crossed is kept by the runtime's own store.
  */
 class PendingExports {
   /**
@@ -48,25 +57,15 @@ class PendingExports {
     read: () => Promise<{ metadata: FileMetadata; content: string }>;
   }): Promise<
     | { kind: "content"; metadata: FileMetadata; content: string }
-    | { kind: "pending"; metadata: FileMetadata }
+    | { kind: "pending" }
   > {
-    const name = entryName({
-      kind: "read",
-      child: params.child,
-      path: params.path,
-      encoding: params.encoding,
-    });
-    const existing = (await this.load(params.child)).get(name);
+    const name = entryName({ kind: "read", ...params });
+    const existing = await this.liveEntry(params.child, name);
     if (existing?.kind === "read") {
-      const step =
-        existing.state === "pending" ? await advanceRead(existing) : existing;
-      if (step.state === "pending") {
-        await this.replace(params.child, name, existing, step);
-        return { kind: "pending", metadata: step.metadata };
-      }
-      await this.remove(params.child, name);
-      if (step.state === "held") throw heldRead(step);
-      return { kind: "content", metadata: step.metadata, content: step.value };
+      // The caller must still be able to use this workspace right now.
+      await authorizeAgentWorkspaceAccess(params);
+      const served = await this.continueRead(params.child, name, existing);
+      if (served) return served;
     }
     const { metadata, content } = await params.read();
     const crossed = await crossRuntimeFile({
@@ -77,20 +76,20 @@ class PendingExports {
     if (crossed.kind === "admitted") {
       return { kind: "content", metadata, content: crossed.value };
     }
-    await this.create(params.child, name, {
+    if (!(await runtimeIsMidTurn(params.taskId))) throw stoppedMidCall(params);
+    const snapshot = await workspaceTransferTickets.pinFile(params);
+    await this.pin(params.child, name, {
       kind: "read",
       ...newEntry(params),
       encoding: params.encoding,
-      metadata,
-      state: "pending",
-      value: content,
+      progress: { snapshot, digests: [] },
     });
-    return { kind: "pending", metadata };
+    return { kind: "pending" };
   }
 
   /**
    * A protected `transfer_workspace_file` download. Returns the ticket, or
-   * `pending` with the pinned version while the runtime is mid-call.
+   * `pending` while the runtime is mid-call.
    */
   async crossDownload(params: {
     child: OpenAppaSession;
@@ -105,61 +104,14 @@ class PendingExports {
           ReturnType<typeof workspaceTransferTickets.mintDownload>
         >;
       }
-    | { kind: "pending"; size: number; sha256: string }
+    | { kind: "pending" }
   > {
-    const name = entryName({
-      kind: "download",
-      child: params.child,
-      path: params.path,
-    });
-    const existing = (await this.load(params.child)).get(name);
+    const name = entryName({ kind: "download", ...params });
+    const existing = await this.liveEntry(params.child, name);
     if (existing?.kind === "download") {
-      let step: PendingDownload;
-      try {
-        step =
-          existing.state === "pending"
-            ? await advanceDownload(existing, Number.POSITIVE_INFINITY)
-            : existing;
-      } catch (error) {
-        // The pinned version cannot be read any more (the workspace was
-        // reset, or its snapshot swept). The next call pins the current one.
-        await this.remove(params.child, name);
-        await discard(existing);
-        throw error;
-      }
-      const { snapshot } = step.progress;
-      if (step.state === "pending") {
-        await this.replace(params.child, name, existing, step);
-        return {
-          kind: "pending",
-          size: snapshot.size,
-          sha256: snapshot.sha256,
-        };
-      }
-      await this.remove(params.child, name);
-      if (step.state === "held") {
-        await discard(step);
-        // Counted where the runtime ruled; this only delivers it.
-        throw runtimeCrossingRefusal(
-          step.reason ??
-            "The protected file could not be admitted. No download ticket was issued.",
-        );
-      }
-      try {
-        return {
-          kind: "ticket",
-          minted: await workspaceTransferTickets.mintAdmittedDownload({
-            actor: step.actor,
-            taskId: step.taskId,
-            path: step.path,
-            child: step.child,
-            progress: step.progress,
-          }),
-        };
-      } catch (error) {
-        await discard(step);
-        throw error;
-      }
+      await authorizeAgentWorkspaceAccess(params);
+      const served = await this.continueDownload(params.child, name, existing);
+      if (served) return served;
     }
     try {
       return {
@@ -173,52 +125,195 @@ class PendingExports {
       };
     } catch (error) {
       if (!(error instanceof ProtectedExportBusy)) throw error;
-      await this.create(params.child, name, {
+      if (!(await runtimeIsMidTurn(params.taskId))) {
+        await discardPinned({ ...params, progress: error.progress });
+        throw stoppedMidCall(params);
+      }
+      await this.pin(params.child, name, {
         kind: "download",
         ...newEntry(params),
-        state: "pending",
         progress: error.progress,
       });
-      const { snapshot } = error.progress;
-      return { kind: "pending", size: snapshot.size, sha256: snapshot.sha256 };
+      return { kind: "pending" };
     }
   }
 
   /**
    * Crosses the files pinned for this runtime. Call it when the runtime has no
    * tool call open: on its model request, after its tool results are admitted
-   * and before its next calls are released. Never fails the request; a file
-   * that cannot cross now stays pinned for the next request or the parent's
-   * next call.
+   * and before its next calls are released. Never fails the request and keeps
+   * to a small budget; a file that cannot cross now stays pinned for the next
+   * request or the parent's next call.
    */
   async drain(child: OpenAppaSession): Promise<void> {
     if (!child.parent_id) return;
+    const started = Date.now();
+    let entries: Array<[string, PendingEntry]>;
     try {
-      const entries = await this.load(child);
-      let budget = DRAIN_BUDGET_BYTES;
-      for (const [name, entry] of entries.pendingOldestFirst()) {
-        if (entry.kind === "read") {
-          const step = await advanceRead(entry);
-          await this.replace(child, name, entry, step);
-          // Still mid-call: nothing else can cross on this request either.
-          if (step.state === "pending") return;
-          budget -= Buffer.byteLength(entry.value, "utf8");
-        } else {
-          const step = await advanceDownload(entry, budget);
-          await this.replace(child, name, entry, step);
-          budget -=
-            (step.progress.digests.length - entry.progress.digests.length) *
-            CHUNK_BYTES;
-          if (step.state === "pending") return;
-        }
-        if (budget <= 0) return;
-      }
+      entries = (await this.load(child)).pendingOldestFirst();
     } catch (error) {
       logger.warn(
         { err: error, sessionId: child.session_id },
-        "Could not release protected files pinned for an Agent Runtime",
+        "Could not read the protected files pinned for an Agent Runtime",
+      );
+      return;
+    }
+    let readBytes = 0;
+    let downloadChunks = 0;
+    for (const [name, entry] of entries) {
+      if (Date.now() - started > DRAIN_DEADLINE_MS) return;
+      const size = entry.progress.snapshot.size;
+      if (
+        entry.kind === "read" &&
+        readBytes > 0 &&
+        readBytes + size > DRAIN_READ_BYTES
+      )
+        continue;
+      if (entry.kind === "download" && downloadChunks >= 1) continue;
+      try {
+        const step =
+          entry.kind === "read"
+            ? await advanceRead(entry, { drain: true })
+            : await advanceDownload(entry, { drain: true });
+        if (entry.kind === "read") readBytes += size;
+        else downloadChunks++;
+        await this.replace(child, name, entry, step.entry);
+        await afterStep(entry, step.entry);
+        // Still mid-call: nothing else can cross on this request either.
+        if (step.busy) return;
+      } catch (error) {
+        logger.warn(
+          { err: error, sessionId: child.session_id, entryId: entry.id },
+          "Could not release a protected file pinned for an Agent Runtime",
+        );
+        await this.failed(child, name, entry).catch(() => undefined);
+      }
+    }
+  }
+
+  // ===========================================================================
+  // Private
+  // ===========================================================================
+
+  /** Serves or advances a read pinned earlier; undefined means pin afresh. */
+  private async continueRead(
+    child: OpenAppaSession,
+    name: string,
+    entry: PendingRead,
+  ): Promise<
+    | { kind: "content"; metadata: FileMetadata; content: string }
+    | { kind: "pending" }
+    | undefined
+  > {
+    if (entry.state === "admitted") {
+      const content = await admittedRead(entry);
+      await this.remove(child, name, entry);
+      return content === undefined
+        ? undefined
+        : { kind: "content", metadata: servedMetadata(entry), content };
+    }
+    if (entry.state === "held") {
+      await this.remove(child, name, entry);
+      throw runtimeCrossingRefusal(entry.reason ?? heldFileRefusal("held"));
+    }
+    let step: Awaited<ReturnType<typeof advanceRead>>;
+    try {
+      step = await advanceRead(entry, { drain: false });
+    } catch (error) {
+      if (!pinnedVersionGone(error)) throw error;
+      await this.remove(child, name, entry);
+      await discardPinned(entry);
+      return undefined;
+    }
+    if (step.entry.state === "pending") {
+      if (!(await runtimeIsMidTurn(entry.taskId))) {
+        await this.remove(child, name, entry);
+        await discardPinned(entry);
+        throw stoppedMidCall(entry);
+      }
+      await this.replace(child, name, entry, step.entry);
+      return { kind: "pending" };
+    }
+    await this.remove(child, name, entry);
+    await discardPinned(entry);
+    if (step.entry.state === "held")
+      throw runtimeCrossingRefusal(
+        step.entry.reason ?? heldFileRefusal("held"),
+      );
+    return {
+      kind: "content",
+      metadata: servedMetadata(entry),
+      content: step.admitted ?? "",
+    };
+  }
+
+  /** Serves or advances a download pinned earlier; undefined means pin afresh. */
+  private async continueDownload(
+    child: OpenAppaSession,
+    name: string,
+    entry: PendingDownload,
+  ): Promise<
+    | {
+        kind: "ticket";
+        minted: Awaited<
+          ReturnType<typeof workspaceTransferTickets.mintDownload>
+        >;
+      }
+    | { kind: "pending" }
+    | undefined
+  > {
+    let current = entry;
+    if (current.state === "pending") {
+      let step: Awaited<ReturnType<typeof advanceDownload>>;
+      try {
+        step = await advanceDownload(current, { drain: false });
+      } catch (error) {
+        if (!pinnedVersionGone(error)) throw error;
+        await this.remove(child, name, entry);
+        await discardPinned(entry);
+        return undefined;
+      }
+      if (step.entry.state === "pending") {
+        if (!(await runtimeIsMidTurn(entry.taskId))) {
+          await this.remove(child, name, entry);
+          await discardPinned(entry);
+          throw stoppedMidCall(entry);
+        }
+        await this.replace(child, name, entry, step.entry);
+        return { kind: "pending" };
+      }
+      current = step.entry;
+    }
+    await this.remove(child, name, entry);
+    if (current.state === "held") {
+      await discardPinned(current);
+      throw runtimeCrossingRefusal(
+        current.reason ??
+          "The protected file could not be admitted. No download ticket was issued.",
       );
     }
+    try {
+      return {
+        kind: "ticket",
+        minted: await workspaceTransferTickets.mintAdmittedDownload({
+          actor: current.actor,
+          taskId: current.taskId,
+          path: current.path,
+          child: current.child,
+          progress: current.progress,
+        }),
+      };
+    } catch (error) {
+      await discardPinned(current);
+      throw error;
+    }
+  }
+
+  private async liveEntry(
+    child: OpenAppaSession,
+    name: string,
+  ): Promise<PendingEntry | undefined> {
+    return (await this.load(child)).get(name);
   }
 
   private async load(child: OpenAppaSession): Promise<Entries> {
@@ -228,16 +323,20 @@ class PendingExports {
   }
 
   /** Pins a new entry, unless a concurrent call already pinned this file. */
-  private async create(
+  private async pin(
     child: OpenAppaSession,
     name: string,
     entry: PendingEntry,
   ): Promise<void> {
-    await this.mutate(child, (entries) => {
+    let created = false;
+    const evicted = await this.mutate(child, (entries) => {
       if (entries.get(name)) return;
       entries.add(name, entry);
-      reportAgentRuntimePendingExport("pinned");
+      created = true;
     });
+    if (created) reportAgentRuntimePendingExport("pinned");
+    else await discardPinned(entry);
+    await Promise.all(evicted.map(discardPinned));
   }
 
   /**
@@ -250,28 +349,65 @@ class PendingExports {
     before: PendingEntry,
     after: PendingEntry,
   ): Promise<void> {
-    await this.mutate(child, (entries) => {
+    const evicted = await this.mutate(child, (entries) => {
       if (entries.get(name)?.rev !== before.rev) return;
       entries.set(name, { ...after, rev: newRev() });
     });
+    await Promise.all(evicted.map(discardPinned));
   }
 
-  private async remove(child: OpenAppaSession, name: string): Promise<void> {
-    await this.mutate(child, (entries) => entries.delete(name));
+  /** Removes `entry`, unless a concurrent call already replaced it. */
+  private async remove(
+    child: OpenAppaSession,
+    name: string,
+    entry: PendingEntry,
+  ): Promise<void> {
+    const evicted = await this.mutate(child, (entries) => {
+      if (entries.get(name)?.rev === entry.rev) entries.delete(name);
+    });
+    await Promise.all(evicted.map(discardPinned));
   }
 
-  /** The only work under the lock is reading and writing the cache entry. */
+  /** Counts a failed drain; a pin that keeps failing is given up as held. */
+  private async failed(
+    child: OpenAppaSession,
+    name: string,
+    entry: PendingEntry,
+  ): Promise<void> {
+    const failures = entry.failures + 1;
+    const after: PendingEntry =
+      failures < MAX_DRAIN_FAILURES
+        ? { ...entry, failures }
+        : {
+            ...entry,
+            failures,
+            state: "held",
+            decidedAt: Date.now(),
+            reason:
+              "The pinned version of this file could not be read from the runtime. Call the tool again to pin its current version.",
+          };
+    await this.replace(child, name, entry, after);
+    if (after.state === "held") await discardPinned(entry);
+  }
+
+  /**
+   * The only work under the lock is reading and writing the cache entry.
+   * Returns the entries that expired or were evicted, for their pins to be
+   * released outside the lock.
+   */
   private async mutate(
     child: OpenAppaSession,
     change: (entries: Entries) => void,
-  ): Promise<void> {
+  ): Promise<PendingEntry[]> {
     const key = entriesKey(child);
-    await cacheManager.withLock(key, async (cache) => {
+    return cacheManager.withLock(key, async (cache) => {
       const entries = new Entries((await cache.get<StoredEntries>(key)) ?? {});
       change(entries);
-      if (!entries.changed) return;
-      if (entries.size === 0) await cache.delete(key);
-      else await cache.set(key, entries.toJSON(), ENTRY_TTL_MS);
+      if (entries.changed) {
+        if (entries.size === 0) await cache.delete(key);
+        else await cache.set(key, entries.toJSON(), PENDING_TTL_MS);
+      }
+      return entries.dropped;
     });
   }
 }
@@ -280,7 +416,7 @@ export const pendingExports = new PendingExports();
 
 /** What the parent learns about a file that is waiting for its runtime. */
 export function pendingFileNotice(tool: string): string {
-  return `The runtime is in the middle of a tool call, so Guardrails cannot release this file yet. This version was pinned. Call ${tool} again with the same arguments after that tool call finishes: the runtime's next step releases it. This is not an error.`;
+  return `The runtime is in the middle of a tool call, so Guardrails cannot release this file yet. Its current version was pinned. Call ${tool} again with the same arguments after that tool call finishes: the runtime's next step releases it. This is not an error.`;
 }
 
 // =============================================================================
@@ -293,30 +429,26 @@ type EntryBase = {
   id: string;
   /** Changes on every write, so a stale write cannot overwrite a newer one. */
   rev: string;
-  attempt: number;
   createdAt: number;
+  /** When it was admitted or held. */
+  decidedAt?: number;
   child: OpenAppaSession;
   actor: A2AActor;
   taskId: string;
   path: string;
+  state: "pending" | "admitted" | "held";
+  /** Held: the refusal the parent gets. */
+  reason?: string;
+  failures: number;
+  progress: ProtectedExportProgress;
 };
 
 type PendingRead = EntryBase & {
   kind: "read";
   encoding: "utf8" | "base64";
-  metadata: FileMetadata;
-  state: "pending" | "admitted" | "held";
-  /** Pending: the bytes to cross. Admitted: what crossed. Held: the ruling. */
-  value: string;
 };
 
-type PendingDownload = EntryBase & {
-  kind: "download";
-  state: "pending" | "admitted" | "held";
-  progress: ProtectedExportProgress;
-  /** Held: the refusal the parent gets. */
-  reason?: string;
-};
+type PendingDownload = EntryBase & { kind: "download" };
 
 type PendingEntry = PendingRead | PendingDownload;
 type StoredEntries = Record<string, PendingEntry>;
@@ -324,16 +456,19 @@ type StoredEntries = Record<string, PendingEntry>;
 /** The entries of one runtime session, with the cap and expiry applied. */
 class Entries {
   changed = false;
+  /** Entries that expired or were evicted; their pins should be released. */
+  readonly dropped: PendingEntry[] = [];
   private readonly entries: Map<string, PendingEntry>;
 
   constructor(stored: StoredEntries) {
-    const now = Date.now();
-    this.entries = new Map(
-      Object.entries(stored).filter(
-        ([, entry]) => now - entry.createdAt < ENTRY_TTL_MS,
-      ),
-    );
-    if (this.entries.size !== Object.keys(stored).length) this.changed = true;
+    this.entries = new Map();
+    for (const [name, entry] of Object.entries(stored)) {
+      if (isLive(entry)) this.entries.set(name, entry);
+      else {
+        this.dropped.push(entry);
+        this.changed = true;
+      }
+    }
   }
 
   get size(): number {
@@ -357,6 +492,7 @@ class Entries {
       );
       if (!oldest) break;
       this.entries.delete(oldest[0]);
+      this.dropped.push(oldest[1]);
     }
     this.set(name, entry);
   }
@@ -376,21 +512,44 @@ class Entries {
   }
 }
 
+/**
+ * A pin waits for one tool call, and a crossed file waits for the parent's
+ * retry. Neither is served long after: the next read then reads afresh.
+ */
+function isLive(entry: PendingEntry): boolean {
+  const now = Date.now();
+  return entry.state === "pending"
+    ? now - entry.createdAt < PENDING_TTL_MS
+    : now - (entry.decidedAt ?? entry.createdAt) < DECIDED_TTL_MS;
+}
+
 function newEntry(params: {
   child: OpenAppaSession;
   actor: A2AActor;
   taskId: string;
   path: string;
-}): EntryBase {
+}): Pick<
+  EntryBase,
+  | "id"
+  | "rev"
+  | "createdAt"
+  | "child"
+  | "actor"
+  | "taskId"
+  | "path"
+  | "state"
+  | "failures"
+> {
   return {
     id: randomBytes(12).toString("hex"),
     rev: newRev(),
-    attempt: 0,
     createdAt: Date.now(),
     child: params.child,
     actor: params.actor,
     taskId: params.taskId,
     path: params.path,
+    state: "pending",
+    failures: 0,
   };
 }
 
@@ -398,7 +557,162 @@ function newRev(): string {
   return randomBytes(8).toString("hex");
 }
 
-async function discard(entry: PendingDownload): Promise<void> {
+/** Unique per crossing attempt, so a retry never meets a decision already given. */
+function operationNonce(): string {
+  return randomBytes(6).toString("hex");
+}
+
+/**
+ * Reads the pinned bytes and tries to cross them. `admitted` is what crossed;
+ * a later caller finds it in the runtime's store by the entry's operation id.
+ */
+async function advanceRead(
+  entry: PendingRead,
+  options: { drain: boolean },
+): Promise<{ entry: PendingRead; busy: boolean; admitted?: string }> {
+  const bytes = await workspaceTransferTickets.readPinned({
+    actor: entry.actor,
+    taskId: entry.taskId,
+    snapshot: entry.progress.snapshot,
+    drain: options.drain,
+  });
+  let value: string;
+  if (entry.encoding === "base64") value = bytes.toString("base64");
+  else {
+    try {
+      value = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch {
+      return {
+        entry: held(
+          entry,
+          "The pinned version of this file is not UTF-8 text. Read it with encoding base64.",
+        ),
+        busy: false,
+      };
+    }
+  }
+  const result = await returnRuntimeValue({
+    session: entry.child,
+    operationId: `${readOperationPrefix(entry)}${operationNonce()}`,
+    value,
+  });
+  if (result.kind === "admitted") {
+    reportAgentRuntimePendingExport("admitted");
+    return {
+      entry: { ...entry, state: "admitted", decidedAt: Date.now() },
+      busy: false,
+      admitted: result.value,
+    };
+  }
+  if (result.busy) return { entry, busy: true };
+  return {
+    entry: held(
+      entry,
+      reportCrossingRefusal({
+        reason: "held",
+        message: heldFileRefusal(result.reason),
+        childSessionId: entry.child.session_id,
+        parentSessionId: entry.child.parent_id,
+      }),
+    ),
+    busy: false,
+  };
+}
+
+/** Crosses more of a pinned download: one chunk on a drain, all it can otherwise. */
+async function advanceDownload(
+  entry: PendingDownload,
+  options: { drain: boolean },
+): Promise<{ entry: PendingDownload; busy: boolean }> {
+  try {
+    const advanced = await workspaceTransferTickets.advanceExport({
+      actor: entry.actor,
+      taskId: entry.taskId,
+      path: entry.path,
+      child: entry.child,
+      operationBase: `file-export:${entry.id}`,
+      progress: entry.progress,
+      maxChunks: options.drain ? 1 : Number.POSITIVE_INFINITY,
+      drain: options.drain,
+    });
+    if (advanced.kind === "waiting") {
+      return {
+        entry: { ...entry, progress: advanced.progress },
+        busy: advanced.busy,
+      };
+    }
+    reportAgentRuntimePendingExport("admitted");
+    return {
+      entry: {
+        ...entry,
+        state: "admitted",
+        decidedAt: Date.now(),
+        progress: advanced.progress,
+      },
+      busy: false,
+    };
+  } catch (error) {
+    const refusal = crossingRefusal(error);
+    if (refusal === undefined) throw error;
+    return { entry: held(entry, refusal), busy: false };
+  }
+}
+
+function held<T extends PendingEntry>(entry: T, reason: string): T {
+  reportAgentRuntimePendingExport("held");
+  return { ...entry, state: "held", decidedAt: Date.now(), reason };
+}
+
+/** What crossed for a read the drain admitted, from the runtime's own store. */
+async function admittedRead(entry: PendingRead): Promise<string | undefined> {
+  const prefix = readOperationPrefix(entry);
+  const [latest] = (
+    await loadChildReturns({
+      organizationId: entry.child.organization_id,
+      parentSessionId: entry.child.parent_id ?? "",
+      childSessionId: entry.child.session_id,
+      operationPrefix: prefix,
+    })
+  ).filter(
+    (record) =>
+      record.childSessionId === entry.child.session_id &&
+      record.operationId?.startsWith(prefix),
+  );
+  return latest?.value;
+}
+
+function readOperationPrefix(entry: PendingRead): string {
+  return `file-read:${entry.id}:`;
+}
+
+/** What a served pinned read tells the parent: the version it crossed, and when it was pinned. */
+function servedMetadata(entry: PendingRead): FileMetadata {
+  const { snapshot } = entry.progress;
+  return {
+    path: entry.path,
+    size: snapshot.size,
+    sha256: snapshot.sha256,
+    pinned_at: new Date(entry.createdAt).toISOString(),
+  };
+}
+
+/** Releases what a decided entry no longer needs pinned in the pod. */
+async function afterStep(
+  before: PendingEntry,
+  after: PendingEntry,
+): Promise<void> {
+  if (before.state !== "pending" || after.state === "pending") return;
+  // A crossed read is kept by the runtime's store; a crossed download is
+  // served from its pin, so only that one stays.
+  if (after.kind === "read" || after.state === "held")
+    await discardPinned(after);
+}
+
+async function discardPinned(entry: {
+  actor: A2AActor;
+  taskId: string;
+  progress: ProtectedExportProgress;
+}): Promise<void> {
   await workspaceTransferTickets
     .discardExport({
       actor: entry.actor,
@@ -408,64 +722,37 @@ async function discard(entry: PendingDownload): Promise<void> {
     .catch(() => undefined);
 }
 
-/** Tries once more to cross a pinned read, under an operation id not used before. */
-async function advanceRead(entry: PendingRead): Promise<PendingRead> {
-  const attempt = entry.attempt + 1;
-  const result = await returnRuntimeValue({
-    session: entry.child,
-    operationId: `file-read:${entry.id}:${attempt}`,
-    value: entry.value,
-  });
-  if (result.kind === "admitted") {
-    reportAgentRuntimePendingExport("admitted");
-    return { ...entry, attempt, state: "admitted", value: result.value };
-  }
-  if (result.busy) return { ...entry, attempt };
-  reportAgentRuntimePendingExport("held");
-  return { ...entry, attempt, state: "held", value: result.reason };
+/** The pinned version changed or was swept; the next call pins the current one. */
+function pinnedVersionGone(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    /pinned (version of this file changed or is gone|export changed size)/.test(
+      error.message,
+    )
+  );
 }
 
-/** Crosses more of a pinned download, at most `budgetBytes` of it. */
-async function advanceDownload(
-  entry: PendingDownload,
-  budgetBytes: number,
-): Promise<PendingDownload> {
-  try {
-    const advanced = await workspaceTransferTickets.advanceExport({
-      actor: entry.actor,
-      taskId: entry.taskId,
-      path: entry.path,
-      child: entry.child,
-      operationBase: `file-export:${entry.id}`,
-      progress: entry.progress,
-      budgetBytes,
-    });
-    const attempt = entry.attempt + 1;
-    if (advanced.kind === "waiting") {
-      return { ...entry, attempt, progress: advanced.progress };
-    }
-    reportAgentRuntimePendingExport("admitted");
-    return {
-      ...entry,
-      attempt,
-      state: "admitted",
-      progress: advanced.progress,
-    };
-  } catch (error) {
-    const refusal = crossingRefusal(error);
-    if (refusal === undefined) throw error;
-    reportAgentRuntimePendingExport("held");
-    return { ...entry, state: "held", reason: refusal };
-  }
+/**
+ * Whether the runtime is in a turn. A runtime that stopped mid-call never
+ * reports that call, so its files would wait forever: refuse instead.
+ */
+async function runtimeIsMidTurn(taskId: string): Promise<boolean> {
+  const run = await AgentRunModel.findByTaskId(taskId);
+  if (!run) return false;
+  const workspace = await AgentWorkspaceModel.findByWorkloadName(
+    run.workloadName,
+  );
+  return workspace?.state === "active" && workspace.activeTaskId !== null;
 }
 
-function heldRead(entry: PendingRead): Error {
+function stoppedMidCall(params: { child: OpenAppaSession }): Error {
   return runtimeCrossingRefusal(
     reportCrossingRefusal({
       reason: "held",
-      message: heldFileRefusal(entry.value),
-      childSessionId: entry.child.session_id,
-      parentSessionId: entry.child.parent_id,
+      message:
+        "The runtime stopped in the middle of a tool call that never reported, so Guardrails cannot release its files to this session. Open the run page to read the file there.",
+      childSessionId: params.child.session_id,
+      parentSessionId: params.child.parent_id,
     }),
   );
 }
@@ -476,10 +763,15 @@ function entriesKey(child: OpenAppaSession): AllowedCacheKey {
   )}`;
 }
 
-/** One file of one parent: a later call for the same file finds its entry. */
+/**
+ * One file of one caller in one parent session: a later call for the same
+ * file by the same caller finds its entry, and nobody else does.
+ */
 function entryName(params: {
   kind: "read" | "download";
   child: OpenAppaSession;
+  actor: A2AActor;
+  taskId: string;
   path: string;
   encoding?: string;
 }): string {
@@ -487,6 +779,8 @@ function entryName(params: {
     [
       params.kind,
       params.child.parent_id ?? "",
+      `${params.actor.kind}:${params.actor.id}`,
+      params.taskId,
       params.path,
       params.encoding ?? "",
     ].join("\n"),
@@ -497,10 +791,12 @@ function digest(value: string): string {
   return createHash("sha256").update(value).digest("base64url");
 }
 
-/** Matches the protected export chunk: one drained chunk spends this much. */
-const CHUNK_BYTES = 4 * 1024 * 1024;
 /** What one runtime request spends releasing files, so its own latency stays small. */
-const DRAIN_BUDGET_BYTES = 8 * 1024 * 1024;
-/** Longer than any tool call worth waiting for; the in-pod snapshot lives six hours. */
-const ENTRY_TTL_MS = 2 * 60 * 60 * 1000;
+const DRAIN_DEADLINE_MS = 2_000;
+const DRAIN_READ_BYTES = 8 * 1024 * 1024;
+const MAX_DRAIN_FAILURES = 3;
+/** One tool call worth waiting for; a longer one gets a fresh pin on the next call. */
+const PENDING_TTL_MS = 30 * 60 * 1000;
+/** A crossed file waits this long for the parent's retry, then is read afresh. */
+const DECIDED_TTL_MS = 10 * 60 * 1000;
 const MAX_ENTRIES_PER_RUNTIME = 16;

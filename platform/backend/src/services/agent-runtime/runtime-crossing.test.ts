@@ -1022,8 +1022,12 @@ test("a protected export above the inline size crosses chunk by chunk and is ser
   expect(minted.ticket).not.toHaveProperty("admittedBytes");
   // Every byte crossed as content, in order, each chunk naming its digest.
   expect(crossing.mock.calls.map((call) => call[0].operationId)).toEqual([
-    `file-export:big-export:${sha256}:0/2:1`,
-    `file-export:big-export:${sha256}:1/2:1`,
+    expect.stringMatching(
+      new RegExp(`^file-export:big-export:${sha256}:0/2:[0-9a-f]+$`),
+    ),
+    expect.stringMatching(
+      new RegExp(`^file-export:big-export:${sha256}:1/2:[0-9a-f]+$`),
+    ),
   ]);
   // Bytes that are not text cross as base64; text crosses as text, so a rule
   // that reads content sees what the file says.

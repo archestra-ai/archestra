@@ -15,15 +15,15 @@ export function CreatedByHeader({
 }) {
   if (!createdBy && !createdAt) return null;
   return (
-    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-      <span>Created by</span>
+    <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
+      <span className="shrink-0">Created by</span>
       {createdBy ? (
-        <CreatedByCell createdBy={createdBy} />
+        <CreatedByCell createdBy={createdBy} className="max-w-48" />
       ) : (
         <span>unknown</span>
       )}
       {createdAt && (
-        <span>
+        <span className="shrink-0 whitespace-nowrap">
           ·{" "}
           {formatDate({
             date: new Date(createdAt).toISOString(),

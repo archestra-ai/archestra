@@ -40,7 +40,7 @@ export function SectionNav({
   return (
     <nav
       aria-label={label}
-      className="flex gap-1 overflow-x-auto rounded-lg border border-border bg-card p-1 lg:flex-col lg:overflow-visible"
+      className="flex gap-1 overflow-x-auto rounded-lg border border-border bg-card p-0.5 lg:p-1 lg:flex-col lg:overflow-visible"
     >
       {items.map(({ href, label: itemLabel, Icon, subnav }) => {
         const isActive = href === activeHref;
@@ -50,7 +50,7 @@ export function SectionNav({
               href={href}
               aria-current={isActive && !subnav ? "page" : undefined}
               className={cn(
-                "flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sm transition-colors",
+                "flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md px-3 py-1.5 text-sm transition-colors lg:py-2",
                 isActive && !subnav
                   ? "bg-accent font-medium text-accent-foreground"
                   : isActive

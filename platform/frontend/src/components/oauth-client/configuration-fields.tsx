@@ -200,6 +200,7 @@ export function OAuthClientAdvancedFields({
           <h3 className="font-medium text-sm">Budget</h3>
           {userMode && <UsersPayNotice />}
           <BudgetFields
+            layout="plain"
             subject="client"
             idPrefix="oauth-client-budget"
             showBillingTeam={!userMode}

@@ -222,7 +222,7 @@ export default function SettingsLayout({
         {/* The section list sits beside the content rather than as a tab row
             above it: at sixteen entries the row scrolled sideways, so the
             settings you were not already looking at were off-screen. */}
-        <div className="grid items-start gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+        <div className="-mt-3 grid items-start gap-3 lg:mt-0 lg:gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
           <div className="min-w-0 lg:sticky lg:top-6 lg:max-h-[calc(100dvh-6rem)] lg:overflow-y-auto lg:rounded-lg scrollbar-sidebar">
             <SectionNav
               label="Settings sections"

@@ -218,7 +218,7 @@ export function ProviderKeyList({
       )}
 
       {showList && (
-        <div className="space-y-3 rounded-lg border bg-muted/40 p-3">
+        <div className="@container/provider-keys space-y-3 rounded-lg border bg-muted/40 p-3">
           {noneOn && (
             <div className="space-y-0.5">
               <p className="font-semibold text-sm">Choose providers to use</p>
@@ -293,7 +293,7 @@ export function ProviderKeyList({
                   <div
                     key={line.provider}
                     className={cn(
-                      "flex min-h-10 items-center gap-2 rounded-md border pr-1.5 pl-3",
+                      "grid min-h-10 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 rounded-md border px-3 py-2 @[480px]/provider-keys:flex @[480px]/provider-keys:pr-1.5 @[480px]/provider-keys:py-0",
                       noneOn
                         ? "bg-background"
                         : "border-dashed bg-background/60",
@@ -304,13 +304,14 @@ export function ProviderKeyList({
                       label={line.label}
                       muted={!noneOn}
                     />
-                    <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                    <span className="col-start-1 row-start-2 min-w-0 flex-1 truncate text-xs text-muted-foreground">
                       {key ? keyLine([key]) : null}
                     </span>
                     <Button
                       type="button"
                       variant="outline"
                       size="xs"
+                      className="col-start-2 row-span-2 row-start-1 shrink-0"
                       aria-label={`Add ${line.label}`}
                       onClick={() => addProvider(line.provider)}
                     >
@@ -368,13 +369,13 @@ function ProviderLine({
       description: `${ownerLabel(key)} · ${isSubscriptionKey(key) ? "Subscription" : "Metered"}`,
       checked: several && chosenIds.includes(key.id),
       content: (
-        <span className="flex min-w-0 items-center gap-2">
-          <span className="truncate">{key.name}</span>
+        <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="min-w-0 basis-full break-words">{key.name}</span>
           {key.isPrimary && <PrimaryBadge />}
           {!modelsPending && (
             <span
               className={cn(
-                "ml-auto shrink-0 text-xs tabular-nums",
+                "shrink-0 text-xs tabular-nums",
                 count
                   ? "text-muted-foreground"
                   : "text-amber-700 dark:text-amber-400",
@@ -397,10 +398,10 @@ function ProviderLine({
   });
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 @[480px]/provider-keys:flex">
       <ProviderName provider={provider} label={label} noModels={noModels} />
       <SearchableSelect
-        className="min-w-0 flex-1 bg-background"
+        className="col-span-2 row-start-2 w-full min-w-0 flex-1 bg-background @[480px]/provider-keys:w-auto"
         ariaLabel={`${label} key`}
         value={several ? "" : (chosenIds[0] ?? "")}
         placeholder={summary}
@@ -419,7 +420,7 @@ function ProviderLine({
         type="button"
         variant="ghost"
         size="icon-sm"
-        className="text-muted-foreground"
+        className="col-start-2 row-start-1 shrink-0 text-muted-foreground"
         aria-label={`Stop using ${label}`}
         onClick={onRemove}
       >
@@ -443,7 +444,7 @@ function ProviderName({
   return (
     <span
       className={cn(
-        "flex w-36 shrink-0 items-center gap-2 text-sm",
+        "flex min-w-0 items-center gap-2 text-sm @[480px]/provider-keys:w-36 @[480px]/provider-keys:shrink-0",
         muted ? "text-muted-foreground" : "text-foreground",
       )}
     >

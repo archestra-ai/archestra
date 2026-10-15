@@ -165,28 +165,32 @@ export function TabbedDialogShell<TSection extends string>({
       )}
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <div className="flex min-h-[72px] shrink-0 items-center justify-between gap-4 border-b px-4 py-4">
-          <div className="min-w-0">
-            <DialogTitle className="truncate">{title}</DialogTitle>
+        <div className="grid min-h-[72px] shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 border-b px-4 py-4 md:flex md:gap-4">
+          <div className="min-w-0 flex-1">
+            <DialogTitle className="break-words md:truncate">
+              {title}
+            </DialogTitle>
             {headerDescription && (
               <div className="mt-1 text-sm text-muted-foreground">
                 {headerDescription}
               </div>
             )}
           </div>
-          <div className="flex min-w-0 items-center justify-end gap-3">
-            {headerExtra}
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="shrink-0 rounded-xs opacity-70 hover:opacity-100"
-              onClick={guard.requestClose}
-            >
-              <XIcon className="h-4 w-4" />
-              <span className="sr-only">Close</span>
-            </Button>
-          </div>
+          {headerExtra && (
+            <div className="col-span-2 row-start-2 min-w-0 md:ml-auto">
+              {headerExtra}
+            </div>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="col-start-2 row-start-1 shrink-0 self-start rounded-xs opacity-70 hover:opacity-100 md:self-center"
+            onClick={guard.requestClose}
+          >
+            <XIcon className="h-4 w-4" />
+            <span className="sr-only">Close</span>
+          </Button>
         </div>
 
         {showSidebar &&

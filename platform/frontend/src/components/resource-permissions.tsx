@@ -47,6 +47,7 @@ import {
   useUpdateResourcePermissions,
 } from "@/lib/resource-permissions.query";
 import { getListPermissionsHref } from "@/lib/resource-permissions-links";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
  * The permissions block is a list of people and rules, not another field. It
@@ -469,8 +470,15 @@ function PermissionsEditor({
             data-testid={isOwner ? "owner-grant" : undefined}
             className="grid min-h-9 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 px-2.5 py-2 sm:flex sm:gap-2 sm:py-0"
           >
-            <div className="col-span-2 flex min-w-0 flex-1 flex-col items-start gap-x-2 sm:flex-row sm:flex-wrap sm:items-baseline">
-              <p className="break-words font-medium">{grant.name}</p>
+            <div
+              className={cn(
+                "flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-1",
+                !isOwner && "col-span-2 sm:col-auto",
+              )}
+            >
+              <p className="w-full break-words font-medium sm:w-auto">
+                {grant.name}
+              </p>
               <p className="text-xs text-muted-foreground">
                 {subjectLabels[grant.subject.type]}
               </p>
@@ -481,7 +489,7 @@ function PermissionsEditor({
             {isOwner ? (
               // The owner always keeps their grant: handing the object on is
               // "Make owner" on another person's row, not an edit of this one.
-              <span className="px-2 pr-[3.25rem] text-muted-foreground sm:pr-11">
+              <span className="shrink-0 whitespace-nowrap text-muted-foreground sm:px-2 sm:pr-11">
                 {levelOptions.find(
                   (option) =>
                     option.value === presetFor(grant.actions, policy.resource),

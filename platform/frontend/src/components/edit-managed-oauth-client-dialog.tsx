@@ -220,6 +220,7 @@ export function EditManagedOAuthClientDialog({
         <div hidden={section !== "budget"} className="space-y-4">
           {values.grantType === "authorization_code" && <UsersPayNotice />}
           <BudgetFields
+            layout="plain"
             subject="client"
             idPrefix="edit-oauth-budget"
             showBillingTeam={values.grantType !== "authorization_code"}

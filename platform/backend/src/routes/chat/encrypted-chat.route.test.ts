@@ -31,6 +31,7 @@ import {
 import db from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import MessageModel from "@/models/message";
 import ProjectModel from "@/models/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -123,6 +124,38 @@ describe("encrypted chat routes", () => {
   }
 
   describe("POST /api/chat/conversations (encrypted chat)", () => {
+    test.each([
+      "deployment switch",
+      "feature flag",
+    ])("allows encrypted chat creation when the Guardrails %s is off", async (off) => {
+      config.openappa.enabled = off !== "feature flag";
+      await GuardrailsDeploymentModel.setEnabled(off !== "deployment switch");
+      const id = await createEncryptedChatConversation();
+      expect((await readEncryptedChatRow(id)).encrypted_chat).toBe(true);
+    });
+
+    test("refuses an encrypted chat before saving it when Guardrails enforcement is active", async () => {
+      config.openappa.enabled = true;
+      await GuardrailsDeploymentModel.setEnabled(true);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/chat/conversations",
+        headers: dekHeader(),
+        payload: { agentId, encryptedChat: true },
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json().error.message).toContain(
+        "encrypted policy storage",
+      );
+      const rows = await db.execute(
+        sql`SELECT id FROM conversations WHERE encrypted_chat = true`,
+      );
+      expect(rows.rows).toHaveLength(0);
+      expect(await GuardrailsDeploymentModel.isEnabled()).toBe(true);
+    });
+
     test("rejects a missing or malformed key header", async () => {
       const missing = await app.inject({
         method: "POST",

@@ -1026,6 +1026,52 @@ describe("ArchestraPromptInput", () => {
   });
 
   describe("encrypted-chat composer", () => {
+    it("lets the user turn off an encrypted draft after Guardrails is activated", () => {
+      mockFeatureState.encryptedChatEnabled = true;
+      queryClient.setQueryData(["guardrails-deployment"], { active: true });
+      const onEncryptedChatChange = vi.fn();
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          encryptedChat
+          onEncryptedChatChange={onEncryptedChatChange}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Encrypted chat" }));
+      expect(onEncryptedChatChange).toHaveBeenCalledWith(false);
+    });
+
+    it("explains why encrypted chat is unavailable with active Guardrails without toggling the draft", () => {
+      mockFeatureState.encryptedChatEnabled = true;
+      queryClient.setQueryData(["guardrails-deployment"], {
+        enabled: true,
+        featureEnabled: true,
+        active: true,
+      });
+      const onEncryptedChatChange = vi.fn();
+      render(
+        <ArchestraPromptInput
+          {...defaultProps}
+          onEncryptedChatChange={onEncryptedChatChange}
+        />,
+      );
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Encrypted chat (unavailable)" }),
+      );
+      expect(
+        screen.getByText(/unavailable while Guardrails enforcement is on/),
+      ).toBeInTheDocument();
+      expect(onEncryptedChatChange).not.toHaveBeenCalled();
+
+      const shortcut = new Event(ENCRYPTED_CHAT_DRAFT_SHORTCUT_EVENT, {
+        cancelable: true,
+      });
+      act(() => window.dispatchEvent(shortcut));
+      expect(shortcut.defaultPrevented).toBe(true);
+      expect(onEncryptedChatChange).not.toHaveBeenCalled();
+    });
+
     it("keeps the attach button usable and shows the explainer drawer while the new-chat toggle is on", () => {
       render(
         <ArchestraPromptInput

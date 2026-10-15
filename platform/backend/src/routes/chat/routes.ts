@@ -2959,6 +2959,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         user,
         organizationId,
       } = request;
+      // The stream and proxy already refuse this combination. Refuse before
+      // creating a conversation (or wrapping its key), rather than leaving an
+      // empty encrypted chat that cannot accept its first message.
+      if (encryptedChat && (await isGuardrailsV2Active())) {
+        throw new ApiError(
+          409,
+          "OpenAPPA does not yet support encrypted policy storage for encrypted chats",
+        );
+      }
       // Encrypted chats stay out of projects: a project lists its chats to
       // everyone it is shared with, so a locked one would sit in a shared
       // space advertising a conversation none of them can open.

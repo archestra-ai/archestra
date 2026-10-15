@@ -771,7 +771,7 @@ WITH holders AS (
   FROM organization o
   CROSS JOIN (VALUES
     ('project'), ('plugin'), ('llmVirtualKey'), ('llmProviderApiKey'),
-    ('knowledgeSource'), ('scheduledTask'),
+    ('knowledgeSource'),
     ('mcpOauthClient'), ('llmOauthClient')
   ) AS source(role_action)
   JOIN LATERAL (
@@ -1040,7 +1040,7 @@ WITH converted AS (
       WHEN resource IN (
         'agent', 'mcpGateway', 'mcpRegistry', 'skill', 'app',
         'project', 'plugin', 'llmVirtualKey', 'llmProviderApiKey',
-        'knowledgeSource', 'scheduledTask',
+        'knowledgeSource',
         'mcpServerInstallation', 'mcpOauthClient', 'llmOauthClient'
       ) THEN
         COALESCE((SELECT jsonb_agg(action ORDER BY ordinal)

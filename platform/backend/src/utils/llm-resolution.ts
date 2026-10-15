@@ -510,6 +510,26 @@ export function modelOutputBudget(params: {
 }
 
 /**
+ * The output cap to send for a call that set none, or undefined to leave the
+ * provider's own default, which can spend whatever window the prompt leaves.
+ * Only a cap separate from the context window is safe to reserve; Anthropic
+ * always gets one, since its API requires `max_tokens` and its SDK's own
+ * fallback table lags new model ids.
+ */
+export function defaultMaxOutputTokens(
+  provider: SupportedProvider,
+  budget: ModelOutputBudget,
+): number | undefined {
+  switch (budget.kind) {
+    case "catalogued":
+      return budget.tokens;
+    case "shared-window":
+    case "uncatalogued":
+      return provider === "anthropic" ? budget.tokens : undefined;
+  }
+}
+
+/**
  * `catalogued`: the catalog knows an output cap separate from the context
  * window. `shared-window`: the output draws on the prompt's window, so any
  * fixed reservation can push a long prompt over it. `uncatalogued`: the

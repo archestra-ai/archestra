@@ -10,6 +10,7 @@ import {
   TRUNCATION_RETRY_FACTOR,
 } from "@/utils/generate-tagged-text";
 import {
+  defaultMaxOutputTokens,
   resolveAgentLlmOrDefault,
   resolveModelOutputBudget,
 } from "@/utils/llm-resolution";
@@ -85,14 +86,17 @@ class OpenAppaArchestraAnnotator {
     });
     // A fraction of the model's budget, so the truncation retry's extra room
     // still fits under the model's real output cap.
-    const maxOutputTokens = Math.floor(
-      (
-        await resolveModelOutputBudget({
-          provider: selection.provider,
-          modelName: selection.modelName,
-        })
-      ).tokens / TRUNCATION_RETRY_FACTOR,
+    const budget = defaultMaxOutputTokens(
+      selection.provider,
+      await resolveModelOutputBudget({
+        provider: selection.provider,
+        modelName: selection.modelName,
+      }),
     );
+    const maxOutputTokens =
+      budget === undefined
+        ? undefined
+        : Math.floor(budget / TRUNCATION_RETRY_FACTOR);
     try {
       const text = await generateTaggedText({
         model,

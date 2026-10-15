@@ -79,7 +79,10 @@ import { APPA_SUBAGENT_BINDING_HEADER } from "@/openappa/subagent-binding";
 import { ApiError } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
-import { resolveModelOutputBudget } from "@/utils/llm-resolution";
+import {
+  defaultMaxOutputTokens,
+  resolveModelOutputBudget,
+} from "@/utils/llm-resolution";
 
 /**
  * Placeholder API key for providers that don't require authentication (vLLM, Ollama).
@@ -1248,12 +1251,9 @@ function createOllamaNativeFetch(
 }
 
 /**
- * Default output budget for calls that set no `maxOutputTokens`. When the
- * model catalog knows an output cap separate from the context window, every
- * provider gets the catalog budget (see modelOutputBudget), so a model that
- * reasons by default never runs into a small provider or SDK default.
- * Otherwise the provider's own default stands, since it can spend the
- * prompt's leftover window, except for Anthropic: its SDK substitutes a per-model
+ * Default output budget for calls that set no `maxOutputTokens` (see
+ * defaultMaxOutputTokens), so a model that reasons by default never runs into
+ * a small provider or SDK default. Anthropic matters most: its SDK substitutes a per-model
  * table that lags new model ids and Vertex `@` spellings (4096 for unknown
  * ids on older SDKs, 128k on newer ones, which older models reject), so it
  * gets the safe fallback. Explicit per-call values still win.
@@ -1271,16 +1271,13 @@ function withCatalogOutputBudget(
       specificationVersion: "v3",
       transformParams: async ({ params }) => {
         if (params.maxOutputTokens !== undefined) return params;
-        const budget = await resolveModelOutputBudget(target);
-        switch (budget.kind) {
-          case "catalogued":
-            return { ...params, maxOutputTokens: budget.tokens };
-          case "shared-window":
-          case "uncatalogued":
-            return target.provider === "anthropic"
-              ? { ...params, maxOutputTokens: budget.tokens }
-              : params;
-        }
+        const maxOutputTokens = defaultMaxOutputTokens(
+          target.provider,
+          await resolveModelOutputBudget(target),
+        );
+        return maxOutputTokens === undefined
+          ? params
+          : { ...params, maxOutputTokens };
       },
     },
   });

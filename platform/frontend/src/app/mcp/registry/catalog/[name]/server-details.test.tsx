@@ -4,7 +4,7 @@ import { expect, it } from "vitest";
 import { ServerDetails } from "./server-details";
 
 it("keeps remote connection details and configuration available without a README or repository", () => {
-  const server: archestraCatalogTypes.ArchestraMcpServerManifest = {
+  const server = {
     name: "example__remote-mcp",
     display_name: "Example server",
     description: "A remote server",
@@ -28,7 +28,7 @@ it("keeps remote connection details and configuration available without a README
         default: "https://example.com",
       },
     },
-  };
+  } satisfies archestraCatalogTypes.ArchestraMcpServerManifest;
 
   render(<ServerDetails server={server} />);
 

@@ -1217,6 +1217,9 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
               isOrganizationToken: tokenAuth.isOrganizationToken,
               organizationId: tokenAuth.organizationId,
               ...(tokenAuth.userId && { userId: tokenAuth.userId }),
+              ...(tokenAuth.serviceAccountId && {
+                serviceAccountId: tokenAuth.serviceAccountId,
+              }),
               ...(tokenAuth.oauthClientId && {
                 oauthClientId: tokenAuth.oauthClientId,
               }),
@@ -1244,6 +1247,12 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
         organizationId: tokenAuth.organizationId,
         ...(tokenAuth.isUserToken && { isUserToken: true }),
         ...(tokenAuth.userId && { userId: tokenAuth.userId }),
+        // The account, not its team, is who acts: runtime binding and run
+        // ownership checks, call-time credentials, and tool permissions all
+        // read it.
+        ...(tokenAuth.serviceAccountId && {
+          serviceAccountId: tokenAuth.serviceAccountId,
+        }),
         ...(tokenAuth.isExternalIdp && { isExternalIdp: true }),
         ...(tokenAuth.rawToken && { rawToken: tokenAuth.rawToken }),
         ...(tokenAuth.oauthClientId && {

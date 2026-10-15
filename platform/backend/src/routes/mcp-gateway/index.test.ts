@@ -39,6 +39,7 @@ import {
   AppModel,
   McpServerModel,
   McpToolCallModel,
+  ServiceAccountModel,
   TeamTokenModel,
   ToolModel,
   UserTokenModel,
@@ -248,6 +249,53 @@ describe("MCP Gateway (stateless mode)", () => {
         agentId: agent.id,
         method: "initialize",
         runId,
+      }),
+    ]);
+  });
+
+  test("records a service account key's call as that account, not a team token", async ({
+    makeAgent,
+    makeOrganization,
+    makeServiceAccount,
+  }) => {
+    const organization = await makeOrganization();
+    const agent = await makeAgent({ organizationId: organization.id });
+    const account = await makeServiceAccount(organization.id);
+    const { token } = await ServiceAccountModel.createToken({
+      serviceAccountId: account.id,
+      organizationId: organization.id,
+      name: "test key",
+    });
+    const runId = crypto.randomUUID();
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: { ...makeMcpHeaders(token), "x-archestra-run-id": runId },
+      payload: {
+        jsonrpc: "2.0",
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "automation", version: "1.0.0" },
+        },
+        id: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const rows = await McpToolCallModel.findAllPaginated(
+      { limit: 10, offset: 0 },
+      undefined,
+      undefined,
+      undefined,
+      { search: runId },
+    );
+    expect(rows.data).toEqual([
+      expect.objectContaining({
+        method: "initialize",
+        authMethod: "service_account_token",
       }),
     ]);
   });

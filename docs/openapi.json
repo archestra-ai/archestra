@@ -312628,6 +312628,7 @@
                               "user_token",
                               "org_token",
                               "team_token",
+                              "service_account_token",
                               "external_idp",
                               "session"
                             ]
@@ -313099,6 +313100,7 @@
                         "user_token",
                         "org_token",
                         "team_token",
+                        "service_account_token",
                         "external_idp",
                         "session"
                       ]

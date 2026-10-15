@@ -23,6 +23,18 @@ export type NativeSessionClientId = keyof typeof NATIVE_SESSION_CLIENT_LABELS;
 
 export const CONNECTION_SETUP_WINDOW_MS = 10 * 60 * 1000;
 
+/**
+ * Upper bound on skills bundled into one connection-setup command. Matches the
+ * share-link POST cap and the static marketplace serve cap so including every
+ * org skill at /connection is not rejected by a tighter create-setup schema.
+ * The Connect page checks it too, so it can explain a selection over the cap
+ * instead of sending a request the backend refuses.
+ */
+export const CONNECTION_SETUP_MAX_SKILLS = 500;
+
+/** Upper bound on plugins delivered by one setup or share link. */
+export const PLUGIN_DELIVERY_MAX_COUNT = 555;
+
 /** Parts of a setup the user can leave out on the connect page's review step. */
 export const CONNECT_SETUP_PARTS = [
   "tools",

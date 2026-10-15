@@ -247,8 +247,11 @@ export async function extractPdfText(params: {
 /** At most this many single-page transcription requests run concurrently. */
 const OCR_PAGE_CONCURRENCY = 4;
 
-/** Transcription of one page comfortably fits; bounds a runaway response. */
-const OCR_MAX_OUTPUT_TOKENS = 4_096;
+/**
+ * Transcription of one dense page plus any thinking the model does by default
+ * fits; bounds a runaway response.
+ */
+const OCR_MAX_OUTPUT_TOKENS = 16_384;
 
 /** A single extracted page larger than this is skipped, not sent. */
 const OCR_MAX_SUB_PDF_BYTES = 8 * 1024 * 1024;
@@ -308,7 +311,10 @@ async function transcribePage(params: {
             ],
           },
         ],
-        maxOutputTokens: OCR_MAX_OUTPUT_TOKENS,
+        maxOutputTokens: Math.min(
+          OCR_MAX_OUTPUT_TOKENS,
+          ocr.config.maxOutputTokens,
+        ),
         maxRetries: 1,
         abortSignal: AbortSignal.timeout(OCR_REQUEST_TIMEOUT_MS),
       }),

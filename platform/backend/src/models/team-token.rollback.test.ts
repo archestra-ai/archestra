@@ -427,16 +427,23 @@ describe("TeamTokenModel", () => {
     }) => {
       const org = await makeOrganization();
       const otherOrg = await makeOrganization();
+      // Token creation uses the deployment's single-organization selection;
+      // an unordered LIMIT 1 does not promise fixture insertion order.
+      const { token: organizationToken } =
+        await TeamTokenModel.createOrganizationToken();
+      const organizationId = organizationToken.organizationId;
+      const otherOrganizationId =
+        organizationId === org.id ? otherOrg.id : org.id;
       const user = await makeUser();
-      const team = await makeTeam(org.id, user.id);
-      const otherTeam = await makeTeam(otherOrg.id, user.id);
+      const team = await makeTeam(organizationId, user.id);
+      const otherTeam = await makeTeam(otherOrganizationId, user.id);
 
-      expect(await TeamTokenModel.ensureTeamTokensForOrganization(org.id)).toBe(
-        1,
-      );
+      expect(
+        await TeamTokenModel.ensureTeamTokensForOrganization(organizationId),
+      ).toBe(1);
       expect(await TeamTokenModel.findTeamToken(team.id)).toMatchObject({
         teamId: team.id,
-        organizationId: org.id,
+        organizationId,
       });
       expect(await TeamTokenModel.findTeamToken(otherTeam.id)).toBeNull();
     });

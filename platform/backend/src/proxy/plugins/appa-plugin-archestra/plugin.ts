@@ -163,7 +163,11 @@ import {
   type NativeQuestionNoAnswer,
   type NativeQuestionReading,
 } from "./types";
-import { withCallerScope, withoutCallerScope } from "./utils";
+import {
+  withCallerScope,
+  withoutCallerScope,
+  withoutRemedySections,
+} from "./utils";
 
 type AppaPluginBinding = {
   /** The request continues a provider thread that holds the system prompt. */
@@ -478,6 +482,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         toolCallIds: [...runtimeSpawns],
       },
     );
+    // A call whose annotator gave no answer never ran, and the runtime has no
+    // record of it. Its result is the notice the client ran in its place, so
+    // it is answered with that notice instead of being ruled on as a call.
+    const unansweredNotices = new Map<string, string>();
+    for (const answer of results) {
+      const notice = await cacheManager.get<string>(
+        unansweredNoticeKey({ session: governed, callId: answer.id }),
+      );
+      if (typeof notice === "string") unansweredNotices.set(answer.id, notice);
+    }
     // The runtime withholds the output of a spawn that failed. What the gateway
     // recorded about the launch is not that output, so it is restored after.
     const failedLaunchResults: Record<string, string> = {};
@@ -487,7 +501,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           !binding.adapter?.isChildHandbackTool?.(result.name) &&
           !binding.adapter?.isRelayTool?.(result.name) &&
           !isPeerInboxResult(binding, result.name, result.namespace) &&
-          !childReturns.ignored.has(result.id),
+          !childReturns.ignored.has(result.id) &&
+          !unansweredNotices.has(result.id),
       )
       // An answer to an issued question is recognized as the very result the
       // client sent, so a result nothing rewrote goes on as that object.
@@ -545,6 +560,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         binding.returnContract = text;
       },
     });
+    for (const [id, notice] of unansweredNotices)
+      result.toolResultUpdates[id] = {
+        content: notice,
+        outputSource: "runtime",
+        denied: true,
+      };
     for (const answer of toolResults) {
       // Read, not consumed: the client sends this result on every later
       // request, and the model must read the same text each time.
@@ -1303,6 +1324,17 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const decisionById = new Map(
       rest.map((call, index) => [call.id, decisions[index]]),
     );
+    for (const [id, decision] of decisionById) {
+      // Only the notice of this call runs. The runtime holds no record of the
+      // call, so the result the client sends back is answered from here and
+      // never ruled on as a call that ran.
+      if (decision.kind === "deny" && decision.unanswered)
+        await cacheManager.set(
+          unansweredNoticeKey({ session, callId: id }),
+          decision.feedback,
+          TimeInMs.Day,
+        );
+    }
     for (const [id, feedback] of notLoaded) {
       decisionById.set(id, { kind: "deny", feedback });
       // The runtime holds no record of this call, so the result the client
@@ -1538,18 +1570,22 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             ruling: decision.feedback,
           });
         }
-        // A call that only needs loading gets that one instruction.
+        // A call that only needs loading gets that one instruction. A client
+        // that defers tools can still load the remedy tools and act on the
+        // plans. Any other session cannot act on them, so the ruling loses its
+        // plan and delegation sections: the model would otherwise pass them
+        // on to the person as options.
+        // A ruling with no plan can still advise a subagent route, which the
+        // runtime renders whether or not it offers a plan; here it is cut too.
         const contentMessage = notLoaded.has(call.id)
           ? decision.feedback
-          : noPlan
-            ? ruling
-            : transient
-              ? `${ruling}\n\n[appa] This request did not include the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the ruling could not be offered as a remedy and the call is refused. The gateway tools usually finish loading a moment after the session starts. Send your message again.`
-              : binding.request.defersTools
-                ? `${ruling}\n\n[appa] This client defers tools it has not loaded, and the ${archestraMcpBranding.serverName} MCP gateway remedy tools are not loaded in this session, so the ruling could not be offered as a remedy and the call is refused. Search for ${TOOL_GET_REMEDY_PLANS_SHORT_NAME} and ${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME} with your tool search, then call the denied tool again to receive the remedy.`
-                : binding.request.declaredTools.length === 0
-                  ? `${ruling}\n\n[appa] This request listed no tools, so the ruling could not be offered as a remedy and the call is refused. Remedies need the ${archestraMcpBranding.serverName} MCP gateway tools in the request. Connect the gateway, then start a new session. In Codex, also set code_mode_host = false: code mode keeps its tools out of the request.`
-                  : `${ruling}\n\n[appa] This client did not declare the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the call is refused. Connect the MCP gateway and allow both remedy tools to use approval plans.`;
+          : binding.request.defersTools
+            ? noPlan
+              ? ruling
+              : `${ruling}\n\n[appa] This client defers tools it has not loaded, and the ${archestraMcpBranding.serverName} MCP gateway remedy tools are not loaded in this session, so the ruling could not be offered as a remedy and the call is refused. Search for ${TOOL_GET_REMEDY_PLANS_SHORT_NAME} and ${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME} with your tool search, then call the denied tool again to receive the remedy.`
+            : noPlan
+              ? `${withoutRemedySections(decision.feedback)}${clarification}${NO_REMEDY_PLAN_HINT}`
+              : `${withoutRemedySections(decision.feedback)}${clarification}\n\n${remedylessRefusalNote({ binding, transient })}`;
         return {
           decision: "refuse",
           refusal: {
@@ -2008,6 +2044,30 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
 const NO_REMEDY_PLAN_HINT =
   "\n\n[appa] This ruling offers no remedy plan. Explain the ruling to the user and STOP this blocked action. Do not retry the same call, directly or through a wrapper.";
 
+/**
+ * Why a refused call got no remedy, and what the person does about it. The
+ * client's adapter knows where its gateway state is seen and how to sign in.
+ * Without one, the first miss in a session is read as tools still loading.
+ */
+function remedylessRefusalNote(params: {
+  binding: AppaPluginBinding;
+  transient: boolean;
+}): string {
+  const server = archestraMcpBranding.serverName;
+  // A request with no tools at all is not a gateway that is still loading or
+  // needs a sign-in. The client known to send one is Codex in code mode, which
+  // runs its tools outside the request, so the text names its setting.
+  if (params.binding.request.declaredTools.length === 0) {
+    return `[appa] This request listed no tools, so the ruling could not be offered as a remedy and the call is refused. Remedies need the ${server} MCP gateway tools in the request. Connect the gateway, then start a new session. In Codex, also set code_mode_host = false: code mode keeps its tools out of the request.`;
+  }
+  const lead = `[appa] This request did not include the ${server} MCP gateway tools, so no remedy plan can be used in this session, and a subagent started from it has the same limit. The call is refused.`;
+  const hint = params.binding.adapter?.gatewayToolsHint?.(server);
+  if (hint) return `${lead} ${hint}`;
+  return params.transient
+    ? `${lead} The gateway tools usually finish loading a moment after the session starts. Send your message again.`
+    : `${lead} Connect this client to the ${server} MCP gateway, then start a new session.`;
+}
+
 function deniedCallClarificationKey(params: {
   session: OpenAppaSession;
   callId: string;
@@ -2029,6 +2089,15 @@ function waitFailure(wait: CommonToolResult): string {
       ? wait.content
       : JSON.stringify(wait.content);
   return ` The wait itself failed, and the client reported:\n${reported}\n`;
+}
+
+function unansweredNoticeKey(params: {
+  session: OpenAppaSession;
+  callId: string;
+}): AllowedCacheKey {
+  return `${CacheKey.OpenAppaUnansweredAnnotationNotice}-${Buffer.from(
+    `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.callId)}`,
+  ).toString("base64url")}`;
 }
 
 function notLoadedRulingKey(params: {

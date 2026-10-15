@@ -102,10 +102,10 @@ jobs:
   # Publishes an exact-source cache of backend NAPI binaries on main so fresh
   # PR and merge-group runs can skip the much larger Cargo target restore.
   # On a miss, the existing Cargo cache and build remain the fallback.
-  # See the shard job in on-pull-requests.yml for the consumer.
+  # See backend-test-dependencies in on-pull-requests.yml for the consumer.
   warm-backend-build-cache:
     name: Warm Backend Build Cache
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     concurrency:
       group: on-commits-to-main-warm-backend-cache
@@ -134,7 +134,7 @@ jobs:
         id: native-cache
         uses: ./.github/actions/cache-backend-napi
 
-      # shared-key must stay identical to the shard job's.
+      # shared-key must stay identical to the backend preparation job's.
       - name: Cache cargo registry and target on native cache miss
         if: steps.native-cache.outputs.usable != 'true'
         uses: ./.github/actions/setup-rust-build
@@ -142,7 +142,7 @@ jobs:
           workspaces: platform/archestra-rs
           shared-key: backend-unit-tests
 
-      # Retry pattern mirrors the shard job (rustup race on cold cargo builds).
+      # Retry pattern mirrors backend preparation (rustup race on cold builds).
       - name: Build backend workspace dependencies
         if: steps.native-cache.outputs.usable != 'true'
         run: |

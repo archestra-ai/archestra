@@ -1478,17 +1478,27 @@ class InteractionModel {
     const access = await InteractionModel.buildSessionConditions(
       requestingUserId,
       isAgentAdmin,
-      filters,
+      filters ? { ...filters, organizationId: undefined } : undefined,
     );
     if (access === SESSION_ACCESS_DENIED) {
       return emptyPage();
     }
-    const whereClause = access;
+    const whereClause = filters?.organizationId
+      ? and(access, interactionBelongsToOrganization(filters.organizationId))
+      : access;
+    const headWhereClause = filters?.organizationId
+      ? and(
+          access,
+          InteractionModel.sessionHeadOrganizationCondition(
+            filters.organizationId,
+          ),
+        )
+      : access;
 
     // One row past the page is fetched so its presence can answer "is there
     // another page" — the job the total count used to do.
     const heads = await InteractionModel.findSessionHeadsForCursor(
-      whereClause,
+      headWhereClause,
       cursorQuery,
     );
     const hasNext = heads.length > cursorQuery.limit;
@@ -1641,6 +1651,28 @@ class InteractionModel {
     }
 
     return conditions.length > 0 ? and(...conditions) : undefined;
+  }
+
+  /**
+   * A bounded head scan should probe owner primary keys, rather than build the
+   * organization's complete owner sets before it can return its first page.
+   * Scalar subqueries prevent PostgreSQL from rewriting EXISTS into hashed
+   * full-roster scans. Missing owners fail closed, as in the shared predicate.
+   */
+  private static sessionHeadOrganizationCondition(organizationId: string): SQL {
+    const t = schema.interactionsTable;
+    const agent = schema.agentsTable;
+    const connector = schema.knowledgeBaseConnectorsTable;
+    const app = schema.appsTable;
+    const agentBelongs = sql`COALESCE((SELECT ${agent.organizationId} = ${organizationId} FROM ${agent} WHERE ${agent.id} = ${t.profileId}), false)`;
+    const connectorBelongs = sql`COALESCE((SELECT ${connector.organizationId} = ${organizationId} FROM ${connector} WHERE ${connector.id} = ${t.connectorId}), false)`;
+    const appBelongs = sql`COALESCE((SELECT ${app.organizationId} = ${organizationId} FROM ${app} WHERE ${app.id} = ${t.appId}), false)`;
+    return and(
+      or(agentBelongs, connectorBelongs, appBelongs),
+      or(sql`${t.profileId} IS NULL`, agentBelongs),
+      or(sql`${t.connectorId} IS NULL`, connectorBelongs),
+      or(sql`${t.appId} IS NULL`, appBelongs),
+    ) as SQL;
   }
 
   /**

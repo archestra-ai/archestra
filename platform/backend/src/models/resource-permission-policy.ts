@@ -28,6 +28,7 @@ import {
   sql,
 } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
+import { idArrayCondition } from "./id-array-condition";
 import type { GrantPrincipal } from "./resource-permission-subject";
 import RoleCompositionModel from "./role-composition";
 
@@ -783,7 +784,7 @@ export default class ResourcePermissionPolicyModel {
         and(
           eq(table.organizationId, params.organizationId),
           eq(table.resource, params.resource),
-          inArray(table.scope, params.scopes),
+          idArrayCondition(table.scope, params.scopes),
         ),
       );
     const byScope = new Map(policies.map((policy) => [policy.scope, policy]));
@@ -817,7 +818,7 @@ export default class ResourcePermissionPolicyModel {
       .where(
         and(
           inArray(table.resource, params.resources),
-          inArray(table.scope, params.scopes),
+          idArrayCondition(table.scope, params.scopes),
         ),
       );
     for (const policy of policies) {
@@ -870,7 +871,7 @@ export default class ResourcePermissionPolicyModel {
         : db
             .select({ id: schema.teamsTable.id, name: schema.teamsTable.name })
             .from(schema.teamsTable)
-            .where(inArray(schema.teamsTable.id, teamIds)),
+            .where(idArrayCondition(schema.teamsTable.id, teamIds)),
       userIds.length === 0
         ? []
         : db
@@ -880,7 +881,7 @@ export default class ResourcePermissionPolicyModel {
               email: schema.usersTable.email,
             })
             .from(schema.usersTable)
-            .where(inArray(schema.usersTable.id, userIds)),
+            .where(idArrayCondition(schema.usersTable.id, userIds)),
     ]);
     const teamById = new Map(teams.map((team) => [team.id, team]));
     const userById = new Map(users.map((user) => [user.id, user]));
@@ -934,27 +935,9 @@ export default class ResourcePermissionPolicyModel {
     return rows.map((row) => row.scope).filter((scope) => scope !== "*");
   }
 
-  /**
-   * Whether the object in `scopeColumn` has a policy that grants read to the
-   * team in `teamColumn`. The join condition that replaces joining through a
-   * retired team assignment table.
-   */
-  static grantsReadToTeamColumn(params: {
-    organizationId: SQLWrapper;
-    resource: ScopedResource | SQLWrapper;
-    scopeColumn: SQLWrapper;
-    teamColumn: SQLWrapper;
-  }) {
-    return sql<boolean>`EXISTS (
-      SELECT 1 FROM resource_permission_policies team_policy,
-        jsonb_array_elements(team_policy.grants) team_entry
-      WHERE team_policy.organization_id = ${params.organizationId}
-        AND team_policy.resource = ${params.resource}
-        AND team_policy.scope = ${params.scopeColumn}::text
-        AND (team_entry->'actions') ? 'read'
-        AND team_entry->'subject'->>'type' = 'team'
-        AND team_entry->'subject'->>'id' = ${params.teamColumn}::text
-    )`;
+  /** The direct team-read grant predicate shared by team attribution queries. */
+  static teamReadGrantCondition(entry: SQLWrapper) {
+    return sql`(${entry}->'actions') ? 'read' AND ${entry}->'subject'->>'type' = 'team'`;
   }
 
   /**

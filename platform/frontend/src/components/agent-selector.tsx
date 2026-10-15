@@ -156,8 +156,8 @@ function SingleAgentSelector({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const selectedAgent = agents.find((agent) => agent.id === value);
   const isSentinelSelected = sentinelOption?.value === value;
-  const groupedAgents = useGroupedAgents(agents, search);
-  const visibleAgents = useVisibleAgents(agents, search);
+  const { groupedAgents, visibleAgents, page, total, setPage } =
+    usePagedAgentChoices({ agents, search, flat: flat === true });
 
   const handleSelect = (agentId: string) => {
     onValueChange(agentId);
@@ -230,7 +230,10 @@ function SingleAgentSelector({
         <Command shouldFilter={false} className="min-h-0">
           <CommandInput
             value={search}
-            onValueChange={setSearch}
+            onValueChange={(value) => {
+              setSearch(value);
+              setPage(0);
+            }}
             placeholder={searchPlaceholder}
           />
           {hint && (
@@ -277,6 +280,11 @@ function SingleAgentSelector({
             )}
           </CommandList>
         </Command>
+        <AgentSelectorPagination
+          page={page}
+          total={total}
+          onPageChange={setPage}
+        />
       </PopoverContent>
     </Popover>
   );
@@ -302,8 +310,8 @@ function MultiAgentSelector({
   const anchorRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef(false);
   const selectedAgents = agents.filter((agent) => value.includes(agent.id));
-  const groupedAgents = useGroupedAgents(agents, search);
-  const visibleAgents = useVisibleAgents(agents, search);
+  const { groupedAgents, visibleAgents, page, total, setPage } =
+    usePagedAgentChoices({ agents, search, flat: flat === true });
   const allAgentIds = agents.map((agent) => agent.id);
   const allSelected =
     !!allOption &&
@@ -423,7 +431,10 @@ function MultiAgentSelector({
         <Command shouldFilter={false} className="min-h-0">
           <CommandInput
             value={search}
-            onValueChange={setSearch}
+            onValueChange={(value) => {
+              setSearch(value);
+              setPage(0);
+            }}
             placeholder={searchPlaceholder}
           />
           <CommandList
@@ -483,6 +494,11 @@ function MultiAgentSelector({
             )}
           </CommandList>
         </Command>
+        <AgentSelectorPagination
+          page={page}
+          total={total}
+          onPageChange={setPage}
+        />
         {createAction && (
           <div className="border-t p-1">
             <Button
@@ -652,6 +668,78 @@ function AgentSelectorRow({
       ) : null}
     </span>
   );
+}
+
+const AGENT_SELECTOR_PAGE_SIZE = 100;
+
+function AgentSelectorPagination({
+  page,
+  total,
+  onPageChange,
+}: {
+  page: number;
+  total: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (total <= AGENT_SELECTOR_PAGE_SIZE) return null;
+  return (
+    <div className="flex items-center justify-between gap-2 border-t p-2">
+      <Button
+        size="sm"
+        variant="outline"
+        aria-label="Previous agents"
+        disabled={page === 0}
+        onClick={() => onPageChange(page - 1)}
+      >
+        Previous
+      </Button>
+      <span className="text-xs text-muted-foreground">
+        {page + 1} / {Math.ceil(total / AGENT_SELECTOR_PAGE_SIZE)}
+      </span>
+      <Button
+        size="sm"
+        variant="outline"
+        aria-label="Next agents"
+        disabled={(page + 1) * AGENT_SELECTOR_PAGE_SIZE >= total}
+        onClick={() => onPageChange(page + 1)}
+      >
+        Next
+      </Button>
+    </div>
+  );
+}
+
+function usePagedAgentChoices({
+  agents,
+  search,
+  flat,
+}: {
+  agents: AgentSelectorAgent[];
+  search: string;
+  flat: boolean;
+}) {
+  const [requestedPage, setPage] = useState(0);
+  const matches = useVisibleAgents(agents, search);
+  const ordered = useMemo(
+    () =>
+      flat
+        ? matches
+        : [
+            ...matches.filter((agent) => agent.agentType === "agent"),
+            ...matches.filter((agent) => agent.agentType === "mcp_gateway"),
+          ],
+    [matches, flat],
+  );
+  const page = Math.min(
+    requestedPage,
+    Math.max(0, Math.ceil(ordered.length / AGENT_SELECTOR_PAGE_SIZE) - 1),
+  );
+  const visibleAgents = ordered.slice(
+    page * AGENT_SELECTOR_PAGE_SIZE,
+    (page + 1) * AGENT_SELECTOR_PAGE_SIZE,
+  );
+  const groupedAgents = useGroupedAgents(visibleAgents, "");
+  return { visibleAgents, groupedAgents, page, total: ordered.length, setPage };
 }
 
 function useVisibleAgents(agents: AgentSelectorAgent[], search: string) {

@@ -1888,6 +1888,80 @@ describe("agent routes", () => {
       expect((await findAgent("&includeTools=true")).tools).toHaveLength(1);
     });
 
+    test("selector options preserve authorized identities without loading editing content", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+      makeOrganization,
+    }) => {
+      const agent = await makeAgent({
+        organizationId,
+        agentType: "agent",
+        authorId: user.id,
+        name: "Selectable Agent",
+        systemPrompt: "Configuration content",
+        icon: `data:image/png;base64,${"A".repeat(2048)}`,
+      });
+      const tool = await makeTool({});
+      await makeAgentTool(agent.id, tool.id);
+      const query = "?excludeBuiltIn=true&agentType=agent";
+      const full = await app.inject({
+        method: "GET",
+        url: `/api/agents/all${query}`,
+      });
+      const options = await app.inject({
+        method: "GET",
+        url: `/api/agents/options${query}`,
+      });
+      expect(options.statusCode, options.body).toBe(200);
+      expect(
+        options
+          .json()
+          .map((row: { id: string }) => row.id)
+          .sort(),
+      ).toEqual(
+        full
+          .json()
+          .map((row: { id: string }) => row.id)
+          .sort(),
+      );
+      const option = options
+        .json()
+        .find((row: { id: string }) => row.id === agent.id);
+      expect(option).toMatchObject({
+        id: agent.id,
+        name: agent.name,
+        scope: agent.scope,
+        icon: null,
+      });
+      for (const field of [
+        "systemPrompt",
+        "tools",
+        "users",
+        "labels",
+        "knowledgeBaseIds",
+        "connectorIds",
+        "suggestedPrompts",
+      ])
+        expect(option).not.toHaveProperty(field);
+      expect(
+        full.json().find((row: { id: string }) => row.id === agent.id),
+      ).toMatchObject({ systemPrompt: "Configuration content" });
+      const foreignOrg = await makeOrganization();
+      const foreign = await makeAgent({
+        organizationId: foreignOrg.id,
+        agentType: "agent",
+      });
+      const selected = await app.inject({
+        method: "GET",
+        url: `/api/agents/options${query}&ids=${agent.id},${foreign.id}`,
+      });
+      expect(selected.statusCode, selected.body).toBe(200);
+      expect(selected.json().map((row: { id: string }) => row.id)).toEqual([
+        agent.id,
+      ]);
+    });
+
     test("returns a compact roster for chat without changing the default response", async ({
       makeAgent,
       makeTool,

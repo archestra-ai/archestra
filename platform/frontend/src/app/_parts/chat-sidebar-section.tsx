@@ -69,6 +69,7 @@ import { ATTENTION_DOT_CLASS } from "@/lib/agent-run-status-marks";
 import {
   useCancelAgentRun,
   useDeleteAgentRun,
+  useMyAgentRun,
   useMyAgentRuns,
   useUpdateAgentRun,
 } from "@/lib/agent-runtime.query";
@@ -154,9 +155,29 @@ export function ChatSidebarSection({
     enabled: isAuthenticated && canReadConversation === true,
   });
   const runtimeEnabled = useFeature("agentRuntime") === true;
-  const { data: runs = [], isLoading: runsLoading } = useMyAgentRuns(
-    isAuthenticated && canReadConversation === true && runtimeEnabled,
+  const runsEnabled =
+    isAuthenticated && canReadConversation === true && runtimeEnabled;
+  const recentRunsQuery = useMyAgentRuns(runsEnabled, { pinned: false });
+  const pinnedRunsQuery = useMyAgentRuns(runsEnabled, { pinned: true });
+  const selectedRunId = pathname.startsWith("/chat/runs/")
+    ? (pathname.split("/").at(-1) ?? "")
+    : "";
+  const selectedRunQuery = useMyAgentRun(
+    selectedRunId,
+    runsEnabled && !!selectedRunId,
   );
+  const runs = [
+    ...new Map(
+      [
+        ...(recentRunsQuery.data ?? []),
+        ...(pinnedRunsQuery.data ?? []),
+        ...(selectedRunQuery.data?.viewerRole === "owner"
+          ? [selectedRunQuery.data]
+          : []),
+      ].map((run) => [run.taskId, run]),
+    ).values(),
+  ];
+  const runsLoading = recentRunsQuery.isLoading;
   const updateRunMutation = useUpdateAgentRun();
   const cancelRunMutation = useCancelAgentRun();
   const deleteRunMutation = useDeleteAgentRun();
@@ -962,7 +983,7 @@ export function ChatSidebarSection({
 
   const subClass = flat ? "mx-0 border-l-0 px-0" : "mx-0 ml-3.5 px-0 pl-2.5";
   const recentItems = [
-    ...recentUnpinnedChats.map((item) => ({
+    ...recentUnpinnedChats.slice(0, slots).map((item) => ({
       kind: "conversation" as const,
       item,
       timestamp: item.lastMessageAt,
@@ -976,16 +997,13 @@ export function ChatSidebarSection({
     (left, right) =>
       new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime(),
   );
-  // Runs are operational sessions, so keep every one of them visible
-  // instead of counting them against the chat slots — the rows still sort
-  // into the same timeline.
-  const visibleSlots = slots + recentUnpinnedRuns.length;
+  // Every loaded run remains visible; only conversations consume chat slots.
   const showMore = recentUnpinnedChats.length > slots;
 
   // The list arrives sorted by lastMessageAt desc, so grouping the visible
   // slice by the same timestamp yields contiguous date sections.
   const recentChatGroups = groupConversationsByDay(
-    recentItems.slice(0, visibleSlots),
+    recentItems,
     (entry) => entry.timestamp,
   );
 
@@ -1009,6 +1027,22 @@ export function ChatSidebarSection({
                             : it.type === "app"
                               ? renderAppItem(it.item)
                               : renderRunItem(it.item),
+                      )}
+                      {pinnedRunsQuery.hasNextPage && (
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton asChild>
+                            <Button
+                              variant="ghost"
+                              size="xs"
+                              disabled={pinnedRunsQuery.isFetchingNextPage}
+                              onClick={() =>
+                                void pinnedRunsQuery.fetchNextPage()
+                              }
+                            >
+                              More pinned runs
+                            </Button>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
                       )}
                     </SidebarMenuSub>
                   </SidebarMenuItem>
@@ -1037,6 +1071,23 @@ export function ChatSidebarSection({
                             >
                               <MoreHorizontal />
                               <span>More</span>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        )}
+                      {recentRunsQuery.hasNextPage &&
+                        groupIndex === recentChatGroups.length - 1 && (
+                          <SidebarMenuSubItem>
+                            <SidebarMenuSubButton asChild>
+                              <Button
+                                variant="ghost"
+                                size="xs"
+                                disabled={recentRunsQuery.isFetchingNextPage}
+                                onClick={() =>
+                                  void recentRunsQuery.fetchNextPage()
+                                }
+                              >
+                                More runs
+                              </Button>
                             </SidebarMenuSubButton>
                           </SidebarMenuSubItem>
                         )}

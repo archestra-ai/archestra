@@ -87,6 +87,7 @@ type SkillsQuery = NonNullable<archestraApiTypes.GetSkillsData["query"]>;
 type SkillsPaginatedParams = Pick<
   SkillsQuery,
   | "limit"
+  | "includeContent"
   | "offset"
   | "search"
   | "sourceRepo"

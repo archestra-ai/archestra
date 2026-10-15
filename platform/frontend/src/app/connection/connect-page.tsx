@@ -1267,7 +1267,7 @@ function ProfileCard({
     });
 
   const included =
-    (skillsOn && !skillsOff ? skills.length : 0) +
+    (skillsOn && !skillsOff ? data.totalSkills : 0) +
     (pluginsOff ? 0 : plugins.length);
 
   return (
@@ -1391,7 +1391,7 @@ function ProfileCard({
                 title={
                   skillsOff
                     ? "Skills off"
-                    : `+${fmt(skills.length)} ${plural(skills.length, "skill")}`
+                    : `+${fmt(data.totalSkills)} ${plural(data.totalSkills, "skill")}`
                 }
                 sub={
                   skillsOff
@@ -1400,7 +1400,7 @@ function ProfileCard({
                 }
                 muted={skillsOff}
                 onTitle={() => onOpen("skills")}
-                seeAll={seeAllLabel(skills.length, "skill")}
+                seeAll={seeAllLabel(data.totalSkills, "skill")}
               >
                 {skills.slice(0, SKILL_ROWS).map((s) => (
                   <ListRow

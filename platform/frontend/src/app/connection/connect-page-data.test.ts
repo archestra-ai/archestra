@@ -45,7 +45,7 @@ vi.mock("@/lib/agent.query", () => ({
     data: mocks.gateway ? { id: "gw-default" } : undefined,
     isLoading: false,
   }),
-  useProfiles: () => ({ data: [], isPending: false }),
+  useAgentOptions: () => ({ data: [], isPending: false }),
 }));
 vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: false }),
@@ -81,7 +81,7 @@ vi.mock("@/lib/plugins/plugin.query", () => ({
   usePlugins: () => ({ data: mocks.plugins }),
 }));
 vi.mock("@/lib/skills/skill.query", () => ({
-  useAllSkills: () => ({ data: undefined }),
+  useSkillsPaginated: () => ({ data: undefined }),
 }));
 vi.mock("./use-gateway-servers", () => ({
   useGatewayServers: () => ({

@@ -4,7 +4,7 @@ sidebarTitle: Clients
 description: Make Guardrails check your client, with built-in support or session headers
 order: 3
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -31,6 +31,8 @@ Route model requests through the proxy so Guardrails can check the tool calls th
 2. For a client without built-in support, add the [session headers](#session-headers).
 
 **Other clients** under **Settings → Guardrails** sets what happens to [unrecognized ones](#unrecognized-clients).
+
+- A block that says no remedy plan can be used in this session means the client sent no gateway tools: it is not signed in to the gateway, or the gateway is not connected. The message names the fix for your client. The steps are under [Finish Setup in Your Client](/docs/get-started/connect#finish-setup-in-your-client).
 
 ## Session Headers
 

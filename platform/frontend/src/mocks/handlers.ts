@@ -472,6 +472,7 @@ export const handlers: HttpHandler[] = [
     }),
   ),
   ...getJson("/api/agents/all", []),
+  ...getJson("/api/agents/options", []),
   // Keep literal agent routes before `:id`, or MSW treats the literal segment
   // as an id and returns an agent-shaped response to the activation editor.
   ...getJson("/api/agents/activation-skills", {

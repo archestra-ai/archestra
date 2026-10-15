@@ -1510,15 +1510,29 @@ describe("getChatMcpTools approval-gated execution idempotency (#5132)", () => {
 
   test("concurrent duplicate executes dispatch once; the loser fails closed without re-dispatching", async () => {
     const { baseParams } = await setupApprovalGatedTool();
-    let releaseGateway = () => {};
+    // The winner's dispatch may reach the gateway either side of the release
+    // signal (pre-dispatch policy evaluation can run past the loser's dedup),
+    // so gate on a flag plus a captured settler rather than assuming the
+    // gateway was entered before release — only the winner ever dispatches.
+    let gatewayReleased = false;
+    let settleWinner: (() => void) | null = null;
+    const releaseGateway = () => {
+      gatewayReleased = true;
+      settleWinner?.();
+    };
     vi.mocked(mcpClient.executeToolCallForOwner).mockImplementation(
       () =>
         new Promise((resolve) => {
-          releaseGateway = () =>
+          const settle = () =>
             resolve({
               content: [{ type: "text", text: "Ticket created: TICKET-1" }],
               isError: false,
             } as never);
+          if (gatewayReleased) {
+            settle();
+          } else {
+            settleWinner = settle;
+          }
         }),
     );
 
@@ -1662,5 +1676,45 @@ describe("getChatMcpTools approval-gated execution idempotency (#5132)", () => {
     );
 
     expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("getChatMcpTools MCP tool invocation policy enforcement", () => {
+  // Regression: the chat direct-execution path used to honor only
+  // `require_approval` (via the AI SDK needsApproval hook), so a `block_always`
+  // guardrail never applied in chat — the same tool the MCP Gateway refused ran
+  // when invoked (or resumed from an approved tool call) in internal chat.
+  test("blocks a block_always external tool and never calls the gateway", async () => {
+    const { org, agent, baseParams } = await setupChatToolEnv({
+      gatewayTools: [externalTool("extsrv__fetch_data")],
+    });
+    const catalog = await f.makeInternalMcpCatalog({ organizationId: org.id });
+    const tool = await f.makeTool({
+      catalogId: catalog.id,
+      name: "extsrv__fetch_data",
+    });
+    await f.makeAgentTool(agent.id, tool.id);
+    // Empty conditions = block every call, matching an operator's "block
+    // always" guardrail.
+    await f.makeToolPolicy(tool.id, { action: "block_always", conditions: [] });
+    vi.spyOn(hookDispatcherService, "fire").mockResolvedValue({
+      decision: "proceed",
+      runs: [],
+    });
+
+    const tools = await chatClient.getChatMcpTools(baseParams);
+    const result = await tools.extsrv__fetch_data.execute?.(
+      { query: "q" },
+      execOptions("call-block-always"),
+    );
+
+    expect(
+      (
+        result as {
+          structuredContent?: { archestraError?: { type?: string } };
+        }
+      ).structuredContent?.archestraError?.type,
+    ).toBe("policy_denied");
+    expect(mcpClient.executeToolCallForOwner).not.toHaveBeenCalled();
   });
 });

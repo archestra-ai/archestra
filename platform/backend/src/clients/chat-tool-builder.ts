@@ -48,6 +48,8 @@ import type {
   ToolCallRepeatTracker,
 } from "@/clients/tool-call-repeat-tracker";
 import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
+import { evaluateSingleMcpToolInvocationPolicy } from "@/guardrails/tool-invocation";
+import { buildPolicyBlockedToolResult } from "@/guardrails/tool-policy-link";
 import { sensitiveContextOriginFromBoundary } from "@/guardrails/trusted-data";
 import { hookDispatcherService } from "@/hooks/hook-dispatcher-service";
 import { type CollectedHookRun, toCollectedRuns } from "@/hooks/hook-run-parts";
@@ -384,25 +386,81 @@ export function buildMcpGatewayTool(params: {
               });
             }
           } else {
-            // Execute non-Archestra tools via shared helper with browser sync
-            toolResult = await executeMcpTool({
-              toolName: mcpTool.name,
-              toolArguments,
+            // Enforce tool-call invocation policies on the direct external
+            // execution path, matching the MCP Gateway and run_tool. Without
+            // this the chat path only honored `require_approval` (via the AI
+            // SDK needsApproval hook), so `block_always` and the
+            // block-when-context-is-untrusted actions never applied — a tool an
+            // operator set to "block always" still ran when invoked from chat
+            // (including via a client-supplied approved tool call that the SDK
+            // resumes). `enforceApprovalRequired: false` keeps approval handling
+            // where it already lives and limits this gate to the hard blocks.
+            const { contextIsTrusted, unsafeContextBoundary } =
+              await evaluateToolExecutionContextTrust({
+                messages: options.messages,
+                agentId: ctx.agentId,
+                organizationId: ctx.organizationId,
+                userId: ctx.userId,
+                considerContextUntrusted: ctx.considerContextUntrusted,
+                policyContext: {
+                  externalAgentId: getChatExternalAgentId(),
+                },
+              });
+            const policyBlock = await evaluateSingleMcpToolInvocationPolicy({
               agentId: ctx.agentId,
-              agentName: ctx.agentName,
-              userId: ctx.userId,
+              toolName: mcpTool.name,
+              toolInput: toolArguments ?? {},
               organizationId: ctx.organizationId,
-              isolationKey: ctx.scopeKey,
-              mcpGwToken: ctx.mcpGwToken,
-              considerContextUntrusted: ctx.considerContextUntrusted,
-              abortSignal: ctx.abortSignal,
-              elicitation: ctx.elicitation,
-              taskBridge: ctx.taskBridge,
-              toolCallId: options.toolCallId,
-              isUiProvidingTool,
-              suppressContentLogging: ctx.suppressContentLogging,
-              lockedChatAudit: ctx.lockedChatAudit,
+              contextIsTrusted,
+              sensitiveContextOrigin: sensitiveContextOriginFromBoundary(
+                unsafeContextBoundary,
+              ),
+              enforceApprovalRequired: false,
             });
+            if (policyBlock) {
+              span.setAttribute(ATTR_MCP_IS_ERROR_RESULT, true);
+              reportToolMetrics({
+                toolName: mcpTool.name,
+                agentId: ctx.agentId,
+                agentName: ctx.agentName,
+                startTime,
+                isError: true,
+              });
+              ctx.repeatTracker.noteDeterministicError(
+                mcpTool.name,
+                toolArguments,
+              );
+              const { error, text } = await buildPolicyBlockedToolResult({
+                policyBlock,
+                userId: ctx.userId,
+                organizationId: ctx.organizationId,
+              });
+              toolResult = {
+                content: text,
+                _meta: { archestraError: error },
+                structuredContent: { archestraError: error },
+              };
+            } else {
+              // Execute non-Archestra tools via shared helper with browser sync
+              toolResult = await executeMcpTool({
+                toolName: mcpTool.name,
+                toolArguments,
+                agentId: ctx.agentId,
+                agentName: ctx.agentName,
+                userId: ctx.userId,
+                organizationId: ctx.organizationId,
+                isolationKey: ctx.scopeKey,
+                mcpGwToken: ctx.mcpGwToken,
+                considerContextUntrusted: ctx.considerContextUntrusted,
+                abortSignal: ctx.abortSignal,
+                elicitation: ctx.elicitation,
+                taskBridge: ctx.taskBridge,
+                toolCallId: options.toolCallId,
+                isUiProvidingTool,
+                suppressContentLogging: ctx.suppressContentLogging,
+                lockedChatAudit: ctx.lockedChatAudit,
+              });
+            }
           }
 
           // PostToolUse lifecycle hook: append any block feedback to the

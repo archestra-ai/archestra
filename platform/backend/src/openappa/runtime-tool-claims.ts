@@ -4,13 +4,19 @@ import type { OpenAppaSession } from "./service";
 
 export const RUNTIME_TOOL_PROOF_ARGUMENT = "runtime_proof";
 
-/** The proxy supplies the source trajectory; MCP headers may name its parent. */
+/**
+ * The proxy supplies the source trajectory; MCP headers may name its parent.
+ * `observed` marks a call the proxy signed while enforcement was off: nothing
+ * ruled it, so the gateway checks it against the record of calls made then
+ * instead of the runtime's released calls.
+ */
 export function signRuntimeToolProof(params: {
   session: OpenAppaSession;
   toolCallId: string;
   action: string;
   arguments: Record<string, unknown>;
   spawn: boolean;
+  observed?: true;
   secret: string;
   now?: number;
 }): string | undefined {
@@ -27,6 +33,7 @@ export function signRuntimeToolProof(params: {
       action: params.action,
       arguments_hash: argumentsHash(params.arguments),
       spawn: params.spawn,
+      ...(params.observed ? { observed: true } : {}),
       iat: now,
       exp: now + PROOF_TTL_SECONDS,
     });
@@ -49,6 +56,7 @@ export function verifyRuntimeToolProof(params: {
   session: OpenAppaSession;
   toolCallId: string;
   spawn: boolean;
+  observed?: true;
 } | null {
   if (
     !params.secret ||
@@ -93,6 +101,7 @@ export function verifyRuntimeToolProof(params: {
       },
       toolCallId: claims.call_id,
       spawn: claims.spawn,
+      ...(claims.observed ? { observed: true as const } : {}),
     };
   } catch {
     return null;
@@ -146,6 +155,8 @@ const ClaimsSchema = z
     action: z.string().min(1).max(512),
     arguments_hash: z.string().regex(/^[a-f0-9]{64}$/),
     spawn: z.boolean(),
+    // Absent on proofs signed while enforcement was on, so those still verify.
+    observed: z.literal(true).optional(),
     iat: z.number().int().nonnegative(),
     exp: z.number().int().nonnegative(),
   })

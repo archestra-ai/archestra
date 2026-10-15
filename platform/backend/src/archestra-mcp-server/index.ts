@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   type ArchestraToolFullName,
@@ -24,9 +25,11 @@ import {
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { ZodError, type ZodType, z } from "zod";
+import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
+import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import {
   RUNTIME_TOOL_PROOF_ARGUMENT,
   verifyRuntimeToolProof,
@@ -349,14 +352,30 @@ export async function executeArchestraTool(
         "OpenAPPA could not find the recorded source session.",
       );
     }
-    const released = await OpenAppaSpawnCorrelationModel.releasedCalls({
-      organizationId: verified.session.organization_id,
-      callerId: verified.session.caller_id,
-      sessionId: verified.session.session_id,
-      toolCallIds: [verified.toolCallId],
-    });
-    if (released.get(verified.toolCallId)?.spawn !== verified.spawn) {
-      return errorResult("OpenAPPA has no matching released runtime call.");
+    if (verified.observed) {
+      // Nothing ruled a call made while enforcement was off, so no released
+      // call exists. The record that the session made it stands in, and a
+      // launch is never accepted this way: it would bind an unruled child.
+      if (
+        verified.spawn ||
+        !(await observedCallWasMade({
+          organizationId: verified.session.organization_id,
+          sessionId: verified.session.session_id,
+          toolCallId: verified.toolCallId,
+        }))
+      ) {
+        return errorResult("OpenAPPA has no record of this runtime call.");
+      }
+    } else {
+      const released = await OpenAppaSpawnCorrelationModel.releasedCalls({
+        organizationId: verified.session.organization_id,
+        callerId: verified.session.caller_id,
+        sessionId: verified.session.session_id,
+        toolCallIds: [verified.toolCallId],
+      });
+      if (released.get(verified.toolCallId)?.spawn !== verified.spawn) {
+        return errorResult("OpenAPPA has no matching released runtime call.");
+      }
     }
     context = {
       ...context,
@@ -820,6 +839,7 @@ async function claimRuntimeDispatch(
 ): Promise<boolean> {
   const call = context.openappaRuntimeCall;
   if (!call) return false;
+  if (call.observed) return claimObservedRuntimeDispatch(call);
   return OpenAppaSpawnCorrelationModel.claimRuntimeDispatch({
     organizationId: call.session.organization_id,
     callerId: call.session.caller_id,
@@ -828,6 +848,50 @@ async function claimRuntimeDispatch(
     spawn: call.spawn,
   });
 }
+
+/** Whether the proxy recorded that this session made the call while enforcement was off. */
+async function observedCallWasMade(params: {
+  organizationId: string;
+  sessionId: string;
+  toolCallId: string;
+}): Promise<boolean> {
+  const calls = await OpenAppaUnenforcedModel.findCalls({
+    organizationId: params.organizationId,
+    sessionIds: [params.sessionId],
+    toolCallIds: [params.toolCallId],
+  });
+  return calls.some(
+    (call) => call.toolCallId === params.toolCallId && call.reason === "made",
+  );
+}
+
+/**
+ * One execution per observed call. A proof lives five minutes, so a claim that
+ * outlives it is enough; it never needs the engine's released-call record.
+ */
+async function claimObservedRuntimeDispatch(
+  call: NonNullable<ArchestraContext["openappaRuntimeCall"]>,
+): Promise<boolean> {
+  const key: AllowedCacheKey = `${CacheKey.OpenAppaObservedRuntimeDispatch}-${createHash(
+    "sha256",
+  )
+    .update(
+      [
+        call.session.organization_id,
+        call.session.caller_id ?? "",
+        call.session.session_id,
+        call.toolCallId,
+      ].join("\n"),
+    )
+    .digest("base64url")}`;
+  return cacheManager.withLock(key, async (cache) => {
+    if (await cache.get<true>(key)) return false;
+    await cache.set(key, true, OBSERVED_DISPATCH_CLAIM_TTL_MS);
+    return true;
+  });
+}
+
+const OBSERVED_DISPATCH_CLAIM_TTL_MS = 10 * 60 * 1000;
 
 /**
  * Shared error-result builder for a tool-args ZodError: the per-issue error

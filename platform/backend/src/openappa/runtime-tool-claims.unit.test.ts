@@ -48,6 +48,37 @@ describe("runtime tool origin proofs", () => {
     });
   });
 
+  it("carries that a call was signed while enforcement was off, and only then", () => {
+    const observed = { ...request, spawn: false, observed: true as const };
+    expect(
+      verifyRuntimeToolProof({
+        proof: signRuntimeToolProof(observed),
+        organizationId: session.organization_id,
+        callerId: session.caller_id,
+        action: request.action,
+        arguments: request.arguments,
+        secret: request.secret,
+      }),
+    ).toEqual({
+      session,
+      toolCallId: "call-start",
+      spawn: false,
+      observed: true,
+    });
+    expect(verify()).not.toHaveProperty("observed");
+  });
+
+  it("refuses a proof whose observed claim was added after signing", () => {
+    const proof = signRuntimeToolProof({ ...request, spawn: false });
+    if (!proof) throw new Error("no proof");
+    const [payload, mac] = proof.split(".");
+    const claims = JSON.parse(Buffer.from(payload, "base64url").toString());
+    const forged = `${Buffer.from(
+      JSON.stringify({ ...claims, observed: true }),
+    ).toString("base64url")}.${mac}`;
+    expect(verify({ proof: forged })).toBeNull();
+  });
+
   it("tolerates key ordering but binds all nested attachment bytes", () => {
     expect(
       verify({

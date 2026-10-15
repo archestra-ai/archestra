@@ -1450,7 +1450,7 @@ describe("InteractionModel", () => {
           },
           type: "openai:chatCompletions",
         });
-      // Four turns, then more guardrail calls than the newest-rows sample holds.
+      // Four turns, then more guardrail calls than even the deep re-read holds.
       for (const n of [1, 2, 3, 4])
         await turn({
           sessionId: "mixed",
@@ -1458,7 +1458,7 @@ describe("InteractionModel", () => {
           source: "api",
           seconds: n,
         });
-      for (const n of [5, 6, 7])
+      for (let n = 5; n < 30; n++)
         await turn({
           sessionId: "mixed",
           content: `annotate call ${n}`,
@@ -1498,6 +1498,13 @@ describe("InteractionModel", () => {
               `${i.source} ${(i as unknown as { requestType: string }).requestType}`,
           ),
         ),
+      ).toEqual(new Set(["guardrail:annotator subagent", "api main"]));
+      const summaries = await InteractionModel.findSummariesPaginated({
+        pagination: { limit: 100, offset: 0 },
+        filters: { sessionId: "mixed" },
+      });
+      expect(
+        new Set(summaries.data.map((i) => `${i.source} ${i.requestType}`)),
       ).toEqual(new Set(["guardrail:annotator subagent", "api main"]));
     });
   });

@@ -788,6 +788,7 @@ class InteractionModel {
               WHEN ${schema.interactionsTable.source} IN ('opencode:main', 'kilo:main')
               THEN 'main'
               WHEN ${schema.interactionsTable.source} IN ('opencode:subagent', 'opencode:title', 'opencode:compaction', 'kilo:subagent', 'kilo:title', 'kilo:compaction')
+                OR ${schema.interactionsTable.source} LIKE 'guardrail:%'
               THEN 'subagent'
               WHEN ${schema.interactionsTable.sessionSource} IN ('opencode_session', 'kilo_session')
                 AND LOWER(CONCAT_WS('\n',
@@ -2286,6 +2287,9 @@ class InteractionModel {
         uuidKeys: [],
         newest: DEEP_PER_SESSION,
         oldest: 0,
+        // However many guardrail calls follow the last turn; a session of
+        // nothing but them keeps the guardrail tip its sample found.
+        skipGuardrails: true,
       });
       for (const [sessionKey, windowRows] of groupRowsBySession(deepRows)) {
         const deep = selectTip(windowRows);
@@ -2364,11 +2368,13 @@ class InteractionModel {
     uuidKeys,
     newest,
     oldest,
+    skipGuardrails = false,
   }: {
     sessionKeys: string[];
     uuidKeys: string[];
     newest: number;
     oldest: number;
+    skipGuardrails?: boolean;
   }): Promise<SessionWindowRow[]> {
     if (sessionKeys.length === 0) {
       return [];
@@ -2449,6 +2455,7 @@ class InteractionModel {
                 encrypted_chat_conversation_id
          FROM interactions
          WHERE session_id = keys.key
+           ${skipGuardrails ? sql`AND (source IS NULL OR source NOT LIKE 'guardrail:%')` : sql``}
          ORDER BY created_at DESC NULLS LAST, id DESC
          LIMIT ${newest})
         ${oldestBranch}

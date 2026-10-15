@@ -4462,6 +4462,7 @@ describe("mcp server core route coverage", () => {
       });
       const tool = await makeTool({ catalogId: catalog.id });
       const agent = await makeAgent({
+        organizationId,
         name: "Server Consumer",
         access: "personal",
         authorId: user.id,
@@ -4491,6 +4492,90 @@ describe("mcp server core route coverage", () => {
           pinned: false,
         },
       ]);
+    });
+
+    test("names to a member only the agents they can open, on the list and on one server", async ({
+      makeInternalMcpCatalog,
+      makeMcpServer,
+      makeTool,
+      makeAgent,
+      makeAgentTool,
+      makeUser,
+      makeMember,
+    }) => {
+      const catalog = await makeInternalMcpCatalog({
+        organizationId,
+        serverType: "local",
+      });
+      const server = await makeMcpServer({
+        ownerId: user.id,
+        catalogId: catalog.id,
+      });
+      const tool = await makeTool({ catalogId: catalog.id });
+      const colleague = await makeUser();
+      await makeMember(colleague.id, organizationId);
+      const agents = [
+        await makeAgent({
+          organizationId,
+          name: "Mine",
+          access: "personal",
+          authorId: user.id,
+        }),
+        await makeAgent({
+          organizationId,
+          name: "Shared",
+          access: "org",
+          authorId: colleague.id,
+        }),
+        // Someone else's personal agent: its name and owner are not the
+        // caller's to see, even though it uses the caller's server.
+        await makeAgent({
+          organizationId,
+          name: "Theirs",
+          access: "personal",
+          authorId: colleague.id,
+        }),
+      ];
+      for (const agent of agents) {
+        await makeAgentTool(agent.id, tool.id);
+      }
+      // A member: no shared installations to manage.
+      userHasPermissionMock.mockImplementation(
+        async (_userId, _organizationId, resource, action) =>
+          !(resource === "mcpServerInstallation" && action === "update"),
+      );
+
+      const list = await app.inject({ method: "GET", url: "/api/mcp_server" });
+      const listed = list
+        .json()
+        .find((s: { id: string }) => s.id === server.id);
+      expect(
+        listed.assignedAgents.map((a: { name: string }) => a.name).sort(),
+      ).toEqual(["Mine", "Shared"]);
+
+      const single = await app.inject({
+        method: "GET",
+        url: `/api/mcp_server/${server.id}`,
+      });
+      expect(
+        single
+          .json()
+          .assignedAgents.map((a: { name: string }) => a.name)
+          .sort(),
+      ).toEqual(["Mine", "Shared"]);
+
+      // Someone who manages shared installations keeps the full list.
+      userHasPermissionMock.mockResolvedValue(true);
+      const managed = await app.inject({
+        method: "GET",
+        url: `/api/mcp_server/${server.id}`,
+      });
+      expect(
+        managed
+          .json()
+          .assignedAgents.map((a: { name: string }) => a.name)
+          .sort(),
+      ).toEqual(["Mine", "Shared", "Theirs"]);
     });
 
     // The registry lists other members' personal connections to an

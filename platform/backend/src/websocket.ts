@@ -15,7 +15,7 @@ import type * as k8s from "@kubernetes/client-node";
 import type { WebSocket, WebSocketServer } from "ws";
 import { WebSocket as WS, WebSocketServer as WSS } from "ws";
 import { z } from "zod";
-import { betterAuth } from "@/auth";
+import { betterAuth, userHasPermission } from "@/auth";
 import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
 import config from "@/config";
 import { BrowserStreamSocketClientContext } from "@/features/browser-stream/websocket/browser-stream.websocket";
@@ -1110,6 +1110,28 @@ export class WebSocketService {
       this.sendToClient(ws, {
         type: "mcp_exec_error",
         payload: { serverId, error: "MCP server not found" },
+      });
+      return;
+    }
+
+    // A shell runs commands inside the server's container in the cluster, so
+    // it takes the right to manage installations, not just to see one: a
+    // member's own installation does not open a shell.
+    const mayOpenShell =
+      clientContext.userIsMcpServerAdmin ||
+      (await userHasPermission(
+        clientContext.userId,
+        clientContext.organizationId,
+        "mcpServerInstallation",
+        "update",
+      ));
+    if (!mayOpenShell) {
+      this.sendToClient(ws, {
+        type: "mcp_exec_error",
+        payload: {
+          serverId,
+          error: "Opening a shell needs permission to manage MCP servers.",
+        },
       });
       return;
     }

@@ -454235,6 +454235,9 @@
                         ]
                       }
                     },
+                    "canShareOrganizationWide": {
+                      "type": "boolean"
+                    },
                     "actorSubjects": {
                       "type": "array",
                       "items": {
@@ -454355,6 +454358,7 @@
                     "grants",
                     "inheritedGrants",
                     "effectiveActions",
+                    "canShareOrganizationWide",
                     "actorSubjects"
                   ],
                   "additionalProperties": false
@@ -455182,6 +455186,9 @@
                         ]
                       }
                     },
+                    "canShareOrganizationWide": {
+                      "type": "boolean"
+                    },
                     "actorSubjects": {
                       "type": "array",
                       "items": {
@@ -455302,6 +455309,7 @@
                     "grants",
                     "inheritedGrants",
                     "effectiveActions",
+                    "canShareOrganizationWide",
                     "actorSubjects"
                   ],
                   "additionalProperties": false

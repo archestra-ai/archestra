@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { usePermissionRecipients } from "@/lib/resource-permissions.query";
 import {
   type RuntimeCredentialDefinition,
   useCreateRuntimeCredential,
@@ -94,13 +95,27 @@ export function RuntimeCredentialDefinitionDialog({
   const [permissionsDirty, setPermissionsDirty] = useState(false);
   // A new credential has no policy yet, so its starting grants travel with it.
   // It starts shared with everyone; remove that to keep it to a team.
-  const [initialGrants, setInitialGrants] = useState<InitialPermissionGrant[]>(
+  const [chosenGrants, setChosenGrants] = useState<InitialPermissionGrant[]>(
     () =>
       DEFAULT_CREDENTIAL_GRANTS.map((grant) => ({
         ...grant,
         name: "Everyone in the organization",
       })),
   );
+  // Only someone who may share a credential with everyone starts there. The
+  // server offers Everyone as a recipient exactly to them.
+  const recipients = usePermissionRecipients({
+    resource: "credential",
+    query: "",
+    enabled: !definition,
+  });
+  const offersEveryone = recipients.data?.some(
+    (recipient) => recipient.subject.type === "organization",
+  );
+  const initialGrants =
+    offersEveryone === false
+      ? chosenGrants.filter((grant) => grant.subject.type !== "organization")
+      : chosenGrants;
   const form = useForm<DefinitionFormValues>({
     resolver: zodResolver(DefinitionFormSchema),
     defaultValues: {
@@ -533,7 +548,7 @@ export function RuntimeCredentialDefinitionDialog({
         <ResourceAccessSection
           resource="credential"
           grants={initialGrants}
-          onGrantsChange={setInitialGrants}
+          onGrantsChange={setChosenGrants}
         />
       )}
       {/* SPDX-SnippetEnd */}

@@ -58,6 +58,7 @@ import {
 import { useDeleteMcpServer, useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useCanReauthenticate } from "@/lib/mcp/use-can-reauthenticate";
 import { useMyTeams } from "@/lib/teams/team.query";
+import { cn } from "@/lib/utils/tailwind";
 import { AddServiceAccountDialog } from "./add-service-account-dialog";
 import { useCanModifyCatalogItem } from "./catalog-edit-access";
 import {
@@ -136,6 +137,12 @@ interface ManageUsersContentProps {
   /** Whether this catalog is currently being installed. */
   isInstalling?: boolean;
   onReauthenticate?: (server: InstalledServer) => void;
+  /**
+   * The server is shared with nobody, so the viewer's own installation is
+   * the only one that matters: render it as one compact row instead of the
+   * tables. The caller decides, because it needs the item's grants.
+   */
+  personalOnly?: boolean;
 }
 
 export function ManageUsersContent({
@@ -152,6 +159,7 @@ export function ManageUsersContent({
   bodyTestId,
   isInstalling = false,
   onReauthenticate,
+  personalOnly = false,
 }: ManageUsersContentProps) {
   const router = useRouter();
   // Subscribe to live mcp-servers query to get fresh data. We fetch all
@@ -254,7 +262,7 @@ export function ManageUsersContent({
   };
 
   const deleteMcpServerMutation = useDeleteMcpServer();
-  const [sharedRevokeTarget, setSharedRevokeTarget] = useState<
+  const [uninstallTarget, setUninstallTarget] = useState<
     (typeof allServers)[number] | null
   >(null);
 
@@ -262,7 +270,7 @@ export function ManageUsersContent({
     // A team or organization connection serves everyone who resolves to it,
     // so removing one is confirmed against the agents it affects first.
     if (resolveServerScope(mcpServer) !== "personal") {
-      setSharedRevokeTarget(mcpServer);
+      setUninstallTarget(mcpServer);
       return;
     }
     await deleteMcpServerMutation.mutateAsync({
@@ -373,6 +381,17 @@ export function ManageUsersContent({
   const isPersonalOnly =
     catalogItem != null && isPlaywrightCatalogItem(catalogItem.id);
   const canAddServiceAccount = !isPersonalOnly && (canAddTeam || canAddOrg);
+  // Without installation update permission the backend refuses team and
+  // organization installs, and shared credentials are not the viewer's to
+  // pick or inspect, so the view keeps only their own installations.
+  const isMemberView = !hasMcpServerUpdatePermission;
+  // "for me" only tells a personal install apart from a shared one; in a
+  // member's view, where their own is the only kind listed, it says nothing.
+  const personalAddLabel = isLocalServer
+    ? isMemberView
+      ? "Install"
+      : "Install for me"
+    : "Connect my account";
 
   const rowProps: RowRenderProps = {
     deploymentStatuses,
@@ -386,6 +405,7 @@ export function ManageUsersContent({
     handleRevoke,
     isDeleting: deleteMcpServerMutation.isPending,
     onOpenPodLogs,
+    showInfrastructure: !isMemberView,
   };
 
   return (
@@ -407,17 +427,60 @@ export function ManageUsersContent({
         className={hideHeader ? "space-y-6" : "space-y-6 pb-4"}
         data-testid={bodyTestId}
       >
-        {catalogItem?.serverType === "remote" && (
-          <AgentConnectionsSection
-            item={catalogItem}
-            connections={allServers}
+        {personalOnly ? (
+          <OwnConnectionRow
+            server={split.myPersonalServer}
+            isLocalServer={isLocalServer}
+            deploymentState={(() => {
+              const status =
+                split.myPersonalServer &&
+                deploymentStatuses[split.myPersonalServer.id];
+              return status
+                ? resolveDeploymentState(status, canonicalStateByPod)
+                : null;
+            })()}
+            installAction={
+              onAddPersonalConnection ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isInstalling}
+                  onClick={() => onAddPersonalConnection()}
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>
+                    {isInstalling ? "Installing..." : personalAddLabel}
+                  </span>
+                </Button>
+              ) : null
+            }
+            canReauthenticate={canReauthenticate}
+            getReauthTooltip={getReauthTooltip}
+            onReauthenticate={handleReauthenticate}
+            onUninstall={setUninstallTarget}
+            isDeleting={deleteMcpServerMutation.isPending}
           />
-        )}
+        ) : null}
 
-        {(personalRows.length > 0 || canAddPersonal) && (
+        {!personalOnly &&
+          !isMemberView &&
+          catalogItem?.serverType === "remote" && (
+            <AgentConnectionsSection
+              item={catalogItem}
+              connections={allServers}
+            />
+          )}
+
+        {!personalOnly && (personalRows.length > 0 || canAddPersonal) && (
           <ConnectionsSection
+            // Alone on a member's view, the block needs no heading: the
+            // section title already names it.
             title={
-              isLocalServer ? "Personal installations" : "Personal connections"
+              isMemberView
+                ? undefined
+                : isLocalServer
+                  ? "Personal installations"
+                  : "Personal connections"
             }
             description={
               isLocalServer
@@ -443,11 +506,7 @@ export function ManageUsersContent({
                   }}
                 >
                   <Plus className="h-4 w-4" />
-                  {isInstalling
-                    ? "Installing..."
-                    : isLocalServer
-                      ? "Install for me"
-                      : "Connect my account"}
+                  {isInstalling ? "Installing..." : personalAddLabel}
                 </Button>
               ) : null
             }
@@ -455,42 +514,46 @@ export function ManageUsersContent({
           />
         )}
 
-        {(serviceAccountRows.length > 0 || canAddServiceAccount) && (
-          <ConnectionsSection
-            title={isLocalServer ? "Shared installations" : "Service accounts"}
-            description={
-              isLocalServer
-                ? installationCopy.shared
-                : "Static credentials intentionally shared with a team or organization."
-            }
-            emptyText={
-              isLocalServer
-                ? "No shared installations yet."
-                : "No service accounts yet."
-            }
-            rows={serviceAccountRows}
-            tableTestId={E2eTestId.ManageServiceAccountsTable}
-            action={
-              canAddServiceAccount ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={isInstalling}
-                  data-testid={
-                    E2eTestId.ManageCredentialsAddServiceAccountButton
-                  }
-                  onClick={() => setServiceAccountDialogOpen(true)}
-                >
-                  <Plus className="h-4 w-4" />
-                  {isLocalServer
-                    ? "Add shared installation"
-                    : "Add service account"}
-                </Button>
-              ) : null
-            }
-            {...rowProps}
-          />
-        )}
+        {!personalOnly &&
+          !isMemberView &&
+          (serviceAccountRows.length > 0 || canAddServiceAccount) && (
+            <ConnectionsSection
+              title={
+                isLocalServer ? "Shared installations" : "Service accounts"
+              }
+              description={
+                isLocalServer
+                  ? installationCopy.shared
+                  : "Static credentials intentionally shared with a team or organization."
+              }
+              emptyText={
+                isLocalServer
+                  ? "No shared installations yet."
+                  : "No service accounts yet."
+              }
+              rows={serviceAccountRows}
+              tableTestId={E2eTestId.ManageServiceAccountsTable}
+              action={
+                canAddServiceAccount ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isInstalling}
+                    data-testid={
+                      E2eTestId.ManageCredentialsAddServiceAccountButton
+                    }
+                    onClick={() => setServiceAccountDialogOpen(true)}
+                  >
+                    <Plus className="h-4 w-4" />
+                    {isLocalServer
+                      ? "Add shared installation"
+                      : "Add service account"}
+                  </Button>
+                ) : null
+              }
+              {...rowProps}
+            />
+          )}
       </div>
 
       <AddServiceAccountDialog
@@ -510,19 +573,19 @@ export function ManageUsersContent({
       />
 
       <UninstallServerDialog
-        open={!!sharedRevokeTarget}
-        onClose={() => setSharedRevokeTarget(null)}
+        open={!!uninstallTarget}
+        onClose={() => setUninstallTarget(null)}
         installs={
-          sharedRevokeTarget
+          uninstallTarget
             ? [
                 {
                   server: {
-                    id: sharedRevokeTarget.id,
-                    name: sharedRevokeTarget.name,
-                    scope: sharedRevokeTarget.scope,
-                    teamId: sharedRevokeTarget.teamId,
+                    id: uninstallTarget.id,
+                    name: uninstallTarget.name,
+                    scope: uninstallTarget.scope,
+                    teamId: uninstallTarget.teamId,
                   },
-                  assignedAgents: sharedRevokeTarget.assignedAgents ?? [],
+                  assignedAgents: uninstallTarget.assignedAgents ?? [],
                 },
               ]
             : []
@@ -558,6 +621,8 @@ interface RowRenderProps {
   handleRevoke: (s: ServerEntry) => void;
   isDeleting: boolean;
   onOpenPodLogs?: (serverId: string) => void;
+  /** The Pod and Secret Storage columns, for those who manage installations. */
+  showInfrastructure: boolean;
 }
 
 function ConnectionsSection({
@@ -569,7 +634,8 @@ function ConnectionsSection({
   tableTestId,
   ...rowProps
 }: {
-  title: string;
+  /** Omitted when the block is the only one in its section. */
+  title?: string;
   description: string;
   action: React.ReactNode;
   rows: ConnectionRow[];
@@ -578,10 +644,12 @@ function ConnectionsSection({
 } & RowRenderProps) {
   return (
     <div className="space-y-3">
-      <div className="space-y-0.5">
-        <h4 className="text-sm font-medium">{title}</h4>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </div>
+      {title ? (
+        <div className="space-y-0.5">
+          <h4 className="text-sm font-medium">{title}</h4>
+          <p className="text-xs text-muted-foreground">{description}</p>
+        </div>
+      ) : null}
       {rows.length > 0 ? (
         <>
           <div className="overflow-hidden rounded-lg border">
@@ -612,13 +680,13 @@ function ConnectionsTable({
   handleRevoke,
   isDeleting,
   onOpenPodLogs,
+  showInfrastructure,
 }: {
   rows: ConnectionRow[];
   testId: string;
 } & RowRenderProps) {
-  const hasDeploymentStatuses = rows.some(
-    (r) => deploymentStatuses[r.server.id],
-  );
+  const hasDeploymentStatuses =
+    showInfrastructure && rows.some((r) => deploymentStatuses[r.server.id]);
 
   return (
     // A fixed-layout table squeezes its unsized columns to nothing on a
@@ -633,9 +701,11 @@ function ConnectionsTable({
           {hasDeploymentStatuses && (
             <TableHead className="whitespace-nowrap">Pod</TableHead>
           )}
-          <TableHead className="w-[120px] whitespace-nowrap">
-            Secret Storage
-          </TableHead>
+          {showInfrastructure && (
+            <TableHead className="w-[120px] whitespace-nowrap">
+              Secret Storage
+            </TableHead>
+          )}
           <TableHead className="w-[120px] whitespace-nowrap">
             Created At
           </TableHead>
@@ -683,19 +753,11 @@ function ConnectionsTable({
                     return <span className="text-muted-foreground">—</span>;
                   }
                   const podName = status.podName;
-                  const effectiveState =
-                    (podName && canonicalStateByPod.get(podName)) ||
-                    status.state;
-                  const dot = (
-                    <DeploymentStatusDot
-                      state={
-                        (effectiveState === "not_created" ||
-                        effectiveState === "succeeded"
-                          ? "running"
-                          : effectiveState) as DeploymentState
-                      }
-                    />
+                  const effectiveState = resolveDeploymentState(
+                    status,
+                    canonicalStateByPod,
                   );
+                  const dot = <DeploymentStatusDot state={effectiveState} />;
                   if (!podName) {
                     // SPDX-SnippetBegin
                     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -736,9 +798,11 @@ function ConnectionsTable({
                 })()}
               </TableCell>
             )}
-            <TableCell className="text-muted-foreground">
-              {formatSecretStorageType(server.secretStorageType)}
-            </TableCell>
+            {showInfrastructure && (
+              <TableCell className="text-muted-foreground">
+                {formatSecretStorageType(server.secretStorageType)}
+              </TableCell>
+            )}
             <TableCell
               className="whitespace-nowrap text-muted-foreground"
               title={format(new Date(server.createdAt), "PPpp")}
@@ -806,6 +870,132 @@ function ConnectionsTable({
       </TableBody>
     </Table>
   );
+}
+
+/**
+ * The viewer's own installation or connection of a server shared with nobody
+ * else, as one line: its state and date with its actions, or "Not installed"
+ * with the install action.
+ */
+function OwnConnectionRow({
+  server,
+  isLocalServer,
+  deploymentState,
+  installAction,
+  canReauthenticate,
+  getReauthTooltip,
+  onReauthenticate,
+  onUninstall,
+  isDeleting,
+}: {
+  server: ServerEntry | null;
+  isLocalServer: boolean;
+  /** The pod's reported state; null when none has been reported. */
+  deploymentState: DeploymentState | null;
+  installAction: React.ReactNode;
+  canReauthenticate: (s: ServerEntry) => boolean;
+  getReauthTooltip: (s: ServerEntry) => string;
+  onReauthenticate: (s: ServerEntry) => void;
+  onUninstall: (s: ServerEntry) => void;
+  isDeleting: boolean;
+}) {
+  if (!server) {
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3">
+        <span className="text-sm text-muted-foreground">
+          {isLocalServer ? "Not installed" : "Not connected"}
+        </span>
+        {installAction}
+      </div>
+    );
+  }
+
+  const createdAt = new Date(server.createdAt);
+  // A status of its own only when it says more than the date line does: the
+  // pod's state, or a rejected token.
+  const statusLabel = server.oauthRefreshError
+    ? "Needs re-authentication"
+    : isLocalServer && deploymentState
+      ? getDeploymentLabel(deploymentState)
+      : null;
+
+  return (
+    <div
+      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3"
+      data-testid={E2eTestId.CredentialRow}
+      data-server-id={server.id}
+    >
+      <div className="flex min-w-0 items-center gap-2 text-sm">
+        {statusLabel ? (
+          <>
+            {isLocalServer && deploymentState && !server.oauthRefreshError ? (
+              <DeploymentStatusDot state={deploymentState} />
+            ) : null}
+            <span className="font-medium">{statusLabel}</span>
+          </>
+        ) : null}
+        <span
+          className={cn(
+            "whitespace-nowrap",
+            statusLabel && "text-muted-foreground",
+          )}
+          title={format(createdAt, "PPpp")}
+        >
+          {`${isLocalServer ? "Installed" : "Connected"} ${format(createdAt, "PP")}`}
+        </span>
+      </div>
+      <div className="flex items-center gap-2">
+        {server.oauthRefreshError && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button
+                    onClick={() => onReauthenticate(server)}
+                    disabled={!canReauthenticate(server)}
+                    size="sm"
+                    variant="outline"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Re-authenticate
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {!canReauthenticate(server) && (
+                <TooltipContent>{getReauthTooltip(server)}</TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+        )}
+        <Button
+          onClick={() => onUninstall(server)}
+          disabled={isDeleting}
+          size="sm"
+          variant="ghost"
+          className="text-muted-foreground hover:text-foreground"
+          data-testid={`${E2eTestId.RevokeCredentialButton}-personal`}
+        >
+          <Trash className="h-4 w-4" />
+          Uninstall
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The state a pod's dot and label show. Multi-tenant rows share one pod, so
+ * the canonical state wins; pods that never needed creating count as running.
+ */
+function resolveDeploymentState(
+  status: McpDeploymentStatusEntry,
+  canonicalStateByPod: Map<string, string>,
+): DeploymentState {
+  const state =
+    (status.podName && canonicalStateByPod.get(status.podName)) || status.state;
+  return (
+    state === "not_created" || state === "succeeded" ? "running" : state
+  ) as DeploymentState;
 }
 
 // `scope` is nullable on rows created before it existed; a team id implies a

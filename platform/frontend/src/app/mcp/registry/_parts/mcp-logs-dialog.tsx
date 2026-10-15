@@ -39,6 +39,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { TabsContent } from "@/components/ui/tabs";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useAnimatedDots } from "@/lib/hooks/use-animated-dots";
 import websocketService from "@/lib/websocket/websocket";
@@ -421,6 +422,12 @@ export function McpLogsContent({
   }, [command]);
 
   const isDebugDisabled = currentDeploymentStatus?.state !== "running";
+  // A shell runs commands inside the server's container in the cluster, so it
+  // stays with the people who manage installations; the backend refuses it to
+  // everyone else too.
+  const { data: canOpenShell } = useHasPermissions({
+    mcpServerInstallation: ["update"],
+  });
   const contentTabClassName = hideHeader
     ? "flex flex-1 min-h-0 flex-col pt-4"
     : "mt-2 flex flex-1 min-h-0 flex-col";
@@ -466,12 +473,17 @@ export function McpLogsContent({
             disabled: isDebugDisabled,
             disabledReason: "Pod must be running to inspect tools",
           },
-          {
-            value: "debug",
-            label: "Shell",
-            disabled: isDebugDisabled,
-            disabledReason: "Pod must be running to start a shell session",
-          },
+          ...(canOpenShell
+            ? [
+                {
+                  value: "debug",
+                  label: "Shell",
+                  disabled: isDebugDisabled,
+                  disabledReason:
+                    "Pod must be running to start a shell session",
+                },
+              ]
+            : []),
         ]}
       >
         <TabsContent value="logs" className={contentTabClassName}>
@@ -604,7 +616,7 @@ export function McpLogsContent({
         </TabsContent>
 
         <TabsContent value="debug" className={contentTabClassName}>
-          {serverId && (
+          {serverId && canOpenShell && (
             <McpExecTerminal
               serverId={serverId}
               isActive={activeTab === "debug" && isActive}

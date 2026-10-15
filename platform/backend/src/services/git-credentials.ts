@@ -3,6 +3,7 @@ import { GitHostClient, GitHostError } from "@/git-hosts/git-host-client";
 import { createSharedCredential } from "@/models/_shared/credential-store";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import { secretManager } from "@/secrets-manager";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
   type CreateGitlabTokenRequest,
@@ -55,6 +56,8 @@ export async function listGitCredentials(
  */
 export async function createGitlabToken(params: {
   organizationId: string;
+  /** Becomes the credential's author, who is granted full access to it. */
+  userId?: string;
   data: CreateGitlabTokenRequest;
 }): Promise<GitCredential> {
   let host: ReturnType<typeof gitHostFromUrl>;
@@ -95,6 +98,15 @@ export async function createGitlabToken(params: {
     kind: "gitlab_token",
     gitlabUrl: host.webUrl,
     secretId: secret.id,
+    createdBy: params.userId ?? null,
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    initialPermissionGrants: await ResourcePermissions.defaultCredentialGrants({
+      organizationId: params.organizationId,
+      userId: params.userId,
+    }),
+    // SPDX-SnippetEnd
   });
   return {
     id: definition.id,

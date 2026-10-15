@@ -7,7 +7,7 @@ import type * as k8s from "@kubernetes/client-node";
 /**
  * Pure manifest builders for the p4 shim — the per-tenant pod that executes
  * allowlisted Perforce CLI commands for knowledge-base permission sync
- * (`p4_shim_docker_image/`).
+ * (`docker_images/p4_shim/`).
  *
  * **Tenancy.** One shim per CONNECTOR, never one per installation and never
  * one shared across a tenant's connectors. Every resource — Deployment,

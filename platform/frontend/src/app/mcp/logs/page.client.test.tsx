@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useProfiles } from "@/lib/agent.query";
+import { useAgentOptions } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
@@ -27,7 +27,7 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/organization.query");
 
-vi.mock("@/lib/agent.query", () => ({ useProfiles: vi.fn() }));
+vi.mock("@/lib/agent.query", () => ({ useAgentOptions: vi.fn() }));
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   useMcpCatalogCredentialPreflight: () => ({ data: [] }),
   useInternalMcpCatalog: vi.fn(),
@@ -74,9 +74,9 @@ describe("McpGatewayLogsPage filters", () => {
       new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
     );
     vi.mocked(usePathname).mockReturnValue("/mcp/logs");
-    vi.mocked(useProfiles).mockReturnValue({
+    vi.mocked(useAgentOptions).mockReturnValue({
       data: [personalGateway, orgGateway],
-    } as unknown as ReturnType<typeof useProfiles>);
+    } as unknown as ReturnType<typeof useAgentOptions>);
     vi.mocked(useMcpServers).mockReturnValue({
       data: [],
     } as unknown as ReturnType<typeof useMcpServers>);

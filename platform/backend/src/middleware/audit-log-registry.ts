@@ -1162,6 +1162,13 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (_id, orgId) =>
       ChatOpsChannelBindingModel.findBindingsFingerprintForOrganization(orgId),
   },
+  // Joining records the channel's binding, with no agent when it is new.
+  "/api/chatops/config/slack/router/channels/:channelId/join": {
+    resourceType: "chatOpsBinding",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, orgId) =>
+      ChatOpsChannelBindingModel.findBindingsFingerprintForOrganization(orgId),
+  },
   "/api/chatops/config/slack/agents/:agentId": {
     resourceType: "chatOpsConfig",
     resourceIdSource: "organizationContext",

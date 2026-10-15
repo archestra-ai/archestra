@@ -16,7 +16,7 @@ export interface SkillCatalogEntry {
 
 // repos are normalized out of the per-skill rows so the repo strings aren't
 // duplicated across every skill; skills are positional tuples to drop repeated
-// JSON key names. See standalone-scripts/generate-skill-index.ts.
+// JSON key names. See scripts/generate-skill-index.ts.
 type CompactRepo = [repo: string, repoDescription: string];
 type CompactSkill = [
   repoIndex: number,

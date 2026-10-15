@@ -49,11 +49,11 @@ export const TOOL_PERMISSIONS: Record<
   get_guardrails_policy: { resource: "openappaPolicy", action: "read" },
   get_openappa_policy_tests: { resource: "openappaPolicy", action: "read" },
   run_openappa_policy_tests: { resource: "openappaPolicy", action: "update" },
-  preview_openappa_validation_change: {
+  preview_guardrails_validation_change: {
     resource: "openappaPolicy",
     action: "read",
   },
-  publish_openappa_validation_change: {
+  update_guardrails_validation: {
     resource: "openappaPolicy",
     action: "update",
   },
@@ -76,6 +76,11 @@ export const TOOL_PERMISSIONS: Record<
     action: "update",
   },
   connect_guardrails_repository: {
+    resource: "organizationSettings",
+    action: "update",
+  },
+  // Same permission as the REST route's sync action.
+  sync_guardrails_repository: {
     resource: "organizationSettings",
     action: "update",
   },

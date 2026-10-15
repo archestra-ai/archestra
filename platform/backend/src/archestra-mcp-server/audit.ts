@@ -383,6 +383,13 @@ const TOOL_AUDIT_SPECS: Record<string, ArchestraToolAuditSpec> = {
     fetchById: (id, orgId) =>
       OpenAppaGithubSyncModel.findByIdForAudit(id, orgId),
   },
+  sync_guardrails_repository: {
+    resourceType: "organization",
+    action: "organization.updated",
+    useOrganizationAsResource: true,
+    fetchById: (id, orgId) =>
+      OpenAppaGithubSyncModel.findByIdForAudit(id, orgId),
+  },
   write_workspace_file: {
     resourceType: "agentRun",
     action: "agentRun.updated",

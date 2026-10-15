@@ -20,6 +20,7 @@ import { type ArchestraContext, executeArchestraTool } from ".";
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle fixture, not a React hook
 const server = useMswServer();
 const CONNECT = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}connect_guardrails_repository`;
+const SYNC = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}sync_guardrails_repository`;
 const commit = "d".repeat(40);
 const repositoryPolicy =
   '[policy]\nversion = 2\n[[policy.tool]]\nname = "read"\ndelta = {}\n[externals]\ntimeout_ms = 2000\nmax_body_bytes = 65536\n';
@@ -228,5 +229,45 @@ describe("connect_guardrails_repository", () => {
     expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
       repo: "example/current-policy",
     });
+  });
+
+  test("pulls the connected repository's policy on demand", async () => {
+    let served = repositoryPolicy;
+    server.use(
+      http.get(
+        "https://api.github.com/repos/example/existing-policy/contents/appa.toml",
+        () => HttpResponse.text(served),
+      ),
+    );
+    const connected = await executeArchestraTool(
+      CONNECT,
+      { repo: "example/existing-policy", githubAppConfigId },
+      context,
+    );
+    expect(connected.isError).toBeFalsy();
+
+    served = `${repositoryPolicy}# Merged after the repository was connected\n`;
+    const response = await executeArchestraTool(SYNC, {}, context);
+
+    expect(response.isError).toBeFalsy();
+    expect(response.structuredContent).toMatchObject({
+      source: { repo: "example/existing-policy", lastSyncError: null },
+      hasPolicy: true,
+    });
+    expect((await guardrailsPolicyService.get(organizationId)).content).toBe(
+      served,
+    );
+  });
+
+  test("explains that there is nothing to sync without a connected repository", async () => {
+    const response = await executeArchestraTool(SYNC, {}, context);
+
+    expect(response.isError).toBe(true);
+    expect(JSON.stringify(response.content)).toContain(
+      "Connect a GitHub source first",
+    );
+    expect((await guardrailsPolicyService.get(organizationId)).content).toBe(
+      currentPolicy,
+    );
   });
 });

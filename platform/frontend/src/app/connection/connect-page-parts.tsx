@@ -51,8 +51,9 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
-import { useSkill } from "@/lib/skills/skill.query";
+import { useSkill, useSkillsPaginated } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils/tailwind";
 import { skillDetailHref } from "../skills/_parts/skill-page-config";
 import { ClientIcon } from "./client-icon";
@@ -183,6 +184,31 @@ export function BrowseDialog({
   choices: ConnectChoices;
 }) {
   const [q, setQ] = useState("");
+  const [skillOffset, setSkillOffset] = useState(0);
+  const [skillSearch, setSkillSearch] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSkillSearch(q);
+      setSkillOffset(0);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [q]);
+  const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
+  const skillQuery = useSkillsPaginated(
+    {
+      limit: 100,
+      offset: skillOffset,
+      search: skillSearch || undefined,
+      includeContent: false,
+    },
+    {
+      enabled:
+        open &&
+        tab === "skills" &&
+        data.skillsEnabled &&
+        canReadSkills === true,
+    },
+  );
   const [expanded, setExpanded] = useState<string | null>(null);
   const [openSkill, setOpenSkill] = useState<ConnectPageSkill | null>(null);
   // Only on open: switching tabs inside the dialog keeps what's open.
@@ -196,6 +222,8 @@ export function BrowseDialog({
           : null,
       );
       setQ("");
+      setSkillOffset(0);
+      setSkillSearch("");
     }
   }, [open, focus]);
   const parts = data.partsFor(client);
@@ -204,9 +232,7 @@ export function BrowseDialog({
   const serverMatch = data.servers.filter((s) =>
     s.name.toLowerCase().includes(needle),
   );
-  const skillMatch = skills.filter((s) =>
-    `${s.name} ${s.description}`.toLowerCase().includes(needle),
-  );
+  const skillMatch = skillQuery.data?.data ?? [];
   const pluginMatch = plugins.filter((p) =>
     `${p.name} ${p.description ?? ""}`.toLowerCase().includes(needle),
   );
@@ -356,7 +382,9 @@ export function BrowseDialog({
                   )}
                 </>
               ) : tab === "skills" ? (
-                !data.skillsEnabled ? (
+                canReadSkills === false ? (
+                  <Empty>You don’t have access to skills.</Empty>
+                ) : !data.skillsEnabled ? (
                   <Empty>
                     Your admin hasn't shared skills with agents yet.
                   </Empty>
@@ -388,20 +416,47 @@ export function BrowseDialog({
                           </UnstyledButton>
                         </li>
                       ))}
-                      {skillMatch.length === 0 && (
-                        <Empty>
-                          {skills.length === 0
-                            ? "No skills in your org yet."
-                            : "No skills match."}
-                        </Empty>
+                      {skillQuery.isPending ? (
+                        <Empty>Loading skills…</Empty>
+                      ) : skillQuery.isError ? (
+                        <Empty>Skills could not be loaded.</Empty>
+                      ) : (
+                        skillMatch.length === 0 && (
+                          <Empty>
+                            {data.totalSkills === 0
+                              ? "No skills in your org yet."
+                              : "No skills match."}
+                          </Empty>
+                        )
                       )}
                     </ul>
-                    {skillMatch.length > MODAL_ROW_CAP && (
-                      <p className="text-xs text-muted-foreground">
-                        Showing {MODAL_ROW_CAP} of {fmt(skillMatch.length)}.
-                        Search to narrow down.
-                      </p>
-                    )}
+                    <div className="flex items-center justify-between gap-3">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={skillOffset === 0 || skillQuery.isFetching}
+                        onClick={() =>
+                          setSkillOffset((offset) => Math.max(0, offset - 100))
+                        }
+                      >
+                        Previous
+                      </Button>
+                      <span className="text-xs text-muted-foreground">
+                        {fmt(skillQuery.data?.pagination.total ?? 0)} skills
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={
+                          skillQuery.isFetching ||
+                          skillOffset + 100 >=
+                            (skillQuery.data?.pagination.total ?? 0)
+                        }
+                        onClick={() => setSkillOffset((offset) => offset + 100)}
+                      >
+                        Next
+                      </Button>
+                    </div>
                   </>
                 )
               ) : (

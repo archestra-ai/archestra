@@ -146,15 +146,13 @@ describe("renderStartupGuardPowerShell (Claude Code)", () => {
     expect(script).toContain("a newer ' + $AppName + ' setup");
     // non-interactive stays advisory-only
     expect(script).toContain("re-run the setup from the ");
-    // interactive offers a timed, non-blocking [U] that prints the steps
-    expect(script).toContain("'[U]'");
+    // Steps are unconditional once stale, with a bounded reading window.
+    expect(script).not.toContain("'[U]'");
     expect(script).toContain("/connection page and pick");
-    expect(script).toContain("$key -eq 'u' -or $key -eq 'U'");
-    // the [C] closing beat must leave a non-[C] queued key (an early [U]) in
-    // PendingKey so the update offer can consume it, mirroring the bash guard
     expect(script).toContain(
-      "if ($key -and $key -ne 'c' -and $key -ne 'C') { $Script:PendingKey = $key; $key = '' }",
+      "Your installed startup check is older than this deployment.",
     );
+    expect(script).toContain("UtcNow.AddMilliseconds(6000)");
     // a guard that removed itself this run must not advertise an update for a
     // startup check that no longer exists
     expect(script).toContain("if ($Script:GuardUninstalled) { return }");

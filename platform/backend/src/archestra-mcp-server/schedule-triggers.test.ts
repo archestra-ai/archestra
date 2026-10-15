@@ -835,15 +835,24 @@ describe("schedule trigger MCP tools", () => {
         organizationId,
         agentId: agent.id,
         actorUserId: userId,
+        enabled: true,
       });
-      const skipped = await makeScheduleTriggerRun(trigger.id, {
-        runKind: "due",
+      const blockedBy = {
+        phase: "running" as const,
+        runId: "16100000-0000-4000-8000-000000000001",
+        runtimeTaskId: "16100000-0000-4000-8000-000000000002",
+        startedAt: "2030-01-01T00:00:00.000Z",
+        elapsedSeconds: 3600,
+        deadline: "2030-01-01T04:00:00.000Z",
+        maximumDurationSeconds: 14400,
+      };
+      const skipped = await ScheduleTriggerRunModel.recordDueRun({
+        trigger,
+        now: new Date(),
+        skip: { blockedBy, error: "Previous run still in progress" },
       });
-      await ScheduleTriggerRunModel.markCompleted({
-        runId: skipped.id,
-        status: "failed",
-        error: "Previous run still in progress",
-      });
+      expect(skipped).not.toBeNull();
+      if (!skipped) throw new Error("Expected a recorded skip");
       await makeScheduleTriggerRun(trigger.id, { runKind: "manual" });
 
       const result = await executeArchestraTool(
@@ -864,8 +873,16 @@ describe("schedule trigger MCP tools", () => {
         run_kind: "due",
         status: "failed",
         error: "Previous run still in progress",
+        blocked_by: blockedBy,
       });
       expect(failed?.completed_at).not.toBeNull();
+      const detail = await executeArchestraTool(
+        GET_RUN,
+        { schedule_trigger_id: trigger.id, run_id: skipped.id },
+        context,
+      );
+      expect(detail.isError).toBe(false);
+      expect(detail.structuredContent).toMatchObject({ blocked_by: blockedBy });
     });
 
     test("filters runs by status", async ({

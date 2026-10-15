@@ -7,6 +7,7 @@ import {
   runHref,
   runRowKind,
 } from "@/app/projects/[id]/schedules/[triggerId]/run-row.utils";
+import { ScheduleRunBlockedNotice } from "@/components/scheduled-tasks/schedule-run-blocked-notice";
 import { isScheduleTriggerRunActive } from "@/components/scheduled-tasks/schedule-trigger.utils";
 import { StatusBadge } from "@/components/scheduled-tasks/status-badge";
 import { useResolveRunChat } from "@/components/scheduled-tasks/use-resolve-run-chat";
@@ -75,6 +76,9 @@ export function ScheduleRunsList({
           run={run}
           triggerId={triggerId}
           isCurrent={run.id === currentRunId}
+          blockingRun={runs.find(
+            (candidate) => candidate.id === run.blockedBy?.runId,
+          )}
         />
       ))}
     </div>
@@ -87,17 +91,19 @@ function RunRow({
   run,
   triggerId,
   isCurrent,
+  blockingRun,
 }: {
   run: ScheduleTriggerRun;
   triggerId: string;
   isCurrent: boolean;
+  blockingRun?: ScheduleTriggerRun;
 }) {
   const kind = runRowKind(run);
   const { resolve, isResolving } = useResolveRunChat();
 
   const rowContent = (
     <div className="flex items-center gap-3 px-3 py-2.5">
-      <StatusBadge label={run.status} />
+      <StatusBadge label={run.blockedBy ? "skipped" : run.status} />
       <div
         className="min-w-0 flex-1 text-sm"
         title={new Date(run.createdAt).toLocaleString()}
@@ -109,6 +115,21 @@ function RunRow({
       )}
     </div>
   );
+
+  if (run.blockedBy) {
+    return (
+      <div className="rounded-lg border bg-card">
+        {rowContent}
+        <div className="px-3 pb-3">
+          <ScheduleRunBlockedNotice
+            run={run}
+            triggerId={triggerId}
+            blockingRun={blockingRun}
+          />
+        </div>
+      </div>
+    );
+  }
 
   if (kind === "open-chat" || kind === "open-runtime") {
     const href = runHref({ triggerId, run });

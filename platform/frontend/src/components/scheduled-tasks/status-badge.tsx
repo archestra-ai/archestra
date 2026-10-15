@@ -14,6 +14,7 @@ export function StatusBadge({ label }: { label: string }) {
         label === "running" &&
           "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400",
         label === "cancelled" && "text-muted-foreground",
+        label === "skipped" && "text-muted-foreground",
       )}
     >
       {DISPLAY_LABELS[label] ?? label}

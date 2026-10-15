@@ -22,7 +22,9 @@ export {
   PLUGIN_MAX_FILES,
   PLUGIN_MAX_TOTAL_BYTES,
 } from "./plugin-file-constraints";
-export const PLUGIN_DELIVERY_MAX_BYTES = 1110 * 1024 * 1024;
+/** Byte cap on one plugin delivery, kept in whole MiB so messages read cleanly. */
+export const PLUGIN_DELIVERY_MAX_MIB = 1110;
+export const PLUGIN_DELIVERY_MAX_BYTES = PLUGIN_DELIVERY_MAX_MIB * 1024 * 1024;
 
 export const ClientTypeSchema = z.enum([
   "claude-code",

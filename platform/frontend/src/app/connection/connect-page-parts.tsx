@@ -51,6 +51,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useSkill, useSkillsPaginated } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils/tailwind";
@@ -192,6 +193,7 @@ export function BrowseDialog({
     }, 250);
     return () => clearTimeout(timer);
   }, [q]);
+  const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
   const skillQuery = useSkillsPaginated(
     {
       limit: 100,
@@ -199,7 +201,13 @@ export function BrowseDialog({
       search: skillSearch || undefined,
       includeContent: false,
     },
-    { enabled: open && tab === "skills" && data.skillsEnabled },
+    {
+      enabled:
+        open &&
+        tab === "skills" &&
+        data.skillsEnabled &&
+        canReadSkills === true,
+    },
   );
   const [expanded, setExpanded] = useState<string | null>(null);
   const [openSkill, setOpenSkill] = useState<ConnectPageSkill | null>(null);
@@ -374,7 +382,9 @@ export function BrowseDialog({
                   )}
                 </>
               ) : tab === "skills" ? (
-                !data.skillsEnabled ? (
+                canReadSkills === false ? (
+                  <Empty>You don’t have access to skills.</Empty>
+                ) : !data.skillsEnabled ? (
                   <Empty>
                     Your admin hasn't shared skills with agents yet.
                   </Empty>

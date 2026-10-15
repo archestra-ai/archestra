@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
+import { authQueryKeys } from "@/lib/auth/auth.query";
 import { CONNECT_CLIENTS } from "./clients";
 import { ALL_INCLUDED } from "./connect-choices";
 import type { ConnectPageData } from "./connect-page-data";
@@ -21,7 +22,10 @@ afterEach(() => {
 });
 afterAll(() => api.close());
 
-it("requests skill pages only when opened or navigated and searches the whole catalogue", async () => {
+it.each([
+  true,
+  false,
+])("loads skill pages only on demand and with read permission (%s)", async (canRead) => {
   const requests: { offset: number; search: string | null }[] = [];
   api.use(
     http.get("http://localhost:9000/api/skills", ({ request }) => {
@@ -47,6 +51,12 @@ it("requests skill pages only when opened or navigated and searches the whole ca
   );
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
+  });
+  queryClient.setQueryData(authQueryKeys.session(), {
+    user: { id: "test-user" },
+  });
+  queryClient.setQueryData(authQueryKeys.userPermissions(), {
+    skill: canRead ? ["read"] : [],
   });
   const data = {
     servers: [],
@@ -74,6 +84,13 @@ it("requests skill pages only when opened or navigated and searches the whole ca
   await new Promise((resolve) => setTimeout(resolve, 300));
   expect(requests).toEqual([]);
   view.rerender(show(true));
+  if (!canRead) {
+    expect(
+      await screen.findByText("You don’t have access to skills."),
+    ).toBeVisible();
+    expect(requests).toEqual([]);
+    return;
+  }
   expect(await screen.findByText("Page 1 skill")).toBeVisible();
   await new Promise((resolve) => setTimeout(resolve, 300));
   expect(requests).toEqual([{ offset: 0, search: null }]);

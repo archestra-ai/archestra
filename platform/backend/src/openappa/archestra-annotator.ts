@@ -7,6 +7,7 @@ import {
   Output,
   type SystemModelMessage,
 } from "ai";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import { LRUCacheManager } from "@/cache-manager";
 import { isAnthropicNativeEndpoint } from "@/clients/anthropic-endpoint";
 import {
@@ -143,7 +144,7 @@ class OpenAppaArchestraAnnotator {
       const answer =
         (await structuredAnswer({
           model,
-          modelKey: `${selection.provider}/${selection.modelName}`,
+          modelKey: `${selection.provider}/${selection.modelName}@${selection.baseUrl ?? "default"}`,
           system: cached(request.system),
           request,
           maxOutputTokens: budget,
@@ -213,7 +214,9 @@ async function sessionOwner(
   if (!attribution) return { kind: "unattributed" };
   const session = await OpenAppaSessionModel.findByTrajectory(attribution);
   if (!session) return { kind: "unattributed" };
-  const userId = callerUserId(session.callerId);
+  const caller = callerUserId(session.callerId);
+  // A service account has no users row to attribute to; its session still counts.
+  const userId = caller && !isServiceAccountUserId(caller) ? caller : undefined;
   if (
     userId &&
     !(await MemberModel.getByUserId(userId, session.organizationId))
@@ -261,9 +264,10 @@ type AnnotationCall = {
 };
 
 /**
- * Models that refused the structured-output format, so later consults go
- * straight to the tagged answer instead of paying for a refused call each
- * time. Entries expire, so a provider that gains support is tried again.
+ * Model endpoints that refused the structured-output format for a schema, so
+ * later consults go straight to the tagged answer instead of paying for a
+ * refused call each time. Entries expire, so a provider that gains support is
+ * tried again.
  */
 const structuredOutputRefusals = new LRUCacheManager<true>({
   maxSize: 256,
@@ -279,7 +283,8 @@ const structuredOutputRefusals = new LRUCacheManager<true>({
 async function structuredAnswer(
   call: AnnotationCall & { modelKey: string },
 ): Promise<Record<string, unknown> | null> {
-  if (structuredOutputRefusals.get(call.modelKey)) return null;
+  const refusalKey = JSON.stringify([call.modelKey, call.request.schema]);
+  if (structuredOutputRefusals.get(refusalKey)) return null;
   try {
     const { output } = await generateText({
       model: call.model,
@@ -290,29 +295,36 @@ async function structuredAnswer(
     });
     return isPlainObject(output) ? output : null;
   } catch (error) {
-    if (!refusesStructuredOutput(error)) throw error;
-    structuredOutputRefusals.set(call.modelKey, true);
-    logger.info(
-      { model: call.modelKey },
-      "OpenAPPA archestra annotator: the model refused structured output; using tagged answers",
-    );
-    return null;
+    switch (structuredFailure(error)) {
+      case "refused":
+        structuredOutputRefusals.set(refusalKey, true);
+        logger.info(
+          { model: call.modelKey },
+          "OpenAPPA archestra annotator: the model refused structured output; using tagged answers",
+        );
+        return null;
+      case "unparsed":
+        return null;
+      case "other":
+        throw error;
+    }
   }
 }
 
 /**
- * A rejected request shape or an answer that does not parse against the
- * schema. Authentication, rate and cost limits are not about the format.
+ * `refused`: the provider rejected the request shape. `unparsed`: this one
+ * answer did not parse against the schema. Authentication, rate and cost
+ * limits are not about the format.
  */
-function refusesStructuredOutput(error: unknown): boolean {
-  if (NoObjectGeneratedError.isInstance(error)) return true;
-  if (!APICallError.isInstance(error)) return false;
+function structuredFailure(error: unknown): "refused" | "unparsed" | "other" {
+  if (NoObjectGeneratedError.isInstance(error)) return "unparsed";
+  if (!APICallError.isInstance(error)) return "other";
   switch (error.statusCode) {
     case 400:
     case 422:
-      return true;
+      return "refused";
     default:
-      return false;
+      return "other";
   }
 }
 

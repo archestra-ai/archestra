@@ -219,6 +219,27 @@ describe("archestra annotator", () => {
     expect(tagged.length).toBeGreaterThan(request.system.length);
   });
 
+  test("keeps asking for the format after one answer that did not parse", async () => {
+    await useDefaultModel({ provider: "openai", modelId: "gpt-4o-mini" });
+    let structured = 0;
+    const sent = answerAt(`/v1/openai/${agentId}/chat/completions`, (body) =>
+      "response_format" in body
+        ? completion(structured++ === 0 ? "not json" : '{"rank":"trusted"}')
+        : completion('<annotation>{"rank":"suspicious"}</annotation>'),
+    );
+
+    const first = await annotate(bearer());
+    const second = await annotate(bearer());
+
+    expect(first.json()).toEqual({ rank: "suspicious" });
+    expect(second.json()).toEqual({ rank: "trusted" });
+    expect(sent.map(({ body }) => "response_format" in body)).toEqual([
+      true,
+      false,
+      true,
+    ]);
+  });
+
   test("marks the constant system prompt as a cache breakpoint for Claude through OpenRouter", async () => {
     await useDefaultModel({
       provider: "openrouter",
@@ -243,11 +264,12 @@ describe("archestra annotator", () => {
     callerId: string;
     sessionId: string;
     parentId?: string;
+    root?: string;
   }) =>
     db.insert(schema.openappaSessionsTable).values({
+      root: ROOT,
       ...params,
       actor: openappaActor(params.sessionId),
-      root: ROOT,
       startDecision: { decision: "ack" },
     });
 
@@ -283,6 +305,13 @@ describe("archestra annotator", () => {
       sessionId: child,
       parentId: root,
     });
+    const serviceRoot = "archestra:service-account-root";
+    await openSession({
+      organizationId: owner,
+      callerId: "user:service-account:sa-1",
+      sessionId: "user:service-account:sa-1|batch",
+      root: serviceRoot,
+    });
     const sent = answerAt(`/v1/openai/${ownerAgent.id}/chat/completions`, () =>
       completion('{"rank":"trusted"}'),
     );
@@ -295,12 +324,19 @@ describe("archestra annotator", () => {
       ...request,
       attribution: { root: ROOT, trajectory: openappaActor(child) },
     });
+    const fromServiceAccount = await annotate(bearer(), {
+      ...request,
+      attribution: { root: serviceRoot, trajectory: serviceRoot },
+    });
 
     expect(fromRoot.json()).toEqual({ rank: "trusted" });
     expect(fromChild.json()).toEqual({ rank: "trusted" });
+    expect(fromServiceAccount.json()).toEqual({ rank: "trusted" });
     expect(sent.map(({ user, session }) => ({ user, session }))).toEqual([
       { user: user.id, session: "conversation" },
       { user: user.id, session: "conversation:subagent" },
+      // A service account has no users row; its session still names the call.
+      { user: null, session: "batch" },
     ]);
   });
 

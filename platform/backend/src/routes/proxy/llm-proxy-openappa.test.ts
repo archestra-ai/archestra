@@ -9223,19 +9223,40 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           output: admitted,
         }),
       ]);
-      const carrier = stream
+      // Claude Code takes a subagent's report only through SubagentHandback,
+      // so the admitted return must reach the client as that call, streamed
+      // or not. Text in its place leaves the report undelivered.
+      const handback = noticeFrom(child.body, stream);
+      expect(handback.name).toBe("SubagentHandback");
+      expect(String(handback.input?.message)).toContain(admitted);
+      expect(String(handback.input?.message)).toContain("finished subagent");
+      expect(String(handback.input?.message)).not.toContain(rawMarker);
+      const childEvents = stream
         ? child.body
             .split("\n")
             .filter((line) => line.startsWith("data: "))
             .map((line) => JSON.parse(line.slice("data: ".length)))
+        : [];
+      expect(
+        stream
+          ? childEvents.find((event) => event.type === "message_delta")?.delta
+              ?.stop_reason
+          : child.json().stop_reason,
+      ).toBe("tool_use");
+      const startProof = stream
+        ? childEvents
             .filter((event) => event.delta?.type === "text_delta")
             .map((event) => event.delta.text as string)
             .join("")
-        : `${
-            (child.json().content as Array<{ type: string; text?: string }>)
-              .find((block) => block.text?.includes("started subagent"))
-              ?.text?.split("\n\n", 1)[0]
-          }\n\n${childReturnCarrier(child.body, admitted)}`;
+        : (child.json().content as Array<{ type: string; text?: string }>)
+            .filter((block) => block.type === "text")
+            .map((block) => block.text ?? "")
+            .join("");
+      expect(startProof).toContain("started subagent");
+      const carrier = `${startProof.split("\n\n", 1)[0]}\n\n${childReturnCarrier(
+        child.body,
+        admitted,
+      )}`;
       expect(carrier).toContain("started subagent");
       expect(carrier).toContain("finished subagent");
 

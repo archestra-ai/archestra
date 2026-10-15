@@ -3698,7 +3698,7 @@ describe("rendering runtime text for this client", () => {
     }
   });
 
-  test("suppresses the queued start proof when a streamed child completes its handback", async ({
+  test("releases a streamed child's lone handback as the rewritten call", async ({
     makeOrganization,
   }) => {
     const priorSecret = config.openappa.offerSigningSecret;
@@ -3768,21 +3768,20 @@ describe("rendering runtime text for this client", () => {
         expect.objectContaining({ id: "handback" }),
       ]);
 
+      const [handback] = outcome.toolCalls;
+      expect(handback?.name).toBe("SubagentHandback");
+      expect(JSON.stringify(handback?.arguments)).toContain("raw child return");
+
+      // Claude Code takes a subagent's report only through SubagentHandback.
+      // Replacing the streamed turn with text drops that call, and the client
+      // then asks the subagent to send its report again.
       const buffered = await plugin.onBufferedModelResponse({
         ...context,
         streaming: true,
         response: {},
         responseText: "",
       });
-      if (buffered?.decision !== "replace") {
-        throw new Error(
-          "expected the completed handback to replace the buffered stream",
-        );
-      }
-      expect(buffered.responseText).toContain("raw child return");
-      expect(buffered.responseText).toContain("finished subagent");
-      expect(buffered.responseText).not.toContain("[appa]");
-      expect(buffered.responseText).not.toContain("appact2-");
+      expect(buffered).toBeUndefined();
       expect(endChild).toHaveBeenCalledTimes(1);
     } finally {
       endChild.mockRestore();

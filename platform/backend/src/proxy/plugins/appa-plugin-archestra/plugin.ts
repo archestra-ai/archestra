@@ -177,12 +177,6 @@ type AppaPluginBinding = {
   sessionInitialized?: boolean;
   /** True when the model's response contained tool calls awaiting client execution. */
   turnOpen: boolean;
-  /**
-   * Admitted return text when a native handback is the only call in the batch.
-   * A buffered stream replacement prevents the start proof from accompanying
-   * the return.
-   */
-  completedHandbackReturn: string | undefined;
   /** True on internal loopback Chat requests. */
   chat: boolean;
   compaction: boolean;
@@ -283,7 +277,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       runtimeSessionId: trustedContext.runtimeSessionId,
       runtimeTaskId: trustedContext.runtimeTaskId,
       turnOpen: false,
-      completedHandbackReturn: undefined,
       chat,
       compaction: trustedContext.compaction === true,
       threadContinue: trustedContext.thread === "continue",
@@ -1336,10 +1329,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       if (handbackIds.has(call.id)) {
         const handback = await admitChildHandback({ binding, call });
         rewritten.push({ id: call.id, name: call.name });
+        // The rewritten call carries the admitted return. Claude Code takes a
+        // report only through this call, so it must reach the client as a
+        // call, streamed or not; text in its place is an undelivered report.
         released.push(handback.call);
-        if (calls.length === 1) {
-          binding.completedHandbackReturn = handback.returnText;
-        }
         continue;
       }
       const inbox = peerInbox.get(call.id);
@@ -1626,12 +1619,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       binding.compaction = true;
     }
     if (binding?.compaction) return { decision: "release" };
-    if (binding?.completedHandbackReturn !== undefined && context.streaming) {
-      return {
-        decision: "replace",
-        responseText: binding.completedHandbackReturn,
-      };
-    }
     if (!binding || binding.turnOpen || !binding.session.parent_id) {
       return;
     }

@@ -20,15 +20,20 @@ import { projectService } from "@/services/project";
 import {
   findAccessibleScheduleTriggerOrThrow,
   findAccessibleScheduleTriggerRunOrThrow,
-  isScheduledTaskAdmin,
+  hasProjectScheduleOversight,
   startManualScheduleTriggerRun,
 } from "@/services/schedule-trigger-access";
 import {
   createScheduleTrigger,
+  createScheduleTriggerWithProject,
   updateScheduleTrigger,
 } from "@/services/schedule-trigger-management";
 import type { ScheduleTrigger, ScheduleTriggerRun } from "@/types";
-import { ApiError, ScheduleTriggerRunStatusSchema } from "@/types";
+import {
+  ApiError,
+  ScheduleRunBlockerSchema,
+  ScheduleTriggerRunStatusSchema,
+} from "@/types";
 import {
   CreateScheduleTriggerBodySchema,
   UpdateScheduleTriggerBodySchema,
@@ -103,6 +108,9 @@ const GetScheduleTriggerOutputSchema = ScheduleTriggerSummarySchema.extend({
 });
 
 const ScheduleTriggerRunSummarySchema = z.object({
+  blocked_by: ScheduleRunBlockerSchema.nullable().describe(
+    "Why this tick was skipped, including the blocking run and its frozen deadline.",
+  ),
   id: z
     .string()
     .describe("The run's id — pass it to get_schedule_trigger_run."),
@@ -182,20 +190,53 @@ const registry = defineArchestraTools([
     shortName: TOOL_CREATE_SCHEDULE_TRIGGER_SHORT_NAME,
     title: "Create Scheduled Task",
     description:
-      "Create a scheduled agent task in a project you can access. It runs as you. Use list_projects to find the project id.",
-    schema: ScheduleFieldsSchema.strict(),
-    outputSchema: GetScheduleTriggerOutputSchema,
+      "Schedule an agent from chat, Slack, or Teams. Omit project_id to create a private project named after the task, with message_template as its instructions; agent_id defaults to the current agent. Retry with the same name and task arguments to reuse the schedule. For an existing project, pass its id from list_projects; agent_id defaults to that project's agent, then the organization default. Runs as you. Requires project:create.",
+    schema: ScheduleFieldsSchema.extend({
+      project_id: ScheduleFieldsSchema.shape.project_id
+        .optional()
+        .describe(
+          "Existing project to schedule in. Omit to create a private project using name and message_template as its instructions.",
+        ),
+      agent_id: ScheduleFieldsSchema.shape.agent_id.describe(
+        "Agent to run. For a new project, defaults to the current agent; for an existing project, its agent then the organization default.",
+      ),
+    }).strict(),
+    outputSchema: GetScheduleTriggerOutputSchema.extend({
+      created: z
+        .boolean()
+        .describe(
+          "False when an identical new-project request reused an existing schedule.",
+        ),
+    }),
     async handler({ args, context }) {
       const identity = requireUserContext(context);
       if ("error" in identity) return identity.error;
       try {
-        const trigger = await createScheduleTrigger({
-          ...identity,
-          body: CreateScheduleTriggerBodySchema.parse(toScheduleBody(args)),
-        });
+        const { trigger, created } = args.project_id
+          ? {
+              trigger: await createScheduleTrigger({
+                ...identity,
+                body: CreateScheduleTriggerBodySchema.parse(
+                  toScheduleBody(args),
+                ),
+              }),
+              created: true,
+            }
+          : await createScheduleTriggerWithProject({
+              ...identity,
+              body: {
+                name: args.name,
+                agentId: args.agent_id ?? context.agent.id,
+                cronExpression: args.cron_expression,
+                timezone: args.timezone,
+                messageTemplate: args.message_template,
+                enabled: args.enabled ?? true,
+              },
+            });
         return structuredSuccessResult({
           ...toTriggerSummary(trigger),
           message_template: trigger.messageTemplate,
+          created,
         });
       } catch (error) {
         return apiErrorOr(error, "create scheduled task");
@@ -206,7 +247,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_UPDATE_SCHEDULE_TRIGGER_SHORT_NAME,
     title: "Update Scheduled Task",
     description:
-      "Edit a scheduled task. Only its actor or a scheduled-task administrator may edit it. Omitted fields retain their values.",
+      "Edit a scheduled task. Only its actor or someone with organization-wide Projects update access may edit it. Omitted fields retain their values.",
     schema: ScheduleFieldsSchema.partial()
       .extend({ schedule_trigger_id: z.string().uuid() })
       .strict(),
@@ -233,7 +274,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_DELETE_SCHEDULE_TRIGGER_SHORT_NAME,
     title: "Delete Scheduled Task",
     description:
-      "Delete a scheduled task and its run history. Only its actor or a scheduled-task administrator may delete it.",
+      "Delete a scheduled task and its run history. Only its actor or someone with organization-wide Projects delete access may delete it.",
     schema: z.object({ schedule_trigger_id: z.string().uuid() }).strict(),
     outputSchema: z.object({ success: z.boolean() }),
     async handler({ args, context }) {
@@ -243,7 +284,7 @@ const registry = defineArchestraTools([
         const trigger = await findAccessibleScheduleTriggerOrThrow({
           ...identity,
           id: args.schedule_trigger_id,
-          access: "mutate",
+          access: "delete",
         });
         const success = await ScheduleTriggerModel.delete(trigger.id);
         if (!success) throw new ApiError(404, "Schedule trigger not found");
@@ -261,7 +302,7 @@ const registry = defineArchestraTools([
       "one runs, its cron expression and timezone, whether it is enabled, and " +
       "when it last fired. Use run history to investigate missed or failed runs. Defaults to the caller's own schedules; pass project_id " +
       "for a project's schedules, or include_all_users to sweep the whole " +
-      "organization (requires organization-wide scheduled-task access).",
+      "organization (requires organization-wide project access).",
     schema: z
       .object({
         project_id: z
@@ -286,7 +327,7 @@ const registry = defineArchestraTools([
           .optional()
           .describe(
             "Include other members' schedules. Ignored unless the caller holds " +
-              "organization-wide scheduled-task access.",
+              "organization-wide project access.",
           ),
         limit: LimitSchema,
         cursor: CursorQuerySchema.shape.cursor.describe(
@@ -316,7 +357,7 @@ const registry = defineArchestraTools([
           actorUserId = undefined;
         } else if (
           args.include_all_users &&
-          (await isScheduledTaskAdmin({ userId, organizationId }))
+          (await hasProjectScheduleOversight({ userId, organizationId }))
         ) {
           actorUserId = undefined;
         }
@@ -522,7 +563,7 @@ const registry = defineArchestraTools([
     description:
       "Disable a scheduled task so it stops firing, leaving its configuration " +
       "and run history intact. Only the user the schedule runs as, or someone " +
-      "with organization-wide scheduled-task access, may change it.",
+      "with organization-wide Projects update access, may change it.",
     schema: z
       .object({
         schedule_trigger_id: z
@@ -544,7 +585,7 @@ const registry = defineArchestraTools([
       "is queued and returns straight away with status `running` — poll " +
       "get_schedule_trigger_run for the outcome. The run executes as the user " +
       "the schedule is configured to act as, so only that user or someone with " +
-      "organization-wide scheduled-task access may start it.",
+      "organization-wide Projects use access may start it.",
     schema: z
       .object({
         schedule_trigger_id: z
@@ -563,7 +604,7 @@ const registry = defineArchestraTools([
           id: args.schedule_trigger_id,
           userId: identity.userId,
           organizationId: identity.organizationId,
-          access: "mutate",
+          access: "use",
         });
         const run = await startManualScheduleTriggerRun({
           trigger,
@@ -633,7 +674,7 @@ async function setEnabled(params: {
       id: params.args.schedule_trigger_id,
       userId: identity.userId,
       organizationId: identity.organizationId,
-      access: "mutate",
+      access: "update",
     });
     const updated = await ScheduleTriggerModel.update(trigger.id, {
       enabled: params.enabled,
@@ -669,6 +710,7 @@ function toTriggerSummary(trigger: ScheduleTrigger) {
 
 function toRunSummary(run: ScheduleTriggerRun) {
   return {
+    blocked_by: run.blockedBy ?? null,
     id: run.id,
     trigger_id: run.triggerId,
     run_kind: run.runKind,

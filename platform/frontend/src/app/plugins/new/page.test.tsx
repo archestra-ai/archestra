@@ -77,6 +77,22 @@ const permissionServer = setupServer(
         { subject: { type: "role", id: "member" }, name: "Member" },
       ]),
   ),
+  http.get(
+    /^http:\/\/localhost:9000\/api\/resource-permissions\/plugin\/\*$/,
+    () =>
+      HttpResponse.json({
+        resource: "plugin",
+        scope: "*",
+        name: "Plugins",
+        ownerId: null,
+        revision: 1,
+        grants: [],
+        inheritedGrants: [],
+        effectiveActions: ["read", "update", "manage-permissions"],
+        canShareOrganizationWide: true,
+        actorSubjects: [],
+      }),
+  ),
 );
 beforeAll(() => {
   permissionServer.listen({ onUnhandledRequest: "error" });
@@ -446,30 +462,7 @@ describe("NewPluginPage", () => {
   });
 
   it("limits each marketplace import to one bounded batch", async () => {
-    discoverMock.mockResolvedValue({
-      data: {
-        repoUrl: "github/awesome-copilot",
-        ref: "main",
-        commitSha: "a".repeat(40),
-        marketplacePath: ".github/plugin/marketplace.json",
-        reason: null,
-        entries: Array.from({ length: 101 }, (_, index) => ({
-          marketplacePath: ".github/plugin/marketplace.json",
-          name: `plugin-${index}`,
-          description: "A plugin",
-          version: "1.0.0",
-          clientType: index % 2 === 0 ? "claude-code" : "copilot-cli",
-          sourceRepoUrl: "github/awesome-copilot",
-          sourceRef: "main",
-          sourceSubdir: `plugins/plugin-${index}`,
-          sourceCommitSha: "a".repeat(40),
-          fileCount: 2,
-          supported: true,
-          reason: null,
-        })),
-      },
-      errorMessage: null,
-    });
+    discoverMock.mockResolvedValue(boundedMarketplaceFixture());
     const user = userEvent.setup();
     renderPage();
 
@@ -499,7 +492,18 @@ describe("NewPluginPage", () => {
     expect(next).toBeEnabled();
     await user.click(next);
     expect(next).toBeChecked();
+  });
 
+  it("updates bounded marketplace selection totals when filtering clients", async () => {
+    discoverMock.mockResolvedValue(boundedMarketplaceFixture());
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(
+      screen.getByRole("button", { name: /github\/awesome-copilot/ }),
+    );
+    await screen.findByText(
+      `${PLUGIN_MARKETPLACE_IMPORT_LIMIT} of 101 selected · ${PLUGIN_MARKETPLACE_IMPORT_LIMIT} max per import`,
+    );
     const clientFilter = screen.getByRole("combobox", {
       name: "Filter marketplace clients",
     });
@@ -608,3 +612,30 @@ describe("NewPluginPage", () => {
     expect(create).toBeEnabled();
   });
 });
+
+function boundedMarketplaceFixture() {
+  return {
+    data: {
+      repoUrl: "github/awesome-copilot",
+      ref: "main",
+      commitSha: "a".repeat(40),
+      marketplacePath: ".github/plugin/marketplace.json",
+      reason: null,
+      entries: Array.from({ length: 101 }, (_, index) => ({
+        marketplacePath: ".github/plugin/marketplace.json",
+        name: `plugin-${index}`,
+        description: "A plugin",
+        version: "1.0.0",
+        clientType: index % 2 === 0 ? "claude-code" : "copilot-cli",
+        sourceRepoUrl: "github/awesome-copilot",
+        sourceRef: "main",
+        sourceSubdir: `plugins/plugin-${index}`,
+        sourceCommitSha: "a".repeat(40),
+        fileCount: 2,
+        supported: true,
+        reason: null,
+      })),
+    },
+    errorMessage: null,
+  };
+}

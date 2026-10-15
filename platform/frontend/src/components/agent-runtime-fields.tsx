@@ -15,6 +15,7 @@ import type {
   EnvVarDraft,
 } from "@/components/environment-variable-dialog";
 import { RuntimeCredentialDefinitionDialog } from "@/components/settings/runtime-credential-definition-dialog";
+import { useCredentialsPageHref } from "@/components/settings-link";
 import {
   SettingsSection,
   SettingsSectionGroup,
@@ -98,6 +99,7 @@ export function AgentRuntimeFields({
   onChange: (value: AgentRuntimeConfig | null) => void;
 }) {
   const enabledId = useId();
+  const credentialsHref = useCredentialsPageHref();
   const runtimeEnabled = useFeature("agentRuntime");
   const config = value ?? defaultAgentRuntime();
 
@@ -161,7 +163,7 @@ export function AgentRuntimeFields({
                   Configuration and secrets passed to the container. Manage
                   reusable credentials on the{" "}
                   <Link
-                    href="/settings/credentials"
+                    href={credentialsHref}
                     className="underline underline-offset-4"
                   >
                     Credentials
@@ -251,6 +253,7 @@ export function AgentRuntimeEnvironmentFields({
   hideDescription = false,
 }: RuntimeSectionProps & { hideLabel?: boolean; hideDescription?: boolean }) {
   const appName = useAppName();
+  const credentialsHref = useCredentialsPageHref();
   const config = value;
   const update = (patch: Partial<AgentRuntimeConfig>) =>
     onChange({ ...config, ...patch });
@@ -310,7 +313,7 @@ export function AgentRuntimeEnvironmentFields({
               it reads. Without a token it can use your tools through {appName}{" "}
               but can&apos;t push to a repo. Reusable credentials live on the{" "}
               <Link
-                href="/settings/credentials"
+                href={credentialsHref}
                 className="font-medium text-foreground underline underline-offset-4"
               >
                 Credentials

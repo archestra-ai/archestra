@@ -254,6 +254,19 @@ export type HibernateResult =
     };
 
 // SPDX-SnippetEnd
+/**
+ * The image a deployment's pods are serving right now, as Kubernetes reports
+ * it: the reference from the pod spec, the digest the node resolved it to,
+ * and the pull settings the pods carry.
+ */
+export type RunningMcpImage = {
+  image: string;
+  /** `sha256:…` the container runtime resolved the reference to. */
+  digest: string;
+  pullPolicy: string | undefined;
+  pullSecretNames: string[];
+};
+
 type LifecycleMutationOptions = {
   assertOwned?: () => Promise<void>;
   runFencedMutation?: <T>(fn: () => Promise<T>) => Promise<T>;
@@ -4026,6 +4039,109 @@ export default class K8sDeployment {
   async hasRunningPod(): Promise<boolean> {
     const pod = await this.findPodForDeployment();
     return !!pod;
+  }
+
+  /**
+   * The image every pod of this deployment is serving, or `null` when there
+   * is no single settled answer: the deployment is missing or scaled to zero,
+   * a rollout is in flight, a pod is not ready, the pods disagree, or the
+   * runtime reported no digest (an image loaded onto the node rather than
+   * pulled). Callers treat `null` as "nothing to compare", never as stale.
+   */
+  async readRunningImage(): Promise<RunningMcpImage | null> {
+    let deployment: k8s.V1Deployment;
+    try {
+      deployment = await this.k8sAppsApi.readNamespacedDeployment({
+        name: this.deploymentName,
+        namespace: this.namespace,
+      });
+    } catch (error) {
+      if (isK8sNotFoundError(error)) return null;
+      throw error;
+    }
+
+    const replicas = deployment.spec?.replicas ?? 0;
+    const status = deployment.status;
+    const settled =
+      replicas > 0 &&
+      (status?.observedGeneration ?? 0) >=
+        (deployment.metadata?.generation ?? 0) &&
+      status?.replicas === replicas &&
+      status?.updatedReplicas === replicas &&
+      status?.readyReplicas === replicas;
+    const matchLabels = deployment.spec?.selector?.matchLabels ?? {};
+    if (!settled || Object.keys(matchLabels).length === 0) return null;
+
+    const pods = await this.k8sApi.listNamespacedPod({
+      namespace: this.namespace,
+      labelSelector: Object.entries(matchLabels)
+        .map(([key, value]) => `${key}=${value}`)
+        .join(","),
+    });
+    const livePods = pods.items.filter(
+      (pod) => !pod.metadata?.deletionTimestamp,
+    );
+    if (livePods.length === 0) return null;
+
+    let running: RunningMcpImage | null = null;
+    for (const pod of livePods) {
+      if (pod.status?.phase !== "Running") return null;
+      const containers = pod.spec?.containers ?? [];
+      const container =
+        containers.find(({ name }) => name === "mcp-server") ?? containers[0];
+      const containerStatus = pod.status.containerStatuses?.find(
+        ({ name }) => name === container?.name,
+      );
+      const digest = containerStatus?.imageID?.match(
+        /@(sha256:[0-9a-f]{64})$/i,
+      )?.[1];
+      if (!container?.image || !containerStatus?.ready || !digest) return null;
+      const candidate: RunningMcpImage = {
+        image: container.image,
+        digest: digest.toLowerCase(),
+        pullPolicy: container.imagePullPolicy,
+        pullSecretNames: (pod.spec?.imagePullSecrets ?? [])
+          .map(({ name }) => name)
+          .filter((name): name is string => Boolean(name)),
+      };
+      if (
+        running &&
+        (running.image !== candidate.image ||
+          running.digest !== candidate.digest)
+      ) {
+        return null;
+      }
+      running ??= candidate;
+    }
+    return running;
+  }
+
+  /**
+   * The decoded registry auth documents (`.dockerconfigjson`, or legacy
+   * `.dockercfg`) of the named pull secrets in this deployment's namespace.
+   * A secret that is gone or holds neither key contributes nothing.
+   */
+  async readImagePullSecretConfigs(
+    names: readonly string[],
+  ): Promise<string[]> {
+    const configs: string[] = [];
+    for (const name of names) {
+      let secret: k8s.V1Secret;
+      try {
+        secret = await this.k8sApi.readNamespacedSecret({
+          name,
+          namespace: this.namespace,
+        });
+      } catch (error) {
+        if (isK8sNotFoundError(error)) continue;
+        throw error;
+      }
+      const encoded =
+        secret.data?.[".dockerconfigjson"] ?? secret.data?.[".dockercfg"];
+      if (encoded)
+        configs.push(Buffer.from(encoded, "base64").toString("utf8"));
+    }
+    return configs;
   }
 
   /**

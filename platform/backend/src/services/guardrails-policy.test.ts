@@ -154,11 +154,5 @@ describe("initialPolicy", () => {
     expect(
       governing(archestraMcpBranding.getToolName(TOOL_TODO_WRITE_SHORT_NAME)),
     ).toEqual({ name: "noop" });
-    // Turning OpenAPPA off for a session always needs a person's approval.
-    expect(rule(archestraMcpBranding.getToolName("superyell"))).toEqual({
-      name: archestraMcpBranding.getToolName("superyell"),
-      delta: {},
-      requires: { attention: ["human-approval"] },
-    });
   });
 });

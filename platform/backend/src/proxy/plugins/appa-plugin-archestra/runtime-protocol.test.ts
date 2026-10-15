@@ -118,6 +118,9 @@ describe("protected runtime protocol", () => {
     for (const { tool, spawn, wrapped } of [
       { tool: "start_run", spawn: true, wrapped: true },
       { tool: "get_run", spawn: false, wrapped: false },
+      { tool: "get_run", spawn: false, wrapped: true },
+      { tool: "list_runs", spawn: false, wrapped: true },
+      { tool: "steer_run", spawn: false, wrapped: true },
     ]) {
       test(`signs ${tool} from ${client.label} behind an attested gateway (wrapped=${wrapped})`, async ({
         makeOrganization,
@@ -133,7 +136,7 @@ describe("protected runtime protocol", () => {
           organizationId: org.id,
           declarations: [
             "archestra__run_tool",
-            "archestra__get_run",
+            ...(wrapped ? [] : ["archestra__get_run"]),
             "archestra__get_remedy_plans",
             "archestra__execute_remedy_plan",
           ].map((name) => ({
@@ -162,7 +165,14 @@ describe("protected runtime protocol", () => {
         await plugin.onSessionInit(context);
         const args = spawn
           ? { agent_id: agent.id, message: "Do the work" }
-          : { task_id: "example-run" };
+          : tool === "list_runs"
+            ? { agent_id: agent.id }
+            : {
+                task_id: "example-run",
+                ...(tool === "steer_run"
+                  ? { message: "Continue the work" }
+                  : {}),
+              };
 
         const released = await plugin.onToolCalls({
           ...context,

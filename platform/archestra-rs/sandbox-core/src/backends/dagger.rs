@@ -66,7 +66,7 @@ pub const DEFAULT_APT_PACKAGES: &[&str] = &[
 /// split the two interpreters.
 const DEFAULT_VENV_DIR: &str = "/home/sandbox/.venv";
 const DEFAULT_PYTHON_REQUIREMENTS: &[&str] = &["numpy", "pandas", "httpx"];
-/// provenance marker written by `sandbox_base/Dockerfile`; prebuilt mode verifies
+/// provenance marker written by `docker_images/sandbox_base/Dockerfile`; prebuilt mode verifies
 /// it so a mis-set `ARCHESTRA_DAGGER_RUNTIME_IMAGE` fails fast here instead of
 /// downstream.
 const SANDBOX_BASE_MARKER: &str = "/etc/archestra-sandbox-base";

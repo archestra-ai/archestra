@@ -1778,6 +1778,144 @@ describe("ChatOpsManager security validation", () => {
     expect(await ownerOf("C_CODING")).toBe(coding.id);
   });
 
+  test("'list' to the router bot names the agents a person can reach, without asking one", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const execute = mockA2AExecutor();
+    const user = await makeUser({ email: "router-list@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const marketing = await makeInternalAgent({
+      organizationId: org.id,
+      name: "Marketing",
+    });
+    await AgentTeamModel.assignTeamsToAgent(marketing.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "slack",
+      channelId: "C_LIST",
+      workspaceId: "T_TEST",
+      agentId: marketing.id,
+    });
+    const sendReply = vi.fn(async () => "reply-id");
+    const router: ChatOpsProvider = {
+      ...createMockProvider({ sendReply }),
+      providerId: "slack",
+    };
+    const manager = new ChatOpsManager();
+
+    await manager.processMessage({
+      provider: router,
+      message: {
+        ...createMockMessage({ messageId: "router-list-1", text: "list" }),
+        channelId: "C_LIST",
+        workspaceId: "T_TEST",
+        senderEmail: user.email,
+      },
+    });
+
+    expect(execute).not.toHaveBeenCalled();
+    expect(sendReply).toHaveBeenCalledTimes(1);
+    const reply = (sendReply.mock.calls[0] as unknown as [ChatReplyOptions])[0]
+      .text;
+    expect(reply).toContain("• Marketing");
+    expect(reply).toContain("Marketing > ");
+
+    // An agent's own bot passes "list" to its agent like any message.
+    await manager.processMessage({
+      provider: { ...router, pinnedAgentId: marketing.id },
+      message: {
+        ...createMockMessage({ messageId: "router-list-2", text: "list" }),
+        channelId: "C_LIST",
+        workspaceId: "T_TEST",
+        senderEmail: user.email,
+      },
+    });
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  test("a person's DMs with the router bot and with agent bots stay separate", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    mockA2AExecutor();
+    const user = await makeUser({ email: "router-dm@example.com" });
+    const org = await makeOrganization();
+    const team = await makeTeam(org.id, user.id);
+    await makeTeamMember(team.id, user.id);
+    const marketing = await makeInternalAgent({ organizationId: org.id });
+    await AgentTeamModel.assignTeamsToAgent(marketing.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "slack",
+      channelId: "D_MARKETING_BOT",
+      workspaceId: "T_TEST",
+      isDm: true,
+      dmOwnerEmail: user.email,
+      agentId: marketing.id,
+    });
+
+    const manager = new ChatOpsManager();
+    (
+      manager as unknown as { slackAgentBots: Map<string, ChatOpsProvider> }
+    ).slackAgentBots.set(marketing.id, createMockProvider());
+    const router: ChatOpsProvider = {
+      ...createMockProvider({ getUserEmail: async () => user.email }),
+      providerId: "slack",
+      parseWebhookNotification: async (payload) =>
+        payload as IncomingChatMessage,
+    };
+
+    await manager.handleIncomingMessage(router, {
+      ...createMockMessage({ messageId: "router-dm-1" }),
+      channelId: "D_ROUTER",
+      workspaceId: "T_TEST",
+      metadata: { channelType: "im" },
+    });
+
+    const findDm = (channelId: string) =>
+      ChatOpsChannelBindingModel.findByChannel({
+        provider: "slack",
+        channelId,
+        workspaceId: "T_TEST",
+      });
+    // The router's first DM does not take over the agent bot's DM...
+    expect((await findDm("D_MARKETING_BOT"))?.agentId).toBe(marketing.id);
+    const routerDm = await findDm("D_ROUTER");
+    expect(routerDm).not.toBeNull();
+
+    // ...and a first DM with another agent bot keeps the agent picked in the
+    // router's DM.
+    const research = await makeInternalAgent({ organizationId: org.id });
+    await ChatOpsChannelBindingModel.update(routerDm?.id ?? "", {
+      agentId: research.id,
+    });
+    const coding = await makeInternalAgent({ organizationId: org.id });
+    const codingBot: ChatOpsProvider = {
+      ...router,
+      pinnedAgentId: coding.id,
+      stateScope: `agent:${coding.id}`,
+    };
+    await manager.handleIncomingMessage(codingBot, {
+      ...createMockMessage({ messageId: "coding-dm-1" }),
+      channelId: "D_CODING_BOT",
+      workspaceId: "T_TEST",
+      metadata: { channelType: "im" },
+    });
+
+    expect((await findDm("D_ROUTER"))?.agentId).toBe(research.id);
+    expect((await findDm("D_MARKETING_BOT"))?.agentId).toBe(marketing.id);
+    expect((await findDm("D_CODING_BOT"))?.agentId).toBe(coding.id);
+  });
+
   test("a background result for a pinned bot's thread is posted by that bot", async ({
     makeOrganization,
   }) => {

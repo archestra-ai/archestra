@@ -4,7 +4,7 @@ sidebarTitle: Setup
 description: Prepare Kubernetes nodes, storage, and the Agent Sandbox controller for Agent Runtime
 order: 1
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-15
 ---
 
 Prepare your cluster once, and every agent can get a dedicated runtime. Each run becomes a pod with its own persistent volume, created by the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/).
@@ -110,3 +110,15 @@ When runs do not start:
 - **Image pull fails:** check the image name, registry access, and pull credentials.
 
 Chat shows the reported startup error.
+
+### Scheduled Runs Keep Getting Skipped
+
+A [scheduled task](/docs/chat/projects#scheduled-tasks) skips a tick while its previous run is unfinished.
+
+1. Open the skipped entry in the project's run history. It identifies the blocking run, its elapsed time, and its **Maximum duration** deadline.
+2. Click **Inspect previous run** to inspect it and use **Stop** if needed.
+3. Use **Maximum duration settings** to set the agent's lifetime cap for future runtime sessions. Choose a duration long enough for healthy work to finish.
+
+- Changing the cap does not shorten an existing run's deadline. Skipped entries preserve the deadline and elapsed time recorded at that tick.
+- A queued run gets its runtime deadline after launch. Foreground chat runs do not use the runtime lifetime cap.
+- After a run stops or reaches its deadline, the schedule waits for workload cleanup before starting another run.

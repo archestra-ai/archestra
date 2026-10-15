@@ -104,6 +104,7 @@ import {
   useDefaultAgentId,
 } from "@/lib/agent.query";
 import {
+  runtimePreflightDisabledReason,
   useAgentRuntimePreflight,
   useStartAgentRun,
 } from "@/lib/agent-runtime.query";
@@ -188,6 +189,7 @@ import {
   agentToolsUnavailableForModel,
   deriveModelSource,
   getAgentSubscriptionConnection,
+  resolveConversationKeyForModel,
 } from "@/lib/chat/use-chat-preferences";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
 import { useConfig, useFeature } from "@/lib/config/config.query";
@@ -440,6 +442,15 @@ export function ChatPageContent({
     enabled: hasChatAccess && canUseProviderSettings,
     toastOnError: false,
   });
+  // The keys the viewer may use. A key shared as read-only is in the list
+  // above but refused when a chat sends it, so the model/key pairing below
+  // only ever picks from these (plus the agent's own key, which needs no
+  // grant of its own).
+  const { data: usableChatApiKeys = [], isLoading: isLoadingUsableApiKeys } =
+    useAvailableLlmProviderApiKeys({
+      enabled: hasChatAccess && canUseProviderSettings,
+      toastOnError: false,
+    });
   const { data: organization, isPending: isOrgLoading } = useOrganization();
   // The user's saved default (model, key) pair — top of the resolution chain
   // for a new chat ("member" level).
@@ -471,7 +482,7 @@ export function ChatPageContent({
     organization: organization ?? null,
     defaultAgentId,
     modelsByProvider,
-    chatApiKeys,
+    chatApiKeys: usableChatApiKeys,
     memberDefault: memberDefault ?? null,
     urlAgentId: searchParams.get("agentId"),
     urlModelId: searchParams.get("modelId"),
@@ -480,6 +491,7 @@ export function ChatPageContent({
     isPermissionResolving: isAgentPickerPermissionLoading,
     isOrgLoading,
     isProjectLoading: !!newChatProjectId && isNewChatProjectPending,
+    isApiKeysLoading: isLoadingUsableApiKeys,
     routeConversationId,
   });
   const initialRuntimeAgent = runtimeEnabled
@@ -518,9 +530,14 @@ export function ChatPageContent({
   );
   updateMemberDefaultModelMutateRef.current =
     updateMemberDefaultModelMutation.mutate;
+  const usableChatApiKeysRef = useRef(usableChatApiKeys);
+  usableChatApiKeysRef.current = usableChatApiKeys;
   const persistMemberDefaultModel = useCallback(
     (modelId: string | null, apiKeyId: string | null) => {
       if (!modelId || !apiKeyId) return;
+      // A default carries into chats on any agent, so it must be a key the
+      // viewer may use; an agent's own key works only through that agent.
+      if (!usableChatApiKeysRef.current.some((k) => k.id === apiKeyId)) return;
       subscriptionDebug("persist member default", {
         modelId,
         chatApiKeyId: apiKeyId,
@@ -535,9 +552,6 @@ export function ChatPageContent({
 
   const { isLoading: isLoadingFeatures } = useConfig();
   const { data: chatModels = [] } = useLlmModels();
-  // Check if user has any API keys (including system keys for keyless providers
-  // like Vertex AI Gemini, vLLM, or Ollama which don't require secrets)
-  const hasAnyApiKey = chatApiKeys.length > 0;
   const isLoadingApiKeyCheck = isLoadingApiKeys || isLoadingFeatures;
 
   useEffect(() => {
@@ -997,6 +1011,21 @@ export function ChatPageContent({
       }),
     [activeSelectionAgent, activeAgentCredentials, session?.user.id],
   );
+  // Check if user has any API keys (including system keys for keyless providers
+  // like Vertex AI Gemini, vLLM, or Ollama which don't require secrets).
+  // Seeing a key is not enough to chat: a member whose keys are all shared
+  // read-only gets a composer whose sends fail at the provider. Count only the
+  // keys they may use, or the agent's own key, which works through the agent.
+  // Unknown while the usable list loads, so the visible list (restored on
+  // refresh) still decides the first paint.
+  const hasAnyApiKey =
+    chatApiKeys.length > 0 &&
+    // The usable list has not settled yet: keep the composer.
+    (isLoadingUsableApiKeys ||
+      // A key the viewer may use.
+      usableChatApiKeys.length > 0 ||
+      // Or the agent's own key, which works through the agent.
+      Boolean(activeSelectionAgent?.llmApiKeyId));
   const isAgentSubscriptionMetadataPending = Boolean(
     activeSelectionAgent?.llmApiKeyId && isActiveAgentCredentialPending,
   );
@@ -1203,27 +1232,28 @@ export function ChatPageContent({
   // ModelSelector's auto-select effect on every chatModels refetch.
   const chatModelsRef = useRef(chatModels);
   chatModelsRef.current = chatModels;
-  const chatApiKeysRef = useRef(chatApiKeys);
-  chatApiKeysRef.current = chatApiKeys;
   const conversationRef = useRef(conversation);
   conversationRef.current = conversation;
   // Picking a model also pins the API key it runs through: a conversation
   // stores the (model, key) pair as a unit, so a model is never persisted
   // without its key. Keep the conversation's current key when it serves the
-  // model's provider, otherwise use any key for that provider.
+  // model's provider, otherwise use a key the viewer may use for that provider.
   const handleModelChange = useCallback(
     (modelId: string) => {
       const conv = conversationRef.current;
       if (!conv) return;
       const model = chatModelsRef.current.find((m) => m.dbId === modelId);
-      const currentKey = chatApiKeysRef.current.find(
-        (k) => k.id === conv.chatApiKeyId,
-      );
-      const chatApiKeyId =
-        currentKey && currentKey.provider === model?.provider
-          ? currentKey.id
-          : (chatApiKeysRef.current.find((k) => k.provider === model?.provider)
-              ?.id ?? null);
+      const chatApiKeyId = resolveConversationKeyForModel({
+        currentKeyId: conv.chatApiKeyId,
+        // A stored (model, key) pair shares one provider, so the current
+        // model tells which provider the agent's own key serves.
+        currentModelProvider: chatModelsRef.current.find(
+          (m) => m.dbId === conv.modelId,
+        )?.provider,
+        agentApiKeyId: conv.agent?.llmApiKeyId,
+        modelProvider: model?.provider,
+        usableKeys: usableChatApiKeysRef.current,
+      });
       subscriptionDebug("model change", {
         source: "conversation-model-selector",
         conversationId: conv.id,
@@ -1406,7 +1436,7 @@ export function ChatPageContent({
     const resolved = resolveChatModelState({
       agent: agent ?? null,
       modelsByProvider,
-      chatApiKeys,
+      chatApiKeys: usableChatApiKeys,
       organization: organization
         ? {
             defaultModelId: organization.defaultModelId,
@@ -1487,7 +1517,7 @@ export function ChatPageContent({
     conversation,
     internalAgents,
     modelsByProvider,
-    chatApiKeys,
+    usableChatApiKeys,
     chatModels,
     organization,
   ]);
@@ -3283,7 +3313,12 @@ export function ChatPageContent({
         <div className="flex flex-1 min-h-0">
           <div className="flex-1 flex flex-col min-w-0 min-h-0">
             <div className="flex flex-col h-full min-h-0">
-              <StreamTimeoutWarning isStalled={isTransportStalled} />
+              <StreamTimeoutWarning
+                isStalled={
+                  isTransportStalled &&
+                  chatSession?.stallRecoveryExhausted === true
+                }
+              />
 
               {/* Mobile: Inline artifact/browser panel below header */}
               {isRightPanelOpen && (
@@ -3570,6 +3605,16 @@ export function ChatPageContent({
                                 isApplyingAgentSelection ||
                                 isAgentSubscriptionMetadataPending
                               }
+                              disabledReason={
+                                isWaitingForScheduledPrompt ||
+                                isAwaitingScheduledStream
+                                  ? "Waiting for the scheduled run"
+                                  : isApplyingAgentSelection
+                                    ? "Switching agent…"
+                                    : isAgentSubscriptionMetadataPending
+                                      ? "Checking the agent's credentials…"
+                                      : undefined
+                              }
                               subscriptionConnectRequired={
                                 conversationPerUserConnect.needsConnect
                               }
@@ -3792,6 +3837,19 @@ export function ChatPageContent({
                                     (isInitialRuntimeMode &&
                                       (runtimePreflight.isPending ||
                                         runtimePreflight.data?.ready !== true))
+                                  }
+                                  disabledReason={
+                                    isLoadingAgents
+                                      ? "Loading agents…"
+                                      : !initialAgentId
+                                        ? "No agent is available to you"
+                                        : isInitialRuntimeMode
+                                          ? runtimePreflightDisabledReason(
+                                              runtimePreflight,
+                                            )
+                                          : isAgentSubscriptionMetadataPending
+                                            ? "Checking the agent's credentials…"
+                                            : undefined
                                   }
                                   subscriptionConnectRequired={
                                     initialPerUserConnect.needsConnect

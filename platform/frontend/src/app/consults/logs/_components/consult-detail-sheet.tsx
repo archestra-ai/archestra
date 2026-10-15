@@ -36,8 +36,19 @@ export function ConsultDetailSheet({
   onClose: () => void;
 }) {
   return (
-    <Sheet open={view !== null} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
+    // Non-modal so the table stays clickable: picking another row swaps the
+    // consult shown instead of closing the panel.
+    <Sheet
+      modal={false}
+      open={view !== null}
+      onOpenChange={(open) => !open && onClose()}
+    >
+      <SheetContent
+        className="w-full overflow-y-auto sm:max-w-2xl"
+        onInteractOutside={(event) => {
+          if (isTableRow(event.target)) event.preventDefault();
+        }}
+      >
         {view && <ConsultDetail view={view} />}
       </SheetContent>
     </Sheet>
@@ -45,6 +56,10 @@ export function ConsultDetailSheet({
 }
 
 // === Internal components ===
+
+function isTableRow(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest("tbody tr") !== null;
+}
 
 function ConsultDetail({ view }: { view: ConsultView }) {
   const { consult, toolCall, diagnostics } = view;

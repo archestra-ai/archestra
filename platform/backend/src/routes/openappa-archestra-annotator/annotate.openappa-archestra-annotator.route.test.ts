@@ -197,6 +197,11 @@ describe("archestra annotator", () => {
   });
 
   test("refuses without a call when no LLM key is configured", async () => {
+    // Ignore credentials inherited from a developer's .env.
+    for (const entry of Object.values(config.chat)) {
+      if (entry && typeof entry === "object" && "apiKey" in entry)
+        entry.apiKey = "";
+    }
     // Every request is answered by MSW; an unhandled one fails the test.
     const response = await annotate(bearer());
     expect(response.statusCode).toBe(409);

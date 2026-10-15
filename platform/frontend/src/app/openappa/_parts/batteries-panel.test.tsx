@@ -25,6 +25,7 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { BatteriesPanel } from "./batteries-panel";
 
+vi.mock("@/app/_parts/use-settings-area-access");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("next/navigation");
 vi.mock("sonner");

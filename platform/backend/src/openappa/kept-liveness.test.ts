@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { afterEach, vi } from "vitest";
 import config from "@/config";
@@ -117,6 +117,19 @@ describe("annotators kept for conversations that are still active", () => {
     expect(retiredLines()).toHaveLength(1);
   });
 
+  test("an encrypted conversation keeps its opening annotator using recorded policy metadata", async () => {
+    await declare(urlJudged("a", JUDGE_A));
+    const opening = await openedUnder({ activeDaysAgo: 2, encrypted: true });
+    await declare(urlJudged("b", JUDGE_B));
+    const effective =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+    expect(effective.content).toContain("a.tool-call");
+    expect(effective.retainedAnnotators?.livenessKnown).toBe(true);
+    expect(effective.retainedAnnotators?.kept).toMatchObject([
+      { name: "a.tool-call", openingHashes: [opening.hash], liveRoots: 1 },
+    ]);
+  });
+
   test("the first read after the last conversation's horizon ends retires the annotator, although nothing else changed", async () => {
     await declare(urlJudged("a", JUDGE_A));
     await openedUnder({ activeDaysAgo: 29 });
@@ -196,6 +209,7 @@ describe("annotators kept for conversations that are still active", () => {
   async function openedUnder(params: {
     activeDaysAgo: number;
     content?: string;
+    encrypted?: boolean;
   }) {
     const content =
       params.content ??
@@ -207,12 +221,22 @@ describe("annotators kept for conversations that are still active", () => {
     await db.insert(schema.openappaEventsTable).values({
       root,
       seq: 0,
-      payload: Buffer.from(
-        JSON.stringify([
-          { TrajectoryOpened: { trajectory: root, policy_file_key: hash } },
-        ]),
-      ),
+      payload: params.encrypted
+        ? randomBytes(96)
+        : Buffer.from(
+            JSON.stringify([
+              { TrajectoryOpened: { trajectory: root, policy_file_key: hash } },
+            ]),
+          ),
     });
+    // Encrypted opening bytes are opaque to the keyless retention sweep. The
+    // native dispatch records this non-content identity while it has the key.
+    if (params.encrypted)
+      await db.insert(schema.openappaRootOpeningsTable).values({
+        root,
+        organizationId,
+        policyFileKey: hash,
+      });
     const activeAt = new Date(
       Math.floor((Date.now() - params.activeDaysAgo * DAY_MS) / 1000) * 1000,
     );

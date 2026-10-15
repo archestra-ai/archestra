@@ -6,7 +6,6 @@ import {
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
-  type YellToolShortName,
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -74,9 +73,9 @@ import {
 } from "@/services/agent-runtime/runtime-identity";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import {
+  breakTheGlassActiveIn,
   firstPolicyRefusal,
   getGuardrailsDeployment,
-  SUPERYELL_DISABLED_MESSAGE,
   turnOnForFirstPolicy,
 } from "@/services/guardrails-deployment";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
@@ -92,6 +91,7 @@ import {
   connectAppaGithubRepository,
   createAppaGithubRepository,
   getAppaGithubSync,
+  updateAppaGithubSync,
 } from "@/services/openappa-github-sync";
 import {
   credentialLineWarnings,
@@ -103,10 +103,6 @@ import {
   getOpenAppaPolicyTests,
   runOpenAppaPolicyTests,
 } from "@/services/openappa-policy-tests";
-import {
-  discoverOpenAppaScenarios,
-  draftOpenAppaScenario,
-} from "@/services/openappa-scenario-discovery";
 import {
   previewOpenAppaValidationChange,
   publishOpenAppaValidationChange,
@@ -128,10 +124,6 @@ import {
 } from "@/types/openappa-external-consults";
 import { AppaGithubSourceSchema } from "@/types/openappa-github-sync";
 import { RunPolicyTestsSchema } from "@/types/openappa-policy-tests";
-import {
-  DiscoverOpenAppaScenariosSchema,
-  SelectOpenAppaScenarioSchema,
-} from "@/types/openappa-scenario-discovery";
 import {
   PreviewOpenAppaValidationChangeSchema,
   PublishOpenAppaValidationChangeSchema,
@@ -531,47 +523,55 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "yell",
-    title: "Report OpenAPPA feedback",
+    shortName: "sync_guardrails_repository",
+    title: "Sync OpenAPPA policy repository",
     description:
-      "Send feedback about OpenAPPA, such as a confusing block, remedy or ruling, or the user's complaint, with a diagnostic archive for review in the Guardrails Yells tab. When deployment analytics is enabled, also forwards the report to the shared OpenAPPA reporting service. with_trajectory includes this session's policy decisions, never raw prompts, tool arguments, or outputs. Your message is sent verbatim: say what about OpenAPPA was confusing or wrong. When a call was blocked, report the block; never put the blocked call's content (such as a task you could not file) in its place, and do not include secrets, personal data, or task content. This does not change policy or grant permission.",
-    schema: YellArgumentsSchema,
-    async handler({ args, context }) {
-      const identity = await yellIdentity({ shortName: "yell", args, context });
-      const report = await executeYell({
-        session: identity.session,
-        toolCallId: identity.callId,
-        args,
-      });
-      await rememberYellResult({ ...identity, result: report });
-      return report;
+      "Pull the policy file from the connected Git repository now instead of waiting for the next scheduled sync, so a merged policy or validation pull request takes effect. Call it after the user says the pull request is merged. It changes nothing in the repository. Report `source.lastSyncError` when it is set, and a held pull (`source.heldContentHash`) as waiting for an operator to accept it in the guardrails panel. Without a connected repository it fails; point the user to Git sync setup in the guardrails settings.",
+    schema: z.strictObject({}),
+    async handler({ context }) {
+      const { organizationId } = organizationUser(context);
+      try {
+        return result(
+          await updateAppaGithubSync({ organizationId, action: "sync" }),
+        );
+      } catch (error) {
+        // No connected source is the agent's to explain, not a provider failure.
+        if (error instanceof ApiError && error.statusCode < 500)
+          return errorResult(error.message);
+        throw error;
+      }
     },
   }),
   defineArchestraTool({
-    shortName: "superyell",
-    title: "Report OpenAPPA feedback and turn it off for this session",
+    shortName: "yell",
+    title: "Report OpenAPPA feedback",
     description:
-      "Do what yell does, then turn OpenAPPA off for this session, after the person running it approves. The report is sent first, the same way yell sends it. Then the session's label resets and OpenAPPA stops checking its calls, and the calls of the children it starts afterwards. Other sessions are not affected. Call it only when the user asks to turn OpenAPPA off for this session. Your message is sent verbatim and is what the person approving reads: say what about OpenAPPA was wrong and why it should be off. Do not include secrets, personal data, or task content.",
+      "Send feedback about OpenAPPA, with a diagnostic archive for review in the Guardrails Yells tab. Call it when a remedy plan makes no sense, you keep getting blocked, the user keeps being asked to approve similar calls, or the user is frustrated. When an administrator turned on break the glass in Guardrails settings, the report also turns OpenAPPA off for this session, so its calls are no longer checked; the result says which happened. When deployment analytics is enabled, also forwards the report to the shared OpenAPPA reporting service. with_trajectory includes this session's policy decisions, never raw prompts, tool arguments, or outputs. Your message is sent verbatim: say what about OpenAPPA was confusing or wrong. When a call was blocked, report the block; never put the blocked call's content (such as a task you could not file) in its place, and do not include secrets, personal data, or task content.",
     schema: YellArgumentsSchema,
     async handler({ args, context }) {
-      const deployment = await getGuardrailsDeployment();
-      if (!deployment.active)
-        return errorResult("Guardrails enforcement is off");
-      if (!deployment.superyellEnabled)
-        return errorResult(SUPERYELL_DISABLED_MESSAGE);
-      const identity = await yellIdentity({
-        shortName: "superyell",
-        args,
-        context,
-      });
+      const identity = await yellIdentity({ args, context });
+      const breakTheGlass = breakTheGlassActiveIn(
+        await getGuardrailsDeployment(),
+      );
       const report = await executeYell({
         session: identity.session,
         toolCallId: identity.callId,
         args,
-        superyell: true,
+        brokeTheGlass: breakTheGlass,
       });
-      // The person approved turning OpenAPPA off, so a report that failed to
-      // send does not keep it on.
+      if (!breakTheGlass) {
+        const result = report.isError
+          ? report
+          : successResult(
+              [...textParts(report), YELL_RESULT_GUARDRAILS_UNCHANGED].join(
+                "\n",
+              ),
+            );
+        await rememberYellResult({ ...identity, result });
+        return result;
+      }
+      // Break the glass turns OpenAPPA off even when the report failed to
+      // send: the agent is stuck either way.
       await superyellSession(identity.session);
       logger.warn(
         {
@@ -580,15 +580,10 @@ const registry = defineArchestraTools([
           userId: context.userId,
           reported: !report.isError,
         },
-        "OpenAPPA turned off for a session by an approved superyell",
+        "OpenAPPA turned off for a session by a yell with break the glass on",
       );
       const result = successResult(
-        [
-          ...report.content.flatMap((part) =>
-            part.type === "text" ? [part.text] : [],
-          ),
-          "OpenAPPA is off for this session. Its label is reset, and its calls are no longer checked.",
-        ].join("\n"),
+        [...textParts(report), YELL_RESULT_GUARDRAILS_OFF].join("\n"),
       );
       await rememberYellResult({ ...identity, result });
       return result;
@@ -933,37 +928,6 @@ const registry = defineArchestraTools([
       }),
   }),
   defineArchestraTool({
-    shortName: "discover_openappa_validation_scenarios",
-    title: "Find replayable validation scenarios",
-    annotations: { readOnlyHint: true },
-    description:
-      "Find up to three exact current-policy call scenarios verified by offline replay. Checks policy and suite readiness itself; no prerequisite policy, suite, or tool-schema reads are needed. No model-invented calls or files are needed. Each candidate states an observed decision, not a desired requirement or proof of general protection. Explain returned candidates as human situations: what behavior each checks, a concrete example consistent with its inputs and starting state, and which unwanted policy change it would catch. Use short behavior labels that include the tested starting scope; describe each choice in at most two sentences. Distinguish illustrative context from what replay actually checked, and ask which outcome the user wants to preserve, then wait. A needs_input entry requires a custom check; its reason explains the discovery limit; cannot_run means no offline decision was established, not evidence of a live helper outage. Stop those branches. Discovery is bounded and incomplete; do not retry unchanged inputs or invent missing state. Saves nothing. For an explicit concrete requirement or supplied candidate policy, use validation preview directly. Do not discover for inspection-only/no-tests requests.",
-    schema: DiscoverOpenAppaScenariosSchema,
-    async handler({ context }) {
-      return result(
-        await discoverOpenAppaScenarios(
-          organizationUser(context, AUTHENTICATED_CONTEXT_REQUIRED),
-        ),
-      );
-    },
-  }),
-  defineArchestraTool({
-    shortName: "draft_openappa_validation_scenario",
-    title: "Draft a selected validation scenario",
-    annotations: { readOnlyHint: true },
-    description:
-      "After the user chooses a discovered scenario and confirms its observed decision is the desired expectation, prepare its exact verified file and preview the full suite without saving. Pass the discoveryId and candidateId returned by discovery; do not reconstruct its calls. Explain the example behavior and result before technical details; retain the exact returned file and provide its source on request. Do not substitute a scenario or change the policy. Stale or expired choices need fresh discovery and user selection. Saving requires separate authorization and publish_openappa_validation_change with this exact file, expectedRevision and expectedVersion.",
-    schema: SelectOpenAppaScenarioSchema,
-    async handler({ args, context }) {
-      return result(
-        await draftOpenAppaScenario(
-          organizationUser(context, AUTHENTICATED_CONTEXT_REQUIRED),
-          args,
-        ),
-      );
-    },
-  }),
-  defineArchestraTool({
     shortName: "get_openappa_policy_tests",
     title: "Read OpenAPPA validation specifications",
     annotations: { readOnlyHint: true },
@@ -997,9 +961,17 @@ const registry = defineArchestraTools([
     shortName: "run_openappa_policy_tests",
     title: "Run saved OpenAPPA validations",
     description:
-      "Replay the complete currently saved validation suite offline against the current policy and record the result in validation run history. Use when the user asks to run saved checks or explicitly requests a fresh recorded result on the validations page. Showing existing results does not authorize a new run. Loads the authoritative saved files itself; no draft files or policy changes are accepted. This records a run only: it does not edit validations, change or enable the policy, execute business tools, or contact models or remote helpers. Report the returned run ID, pass/fail/cannot-run outcomes and stale status. A preview or publication replay alone does not create this recorded run.",
-    schema: z.strictObject({}),
-    async handler({ context }) {
+      "Replay saved validations offline against the current policy and record the result in validation run history. This is the only way to run validations: preview and publication check syntax but do not replay. Pass `path` to run one saved validation file, for example right after saving it; omit it to run the whole suite. Loads the authoritative saved files itself; no draft files or policy changes are accepted. This records a run only: it does not edit validations, change or enable the policy, execute business tools, or contact models or remote helpers. Report the returned run ID and pass/fail/cannot-run outcomes.",
+    schema: z.strictObject({
+      path: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+          "A saved validation file's path, as get_openappa_policy_tests lists it. Omit to run every saved validation.",
+        ),
+    }),
+    async handler({ args, context }) {
       const ids = organizationUser(context, AUTHENTICATED_CONTEXT_REQUIRED);
       const suite = await getOpenAppaPolicyTests(
         ids.organizationId,
@@ -1016,12 +988,26 @@ const registry = defineArchestraTools([
           400,
           "No saved validations to run. Save a validation first.",
         );
-      const args = RunPolicyTestsSchema.parse({
-        files: suite.files,
+      const files = args.path
+        ? suite.files.filter((file) => file.path === args.path)
+        : suite.files;
+      if (!files.length)
+        throw new ApiError(
+          400,
+          `No saved validation at ${args.path}. Save it first, or check the path with get_openappa_policy_tests.`,
+        );
+      const run = RunPolicyTestsSchema.parse({
+        files,
         sourceVersion: suite.version,
         directory: suite.directory,
       });
-      return result(await runOpenAppaPolicyTests({ ...ids, ...args }));
+      return result(
+        await runOpenAppaPolicyTests({
+          ...ids,
+          ...run,
+          partial: Boolean(args.path),
+        }),
+      );
     },
   }),
   defineArchestraTool({
@@ -1029,7 +1015,7 @@ const registry = defineArchestraTools([
     title: "Preview OpenAPPA validations",
     annotations: { readOnlyHint: true },
     description:
-      "Preview a patch of .appa validation files against the current policy, then replay the full resulting suite offline. Replay evaluates the effective policy contracts, including their parameter schemas and selectors; it does not fetch installed MCP input schemas or require tools to be installed. Draft from those contracts and use replay to check decisions. Read the policy revision and specification version first. Upserts replace only named files; deletions must be explicit; unrelated files are preserved. Omit policyContent or pass null for validation-only work; never send the current policy or blank text as a placeholder. Include a complete proposed policy only when the user explicitly requested a policy change. Correct scenario syntax errors in the .appa files without changing the policy. This saves nothing and does not affect global run history, execute business tools, or contact model/helper providers. Before publishing, explain the scenario in ordinary language, its expected behavior, observed results and relevant limits. Give the file path and provide its exact source on request. A failed check does not authorize a policy fix or changing expectations merely to force green. Keep specifications small and focused on the user's intended behavior.",
+      "Preview a patch of .appa validation files: checks each changed file's syntax and, when policyContent is given, the proposed policy. It does not replay or run validations; after saving, run them with run_openappa_policy_tests. Read the policy revision and specification version first. Upserts replace only named files; deletions must be explicit; unrelated files are preserved. Omit policyContent or pass null for validation-only work; never send the current policy or blank text as a placeholder. Include a complete proposed policy only when the user explicitly requested a policy change. Correct scenario syntax errors in the .appa files without changing the policy. This saves nothing and does not affect run history. Before publishing, explain the scenario in ordinary language and its expected behavior. Give the file path and provide its exact source on request. Keep specifications small and focused on the user's intended behavior.",
     schema: PreviewOpenAppaValidationChangeSchema,
     async handler({ args, context }) {
       const { organizationId, userId } = organizationUser(
@@ -1049,7 +1035,7 @@ const registry = defineArchestraTools([
     shortName: "publish_openappa_validation_change",
     title: "Publish OpenAPPA validations",
     description:
-      "Publish the exact validation patch explained after preview_openappa_validation_change, only when the user authorized saving it. Replays the full suite again before saving. Omit policyContent or pass null for validation-only work. Saving validations does not authorize a policy change; include a complete proposed policy only for an explicitly requested policy change. With Git sync, opens one repository PR using the configured GitHub App or PAT, containing only the changed files; nothing becomes active until merge and sync. Otherwise saves locally, atomically when policy and validations both change. Test failures are informational and do not authorize policy fixes or block an authorized valid policy. Preserve existing expectations and unrelated rules. On a conflict, re-read and reconcile before retrying. Tests-only writes do not enable enforcement. A first local policy change turns enforcement on for an administrator; report enforcement and inactive batteries. Policy-only setup can continue to use update_guardrails_policy without creating tests.",
+      "Publish the exact validation patch explained after preview_openappa_validation_change, only when the user authorized saving it. Checks syntax and any proposed policy, then saves without replaying; run the saved files with run_openappa_policy_tests. Omit policyContent or pass null for validation-only work. Saving validations does not authorize a policy change; include a complete proposed policy only for an explicitly requested policy change. With Git sync, opens one repository PR using the configured GitHub App or PAT, containing only the changed files; nothing becomes active until merge and sync. Otherwise saves locally, atomically when policy and validations both change. Preserve existing expectations and unrelated rules. On a conflict, re-read and reconcile before retrying. Tests-only writes do not enable enforcement. A first local policy change turns enforcement on for an administrator; report enforcement and inactive batteries. Policy-only setup can continue to use update_guardrails_policy without creating tests.",
     schema: PublishOpenAppaValidationChangeSchema,
     async handler({ args, context }) {
       const ids = organizationUser(context, AUTHENTICATED_CONTEXT_REQUIRED);
@@ -1468,6 +1454,19 @@ function organization(context: ArchestraContext): string {
 
 const PREVIEW_APPROVAL_INSTRUCTION =
   "Nothing is saved yet. In this same turn, summarize in 2-4 short bullets what the change does to agents and tools (not the TOML), then ask the user to approve it with the ask_user tool, or the client's own question tool. Do not end the turn without that question, even when the user said not to publish until they approve: the question is how they approve. After approval, call update_guardrails_policy with the same edits or content and expectedRevision.";
+
+/** What a yell tells the agent when break the glass is off. */
+const YELL_RESULT_GUARDRAILS_UNCHANGED =
+  "Guardrails are unchanged for this session.";
+/** What a yell tells the agent when break the glass turned OpenAPPA off. */
+const YELL_RESULT_GUARDRAILS_OFF =
+  "Guardrails are now off for this session: its label is reset, and its calls are no longer checked.";
+
+function textParts(result: CallToolResult): string[] {
+  return result.content.flatMap((part) =>
+    part.type === "text" ? [part.text] : [],
+  );
+}
 
 const YELL_LIST_LIMIT = 20;
 const YELL_MESSAGE_LIMIT = 300;
@@ -1937,12 +1936,11 @@ function peerExecution(params: {
 }
 
 /**
- * The session and call a yell or superyell reports under. A Chat or runtime
+ * The session and call a yell reports under. A Chat or runtime
  * call knows both; an external client's call through the MCP gateway does
  * not, so the proxy left them when it allowed the call.
  */
 async function yellIdentity(params: {
-  shortName: YellToolShortName;
   args: YellArguments;
   context: ArchestraContext;
 }): Promise<{ session: OpenAppaSession; callId: string }> {
@@ -1960,7 +1958,6 @@ async function yellIdentity(params: {
       : context.organizationId
         ? await recallYellSession({
             organizationId: context.organizationId,
-            shortName: params.shortName,
             args: params.args,
           })
         : undefined;
@@ -1968,7 +1965,7 @@ async function yellIdentity(params: {
     logger.warn(
       {
         agentId: context.agentId,
-        tool: params.shortName,
+        tool: "yell",
         hasSession: Boolean(known),
         hasToolCallId: Boolean(context.currentToolCallId),
       },

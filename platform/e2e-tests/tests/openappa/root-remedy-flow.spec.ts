@@ -189,6 +189,9 @@ test("denies a tool call, rules on it, and releases it after the model executes 
     const agentResponse = await createAgent(
       request,
       `OpenAPPA root flow ${suffix}`,
+      // This scenario exercises Chat's directly declared skill tool. The API
+      // defaults to an MCP gateway, whose progressive surface defers it.
+      "agent",
     );
     agentId = ((await agentResponse.json()) as { id: string }).id;
 
@@ -452,6 +455,7 @@ test("rules a run_tool dispatch by its target: notice names it, remedy clears it
     const agentResponse = await createAgent(
       request,
       `OpenAPPA dispatch flow ${suffix}`,
+      "mcp_gateway",
     );
     agentId = ((await agentResponse.json()) as { id: string }).id;
     await makeApiRequest({
@@ -497,6 +501,7 @@ test("rules a run_tool dispatch by its target: notice names it, remedy clears it
     expect(advertised).toEqual(
       expect.arrayContaining([NOTICE_TOOL, CONTROL_TOOL, DISPATCH_TOOL]),
     );
+    expect(advertised).not.toContain(BLOCKED_TOOL);
 
     for (const mapping of [
       proposeBlockedCallMapping({

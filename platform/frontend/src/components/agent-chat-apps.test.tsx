@@ -19,6 +19,7 @@ const refetchProviders = vi.fn();
 const hasUpdatePermission = vi.fn(() => true);
 const hasAgentUpdatePermission = vi.fn(() => true);
 
+vi.mock("@/app/_parts/use-settings-area-access");
 vi.mock("@/lib/agent.query", () => ({
   useProfiles: vi.fn(),
 }));

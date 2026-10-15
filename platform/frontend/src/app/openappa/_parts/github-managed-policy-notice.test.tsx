@@ -90,8 +90,10 @@ test.each([
   expect(
     screen.queryByRole("link", { name: "Review sync settings" }),
   ).not.toBeInTheDocument();
-  expect(screen.getByText("Managed in GitHub")).toBeVisible();
-  expect(screen.getByRole("link", { name: /repository/ })).toBeVisible();
+  // A healthy sync is a chip linking to the same source, not a banner.
+  expect(
+    screen.getByRole("link", { name: /Managed in GitHub/ }),
+  ).toHaveAttribute("href", `https://github.com/example/policies/${path}`);
   client.clear();
 });
 

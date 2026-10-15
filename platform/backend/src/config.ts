@@ -3304,6 +3304,17 @@ const config = {
             process.env.ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS,
             600,
           ),
+    /**
+     * How often (in minutes) to check whether a running local MCP server's
+     * mutable image tag (`:latest` or untagged) now points at a different
+     * image in its registry, and roll the server onto it when it does.
+     * Defaults to 15; 0 disables the check.
+     */
+    mcpImageUpdateCheckIntervalMinutes: parseNonNegativeInt(
+      process.env
+        .ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_UPDATE_CHECK_INTERVAL_MINUTES,
+      15,
+    ),
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise

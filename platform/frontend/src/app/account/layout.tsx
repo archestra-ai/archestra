@@ -6,6 +6,7 @@ import { Suspense, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AccountPageActionSlotContext } from "@/app/account/_components/account-page-action";
 import { accountSections } from "@/app/account/_components/account-sections";
+import { useAccountCredentialsAccess } from "@/app/account/_components/use-account-credentials-access";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageLayout } from "@/components/page-layout";
 import { WithPermissions } from "@/components/roles/with-permissions";
@@ -15,10 +16,17 @@ import { getFrontendDocsUrl } from "@/lib/docs/docs";
 // the description says what the open tab is for.
 const PAGE_DESCRIPTIONS: Record<string, React.ReactNode> = {
   "/account": "Settings that apply only to you, not your organization.",
+  "/account/credentials":
+    "Credentials your agents use on your behalf. Values stay private to you.",
   "/account/api-keys": <ApiKeysDescription />,
   "/account/sessions":
     "The browsers and devices you're signed in on. Sign out of any you don't recognize.",
 };
+
+const PAGES_WITH_ACTION = new Set([
+  "/account/api-keys",
+  "/account/credentials",
+]);
 
 function ApiKeysDescription() {
   const apiDocsUrl = getFrontendDocsUrl("reference/api");
@@ -62,17 +70,24 @@ function AccountShell({ children }: { children: React.ReactNode }) {
   const [pageActionSlot, setPageActionSlot] = useState<HTMLDivElement | null>(
     null,
   );
+  // No Credentials tab for a reader who uses Settings → Credentials, or who
+  // has nothing to show here (no credential:read, no Claude Code agent); its
+  // page forwards them.
+  const { hasTab: hasCredentialsTab } = useAccountCredentialsAccess();
+  const tabs = accountSections.filter(
+    (section) =>
+      section.href !== "/account/credentials" || hasCredentialsTab !== false,
+  );
 
   return (
     <PageLayout
       title="Personal Settings"
       description={PAGE_DESCRIPTIONS[pathname] ?? PAGE_DESCRIPTIONS["/account"]}
-      tabs={accountSections}
-      // API Keys puts Create API Key in the header through this slot.
+      tabs={tabs}
+      // API Keys puts Create API Key, and Credentials Add credential, in the
+      // header through this slot.
       actionButton={
-        pathname === "/account/api-keys" ? (
-          <div ref={setPageActionSlot} />
-        ) : null
+        PAGES_WITH_ACTION.has(pathname) ? <div ref={setPageActionSlot} /> : null
       }
     >
       <AccountPageActionSlotContext.Provider value={pageActionSlot}>

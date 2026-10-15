@@ -122158,8 +122158,7 @@
                               "oauthClient",
                               "environment",
                               "serviceAccount",
-                              "credential",
-                              "scheduledTask"
+                              "credential"
                             ]
                           },
                           "scope": {
@@ -138903,7 +138902,7 @@
         "tags": [
           "ChatOps Webhooks"
         ],
-        "description": "Slack OAuth callback for an agent bot install",
+        "description": "Slack OAuth callback for a Slack bot install",
         "parameters": [
           {
             "schema": {
@@ -143341,6 +143340,37 @@
                         "appId": {
                           "type": "string"
                         },
+                        "handle": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "connected": {
+                          "type": "boolean"
+                        },
+                        "installed": {
+                          "type": "boolean"
+                        },
+                        "needsAppLevelToken": {
+                          "type": "boolean"
+                        },
+                        "createdBy": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "nullable": true,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name"
+                          ],
+                          "additionalProperties": false
+                        },
                         "connectionMode": {
                           "type": "string",
                           "enum": [
@@ -143374,6 +143404,11 @@
                       },
                       "required": [
                         "appId",
+                        "handle",
+                        "connected",
+                        "installed",
+                        "needsAppLevelToken",
+                        "createdBy",
                         "connectionMode",
                         "agentUsage"
                       ],
@@ -145455,6 +145490,313 @@
         }
       }
     },
+    "/api/chatops/config/slack/router/app": {
+      "post": {
+        "operationId": "createSlackRouterBotApp",
+        "tags": [
+          "ChatOps"
+        ],
+        "description": "Create the Slack app of the router bot and return its install link\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "appName": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9._-]{0,34}$"
+                  },
+                  "connectionMode": {
+                    "type": "string",
+                    "enum": [
+                      "webhook",
+                      "socket"
+                    ]
+                  }
+                },
+                "required": [
+                  "appName",
+                  "connectionMode"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "appId": {
+                      "type": "string"
+                    },
+                    "installUrl": {
+                      "type": "string"
+                    },
+                    "installMode": {
+                      "type": "string",
+                      "enum": [
+                        "oauth",
+                        "manual"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "appId",
+                    "installUrl",
+                    "installMode"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "organizationSettings:update"
+          ]
+        }
+      }
+    },
     "/api/chatops/config/slack/agents/{agentId}/channels": {
       "get": {
         "operationId": "listSlackAgentBotChannels",
@@ -145792,6 +146134,592 @@
             "name": "agentId",
             "required": true
           },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Z0-9]+$"
+            },
+            "in": "path",
+            "name": "channelId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "organizationSettings:update"
+          ]
+        }
+      }
+    },
+    "/api/chatops/config/slack/router/channels": {
+      "get": {
+        "operationId": "listSlackRouterBotChannels",
+        "tags": [
+          "ChatOps"
+        ],
+        "description": "List the Slack channels the router bot is in or can join\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:read`: View every organization settings page, including messaging channels",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "workspaceId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "canJoin": {
+                      "type": "boolean"
+                    },
+                    "channels": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "channelId": {
+                            "type": "string"
+                          },
+                          "channelName": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "description": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "isPrivate": {
+                            "type": "boolean"
+                          },
+                          "isMember": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "channelId",
+                          "channelName",
+                          "description",
+                          "isPrivate",
+                          "isMember"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "workspaceId",
+                    "canJoin",
+                    "channels"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "organizationSettings:read"
+          ]
+        }
+      }
+    },
+    "/api/chatops/config/slack/router/channels/{channelId}/join": {
+      "post": {
+        "operationId": "joinSlackRouterBotChannel",
+        "tags": [
+          "ChatOps"
+        ],
+        "description": "Add the Slack router bot to a public channel\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
+        "parameters": [
           {
             "schema": {
               "type": "string",
@@ -171975,7 +172903,7 @@
                         "block"
                       ]
                     },
-                    "superyellEnabled": {
+                    "breakTheGlassEnabled": {
                       "type": "boolean"
                     },
                     "featureEnabled": {
@@ -171988,7 +172916,7 @@
                   "required": [
                     "enabled",
                     "unsupportedClientAction",
-                    "superyellEnabled",
+                    "breakTheGlassEnabled",
                     "featureEnabled",
                     "active"
                   ],
@@ -172259,7 +173187,7 @@
                       "block"
                     ]
                   },
-                  "superyellEnabled": {
+                  "breakTheGlassEnabled": {
                     "type": "boolean"
                   }
                 }
@@ -172285,7 +173213,7 @@
                         "block"
                       ]
                     },
-                    "superyellEnabled": {
+                    "breakTheGlassEnabled": {
                       "type": "boolean"
                     },
                     "featureEnabled": {
@@ -172298,7 +173226,7 @@
                   "required": [
                     "enabled",
                     "unsupportedClientAction",
-                    "superyellEnabled",
+                    "breakTheGlassEnabled",
                     "featureEnabled",
                     "active"
                   ],
@@ -386540,7 +387468,7 @@
         "tags": [
           "Ownership"
         ],
-        "description": "Transfer ownership to another organization member\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions, instructions, and sharing",
+        "description": "Transfer ownership to another organization member\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions, instructions, sharing, and schedules",
         "requestBody": {
           "required": true,
           "content": {
@@ -386839,7 +387767,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Get all label keys used by projects\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
+        "description": "Get all label keys used by projects\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -387101,7 +388029,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Get all label values used by projects\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
+        "description": "Get all label values used by projects\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -387374,7 +388302,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Create a project. Files produced in its chats are owned by the project rather than the individual author.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:create`: Create projects",
+        "description": "Create a project. Files produced in its chats are owned by the project rather than the individual author.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:create`: Create projects and schedules, and trigger schedule runs",
         "requestBody": {
           "required": true,
           "content": {
@@ -387980,7 +388908,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "List projects the caller can see. `scope` is the project's share visibility: `personal` (private), `team` (shared with teams — narrow with `teamIds`), or `org` (org-wide); omitted = all visible. Admins additionally filter `personal` by owner via `authorIds` / `excludeAuthorIds` (ignored for non-admins). `search` matches name + description. `status=deleted` returns the org-wide soft-deleted projects for a project admin (empty for everyone else); the other filters do not apply to that slice.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
+        "description": "List projects the caller can see. `scope` is the project's share visibility: `personal` (private), `team` (shared with teams — narrow with `teamIds`), or `org` (org-wide); omitted = all visible. Admins additionally filter `personal` by owner via `authorIds` / `excludeAuthorIds` (ignored for non-admins). `search` matches name + description. `status=deleted` returns the org-wide soft-deleted projects for a project admin (empty for everyone else); the other filters do not apply to that slice.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -388520,7 +389448,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Turn an existing chat into a project: create the project, move the chat into it, and re-point the chat's files to the project. Only the chat's owner may do this, and only for a user chat not already in a project. `name` defaults to the chat title.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:create`: Create projects",
+        "description": "Turn an existing chat into a project: create the project, move the chat into it, and re-point the chat's files to the project. Only the chat's owner may do this, and only for a user chat not already in a project. `name` defaults to the chat title.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:create`: Create projects and schedules, and trigger schedule runs",
         "requestBody": {
           "required": true,
           "content": {
@@ -388996,7 +389924,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Project detail. Share team ids are included for the owner only.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
+        "description": "Project detail. Share team ids are included for the owner only.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -389452,7 +390380,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Update a project's name, description, icon, and/or default agent (owner or a project admin). Only the provided fields change. The default agent must be an organization-wide chat agent; null clears it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions, instructions, and sharing",
+        "description": "Update a project's name, description, icon, and/or default agent (owner or a project admin). Only the provided fields change. The default agent must be an organization-wide chat agent; null clears it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions, instructions, sharing, and schedules",
         "requestBody": {
           "required": true,
           "content": {
@@ -389797,7 +390725,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Soft-delete a project (owner or a project admin). Its chats detach and survive as ordinary conversations; its files and scheduled tasks are retained but hidden, and a project admin can restore them. Nothing is purged.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:delete`: Delete projects",
+        "description": "Soft-delete a project (owner or a project admin). Its chats detach and survive as ordinary conversations; its files and scheduled tasks are retained but hidden, and a project admin can restore them. Nothing is purged.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:delete`: Delete projects and schedules",
         "parameters": [
           {
             "schema": {
@@ -390080,7 +391008,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Soft-delete several projects in one request (owner or project admin per project). As with the single-project delete, their chats detach and survive as ordinary conversations, and their files and scheduled tasks are retained but hidden. Nothing is purged, and a project the caller may not delete is reported in `failed` while the rest of the batch still applies.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:delete`: Delete projects",
+        "description": "Soft-delete several projects in one request (owner or project admin per project). As with the single-project delete, their chats detach and survive as ordinary conversations, and their files and scheduled tasks are retained but hidden. Nothing is purged, and a project the caller may not delete is reported in `failed` while the rest of the batch still applies.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:delete`: Delete projects and schedules",
         "requestBody": {
           "required": true,
           "content": {
@@ -390416,7 +391344,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Restore a soft-deleted project (project admins only). Brings back its retained files and scheduled tasks (schedules resume forward-only, no catch-up runs); chats do NOT re-attach, so the restored project reports zero chats. 404 if there is no soft-deleted project with that id in the org. Deleting frees the display name, so if the owner has since taken it, pass `name` to restore under a different one; restoring into a name that is still taken is a 409.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:delete`: Delete projects",
+        "description": "Restore a soft-deleted project (project admins only). Brings back its retained files and scheduled tasks (schedules resume forward-only, no catch-up runs); chats do NOT re-attach, so the restored project reports zero chats. 404 if there is no soft-deleted project with that id in the org. Deleting frees the display name, so if the owner has since taken it, pass `name` to restore under a different one; restoring into a name that is still taken is a 409.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:delete`: Delete projects and schedules",
         "requestBody": {
           "required": true,
           "content": {
@@ -391173,7 +392101,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Files owned by the project, readable by anyone with project access.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
+        "description": "Files owned by the project, readable by anyone with project access.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -391496,7 +392424,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Upload one file into the project (drag-and-drop on the Files panel). The bytes are base64-encoded in the body; a colliding name is auto-renamed.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
+        "description": "Upload one file into the project (drag-and-drop on the Files panel). The bytes are base64-encoded in the body; a colliding name is auto-renamed.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "requestBody": {
           "required": true,
           "content": {
@@ -391814,7 +392742,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "The project's instructions (markdown). Readable by anyone with project access; empty until the owner first saves it. The content is injected into the system prompt of every chat in the project.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
+        "description": "The project's instructions (markdown). Readable by anyone with project access; empty until the owner first saves it. The content is injected into the system prompt of every chat in the project.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -392092,7 +393020,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Set the project's instructions (owner only). The first save creates the instructions file; saving empty content keeps it but injects nothing.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions, instructions, and sharing",
+        "description": "Set the project's instructions (owner only). The first save creates the instructions file; saving empty content keeps it but injects nothing.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions, instructions, sharing, and schedules",
         "requestBody": {
           "required": true,
           "content": {
@@ -392394,7 +393322,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "All chats in a project the caller can read. Chats authored by others require `read` on every chat (a grant at `*` on `conversation`); without it the caller sees only their own. `readOnly` marks chats authored by someone else (viewable, never writable).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
+        "description": "All chats in a project the caller can read. Chats authored by others require `read` on every chat (a grant at `*` on `conversation`); without it the caller sees only their own. `readOnly` marks chats authored by someone else (viewable, never writable).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -392731,7 +393659,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "All run sessions in a project the caller can read. Sessions started by others require `read` on every chat (a grant at `*` on `conversation`); all non-owner views are read-only.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: Open Agents, and use the code sandboxes and files of agents you can use\n`project:read`: View projects and your own sessions inside them",
+        "description": "All run sessions in a project the caller can read. Sessions started by others require `read` on every chat (a grant at `*` on `conversation`); all non-owner views are read-only.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: Open Agents, and use the code sandboxes and files of agents you can use\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -393312,7 +394240,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Pin a project to the current user's sidebar. Personal — does not affect other members. Any user who can read the project may pin it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
+        "description": "Pin a project to the current user's sidebar. Personal — does not affect other members. Any user who can read the project may pin it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -393593,7 +394521,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Remove the current user's pin on a project. Idempotent; allowed even if the project was since unshared from the user.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
+        "description": "Remove the current user's pin on a project. Idempotent; allowed even if the project was since unshared from the user.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -393876,7 +394804,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Apps linked into the project. Each member sees only the linked apps they can read themselves.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps\n`project:read`: View projects and your own sessions inside them",
+        "description": "Apps linked into the project. Each member sees only the linked apps they can read themselves.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -394181,7 +395109,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Link an app into the project. Any project member who can read the app may link it; the app keeps its own permissions. Idempotent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps\n`project:read`: View projects and your own sessions inside them",
+        "description": "Link an app into the project. Any project member who can read the app may link it; the app keeps its own permissions. Idempotent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -394473,7 +395401,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Unlink an app from the project. The app itself is not changed.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps\n`project:read`: View projects and your own sessions inside them",
+        "description": "Unlink an app from the project. The app itself is not changed.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -395745,7 +396673,7 @@
         "tags": [
           "Credentials"
         ],
-        "description": "Create a credential definition\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:create`: Create saved credentials",
+        "description": "Create a credential definition\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nChecked dynamically based on the credential being created. A credential just for the caller (`allowPersonal: true`, `allowOrganization: false`, no `initialGrants`) needs no permission, and only its author can reach it. Organization credentials and credentials created with grants require `credential:create`.",
         "requestBody": {
           "required": true,
           "content": {
@@ -396299,10 +397227,9 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "credential:create"
-          ]
+          "kind": "dynamic",
+          "note": "Checked dynamically based on the credential being created. A credential just for the caller (`allowPersonal: true`, `allowOrganization: false`, no `initialGrants`) needs no permission, and only its author can reach it. Organization credentials and credentials created with grants require `credential:create`.",
+          "permissions": []
         }
       }
     },
@@ -398495,7 +399422,7 @@
         "tags": [
           "Schedule Triggers"
         ],
-        "description": "List scheduled agent triggers\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`scheduledTask:read`: View scheduled tasks and their run history",
+        "description": "List scheduled agent triggers\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -398979,7 +399906,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "scheduledTask:read"
+            "project:read"
           ]
         }
       },
@@ -398988,7 +399915,7 @@
         "tags": [
           "Schedule Triggers"
         ],
-        "description": "Create a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`scheduledTask:create`: Create new scheduled tasks and trigger runs",
+        "description": "Create a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:create`: Create projects and schedules, and trigger schedule runs",
         "requestBody": {
           "required": true,
           "content": {
@@ -399394,7 +400321,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "scheduledTask:create"
+            "project:create"
           ]
         }
       }
@@ -399405,7 +400332,7 @@
         "tags": [
           "Schedule Triggers"
         ],
-        "description": "Get a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`scheduledTask:read`: View scheduled tasks and their run history",
+        "description": "Get a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -399774,7 +400701,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "scheduledTask:read"
+            "project:read"
           ]
         }
       },
@@ -399783,7 +400710,7 @@
         "tags": [
           "Schedule Triggers"
         ],
-        "description": "Update a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`scheduledTask:update`: Modify scheduled task configuration",
+        "description": "Update a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions, instructions, sharing, and schedules",
         "requestBody": {
           "required": true,
           "content": {
@@ -400193,7 +401120,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "scheduledTask:update"
+            "project:update"
           ]
         }
       },
@@ -400202,7 +401129,7 @@
         "tags": [
           "Schedule Triggers"
         ],
-        "description": "Delete a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`scheduledTask:delete`: Delete scheduled tasks",
+        "description": "Delete a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:delete`: Delete projects and schedules",
         "parameters": [
           {
             "schema": {
@@ -400471,7 +401398,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "scheduledTask:delete"
+            "project:delete"
           ]
         }
       }
@@ -400482,7 +401409,7 @@
         "tags": [
           "Schedule Triggers"
         ],
-        "description": "Enable a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`scheduledTask:update`: Modify scheduled task configuration",
+        "description": "Enable a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions, instructions, sharing, and schedules",
         "parameters": [
           {
             "schema": {
@@ -400851,7 +401778,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "scheduledTask:update"
+            "project:update"
           ]
         }
       }
@@ -400862,7 +401789,7 @@
         "tags": [
           "Schedule Triggers"
         ],
-        "description": "Disable a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`scheduledTask:update`: Modify scheduled task configuration",
+        "description": "Disable a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions, instructions, sharing, and schedules",
         "parameters": [
           {
             "schema": {
@@ -401231,7 +402158,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "scheduledTask:update"
+            "project:update"
           ]
         }
       }
@@ -401242,7 +402169,7 @@
         "tags": [
           "Schedule Triggers"
         ],
-        "description": "Run a scheduled agent trigger immediately\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`scheduledTask:create`: Create new scheduled tasks and trigger runs",
+        "description": "Run a scheduled agent trigger immediately\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:create`: Create projects and schedules, and trigger schedule runs",
         "parameters": [
           {
             "schema": {
@@ -401322,6 +402249,64 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "blockedBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "phase": {
+                          "type": "string",
+                          "enum": [
+                            "starting",
+                            "running",
+                            "stopping"
+                          ]
+                        },
+                        "runId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "runtimeTaskId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "startedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        "elapsedSeconds": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "deadline": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        "maximumDurationSeconds": {
+                          "nullable": true,
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "phase",
+                        "runId",
+                        "runtimeTaskId",
+                        "startedAt",
+                        "elapsedSeconds",
+                        "deadline",
+                        "maximumDurationSeconds"
+                      ],
+                      "additionalProperties": false
+                    },
                     "artifact": {
                       "nullable": true,
                       "type": "string"
@@ -401343,6 +402328,7 @@
                     "startedAt",
                     "completedAt",
                     "error",
+                    "blockedBy",
                     "artifact",
                     "createdAt"
                   ],
@@ -401587,7 +402573,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "scheduledTask:create"
+            "project:create"
           ]
         }
       }
@@ -401598,7 +402584,7 @@
         "tags": [
           "Schedule Triggers"
         ],
-        "description": "List runs for a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`scheduledTask:read`: View scheduled tasks and their run history",
+        "description": "List runs for a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -401719,6 +402705,64 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "blockedBy": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "phase": {
+                                "type": "string",
+                                "enum": [
+                                  "starting",
+                                  "running",
+                                  "stopping"
+                                ]
+                              },
+                              "runId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "runtimeTaskId": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "startedAt": {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                              },
+                              "elapsedSeconds": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "deadline": {
+                                "nullable": true,
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                              },
+                              "maximumDurationSeconds": {
+                                "nullable": true,
+                                "type": "integer",
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "phase",
+                              "runId",
+                              "runtimeTaskId",
+                              "startedAt",
+                              "elapsedSeconds",
+                              "deadline",
+                              "maximumDurationSeconds"
+                            ],
+                            "additionalProperties": false
+                          },
                           "artifact": {
                             "nullable": true,
                             "type": "string"
@@ -401740,6 +402784,7 @@
                           "startedAt",
                           "completedAt",
                           "error",
+                          "blockedBy",
                           "artifact",
                           "createdAt"
                         ],
@@ -402032,7 +403077,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "scheduledTask:read"
+            "project:read"
           ]
         }
       }
@@ -402043,7 +403088,7 @@
         "tags": [
           "Schedule Triggers"
         ],
-        "description": "Get a single run for a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`scheduledTask:read`: View scheduled tasks and their run history",
+        "description": "Get a single run for a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -402133,6 +403178,64 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "blockedBy": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "phase": {
+                          "type": "string",
+                          "enum": [
+                            "starting",
+                            "running",
+                            "stopping"
+                          ]
+                        },
+                        "runId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "runtimeTaskId": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "startedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        "elapsedSeconds": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "deadline": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                        },
+                        "maximumDurationSeconds": {
+                          "nullable": true,
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "phase",
+                        "runId",
+                        "runtimeTaskId",
+                        "startedAt",
+                        "elapsedSeconds",
+                        "deadline",
+                        "maximumDurationSeconds"
+                      ],
+                      "additionalProperties": false
+                    },
                     "artifact": {
                       "nullable": true,
                       "type": "string"
@@ -402154,6 +403257,7 @@
                     "startedAt",
                     "completedAt",
                     "error",
+                    "blockedBy",
                     "artifact",
                     "createdAt"
                   ],
@@ -402398,7 +403502,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "scheduledTask:read"
+            "project:read"
           ]
         }
       }
@@ -402409,7 +403513,7 @@
         "tags": [
           "Schedule Triggers"
         ],
-        "description": "Create or return the chat conversation linked to a schedule run\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`scheduledTask:create`: Create new scheduled tasks and trigger runs",
+        "description": "Create or return the chat conversation linked to a schedule run\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:create`: Create projects and schedules, and trigger schedule runs",
         "parameters": [
           {
             "schema": {
@@ -403192,7 +404296,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "scheduledTask:create"
+            "project:create"
           ]
         }
       }
@@ -428244,6 +429348,445 @@
         }
       }
     },
+    "/api/statistics/costs": {
+      "get": {
+        "operationId": "getCostStatistics",
+        "tags": [
+          "Statistics"
+        ],
+        "description": "Get the Costs overview and model chart from shared aggregates. Active user counts are self-scoped without member:read; no user identities are returned.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics",
+        "parameters": [
+          {
+            "schema": {
+              "default": "24h",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "5m",
+                    "15m",
+                    "30m",
+                    "1h",
+                    "24h",
+                    "7d",
+                    "30d",
+                    "90d",
+                    "12m",
+                    "all"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "pattern": "^custom:[\\s\\S]{0,}_[\\s\\S]{0,}$",
+                  "description": "Custom timeframe must be in format 'custom:startTime_endTime'"
+                }
+              ]
+            },
+            "in": "query",
+            "name": "timeframe",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "models": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "model": {
+                            "type": "string"
+                          },
+                          "requests": {
+                            "type": "number"
+                          },
+                          "inputTokens": {
+                            "type": "number"
+                          },
+                          "outputTokens": {
+                            "type": "number"
+                          },
+                          "cacheReadTokens": {
+                            "type": "number"
+                          },
+                          "cost": {
+                            "type": "number"
+                          },
+                          "percentage": {
+                            "type": "number"
+                          },
+                          "timeSeries": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "timestamp": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "number"
+                                },
+                                "requests": {
+                                  "type": "number"
+                                },
+                                "inputTokens": {
+                                  "type": "number"
+                                },
+                                "outputTokens": {
+                                  "type": "number"
+                                },
+                                "cacheReadTokens": {
+                                  "type": "number"
+                                },
+                                "billedCost": {
+                                  "type": "number"
+                                },
+                                "subscriptionCost": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "timestamp",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "model",
+                          "requests",
+                          "inputTokens",
+                          "outputTokens",
+                          "cacheReadTokens",
+                          "cost",
+                          "percentage",
+                          "timeSeries"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "costSavings": {
+                      "type": "object",
+                      "properties": {
+                        "totalBaselineCost": {
+                          "type": "number"
+                        },
+                        "totalActualCost": {
+                          "type": "number"
+                        },
+                        "totalSavings": {
+                          "type": "number"
+                        },
+                        "totalSubscriptionCost": {
+                          "type": "number"
+                        },
+                        "totalCacheSavings": {
+                          "type": "number"
+                        },
+                        "timeSeries": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "timestamp": {
+                                "type": "string"
+                              },
+                              "baselineCost": {
+                                "type": "number"
+                              },
+                              "actualCost": {
+                                "type": "number"
+                              },
+                              "cacheSavings": {
+                                "type": "number"
+                              },
+                              "subscriptionCost": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "timestamp",
+                              "baselineCost",
+                              "actualCost",
+                              "cacheSavings",
+                              "subscriptionCost"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "totalBaselineCost",
+                        "totalActualCost",
+                        "totalSavings",
+                        "totalSubscriptionCost",
+                        "totalCacheSavings",
+                        "timeSeries"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "activeUsers": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "models",
+                    "costSavings",
+                    "activeUsers"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "llmCost:read"
+          ]
+        }
+      }
+    },
     "/api/statistics/cost-savings": {
       "get": {
         "operationId": "getCostSavingsStatistics",
@@ -452652,8 +454195,7 @@
                 "oauthClient",
                 "environment",
                 "serviceAccount",
-                "credential",
-                "scheduledTask"
+                "credential"
               ]
             },
             "in": "path",
@@ -453078,8 +454620,7 @@
                           "oauthClient",
                           "environment",
                           "serviceAccount",
-                          "credential",
-                          "scheduledTask"
+                          "credential"
                         ]
                       },
                       "scope": {
@@ -453401,8 +454942,7 @@
                 "oauthClient",
                 "environment",
                 "serviceAccount",
-                "credential",
-                "scheduledTask"
+                "credential"
               ]
             },
             "in": "path",
@@ -453836,8 +455376,7 @@
                 "oauthClient",
                 "environment",
                 "serviceAccount",
-                "credential",
-                "scheduledTask"
+                "credential"
               ]
             },
             "in": "path",
@@ -453895,8 +455434,7 @@
                         "oauthClient",
                         "environment",
                         "serviceAccount",
-                        "credential",
-                        "scheduledTask"
+                        "credential"
                       ]
                     },
                     "scope": {
@@ -454787,8 +456325,7 @@
                 "oauthClient",
                 "environment",
                 "serviceAccount",
-                "credential",
-                "scheduledTask"
+                "credential"
               ]
             },
             "in": "path",
@@ -454846,8 +456383,7 @@
                         "oauthClient",
                         "environment",
                         "serviceAccount",
-                        "credential",
-                        "scheduledTask"
+                        "credential"
                       ]
                     },
                     "scope": {

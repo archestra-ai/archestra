@@ -117,7 +117,9 @@ function generateCustomRolesPermissionsTable(): string {
           ? ["mcpOauthClient", "llmOauthClient"]
               .map((old) => `<span id="${old}:${action}"></span>`)
               .join("")
-          : "";
+          : resource === "project"
+            ? `<span id="scheduledTask:${action}"></span>`
+            : "";
       table += `| ${legacyAnchors}<span id="${key}"></span>\`${key}\` | ${permissionDescriptions[key]} |\n`;
     }
   }

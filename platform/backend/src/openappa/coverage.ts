@@ -821,9 +821,9 @@ async function buildReport(
   };
 }
 
-/** Agents are not policy targets; only gateways and registry servers are listed. */
+/** Only registry servers are policy targets; agents and gateways are not listed. */
 function isListedTarget(entity: { type: string }): boolean {
-  return entity.type !== "agent";
+  return entity.type === "mcp_server";
 }
 
 /** Compute the visible page before resolving each Auto-mode agent's tool access. */

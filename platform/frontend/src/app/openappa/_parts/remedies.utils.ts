@@ -5,30 +5,9 @@ import type {
   Sanitizer,
 } from "@/lib/openappa-remedies.query";
 
-/** Who answers a consult, as the table phrases it; null when no `[externals.*]` entry wires it. */
-export function runsAs(remedy: Remedy): string | null {
-  switch (remedy.implementation?.kind) {
-    case "hitl":
-      return "a person reviews";
-    case "url":
-      return "an HTTP service";
-    case "llm":
-    case "claude_code":
-      return "a model decides";
-    case "command":
-    case "module":
-      return "a local program";
-    case "approve":
-    case "builtin":
-      return "built in";
-    default:
-      return null;
-  }
-}
-
-/** One kind of block an authority or sanitizer lifts, as `Lock · value`. */
+/** One kind of block an authority or sanitizer lifts, as `lock value`, the lock spelled as in the policy. */
 export type CoverChip = {
-  lock: "Approvals" | "Audience" | "Trust" | "Effects";
+  lock: "attention" | "audience" | "trust" | "effects";
   value: string;
   /** Whether the value is a policy spelling, shown in monospace. */
   code: boolean;
@@ -44,22 +23,22 @@ function authorityChips(authority: Authority): CoverChip[] {
     authority.permits;
   return [
     ...(attention.includes("*")
-      ? [{ lock: "Approvals" as const, value: "any", code: false }]
+      ? [{ lock: "attention" as const, value: "any", code: false }]
       : attention.map((mark) => ({
-          lock: "Approvals" as const,
+          lock: "attention" as const,
           value: mark,
           code: true,
         }))),
     ...audienceMissing.map((audience) => ({
-      lock: "Audience" as const,
+      lock: "audience" as const,
       value: `up to ${audience}`,
       code: false,
     })),
     ...(trustBelow
-      ? [{ lock: "Trust" as const, value: `up to ${trustBelow}`, code: false }]
+      ? [{ lock: "trust" as const, value: `up to ${trustBelow}`, code: false }]
       : []),
     ...effectsContaining.map((effect) => ({
-      lock: "Effects" as const,
+      lock: "effects" as const,
       value: effect,
       code: true,
     })),
@@ -71,34 +50,15 @@ function sanitizerChips(sanitizer: Sanitizer): CoverChip[] {
   if (!permits) return [];
   if (permits.kind === "trust")
     return [
-      { lock: "Trust", value: `${permits.from} → ${permits.to}`, code: true },
+      { lock: "trust", value: `${permits.from} → ${permits.to}`, code: true },
     ];
   return [
     {
-      lock: "Audience",
+      lock: "audience",
       value: `${permits.from.join(", ")} → ${permits.to.join(", ")}`,
       code: true,
     },
   ];
-}
-
-/**
- * Which tools the remedy may act on, and for a sanitizer which part of a
- * call: the data-kind prefix, then the tags, or "any tool" when untagged.
- */
-export function forTools(remedy: Remedy): {
-  prefix: string | null;
-  tags: string[];
-} {
-  const prefix =
-    remedy.kind === "sanitizer"
-      ? remedy.on.includes("tool_input")
-        ? remedy.on.includes("tool_output")
-          ? "results and arguments of"
-          : "arguments of"
-        : "results of"
-      : null;
-  return { prefix, tags: remedy.tags };
 }
 
 export function isWired(remedy: Remedy): boolean {

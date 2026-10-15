@@ -381,6 +381,13 @@ describe("resolveConversationLlmSelectionForAgent", () => {
   });
 
   test("uses the member's /chat default over the agent's model by default", async () => {
+    // The default's key is one the user may use, so it is kept as configured.
+    vi.spyOn(
+      LlmProviderApiKeyModelLinkModel,
+      "getRankedModelsForApiKeys",
+    ).mockResolvedValue([
+      { modelId: "m-member", apiKeyId: "key-member", isBest: false },
+    ]);
     vi.spyOn(MemberModel, "getByUserId").mockResolvedValue({
       defaultModelId: "m-member",
       defaultChatApiKeyId: "key-member",
@@ -556,6 +563,13 @@ describe("resolveConversationLlmSelectionForAgent", () => {
   });
 
   test("falls back to the organization default when the agent has no model", async () => {
+    // The default's key is one the user may use, so it is kept as configured.
+    vi.spyOn(
+      LlmProviderApiKeyModelLinkModel,
+      "getRankedModelsForApiKeys",
+    ).mockResolvedValue([
+      { modelId: "m-org", apiKeyId: "org-key", isBest: false },
+    ]);
     vi.spyOn(OrganizationModel, "getById").mockResolvedValue({
       id: "org-1",
       defaultModelId: "m-org",
@@ -587,6 +601,13 @@ describe("resolveConversationLlmSelectionForAgent", () => {
   });
 
   test("an agent with a model but no key (dynamic key) falls through to the org default", async () => {
+    // The default's key is one the user may use, so it is kept as configured.
+    vi.spyOn(
+      LlmProviderApiKeyModelLinkModel,
+      "getRankedModelsForApiKeys",
+    ).mockResolvedValue([
+      { modelId: "m-org", apiKeyId: "org-key", isBest: false },
+    ]);
     vi.spyOn(OrganizationModel, "getById").mockResolvedValue({
       id: "org-1",
       defaultModelId: "m-org",
@@ -618,6 +639,13 @@ describe("resolveConversationLlmSelectionForAgent", () => {
   });
 
   test("skips a configured model that is no longer linked to its API key", async () => {
+    // The default's key is one the user may use, so it is kept as configured.
+    vi.spyOn(
+      LlmProviderApiKeyModelLinkModel,
+      "getRankedModelsForApiKeys",
+    ).mockResolvedValue([
+      { modelId: "m-org", apiKeyId: "org-key", isBest: false },
+    ]);
     vi.spyOn(OrganizationModel, "getById").mockResolvedValue({
       id: "org-1",
       defaultModelId: "m-org",

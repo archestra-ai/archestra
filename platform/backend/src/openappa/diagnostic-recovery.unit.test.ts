@@ -3,9 +3,13 @@ import { recoverDiagnosticTurn } from "./diagnostic-recovery";
 import type { AppaWireFamily } from "./wire";
 
 const reporting = {
-  tools: [{ name: "yell" }, { name: "superyell" }, { name: "ask_user" }],
+  tools: [
+    { name: "yell" },
+    { name: "execute_remedy_plan" },
+    { name: "ask_user" },
+  ],
   isAllowedCall: (call: { name: string }) =>
-    ["yell", "superyell", "ask_user"].includes(call.name),
+    ["yell", "execute_remedy_plan", "ask_user"].includes(call.name),
 };
 
 describe("blocked-history reporting recovery", () => {
@@ -82,10 +86,14 @@ describe("blocked-history reporting recovery", () => {
       tools:
         family === "openai:chatCompletions"
           ? [
-              { type: "function", function: { name: "superyell" } },
+              { type: "function", function: { name: "execute_remedy_plan" } },
               { type: "function", function: { name: "Bash" } },
             ]
-          : [{ name: "superyell" }, { type: "web_search" }, { name: "Bash" }],
+          : [
+              { name: "execute_remedy_plan" },
+              { type: "web_search" },
+              { name: "Bash" },
+            ],
       metadata: { session_id: "same-session" },
     };
     const result = recoverDiagnosticTurn({
@@ -252,7 +260,11 @@ describe("blocked-history reporting recovery", () => {
               type: "namespace",
               name: "gateway",
               tools: [
-                { type: "function", name: "superyell", defer_loading: true },
+                {
+                  type: "function",
+                  name: "execute_remedy_plan",
+                  defer_loading: true,
+                },
                 { type: "function", name: "unsafe" },
               ],
             },
@@ -268,7 +280,7 @@ describe("blocked-history reporting recovery", () => {
       ...reporting,
       tools: [
         { name: "ask_user", namespace: "gateway" },
-        { name: "superyell", namespace: "gateway" },
+        { name: "execute_remedy_plan", namespace: "gateway" },
       ],
     });
     expect(body.tools).toEqual([
@@ -277,7 +289,7 @@ describe("blocked-history reporting recovery", () => {
         name: "gateway",
         tools: [
           { type: "function", name: "ask_user" },
-          { type: "function", name: "superyell" },
+          { type: "function", name: "execute_remedy_plan" },
         ],
       },
     ]);
@@ -314,7 +326,7 @@ describe("blocked-history reporting recovery", () => {
           type: "namespace",
           name: "gateway",
           tools: [
-            { type: "function", name: "superyell" },
+            { type: "function", name: "execute_remedy_plan" },
             { type: "function", name: "unsafe" },
           ],
         },
@@ -326,13 +338,13 @@ describe("blocked-history reporting recovery", () => {
       family: "openai:responses",
       refusal: "Blocked",
       ...reporting,
-      tools: [{ name: "superyell", namespace: "gateway" }],
+      tools: [{ name: "execute_remedy_plan", namespace: "gateway" }],
     });
     expect(body.tools).toEqual([
       {
         type: "namespace",
         name: "gateway",
-        tools: [{ type: "function", name: "superyell" }],
+        tools: [{ type: "function", name: "execute_remedy_plan" }],
       },
     ]);
     expect(body.tool_choice).toBe("auto");

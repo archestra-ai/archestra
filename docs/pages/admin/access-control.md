@@ -2,7 +2,7 @@
 title: Access Control
 description: Assign roles and share resources with users, teams, and service accounts
 order: 2
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-15
 ---
 
 Roles control which sections a person can open and which kinds of resources they can create. Resource grants control which individual agents, gateways, skills, apps, models, and credentials they can reach. Configure both when giving someone access.
@@ -10,6 +10,8 @@ Roles control which sections a person can open and which kinds of resources they
 ## Predefined Roles
 
 Built-in roles cannot be edited or deleted. **Admin** has every organization permission. **Platform Admin** manages the platform without organization-wide logs or user impersonation. **Editor** manages core resources without organization settings or user management. **Member** can create agents and chat, with read access to many other sections.
+
+Members do not see **Settings**. It appears only for people who can open an organization settings page or manage teams, credentials, or OAuth clients. People who can open **Settings → Credentials** connect and add their own credentials there; everyone else does it under **Personal Settings → Credentials**.
 
 See the [complete role tables](/docs/reference/permissions#predefined-roles) before choosing a role.
 
@@ -165,7 +167,7 @@ Provider keys and virtual keys can have personal, team, or organization scope. P
 
 ### Saved Credentials
 
-[Credentials](/docs/admin/security/credentials#who-can-manage-a-credential) take grants like any other resource. **Can use** lets a person connect their own value or bind the credential to a guardrails battery. Updating a credential requires **Can update**; deleting it requires **Full access**. These are grants on the credential, not role permissions.
+[Credentials](/docs/admin/security/credentials#who-can-manage-a-credential) take grants like any other resource. **Can use** lets a person connect their own value or bind the credential to a guardrails battery. Updating a credential requires **Can update**; deleting it requires **Full access**. These are grants on the credential, not role permissions. Anyone can add a credential that only they can use. Sharing one, or adding an organization credential, needs [`credential:create`](/docs/reference/permissions#credential:create).
 
 ### Models
 

@@ -12,7 +12,6 @@ import {
   scopedResourceNouns,
 } from "@archestra/shared";
 import { AlertCircle, AlertTriangle, Info, Loader2, X } from "lucide-react";
-import Link from "next/link";
 import {
   createContext,
   type ReactNode,
@@ -33,6 +32,7 @@ import {
   ResourceAccessAddField,
 } from "@/components/resource-access-add-field";
 import { getPermissionSafetyPreview } from "@/components/resource-permission-safety-preview";
+import { SettingsLink } from "@/components/settings-link";
 import { StandardDialog } from "@/components/standard-dialog";
 import { TabbedDialogFooterSlot } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
@@ -948,12 +948,13 @@ export function InheritedAccessNote({
       {editable && listHref && (
         <>
           {" "}
-          <Link
+          <SettingsLink
             href={listHref}
             className="underline underline-offset-2 hover:text-foreground"
+            fallback={null}
           >
             Edit access to every {noun}
-          </Link>
+          </SettingsLink>
         </>
       )}
     </p>
@@ -1073,7 +1074,6 @@ export const resourcePluralNames: Record<ScopedResource, string> = {
   mcpOauthClient: "OAuth clients",
   llmOauthClient: "OAuth clients",
   environment: "environments",
-  scheduledTask: "scheduled tasks",
   log: "LLM and MCP logs",
   auditLog: "audit logs",
   serviceAccount: "service accounts",

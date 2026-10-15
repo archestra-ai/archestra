@@ -76,12 +76,12 @@ export function useUpdateUnsupportedClientAction() {
   });
 }
 
-export function useUpdateSuperyellEnabled() {
+export function useUpdateBreakTheGlassEnabled() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: async (superyellEnabled: boolean) => {
+    mutationFn: async (breakTheGlassEnabled: boolean) => {
       const { data, error } = await archestraApiSdk.updateGuardrailsDeployment({
-        body: { superyellEnabled },
+        body: { breakTheGlassEnabled },
       });
       if (error) {
         handleApiError(error);

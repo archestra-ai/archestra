@@ -1,5 +1,5 @@
 import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 import type { InsertTask, Task, TaskType } from "@/types";
 
 type StuckTaskTransition = Pick<Task, "taskType" | "periodic"> & {
@@ -8,8 +8,8 @@ type StuckTaskTransition = Pick<Task, "taskType" | "periodic"> & {
 };
 
 class TaskModel {
-  static async create(data: InsertTask): Promise<Task> {
-    const [result] = await db
+  static async create(data: InsertTask, tx?: Transaction): Promise<Task> {
+    const [result] = await (tx ?? db)
       .insert(schema.tasksTable)
       .values(data)
       .returning();

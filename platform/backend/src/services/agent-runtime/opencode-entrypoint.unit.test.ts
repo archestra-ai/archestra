@@ -15,7 +15,7 @@ import { describe, expect, test } from "vitest";
 const execFileAsync = promisify(execFile);
 const ENTRYPOINT = path.resolve(
   import.meta.dirname,
-  "../../../../agent_images/bin/archestra-opencode",
+  "../../../../docker_images/agent/bin/archestra-opencode",
 );
 
 describe("OpenCode image entrypoint", () => {

@@ -47562,7 +47562,7 @@
         "tags": [
           "A2A"
         ],
-        "description": "Execute A2A message on an internal agent (must be agentType='agent'). Accepts a JSON-RPC envelope or any JSON payload \u2014 non-JSON-RPC payloads are stringified and passed through to the agent as the user message.",
+        "description": "Execute A2A message on an internal agent (must be agentType='agent'). Accepts a JSON-RPC envelope or any JSON payload — non-JSON-RPC payloads are stringified and passed through to the agent as the user message.",
         "requestBody": {
           "required": true,
           "content": {
@@ -53040,7 +53040,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Pin an agent for the current user. Personal \u2014 does not affect other members. Any user who can read the agent may pin it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nChecked dynamically based on the target agent's type and the caller's visibility. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`.",
+        "description": "Pin an agent for the current user. Personal — does not affect other members. Any user who can read the agent may pin it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nChecked dynamically based on the target agent's type and the caller's visibility. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`.",
         "parameters": [
           {
             "schema": {
@@ -53688,7 +53688,7 @@
             "in": "query",
             "name": "includeTools",
             "required": false,
-            "description": "Attach each agent's assigned tools. Defaults to true. Pass false from callers that only need the roster itself \u2014 the tool refs carry every tool's name and description, which on an organization of any size is the great majority of this response's bytes. Agents come back with an empty `tools` array when it is off, meaning 'not requested' rather than 'none assigned'."
+            "description": "Attach each agent's assigned tools. Defaults to true. Pass false from callers that only need the roster itself — the tool refs carry every tool's name and description, which on an organization of any size is the great majority of this response's bytes. Agents come back with an empty `tools` array when it is off, meaning 'not requested' rather than 'none assigned'."
           },
           {
             "schema": {
@@ -62110,7 +62110,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Restore an agent's config to an earlier version by replaying its snapshot forward as a new head version \u2014 history is never rewritten. All-or-nothing: the restore is validated in full before anything is written, and a version referencing something that no longer exists or is out of the caller's reach (a deleted tool, key or knowledge source) is rejected with 400 rather than partially applied. Only differences from the agent's live config are written, so restoring the current configuration is a no-op. Retrying is safe: the source version is immutable, and the pre-restore config is forked as a version before anything is written.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Restore an agent's config to an earlier version by replaying its snapshot forward as a new head version — history is never rewritten. All-or-nothing: the restore is validated in full before anything is written, and a version referencing something that no longer exists or is out of the caller's reach (a deleted tool, key or knowledge source) is rejected with 400 rather than partially applied. Only differences from the agent's live config are written, so restoring the current configuration is a no-op. Retrying is safe: the source version is immutable, and the pre-restore config is forked as a version before anything is written.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -70948,7 +70948,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Soft-delete several agents in one request. Each id is authorized exactly as the single-agent delete authorizes its own, so an id the caller cannot see or modify \u2014 and a built-in agent or personal MCP gateway, which are never deletable \u2014 is reported in `failed` while the rest of the batch still applies. Deleted agents can be restored from the trash. Members who chose one as their personal default, and projects pinning it, are unpinned, as they are on the single-agent delete.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Soft-delete several agents in one request. Each id is authorized exactly as the single-agent delete authorizes its own, so an id the caller cannot see or modify — and a built-in agent or personal MCP gateway, which are never deletable — is reported in `failed` while the rest of the batch still applies. Deleted agents can be restored from the trash. Members who chose one as their personal default, and projects pinning it, are unpinned, as they are on the single-agent delete.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -72297,7 +72297,7 @@
         "tags": [
           "Agents"
         ],
-        "description": "Permanently destroy a soft-deleted agent. Global admins only \u2014 an `agent:delete` or `agent:admin` grant reaches the trash, not past it. Irreversible, with no grace period: the agent's configuration and scheduled runs are destroyed, and it is cleared from the organization, /connection, and member defaults. Its history survives, detached \u2014 conversations and LLM usage rows are kept and simply stop pointing at it. 404 if there is no soft-deleted agent with that id in the org, which is also the answer when the agent is still live or the caller is not a global admin. Restore wins a race.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRestricted to the built-in Admin and Platform Admin roles. No permission grants it: `agent:delete` and even `agent:admin` reach the trash, not past it, and a service account never qualifies. A caller without it gets 404, not 403, so the endpoint never confirms the agent exists.",
+        "description": "Permanently destroy a soft-deleted agent. Global admins only — an `agent:delete` or `agent:admin` grant reaches the trash, not past it. Irreversible, with no grace period: the agent's configuration and scheduled runs are destroyed, and it is cleared from the organization, /connection, and member defaults. Its history survives, detached — conversations and LLM usage rows are kept and simply stop pointing at it. 404 if there is no soft-deleted agent with that id in the org, which is also the answer when the agent is still live or the caller is not a global admin. Restore wins a race.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRestricted to the built-in Admin and Platform Admin roles. No permission grants it: `agent:delete` and even `agent:admin` reach the trash, not past it, and a service account never qualifies. A caller without it gets 404, not 403, so the endpoint never confirms the agent exists.",
         "parameters": [
           {
             "schema": {
@@ -73384,7 +73384,7 @@
         "tags": [
           "Members"
         ],
-        "description": "Set or clear the current user's default agent. Any chat agent the caller can see may be pinned \u2014 their own, a team's, or an organization-wide one \u2014 and it is preselected for their new chats ahead of the organization default. Null clears it, so the organization default applies. Nothing else writes this: a member who never pinned one has no personal default, and the organization default reaches them.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Set or clear the current user's default agent. Any chat agent the caller can see may be pinned — their own, a team's, or an organization-wide one — and it is preselected for their new chats ahead of the organization default. Null clears it, so the organization default applies. Nothing else writes this: a member who never pinned one has no personal default, and the organization default reaches them.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -90184,7 +90184,7 @@
         "tags": [
           "App Recordings"
         ],
-        "description": "Start rendering a recorded app session to an MP4 and return the job's id. Rendering runs in the background \u2014 poll the status endpoint and collect the file when it reports done. The recording is rendered from the bundle sent with the request; nothing is read from or written to server storage.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:update`: Edit chat messages and conversation settings",
+        "description": "Start rendering a recorded app session to an MP4 and return the job's id. Rendering runs in the background — poll the status endpoint and collect the file when it reports done. The recording is rendered from the bundle sent with the request; nothing is read from or written to server storage.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:update`: Edit chat messages and conversation settings",
         "requestBody": {
           "required": true,
           "content": {
@@ -91040,7 +91040,7 @@
         "tags": [
           "App Recordings"
         ],
-        "description": "Collect a finished render. The job ends here \u2014 the file is handed over once and the server keeps no copy.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:update`: Edit chat messages and conversation settings",
+        "description": "Collect a finished render. The job ends here — the file is handed over once and the server keeps no copy.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:update`: Edit chat messages and conversation settings",
         "parameters": [
           {
             "schema": {
@@ -92715,7 +92715,7 @@
                           "description": "Concrete capabilities the app should provide."
                         },
                         "data": {
-                          "description": "What the app reads/persists via the App Data Store \u2014 a free-form prose string, not a structured object.",
+                          "description": "What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.",
                           "nullable": true,
                           "type": "string"
                         },
@@ -94921,7 +94921,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Pin an app for the current user (mirrors project pins). Personal \u2014 does not affect other members. Any user who can view the app may pin it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Pin an app for the current user (mirrors project pins). Personal — does not affect other members. Any user who can view the app may pin it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -95483,7 +95483,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Pin an external (MCP-server) UI app for the current user, identified by install + resource + tool (several tools of one server can share a UI resource, so the tool name pins one tile, not the group). Personal \u2014 does not affect other members.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps",
+        "description": "Pin an external (MCP-server) UI app for the current user, identified by install + resource + tool (several tools of one server can share a UI resource, so the tool name pins one tile, not the group). Personal — does not affect other members.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps",
         "requestBody": {
           "required": true,
           "content": {
@@ -96158,7 +96158,7 @@
                           "description": "Concrete capabilities the app should provide."
                         },
                         "data": {
-                          "description": "What the app reads/persists via the App Data Store \u2014 a free-form prose string, not a structured object.",
+                          "description": "What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.",
                           "nullable": true,
                           "type": "string"
                         },
@@ -96794,7 +96794,7 @@
                           "description": "Concrete capabilities the app should provide."
                         },
                         "data": {
-                          "description": "What the app reads/persists via the App Data Store \u2014 a free-form prose string, not a structured object.",
+                          "description": "What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.",
                           "nullable": true,
                           "type": "string"
                         },
@@ -97488,7 +97488,7 @@
         "tags": [
           "Apps"
         ],
-        "description": "Soft-delete several apps in one request. Each id is authorized exactly as the single-app delete authorizes its own, so an app the caller cannot see or administer \u2014 and a locked app, which is never deletable until unlocked \u2014 is reported in `failed` while the rest of the batch still applies.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Soft-delete several apps in one request. Each id is authorized exactly as the single-app delete authorizes its own, so an app the caller cannot see or administer — and a locked app, which is never deletable until unlocked — is reported in `failed` while the rest of the batch still applies.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -97893,7 +97893,7 @@
                           "description": "Concrete capabilities the app should provide."
                         },
                         "data": {
-                          "description": "What the app reads/persists via the App Data Store \u2014 a free-form prose string, not a structured object.",
+                          "description": "What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.",
                           "nullable": true,
                           "type": "string"
                         },
@@ -98433,7 +98433,7 @@
                           "description": "Concrete capabilities the app should provide."
                         },
                         "data": {
-                          "description": "What the app reads/persists via the App Data Store \u2014 a free-form prose string, not a structured object.",
+                          "description": "What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.",
                           "nullable": true,
                           "type": "string"
                         },
@@ -98973,7 +98973,7 @@
                           "description": "Concrete capabilities the app should provide."
                         },
                         "data": {
-                          "description": "What the app reads/persists via the App Data Store \u2014 a free-form prose string, not a structured object.",
+                          "description": "What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.",
                           "nullable": true,
                           "type": "string"
                         },
@@ -99513,7 +99513,7 @@
                           "description": "Concrete capabilities the app should provide."
                         },
                         "data": {
-                          "description": "What the app reads/persists via the App Data Store \u2014 a free-form prose string, not a structured object.",
+                          "description": "What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.",
                           "nullable": true,
                           "type": "string"
                         },
@@ -100071,7 +100071,7 @@
                             "description": "Concrete capabilities the app should provide."
                           },
                           "data": {
-                            "description": "What the app reads/persists via the App Data Store \u2014 a free-form prose string, not a structured object.",
+                            "description": "What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.",
                             "nullable": true,
                             "type": "string"
                           },
@@ -100760,7 +100760,7 @@
                           "description": "Concrete capabilities the app should provide."
                         },
                         "data": {
-                          "description": "What the app reads/persists via the App Data Store \u2014 a free-form prose string, not a structured object.",
+                          "description": "What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.",
                           "nullable": true,
                           "type": "string"
                         },
@@ -101151,7 +101151,7 @@
                           "description": "Concrete capabilities the app should provide."
                         },
                         "data": {
-                          "description": "What the app reads/persists via the App Data Store \u2014 a free-form prose string, not a structured object.",
+                          "description": "What the app reads/persists via the App Data Store — a free-form prose string, not a structured object.",
                           "nullable": true,
                           "type": "string"
                         },
@@ -132043,7 +132043,7 @@
         "tags": [
           "Chat"
         ],
-        "description": "List files for a conversation: this chat's own outputs, user attachments, and \u2014 for a project chat \u2014 every file in the project (metadata only).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:read`: View and access chat conversations",
+        "description": "List files for a conversation: this chat's own outputs, user attachments, and — for a project chat — every file in the project (metadata only).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`chat:read`: View and access chat conversations",
         "parameters": [
           {
             "schema": {
@@ -262273,7 +262273,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "List all knowledge bases for the organization. `status=deleted` lists the soft-deleted ones instead \u2014 the trash view, which requires `knowledgeSource:delete`. Search and pagination behave identically on both slices, but the deleted slice carries identity only: `connectors` and `assignedAgents` come back empty and `totalDocsIndexed` zero, since those links resolve to nothing while the knowledge base is in the trash.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
+        "description": "List all knowledge bases for the organization. `status=deleted` lists the soft-deleted ones instead — the trash view, which requires `knowledgeSource:delete`. Search and pagination behave identically on both slices, but the deleted slice carries identity only: `connectors` and `assignedAgents` come back empty and `totalDocsIndexed` zero, since those links resolve to nothing while the knowledge base is in the trash.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -265256,7 +265256,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Permanently destroy a soft-deleted knowledge base (global admins only \u2014 a `knowledgeSource:delete` or `knowledgeSource:admin` grant reaches the trash, not past it). Irreversible, with no grace period: the row and its agent and connector assignments are destroyed. Its connectors survive, detached. 404 if there is no soft-deleted knowledge base with that id in the org, which is also the answer when it is still live or the caller is not a global admin. Restore wins a race.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors, view the deleted ones, and restore them",
+        "description": "Permanently destroy a soft-deleted knowledge base (global admins only — a `knowledgeSource:delete` or `knowledgeSource:admin` grant reaches the trash, not past it). Irreversible, with no grace period: the row and its agent and connector assignments are destroyed. Its connectors survive, detached. 404 if there is no soft-deleted knowledge base with that id in the org, which is also the answer when it is still live or the caller is not a global admin. Restore wins a race.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors, view the deleted ones, and restore them",
         "parameters": [
           {
             "schema": {
@@ -265823,7 +265823,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "List all connectors for the organization. `status=deleted` lists the soft-deleted ones instead \u2014 the trash view, which requires `knowledgeSource:delete`. Search and connector-type filtering behave identically on both slices; `knowledgeBaseId` is an active-only filter and is rejected with a 400 alongside `status=deleted`. The deleted slice carries identity only: `assignedAgents` comes back empty, since those links resolve to nothing while the connector is in the trash. It is also the one slice that never hides a row whose stored `config` no longer matches a known connector shape \u2014 the trash is the only place restore and permanent delete are offered.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
+        "description": "List all connectors for the organization. `status=deleted` lists the soft-deleted ones instead — the trash view, which requires `knowledgeSource:delete`. Search and connector-type filtering behave identically on both slices; `knowledgeBaseId` is an active-only filter and is rejected with a 400 alongside `status=deleted`. The deleted slice carries identity only: `assignedAgents` comes back empty, since those links resolve to nothing while the connector is in the trash. It is also the one slice that never hides a row whose stored `config` no longer matches a known connector shape — the trash is the only place restore and permanent delete are offered.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:read`: View Knowledge Bases and Connectors",
         "parameters": [
           {
             "schema": {
@@ -275937,7 +275937,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Delete several of a connector's synced documents in one request. Ids belonging to a different connector \u2014 or to no document at all \u2014 are reported in `failed` as not found and leave the rest of the batch applied. Deleting a synced document removes it until the next sync brings it back; to stop it returning, remove it at the source or narrow the connector's scope.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors, view the deleted ones, and restore them",
+        "description": "Delete several of a connector's synced documents in one request. Ids belonging to a different connector — or to no document at all — are reported in `failed` as not found and leave the rest of the batch applied. Deleting a synced document removes it until the next sync brings it back; to stop it returning, remove it at the source or narrow the connector's scope.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors, view the deleted ones, and restore them",
         "requestBody": {
           "required": true,
           "content": {
@@ -275983,7 +275983,7 @@
                     "required": [
                       "all"
                     ],
-                    "description": "Filter mode. A connector's corpus routinely runs to tens of thousands of documents, which is neither a sane request body as uuids nor worth authorizing row by row \u2014 so the filter travels instead and the database does the work in one statement. The response carries `affected` rather than a per-row list."
+                    "description": "Filter mode. A connector's corpus routinely runs to tens of thousands of documents, which is neither a sane request body as uuids nor worth authorizing row by row — so the filter travels instead and the database does the work in one statement. The response carries `affected` rather than a per-row list."
                   }
                 ]
               }
@@ -276663,7 +276663,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Soft-delete several connectors in one request. As with the single delete, each one's queued syncs are cancelled and its stored credential is destroyed \u2014 a restored connector comes back disabled and re-authenticates. A connector the caller may not delete is reported in `failed` while the rest of the batch still applies.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors, view the deleted ones, and restore them",
+        "description": "Soft-delete several connectors in one request. As with the single delete, each one's queued syncs are cancelled and its stored credential is destroyed — a restored connector comes back disabled and re-authenticates. A connector the caller may not delete is reported in `failed` while the rest of the batch still applies.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors, view the deleted ones, and restore them",
         "requestBody": {
           "required": true,
           "content": {
@@ -276999,7 +276999,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Restore a soft-deleted connector. The stored credential was destroyed when the connector was deleted, so it is restored DISABLED \u2014 re-authenticate, then re-enable it to resume syncing. 404 if there is no soft-deleted connector with that id in the org that the caller may manage \u2014 restoring one is gated on the same visibility as editing or deleting it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors, view the deleted ones, and restore them",
+        "description": "Restore a soft-deleted connector. The stored credential was destroyed when the connector was deleted, so it is restored DISABLED — re-authenticate, then re-enable it to resume syncing. 404 if there is no soft-deleted connector with that id in the org that the caller may manage — restoring one is gated on the same visibility as editing or deleting it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors, view the deleted ones, and restore them",
         "parameters": [
           {
             "schema": {
@@ -277279,7 +277279,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Permanently destroy a soft-deleted connector (global admins only \u2014 a `knowledgeSource:delete` or `knowledgeSource:admin` grant reaches the trash, not past it). Irreversible, with no grace period: its synced documents and their chunks, run history, access mappings, and assignments are all destroyed. 404 if there is no soft-deleted connector with that id in the org, which is also the answer when it is still live or the caller is not a global admin. Restore wins a race.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors, view the deleted ones, and restore them",
+        "description": "Permanently destroy a soft-deleted connector (global admins only — a `knowledgeSource:delete` or `knowledgeSource:admin` grant reaches the trash, not past it). Irreversible, with no grace period: its synced documents and their chunks, run history, access mappings, and assignments are all destroyed. 404 if there is no soft-deleted connector with that id in the org, which is also the answer when it is still live or the caller is not a global admin. Restore wins a race.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:delete`: Delete Knowledge Bases and Connectors, view the deleted ones, and restore them",
         "parameters": [
           {
             "schema": {
@@ -278800,7 +278800,7 @@
         "tags": [
           "Connectors"
         ],
-        "description": "Manually map an upstream member account to an Archestra user for an auto-sync-permissions connector \u2014 the admin escape hatch when the upstream hides the member's email from every credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify Knowledge Bases and Connectors",
+        "description": "Manually map an upstream member account to an Archestra user for an auto-sync-permissions connector — the admin escape hatch when the upstream hides the member's email from every credential\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`knowledgeSource:update`: Modify Knowledge Bases and Connectors",
         "requestBody": {
           "required": true,
           "content": {
@@ -306971,7 +306971,7 @@
         "tags": [
           "MCP Server"
         ],
-        "description": "Get the organization's auto-mode agents (implicit access to all tools). The set is org-wide \u2014 these agents can reach every MCP server \u2014 so it is served once here instead of being embedded on every server row.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:read`: View installed MCP servers and their status",
+        "description": "Get the organization's auto-mode agents (implicit access to all tools). The set is org-wide — these agents can reach every MCP server — so it is served once here instead of being embedded on every server row.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:read`: View installed MCP servers and their status",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -307666,7 +307666,7 @@
                       },
                       "canUseCredential": {
                         "type": "boolean",
-                        "description": "Whether the caller may present this install's stored credential to the upstream \u2014 their own connection, or one shared with them. False for another member's personal connection, which the listing still returns to installation admins so they can manage it."
+                        "description": "Whether the caller may present this install's stored credential to the upstream — their own connection, or one shared with them. False for another member's personal connection, which the listing still returns to installation admins so they can manage it."
                       }
                     },
                     "required": [
@@ -315801,7 +315801,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Serve the M-Files connector's VAF Add On install bootstrap: a tiny PowerShell script that fetches the static installer and runs it with the server-resolved package source. Identical for every caller \u2014 it carries no credentials or per-user state.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Serve the M-Files connector's VAF Add On install bootstrap: a tiny PowerShell script that fetches the static installer and runs it with the server-resolved package source. Identical for every caller — it carries no credentials or per-user state.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response"
@@ -315820,7 +315820,7 @@
         "tags": [
           "Knowledge Bases"
         ],
-        "description": "Resolve how the M-Files connector's VAF Add On is distributed to this installation: a verified direct package download URL (the dev source-ref CI build or the package compiled into this platform image \u2014 both served by the backend's package route \u2014 or a release asset), or null when the install script compiles from source instead. The connector form probes this for its download link.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Resolve how the M-Files connector's VAF Add On is distributed to this installation: a verified direct package download URL (the dev source-ref CI build or the package compiled into this platform image — both served by the backend's package route — or a release asset), or null when the install script compiles from source instead. The connector form probes this for its download link.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -360472,7 +360472,7 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 100,
-                    "pattern": "^[\\p{L}\\p{N}][\\p{L}\\p{N} .,'\u2019\\-&()+:!?_/]*$"
+                    "pattern": "^[\\p{L}\\p{N}][\\p{L}\\p{N} .,'’\\-&()+:!?_/]*$"
                   },
                   "ogDescription": {
                     "nullable": true,
@@ -389551,7 +389551,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "List projects the caller can see. `scope` is the project's share visibility: `personal` (private), `team` (shared with teams \u2014 narrow with `teamIds`), or `org` (org-wide); omitted = all visible. Admins additionally filter `personal` by owner via `authorIds` / `excludeAuthorIds` (ignored for non-admins). `search` matches name + description. `status=deleted` returns the org-wide soft-deleted projects for a project admin (empty for everyone else); the other filters do not apply to that slice.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
+        "description": "List projects the caller can see. `scope` is the project's share visibility: `personal` (private), `team` (shared with teams — narrow with `teamIds`), or `org` (org-wide); omitted = all visible. Admins additionally filter `personal` by owner via `authorIds` / `excludeAuthorIds` (ignored for non-admins). `search` matches name + description. `status=deleted` returns the org-wide soft-deleted projects for a project admin (empty for everyone else); the other filters do not apply to that slice.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -392462,7 +392462,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Permanently destroy a soft-deleted project (global admins only). Irreversible, with no grace period: the project, its files (records and stored contents), pins, share configuration, and scheduled tasks are all destroyed. Its chats are unaffected \u2014 they detached when it was deleted and survive as ordinary conversations. 404 if there is no soft-deleted project with that id in the org, which is also the answer when the project is still live or the caller is not a global admin. Restore wins a race: if a restore commits first, this returns 404 and the project stays.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRestricted to the built-in Admin and Platform Admin roles. No permission grants it: `project:delete`, `project:admin`, and ownership of the project all reach the trash, not past it, and a service account never qualifies. A caller without it gets 404, not 403, so the endpoint never confirms the project exists.",
+        "description": "Permanently destroy a soft-deleted project (global admins only). Irreversible, with no grace period: the project, its files (records and stored contents), pins, share configuration, and scheduled tasks are all destroyed. Its chats are unaffected — they detached when it was deleted and survive as ordinary conversations. 404 if there is no soft-deleted project with that id in the org, which is also the answer when the project is still live or the caller is not a global admin. Restore wins a race: if a restore commits first, this returns 404 and the project stays.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRestricted to the built-in Admin and Platform Admin roles. No permission grants it: `project:delete`, `project:admin`, and ownership of the project all reach the trash, not past it, and a service account never qualifies. A caller without it gets 404, not 403, so the endpoint never confirms the project exists.",
         "parameters": [
           {
             "schema": {
@@ -394883,7 +394883,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Pin a project to the current user's sidebar. Personal \u2014 does not affect other members. Any user who can read the project may pin it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
+        "description": "Pin a project to the current user's sidebar. Personal — does not affect other members. Any user who can read the project may pin it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -414102,7 +414102,7 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 10485760,
-                    "description": "A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `agent`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use. `agent` names an agent the skill runs in \u2014 when set, activating the skill delegates it to that agent instead of loading the instructions into the caller's context."
+                    "description": "A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `agent`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use. `agent` names an agent the skill runs in — when set, activating the skill delegates it to that agent instead of loading the instructions into the caller's context."
                   },
                   "icon": {
                     "description": "Emoji or base64 image data URL shown with the name. Omit to leave it untouched; null clears it.",
@@ -415682,7 +415682,7 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 10485760,
-                    "description": "A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `agent`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use. `agent` names an agent the skill runs in \u2014 when set, activating the skill delegates it to that agent instead of loading the instructions into the caller's context."
+                    "description": "A complete SKILL.md manifest: a YAML frontmatter block with `name` and `description` (and optional `license`, `compatibility`, `allowed-tools`, `agent`, `templated`, `metadata`), followed by the Markdown instruction body. Set `templated: true` to render the body through Handlebars (e.g. `{{user.name}}`) at activation. `allowed-tools` is a space-separated list of tools the skill is pre-approved to use. `agent` names an agent the skill runs in — when set, activating the skill delegates it to that agent instead of loading the instructions into the caller's context."
                   },
                   "icon": {
                     "description": "Emoji or base64 image data URL shown with the name. Omit to leave it untouched; null clears it.",
@@ -419117,7 +419117,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Permanently destroy a soft-deleted skill (global admins only). Irreversible, with no grace period: every version and resource file is destroyed, along with the skill's team and user grants, environment assignments, usage events, and share links \u2014 so any public share URL for it stops working. 404 if there is no soft-deleted skill with that id in the org, which is also the answer when the skill is still live or the caller is not a global admin. 409 while a sandbox still has the skill mounted; that is retryable, but note nothing clears a mount on its own \u2014 it lasts as long as the sandbox does. Built-in skills cannot be purged: their soft-deleted row is what stops the seeder recreating them on the next restart. Restore wins a race.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRestricted to the built-in Admin and Platform Admin roles. No permission grants it: `skill:delete` and even `skill:admin` reach the trash, not past it, and a service account never qualifies. A caller without it gets 404, not 403, so the endpoint never confirms the skill exists.",
+        "description": "Permanently destroy a soft-deleted skill (global admins only). Irreversible, with no grace period: every version and resource file is destroyed, along with the skill's team and user grants, environment assignments, usage events, and share links — so any public share URL for it stops working. 404 if there is no soft-deleted skill with that id in the org, which is also the answer when the skill is still live or the caller is not a global admin. 409 while a sandbox still has the skill mounted; that is retryable, but note nothing clears a mount on its own — it lasts as long as the sandbox does. Built-in skills cannot be purged: their soft-deleted row is what stops the seeder recreating them on the next restart. Restore wins a race.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRestricted to the built-in Admin and Platform Admin roles. No permission grants it: `skill:delete` and even `skill:admin` reach the trash, not past it, and a service account never qualifies. A caller without it gets 404, not 403, so the endpoint never confirms the skill exists.",
         "parameters": [
           {
             "schema": {
@@ -420075,7 +420075,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Manage a Git-synced skill: change its pull frequency or its source (repository, branch, folder, credential), trigger an immediate pull, or disconnect it from the Git source (interval null) \u2014 a disconnected skill keeps its content and provenance and becomes editable in the app.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Manage a Git-synced skill: change its pull frequency or its source (repository, branch, folder, credential), trigger an immediate pull, or disconnect it from the Git source (interval null) — a disconnected skill keeps its content and provenance and becomes editable in the app.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {
@@ -428280,7 +428280,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Explain the calling user's own usage: the client applications that generated it, the price band their tokens fell into (fresh input, cache read, cache write, output, plus what caching cost and saved), how their requests were distributed across context sizes, and which of their sessions concentrated the spend. Cost here is list price across both billing modes, because this is a consumption view \u2014 a caller on a flat-rate plan has no billed spend to apportion. Reports only the caller's own activity, so like `/api/statistics/me` it requires no permission over organization-wide cost data.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Explain the calling user's own usage: the client applications that generated it, the price band their tokens fell into (fresh input, cache read, cache write, output, plus what caching cost and saved), how their requests were distributed across context sizes, and which of their sessions concentrated the spend. Cost here is list price across both billing modes, because this is a consumption view — a caller on a flat-rate plan has no billed spend to apportion. Reports only the caller's own activity, so like `/api/statistics/me` it requires no permission over organization-wide cost data.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "parameters": [
           {
             "schema": {
@@ -428753,7 +428753,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get per-MCP-App cost: what each app cost to build (the LLM spend of the session that authored it) and what it costs to run (its own archestra.llm.complete() calls, plus how often it is opened). Includes an estimated chat-equivalent cost per app, derived from the organization's measured average cost per chat session over the same timeframe \u2014 the baseline is returned alongside so the estimate is auditable. Paginated. Apps outside the caller's visibility are excluded.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics\n\nApp details are limited to apps visible to the caller; `app:admin` includes every app in the active organization.",
+        "description": "Get per-MCP-App cost: what each app cost to build (the LLM spend of the session that authored it) and what it costs to run (its own archestra.llm.complete() calls, plus how often it is opened). Includes an estimated chat-equivalent cost per app, derived from the organization's measured average cost per chat session over the same timeframe — the baseline is returned alongside so the estimate is auditable. Paginated. Apps outside the caller's visibility are excluded.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics\n\nApp details are limited to apps visible to the caller; `app:admin` includes every app in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -429236,7 +429236,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get per-skill cost. `contextTokens` is the skill's own footprint \u2014 the tokens its activation blocks added to the model's context, measured when they were injected. The `attributed*` figures are the spend of the turns that then ran with the skill in context, which is shared with everything else in those turns rather than being the skill's bill alone \u2014 they are computed for the returned page, so they are not a sortable column. Paginated; skills outside the caller's scope are excluded.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics\n`skill:read`: Open Skills\n\nSkill details are limited to skills visible to the caller; `skill:admin` includes every skill in the active organization.",
+        "description": "Get per-skill cost. `contextTokens` is the skill's own footprint — the tokens its activation blocks added to the model's context, measured when they were injected. The `attributed*` figures are the spend of the turns that then ran with the skill in context, which is shared with everything else in those turns rather than being the skill's bill alone — they are computed for the returned page, so they are not a sortable column. Paginated; skills outside the caller's scope are excluded.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics\n`skill:read`: Open Skills\n\nSkill details are limited to skills visible to the caller; `skill:admin` includes every skill in the active organization.",
         "parameters": [
           {
             "schema": {
@@ -430794,7 +430794,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get MCP tool-call counts grouped by any combination of `day`, `mcpServerName`, `toolName`, `userId`, `agentId` and `appId` \u2014 one row per group, with its call and error counts. Group by `day` (UTC calendar days) for a daily series, e.g. `groupBy=day,toolName`. Counts `tools/call` requests made by agents, gateways and apps. Callers without `member:read` see only their own calls.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics",
+        "description": "Get MCP tool-call counts grouped by any combination of `day`, `mcpServerName`, `toolName`, `userId`, `agentId` and `appId` — one row per group, with its call and error counts. Group by `day` (UTC calendar days) for a daily series, e.g. `groupBy=day,toolName`. Counts `tools/call` requests made by agents, gateways and apps. Callers without `member:read` see only their own calls.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics",
         "parameters": [
           {
             "schema": {
@@ -431311,7 +431311,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get app usage grouped by any combination of `day`, `appId` and `userId` \u2014 one row per group: times the app was opened, tool calls it made, and the LLM requests, tokens and spend it generated. Group by `day` (UTC calendar days) for a daily series. Apps outside the caller's visibility are excluded, and callers without `member:read` see only their own usage.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics",
+        "description": "Get app usage grouped by any combination of `day`, `appId` and `userId` — one row per group: times the app was opened, tool calls it made, and the LLM requests, tokens and spend it generated. Group by `day` (UTC calendar days) for a daily series. Apps outside the caller's visibility are excluded, and callers without `member:read` see only their own usage.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics",
         "parameters": [
           {
             "schema": {
@@ -431822,7 +431822,7 @@
         "tags": [
           "Statistics"
         ],
-        "description": "Get skill usage grouped by any combination of `day`, `skillId` and `userId` \u2014 one row per group: activations, the context tokens they added, and how many distinct people activated a skill. Group by `day` (UTC calendar days) for a daily series. Covers the organization's own skills. Skills outside the caller's scope are excluded, and callers without `member:read` see only their own usage.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics\n`skill:read`: Open Skills",
+        "description": "Get skill usage grouped by any combination of `day`, `skillId` and `userId` — one row per group: activations, the context tokens they added, and how many distinct people activated a skill. Group by `day` (UTC calendar days) for a daily series. Covers the organization's own skills. Skills outside the caller's scope are excluded, and callers without `member:read` see only their own usage.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`llmCost:read`: View organization-wide LLM usage cost statistics and analytics\n`skill:read`: Open Skills",
         "parameters": [
           {
             "schema": {
@@ -449288,7 +449288,7 @@
         "tags": [
           "Roles"
         ],
-        "description": "Delete several custom roles in one request. A role that cannot be deleted \u2014 a predefined one, or one still held by a member \u2014 is reported in `failed` with that reason, and the rest of the batch still applies.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`ac:delete`: Delete custom roles",
+        "description": "Delete several custom roles in one request. A role that cannot be deleted — a predefined one, or one still held by a member — is reported in `failed` with that reason, and the rest of the batch still applies.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`ac:delete`: Delete custom roles",
         "requestBody": {
           "required": true,
           "content": {

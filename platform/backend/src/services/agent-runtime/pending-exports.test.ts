@@ -403,6 +403,38 @@ describe("files pinned while their runtime is mid-call", () => {
     expect(pod.discarded).toEqual(["pinned-2"]);
   });
 
+  test("a file that grew past the read limit before it was pinned is refused, not buffered", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    });
+    // Read while small; pinned after the runtime appended past 4 MiB.
+    const pod = fakePod(Buffer.alloc(CHUNK + 1, 7));
+    vi.spyOn(workspaceFiles, "accessAgentWorkspaceFile").mockResolvedValue(
+      fileResult("small"),
+    );
+    vi.spyOn(openappa, "returnRuntimeValue").mockResolvedValue(BUSY);
+
+    const result = await readFile(seeded);
+
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(
+      "Use transfer_workspace_file to download it",
+    );
+    expect(pod.discarded).toEqual(["pinned-1"]);
+    await pendingExports.drain(seeded.child);
+    expect(pod.snapshots).toBe(1);
+  });
+
   test("a pinned version that changed in the pod is dropped and the current file read instead", async ({
     makeAgent,
     makeMember,

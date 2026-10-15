@@ -9,6 +9,7 @@ import {
   type OpenAppaSession,
   returnRuntimeValue,
 } from "@/openappa/service";
+import { ApiError } from "@/types";
 import {
   crossingRefusal,
   crossRuntimeFile,
@@ -81,6 +82,14 @@ class PendingExports {
     }
     if (!(await runtimeIsMidTurn(params.taskId))) throw stoppedMidCall(params);
     const snapshot = await workspaceTransferTickets.pinFile(params);
+    // The file can grow between the read and the pin: a pinned read keeps
+    // the limit every read has, so the drain never buffers more.
+    if (snapshot.size > MAX_READ_BYTES) {
+      await discardPinned({ ...params, progress: { snapshot, digests: [] } });
+      throw runtimeCrossingRefusal(
+        "This file grew past the 4 MiB read_workspace_file limit before it could be pinned. Use transfer_workspace_file to download it.",
+      );
+    }
     await this.pin(params.child, name, {
       kind: "read",
       ...newEntry(params),
@@ -146,10 +155,12 @@ class PendingExports {
    * tool call open: on its model request, after its tool results are admitted
    * and before its next calls are released. Never fails the request and keeps
    * to a small budget; a file that cannot cross now stays pinned for the next
-   * request or the parent's next call. The first file always gets its turn;
-   * the files after it share the byte budget, one chunk per download. The
-   * deadline is checked before each file, so one already crossing finishes
-   * (a slow pod read gives up after its own timeout) and the rest wait.
+   * request or the parent's next call. Files go oldest first and the first
+   * always gets its turn, so a file skipped for the budget leads once the
+   * files before it cross. The files after the first share the byte budget,
+   * one chunk per download. The deadline is checked before each file, so one
+   * already crossing finishes (a slow pod read gives up after its own
+   * timeout) and the rest wait.
    */
   async drain(child: OpenAppaSession): Promise<void> {
     if (!child.parent_id) return;
@@ -179,11 +190,13 @@ class PendingExports {
             : await advanceDownload(entry, { drain: true });
         spentBytes += size;
         await this.replace(child, name, entry, step.entry);
-        await afterStep(entry, step.entry);
+        await afterDrainStep(entry, step.entry);
         // Still mid-call: nothing else can cross on this request either.
         if (step.busy) return;
       } catch (error) {
-        logger.warn(
+        // A workspace that stopped or went away refuses with an ApiError;
+        // only other failures are unexpected.
+        logger[error instanceof ApiError ? "info" : "warn"](
           { err: error, sessionId: child.session_id, entryId: entry.id },
           "Could not release a protected file pinned for an Agent Runtime",
         );
@@ -700,7 +713,7 @@ function servedMetadata(entry: PendingRead): FileMetadata {
 }
 
 /** Releases what a decided entry no longer needs pinned in the pod. */
-async function afterStep(
+async function afterDrainStep(
   before: PendingEntry,
   after: PendingEntry,
 ): Promise<void> {
@@ -799,3 +812,5 @@ const PENDING_TTL_MS = 30 * 60 * 1000;
 /** A crossed file waits this long for the parent's retry, then is read afresh. */
 const DECIDED_TTL_MS = 10 * 60 * 1000;
 const MAX_ENTRIES_PER_RUNTIME = 16;
+/** The in-pod helper's limit for any read (`MAX_BYTES` in workspace-files.py). */
+const MAX_READ_BYTES = 4 * 1024 * 1024;

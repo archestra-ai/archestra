@@ -73,7 +73,7 @@ import {
   useInternalMcpCatalog,
   useRefreshInternalMcpCatalogImage,
 } from "@/lib/mcp/internal-mcp-catalog.query";
-import { useMcpServerAgentUsage } from "@/lib/mcp/mcp-agent-usage.query";
+import { useMcpUsageSummary } from "@/lib/mcp/mcp-agent-usage.query";
 import {
   type McpDeploymentFeedState,
   useMcpDeploymentStatuses,
@@ -114,6 +114,7 @@ import {
   mcpServerAction,
   mcpServerActionHref,
 } from "../_parts/mcp-server-actions-model";
+import { deriveAgentUsage } from "../_parts/mcp-server-agent-usage";
 import type { CatalogItem, InstalledServer } from "../_parts/mcp-server-card";
 import { McpServerIssueNotice } from "../_parts/mcp-server-issue-notice";
 import { McpServerPagedUsageTab } from "../_parts/mcp-server-usage-tab";
@@ -318,8 +319,9 @@ function CatalogItemDetails({
           defaultEnvironmentName: defaultEnvironment.name,
         });
 
-  const allServersForCatalog = (allMcpServers ?? []).filter(
-    (s) => s.catalogId === item.id,
+  const allServersForCatalog = useMemo(
+    () => (allMcpServers ?? []).filter((s) => s.catalogId === item.id),
+    [allMcpServers, item.id],
   );
 
   // Aggregate installations for the logs/inspector dropdown — local installs
@@ -461,13 +463,22 @@ function CatalogItemDetails({
       : isMemberView
         ? "Installation"
         : "Installations";
-  const { data: usageSummary } = useMcpServerAgentUsage({
-    catalogIds: [item.id],
+  const assignedUsage = useMemo(
+    () =>
+      deriveAgentUsage({
+        serversForCatalog: allServersForCatalog,
+        autoModeAgents: undefined,
+      }),
+    [allServersForCatalog],
+  );
+  const { data: usageSummary } = useMcpUsageSummary({
+    catalogId: item.id,
+    assignedAgents: assignedUsage.assigned,
     enabled: !isMemberView,
-    limit: 8,
-    previews: true,
+    previews: false,
   });
-  const agentUsageCount = usageSummary?.[0]?.pagination.total ?? 0;
+  const agentUsageCount =
+    usageSummary?.pagination.total ?? assignedUsage.assigned.length;
 
   const tabs: {
     label: React.ReactNode;
@@ -690,7 +701,10 @@ function CatalogItemDetails({
         )}
         {effectiveTab === "logins" && <PlaywrightSavedLoginsTab />}
         {effectiveTab === "usage" && (
-          <McpServerPagedUsageTab catalogId={item.id} />
+          <McpServerPagedUsageTab
+            catalogId={item.id}
+            serversForCatalog={allServersForCatalog}
+          />
         )}
 
         {effectiveTab === "overview" && (

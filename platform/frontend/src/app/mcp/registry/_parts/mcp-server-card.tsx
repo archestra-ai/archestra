@@ -23,7 +23,13 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { type MouseEventHandler, useEffect, useRef, useState } from "react";
+import {
+  type MouseEventHandler,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { LabelTags } from "@/components/label-tags";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
@@ -307,8 +313,9 @@ export function McpServerCard({
     isOwnPersonalInstall(s, currentUserId),
   );
 
-  const allServersForCatalog = (allMcpServers ?? []).filter(
-    (s) => s.catalogId === item.id,
+  const allServersForCatalog = useMemo(
+    () => (allMcpServers ?? []).filter((s) => s.catalogId === item.id),
+    [allMcpServers, item.id],
   );
   const personalServersForCatalog = allServersForCatalog.filter((s) =>
     isOwnPersonalInstall(s, currentUserId),
@@ -328,10 +335,18 @@ export function McpServerCard({
   // The distinct agents that can reach this catalog item, across every install
   // of it — the audience affected if those installs go away. Shared with the
   // detail page's Usage tab so both surfaces count the same way.
-  const summary = useMcpUsageSummary(item.id);
-  const fallback = deriveAgentUsage({
-    serversForCatalog: allServersForCatalog,
-    autoModeAgents: undefined,
+  const fallback = useMemo(
+    () =>
+      deriveAgentUsage({
+        serversForCatalog: allServersForCatalog,
+        autoModeAgents: undefined,
+      }),
+    [allServersForCatalog],
+  );
+  const { data: summary } = useMcpUsageSummary({
+    catalogId: item.id,
+    assignedAgents: fallback.assigned,
+    enabled: !!showsAgentUsage,
   });
   const assignedAgents = summary?.assignedPreview ?? fallback.assigned;
   const autoModeOnlyAgents = summary?.autoPreview ?? [];

@@ -769,7 +769,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetMcpServers]: {
     mcpServerInstallation: ["read"],
   },
-  [RouteId.GetMcpServerAgentUsage]: {
+  [RouteId.GetMcpServerAutoModeAgentPage]: {
     mcpServerInstallation: ["read"],
   },
   [RouteId.GetMcpServerAutoModeAgents]: {

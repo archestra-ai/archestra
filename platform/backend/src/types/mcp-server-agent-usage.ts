@@ -1,19 +1,16 @@
-import { createPaginatedResponseSchema } from "@archestra/shared";
+import { createCursorPaginatedResponseSchema } from "@archestra/shared";
 import { z } from "zod";
 import { McpServerAgentUsageSchema } from "./mcp-server";
 
-export const McpAgentUsageEntrySchema = McpServerAgentUsageSchema.extend({
-  access: z.enum(["assigned", "auto"]),
-});
-
-export const McpAgentUsagePageSchema = createPaginatedResponseSchema(
-  McpAgentUsageEntrySchema,
+export const McpAutoModeAgentPageSchema = createCursorPaginatedResponseSchema(
+  McpServerAgentUsageSchema,
 ).extend({
-  catalogId: z.string().uuid(),
-  assignedCount: z.number(),
-  autoCount: z.number(),
-  assignedPreview: z.array(McpAgentUsageEntrySchema),
-  autoPreview: z.array(McpAgentUsageEntrySchema),
+  totalAutoCount: z.number().int().nonnegative().optional(),
+  organizationId: z.string().optional(),
 });
 
-export type McpAgentUsagePage = z.infer<typeof McpAgentUsagePageSchema>;
+export const AgentUsagePositionSchema = z.object({
+  name: z.string(),
+  email: z.string(),
+  id: z.string().uuid(),
+});

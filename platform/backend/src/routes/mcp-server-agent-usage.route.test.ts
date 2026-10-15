@@ -3,12 +3,11 @@ import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { createFastifyInstance } from "@/fastify-instance";
 import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
-import McpServerAgentUsageModel from "@/models/mcp-server-agent-usage";
 import { expect, test } from "@/test";
-import type { McpAgentUsagePage } from "@/types/mcp-server-agent-usage";
-import mcpServerAgentUsageRoutes from "./mcp-server-agent-usage";
+import { McpAutoModeAgentPageSchema } from "@/types/mcp-server-agent-usage";
+import routes from "./mcp-server-agent-usage";
 
-test("usage pages merge assigned and auto agents once, with bounded previews, search, sorting and catalog isolation", async ({
+test("automatic pages preserve legacy membership, exclude explicit assignments, and use stable searchable cursors", async ({
   makeOrganization,
   makeUser,
   makeMember,
@@ -22,8 +21,7 @@ test("usage pages merge assigned and auto agents once, with bounded previews, se
   const user = await makeUser();
   await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
   const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
-  const install = await makeMcpServer({ catalogId: catalog.id });
-  const secondInstall = await makeMcpServer({ catalogId: catalog.id });
+  const server = await makeMcpServer({ catalogId: catalog.id });
   const tools = await Promise.all([
     makeTool({ catalogId: catalog.id }),
     makeTool({ catalogId: catalog.id }),
@@ -32,138 +30,146 @@ test("usage pages merge assigned and auto agents once, with bounded previews, se
     organizationId: org.id,
     name: "Alpha",
     accessAllTools: true,
+    authorId: user.id,
   });
   const beta = await makeAgent({
     organizationId: org.id,
     name: "Beta",
     accessAllTools: false,
   });
-  await makeAgentTool(alpha.id, tools[0].id, { mcpServerId: install.id });
-  await makeAgentTool(alpha.id, tools[1].id);
-  await makeAgentTool(beta.id, tools[0].id, { mcpServerId: secondInstall.id });
-  await makeAgent({
-    organizationId: org.id,
-    name: "Gamma_%",
-    accessAllTools: true,
-  });
-  await makeAgent({
+  const delta = await makeAgent({
     organizationId: org.id,
     name: "Delta",
     accessAllTools: true,
   });
+  const gamma = await makeAgent({
+    organizationId: org.id,
+    name: "Gamma_%",
+    accessAllTools: true,
+  });
+  await makeAgentTool(alpha.id, tools[0].id, { mcpServerId: server.id });
+  await makeAgentTool(alpha.id, tools[1].id);
+  await makeAgentTool(beta.id, tools[0].id);
   const deleted = await makeAgent({
     organizationId: org.id,
-    name: "Deleted",
     accessAllTools: true,
   });
   await AgentModel.delete(deleted.id);
   const foreignOrg = await makeOrganization();
-  const foreignCatalog = await makeInternalMcpCatalog({
-    organizationId: foreignOrg.id,
-  });
-  await makeAgent({
+  const foreign = await makeAgent({
     organizationId: foreignOrg.id,
     name: "Foreign",
     accessAllTools: true,
   });
+  await makeAgentTool(foreign.id, tools[0].id);
+  const foreignCatalog = await makeInternalMcpCatalog({
+    organizationId: foreignOrg.id,
+  });
+  const legacy = await AgentModel.getAutoModeAgentDetailsByOrganizations([
+    org.id,
+  ]);
   const app = createFastifyInstance();
   app.addHook("onRequest", async (request) => {
     request.user = user;
     request.organizationId = org.id;
   });
-  await app.register(mcpServerAgentUsageRoutes);
-  const request = async (extra = "") => {
-    const query = new URLSearchParams({
-      catalogIds: `${catalog.id},${foreignCatalog.id}`,
-      limit: "2",
-    });
-    for (const [key, value] of new URLSearchParams(extra))
-      query.set(key, value);
+  await app.register(routes);
+  const request = async (query: Record<string, string> = {}) => {
     const response = await app.inject({
       method: "GET",
-      url: `/api/mcp_server/agent_usage?${query}`,
+      url: `/api/mcp_server/auto_mode_agents/page?${new URLSearchParams(query)}`,
     });
     expect(response.statusCode).toBe(200);
-    const pages: McpAgentUsagePage[] = response.json();
-    expect(pages.map((page) => page.catalogId)).toEqual([catalog.id]);
-    return pages[0];
+    return McpAutoModeAgentPageSchema.parse(response.json());
   };
   try {
-    const first = await request();
-    expect(first).toMatchObject({
-      assignedCount: 2,
-      autoCount: 2,
-      pagination: { total: 4, hasNext: true },
-    });
-    expect(first.data.map((agent) => [agent.name, agent.access])).toEqual([
-      ["Alpha", "assigned"],
-      ["Beta", "assigned"],
-    ]);
+    const summary = await request({ summary: "true" });
+    expect(summary.totalAutoCount).toBe(legacy.get(org.id)?.length);
+    expect(summary.totalAutoCount).toBe(3);
+    expect(summary.organizationId).toBe(org.id);
+    expect(summary.data).toEqual([]);
+    const assigned =
+      (
+        await AgentToolModel.getAssignedAgentDetailsForMcpServers([server.id])
+      ).get(server.id) ?? [];
+    expect(assigned.map((agent) => agent.id).sort()).toEqual(
+      [alpha.id, beta.id, foreign.id].sort(),
+    );
     expect(
-      (await request("&offset=2")).data.map((agent) => agent.name),
-    ).toEqual(["Delta", "Gamma_%"]);
+      assigned
+        .filter(
+          (agent) => agent.accessAllTools && agent.organizationId === org.id,
+        )
+        .map((agent) => agent.id),
+    ).toEqual([alpha.id]);
+    const first = await request({ catalogId: catalog.id, limit: "1" });
+    expect(first.data.map((agent) => agent.id)).toEqual([delta.id]);
+    expect(first.pagination.hasNext).toBe(true);
     expect(
-      (await request("&sortDirection=desc")).data.map((agent) => agent.name),
-    ).toEqual(["Gamma_%", "Delta"]);
-    const search = await request("&search=mm");
-    expect(search.data.map((agent) => agent.name)).toEqual(["Gamma_%"]);
-    expect(search.pagination.total).toBe(1);
+      (
+        await request({
+          catalogId: catalog.id,
+          limit: "1",
+          cursor: first.pagination.nextCursor ?? "",
+        })
+      ).data.map((agent) => agent.id),
+    ).toEqual([gamma.id]);
     expect(
-      (await request("&search=%25")).data.map((agent) => agent.name),
-    ).toEqual(["Gamma_%"]);
+      (
+        await request({ catalogId: catalog.id, afterAgentId: beta.id })
+      ).data.map((agent) => agent.id),
+    ).toEqual([delta.id, gamma.id]);
     expect(
-      (await request("&search=_")).data.map((agent) => agent.name),
-    ).toEqual(["Gamma_%"]);
-    const previews = await request("&previews=true&limit=1");
-    expect(previews.assignedPreview.map((agent) => agent.name)).toEqual([
-      "Alpha",
-    ]);
-    expect(previews.autoPreview.map((agent) => agent.name)).toEqual(["Delta"]);
-    expect(previews.pagination.total).toBe(4);
+      (
+        await request({
+          catalogId: catalog.id,
+          sortDirection: "desc",
+          afterAgentId: gamma.id,
+        })
+      ).data.map((agent) => agent.id),
+    ).toEqual([delta.id]);
     expect(
-      (await request("&previews=true&limit=1&offset=1")).autoPreview.map(
-        (agent) => agent.name,
+      (await request({ catalogId: catalog.id, search: "%" })).data.map(
+        (agent) => agent.id,
       ),
-    ).toEqual(["Gamma_%"]);
-    const otherLocal = await makeInternalMcpCatalog({ organizationId: org.id });
-    const batchResponse = await app.inject({
+    ).toEqual([gamma.id]);
+    expect(
+      (await request({ summary: "true", search: user.email })).totalAutoCount,
+    ).toBe(1);
+    expect(
+      (await request({ catalogId: catalog.id, cursor: "broken" })).data.map(
+        (agent) => agent.id,
+      ),
+    ).toEqual([delta.id, gamma.id]);
+    const noInstalls = await makeInternalMcpCatalog({ organizationId: org.id });
+    expect(
+      (await request({ catalogId: noInstalls.id })).data.map(
+        (agent) => agent.id,
+      ),
+    ).toEqual([alpha.id, delta.id, gamma.id]);
+    const forbidden = await app.inject({
       method: "GET",
-      url: `/api/mcp_server/agent_usage?catalogIds=${catalog.id},${otherLocal.id}&previews=true&limit=1`,
+      url: `/api/mcp_server/auto_mode_agents/page?catalogId=${foreignCatalog.id}`,
     });
-    expect(batchResponse.statusCode).toBe(200);
-    const batch: McpAgentUsagePage[] = batchResponse.json();
-    expect(
-      batch
-        .find((page) => page.catalogId === catalog.id)
-        ?.autoPreview.map((agent) => agent.name),
-    ).toEqual(["Delta"]);
-    expect(
-      batch.find((page) => page.catalogId === otherLocal.id),
-    ).toMatchObject({
-      assignedCount: 0,
-      autoCount: 3,
-      pagination: { total: 3 },
-    });
-    expect(
-      batch
-        .find((page) => page.catalogId === otherLocal.id)
-        ?.autoPreview.map((agent) => agent.name),
-    ).toEqual(["Alpha"]);
+    expect(forbidden.statusCode).toBe(404);
   } finally {
     await app.close();
   }
 });
 
-test("members only receive readable catalogs and visible agents, including an empty visible roster", async ({
+test("member automatic counts and pages retain visible-agent and readable-catalog fences", async ({
   makeOrganization,
   makeUser,
   makeMember,
   makeInternalMcpCatalog,
   makeAgent,
+  makeMcpServer,
+  makeTool,
+  makeAgentTool,
 }) => {
   const org = await makeOrganization();
-  const user = await makeUser();
-  const colleague = await makeUser();
+  const user = await makeUser(),
+    colleague = await makeUser();
   await makeMember(user.id, org.id);
   await makeMember(colleague.id, org.id);
   const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
@@ -172,109 +178,239 @@ test("members only receive readable catalogs and visible agents, including an em
     authorId: colleague.id,
     access: "personal",
   });
-  await makeAgent({
+  const mine = await makeAgent({
     organizationId: org.id,
     authorId: user.id,
     name: "Mine",
     accessAllTools: true,
     access: "personal",
   });
-  await makeAgent({
+  const shared = await makeAgent({
     organizationId: org.id,
     authorId: colleague.id,
     name: "Shared",
     accessAllTools: true,
     access: "org",
   });
-  await makeAgent({
+  const privateAgent = await makeAgent({
     organizationId: org.id,
     authorId: colleague.id,
     name: "Private",
     accessAllTools: true,
     access: "personal",
   });
+  const install = await makeMcpServer({ catalogId: catalog.id });
+  const tool = await makeTool({ catalogId: catalog.id });
+  await makeAgentTool(privateAgent.id, tool.id, { mcpServerId: install.id });
   const app = createFastifyInstance();
   app.addHook("onRequest", async (request) => {
     request.user = user;
     request.organizationId = org.id;
   });
-  await app.register(mcpServerAgentUsageRoutes);
+  const { default: mcpServerRoutes } = await import("./mcp-server");
+  await app.register(mcpServerRoutes);
   try {
+    const summary = await app.inject({
+      method: "GET",
+      url: "/api/mcp_server/auto_mode_agents/page?summary=true",
+    });
+    expect(summary.statusCode).toBe(200);
+    expect(summary.json().totalAutoCount).toBe(2);
     const response = await app.inject({
       method: "GET",
-      url: `/api/mcp_server/agent_usage?catalogIds=${catalog.id},${privateCatalog.id}`,
+      url: `/api/mcp_server/auto_mode_agents/page?catalogId=${catalog.id}`,
     });
     expect(response.statusCode).toBe(200);
-    const pages: McpAgentUsagePage[] = response.json();
-    expect(pages.map((page) => page.catalogId)).toEqual([catalog.id]);
-    expect(pages[0].data.map((agent) => agent.name)).toEqual([
-      "Mine",
-      "Shared",
-    ]);
-    expect(pages[0]).toMatchObject({
-      assignedCount: 0,
-      autoCount: 2,
-      pagination: { total: 2 },
+    expect(
+      McpAutoModeAgentPageSchema.parse(response.json()).data.map(
+        (agent) => agent.id,
+      ),
+    ).toEqual([mine.id, shared.id]);
+    const legacyInstalls = await app.inject({
+      method: "GET",
+      url: `/api/mcp_server?catalogId=${catalog.id}`,
     });
+    expect(legacyInstalls.statusCode).toBe(200);
+    expect(
+      legacyInstalls
+        .json()
+        .flatMap(
+          (server: { assignedAgents: Array<{ id: string }> }) =>
+            server.assignedAgents,
+        )
+        .map((agent: { id: string }) => agent.id),
+    ).not.toContain(privateAgent.id);
+    const privateBoundary = await app.inject({
+      method: "GET",
+      url: `/api/mcp_server/auto_mode_agents/page?catalogId=${catalog.id}&afterAgentId=${privateAgent.id}`,
+    });
+    expect(privateBoundary.statusCode).toBe(200);
+    expect(
+      McpAutoModeAgentPageSchema.parse(privateBoundary.json()).data.map(
+        (agent) => agent.id,
+      ),
+    ).toEqual([mine.id, shared.id]);
+    const forbidden = await app.inject({
+      method: "GET",
+      url: `/api/mcp_server/auto_mode_agents/page?catalogId=${privateCatalog.id}`,
+    });
+    expect(forbidden.statusCode).toBe(404);
   } finally {
     await app.close();
   }
 });
 
-test("bounded assigned usage preserves legacy distinct membership across foreign owners, duplicate tools and deleted agents", async ({
+test("dense assigned prefixes cannot hide later automatic-only agents or truncate cursor pages", async ({
   makeOrganization,
+  makeUser,
+  makeMember,
   makeInternalMcpCatalog,
   makeMcpServer,
-  makeAgent,
   makeTool,
+  makeAgent,
   makeAgentTool,
 }) => {
-  const org = await makeOrganization();
-  const otherOrg = await makeOrganization();
+  const org = await makeOrganization(),
+    user = await makeUser();
+  await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
+  const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+  const install = await makeMcpServer({ catalogId: catalog.id });
+  const tool = await makeTool({ catalogId: catalog.id });
+  const assigned = await Promise.all(
+    Array.from({ length: 105 }, (_, i) =>
+      makeAgent({
+        organizationId: org.id,
+        name: `Assigned ${String(i).padStart(3, "0")}`,
+        accessAllTools: true,
+      }),
+    ),
+  );
+  await Promise.all(
+    assigned.map((agent) =>
+      makeAgentTool(agent.id, tool.id, { mcpServerId: install.id }),
+    ),
+  );
+  const first = await makeAgent({
+    organizationId: org.id,
+    name: "Zeta 1",
+    accessAllTools: true,
+  });
+  const second = await makeAgent({
+    organizationId: org.id,
+    name: "Zeta 2",
+    accessAllTools: true,
+  });
+  const app = createFastifyInstance();
+  app.addHook("onRequest", async (request) => {
+    request.user = user;
+    request.organizationId = org.id;
+  });
+  await app.register(routes);
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/mcp_server/auto_mode_agents/page?catalogId=${catalog.id}&limit=1`,
+    });
+    expect(response.statusCode).toBe(200);
+    const page = McpAutoModeAgentPageSchema.parse(response.json());
+    expect(page.data.map((agent) => agent.id)).toEqual([first.id]);
+    expect(page.pagination.hasNext).toBe(true);
+    const next = await app.inject({
+      method: "GET",
+      url: `/api/mcp_server/auto_mode_agents/page?catalogId=${catalog.id}&limit=1&cursor=${encodeURIComponent(page.pagination.nextCursor ?? "")}`,
+    });
+    expect(next.statusCode).toBe(200);
+    const end = McpAutoModeAgentPageSchema.parse(next.json());
+    expect(end.data.map((agent) => agent.id)).toEqual([second.id]);
+    expect(end.pagination.hasNext).toBe(false);
+  } finally {
+    await app.close();
+  }
+});
+
+test("same-name cursor pages use owner email and id across automatic and assigned boundaries", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeInternalMcpCatalog,
+  makeMcpServer,
+  makeTool,
+  makeAgent,
+  makeAgentTool,
+}) => {
+  const org = await makeOrganization(),
+    user = await makeUser();
+  const earlyOwner = await makeUser({ email: "early-owner@example.test" });
+  const lateOwner = await makeUser({ email: "late-owner@example.test" });
+  await makeMember(user.id, org.id, { role: ADMIN_ROLE_NAME });
   const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
   const server = await makeMcpServer({ catalogId: catalog.id });
   const tool = await makeTool({ catalogId: catalog.id });
-  const anotherTool = await makeTool({ catalogId: catalog.id });
-  const local = await makeAgent({
+  const automatic = await Promise.all(
+    [earlyOwner, earlyOwner, lateOwner].map((owner) =>
+      makeAgent({
+        organizationId: org.id,
+        name: "Repeated",
+        authorId: owner.id,
+        accessAllTools: true,
+      }),
+    ),
+  );
+  const manual = await makeAgent({
     organizationId: org.id,
+    name: "Repeated",
+    authorId: earlyOwner.id,
     accessAllTools: false,
   });
-  const foreign = await makeAgent({
-    organizationId: otherOrg.id,
-    accessAllTools: true,
+  await makeAgentTool(manual.id, tool.id, { mcpServerId: server.id });
+  const expected = automatic
+    .map((agent, index) => ({
+      ...agent,
+      email: index < 2 ? earlyOwner.email : lateOwner.email,
+    }))
+    .sort((a, b) => a.email.localeCompare(b.email) || a.id.localeCompare(b.id));
+  const app = createFastifyInstance();
+  app.addHook("onRequest", async (request) => {
+    request.user = user;
+    request.organizationId = org.id;
   });
-  const deleted = await makeAgent({
-    organizationId: org.id,
-    accessAllTools: false,
-  });
-  await makeAgentTool(local.id, tool.id, { mcpServerId: server.id });
-  await makeAgentTool(local.id, anotherTool.id);
-  await makeAgentTool(foreign.id, tool.id);
-  await makeAgentTool(deleted.id, tool.id);
-  await AgentModel.delete(deleted.id);
-  const legacy = await AgentToolModel.getAssignedAgentDetailsForMcpServers([
-    server.id,
-  ]);
-  const expectedIds = legacy
-    .get(server.id)
-    ?.map((entry) => entry.id)
-    .sort();
-  expect(expectedIds).toEqual([local.id, foreign.id].sort());
-  for (const previews of [true, false]) {
-    const [page] = await McpServerAgentUsageModel.find({
-      catalogIds: [catalog.id],
-      serverIds: [server.id],
-      organizationId: org.id,
-      limit: 20,
-      offset: 0,
-      sortDirection: "asc",
-      previews,
+  await app.register(routes);
+  try {
+    let cursor: string | null = null;
+    const ids: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const query = new URLSearchParams({
+        catalogId: catalog.id,
+        limit: "1",
+        ...(cursor ? { cursor } : {}),
+      });
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/mcp_server/auto_mode_agents/page?${query}`,
+      });
+      expect(response.statusCode).toBe(200);
+      const page = McpAutoModeAgentPageSchema.parse(response.json());
+      ids.push(...page.data.map((agent) => agent.id));
+      cursor = page.pagination.nextCursor;
+    }
+    expect(ids).toEqual(expected.map((agent) => agent.id));
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/mcp_server/auto_mode_agents/page?catalogId=${catalog.id}&afterAgentId=${manual.id}`,
     });
-    expect(page.data.map((entry) => entry.id).sort()).toEqual(expectedIds);
-    expect(page).toMatchObject({
-      assignedCount: 2,
-      autoCount: 0,
-      pagination: { total: 2 },
-    });
+    expect(response.statusCode).toBe(200);
+    expect(
+      McpAutoModeAgentPageSchema.parse(response.json()).data.map(
+        (agent) => agent.id,
+      ),
+    ).toEqual(
+      expected
+        .filter(
+          (agent) => agent.email > earlyOwner.email || agent.id > manual.id,
+        )
+        .map((agent) => agent.id),
+    );
+  } finally {
+    await app.close();
   }
 });

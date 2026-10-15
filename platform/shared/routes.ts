@@ -135,7 +135,7 @@ export const RouteId = {
 
   // MCP Server Routes
   GetMcpServers: "getMcpServers",
-  GetMcpServerAgentUsage: "getMcpServerAgentUsage",
+  GetMcpServerAutoModeAgentPage: "getMcpServerAutoModeAgentPage",
   GetMcpServerAutoModeAgents: "getMcpServerAutoModeAgents",
   GetMcpServer: "getMcpServer",
   GetMcpServerTools: "getMcpServerTools",

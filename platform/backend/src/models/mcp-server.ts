@@ -528,7 +528,6 @@ class McpServerModel {
      */
     filters?: {
       catalogId?: string;
-      catalogIds?: string[];
       /** Skip per-install agent usage for status-only consumers. */
       includeAssignedAgents?: boolean;
       excludeServerTypes?: InternalMcpCatalogServerType[];
@@ -575,12 +574,6 @@ class McpServerModel {
 
     if (filters?.catalogId) {
       conditions.push(eq(schema.mcpServersTable.catalogId, filters.catalogId));
-    }
-
-    if (filters?.catalogIds) {
-      conditions.push(
-        sql`${schema.mcpServersTable.catalogId} = ANY(${sql.param(filters.catalogIds)}::uuid[])`,
-      );
     }
 
     if (filters?.excludeServerTypes?.length) {

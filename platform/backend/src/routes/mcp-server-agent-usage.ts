@@ -1,4 +1,4 @@
-import { PaginationQuerySchema, RouteId } from "@archestra/shared";
+import { CursorQuerySchema, RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 // SPDX-SnippetBegin
@@ -10,31 +10,29 @@ import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
 import AgentTeamModel from "@/models/agent-team";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import McpServerModel from "@/models/mcp-server";
+// SPDX-SnippetEnd
 import McpServerAgentUsageModel from "@/models/mcp-server-agent-usage";
 import { isPredefinedAdmin } from "@/services/agent-tool-assignment";
-// SPDX-SnippetEnd
-import { constructResponseSchema } from "@/types";
-import { McpAgentUsagePageSchema } from "@/types/mcp-server-agent-usage";
+import { ApiError, constructResponseSchema } from "@/types";
+import { McpAutoModeAgentPageSchema } from "@/types/mcp-server-agent-usage";
 
 const mcpServerAgentUsageRoutes: FastifyPluginAsyncZod = async (fastify) => {
   fastify.get(
-    "/api/mcp_server/agent_usage",
+    "/api/mcp_server/auto_mode_agents/page",
     {
       schema: {
-        operationId: RouteId.GetMcpServerAgentUsage,
+        operationId: RouteId.GetMcpServerAutoModeAgentPage,
         description:
-          "Bounded agent usage pages or group previews for requested readable MCP catalog entries.",
+          "Count visible automatic agents or fetch a bounded cursor page, optionally excluding explicit assignments to a readable catalog.",
         tags: ["MCP Server"],
-        querystring: PaginationQuerySchema.extend({
-          catalogIds: z.preprocess(
-            (value) => (typeof value === "string" ? value.split(",") : value),
-            z.array(z.string().uuid()).min(1).max(20),
-          ),
+        querystring: CursorQuerySchema.extend({
+          catalogId: z.string().uuid().optional(),
+          afterAgentId: z.string().uuid().optional(),
           search: z.string().max(200).optional(),
           sortDirection: z.enum(["asc", "desc"]).default("asc"),
-          previews: z.enum(["true", "false"]).default("false"),
+          summary: z.enum(["true", "false"]).default("false"),
         }),
-        response: constructResponseSchema(z.array(McpAgentUsagePageSchema)),
+        response: constructResponseSchema(McpAutoModeAgentPageSchema),
       },
     },
     async ({ user, organizationId, query }) => {
@@ -42,54 +40,55 @@ const mcpServerAgentUsageRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       const context = { userId: user.id, organizationId };
-      const [installationAdmin, predefinedAdmin, managesInstalls, agentAdmin] =
-        await Promise.all([
+      const [managesInstalls, agentAdmin] = await Promise.all([
+        userHasPermission(
+          user.id,
+          organizationId,
+          "mcpServerInstallation",
+          "update",
+        ),
+        hasAnyAgentTypeAdminPermission(context),
+      ]);
+      const visibleAgentIds =
+        managesInstalls || agentAdmin
+          ? undefined
+          : await AgentTeamModel.getUserAccessibleAgentIds(user.id, false);
+      let serverIds: string[] = [];
+      if (query.catalogId) {
+        const [installationAdmin, predefinedAdmin] = await Promise.all([
           isMcpInstallationAdmin(context),
           isPredefinedAdmin(context),
-          userHasPermission(
-            user.id,
-            organizationId,
-            "mcpServerInstallation",
-            "update",
-          ),
-          hasAnyAgentTypeAdminPermission(context),
         ]);
-      const catalogs = await InternalMcpCatalogModel.findAccessibleIds({
-        userId: user.id,
-        organizationId,
-        isAdmin: installationAdmin,
-      });
-      const allowed = new Set(catalogs);
-      const catalogIds = [...new Set(query.catalogIds)].filter((id) =>
-        allowed.has(id),
-      );
-      if (!catalogIds.length) return [];
-      const [servers, visibleAgentIds] = await Promise.all([
-        McpServerModel.findAll(
+        const catalogs = await InternalMcpCatalogModel.findAccessibleIds({
+          ...context,
+          isAdmin: installationAdmin,
+        });
+        if (!catalogs.includes(query.catalogId))
+          throw new ApiError(404, "Catalog entry not found");
+        const servers = await McpServerModel.findAll(
           user.id,
           installationAdmin,
           organizationId,
           undefined,
           predefinedAdmin,
           {
-            catalogIds,
+            catalogId: query.catalogId,
             includeAssignedAgents: false,
             excludeServerTypes: ["app"],
           },
-        ),
-        managesInstalls || agentAdmin
-          ? undefined
-          : AgentTeamModel.getUserAccessibleAgentIds(user.id, false),
-      ]);
+        );
+        serverIds = servers.map((server) => server.id);
+      }
       // SPDX-SnippetEnd
-      return McpServerAgentUsageModel.find({
-        ...query,
-        catalogIds,
-        organizationId,
-        serverIds: servers.map((server) => server.id),
-        visibleAgentIds,
-        previews: query.previews === "true",
-      });
+      const params = { ...query, organizationId, visibleAgentIds, serverIds };
+      if (query.summary === "true")
+        return {
+          data: [],
+          pagination: { limit: query.limit, hasNext: false, nextCursor: null },
+          totalAutoCount: await McpServerAgentUsageModel.count(params),
+          organizationId,
+        };
+      return McpServerAgentUsageModel.find(params);
     },
   );
 };

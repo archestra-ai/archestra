@@ -80006,21 +80006,22 @@ export type McpServerProxyPostResponses = {
     200: unknown;
 };
 
-export type GetMcpServerAgentUsageData = {
+export type GetMcpServerAutoModeAgentPageData = {
     body?: never;
     path?: never;
-    query: {
+    query?: {
         limit?: number;
-        offset?: number;
-        catalogIds: Array<string>;
+        cursor?: string;
+        catalogId?: string;
+        afterAgentId?: string;
         search?: string;
         sortDirection?: 'asc' | 'desc';
-        previews?: 'true' | 'false';
+        summary?: 'true' | 'false';
     };
-    url: '/api/mcp_server/agent_usage';
+    url: '/api/mcp_server/auto_mode_agents/page';
 };
 
-export type GetMcpServerAgentUsageErrors = {
+export type GetMcpServerAutoModeAgentPageErrors = {
     /**
      * Default Response
      */
@@ -80086,13 +80087,13 @@ export type GetMcpServerAgentUsageErrors = {
     };
 };
 
-export type GetMcpServerAgentUsageError = GetMcpServerAgentUsageErrors[keyof GetMcpServerAgentUsageErrors];
+export type GetMcpServerAutoModeAgentPageError = GetMcpServerAutoModeAgentPageErrors[keyof GetMcpServerAutoModeAgentPageErrors];
 
-export type GetMcpServerAgentUsageResponses = {
+export type GetMcpServerAutoModeAgentPageResponses = {
     /**
      * Default Response
      */
-    200: Array<{
+    200: {
         data: Array<{
             id: string;
             name: string;
@@ -80100,41 +80101,18 @@ export type GetMcpServerAgentUsageResponses = {
             scope: 'personal' | 'team' | 'org';
             ownerId: string | null;
             ownerEmail: string | null;
-            access: 'assigned' | 'auto';
         }>;
         pagination: {
-            currentPage: number;
             limit: number;
-            total: number;
-            totalPages: number;
+            nextCursor: string | null;
             hasNext: boolean;
-            hasPrev: boolean;
         };
-        catalogId: string;
-        assignedCount: number;
-        autoCount: number;
-        assignedPreview: Array<{
-            id: string;
-            name: string;
-            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
-            scope: 'personal' | 'team' | 'org';
-            ownerId: string | null;
-            ownerEmail: string | null;
-            access: 'assigned' | 'auto';
-        }>;
-        autoPreview: Array<{
-            id: string;
-            name: string;
-            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
-            scope: 'personal' | 'team' | 'org';
-            ownerId: string | null;
-            ownerEmail: string | null;
-            access: 'assigned' | 'auto';
-        }>;
-    }>;
+        totalAutoCount?: number;
+        organizationId?: string;
+    };
 };
 
-export type GetMcpServerAgentUsageResponse = GetMcpServerAgentUsageResponses[keyof GetMcpServerAgentUsageResponses];
+export type GetMcpServerAutoModeAgentPageResponse = GetMcpServerAutoModeAgentPageResponses[keyof GetMcpServerAutoModeAgentPageResponses];
 
 export type GetMcpServerAutoModeAgentsData = {
     body?: never;
@@ -80366,6 +80344,8 @@ export type GetMcpServersResponses = {
             ownerId: string | null;
             ownerEmail: string | null;
             pinned: boolean;
+            accessAllTools?: boolean;
+            organizationId?: string;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
         alertMutes: Array<{
@@ -80533,6 +80513,8 @@ export type InstallMcpServerResponses = {
             ownerId: string | null;
             ownerEmail: string | null;
             pinned: boolean;
+            accessAllTools?: boolean;
+            organizationId?: string;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
@@ -80757,6 +80739,8 @@ export type GetMcpServerResponses = {
             ownerId: string | null;
             ownerEmail: string | null;
             pinned: boolean;
+            accessAllTools?: boolean;
+            organizationId?: string;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
@@ -80903,6 +80887,8 @@ export type ReauthenticateMcpServerResponses = {
             ownerId: string | null;
             ownerEmail: string | null;
             pinned: boolean;
+            accessAllTools?: boolean;
+            organizationId?: string;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
@@ -81139,6 +81125,8 @@ export type RestoreMcpServerResponses = {
             ownerId: string | null;
             ownerEmail: string | null;
             pinned: boolean;
+            accessAllTools?: boolean;
+            organizationId?: string;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
@@ -81755,6 +81743,8 @@ export type ReinstallMcpServerResponses = {
             ownerId: string | null;
             ownerEmail: string | null;
             pinned: boolean;
+            accessAllTools?: boolean;
+            organizationId?: string;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };

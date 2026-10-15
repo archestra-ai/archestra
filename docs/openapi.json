@@ -306331,13 +306331,13 @@
         }
       }
     },
-    "/api/mcp_server/agent_usage": {
+    "/api/mcp_server/auto_mode_agents/page": {
       "get": {
-        "operationId": "getMcpServerAgentUsage",
+        "operationId": "getMcpServerAutoModeAgentPage",
         "tags": [
           "MCP Server"
         ],
-        "description": "Bounded agent usage pages or group previews for requested readable MCP catalog entries.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:read`: View installed MCP servers and their status",
+        "description": "Count visible automatic agents or fetch a bounded cursor page, optionally excluding explicit assignments to a readable catalog.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`mcpServerInstallation:read`: View installed MCP servers and their status",
         "parameters": [
           {
             "schema": {
@@ -306352,29 +306352,31 @@
           },
           {
             "schema": {
-              "default": 0,
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 9007199254740991
+              "type": "string"
             },
             "in": "query",
-            "name": "offset",
+            "name": "cursor",
             "required": false
           },
           {
             "schema": {
-              "minItems": 1,
-              "maxItems": 20,
-              "type": "array",
-              "items": {
-                "type": "string",
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-              }
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
             },
             "in": "query",
-            "name": "catalogIds",
-            "required": true
+            "name": "catalogId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "query",
+            "name": "afterAgentId",
+            "required": false
           },
           {
             "schema": {
@@ -306408,7 +306410,7 @@
               ]
             },
             "in": "query",
-            "name": "previews",
+            "name": "summary",
             "required": false
           }
         ],
@@ -306418,241 +306420,93 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "data": {
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string"
-                            },
-                            "name": {
-                              "type": "string"
-                            },
-                            "agentType": {
-                              "type": "string",
-                              "enum": [
-                                "profile",
-                                "mcp_gateway",
-                                "llm_proxy",
-                                "agent"
-                              ]
-                            },
-                            "scope": {
-                              "type": "string",
-                              "enum": [
-                                "personal",
-                                "team",
-                                "org"
-                              ]
-                            },
-                            "ownerId": {
-                              "nullable": true,
-                              "type": "string"
-                            },
-                            "ownerEmail": {
-                              "nullable": true,
-                              "type": "string"
-                            },
-                            "access": {
-                              "type": "string",
-                              "enum": [
-                                "assigned",
-                                "auto"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "id",
-                            "name",
-                            "agentType",
-                            "scope",
-                            "ownerId",
-                            "ownerEmail",
-                            "access"
-                          ],
-                          "additionalProperties": false
-                        }
-                      },
-                      "pagination": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
                         "type": "object",
                         "properties": {
-                          "currentPage": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 9007199254740991
+                          "id": {
+                            "type": "string"
                           },
-                          "limit": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 9007199254740991
+                          "name": {
+                            "type": "string"
                           },
-                          "total": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 9007199254740991
+                          "agentType": {
+                            "type": "string",
+                            "enum": [
+                              "profile",
+                              "mcp_gateway",
+                              "llm_proxy",
+                              "agent"
+                            ]
                           },
-                          "totalPages": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 9007199254740991
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "personal",
+                              "team",
+                              "org"
+                            ]
                           },
-                          "hasNext": {
-                            "type": "boolean"
+                          "ownerId": {
+                            "nullable": true,
+                            "type": "string"
                           },
-                          "hasPrev": {
-                            "type": "boolean"
+                          "ownerEmail": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
-                          "currentPage",
-                          "limit",
-                          "total",
-                          "totalPages",
-                          "hasNext",
-                          "hasPrev"
+                          "id",
+                          "name",
+                          "agentType",
+                          "scope",
+                          "ownerId",
+                          "ownerEmail"
                         ],
                         "additionalProperties": false
-                      },
-                      "catalogId": {
-                        "type": "string",
-                        "format": "uuid",
-                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                      },
-                      "assignedCount": {
-                        "type": "number"
-                      },
-                      "autoCount": {
-                        "type": "number"
-                      },
-                      "assignedPreview": {
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string"
-                            },
-                            "name": {
-                              "type": "string"
-                            },
-                            "agentType": {
-                              "type": "string",
-                              "enum": [
-                                "profile",
-                                "mcp_gateway",
-                                "llm_proxy",
-                                "agent"
-                              ]
-                            },
-                            "scope": {
-                              "type": "string",
-                              "enum": [
-                                "personal",
-                                "team",
-                                "org"
-                              ]
-                            },
-                            "ownerId": {
-                              "nullable": true,
-                              "type": "string"
-                            },
-                            "ownerEmail": {
-                              "nullable": true,
-                              "type": "string"
-                            },
-                            "access": {
-                              "type": "string",
-                              "enum": [
-                                "assigned",
-                                "auto"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "id",
-                            "name",
-                            "agentType",
-                            "scope",
-                            "ownerId",
-                            "ownerEmail",
-                            "access"
-                          ],
-                          "additionalProperties": false
-                        }
-                      },
-                      "autoPreview": {
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string"
-                            },
-                            "name": {
-                              "type": "string"
-                            },
-                            "agentType": {
-                              "type": "string",
-                              "enum": [
-                                "profile",
-                                "mcp_gateway",
-                                "llm_proxy",
-                                "agent"
-                              ]
-                            },
-                            "scope": {
-                              "type": "string",
-                              "enum": [
-                                "personal",
-                                "team",
-                                "org"
-                              ]
-                            },
-                            "ownerId": {
-                              "nullable": true,
-                              "type": "string"
-                            },
-                            "ownerEmail": {
-                              "nullable": true,
-                              "type": "string"
-                            },
-                            "access": {
-                              "type": "string",
-                              "enum": [
-                                "assigned",
-                                "auto"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "id",
-                            "name",
-                            "agentType",
-                            "scope",
-                            "ownerId",
-                            "ownerEmail",
-                            "access"
-                          ],
-                          "additionalProperties": false
-                        }
                       }
                     },
-                    "required": [
-                      "data",
-                      "pagination",
-                      "catalogId",
-                      "assignedCount",
-                      "autoCount",
-                      "assignedPreview",
-                      "autoPreview"
-                    ],
-                    "additionalProperties": false
-                  }
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "limit": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "nextCursor": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "hasNext": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "limit",
+                        "nextCursor",
+                        "hasNext"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "totalAutoCount": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "organizationId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "pagination"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }
@@ -307532,6 +307386,12 @@
                             },
                             "pinned": {
                               "type": "boolean"
+                            },
+                            "accessAllTools": {
+                              "type": "boolean"
+                            },
+                            "organizationId": {
+                              "type": "string"
                             }
                           },
                           "required": [
@@ -308244,6 +308104,12 @@
                           },
                           "pinned": {
                             "type": "boolean"
+                          },
+                          "accessAllTools": {
+                            "type": "boolean"
+                          },
+                          "organizationId": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -308823,6 +308689,12 @@
                           },
                           "pinned": {
                             "type": "boolean"
+                          },
+                          "accessAllTools": {
+                            "type": "boolean"
+                          },
+                          "organizationId": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -309715,6 +309587,12 @@
                           },
                           "pinned": {
                             "type": "boolean"
+                          },
+                          "accessAllTools": {
+                            "type": "boolean"
+                          },
+                          "organizationId": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -310630,6 +310508,12 @@
                           },
                           "pinned": {
                             "type": "boolean"
+                          },
+                          "accessAllTools": {
+                            "type": "boolean"
+                          },
+                          "organizationId": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -312814,6 +312698,12 @@
                           },
                           "pinned": {
                             "type": "boolean"
+                          },
+                          "accessAllTools": {
+                            "type": "boolean"
+                          },
+                          "organizationId": {
+                            "type": "string"
                           }
                         },
                         "required": [

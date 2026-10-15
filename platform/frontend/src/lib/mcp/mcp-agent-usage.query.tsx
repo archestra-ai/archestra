@@ -1,70 +1,119 @@
 "use client";
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
-import { createContext, type ReactNode, useContext } from "react";
+import { useMemo } from "react";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { throwOnApiError } from "@/lib/utils/api";
 
-type UsagePage =
-  archestraApiTypes.GetMcpServerAgentUsageResponses["200"][number];
-const UsageSummaries = createContext<Map<string, UsagePage> | undefined>(
-  undefined,
-);
+type AssignedAgent = Omit<
+  NonNullable<
+    archestraApiTypes.GetMcpServersResponses["200"][number]["assignedAgents"]
+  >[number],
+  "pinned"
+>;
 
-export function useMcpServerAgentUsage(params: {
-  catalogIds: string[];
+export function useMcpAutoAgents(params: {
+  catalogId?: string;
   enabled?: boolean;
   limit?: number;
-  offset?: number;
+  cursor?: string;
+  afterAgentId?: string;
   search?: string;
   sortDirection?: "asc" | "desc";
-  previews?: boolean;
+  summary?: boolean;
 }) {
   const { data: allowed } = useHasPermissions({
     mcpServerInstallation: ["read"],
   });
-  const { enabled = true, previews = false, ...query } = params;
+  const { enabled = true, summary = false, ...input } = params;
+  const query = { ...input, search: input.search || undefined };
   return useQuery({
-    queryKey: ["mcp-servers", "agent-usage", query, previews],
+    queryKey: ["mcp-servers", "automatic-agent-usage", query, summary],
     queryFn: async ({ signal }) => {
-      const { data, error } = await archestraApiSdk.getMcpServerAgentUsage({
-        query: { ...query, previews: previews ? "true" : "false" },
-        querySerializer: { array: { style: "form", explode: false } },
-        signal,
-      });
+      const { data, error } =
+        await archestraApiSdk.getMcpServerAutoModeAgentPage({
+          query: { ...query, summary: summary ? "true" : "false" },
+          signal,
+        });
       throwOnApiError(error, { toastOnError: false });
-      return data ?? [];
+      return data;
     },
-    enabled: enabled && !!allowed && params.catalogIds.length > 0,
+    enabled: enabled && !!allowed,
     staleTime: 30_000,
   });
 }
 
-export function McpUsageSummaryProvider({
-  catalogIds,
-  children,
+/** Exact counts use the explicit metadata the caller already loaded. */
+export function useMcpUsageSummary({
+  catalogId,
+  assignedAgents,
+  enabled = true,
+  previews = true,
+  search,
 }: {
-  catalogIds: string[];
-  children: ReactNode;
+  catalogId: string;
+  assignedAgents: AssignedAgent[];
+  enabled?: boolean;
+  previews?: boolean;
+  search?: string;
 }) {
-  const { data: allowed } = useHasPermissions({
-    mcpServerInstallation: ["update"],
+  const summary = useMcpAutoAgents({ summary: true, enabled, search });
+  const overlap = assignedAgents.filter(
+    (agent) =>
+      agent.accessAllTools &&
+      agent.organizationId === summary.data?.organizationId,
+  ).length;
+  const autoCount = Math.max(0, (summary.data?.totalAutoCount ?? 0) - overlap);
+  const globalPreview = useMcpAutoAgents({
+    limit: 100,
+    enabled: enabled && previews && summary.isSuccess && autoCount > 0,
+    search,
   });
-  const { data } = useMcpServerAgentUsage({
-    catalogIds,
-    enabled: !!allowed,
-    limit: 8,
-    previews: true,
-  });
-  return (
-    <UsageSummaries
-      value={new Map(data?.map((entry) => [entry.catalogId, entry]))}
-    >
-      {children}
-    </UsageSummaries>
+  const assignedIds = useMemo(
+    () =>
+      new Set(
+        previews && autoCount > 0
+          ? assignedAgents.map((agent) => agent.id)
+          : [],
+      ),
+    [assignedAgents, previews, autoCount],
   );
-}
-
-export function useMcpUsageSummary(catalogId: string) {
-  return useContext(UsageSummaries)?.get(catalogId);
+  const sharedCandidates =
+    globalPreview.data?.data.filter((agent) => !assignedIds.has(agent.id)) ??
+    [];
+  const sharedComplete =
+    globalPreview.isSuccess &&
+    (sharedCandidates.length >= 8 || !globalPreview.data?.pagination.hasNext);
+  const preview = useMcpAutoAgents({
+    catalogId,
+    limit: 8,
+    search,
+    enabled:
+      enabled &&
+      previews &&
+      summary.isSuccess &&
+      autoCount > 0 &&
+      globalPreview.isSuccess &&
+      !sharedComplete,
+  });
+  const automaticPreview = sharedComplete
+    ? sharedCandidates.slice(0, 8)
+    : (preview.data?.data ?? []);
+  return {
+    ...summary,
+    data: summary.data
+      ? {
+          assignedCount: assignedAgents.length,
+          autoCount,
+          pagination: { total: assignedAgents.length + autoCount },
+          assignedPreview: assignedAgents
+            .slice(0, 8)
+            .map((agent) => ({ ...agent, access: "assigned" as const })),
+          autoPreview: automaticPreview.map((agent) => ({
+            ...agent,
+            access: "auto" as const,
+          })),
+        }
+      : undefined,
+  };
 }

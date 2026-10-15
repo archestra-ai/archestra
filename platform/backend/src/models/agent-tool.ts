@@ -717,69 +717,74 @@ class AgentToolModel {
       return agentsMap;
     }
 
+    // Deduplicate narrow membership keys before joining agent/user metadata.
+    // Multiple assigned tools from one catalog still describe one usage row.
+    const pinnedAssignments = db
+      .selectDistinct({
+        mcpServerId: sql<string>`${schema.agentToolsTable.mcpServerId}`.as(
+          "mcp_server_id",
+        ),
+        agentId: schema.agentToolsTable.agentId,
+      })
+      .from(schema.agentToolsTable)
+      .where(inArray(schema.agentToolsTable.mcpServerId, mcpServerIds))
+      .as("pinned_assignments");
+    const dynamicAssignments = db
+      .selectDistinct({
+        mcpServerId: schema.mcpServersTable.id,
+        agentId: schema.agentToolsTable.agentId,
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .innerJoin(
+        schema.mcpServersTable,
+        eq(schema.toolsTable.catalogId, schema.mcpServersTable.catalogId),
+      )
+      .where(
+        and(
+          isNull(schema.agentToolsTable.mcpServerId),
+          inArray(schema.mcpServersTable.id, mcpServerIds),
+        ),
+      )
+      .as("dynamic_assignments");
     const selection = {
-      mcpServerId: schema.mcpServersTable.id,
       agentId: schema.agentsTable.id,
       agentName: schema.agentsTable.name,
       agentType: schema.agentsTable.agentType,
+      accessAllTools: schema.agentsTable.accessAllTools,
+      organizationId: schema.agentsTable.organizationId,
       scope: schema.agentsTable.scope,
       ownerId: schema.agentsTable.authorId,
       ownerEmail: schema.usersTable.email,
     };
-
     const [pinned, dynamic] = await Promise.all([
-      // Pinned to one install.
       db
-        .selectDistinct(selection)
-        .from(schema.agentToolsTable)
+        .select({ ...selection, mcpServerId: pinnedAssignments.mcpServerId })
+        .from(pinnedAssignments)
         .innerJoin(
           schema.agentsTable,
-          eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
-        )
-        // Personal agents share a name across members, so the owner is what
-        // tells them apart in the UI. LEFT JOIN: `author_id` is nullable and
-        // nulls out when the author is deleted.
-        .leftJoin(
-          schema.usersTable,
-          eq(schema.agentsTable.authorId, schema.usersTable.id),
-        )
-        .innerJoin(
-          schema.mcpServersTable,
-          eq(schema.agentToolsTable.mcpServerId, schema.mcpServersTable.id),
-        )
-        .where(
-          and(
-            inArray(schema.mcpServersTable.id, mcpServerIds),
-            notDeleted(schema.agentsTable),
-          ),
-        ),
-      // Unpinned: resolves to any install of the tool's catalog.
-      db
-        .selectDistinct(selection)
-        .from(schema.agentToolsTable)
-        .innerJoin(
-          schema.toolsTable,
-          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-        )
-        .innerJoin(
-          schema.agentsTable,
-          eq(schema.agentToolsTable.agentId, schema.agentsTable.id),
+          eq(pinnedAssignments.agentId, schema.agentsTable.id),
         )
         .leftJoin(
           schema.usersTable,
           eq(schema.agentsTable.authorId, schema.usersTable.id),
         )
+        .where(notDeleted(schema.agentsTable)),
+      db
+        .select({ ...selection, mcpServerId: dynamicAssignments.mcpServerId })
+        .from(dynamicAssignments)
         .innerJoin(
-          schema.mcpServersTable,
-          eq(schema.toolsTable.catalogId, schema.mcpServersTable.catalogId),
+          schema.agentsTable,
+          eq(dynamicAssignments.agentId, schema.agentsTable.id),
         )
-        .where(
-          and(
-            isNull(schema.agentToolsTable.mcpServerId),
-            inArray(schema.mcpServersTable.id, mcpServerIds),
-            notDeleted(schema.agentsTable),
-          ),
-        ),
+        .leftJoin(
+          schema.usersTable,
+          eq(schema.agentsTable.authorId, schema.usersTable.id),
+        )
+        .where(notDeleted(schema.agentsTable)),
     ]);
 
     // One agent can match both rules for the same server, so the union is

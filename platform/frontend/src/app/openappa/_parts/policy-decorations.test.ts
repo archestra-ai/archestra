@@ -112,7 +112,9 @@ test("a refusal reads each battery as the composition the runtime still enforces
         lastError: refusal.message,
         composition: { served: { kind: "root_only" }, refusal },
       }),
-    ).map(({ status }) => status),
+    ).map((annotation) =>
+      annotation.kind === "battery" ? annotation.status : null,
+    ),
   ).toEqual(["refused", "refused"]);
 });
 

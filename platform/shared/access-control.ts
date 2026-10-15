@@ -1541,6 +1541,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.JoinSlackAgentBotChannel]: {
     organizationSettings: ["update"],
   },
+  [RouteId.ListSlackRouterBotChannels]: {
+    organizationSettings: ["read"],
+  },
+  [RouteId.JoinSlackRouterBotChannel]: {
+    organizationSettings: ["update"],
+  },
   [RouteId.UpdateTelegramChatOpsConfig]: {
     organizationSettings: ["update"],
   },

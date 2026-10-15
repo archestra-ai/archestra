@@ -382,6 +382,20 @@ export function isSessionResetCommand(text: string): boolean {
   return SESSION_RESET_COMMANDS.has(normalized);
 }
 
+/**
+ * Whether a message asks the router bot for the agents a person can reach.
+ * Like a reset, the WHOLE message must be the command.
+ */
+export function isAgentListCommand(text: string): boolean {
+  const normalized = text
+    .trim()
+    .toLowerCase()
+    .replace(/^\//, "")
+    .replace(/[.!?]+$/, "")
+    .trim();
+  return normalized === "list" || normalized === "agents";
+}
+
 // ===========================================================================
 // Internal helpers
 // ===========================================================================

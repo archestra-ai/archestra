@@ -24,7 +24,7 @@ import { imageToneClassName, useImageTone } from "@/lib/hooks/use-image-tone";
 import { cn } from "@/lib/utils/tailwind";
 
 export type AgentIconVariant = Exclude<
-  archestraApiTypes.GetAgentsResponses["200"]["data"][number]["agentType"],
+  Omit<archestraApiTypes.GetAgentsResponses["200"]["data"][number], "pinnedAt">["agentType"],
   "profile"
 >;
 

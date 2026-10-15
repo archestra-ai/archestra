@@ -30,7 +30,7 @@ vi.mock("@archestra/shared", async (importOriginal) => {
     archestraApiSdk: {
       ...actual.archestraApiSdk,
       createAgent: vi.fn(),
-      getAllAgents: vi.fn(),
+      getAgents: vi.fn(),
       getAgent: vi.fn(),
       getChatAgentMcpTools: vi.fn(),
       pinAgent: vi.fn(),
@@ -205,9 +205,9 @@ describe("agent write mutations", () => {
     };
     const oldGateway = { ...savedGateway, toolExposureMode: "full" };
     sdk.updateAgent.mockResolvedValue({ data: savedGateway } as never);
-    sdk.getAllAgents
-      .mockResolvedValueOnce({ data: [oldGateway] } as never)
-      .mockResolvedValue({ data: [savedGateway] } as never);
+    sdk.getAgents
+      .mockResolvedValueOnce({ data: { data: [oldGateway] } } as never)
+      .mockResolvedValue({ data: { data: [savedGateway] } } as never);
     sdk.getChatAgentMcpTools
       .mockResolvedValueOnce({
         data: [{ name: "tools", tokens: 13000 }],
@@ -248,22 +248,17 @@ describe("chat agent roster", () => {
     vi.clearAllMocks();
   });
 
-  it("requests the compact chat view without tool payloads", async () => {
-    sdk.getAllAgents.mockResolvedValue({
-      data: [{ id: "agent-1", name: "Agent" }],
+  it("requests one page of agents for the chat roster", async () => {
+    sdk.getAgents.mockResolvedValue({
+      data: { data: [{ id: "agent-1", name: "Agent" }] },
       error: undefined,
     } as never);
 
     const { result } = setup(() => useChatAgents());
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(sdk.getAllAgents).toHaveBeenCalledWith({
-      query: {
-        agentType: "agent",
-        excludeBuiltIn: true,
-        includeTools: false,
-        view: "chat",
-      },
+    expect(sdk.getAgents).toHaveBeenCalledWith({
+      query: { agentType: "agent", limit: 100 },
     });
   });
 
@@ -271,7 +266,7 @@ describe("chat agent roster", () => {
   // `retry: false`, so without the query's own retry a single blip left the
   // new-chat composer stranded on "Select agent" with no default (T-1317).
   it("recovers the roster after a transient fetch failure", async () => {
-    sdk.getAllAgents
+    sdk.getAgents
       .mockResolvedValueOnce({
         data: undefined,
         error: {
@@ -279,7 +274,7 @@ describe("chat agent roster", () => {
         },
       } as never)
       .mockResolvedValueOnce({
-        data: [{ id: "agent-1", name: "Agent" }],
+        data: { data: [{ id: "agent-1", name: "Agent" }] },
         error: undefined,
       } as never);
 
@@ -294,7 +289,7 @@ describe("chat agent roster", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual([{ id: "agent-1", name: "Agent" }]);
-    expect(sdk.getAllAgents).toHaveBeenCalledTimes(2);
+    expect(sdk.getAgents).toHaveBeenCalledTimes(2);
   });
 });
 

@@ -225,7 +225,7 @@ import {
   shouldShowDescriptionField,
 } from "./agent-form.utils";
 
-type Agent = archestraApiTypes.GetAllAgentsResponses["200"][number];
+type Agent = Omit<archestraApiTypes.GetAgentsResponses["200"]["data"][number], "pinnedAt">;
 type ToolExposureMode = Agent["toolExposureMode"];
 type MissingCredentialBehavior = Agent["missingCredentialBehavior"];
 type A2aRemoteAgent =

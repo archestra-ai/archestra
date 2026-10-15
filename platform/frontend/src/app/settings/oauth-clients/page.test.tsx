@@ -79,10 +79,10 @@ const server = setupServer(
   http.get(`${API_ORIGIN}/api/oauth-clients`, () =>
     HttpResponse.json(page([])),
   ),
-  http.get(`${API_ORIGIN}/api/agents/all`, () =>
-    HttpResponse.json([
-      { id: "agent-1", name: "Support agent", agentType: "agent" },
-    ]),
+  http.get(`${API_ORIGIN}/api/agents`, () =>
+    HttpResponse.json({
+      data: [{ id: "agent-1", name: "Support agent", agentType: "agent" }],
+    }),
   ),
   http.get(`${API_ORIGIN}/api/oauth-clients/labels/keys`, () =>
     HttpResponse.json([]),

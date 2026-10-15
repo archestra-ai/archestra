@@ -69,7 +69,6 @@ export function ConnectionFlow({
     filters: {
       agentTypes: ["profile", "mcp_gateway"],
       excludeOtherPersonalAgents: true,
-      includeTools: false,
     },
   });
 

@@ -123,7 +123,7 @@ const server = setupServer(
     HttpResponse.json({ defaultAgentId: null }),
   ),
   http.get("/api/members/default-model", () => HttpResponse.json(null)),
-  http.get("/api/agents/all", () => HttpResponse.json([agent])),
+  http.get("/api/agents", () => HttpResponse.json({ data: [agent] })),
   http.get(`/api/agents/${agent.id}`, () => HttpResponse.json(agent)),
   http.get("/api/agents/credential-readiness", () => HttpResponse.json([])),
   http.get("/api/chat/conversations", () => HttpResponse.json([])),
@@ -257,7 +257,9 @@ test.each([
     ) as unknown as ReturnType<typeof useSearchParams>,
   );
   server.use(
-    http.get("/api/agents/all", () => HttpResponse.json([agent, otherAgent])),
+    http.get("/api/agents", () =>
+      HttpResponse.json({ data: [agent, otherAgent] }),
+    ),
     http.get(`/api/agents/${otherAgent.id}`, () =>
       HttpResponse.json(otherAgent),
     ),
@@ -296,8 +298,8 @@ test("a fresh stack selects My Assistant while hiding APPA Keeper from the picke
     new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
   );
   server.use(
-    http.get("/api/agents/all", () =>
-      HttpResponse.json([agent, otherAgent, personal]),
+    http.get("/api/agents", () =>
+      HttpResponse.json({ data: [agent, otherAgent, personal] }),
     ),
     http.get(`/api/agents/${personal.id}`, () => HttpResponse.json(personal)),
   );
@@ -345,7 +347,9 @@ test("a saved configuration-agent conversation accepts a normal follow-up withou
   );
   const updates: unknown[] = [];
   server.use(
-    http.get("/api/agents/all", () => HttpResponse.json([agent, otherAgent])),
+    http.get("/api/agents", () =>
+      HttpResponse.json({ data: [agent, otherAgent] }),
+    ),
     http.get(`/api/agents/${otherAgent.id}`, () =>
       HttpResponse.json(otherAgent),
     ),

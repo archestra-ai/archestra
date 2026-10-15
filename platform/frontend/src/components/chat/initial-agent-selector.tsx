@@ -64,6 +64,7 @@ import {
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   useAgentCredentialReadiness,
+  useAgentSearch,
   useChatAgents,
   useCreateProfile,
   usePinnedAgentIds,
@@ -135,6 +136,13 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const [open, setOpen] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [search, setSearch] = useState("");
+  // The roster is one page. Typing searches the whole organization on the server.
+  const trimmedSearch = search.trim();
+  const { data: searchedAgents } = useAgentSearch({
+    name: trimmedSearch,
+    agentType: "agent",
+    enabled: open && trimmedSearch.length > 0,
+  });
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
   const [cloningAgentId, setCloningAgentId] = useState<string | null>(null);
   const afterFirstPaint = useAfterFirstPaint();
@@ -165,12 +173,12 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const filteredAgents = useMemo(
     () =>
       filterAndSortInitialAgents({
-        allAgents,
+        allAgents: trimmedSearch ? (searchedAgents ?? []) : allAgents,
         currentAgentId,
         search,
         userId,
       }),
-    [allAgents, search, currentAgentId, userId],
+    [allAgents, searchedAgents, trimmedSearch, search, currentAgentId, userId],
   );
   // Loaded after first paint, not on open, so the Pinned group is there the
   // moment the picker opens instead of popping in once the request lands.
@@ -838,7 +846,10 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
 // Internal: picker row
 // ============================================================================
 
-type PickerAgent = archestraApiTypes.GetAllAgentsResponses["200"][number];
+type PickerAgent = Omit<
+  archestraApiTypes.GetAgentsResponses["200"]["data"][number],
+  "pinnedAt"
+>;
 
 function AgentPickerRow({
   agent,

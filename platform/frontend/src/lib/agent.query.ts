@@ -5,6 +5,7 @@ import {
   type ResourceAccessRelation,
 } from "@archestra/shared";
 import {
+  keepPreviousData,
   type QueryClient,
   useMutation,
   useQuery,
@@ -38,7 +39,6 @@ const {
   getAgentCredentialReadiness,
   getAgentDefaultSuggestedPrompts,
   getAgents,
-  getAllAgents,
   getDefaultMcpGateway,
   getAgent,
   importAgent,
@@ -54,23 +54,59 @@ const {
 } = archestraApiSdk;
 
 /**
- * The roster, without each agent's tools. No consumer of this list reads them
- * — the pickers that show tools fetch them per agent — while the refs carry
- * every tool's name and description, which on an organization of any size is
- * the great majority of the response. Dropping them is what lets the new-chat
- * screen, whose first paint is gated on this list, stop waiting on megabytes
- * it does not draw.
+ * Agents per request for every roster. The list is paginated on the server, so
+ * a roster never loads the whole organization. Pickers that must reach agents
+ * beyond the first page search by name instead (see `useAgentSearch`).
  */
+export const AGENT_PAGE_SIZE = 100;
+
 const internalAgentsQuery = {
   agentType: "agent",
-  excludeBuiltIn: true,
-  includeTools: false,
+  limit: AGENT_PAGE_SIZE,
 } as const;
 
-const chatAgentsQuery = {
-  ...internalAgentsQuery,
-  view: "chat",
-} as const;
+const chatAgentsQuery = internalAgentsQuery;
+
+/** One page of agents, with the server-side name search applied. */
+async function fetchAgentPage(
+  query: archestraApiTypes.GetAgentsData["query"],
+): Promise<
+  Array<
+    Omit<
+      archestraApiTypes.GetAgentsResponses["200"]["data"][number],
+      "pinnedAt"
+    >
+  >
+> {
+  const { data, error } = await getAgents({ query });
+  throwOnApiError(error, { toastOnError: false });
+  return data?.data ?? [];
+}
+
+/**
+ * Agents matching a name search, one page at a time. Searching is what reaches
+ * agents beyond the first page, so pickers call this with the text the user typed.
+ */
+export function useAgentSearch(params: {
+  name?: string;
+  agentType?: "agent" | "profile" | "mcp_gateway";
+  scope?: "personal" | "team" | "org";
+  enabled?: boolean;
+}) {
+  const query = {
+    limit: AGENT_PAGE_SIZE,
+    name: params.name?.trim() || undefined,
+    agentType: params.agentType,
+    scope: params.scope,
+  };
+  return useQuery({
+    queryKey: ["agents", "search", query],
+    queryFn: () => fetchAgentPage(query),
+    enabled: params.enabled,
+    // Keep the previous matches on screen while the next search loads.
+    placeholderData: keepPreviousData,
+  });
+}
 
 export const internalAgentsQueryKey = [
   "agents",
@@ -81,32 +117,22 @@ export const internalAgentsQueryKey = [
 const chatAgentsQueryKey = ["agents", "chat-roster", chatAgentsQuery] as const;
 
 export async function fetchInternalAgents() {
-  const { data, error } = await getAllAgents({ query: internalAgentsQuery });
-  throwOnApiError(error, { toastOnError: false });
-  return data ?? [];
+  return fetchAgentPage(internalAgentsQuery);
 }
 
 async function fetchChatAgents() {
-  const { data, error } = await getAllAgents({ query: chatAgentsQuery });
-  throwOnApiError(error, { toastOnError: false });
-  return data ?? [];
+  return fetchAgentPage(chatAgentsQuery);
 }
 
 const delegationTargetAgentsQuery = {
   agentType: "agent",
-  excludeBuiltIn: true,
+  limit: AGENT_PAGE_SIZE,
 } as const;
 
 export function useDelegationTargetAgents(params?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["agents", "all", delegationTargetAgentsQuery],
-    queryFn: async () => {
-      const { data, error } = await getAllAgents({
-        query: delegationTargetAgentsQuery,
-      });
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? [];
-    },
+    queryFn: () => fetchAgentPage(delegationTargetAgentsQuery),
     enabled: params?.enabled,
     // No staleTime override: inherit the client default so several components
     // mounting this hook during one page load share a single fetch instead of
@@ -118,24 +144,23 @@ export function useDelegationTargetAgents(params?: { enabled?: boolean }) {
 // Returns all agents as an array
 export function useProfiles(
   params: {
-    initialData?: archestraApiTypes.GetAllAgentsResponses["200"];
-    filters?: archestraApiTypes.GetAllAgentsData["query"];
+    initialData?: Array<
+      Omit<
+        archestraApiTypes.GetAgentsResponses["200"]["data"][number],
+        "pinnedAt"
+      >
+    >;
+    filters?: archestraApiTypes.GetAgentsData["query"];
     enabled?: boolean;
   } = {},
 ) {
   const filters = {
-    excludeBuiltIn: true,
-    // Roster consumers use metadata; selected-agent tools load from detail queries.
-    includeTools: false,
+    limit: AGENT_PAGE_SIZE,
     ...params?.filters,
-  } satisfies archestraApiTypes.GetAllAgentsData["query"];
+  } satisfies archestraApiTypes.GetAgentsData["query"];
   return useQuery({
     queryKey: ["agents", "all", filters],
-    queryFn: async () => {
-      const { data, error } = await getAllAgents({ query: filters });
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? [];
-    },
+    queryFn: () => fetchAgentPage(filters),
     initialData: params?.initialData,
     enabled: params?.enabled,
   });
@@ -862,15 +887,14 @@ export function useOrgScopedAgents() {
     queryKey: [
       "agents",
       "all",
-      { agentType: "agent", excludeBuiltIn: true, scope: "org" as const },
+      { agentType: "agent", scope: "org" as const, limit: AGENT_PAGE_SIZE },
     ],
-    queryFn: async () => {
-      const { data, error } = await getAllAgents({
-        query: { agentType: "agent", excludeBuiltIn: true, scope: "org" },
-      });
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? [];
-    },
+    queryFn: () =>
+      fetchAgentPage({
+        agentType: "agent",
+        scope: "org",
+        limit: AGENT_PAGE_SIZE,
+      }),
   });
 }
 

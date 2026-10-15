@@ -71,8 +71,8 @@ test("shows scheduled output while running and replays it after refresh", async 
   await mswControl.registerMany([
     {
       method: "get",
-      url: "/api/agents/all",
-      body: [makeAgent()],
+      url: "/api/agents",
+      body: { data: [makeAgent()] },
     },
     {
       method: "get",

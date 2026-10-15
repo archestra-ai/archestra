@@ -34,18 +34,20 @@ vi.mock("@/lib/auth/auth.query");
 const origin = "http://localhost:9000";
 const serverId = "e8340e76-19fc-444d-ac4e-a817c1e78c3c";
 const server = setupServer(
-  http.get("http://localhost:9000/api/agents/all", () =>
-    HttpResponse.json([
-      {
-        id: "appa-agent",
-        name: "OpenAPPA Configuration Agent",
-        scope: "org",
-        builtIn: true,
-        builtInAgentConfig: { name: "openappa-configuration-agent" },
-        authorId: null,
-        labels: [],
-      },
-    ]),
+  http.get("http://localhost:9000/api/agents", () =>
+    HttpResponse.json({
+      data: [
+        {
+          id: "appa-agent",
+          name: "OpenAPPA Configuration Agent",
+          scope: "org",
+          builtIn: true,
+          builtInAgentConfig: { name: "openappa-configuration-agent" },
+          authorId: null,
+          labels: [],
+        },
+      ],
+    }),
   ),
 );
 const entityRequests: URLSearchParams[] = [];

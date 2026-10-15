@@ -248,7 +248,6 @@ export function useConnectPageData({
     filters: {
       agentTypes: ["profile", "mcp_gateway"],
       excludeOtherPersonalAgents: true,
-      includeTools: false,
     },
     enabled: canReadGateways === true,
   });

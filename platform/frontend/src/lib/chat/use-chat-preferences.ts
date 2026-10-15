@@ -15,7 +15,7 @@ import {
 export type { ModelSource };
 
 /** The agent's resolved LLM config, as returned by the agents API. */
-type AgentLlmConfig = archestraApiTypes.GetAllAgentsResponses["200"][number];
+type AgentLlmConfig = Omit<archestraApiTypes.GetAgentsResponses["200"]["data"][number], "pinnedAt">;
 
 // ===== LocalStorage Keys =====
 

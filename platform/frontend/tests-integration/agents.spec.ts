@@ -518,12 +518,11 @@ test.describe("Agents", () => {
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
     // Register this after the dynamic `/api/agents/:id` override: without the
-    // exact route winning, `/api/agents/all` is treated as id "all" and the
-    // editor receives one agent object instead of the delegation-target array.
+    // The delegation-target list is one page, so the editor reads its `data`.
     await mswControl.use({
       method: "get",
-      url: "/api/agents/all",
-      body: [original, clonedDraft],
+      url: "/api/agents",
+      body: { data: [original, clonedDraft] },
     });
     // Same for the skills count the edit page's Tools step reads on load.
     await mswControl.use({

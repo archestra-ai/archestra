@@ -82,18 +82,18 @@ function show(
 
 test("launch resolves the system agent from the chat roster rather than a user-created copy", async () => {
   server.use(
-    http.get(`${api}/api/agents/all`, ({ request }) => {
-      const query = new URL(request.url).searchParams;
-      if (query.get("view") !== "chat") return HttpResponse.json([]);
-      return HttpResponse.json([
-        makeAgent({
-          id: "copy",
-          name: agent.name,
-          labels: [{ key: "purpose", value: "openappa-configuration" }],
-        }),
-        agent,
-      ]);
-    }),
+    http.get(`${api}/api/agents`, () =>
+      HttpResponse.json({
+        data: [
+          makeAgent({
+            id: "copy",
+            name: agent.name,
+            labels: [{ key: "purpose", value: "openappa-configuration" }],
+          }),
+          agent,
+        ],
+      }),
+    ),
   );
   show();
   const link = await screen.findByRole("link", { name: "Create policy" });
@@ -107,7 +107,7 @@ test("launch resolves the system agent from the chat roster rather than a user-c
 
 test("without a prompt the chat opens on the agent's suggested prompts", async () => {
   server.use(
-    http.get(`${api}/api/agents/all`, () => HttpResponse.json([agent])),
+    http.get(`${api}/api/agents`, () => HttpResponse.json({ data: [agent] })),
   );
   show({ promptKey: undefined, children: "Ask about the policy" });
   expect(
@@ -116,7 +116,9 @@ test("without a prompt the chat opens on the agent's suggested prompts", async (
 });
 
 test("an unavailable agent does not fall back to the user's default chat", async () => {
-  server.use(http.get(`${api}/api/agents/all`, () => HttpResponse.json([])));
+  server.use(
+    http.get(`${api}/api/agents`, () => HttpResponse.json({ data: [] })),
+  );
   show();
   await waitFor(() =>
     expect(
@@ -131,13 +133,13 @@ test("an unavailable agent does not fall back to the user's default chat", async
 test("a failed agent lookup can be retried from the CTA", async () => {
   let available = false;
   server.use(
-    http.get(`${api}/api/agents/all`, () => {
+    http.get(`${api}/api/agents`, () => {
       return !available
         ? HttpResponse.json(
             { error: "temporarily unavailable" },
             { status: 503 },
           )
-        : HttpResponse.json([agent]);
+        : HttpResponse.json({ data: [agent] });
     }),
   );
   show();
@@ -167,7 +169,7 @@ test.each([
   },
 ])("$children lists only missing permissions and cannot navigate", async (props) => {
   server.use(
-    http.get(`${api}/api/agents/all`, () => HttpResponse.json([agent])),
+    http.get(`${api}/api/agents`, () => HttpResponse.json({ data: [agent] })),
     http.get(`${api}/api/user/permissions`, () =>
       HttpResponse.json({
         chat: ["read"],

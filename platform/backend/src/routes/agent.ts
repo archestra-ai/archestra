@@ -130,6 +130,15 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         querystring: z
           .object({
             name: z.string().optional().describe("Filter by agent name"),
+            includeBuiltIn: z
+              .preprocess(
+                (val) => (typeof val === "string" ? val === "true" : val),
+                z.boolean(),
+              )
+              .optional()
+              .describe(
+                "Include built-in agents, so ids assigned elsewhere still resolve. Only agent admins see them; ignored with `scope`.",
+              ),
             agentType: z
               .enum(["profile", "mcp_gateway", "agent"])
               .optional()
@@ -266,6 +275,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       {
         query: {
           name,
+          includeBuiltIn,
           agentType,
           agentTypes,
           scope,
@@ -325,6 +335,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             baseReadTypes: checker.getAgentTypesWithPermission("read"),
           },
           name,
+          includeBuiltIn,
           // agentTypes takes precedence over agentType
           agentType: agentTypes || permittedTypes ? undefined : agentType,
           agentTypes: permittedTypes ?? agentTypes,
@@ -392,132 +403,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     async ({ params: { id }, user }, reply) => {
       await AgentPinModel.unpin({ userId: user.id, agentId: id });
       return reply.send({ ok: true as const });
-    },
-  );
-
-  fastify.get(
-    "/api/agents/all",
-    {
-      schema: {
-        operationId: RouteId.GetAllAgents,
-        description: "Get all agents without pagination",
-        tags: ["Agents"],
-        querystring: z.object({
-          agentType: z
-            .enum(["profile", "mcp_gateway", "agent"])
-            .optional()
-            .describe(
-              "Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'agent' = internal agents with prompts.",
-            ),
-          agentTypes: z
-            .preprocess(
-              (val) => (typeof val === "string" ? val.split(",") : val),
-              z.array(z.enum(["profile", "mcp_gateway", "agent"])),
-            )
-            .optional()
-            .describe(
-              "Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided.",
-            ),
-          excludeBuiltIn: z
-            .preprocess((val) => val === "true" || val === true, z.boolean())
-            .optional()
-            .describe(
-              "Exclude built-in agents from the results, except the system chat assistant in chat view. Defaults to false.",
-            ),
-          scope: AgentScopeFilterSchema.optional().describe(
-            "Filter by scope: personal, team, org, or built_in.",
-          ),
-          excludeOtherPersonalAgents: z
-            .preprocess(
-              (val) => (typeof val === "string" ? val === "true" : val),
-              z.boolean(),
-            )
-            .optional()
-            .describe(
-              "Hide personal agents owned by other users. Admin-only; no-op for non-admins (their access control already excludes them).",
-            ),
-          status: z
-            .enum(["active", "deleted"])
-            .optional()
-            .describe(
-              "Filter by lifecycle status. Deleted rows require delete permission.",
-            ),
-          includeTools: z
-            .preprocess((val) => val !== "false" && val !== false, z.boolean())
-            .optional()
-            .describe(
-              "Attach each agent's assigned tools. Defaults to true. Pass false from callers that only need the roster itself — the tool refs carry every tool's name and description, which on an organization of any size is the great majority of this response's bytes. Agents come back with an empty `tools` array when it is off, meaning 'not requested' rather than 'none assigned'.",
-            ),
-          view: z
-            .enum(["chat"])
-            .optional()
-            .describe(
-              "Return the lightweight agent fields needed to initialize chat. Large embedded icons, system prompts, sharing metadata, and unrelated list hydration are omitted; fetch an individual agent before editing it.",
-            ),
-        }),
-        response: constructResponseSchema(z.array(SelectAgentSchema)),
-      },
-    },
-    async (
-      {
-        query: {
-          agentType,
-          agentTypes,
-          excludeBuiltIn,
-          scope,
-          excludeOtherPersonalAgents,
-          status,
-          includeTools,
-          view,
-        },
-        user,
-        organizationId,
-      },
-      reply,
-    ) => {
-      // Determine the effective type filter
-      const effectiveTypes =
-        agentTypes || (agentType ? [agentType] : undefined);
-
-      // Single DB query for all permission checks
-      const checker = await getAgentTypePermissionChecker({
-        userId: user.id,
-        organizationId,
-      });
-
-      const permittedTypes = getPermittedAgentTypesForList({
-        checker,
-        effectiveTypes,
-        status,
-      });
-
-      // Check admin for the specific type(s) being queried, or any type if unfiltered
-      const isAdmin = effectiveTypes
-        ? effectiveTypes.length === 1
-          ? checker.isAdmin(effectiveTypes[0])
-          : checker.hasAnyAdminPermission()
-        : checker.hasAnyAdminPermission();
-
-      return reply.send(
-        await AgentModel.findAll(user.id, isAdmin, {
-          authorization: {
-            organizationId,
-            baseReadTypes: checker.getAgentTypesWithPermission("read"),
-          },
-          // agentTypes takes precedence over agentType
-          agentType: agentTypes || permittedTypes ? undefined : agentType,
-          agentTypes: permittedTypes ?? agentTypes,
-          excludeBuiltIn,
-          scope:
-            scope && scope !== "built_in" ? (scope as AgentScope) : undefined,
-          excludeOtherPersonalAgents: isAdmin
-            ? excludeOtherPersonalAgents
-            : undefined,
-          status,
-          includeTools,
-          view,
-        }),
-      );
     },
   );
 

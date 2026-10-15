@@ -102,7 +102,7 @@ for (const width of [1280, 390]) {
             url: "/api/guardrails-deployment",
             body: { enabled: true, featureEnabled: true, active: true },
           },
-          { method: "get", url: "/api/agents/all", body: [agent] },
+          { method: "get", url: "/api/agents", body: { data: [agent] } },
           {
             method: "get",
             url: `/api/chat/agents/${agent.id}/mcp-tools`,

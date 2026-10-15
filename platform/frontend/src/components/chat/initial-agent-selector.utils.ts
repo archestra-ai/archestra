@@ -1,6 +1,6 @@
 import type { archestraApiTypes } from "@archestra/shared";
 
-type InternalAgent = archestraApiTypes.GetAllAgentsResponses["200"][number];
+type InternalAgent = Omit<archestraApiTypes.GetAgentsResponses["200"]["data"][number], "pinnedAt">;
 
 type InitialAgentListItem = Pick<
   InternalAgent,

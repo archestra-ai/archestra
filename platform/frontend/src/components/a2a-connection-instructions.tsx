@@ -53,7 +53,7 @@ import {
 import { useFetchUserTokenValue, useUserToken } from "@/lib/user-token.query";
 import { generateUuid } from "@/lib/uuid";
 
-type InternalAgent = archestraApiTypes.GetAllAgentsResponses["200"][number];
+type InternalAgent = Omit<archestraApiTypes.GetAgentsResponses["200"]["data"][number], "pinnedAt">;
 
 // Special ID for personal token in the dropdown
 const PERSONAL_TOKEN_ID = "__personal_token__";

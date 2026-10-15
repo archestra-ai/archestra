@@ -220,11 +220,11 @@ export function AgentChatAppsEditor({
     isLoadingError: agentNamesLoadingError,
     refetch: refetchAgentNames,
   } = useProfiles({
-    // This resolves existing assignments, including built-in agents.
+    // Resolves only the agents already assigned to this app, by id.
     filters: {
       agentType: "agent",
-      includeTools: false,
-      excludeBuiltIn: false,
+      ids: foreignAgentIds,
+      includeBuiltIn: true,
     },
     enabled: foreignAgentIds.length > 0,
   });

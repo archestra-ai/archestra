@@ -11,6 +11,7 @@ import { SectionNav } from "@/components/section-nav";
 import { useDisableInvitations } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useSecretsType } from "@/lib/secrets.query";
+import { AppearanceSubnav } from "./appearance/_components/appearance-navigation";
 import { MessagingProvidersSubnav } from "./messaging-channels/_components/messaging-providers";
 import { resolveSettingsSection, useSettingsTabs } from "./settings-tabs";
 
@@ -229,7 +230,9 @@ export default function SettingsLayout({
               items={tabs.map((tab) =>
                 tab.href === "/settings/messaging-channels"
                   ? { ...tab, subnav: <MessagingProvidersSubnav /> }
-                  : tab,
+                  : tab.href === "/settings/appearance"
+                    ? { ...tab, subnav: <AppearanceSubnav /> }
+                    : tab,
               )}
               activeHref={sectionHref}
             />

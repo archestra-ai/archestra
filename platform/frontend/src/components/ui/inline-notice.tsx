@@ -112,7 +112,7 @@ export function InlineNoticeText({
   return (
     <div
       data-slot="inline-notice-text"
-      className={cn("min-w-0", className)}
+      className={cn("min-w-0 flex-1", className)}
       {...props}
     />
   );

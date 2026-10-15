@@ -25,7 +25,10 @@ import { useLlmProxy } from "@/lib/llm-proxy.query";
 import { useGatewayToolPreview } from "@/lib/mcp/gateway-tool-preview.query";
 import { useOrganization } from "@/lib/organization.query";
 import { isDeliverablePlugin, usePlugins } from "@/lib/plugins/plugin.query";
-import { type ConnectSkill, useAllSkills } from "@/lib/skills/skill.query";
+import {
+  type ConnectSkill,
+  useSkillsPaginated,
+} from "@/lib/skills/skill.query";
 import {
   type ConnectClient,
   usesGenericInstructions,
@@ -272,9 +275,11 @@ export function useConnectPageData({
     organizationSettings: ["read"],
   });
   const skillsEnabled = org?.connectionSkillsEnabled === true;
-  const { data: skillList } = useAllSkills({
-    enabled: skillsEnabled && canReadSkills === true,
-  });
+  // The card shows a preview, not an eagerly downloaded catalogue.
+  const { data: skillPage } = useSkillsPaginated(
+    { limit: 10, offset: 0, includeContent: false },
+    { enabled: skillsEnabled && canReadSkills === true },
+  );
 
   const llmProxyEnabled = org?.connectionLlmProxyEnabled === true;
   const { data: llmProxy } = useLlmProxy({ enabled: llmProxyEnabled });
@@ -336,7 +341,8 @@ export function useConnectPageData({
         (c): c is ConnectClient => !!c,
       );
 
-  const skills = skillList ?? [];
+  const skills = skillPage?.data ?? [];
+  const totalSkills = skillPage?.pagination.total ?? 0;
   const skillsAvailable = skillsEnabled && skills.length > 0;
   const gateway = profile
     ? { ...profile, slug: profile.slug ?? profile.id }
@@ -423,7 +429,7 @@ export function useConnectPageData({
   useEffect(() => setOrigin(window.location.origin), []);
 
   const footprint: ConnectFootprint = {
-    skillsInstalled: skillsEnabled ? skills.length : 0,
+    skillsInstalled: skillsEnabled ? totalSkills : 0,
   };
 
   return {
@@ -450,7 +456,7 @@ export function useConnectPageData({
     toolPreviewError,
     allServers: accessAll,
     skills,
-    totalSkills: skills.length,
+    totalSkills,
     progressive,
     toolTokens,
     llmProxyEnabled: proxyAvailable,

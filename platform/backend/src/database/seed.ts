@@ -403,8 +403,6 @@ export async function seedArchestraCatalogAndTools(): Promise<void> {
 /** @public — startup reconciliation, exported for behavior tests. */
 export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
   const toolShortNames = [
-    "get_agent",
-    "get_mcp_gateway",
     "get_guardrails_policy",
     "get_openappa_policy_tests",
     "run_openappa_policy_tests",

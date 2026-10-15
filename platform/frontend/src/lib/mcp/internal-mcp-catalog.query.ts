@@ -267,7 +267,6 @@ export function useUpdateInternalMcpCatalogItem() {
       queryClient.invalidateQueries({ queryKey: ["tools"] });
       queryClient.invalidateQueries({ queryKey: ["tools-with-assignments"] });
       queryClient.invalidateQueries({ queryKey: ["agent-tools"] });
-      toast.success("Catalog item updated successfully");
     },
     onError: (error) => {
       // The network-policy error is shown inline on the Server URL field and

@@ -4,11 +4,20 @@ import { AlertTriangle, Loader2 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { DialogStickyFooter } from "@/components/ui/dialog";
+import {
+  InlineNotice,
+  InlineNoticeBody,
+  InlineNoticeText,
+} from "@/components/ui/inline-notice";
+import { WizardFooter } from "@/components/wizard-footer";
 import { cn } from "@/lib/utils/tailwind";
 
 /**
- * Inline confirm surface that replaces the host form's footer when a
- * save would cascade-reinstall installed servers — avoids modal stacking.
+ * Confirm surface that replaces the host form's footer when a save would
+ * cascade-reinstall installed servers — avoids modal stacking. It keeps the
+ * host's own footer (`WizardFooter` on a page, `DialogStickyFooter` in a
+ * dialog) and its button row, and states the consequence in the shared
+ * warning notice above the buttons.
  *
  * `mode` mirrors the backend cascade path: "manual" sets
  * `reinstallRequired: true` (servers stay on old config until the user
@@ -26,6 +35,7 @@ export function ReinstallConfirmBar({
   isSubmitting,
   onCancel,
   onConfirm,
+  layout = "dialog",
   className,
 }: {
   mode: "manual" | "auto" | "rename";
@@ -39,6 +49,8 @@ export function ReinstallConfirmBar({
   isSubmitting: boolean;
   onCancel: () => void;
   onConfirm: () => void | Promise<void>;
+  /** Which footer the host form uses: a full-page wizard or a dialog. */
+  layout?: "page" | "dialog";
   className?: string;
 }) {
   // If Save was clicked while scrolled mid-form, the new footer would
@@ -151,51 +163,67 @@ export function ReinstallConfirmBar({
       </>
     ) : null;
 
+  // The ref sits on the notice: it is the part of the bar that must be read
+  // before confirming, and `WizardFooter` does not forward a ref.
+  const notice = (
+    <InlineNotice ref={barRef} variant="warning">
+      <AlertTriangle />
+      <InlineNoticeBody>
+        <span className="font-medium">{title}</span>
+        <InlineNoticeText>
+          {body}
+          {renameNote}
+        </InlineNoticeText>
+      </InlineNoticeBody>
+    </InlineNotice>
+  );
+
+  const cancelButton = (
+    <Button
+      type="button"
+      variant="outline"
+      size={layout === "page" ? "sm" : "default"}
+      onClick={onCancel}
+      disabled={isSubmitting}
+    >
+      Cancel
+    </Button>
+  );
+  const confirmButton = (
+    <Button
+      type="button"
+      size={layout === "page" ? "sm" : "default"}
+      onClick={() => onConfirm()}
+      disabled={isSubmitting}
+    >
+      {isSubmitting ? (
+        <>
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>Saving…</span>
+        </>
+      ) : (
+        <span>{confirmLabel}</span>
+      )}
+    </Button>
+  );
+
+  if (layout === "page") {
+    return (
+      <WizardFooter notice={notice} className={className}>
+        {cancelButton}
+        {confirmButton}
+      </WizardFooter>
+    );
+  }
+
   return (
     <DialogStickyFooter
-      ref={barRef}
-      // The amber wash colours DialogStickyFooter's tint slot, which sits
-      // above its opaque backdrop. A plain `bg-amber-…/40` here would be
-      // merged *in place of* that backdrop instead, leaving the bar
-      // translucent and its warning unreadable against the form underneath.
-      className={cn(
-        "flex-col items-stretch gap-3 border-t-2 border-amber-500/40 after:bg-amber-100/60 sm:flex-col dark:after:bg-amber-950/40",
-        className,
-      )}
+      className={cn("flex-col items-stretch gap-3 sm:flex-col", className)}
     >
-      <div className="flex items-start gap-3 pr-2 text-sm">
-        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500" />
-        <div className="flex-1 space-y-1 text-foreground/90">
-          <div className="font-semibold text-foreground">{title}</div>
-          <div>
-            {body}
-            {renameNote}
-          </div>
-        </div>
-      </div>
+      {notice}
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onCancel}
-          disabled={isSubmitting}
-        >
-          Cancel
-        </Button>
-        <Button
-          type="button"
-          onClick={() => onConfirm()}
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Saving…
-            </>
-          ) : (
-            confirmLabel
-          )}
-        </Button>
+        {cancelButton}
+        {confirmButton}
       </div>
     </DialogStickyFooter>
   );

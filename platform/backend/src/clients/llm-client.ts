@@ -36,7 +36,6 @@ import {
 
 import { context, propagation } from "@opentelemetry/api";
 import {
-  defaultSettingsMiddleware,
   extractReasoningMiddleware,
   type streamText,
   wrapLanguageModel,
@@ -80,6 +79,7 @@ import { APPA_SUBAGENT_BINDING_HEADER } from "@/openappa/subagent-binding";
 import { ApiError } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
+import { resolveModelOutputBudget } from "@/utils/llm-resolution";
 
 /**
  * Placeholder API key for providers that don't require authentication (vLLM, Ollama).
@@ -611,6 +611,7 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
               // request — see createAnthropicThinkingDisplayFetch.
               fetch: createAnthropicThinkingDisplayFetch(fetch),
             })(modelName),
+        modelName,
       ),
     defaultBaseUrl: config.llm.anthropic.baseUrl,
     apiKeyRequiredMessage: isAnthropicKeylessAuthEnabled()
@@ -1243,20 +1244,32 @@ function createOllamaNativeFetch(
 }
 
 /**
- * Default output budget for Anthropic calls that set no `maxOutputTokens`.
- * Without it @ai-sdk/anthropic falls back to its own per-model table, which
- * lags new model ids: unknown ids get 4096 (older SDKs) or the full 128k
- * (newer ones). Adaptive thinking spends the same budget, so 4096 silently
- * truncates answers. Explicit per-call values still win.
+ * Default output budget for Anthropic calls that set no `maxOutputTokens`,
+ * taken from the model catalog (see resolveModelOutputBudget). Without it
+ * @ai-sdk/anthropic falls back to its own per-model table, which lags new
+ * model ids and Vertex `@` spellings: unknown ids get 4096 (older SDKs, which
+ * adaptive thinking exhausts) or the full 128k (newer ones, which older models
+ * reject). Explicit per-call values still win.
  */
 function withAnthropicOutputBudget(
   model: Parameters<typeof wrapLanguageModel>[0]["model"],
+  modelName: string,
 ): ReturnType<typeof wrapLanguageModel> {
   return wrapLanguageModel({
     model,
-    middleware: defaultSettingsMiddleware({
-      settings: { maxOutputTokens: config.chat.maxOutputTokensCeiling },
-    }),
+    middleware: {
+      specificationVersion: "v3",
+      transformParams: async ({ params }) =>
+        params.maxOutputTokens !== undefined
+          ? params
+          : {
+              ...params,
+              maxOutputTokens: await resolveModelOutputBudget({
+                provider: "anthropic",
+                modelName,
+              }),
+            },
+    },
   });
 }
 

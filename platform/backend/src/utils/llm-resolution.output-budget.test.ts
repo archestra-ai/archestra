@@ -11,6 +11,8 @@ describe("resolveModelOutputBudget", () => {
       modelId: "gpt-4-turbo",
       outputLength: 4_096,
       contextLength: 128_000,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
     });
 
     expect(
@@ -28,6 +30,8 @@ describe("resolveModelOutputBudget", () => {
       modelId: "claude-sonnet-5",
       outputLength: 128_000,
       contextLength: 1_000_000,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
     });
 
     expect(

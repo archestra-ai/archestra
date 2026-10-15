@@ -56,12 +56,9 @@ const {
 } = archestraApiSdk;
 
 /**
- * The roster, without each agent's tools. No consumer of this list reads them
- * — the pickers that show tools fetch them per agent — while the refs carry
- * every tool's name and description, which on an organization of any size is
- * the great majority of the response. Dropping them is what lets the new-chat
- * screen, whose first paint is gated on this list, stop waiting on megabytes
- * it does not draw.
+ * Internal agent metadata for shared list consumers. Tool pickers load each
+ * agent's assignments separately, so keep the embedded tool names and
+ * descriptions out of this response.
  */
 const internalAgentsQuery = {
   agentType: "agent",

@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import { hasScopedPermission } from "@archestra/shared";
 import type { FastifyInstance } from "fastify";
+import { userHasPermission } from "@/auth/utils";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import type { LocalConfig } from "@/types";
 import { ApiError } from "@/types";
@@ -43,6 +44,89 @@ export async function assertCanWriteMcpDeploymentYaml(params: {
   if (!yamlChanged && !envFromChanged && !serviceAccountChanged) return;
 
   await assertCanManageMcpDeployment(params);
+}
+
+/**
+ * The fields that decide what a registry entry runs or where it connects.
+ * The rest (name, icon, description, docs, labels, the default credential,
+ * idle hibernation) describe the entry or how it is used.
+ */
+const MCP_RUNTIME_FIELDS = [
+  "serverType",
+  "serverUrl",
+  "localConfig",
+  "deploymentSpecYaml",
+  "installationCommand",
+  "userConfig",
+  "oauthConfig",
+  "enterpriseManagedConfig",
+  "requiresAuth",
+  "authDescription",
+  "authFields",
+  "environmentId",
+  "multitenant",
+] as const;
+
+/**
+ * Changing what a registry entry runs or connects to takes the right to add
+ * entries to the registry, or the deploy permission on this one. Full access
+ * alone does not carry it: a member made owner of an entry may use, share,
+ * describe and delete it, not swap its image, command or URL. A field sent
+ * with its stored value is no change.
+ */
+export async function assertCanChangeMcpRuntimeConfig(params: {
+  userId: string;
+  organizationId: string;
+  catalogId: string;
+  requested: Partial<Record<(typeof MCP_RUNTIME_FIELDS)[number], unknown>>;
+  current: Partial<Record<(typeof MCP_RUNTIME_FIELDS)[number], unknown>>;
+  /** Secret references stored in a vault, which replace stored values. */
+  requestedVaultReferences?: readonly (string | undefined)[];
+}): Promise<void> {
+  const changed =
+    (params.requestedVaultReferences ?? []).some(
+      (reference) => reference !== undefined,
+    ) ||
+    MCP_RUNTIME_FIELDS.some(
+      (field) =>
+        params.requested[field] !== undefined &&
+        !sameRuntimeValue(
+          field,
+          params.requested[field],
+          params.current[field],
+        ),
+    );
+  if (!changed) return;
+  if (
+    (await userHasPermission(
+      params.userId,
+      params.organizationId,
+      "mcpRegistry",
+      "create",
+    )) ||
+    (await canManageMcpDeployment(params))
+  )
+    return;
+  throw new ApiError(
+    403,
+    "Changing what this MCP server runs or connects to needs permission to add MCP servers to the registry.",
+  );
+}
+
+function sameRuntimeValue(
+  field: (typeof MCP_RUNTIME_FIELDS)[number],
+  requested: unknown,
+  current: unknown,
+): boolean {
+  // The form names the OAuth client after the entry, so a rename alone
+  // rewrites oauthConfig.name without changing where it connects.
+  const comparable = (value: unknown) =>
+    field === "oauthConfig" && value && typeof value === "object"
+      ? { ...(value as Record<string, unknown>), name: undefined }
+      : value;
+  const normalized = (value: unknown) =>
+    JSON.parse(JSON.stringify(comparable(value) ?? null));
+  return isDeepStrictEqual(normalized(requested), normalized(current));
 }
 
 /** Redact stored YAML everywhere it occurs in an authenticated API response,

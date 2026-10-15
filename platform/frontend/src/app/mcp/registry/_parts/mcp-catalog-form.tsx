@@ -207,6 +207,12 @@ interface McpCatalogFormProps {
    * to 0 (no confirm bar — used for create mode and standalone previews).
    */
   affectedServerCount?: number;
+  /**
+   * The editor may describe this server but not change what it runs or where
+   * it connects (a member who owns it). Only its name, icon, description and
+   * labels are shown; the backend refuses the rest.
+   */
+  detailsOnly?: boolean;
 }
 
 export function McpCatalogForm({
@@ -222,6 +228,7 @@ export function McpCatalogForm({
   embedded = false,
   wizardPanel = false,
   affectedServerCount = 0,
+  detailsOnly = false,
 }: McpCatalogFormProps) {
   const localConfigSecretId =
     initialValues?.serverType === "local"
@@ -680,12 +687,17 @@ export function McpCatalogForm({
       }
     }
   }
-  const hasEnvRuleViolations = envRuleViolations.length > 0;
+  // Stored values the environment rejects are for whoever may change the
+  // configuration; they never block someone editing the details alone.
+  const hasEnvRuleViolations = !detailsOnly && envRuleViolations.length > 0;
   const [advancedOpen, setAdvancedOpen] = useState(false);
   useEffect(() => {
     if (hasEnvRuleViolations) setAdvancedOpen(true);
   }, [hasEnvRuleViolations]);
-  const advancedSummary = "Environment and labels";
+  const advancedSummary = detailsOnly ? "Labels" : "Environment and labels";
+  // The configuration stays in the form, so its values and checks are what
+  // they always were; a details-only editor just does not see it.
+  const configurationSectionClass = detailsOnly ? "hidden" : undefined;
   const addHeaderButton = (
     <AddListItemButton
       label="Add Header"
@@ -899,9 +911,19 @@ export function McpCatalogForm({
     // matrix-tested without rendering, and so frontend + backend share
     // the same decision tree shape. See `cascade-decision.ts`.
     if (mode === "edit") {
+      const submitted = transformFormToApiData(values);
       const decision = computeCascadeOutcome(
         (initialValues ?? {}) as CascadeSnapshot,
-        transformFormToApiData(values) as CascadeSnapshot,
+        // A details-only editor sends the details alone, so the rest of the
+        // stored config is what the server keeps: only a rename can matter.
+        (detailsOnly
+          ? {
+              ...initialValues,
+              name: submitted.name,
+              description: submitted.description,
+              icon: submitted.icon,
+            }
+          : submitted) as CascadeSnapshot,
         { affectedServerCount },
       );
       if (decision.mode !== "skip") {
@@ -1065,6 +1087,7 @@ export function McpCatalogForm({
               )}
 
               <SettingsSection
+                className={configurationSectionClass}
                 title={
                   currentServerType === "local" ? "Deployment" : "Connection"
                 }
@@ -1294,6 +1317,7 @@ export function McpCatalogForm({
 
               {currentServerType === "local" && (
                 <SettingsSection
+                  className={configurationSectionClass}
                   title={
                     <>
                       Environment variables
@@ -1334,6 +1358,7 @@ export function McpCatalogForm({
 
               {currentServerType === "local" && (
                 <SettingsSection
+                  className={configurationSectionClass}
                   title="Image pull secrets"
                   description={
                     <>
@@ -1498,6 +1523,7 @@ export function McpCatalogForm({
               {(currentServerType === "remote" ||
                 (currentServerType === "local" && isMultitenant)) && (
                 <SettingsSection
+                  className={configurationSectionClass}
                   title={
                     <>
                       Authentication
@@ -2270,6 +2296,7 @@ export function McpCatalogForm({
                 (currentServerType === "local" &&
                   currentTransportType === "streamable-http")) && (
                 <SettingsSection
+                  className={configurationSectionClass}
                   title={
                     <>
                       Headers
@@ -2347,6 +2374,7 @@ export function McpCatalogForm({
                 <CollapsibleContent>
                   <SettingsSectionGroup className="border-t pt-8">
                     <SettingsSection
+                      className={configurationSectionClass}
                       title="Environment"
                       description="Where this server runs and which resources it can reach."
                     >

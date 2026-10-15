@@ -306653,6 +306653,15 @@
           },
           {
             "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "includeAssignedAgents",
+            "required": false,
+            "description": "Include per-install agent usage (default true). False returns empty assignedAgents for status-only lists."
+          },
+          {
+            "schema": {
               "type": "string",
               "enum": [
                 "personal",
@@ -412531,6 +412540,15 @@
             "in": "query",
             "name": "offset",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "includeContent",
+            "required": false,
+            "description": "Include manifest bodies (default true). False returns empty content for lightweight lists."
           },
           {
             "schema": {

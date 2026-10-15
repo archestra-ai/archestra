@@ -130,7 +130,8 @@ test("large stable upgrade, concurrent replicas, interrupted owner, and restart 
       );
     });
   });
-  const { __setTestDb } = await import("../src/database/index.ts");
+  process.env.ARCHESTRA_DATABASE_URL = connectionString;
+    const { __setTestDb } = await import("../src/database/index.ts");
   resetDb = __setTestDb;
   __setTestDb(drizzle(pool));
   const { sql } = await import("drizzle-orm");

@@ -28,6 +28,52 @@ const PUBLISH_TO_ORGANIZATION = [
 describe("GET /api/skills", () => {
   const ctx = useSkillRouteTestApp(skillRoutes);
 
+  test("compact lists omit manifest bodies while preserving visibility and counts", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: MEMBER_ROLE_NAME,
+    });
+    const visible = await seedImportedSkill({
+      organizationId: ctx.organizationId,
+      name: "visible-manifest",
+      sourceRef: "example/skills@main:skills/visible",
+      access: "org",
+    });
+    const owner = await makeUser();
+    await seedImportedSkill({
+      organizationId: ctx.organizationId,
+      authorId: owner.id,
+      name: "private-manifest",
+      sourceRef: "example/skills@main:skills/private",
+      access: "personal",
+    });
+    const full = await ctx.app.inject({ method: "GET", url: "/api/skills" });
+    const compact = await ctx.app.inject({
+      method: "GET",
+      url: "/api/skills?includeContent=false",
+    });
+    expect(full.statusCode, full.body).toBe(200);
+    expect(compact.statusCode, compact.body).toBe(200);
+    expect(full.json().data).toHaveLength(1);
+    expect(full.json().data[0]).toMatchObject({
+      id: visible.id,
+      content: "# visible-manifest",
+    });
+    expect(compact.json()).toEqual({
+      ...full.json(),
+      data: full
+        .json()
+        .data.map((skill: { content: string }) => ({ ...skill, content: "" })),
+    });
+    const explicit = await ctx.app.inject({
+      method: "GET",
+      url: "/api/skills?includeContent=true",
+    });
+    expect(explicit.json()).toEqual(full.json());
+  });
+
   test("skillIds filters exact accessible rows before pagination and counting", async ({
     makeMember,
     makeOrganization,

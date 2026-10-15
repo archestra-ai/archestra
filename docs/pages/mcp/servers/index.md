@@ -47,5 +47,5 @@ A teammate's sign-in expired but yours works? You are not asked to sign in again
 ## What to Know
 
 - Remote or self-hosted? Pick remote when someone already runs the server. Pick self-hosted when Archestra should run it, hold its secrets, and show its logs.
-- New tools on a server? A server that announces a tool change while connected is re-synced automatically. Otherwise, open it, go to **Inspector**, and click **Refresh Tools**. To refresh on a schedule, set [`ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES`](/docs/reference/configuration#ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES).
+- New tools on a server? Open it, go to **Inspector**, and click **Refresh Tools**. To refresh on a schedule, set [`ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES`](/docs/reference/configuration#ARCHESTRA_MCP_SERVER_TOOLS_REFRESH_INTERVAL_MINUTES).
 - **Renaming a server** renames its tools too, such as `reports__export`. Assignments and policies stay. Clients must reload their tool list.

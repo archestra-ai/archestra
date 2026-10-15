@@ -2,7 +2,7 @@
 title: Connect Your Agents
 description: Connect your AI client to Archestra's tools, models, and shared skills
 order: 2
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -75,6 +75,7 @@ Some clients need one more step. The installer prints any other steps under **Go
 ## After Setup
 
 - **Launch check:** setup adds a block to your shell profile. Each time Claude Code, Codex, Copilot CLI, OpenCode, or Kilo Code starts, it checks the connection. Press `C` there to disconnect. To turn it off, set `ARCHESTRA_CLAUDE_GUARD=0`, `ARCHESTRA_CODEX_GUARD=0`, `ARCHESTRA_COPILOT_GUARD=0`, `ARCHESTRA_OPENCODE_GUARD=0`, or `ARCHESTRA_KILO_GUARD=0`.
+- **Startup check updates:** each launch also checks whether your installed startup check is older than the deployment. If an update is available, it shows why and how to rerun setup, then continues after six seconds. Press any key to continue sooner.
 - **Backups:** setup saves each config file it changes as a `.archestra-backup` file next to the original.
 - **Automatic client helpers:** approved OpenCode and Kilo Code setup installs an update loader for the managed launcher helper and routing plugin, using Node.js 18 or newer. Before launch or plugin activation, it refreshes verified code from your connected Archestra deployment over HTTPS and loads that code in the same process. Concurrent starts share a download check for 30 seconds. Failed or offline downloads keep the verified cached code. These updates do not upgrade the client CLI, rerun installation, issue new provider keys, or replace your original backups.
 - **Duplicate gateways:** the launcher and plugin repair equivalent, enabled registrations before tools bind. They match the exact gateway URL, preserve JSONC comments and authentication settings, and leave deliberately disabled or disconnected bindings disabled. Conflicting connection settings stop repair rather than choose credentials for you.

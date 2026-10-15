@@ -14256,8 +14256,10 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     expect(unprepared.statusCode, unprepared.body).toBe(200);
     expect(unprepared.body).toContain("context_control");
     expect(unprepared.json().output[0].type).toBe("message");
-    expect(unprepared.body).toContain("Send your message again");
-    expect(unprepared.body).not.toContain("Connect the MCP gateway");
+    // OpenCode loads its MCP servers before its first request, so a resend
+    // would meet the same refusal: the hint names the sign-in at once.
+    expect(unprepared.body).toContain("Run opencode mcp auth");
+    expect(unprepared.body).not.toContain("Send your message again");
     expect(events).toContainEqual(
       expect.objectContaining({
         event: "cancel_call",
@@ -14270,7 +14272,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     expect(repeated.statusCode, repeated.body).toBe(200);
     expect(repeated.body).toContain("context_control");
     expect(repeated.json().output[0].type).toBe("message");
-    expect(repeated.body).toContain("Connect the MCP gateway");
+    expect(repeated.body).toContain("Run opencode mcp auth");
     expect(repeated.body).not.toContain("Send your message again");
     expect(events).toContainEqual(
       expect.objectContaining({

@@ -452,8 +452,10 @@ function CatalogItemDetails({
 
   // A member's view lists only their own installation, and a person has at
   // most one personal installation per server: the heading names one, and a
-  // count could only read 0 or 1.
-  const connectionsCount = isMemberView ? 0 : allServersForCatalog.length;
+  // count could only read 0 or 1, so it shows none.
+  const connectionsCount = isMemberView
+    ? undefined
+    : allServersForCatalog.length;
   const connectionsTitle =
     variant !== "local"
       ? "Credentials"
@@ -1206,11 +1208,11 @@ function ItemPageSkeleton() {
  * mobile row and possibly an overflow popover, so a test id on the label
  * resolves to several elements at once.
  */
-function TabLabel({ title, count }: { title: string; count: number }) {
+function TabLabel({ title, count }: { title: string; count?: number }) {
   return (
     <span className="flex items-center gap-1">
       <span>{title}</span>
-      {count > 0 && (
+      {count !== undefined && count > 0 && (
         <span className="text-xs text-muted-foreground tabular-nums">
           {count}
         </span>

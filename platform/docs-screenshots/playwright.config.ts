@@ -21,6 +21,7 @@ export default defineConfig({
     contextOptions: { reducedMotion: "reduce" },
   },
   projects: [
+    { name: "determinism", testMatch: /determinism\.spec\.ts/ },
     { name: "seed", testMatch: /seed\.setup\.ts/ },
     {
       name: "capture",

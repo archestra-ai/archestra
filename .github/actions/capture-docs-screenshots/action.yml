@@ -17,6 +17,11 @@ runs:
       shell: bash
       run: pnpm --filter @archestra/docs-screenshots exec playwright install --with-deps chromium
 
+    - name: Check screenshot determinism helpers
+      working-directory: ./platform
+      shell: bash
+      run: pnpm --filter @archestra/docs-screenshots exec playwright test --project=determinism
+
     # Reuses the platform image CI built for this tree when there is one,
     # otherwise builds it. The docs show beta features (Plugins, OpenAPPA),
     # whose routes 404 unless the beta master switch is on, and Agent

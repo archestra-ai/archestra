@@ -80,7 +80,7 @@ Replace the example revision and IDs with values from your policy and service ac
 What to know:
 
 - Use a service account ID, never an API-key ID.
-- For an item, you need **Manage access** and can delegate only actions you hold. Reading a `*` policy needs [`accessPolicies:read`](/docs/reference/permissions#accessPolicies:read); updating it needs [`accessPolicies:update`](/docs/reference/permissions#accessPolicies:update).
+- For an item, you need **Manage access** and can delegate only actions you hold. [Recipient restrictions](/docs/admin/access-control#granular-access-control) also apply. Reading a `*` policy needs [`accessPolicies:read`](/docs/reference/permissions#accessPolicies:read); updating it needs [`accessPolicies:update`](/docs/reference/permissions#accessPolicies:update).
 - A concurrent save changes the revision. Read again and reconcile; do not retry with an invented revision.
 
 ## Endpoints

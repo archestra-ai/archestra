@@ -2,7 +2,7 @@
 title: Self-Hosted Servers
 description: Run MCP server processes in Kubernetes and manage their runtime
 order: 4
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -29,6 +29,7 @@ Pull from a private registry, add memory, or mount a volume, from the server's E
 - **Private image:** add an image pull secret, or the registry's credentials.
 - **Image pull policy:** `:latest` and untagged images pull on every restart, so a restart runs the newest push. Pinned tags reuse the node's copy, so pods start while the registry is down. Override either per server.
 - **Memory, CPU, volumes, or node rules:** edit the **K8s YAML** tab. You need **Full access + deploy** on the server.
+- **Who can change it:** the image, command, URL, and authentication take [`mcpRegistry:create`](/docs/reference/permissions#mcpRegistry:create) or **Full access + deploy**. With update access alone, you can edit the name, icon, description, and labels.
 - A credential on each call, such as the caller's [identity provider token](/docs/mcp/authentication/servers#identity-provider-token-exchange): set **Transport** to **streamable-http**. A **stdio** server gets credentials only at start.
 
 <span id="logs-and-recovery"></span>
@@ -43,7 +44,7 @@ Find the symptom, then open the server in MCP Registry to fix it. Its **Logs**, 
 | **Starting**, for minutes | The image does not pull, or the cluster has no room. Archestra keeps trying. Check the image name and the pull secret. |
 | Wrong or missing tools | Open **Inspector**, click **Refresh Tools**, and call one tool to test it. |
 | An old version after you pushed a new image to the same tag | Open **⋯** and click **Restart pods with a fresh image**. Set **Image pull policy** to **Always** so later restarts pull it too. |
-| None of these | Open **Shell** for a terminal inside the pod. |
+| None of these | Open **Shell** for a terminal inside the pod. It takes [`mcpServerInstallation:update`](/docs/reference/permissions#mcpServerInstallation:update). |
 
 <span id="idle-hibernation"></span>
 

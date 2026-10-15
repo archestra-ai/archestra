@@ -45,6 +45,8 @@ Share one item through its **Permissions** control. Granular access control is a
 3. Choose a permission level for each recipient.
 4. Save and confirm the recipient has the intended level.
 
+Sharing with everyone, a role, or a team you do not belong to requires **Full access** on every resource of that kind, or [`accessPolicies:update`](/docs/reference/permissions#accessPolicies:update). Admin and Platform Admin have this authority for every kind by default; Editor has it for models and credentials. Without it, you can add people and your own teams, and retain, reduce, or remove existing grants. Adding a service account also requires [`serviceAccount:read`](/docs/reference/permissions#serviceAccount:read).
+
 For every current and future item of a kind, use **Permissions** beside **Create** or **Add** on its list. Viewing these organization-wide policies requires [`accessPolicies:read`](/docs/reference/permissions#accessPolicies:read); editing requires [`accessPolicies:update`](/docs/reference/permissions#accessPolicies:update). Sharing one item requires **Manage access** on that item.
 
 <span id="actions-and-scopes"></span>
@@ -56,7 +58,7 @@ For every current and future item of a kind, use **Permissions** beside **Create
 | **Can update** | Change its configuration. |
 | **Full access** | Delete it and manage other recipients' access. |
 
-OAuth clients have no **Can use** level. MCP registry entries also offer **Full access + deploy** for deployment specifications, service accounts, and secret sources; ordinary **Full access** excludes these changes.
+OAuth clients have no **Can use** level. MCP registry entries also offer **Full access + deploy** for deployment specifications, service accounts, and secret sources; ordinary **Full access** excludes these changes. Changing an entry's image, command, URL, or authentication requires **Full access + deploy** or [`mcpRegistry:create`](/docs/reference/permissions#mcpRegistry:create), alongside update access to the entry.
 
 What to know:
 
@@ -74,7 +76,7 @@ The item's badge summarizes its own read grants, so you can distinguish personal
 | **Team-wide** | A team, without an organization or role grant. |
 | **Personal** | Only people or service accounts. |
 
-Organization-wide policies covering every item do not affect this badge.
+Organization-wide policies covering every item do not affect this badge. Chat and agent-run owners can share their sessions with anyone, including everyone in the organization, without the organization-wide sharing authority above.
 
 ### Find Resources by Access
 

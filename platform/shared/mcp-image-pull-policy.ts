@@ -25,11 +25,11 @@ export function getDefaultMcpImagePullPolicy(
   return usesMutableImageTag(dockerImage) ? "Always" : "IfNotPresent";
 }
 
-// ===
-// Internal helpers
-// ===
-
-function usesMutableImageTag(dockerImage: string): boolean {
+/**
+ * Whether the image reference names a tag the registry can move: `:latest`
+ * or no tag at all. Digest references and any other tag are pinned.
+ */
+export function usesMutableImageTag(dockerImage: string): boolean {
   if (dockerImage.includes("@")) return false;
   // Only the last path segment can carry a tag; an earlier colon is a
   // registry port (`registry.example.com:5000/team/server`).

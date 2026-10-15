@@ -3625,7 +3625,7 @@ describe("publish_app", () => {
     });
   });
 
-  test("a creator with full access can publish their app to the organization", async ({
+  test("a creator with full access to every app can publish their app to the organization", async ({
     makeAgent,
     makeUser,
     makeMember,
@@ -3633,7 +3633,7 @@ describe("publish_app", () => {
   }) => {
     const agent = await makeAgent({ name: "Publish Member" });
     const user = await makeUser();
-    await makeMember(user.id, agent.organizationId, { role: "member" });
+    await makeMember(user.id, agent.organizationId, { role: ADMIN_ROLE_NAME });
     const app = await makeApp({
       organizationId: agent.organizationId,
       access: "personal",
@@ -3650,6 +3650,34 @@ describe("publish_app", () => {
     // The creator's full access lets them publish; the app's scope, read
     // from its grants, is now `org`.
     expect((await AppModel.findById(app.id))?.scope).toBe("org");
+  });
+
+  test("a member cannot publish their own app to the organization", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeApp,
+  }) => {
+    const agent = await makeAgent({ name: "Publish Refused" });
+    const user = await makeUser();
+    await makeMember(user.id, agent.organizationId, { role: "member" });
+    const app = await makeApp({
+      organizationId: agent.organizationId,
+      access: "personal",
+      authorId: user.id,
+    });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      organizationId: agent.organizationId,
+      userId: user.id,
+    };
+
+    const result = await publish({ appId: app.id, scope: "org" }, context);
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text: string }).text).toContain(
+      "Only someone with Full access to every app",
+    );
+    expect((await AppModel.findById(app.id))?.scope).toBe("personal");
   });
 
   test("publishing to a team requires teams", async ({

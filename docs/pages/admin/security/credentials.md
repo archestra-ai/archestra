@@ -50,7 +50,7 @@ Use **Permissions** beside **Add credential** to grant access to every credentia
 | **Can update** | Also change its details and organization value. |
 | **Full access** | Also delete it and manage recipients. |
 
-Opening Credentials requires [`credential:read`](/docs/reference/permissions#credential:read); adding one requires [`credential:create`](/docs/reference/permissions#credential:create). The creator gets Full access. New definitions grant everyone **Can use**; remove that grant for a team-only credential.
+Opening Credentials requires [`credential:read`](/docs/reference/permissions#credential:read); adding one requires [`credential:create`](/docs/reference/permissions#credential:create). The creator gets Full access. New definitions grant everyone **Can use** only when their creator has [organization-wide sharing authority](/docs/admin/access-control#granular-access-control); otherwise they start with the creator alone. Remove the Everyone grant for a team-only credential. Admin and Platform Admin have Full access to all credentials by default, as does Editor.
 
 An attached organization value works for anyone who can use the server or agent. A personal value additionally requires **Can use** on the credential. Without that access, installation is disabled or chat reports missing credential access. See [Granular Access Control](/docs/admin/access-control#granular-access-control).
 

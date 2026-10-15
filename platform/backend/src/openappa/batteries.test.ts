@@ -142,6 +142,7 @@ describe("composing an organization's declarations", () => {
         installFingerprint: "cached-before-default-update",
         error: null,
         served: null,
+        retainedAnnotators: null,
       },
     });
 
@@ -184,6 +185,7 @@ describe("composing an organization's declarations", () => {
           installFingerprint: initial.installFingerprint.replace(/^v\d+:/, ""),
           error: null,
           served: null,
+          retainedAnnotators: null,
         },
       });
 

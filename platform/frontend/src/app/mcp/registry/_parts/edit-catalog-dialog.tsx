@@ -14,7 +14,10 @@ import {
   useUpdateInternalMcpCatalogItem,
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
-import { useCanModifyCatalogItem } from "./catalog-edit-access";
+import {
+  useCanChangeCatalogRuntime,
+  useCanModifyCatalogItem,
+} from "./catalog-edit-access";
 import { McpCatalogForm } from "./mcp-catalog-form";
 import type { McpCatalogFormValues } from "./mcp-catalog-form.types";
 import { transformFormToApiData } from "./mcp-catalog-form.utils";
@@ -93,6 +96,9 @@ export function EditCatalogContent({
   // item.
   const { canModify: canEdit, isLoading: canEditLoading } =
     useCanModifyCatalogItem(item);
+  const { canChangeRuntime, isLoading: runtimeAccessLoading } =
+    useCanChangeCatalogRuntime(item.id);
+  const detailsOnly = !canChangeRuntime;
   const updateMutation = useUpdateInternalMcpCatalogItem();
 
   // Image-approval banner: an admin reviews this config and approves the
@@ -117,11 +123,21 @@ export function EditCatalogContent({
   ) => {
     const { multitenant: _multitenant, ...updateData } =
       transformFormToApiData(values);
+    // Someone who may not change what the server runs sends its details
+    // alone, so nothing the form fills in reads as a change to the rest.
+    const data = detailsOnly
+      ? {
+          name: updateData.name,
+          description: updateData.description,
+          icon: updateData.icon,
+          labels: updateData.labels,
+        }
+      : updateData;
 
     // Callback form so the dialog only closes on success; on a validation
     // error it stays open for correction.
     updateMutation.mutate(
-      { id: item.id, data: updateData },
+      { id: item.id, data },
       {
         onSuccess: () => {
           onSaved?.();
@@ -161,7 +177,7 @@ export function EditCatalogContent({
     );
   };
 
-  if (canEditLoading) {
+  if (canEditLoading || runtimeAccessLoading) {
     return <CatalogEditLoading />;
   }
   if (!canEdit) {
@@ -204,6 +220,7 @@ export function EditCatalogContent({
         onDirtyChange={onDirtyChange}
         submitRef={submitRef}
         affectedServerCount={affectedServerCount}
+        detailsOnly={detailsOnly}
         footer={({ isDirty, onReset, hasBlockingErrors }) => {
           if (footer) {
             return footer({

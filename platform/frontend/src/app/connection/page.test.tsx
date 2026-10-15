@@ -30,9 +30,9 @@ import {
   vi,
 } from "vitest";
 import {
+  useAgentOptions,
   useDefaultMcpGateway,
   useProfile,
-  useProfiles,
 } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConfig } from "@/lib/config/config.query";
@@ -178,9 +178,9 @@ beforeEach(() => {
   vi.mocked(useAllCatalogTools).mockReturnValue({
     data: undefined,
   } as ReturnType<typeof useAllCatalogTools>);
-  vi.mocked(useProfiles).mockReturnValue({
+  vi.mocked(useAgentOptions).mockReturnValue({
     data: [],
-  } as unknown as ReturnType<typeof useProfiles>);
+  } as unknown as ReturnType<typeof useAgentOptions>);
   vi.mocked(useConfig).mockReturnValue({
     data: undefined,
   } as ReturnType<typeof useConfig>);
@@ -1107,10 +1107,10 @@ describe("ConnectPage gateway pick", () => {
     vi.mocked(useDefaultMcpGateway).mockReturnValue({
       data: gateways[0],
     } as unknown as ReturnType<typeof useDefaultMcpGateway>);
-    vi.mocked(useProfiles).mockReturnValue({
+    vi.mocked(useAgentOptions).mockReturnValue({
       data: gateways,
       isPending: false,
-    } as unknown as ReturnType<typeof useProfiles>);
+    } as unknown as ReturnType<typeof useAgentOptions>);
     vi.mocked(useProfile).mockImplementation(
       (id) =>
         ({

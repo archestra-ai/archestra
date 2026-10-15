@@ -17,7 +17,7 @@ import {
 } from "@archestra/shared/connection-setup";
 import { useEffect, useMemo, useState } from "react";
 import type { AgentSelectorAgent } from "@/components/agent-selector";
-import { useDefaultMcpGateway, useProfiles } from "@/lib/agent.query";
+import { useAgentOptions, useDefaultMcpGateway } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -247,11 +247,10 @@ export function useConnectPageData({
   const defaultGatewayId =
     org?.connectionDefaultMcpGatewayId ?? defaultGateway?.id ?? null;
   // The same list the browser approval offers.
-  const { data: gatewayList, isPending: gatewaysPending } = useProfiles({
+  const { data: gatewayList, isPending: gatewaysPending } = useAgentOptions({
     filters: {
       agentTypes: ["profile", "mcp_gateway"],
       excludeOtherPersonalAgents: true,
-      includeTools: false,
     },
     enabled: canReadGateways === true,
   });

@@ -13,7 +13,7 @@ const {
   mockDeleteMutate,
   mockUseConversations,
   mockUseMyAgentRuns,
-  mockUseProfiles,
+  mockUseAgentOptions,
   mockUseInternalMcpCatalog,
   mockUseSkillsList,
 } = vi.hoisted(() => ({
@@ -21,7 +21,7 @@ const {
   mockDeleteMutate: vi.fn(),
   mockUseConversations: vi.fn(),
   mockUseMyAgentRuns: vi.fn(),
-  mockUseProfiles: vi.fn(),
+  mockUseAgentOptions: vi.fn(),
   mockUseInternalMcpCatalog: vi.fn(),
   mockUseSkillsList: vi.fn(),
 }));
@@ -68,7 +68,7 @@ vi.mock("@/lib/agent-runtime.query", () => ({
 }));
 
 vi.mock("@/lib/agent.query", () => ({
-  useProfiles: mockUseProfiles,
+  useAgentOptions: mockUseAgentOptions,
 }));
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
@@ -226,7 +226,7 @@ describe("ConversationSearchPalette", () => {
       data: [],
       isLoading: false,
     });
-    mockUseProfiles.mockReturnValue({ data: [] });
+    mockUseAgentOptions.mockReturnValue({ data: [] });
     mockUseInternalMcpCatalog.mockReturnValue({ data: [] });
     mockUseSkillsList.mockReturnValue({ data: [] });
     capturedOnValueChange = null;
@@ -477,7 +477,7 @@ describe("ConversationSearchPalette", () => {
 
   describe("searching by name", () => {
     it("finds an agent by its name and opens it", () => {
-      mockUseProfiles.mockReturnValue({
+      mockUseAgentOptions.mockReturnValue({
         data: [{ id: "agent-1", name: "Support Triage" }],
       });
       render(<ConversationSearchPalette {...defaultProps} />);
@@ -545,18 +545,18 @@ describe("ConversationSearchPalette", () => {
             isLoading: false,
           }) as ReturnType<typeof useHasPermissions>,
       );
-      mockUseProfiles.mockReturnValue({
+      mockUseAgentOptions.mockReturnValue({
         data: [{ id: "agent-1", name: "Support Triage" }],
       });
       render(<ConversationSearchPalette {...defaultProps} />);
 
-      expect(mockUseProfiles).toHaveBeenLastCalledWith(
+      expect(mockUseAgentOptions).toHaveBeenLastCalledWith(
         expect.objectContaining({ enabled: false }),
       );
     });
 
     it("does not report nothing found when an agent matches", () => {
-      mockUseProfiles.mockReturnValue({
+      mockUseAgentOptions.mockReturnValue({
         data: [{ id: "agent-1", name: "Support Triage" }],
       });
       render(<ConversationSearchPalette {...defaultProps} />);

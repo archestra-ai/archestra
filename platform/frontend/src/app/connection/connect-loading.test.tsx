@@ -6,7 +6,6 @@ import { setupServer } from "msw/node";
 import type { ReactNode } from "react";
 import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
 import { useAgentOptions, useProfiles } from "@/lib/agent.query";
-import { useGatewayToolPreview } from "@/lib/mcp/gateway-tool-preview.query";
 import { fetchAllSkills } from "@/lib/skills/skill.query";
 import { useGatewayServers } from "./use-gateway-servers";
 

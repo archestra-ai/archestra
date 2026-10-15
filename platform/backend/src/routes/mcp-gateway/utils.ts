@@ -18,6 +18,7 @@ import {
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_CANCEL_RUN_SHORT_NAME,
   TOOL_COPY_FILE_SHORT_NAME,
+  TOOL_CREATE_SCHEDULE_TRIGGER_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_GET_RUN_SHORT_NAME,
@@ -2909,14 +2910,6 @@ async function buildSearchToolsDescription(params: {
   )
     ? `For requests such as "hand this work over to ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}" or "spin this up in ${sanitizeAppNameForToolMetadata(archestraMcpBranding.appName)}", discover Agent Runtime tools here and load the Agent Runtime Handoff skill before transferring work. Discover an agent with list_agents; use start_run only when this work has no runtime session. Otherwise steer_run reuses its saved session. "Bring it back" or "resume locally" means retrieve changes and context, stop remote editing, and continue in the local client.`
     : null;
-  const baseDescription = [
-    searchTool.description,
-    knowledgeInstruction,
-    runtimeInstruction,
-  ]
-    .filter(Boolean)
-    .join(" ");
-
   // Mirror search_tools' actual search space: the catalogs backing the
   // assigned tools, widened by the dynamically discoverable ones when the
   // agent's "access all tools" setting is on (getUnassignedDiscoverableTools
@@ -2928,6 +2921,36 @@ async function buildSearchToolsDescription(params: {
     organizationId,
     lookups,
   });
+
+  const schedulingToolName = archestraMcpBranding.getToolName(
+    TOOL_CREATE_SCHEDULE_TRIGGER_SHORT_NAME,
+  );
+  const schedulingSearchable = [...mcpTools, ...discoverableTools].some(
+    (tool) =>
+      tool.catalogId === ARCHESTRA_MCP_CATALOG_ID &&
+      tool.name === schedulingToolName,
+  );
+  const schedulingPermitted =
+    schedulingSearchable &&
+    (
+      await filterToolNamesByPermission(
+        [schedulingToolName],
+        userId,
+        organizationId,
+        lookups,
+      )
+    ).has(schedulingToolName);
+  const schedulingInstruction = schedulingPermitted
+    ? 'To schedule this agent or recurring work, search for "schedule agent". The scheduling tool can create a private project and save the task as instructions when project_id is omitted (requires project:create).'
+    : null;
+  const baseDescription = [
+    searchTool.description,
+    knowledgeInstruction,
+    runtimeInstruction,
+    schedulingInstruction,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   const catalogIds = [
     ...new Set(

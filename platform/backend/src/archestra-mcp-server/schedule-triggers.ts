@@ -20,7 +20,7 @@ import { projectService } from "@/services/project";
 import {
   findAccessibleScheduleTriggerOrThrow,
   findAccessibleScheduleTriggerRunOrThrow,
-  isScheduledTaskAdmin,
+  hasProjectScheduleOversight,
   startManualScheduleTriggerRun,
 } from "@/services/schedule-trigger-access";
 import {
@@ -183,7 +183,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_CREATE_SCHEDULE_TRIGGER_SHORT_NAME,
     title: "Create Scheduled Task",
     description:
-      "Schedule an agent from chat, Slack, or Teams. Omit project_id to create a private project named after the task, with message_template as its instructions; agent_id defaults to the current agent. Retry with the same name and task arguments to reuse the schedule. For an existing project, pass its id from list_projects; agent_id defaults to that project's agent, then the organization default. Runs as you. Creating a project also requires project:create.",
+      "Schedule an agent from chat, Slack, or Teams. Omit project_id to create a private project named after the task, with message_template as its instructions; agent_id defaults to the current agent. Retry with the same name and task arguments to reuse the schedule. For an existing project, pass its id from list_projects; agent_id defaults to that project's agent, then the organization default. Runs as you. Requires project:create.",
     schema: ScheduleFieldsSchema.extend({
       project_id: ScheduleFieldsSchema.shape.project_id
         .optional()
@@ -240,7 +240,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_UPDATE_SCHEDULE_TRIGGER_SHORT_NAME,
     title: "Update Scheduled Task",
     description:
-      "Edit a scheduled task. Only its actor or a scheduled-task administrator may edit it. Omitted fields retain their values.",
+      "Edit a scheduled task. Only its actor or someone with organization-wide Projects update access may edit it. Omitted fields retain their values.",
     schema: ScheduleFieldsSchema.partial()
       .extend({ schedule_trigger_id: z.string().uuid() })
       .strict(),
@@ -267,7 +267,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_DELETE_SCHEDULE_TRIGGER_SHORT_NAME,
     title: "Delete Scheduled Task",
     description:
-      "Delete a scheduled task and its run history. Only its actor or a scheduled-task administrator may delete it.",
+      "Delete a scheduled task and its run history. Only its actor or someone with organization-wide Projects delete access may delete it.",
     schema: z.object({ schedule_trigger_id: z.string().uuid() }).strict(),
     outputSchema: z.object({ success: z.boolean() }),
     async handler({ args, context }) {
@@ -277,7 +277,7 @@ const registry = defineArchestraTools([
         const trigger = await findAccessibleScheduleTriggerOrThrow({
           ...identity,
           id: args.schedule_trigger_id,
-          access: "mutate",
+          access: "delete",
         });
         const success = await ScheduleTriggerModel.delete(trigger.id);
         if (!success) throw new ApiError(404, "Schedule trigger not found");
@@ -295,7 +295,7 @@ const registry = defineArchestraTools([
       "one runs, its cron expression and timezone, whether it is enabled, and " +
       "when it last fired. Use run history to investigate missed or failed runs. Defaults to the caller's own schedules; pass project_id " +
       "for a project's schedules, or include_all_users to sweep the whole " +
-      "organization (requires organization-wide scheduled-task access).",
+      "organization (requires organization-wide project access).",
     schema: z
       .object({
         project_id: z
@@ -320,7 +320,7 @@ const registry = defineArchestraTools([
           .optional()
           .describe(
             "Include other members' schedules. Ignored unless the caller holds " +
-              "organization-wide scheduled-task access.",
+              "organization-wide project access.",
           ),
         limit: LimitSchema,
         cursor: CursorQuerySchema.shape.cursor.describe(
@@ -350,7 +350,7 @@ const registry = defineArchestraTools([
           actorUserId = undefined;
         } else if (
           args.include_all_users &&
-          (await isScheduledTaskAdmin({ userId, organizationId }))
+          (await hasProjectScheduleOversight({ userId, organizationId }))
         ) {
           actorUserId = undefined;
         }
@@ -556,7 +556,7 @@ const registry = defineArchestraTools([
     description:
       "Disable a scheduled task so it stops firing, leaving its configuration " +
       "and run history intact. Only the user the schedule runs as, or someone " +
-      "with organization-wide scheduled-task access, may change it.",
+      "with organization-wide Projects update access, may change it.",
     schema: z
       .object({
         schedule_trigger_id: z
@@ -578,7 +578,7 @@ const registry = defineArchestraTools([
       "is queued and returns straight away with status `running` — poll " +
       "get_schedule_trigger_run for the outcome. The run executes as the user " +
       "the schedule is configured to act as, so only that user or someone with " +
-      "organization-wide scheduled-task access may start it.",
+      "organization-wide Projects use access may start it.",
     schema: z
       .object({
         schedule_trigger_id: z
@@ -597,7 +597,7 @@ const registry = defineArchestraTools([
           id: args.schedule_trigger_id,
           userId: identity.userId,
           organizationId: identity.organizationId,
-          access: "mutate",
+          access: "use",
         });
         const run = await startManualScheduleTriggerRun({
           trigger,
@@ -667,7 +667,7 @@ async function setEnabled(params: {
       id: params.args.schedule_trigger_id,
       userId: identity.userId,
       organizationId: identity.organizationId,
-      access: "mutate",
+      access: "update",
     });
     const updated = await ScheduleTriggerModel.update(trigger.id, {
       enabled: params.enabled,

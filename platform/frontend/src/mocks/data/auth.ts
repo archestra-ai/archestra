@@ -96,7 +96,6 @@ export function makeUserPermissions(
     accessPolicies: ["read", "update"],
     ac: [...ALL],
     identityProvider: [...ALL],
-    scheduledTask: [...ALL],
     ...overrides,
   };
 }
@@ -132,7 +131,6 @@ export const adminScopedCapabilitiesSeed: archestraApiTypes.GetScopedCapabilitie
     "environment",
     "serviceAccount",
     "credential",
-    "scheduledTask",
   ].flatMap((resource) =>
     (["read", "use", "update", "delete", "manage-permissions"] as const).map(
       (action) => ({ resource, scope: "*", action }),

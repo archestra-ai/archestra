@@ -260,7 +260,7 @@ describe("schedule trigger MCP tools", () => {
     ).toMatchObject({ projectId: null });
   });
 
-  test("requires project:create only when making a new project", async ({
+  test("uses project:create for schedules in both new and existing projects", async ({
     makeCustomRole,
   }) => {
     const project = await projectService.create({
@@ -277,7 +277,7 @@ describe("schedule trigger MCP tools", () => {
       content: "Keep existing instructions.",
     });
     const role = await makeCustomRole(organizationId, {
-      permission: { scheduledTask: ["create"] },
+      permission: { project: ["read"] },
     });
     await MemberModel.updateRole(userId, organizationId, role.role);
     const args = {
@@ -293,6 +293,22 @@ describe("schedule trigger MCP tools", () => {
     );
     expect(denied.isError).toBe(true);
     expect(textOf(denied)).toContain("project:create");
+    const deniedExisting = await executeArchestraTool(
+      getArchestraToolFullName("create_schedule_trigger"),
+      { ...args, project_id: project.id },
+      context,
+    );
+    expect(deniedExisting.isError).toBe(true);
+    const creator = await makeCustomRole(organizationId, {
+      permission: { project: ["create"] },
+    });
+    await MemberModel.updateRole(userId, organizationId, creator.role);
+    const createdNew = await executeArchestraTool(
+      getArchestraToolFullName("create_schedule_trigger"),
+      args,
+      context,
+    );
+    expect(createdNew.isError, textOf(createdNew)).toBe(false);
     const created = await executeArchestraTool(
       getArchestraToolFullName("create_schedule_trigger"),
       { ...args, project_id: project.id },
@@ -311,7 +327,7 @@ describe("schedule trigger MCP tools", () => {
       }),
     ).toEqual({ content: "Keep existing instructions." });
     expect(await projectService.list({ organizationId, userId })).toHaveLength(
-      1,
+      2,
     );
   });
 
@@ -631,7 +647,7 @@ describe("schedule trigger MCP tools", () => {
     const created = await createProjectSchedule();
     const id = created.structuredContent?.id as string;
     const role = await makeCustomRole(organizationId, {
-      permission: { scheduledTask: ["read"] },
+      permission: { project: ["read"] },
     });
     await MemberModel.updateRole(userId, organizationId, role.role);
     for (const name of [
@@ -656,7 +672,7 @@ describe("schedule trigger MCP tools", () => {
     makeCustomRole,
   }) => {
     const role = await makeCustomRole(organizationId, {
-      permission: { scheduledTask: ["read"] },
+      permission: { project: ["read"] },
     });
     await MemberModel.updateRole(userId, organizationId, role.role);
     const readTools = [LIST_TRIGGERS, GET_TRIGGER, LIST_RUNS, GET_RUN];
@@ -1483,7 +1499,7 @@ describe("schedule trigger MCP tools", () => {
   });
 
   describe("RBAC", () => {
-    test("a role without scheduledTask permissions cannot read schedules", async ({
+    test("a role without project permissions cannot read schedules", async ({
       makeScheduleTrigger,
       makeCustomRole,
     }) => {
@@ -1506,7 +1522,7 @@ describe("schedule trigger MCP tools", () => {
       }
     });
 
-    test("a read-only scheduledTask role cannot start a run", async ({
+    test("a read-only project role cannot start a run", async ({
       makeScheduleTrigger,
       makeCustomRole,
     }) => {
@@ -1516,7 +1532,7 @@ describe("schedule trigger MCP tools", () => {
         actorUserId: userId,
       });
       const role = await makeCustomRole(organizationId, {
-        permission: { scheduledTask: ["read"] },
+        permission: { project: ["read"] },
       });
       await MemberModel.updateRole(userId, organizationId, role.role);
 

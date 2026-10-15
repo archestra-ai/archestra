@@ -122158,8 +122158,7 @@
                               "oauthClient",
                               "environment",
                               "serviceAccount",
-                              "credential",
-                              "scheduledTask"
+                              "credential"
                             ]
                           },
                           "scope": {
@@ -386540,7 +386539,7 @@
         "tags": [
           "Ownership"
         ],
-        "description": "Transfer ownership to another organization member\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions, instructions, and sharing",
+        "description": "Transfer ownership to another organization member\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions, instructions, sharing, and schedules",
         "requestBody": {
           "required": true,
           "content": {
@@ -386839,7 +386838,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Get all label keys used by projects\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
+        "description": "Get all label keys used by projects\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -387101,7 +387100,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Get all label values used by projects\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
+        "description": "Get all label values used by projects\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -387374,7 +387373,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Create a project. Files produced in its chats are owned by the project rather than the individual author.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:create`: Create projects",
+        "description": "Create a project. Files produced in its chats are owned by the project rather than the individual author.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:create`: Create projects and schedules, and trigger schedule runs",
         "requestBody": {
           "required": true,
           "content": {
@@ -387980,7 +387979,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "List projects the caller can see. `scope` is the project's share visibility: `personal` (private), `team` (shared with teams — narrow with `teamIds`), or `org` (org-wide); omitted = all visible. Admins additionally filter `personal` by owner via `authorIds` / `excludeAuthorIds` (ignored for non-admins). `search` matches name + description. `status=deleted` returns the org-wide soft-deleted projects for a project admin (empty for everyone else); the other filters do not apply to that slice.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
+        "description": "List projects the caller can see. `scope` is the project's share visibility: `personal` (private), `team` (shared with teams — narrow with `teamIds`), or `org` (org-wide); omitted = all visible. Admins additionally filter `personal` by owner via `authorIds` / `excludeAuthorIds` (ignored for non-admins). `search` matches name + description. `status=deleted` returns the org-wide soft-deleted projects for a project admin (empty for everyone else); the other filters do not apply to that slice.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -388520,7 +388519,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Turn an existing chat into a project: create the project, move the chat into it, and re-point the chat's files to the project. Only the chat's owner may do this, and only for a user chat not already in a project. `name` defaults to the chat title.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:create`: Create projects",
+        "description": "Turn an existing chat into a project: create the project, move the chat into it, and re-point the chat's files to the project. Only the chat's owner may do this, and only for a user chat not already in a project. `name` defaults to the chat title.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:create`: Create projects and schedules, and trigger schedule runs",
         "requestBody": {
           "required": true,
           "content": {
@@ -388996,7 +388995,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Project detail. Share team ids are included for the owner only.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
+        "description": "Project detail. Share team ids are included for the owner only.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -389452,7 +389451,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Update a project's name, description, icon, and/or default agent (owner or a project admin). Only the provided fields change. The default agent must be an organization-wide chat agent; null clears it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions, instructions, and sharing",
+        "description": "Update a project's name, description, icon, and/or default agent (owner or a project admin). Only the provided fields change. The default agent must be an organization-wide chat agent; null clears it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions, instructions, sharing, and schedules",
         "requestBody": {
           "required": true,
           "content": {
@@ -389797,7 +389796,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Soft-delete a project (owner or a project admin). Its chats detach and survive as ordinary conversations; its files and scheduled tasks are retained but hidden, and a project admin can restore them. Nothing is purged.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:delete`: Delete projects",
+        "description": "Soft-delete a project (owner or a project admin). Its chats detach and survive as ordinary conversations; its files and scheduled tasks are retained but hidden, and a project admin can restore them. Nothing is purged.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:delete`: Delete projects and schedules",
         "parameters": [
           {
             "schema": {
@@ -390080,7 +390079,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Soft-delete several projects in one request (owner or project admin per project). As with the single-project delete, their chats detach and survive as ordinary conversations, and their files and scheduled tasks are retained but hidden. Nothing is purged, and a project the caller may not delete is reported in `failed` while the rest of the batch still applies.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:delete`: Delete projects",
+        "description": "Soft-delete several projects in one request (owner or project admin per project). As with the single-project delete, their chats detach and survive as ordinary conversations, and their files and scheduled tasks are retained but hidden. Nothing is purged, and a project the caller may not delete is reported in `failed` while the rest of the batch still applies.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:delete`: Delete projects and schedules",
         "requestBody": {
           "required": true,
           "content": {
@@ -390416,7 +390415,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Restore a soft-deleted project (project admins only). Brings back its retained files and scheduled tasks (schedules resume forward-only, no catch-up runs); chats do NOT re-attach, so the restored project reports zero chats. 404 if there is no soft-deleted project with that id in the org. Deleting frees the display name, so if the owner has since taken it, pass `name` to restore under a different one; restoring into a name that is still taken is a 409.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:delete`: Delete projects",
+        "description": "Restore a soft-deleted project (project admins only). Brings back its retained files and scheduled tasks (schedules resume forward-only, no catch-up runs); chats do NOT re-attach, so the restored project reports zero chats. 404 if there is no soft-deleted project with that id in the org. Deleting frees the display name, so if the owner has since taken it, pass `name` to restore under a different one; restoring into a name that is still taken is a 409.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:delete`: Delete projects and schedules",
         "requestBody": {
           "required": true,
           "content": {
@@ -391173,7 +391172,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Files owned by the project, readable by anyone with project access.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
+        "description": "Files owned by the project, readable by anyone with project access.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -391496,7 +391495,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Upload one file into the project (drag-and-drop on the Files panel). The bytes are base64-encoded in the body; a colliding name is auto-renamed.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
+        "description": "Upload one file into the project (drag-and-drop on the Files panel). The bytes are base64-encoded in the body; a colliding name is auto-renamed.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "requestBody": {
           "required": true,
           "content": {
@@ -391814,7 +391813,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "The project's instructions (markdown). Readable by anyone with project access; empty until the owner first saves it. The content is injected into the system prompt of every chat in the project.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
+        "description": "The project's instructions (markdown). Readable by anyone with project access; empty until the owner first saves it. The content is injected into the system prompt of every chat in the project.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -392092,7 +392091,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Set the project's instructions (owner only). The first save creates the instructions file; saving empty content keeps it but injects nothing.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions, instructions, and sharing",
+        "description": "Set the project's instructions (owner only). The first save creates the instructions file; saving empty content keeps it but injects nothing.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions, instructions, sharing, and schedules",
         "requestBody": {
           "required": true,
           "content": {
@@ -392394,7 +392393,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "All chats in a project the caller can read. Chats authored by others require `read` on every chat (a grant at `*` on `conversation`); without it the caller sees only their own. `readOnly` marks chats authored by someone else (viewable, never writable).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
+        "description": "All chats in a project the caller can read. Chats authored by others require `read` on every chat (a grant at `*` on `conversation`); without it the caller sees only their own. `readOnly` marks chats authored by someone else (viewable, never writable).\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -392731,7 +392730,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "All run sessions in a project the caller can read. Sessions started by others require `read` on every chat (a grant at `*` on `conversation`); all non-owner views are read-only.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: Open Agents, and use the code sandboxes and files of agents you can use\n`project:read`: View projects and your own sessions inside them",
+        "description": "All run sessions in a project the caller can read. Sessions started by others require `read` on every chat (a grant at `*` on `conversation`); all non-owner views are read-only.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: Open Agents, and use the code sandboxes and files of agents you can use\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -393312,7 +393311,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Pin a project to the current user's sidebar. Personal — does not affect other members. Any user who can read the project may pin it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
+        "description": "Pin a project to the current user's sidebar. Personal — does not affect other members. Any user who can read the project may pin it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -393593,7 +393592,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Remove the current user's pin on a project. Idempotent; allowed even if the project was since unshared from the user.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects and your own sessions inside them",
+        "description": "Remove the current user's pin on a project. Idempotent; allowed even if the project was since unshared from the user.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -393876,7 +393875,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Apps linked into the project. Each member sees only the linked apps they can read themselves.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps\n`project:read`: View projects and your own sessions inside them",
+        "description": "Apps linked into the project. Each member sees only the linked apps they can read themselves.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -394181,7 +394180,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Link an app into the project. Any project member who can read the app may link it; the app keeps its own permissions. Idempotent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps\n`project:read`: View projects and your own sessions inside them",
+        "description": "Link an app into the project. Any project member who can read the app may link it; the app keeps its own permissions. Idempotent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -394473,7 +394472,7 @@
         "tags": [
           "Projects"
         ],
-        "description": "Unlink an app from the project. The app itself is not changed.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps\n`project:read`: View projects and your own sessions inside them",
+        "description": "Unlink an app from the project. The app itself is not changed.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`app:read`: Open Apps\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -398495,7 +398494,7 @@
         "tags": [
           "Schedule Triggers"
         ],
-        "description": "List scheduled agent triggers\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`scheduledTask:read`: View scheduled tasks and their run history",
+        "description": "List scheduled agent triggers\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -398979,7 +398978,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "scheduledTask:read"
+            "project:read"
           ]
         }
       },
@@ -398988,7 +398987,7 @@
         "tags": [
           "Schedule Triggers"
         ],
-        "description": "Create a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`scheduledTask:create`: Create new scheduled tasks and trigger runs",
+        "description": "Create a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:create`: Create projects and schedules, and trigger schedule runs",
         "requestBody": {
           "required": true,
           "content": {
@@ -399394,7 +399393,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "scheduledTask:create"
+            "project:create"
           ]
         }
       }
@@ -399405,7 +399404,7 @@
         "tags": [
           "Schedule Triggers"
         ],
-        "description": "Get a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`scheduledTask:read`: View scheduled tasks and their run history",
+        "description": "Get a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -399774,7 +399773,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "scheduledTask:read"
+            "project:read"
           ]
         }
       },
@@ -399783,7 +399782,7 @@
         "tags": [
           "Schedule Triggers"
         ],
-        "description": "Update a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`scheduledTask:update`: Modify scheduled task configuration",
+        "description": "Update a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions, instructions, sharing, and schedules",
         "requestBody": {
           "required": true,
           "content": {
@@ -400193,7 +400192,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "scheduledTask:update"
+            "project:update"
           ]
         }
       },
@@ -400202,7 +400201,7 @@
         "tags": [
           "Schedule Triggers"
         ],
-        "description": "Delete a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`scheduledTask:delete`: Delete scheduled tasks",
+        "description": "Delete a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:delete`: Delete projects and schedules",
         "parameters": [
           {
             "schema": {
@@ -400471,7 +400470,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "scheduledTask:delete"
+            "project:delete"
           ]
         }
       }
@@ -400482,7 +400481,7 @@
         "tags": [
           "Schedule Triggers"
         ],
-        "description": "Enable a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`scheduledTask:update`: Modify scheduled task configuration",
+        "description": "Enable a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions, instructions, sharing, and schedules",
         "parameters": [
           {
             "schema": {
@@ -400851,7 +400850,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "scheduledTask:update"
+            "project:update"
           ]
         }
       }
@@ -400862,7 +400861,7 @@
         "tags": [
           "Schedule Triggers"
         ],
-        "description": "Disable a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`scheduledTask:update`: Modify scheduled task configuration",
+        "description": "Disable a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:update`: Edit project descriptions, instructions, sharing, and schedules",
         "parameters": [
           {
             "schema": {
@@ -401231,7 +401230,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "scheduledTask:update"
+            "project:update"
           ]
         }
       }
@@ -401242,7 +401241,7 @@
         "tags": [
           "Schedule Triggers"
         ],
-        "description": "Run a scheduled agent trigger immediately\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`scheduledTask:create`: Create new scheduled tasks and trigger runs",
+        "description": "Run a scheduled agent trigger immediately\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:create`: Create projects and schedules, and trigger schedule runs",
         "parameters": [
           {
             "schema": {
@@ -401587,7 +401586,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "scheduledTask:create"
+            "project:create"
           ]
         }
       }
@@ -401598,7 +401597,7 @@
         "tags": [
           "Schedule Triggers"
         ],
-        "description": "List runs for a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`scheduledTask:read`: View scheduled tasks and their run history",
+        "description": "List runs for a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -402032,7 +402031,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "scheduledTask:read"
+            "project:read"
           ]
         }
       }
@@ -402043,7 +402042,7 @@
         "tags": [
           "Schedule Triggers"
         ],
-        "description": "Get a single run for a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`scheduledTask:read`: View scheduled tasks and their run history",
+        "description": "Get a single run for a scheduled agent trigger\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:read`: View projects, their schedules, and your own sessions inside them",
         "parameters": [
           {
             "schema": {
@@ -402398,7 +402397,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "scheduledTask:read"
+            "project:read"
           ]
         }
       }
@@ -402409,7 +402408,7 @@
         "tags": [
           "Schedule Triggers"
         ],
-        "description": "Create or return the chat conversation linked to a schedule run\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`scheduledTask:create`: Create new scheduled tasks and trigger runs",
+        "description": "Create or return the chat conversation linked to a schedule run\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`project:create`: Create projects and schedules, and trigger schedule runs",
         "parameters": [
           {
             "schema": {
@@ -403192,7 +403191,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "scheduledTask:create"
+            "project:create"
           ]
         }
       }
@@ -452652,8 +452651,7 @@
                 "oauthClient",
                 "environment",
                 "serviceAccount",
-                "credential",
-                "scheduledTask"
+                "credential"
               ]
             },
             "in": "path",
@@ -453078,8 +453076,7 @@
                           "oauthClient",
                           "environment",
                           "serviceAccount",
-                          "credential",
-                          "scheduledTask"
+                          "credential"
                         ]
                       },
                       "scope": {
@@ -453401,8 +453398,7 @@
                 "oauthClient",
                 "environment",
                 "serviceAccount",
-                "credential",
-                "scheduledTask"
+                "credential"
               ]
             },
             "in": "path",
@@ -453836,8 +453832,7 @@
                 "oauthClient",
                 "environment",
                 "serviceAccount",
-                "credential",
-                "scheduledTask"
+                "credential"
               ]
             },
             "in": "path",
@@ -453895,8 +453890,7 @@
                         "oauthClient",
                         "environment",
                         "serviceAccount",
-                        "credential",
-                        "scheduledTask"
+                        "credential"
                       ]
                     },
                     "scope": {
@@ -454787,8 +454781,7 @@
                 "oauthClient",
                 "environment",
                 "serviceAccount",
-                "credential",
-                "scheduledTask"
+                "credential"
               ]
             },
             "in": "path",
@@ -454846,8 +454839,7 @@
                         "oauthClient",
                         "environment",
                         "serviceAccount",
-                        "credential",
-                        "scheduledTask"
+                        "credential"
                       ]
                     },
                     "scope": {

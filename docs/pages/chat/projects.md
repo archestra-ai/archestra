@@ -2,7 +2,7 @@
 title: Projects
 description: Keep chats, agent runs, files, instructions, and schedules in one shared project
 order: 1
-lastUpdated: 2026-10-12
+lastUpdated: 2026-10-15
 ---
 
 A project groups conversations, dedicated Agent Runtime sessions, shared files, instructions, and scheduled tasks. Start with a private project, then grant access to team members as work progresses.
@@ -33,13 +33,15 @@ External coding clients like Claude Code can read and write project files throug
 
 Run recurring agent workflows on an automated schedule with recorded execution logs.
 
-1. Select **New schedule** on the project page. Scheduling tasks requires [`scheduledTask:create`](/docs/reference/permissions#scheduledTask:create).
+1. Select **New schedule** on the project page. Scheduling tasks requires [`project:create`](/docs/reference/permissions#project:create).
 2. Choose an agent and enter the task prompt.
 3. Set the cadence using a cron expression or interval, and select the target time zone.
 
 Each scheduled run executes as an independent conversation or Agent Runtime session inside the project. Open any run from the schedule history to follow real-time progress, review tool calls, and inspect outputs. Observability records execution status with [`schedule_trigger_runs_total`](/docs/admin/observability/metrics#schedule_trigger_runs_total).
 
-Pause a schedule to halt automatic triggers while retaining the ability to trigger manual test runs ([`scheduledTask:update`](/docs/reference/permissions#scheduledTask:update)). Deleting a schedule with [`scheduledTask:delete`](/docs/reference/permissions#scheduledTask:delete) removes its cadence and schedule definition, but preserves all past conversations and session history.
+Pause a schedule to halt automatic triggers while retaining the ability to trigger manual test runs ([`project:update`](/docs/reference/permissions#project:update)). Deleting a schedule with [`project:delete`](/docs/reference/permissions#project:delete) removes its cadence and schedule definition, but preserves all past conversations and session history.
+
+Schedules use the project role permissions. Project members can read schedules; only the schedule actor or someone with the corresponding organization-wide Project grant can change or run them.
 
 ## Sharing and Access Control
 

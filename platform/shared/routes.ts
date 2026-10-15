@@ -751,6 +751,7 @@ export const RouteId = {
   DeleteSlackAgentBot: "deleteSlackAgentBot",
   UpdateSlackAppConfigToken: "updateSlackAppConfigToken",
   CreateSlackAgentBotApp: "createSlackAgentBotApp",
+  CreateSlackRouterBotApp: "createSlackRouterBotApp",
   MigrateSlackApps: "migrateSlackApps",
   ConvertSlackAppToAgentBot: "convertSlackAppToAgentBot",
   ListSlackAgentBotChannels: "listSlackAgentBotChannels",

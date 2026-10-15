@@ -230,6 +230,10 @@ export function useUpdateSlackChatOpsConfig() {
       toast.success("Slack configuration updated");
       queryClient.invalidateQueries({ queryKey: ["chatops", "status"] });
       queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
+      // The router bot is listed with the agent bots.
+      queryClient.invalidateQueries({
+        queryKey: ["chatops", "slack-agent-bots"],
+      });
     },
     onError: (error) => {
       console.error("Slack config update error:", error);
@@ -495,6 +499,31 @@ export function useCreateSlackAgentBotApp() {
       queryClient.invalidateQueries({
         queryKey: ["chatops", "slack-agent-bots"],
       });
+    },
+  });
+}
+
+export function useCreateSlackRouterBotApp() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (
+      body: archestraApiTypes.CreateSlackRouterBotAppData["body"],
+    ) => {
+      const { data, error } = await archestraApiSdk.createSlackRouterBotApp({
+        body,
+      });
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["chatops", "slack-agent-bots"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["chatops", "status"] });
     },
   });
 }

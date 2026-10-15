@@ -1282,21 +1282,22 @@ jobs:
         run: |
           echo "Waiting for platform services to be healthy..."
 
-          # Wait for backend health endpoint (max 3 minutes)
+          # Startup liveness can succeed before the API takes over its port.
+          # Wait for backend readiness before running application assertions (max 3 minutes).
           # Use 127.0.0.1 instead of localhost to avoid IPv6 issues with Docker port mapping
-          echo "Checking backend health..."
+          echo "Checking backend readiness..."
           for i in {1..90}; do
-            if curl -sf http://127.0.0.1:9000/health > /dev/null 2>&1; then
-              echo "Backend is healthy!"
+            if curl -sf http://127.0.0.1:9000/ready > /dev/null 2>&1; then
+              echo "Backend is ready!"
               break
             fi
             echo "Waiting for backend... (attempt $i/90)"
             sleep 2
           done
 
-          # Verify backend is accessible
-          if ! curl -sf http://127.0.0.1:9000/health; then
-            echo "Backend health check failed after 3 minutes"
+          # Verify the application API is ready
+          if ! curl -sf http://127.0.0.1:9000/ready; then
+            echo "Backend readiness check failed after 3 minutes"
             docker logs archestra-quickstart --tail=200
             exit 1
           fi

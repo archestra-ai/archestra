@@ -319,15 +319,6 @@ async function evaluateOpenAppaPolicyTests(
     },
   };
 }
-export async function replayOpenAppaValidationProposal(
-  params: Parameters<typeof evaluateOpenAppaPolicyTests>[0] & {
-    userId: string;
-  },
-  collection: PolicyTestCollection,
-) {
-  const { result } = await evaluateOpenAppaPolicyTests(params, collection);
-  return { ...result, draft: true, stale: false };
-}
 export async function previewOpenAppaPolicyTest(
   params: Parameters<typeof evaluateOpenAppaPolicyTests>[0] & {
     userId: string;
@@ -345,6 +336,8 @@ export async function previewOpenAppaPolicyTest(
 export async function runOpenAppaPolicyTests(
   params: Parameters<typeof evaluateOpenAppaPolicyTests>[0] & {
     userId: string;
+    /** Run only these saved files instead of the whole suite. */
+    partial?: boolean;
   },
 ) {
   const collection = await loadPolicyTestCollection(
@@ -352,13 +345,21 @@ export async function runOpenAppaPolicyTests(
     params.userId,
   );
   assertCurrentCollection(collection, params.sourceVersion);
+  const savedFiles = PolicyTestFilesSchema.parse(collection.files);
   if (
-    policyTestFilesHash(params.files) !==
-    policyTestFilesHash(PolicyTestFilesSchema.parse(collection.files))
+    params.partial
+      ? !params.files.every((file) =>
+          savedFiles.some(
+            (item) => item.path === file.path && item.content === file.content,
+          ),
+        )
+      : policyTestFilesHash(params.files) !== policyTestFilesHash(savedFiles)
   )
     throw new ApiError(
       409,
-      "Run all requires the complete saved validation suite. Save draft changes first or use the editor preview.",
+      params.partial
+        ? "Run only saved validation files. Save draft changes first or use the editor preview."
+        : "Run all requires the complete saved validation suite. Save draft changes first or use the editor preview.",
     );
   const { result, snapshots } = await evaluateOpenAppaPolicyTests(
     params,

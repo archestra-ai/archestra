@@ -952,9 +952,17 @@ const registry = defineArchestraTools([
     shortName: "run_openappa_policy_tests",
     title: "Run saved OpenAPPA validations",
     description:
-      "Replay the complete currently saved validation suite offline against the current policy and record the result in validation run history. Use when the user asks to run saved checks or explicitly requests a fresh recorded result on the validations page. Showing existing results does not authorize a new run. Loads the authoritative saved files itself; no draft files or policy changes are accepted. This records a run only: it does not edit validations, change or enable the policy, execute business tools, or contact models or remote helpers. Report the returned run ID, pass/fail/cannot-run outcomes and stale status. A preview or publication replay alone does not create this recorded run.",
-    schema: z.strictObject({}),
-    async handler({ context }) {
+      "Replay saved validations offline against the current policy and record the result in validation run history. This is the only way to run validations: preview and publication check syntax but do not replay. Pass `path` to run one saved validation file, for example right after saving it; omit it to run the whole suite. Loads the authoritative saved files itself; no draft files or policy changes are accepted. This records a run only: it does not edit validations, change or enable the policy, execute business tools, or contact models or remote helpers. Report the returned run ID and pass/fail/cannot-run outcomes.",
+    schema: z.strictObject({
+      path: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+          "A saved validation file's path, as get_openappa_policy_tests lists it. Omit to run every saved validation.",
+        ),
+    }),
+    async handler({ args, context }) {
       const ids = organizationUser(context, AUTHENTICATED_CONTEXT_REQUIRED);
       const suite = await getOpenAppaPolicyTests(
         ids.organizationId,
@@ -971,12 +979,26 @@ const registry = defineArchestraTools([
           400,
           "No saved validations to run. Save a validation first.",
         );
-      const args = RunPolicyTestsSchema.parse({
-        files: suite.files,
+      const files = args.path
+        ? suite.files.filter((file) => file.path === args.path)
+        : suite.files;
+      if (!files.length)
+        throw new ApiError(
+          400,
+          `No saved validation at ${args.path}. Save it first, or check the path with get_openappa_policy_tests.`,
+        );
+      const run = RunPolicyTestsSchema.parse({
+        files,
         sourceVersion: suite.version,
         directory: suite.directory,
       });
-      return result(await runOpenAppaPolicyTests({ ...ids, ...args }));
+      return result(
+        await runOpenAppaPolicyTests({
+          ...ids,
+          ...run,
+          partial: Boolean(args.path),
+        }),
+      );
     },
   }),
   defineArchestraTool({
@@ -984,7 +1006,7 @@ const registry = defineArchestraTools([
     title: "Preview OpenAPPA validations",
     annotations: { readOnlyHint: true },
     description:
-      "Preview a patch of .appa validation files against the current policy, then replay the full resulting suite offline. Replay evaluates the effective policy contracts, including their parameter schemas and selectors; it does not fetch installed MCP input schemas or require tools to be installed. Draft from those contracts and use replay to check decisions. Read the policy revision and specification version first. Upserts replace only named files; deletions must be explicit; unrelated files are preserved. Omit policyContent or pass null for validation-only work; never send the current policy or blank text as a placeholder. Include a complete proposed policy only when the user explicitly requested a policy change. Correct scenario syntax errors in the .appa files without changing the policy. This saves nothing and does not affect global run history, execute business tools, or contact model/helper providers. Before publishing, explain the scenario in ordinary language, its expected behavior, observed results and relevant limits. Give the file path and provide its exact source on request. A failed check does not authorize a policy fix or changing expectations merely to force green. Keep specifications small and focused on the user's intended behavior.",
+      "Preview a patch of .appa validation files: checks each changed file's syntax and, when policyContent is given, the proposed policy. It does not replay or run validations; after saving, run them with run_openappa_policy_tests. Read the policy revision and specification version first. Upserts replace only named files; deletions must be explicit; unrelated files are preserved. Omit policyContent or pass null for validation-only work; never send the current policy or blank text as a placeholder. Include a complete proposed policy only when the user explicitly requested a policy change. Correct scenario syntax errors in the .appa files without changing the policy. This saves nothing and does not affect run history. Before publishing, explain the scenario in ordinary language and its expected behavior. Give the file path and provide its exact source on request. Keep specifications small and focused on the user's intended behavior.",
     schema: PreviewOpenAppaValidationChangeSchema,
     async handler({ args, context }) {
       const { organizationId, userId } = organizationUser(
@@ -1004,7 +1026,7 @@ const registry = defineArchestraTools([
     shortName: "publish_openappa_validation_change",
     title: "Publish OpenAPPA validations",
     description:
-      "Publish the exact validation patch explained after preview_openappa_validation_change, only when the user authorized saving it. Replays the full suite again before saving. Omit policyContent or pass null for validation-only work. Saving validations does not authorize a policy change; include a complete proposed policy only for an explicitly requested policy change. With Git sync, opens one repository PR using the configured GitHub App or PAT, containing only the changed files; nothing becomes active until merge and sync. Otherwise saves locally, atomically when policy and validations both change. Test failures are informational and do not authorize policy fixes or block an authorized valid policy. Preserve existing expectations and unrelated rules. On a conflict, re-read and reconcile before retrying. Tests-only writes do not enable enforcement. A first local policy change turns enforcement on for an administrator; report enforcement and inactive batteries. Policy-only setup can continue to use update_guardrails_policy without creating tests.",
+      "Publish the exact validation patch explained after preview_openappa_validation_change, only when the user authorized saving it. Checks syntax and any proposed policy, then saves without replaying; run the saved files with run_openappa_policy_tests. Omit policyContent or pass null for validation-only work. Saving validations does not authorize a policy change; include a complete proposed policy only for an explicitly requested policy change. With Git sync, opens one repository PR using the configured GitHub App or PAT, containing only the changed files; nothing becomes active until merge and sync. Otherwise saves locally, atomically when policy and validations both change. Preserve existing expectations and unrelated rules. On a conflict, re-read and reconcile before retrying. Tests-only writes do not enable enforcement. A first local policy change turns enforcement on for an administrator; report enforcement and inactive batteries. Policy-only setup can continue to use update_guardrails_policy without creating tests.",
     schema: PublishOpenAppaValidationChangeSchema,
     async handler({ args, context }) {
       const ids = organizationUser(context, AUTHENTICATED_CONTEXT_REQUIRED);

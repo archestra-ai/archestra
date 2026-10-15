@@ -102,4 +102,44 @@ describe("run_openappa_policy_tests", () => {
       (await GuardrailsPolicyModel.findLatest(ctx.organizationId))?.revision,
     ).toBe(1);
   });
+
+  test("a path runs one saved validation and records it", async () => {
+    await save();
+    await updateOpenAppaPolicyTests({
+      organizationId: ctx.organizationId,
+      expectedVersion: "empty",
+      files: [
+        {
+          path: "traces/allowed.appa",
+          content: "mcp/records/read {}\nexpect allow\n",
+        },
+        {
+          path: "traces/failing.appa",
+          content: "mcp/records/read {}\nexpect deny\n",
+        },
+      ],
+    });
+    const response = await executeArchestraTool(
+      "archestra__run_openappa_policy_tests",
+      { path: "traces/allowed.appa" },
+      ctx,
+    );
+    expect(response.isError, JSON.stringify(response.content)).not.toBe(true);
+    expect(response.structuredContent).toMatchObject({
+      files: [{ path: "traces/allowed.appa", status: "passed" }],
+    });
+    expect(
+      (response.structuredContent as { files: unknown[] }).files,
+    ).toHaveLength(1);
+    expect(
+      await OpenAppaPolicyTestsModel.listRuns(ctx.organizationId),
+    ).toHaveLength(1);
+    await expect(
+      executeArchestraTool(
+        "archestra__run_openappa_policy_tests",
+        { path: "traces/missing.appa" },
+        ctx,
+      ),
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
 });

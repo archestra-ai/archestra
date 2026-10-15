@@ -3432,6 +3432,60 @@ describe("rendering runtime text for this client", () => {
     }
   });
 
+  test("cuts the subagent advice from a ruling with no plan when the session has no gateway tools", async () => {
+    // The runtime advises a subagent route whether or not it offers a plan.
+    // A subagent of this client has no gateway tools either, so the advice
+    // would contradict the stop instruction the proxy adds.
+    const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+    const context = requestContext({ sessionId: "no-plan-no-gateway" });
+    context.headers = { "user-agent": "claude-cli/2.1.300 (external, cli)" };
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: undefined,
+      customTools: new Set(),
+      declaredTools: [{ name: "Bash" }],
+    };
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async () => [
+        {
+          kind: "deny" as const,
+          feedback: [
+            "[appa] Blocked: Bash cannot run yet.",
+            "",
+            "Why:",
+            "  - trust is suspicious, below the required floor trusted",
+            "",
+            "Alternative:",
+            "  If a child-session or subagent tool is available, handle the work there if isolation is useful.",
+          ].join("\n"),
+          recorded: true as const,
+          offers: [],
+        },
+      ]);
+    const cancelCalls = vi
+      .spyOn(appaService, "cancelCalls")
+      .mockResolvedValue(undefined);
+    try {
+      await plugin.onSessionInit(context);
+      const outcome = (await plugin.onToolCalls({
+        ...context,
+        toolCalls: [{ id: "bash", name: "Bash", arguments: { command: "ls" } }],
+      })) as { decision: string; refusal: { contentMessage: string } };
+      expect(outcome.decision).toBe("refuse");
+      const message = outcome.refusal.contentMessage;
+      expect(message).toContain("trust is suspicious");
+      expect(message).not.toContain("Alternative:");
+      expect(message).not.toContain("subagent tool is available");
+      expect(message).toContain("STOP this blocked action");
+    } finally {
+      cancelCalls.mockRestore();
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
   test("refuses the turn and saves a local diagnostic when the client cannot receive remedies", async ({
     makeOrganization,
   }) => {

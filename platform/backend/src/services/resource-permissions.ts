@@ -587,9 +587,13 @@ export class ResourcePermissions {
       ...params,
       authorId: effective.target?.authorId ?? null,
     });
+    // Read once: the recipient checks and the response both need them, and
+    // the write does not change who the caller is.
+    const actorSubjects = await ResourcePermissions.getSubjects(params);
     const policy = await ResourcePermissions.replace({
       ...params,
       authority: effective.grants,
+      subjects: actorSubjects,
     });
     // An app's backing install follows the app's audience.
     if (params.resource === "app" && params.scope !== "*") {
@@ -607,7 +611,6 @@ export class ResourcePermissions {
       });
     }
     const updated = await ResourcePermissions.getEffective(params);
-    const actorSubjects = await ResourcePermissions.getSubjects(params);
     return {
       resource: ManagedResourceSchema.parse(params.resource),
       scope: params.scope,
@@ -723,6 +726,8 @@ export class ResourcePermissions {
       revision: number;
       grants: ResourcePermissionGrant[];
       authority: readonly ScopedPermission[];
+      /** The caller's subjects, when the request has read them already. */
+      subjects?: PermissionSubject[];
     },
   ) {
     await CredentialResourcePermissions.validatePolicy(params);
@@ -828,6 +833,7 @@ export class ResourcePermissions {
     resource: ScopedResource;
     grants: ResourcePermissionGrant[];
     current: ResourcePermissionGrant[];
+    subjects?: PermissionSubject[];
   }) {
     if (isSessionResource(params.resource)) return;
     const added = addedGrants(params).map((grant) => grant.subject);
@@ -835,7 +841,8 @@ export class ResourcePermissions {
     const addsTeam = added.some((subject) => subject.type === "team");
     if (widens || addsTeam) {
       // Read once: the org-wide check and the own-teams check share them.
-      const subjects = await ResourcePermissions.getSubjects(params);
+      const subjects =
+        params.subjects ?? (await ResourcePermissions.getSubjects(params));
       if (
         !(await ResourcePermissions.canShareOrganizationWide({
           ...params,

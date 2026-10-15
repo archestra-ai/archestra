@@ -2966,6 +2966,7 @@ Required RBAC permission: `update` on the MCP gateway (granted per item)
 | `list_openappa_consults` | List the external consults OpenAPPA recorded for one session, newest first: every annotator, context provider, authority, sanitizer and audience source it asked, with the outcome, the HTTP status, ... | [`openappaDiagnostics:read`](/docs/reference/permissions#openappaDiagnostics:read) |
 | `create_guardrails_repository` | Create a private policy repository from the OpenAPPA configuration template, seed it with the current policy and battery declarations, and start Git sync. | [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) |
 | `connect_guardrails_repository` | Make a policy file in an existing GitHub repository or GitLab project the organization's OpenAPPA policy source, pull it now, and keep it in sync. | [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) |
+| `sync_guardrails_repository` | Pull the policy file from the connected Git repository now instead of waiting for the next scheduled sync, so a merged policy or validation pull request takes effect. | [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) |
 | `yell` | Send feedback about OpenAPPA, with a diagnostic archive for review in the Guardrails Yells tab. | None (no additional RBAC permission required) |
 | `get_guardrails_policy` | Read organization.appa.toml and its revision before changing guardrails. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `inspect_guardrails_server` | Inspect one caller-readable MCP catalog's stored tools and current policy coverage. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
@@ -3088,6 +3089,13 @@ Required RBAC permission: [`organizationSettings:update`](/docs/reference/permis
 | `githubAppConfigId` | `string` | No | An organization GitHub App, for a GitHub repository. |
 | `gitlabTokenId` | `string` | No | A GitLab access token, for a GitLab project. |
 | `interval` | `"15m" \| "1h" \| "1d"` | No |  |
+
+
+#### sync_guardrails_repository
+
+Required RBAC permission: [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update)
+
+This tool takes no arguments.
 
 
 #### yell

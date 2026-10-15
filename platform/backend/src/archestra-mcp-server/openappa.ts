@@ -91,6 +91,7 @@ import {
   connectAppaGithubRepository,
   createAppaGithubRepository,
   getAppaGithubSync,
+  updateAppaGithubSync,
 } from "@/services/openappa-github-sync";
 import {
   credentialLineWarnings,
@@ -515,6 +516,26 @@ const registry = defineArchestraTools([
       } catch (error) {
         // A repository, file, or credential the first pull cannot use is the
         // agent's to explain; thrown, the chat would report a provider failure.
+        if (error instanceof ApiError && error.statusCode < 500)
+          return errorResult(error.message);
+        throw error;
+      }
+    },
+  }),
+  defineArchestraTool({
+    shortName: "sync_guardrails_repository",
+    title: "Sync OpenAPPA policy repository",
+    description:
+      "Pull the policy file from the connected Git repository now instead of waiting for the next scheduled sync, so a merged policy or validation pull request takes effect. Call it after the user says the pull request is merged. It changes nothing in the repository. Report `source.lastSyncError` when it is set, and a held pull (`source.heldContentHash`) as waiting for an operator to accept it in the guardrails panel. Without a connected repository it fails; point the user to Git sync setup in the guardrails settings.",
+    schema: z.strictObject({}),
+    async handler({ context }) {
+      const { organizationId } = organizationUser(context);
+      try {
+        return result(
+          await updateAppaGithubSync({ organizationId, action: "sync" }),
+        );
+      } catch (error) {
+        // No connected source is the agent's to explain, not a provider failure.
         if (error instanceof ApiError && error.statusCode < 500)
           return errorResult(error.message);
         throw error;

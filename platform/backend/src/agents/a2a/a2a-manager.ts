@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { coerceMalformedToolInputs } from "@archestra/shared";
+import { A2A_OAUTH_SCOPE, coerceMalformedToolInputs } from "@archestra/shared";
 import {
   convertToModelMessages,
   type FilePart,
@@ -1784,7 +1784,11 @@ export class A2AManager {
     agentId: string,
     token: string,
   ): Promise<A2AActor> {
-    const tokenAuth = await validateMCPGatewayToken(agentId, token);
+    const tokenAuth = await validateMCPGatewayToken(
+      agentId,
+      token,
+      A2A_OAUTH_SCOPE,
+    );
     if (!tokenAuth) {
       throw new A2AError(A2AErrorKind.InvalidToken);
     }

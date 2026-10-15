@@ -616,6 +616,7 @@ function createTokenValue(): string {
 }
 
 function hashToken(token: string): string {
+  // codeql[js/insufficient-password-hash] Lookup digest of a randomBytes(32) bearer token, not a password. OAuth issuer return values are heuristically classified as passwords.
   return createHash("sha256").update(token).digest("hex");
 }
 

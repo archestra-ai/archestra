@@ -19,7 +19,7 @@ import { isAzureOpenAiFirstPartyModelName } from "@/clients/azure-url";
 import { getProviderConfiguredBaseUrl } from "@/config";
 import logger from "@/logging";
 import {
-  LlmOauthClientModel,
+  ManagedOauthClientModel as LlmOauthClientModel,
   LlmProviderApiKeyModel,
   MemberModel,
   OAuthAccessTokenModel,
@@ -32,6 +32,7 @@ import { collectDelegationMarkers } from "@/openappa/delegation";
 import { setCollectedDelegationMarkers } from "@/routes/proxy/utils/delegation-markers";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
+import { resolveOauthClientProviderMappings } from "@/services/oauth-client-providers";
 import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
@@ -1121,6 +1122,15 @@ async function getModelRouterOAuthClientAuth(
   if (!accessToken.scopes?.some((scope) => scope === LLM_PROXY_OAUTH_SCOPE)) {
     throw new ApiError(403, "Access token is missing Model Router scope.");
   }
+  const managedClient = await LlmOauthClientModel.findByClientId(
+    accessToken.clientId,
+  );
+  if (managedClient?.disabled) {
+    throw new ApiError(401, "LLM OAuth client is disabled.");
+  }
+  if (managedClient && !managedClient.scopes.includes(LLM_PROXY_OAUTH_SCOPE)) {
+    throw new ApiError(403, "OAuth client no longer grants LLM proxy access.");
+  }
   if (accessToken.userId) {
     return getModelRouterUserOAuthAuth({ accessToken });
   }
@@ -1140,8 +1150,9 @@ async function getModelRouterOAuthClientAuth(
       serviceAccountId: oauthClient.serviceAccountId,
       organizationId: oauthClient.organizationId,
     });
+  const mappings = await resolveOauthClientProviderMappings(oauthClient);
   const providerApiKeys = await LlmProviderApiKeyModel.findByIds(
-    oauthClient.providerApiKeys.map((mapping) => mapping.providerApiKeyId),
+    mappings.map((mapping) => mapping.providerApiKeyId),
   );
   const providerApiKeysById = new Map(
     providerApiKeys.map((apiKey) => [apiKey.id, apiKey]),
@@ -1157,7 +1168,7 @@ async function getModelRouterOAuthClientAuth(
       name: oauthClient.name,
       clientId: oauthClient.clientId,
     },
-    providerApiKeys: oauthClient.providerApiKeys.map((mapping) => {
+    providerApiKeys: mappings.map((mapping) => {
       const apiKey = providerApiKeysById.get(mapping.providerApiKeyId);
       if (!apiKey) {
         throw new ApiError(

@@ -192,8 +192,7 @@ it("links each category to its corresponding all-item permissions without replac
     <RolePermissionBuilder
       permission={{
         app: ["read"],
-        llmOauthClient: ["read"],
-        mcpOauthClient: ["read"],
+        oauthClient: ["read"],
       }}
       userPermissions={{}}
       onChange={vi.fn()}
@@ -205,29 +204,12 @@ it("links each category to its corresponding all-item permissions without replac
   });
   expect(apps).toHaveAttribute("href", "/apps?permissions=all");
   expect(apps).toHaveAttribute("target", "_blank");
-  await user.click(screen.getByRole("button", { name: "LLM" }));
+  await user.click(screen.getByRole("button", { name: "Administration" }));
   expect(
     screen.getByRole("link", {
-      name: "Permissions for all LLM OAuth Clients (opens in a new tab)",
+      name: "Permissions for all OAuth Clients (opens in a new tab)",
     }),
-  ).toHaveAttribute(
-    "href",
-    "/settings/oauth-clients?permissions=all&permissionResource=llmOauthClient",
-  );
-  expect(
-    screen.queryByRole("link", {
-      name: "Permissions for all Apps (opens in a new tab)",
-    }),
-  ).not.toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "MCP" }));
-  expect(
-    screen.getByRole("link", {
-      name: "Permissions for all MCP OAuth Clients (opens in a new tab)",
-    }),
-  ).toHaveAttribute(
-    "href",
-    "/settings/oauth-clients?permissions=all&permissionResource=mcpOauthClient",
-  );
+  ).toHaveAttribute("href", "/settings/oauth-clients?permissions=all");
 });
 
 it("shows Manage access without adding an invalid action to the role", async () => {

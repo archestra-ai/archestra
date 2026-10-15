@@ -99,6 +99,7 @@ export {
   default as LlmProviderApiKeyModelLinkModel,
   selectionKey,
 } from "./llm-provider-api-key-model";
+export { default as ManagedOauthClientModel } from "./managed-oauth-client";
 export { default as McpCatalogLabelModel } from "./mcp-catalog-label";
 export { default as McpCatalogSkillModel } from "./mcp-catalog-skill";
 export type { ClusterLeaseGuard } from "./mcp-deployment-lease";

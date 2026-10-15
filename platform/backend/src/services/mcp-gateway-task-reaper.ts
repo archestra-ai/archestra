@@ -61,6 +61,7 @@ class McpGatewayTaskReaper {
       // can be abandoned without another reader.
       await cacheManager.deleteExpiredByPrefix(CacheKey.LegacySseMessages);
       await cacheManager.deleteExpiredByPrefix(CacheKey.LegacySseSession);
+      await cacheManager.deleteExpiredByPrefix(CacheKey.OAuthTokenRateLimit);
       await cacheManager.deleteExpiredByPrefix(
         CacheKey.OpenAppaHitlReviewHistory,
       );

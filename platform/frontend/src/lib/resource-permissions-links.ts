@@ -3,7 +3,12 @@ import type { Resource, ScopedResource } from "@archestra/shared";
 
 /** Open the matching list's organization-wide Permissions dialog. */
 export function getListPermissionsHref(resource: Resource | ScopedResource) {
-  const path = listPermissionsPaths[resource];
+  const path =
+    listPermissionsPaths[
+      resource === "mcpOauthClient" || resource === "llmOauthClient"
+        ? "oauthClient"
+        : resource
+    ];
   if (!path) return undefined;
   const params = new URLSearchParams({ permissions: "all" });
   if (resource === "mcpOauthClient" || resource === "llmOauthClient") {
@@ -21,11 +26,10 @@ const listPermissionsPaths: Partial<Record<Resource | ScopedResource, string>> =
     knowledgeConnector: "/knowledge/connectors",
     knowledgeFile: "/knowledge/files",
     llmModel: "/llm/models",
-    llmOauthClient: "/settings/oauth-clients",
     llmProviderApiKey: "/llm/model-providers",
     llmVirtualKey: "/llm/proxy/virtual-keys",
     mcpGateway: "/mcp/gateways",
-    mcpOauthClient: "/settings/oauth-clients",
+    oauthClient: "/settings/oauth-clients",
     mcpRegistry: "/mcp/registry",
     plugin: "/plugins",
     project: "/projects",

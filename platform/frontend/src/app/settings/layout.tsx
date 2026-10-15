@@ -23,7 +23,7 @@ const PAGE_CONFIG: Record<string, { title: string; description: ReactNode }> = {
   "/settings/oauth-clients": {
     title: "OAuth Clients",
     description:
-      "Applications that authenticate with OAuth rather than a person signing in — to the LLM Proxy, or to your MCP gateways and agents. Each client is scoped to the resources it may reach.",
+      "Register applications for MCP Gateway, A2A, and LLM Proxy. One client can access several APIs, as itself or for signed-in users.",
   },
   "/settings/agents": {
     title: "Agents",
@@ -222,7 +222,7 @@ export default function SettingsLayout({
         {/* The section list sits beside the content rather than as a tab row
             above it: at sixteen entries the row scrolled sideways, so the
             settings you were not already looking at were off-screen. */}
-        <div className="grid items-start gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+        <div className="-mt-4 grid items-start gap-2 lg:mt-0 lg:gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
           <div className="min-w-0 lg:sticky lg:top-6 lg:max-h-[calc(100dvh-6rem)] lg:overflow-y-auto lg:rounded-lg scrollbar-sidebar">
             <SectionNav
               label="Settings sections"

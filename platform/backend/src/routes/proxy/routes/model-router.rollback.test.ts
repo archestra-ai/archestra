@@ -44,6 +44,7 @@ import {
   expect,
   test,
 } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import {
   type AnthropicStubOptions,
   createAnthropicTestClient,
@@ -76,6 +77,8 @@ import {
   zhipuaiAdapterFactory,
 } from "../adapters";
 import modelRouterProxyRoutes from "./model-router";
+
+setupTestCacheManager();
 
 function createFastifyApp() {
   const app = Fastify().withTypeProvider<ZodTypeProvider>();

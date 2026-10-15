@@ -350,10 +350,7 @@ export default class ResourcePermissionTargetModel {
       // audience of its own. Its whole access story is the grants below.
       return { ...target, authorId: null };
     }
-    if (
-      params.resource === "mcpOauthClient" ||
-      params.resource === "llmOauthClient"
-    ) {
+    if (params.resource === "oauthClient") {
       // Both kinds share the OAuth provider's table; the registration's
       // organization, kind and author live in its metadata.
       const table = schema.oauthClientsTable;
@@ -368,11 +365,7 @@ export default class ResourcePermissionTargetModel {
         .where(
           and(
             eq(table.id, params.id),
-            sql`${table.metadata}->>'type' = ${
-              params.resource === "mcpOauthClient"
-                ? "mcp_oauth_client"
-                : "llm_oauth_client"
-            }`,
+            sql`${table.metadata}->>'type' IN ('mcp_oauth_client', 'llm_oauth_client', 'managed_oauth_client')`,
             sql`${table.metadata}->>'organizationId' = ${params.organizationId}`,
           ),
         );

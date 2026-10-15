@@ -881,7 +881,10 @@ export class ResourcePermissions {
 }
 
 type ManagedScopedPermission = ScopedPermission & {
-  resource: Exclude<ScopedResource, "log" | "auditLog">;
+  resource: Exclude<
+    ScopedResource,
+    "log" | "auditLog" | "mcpOauthClient" | "llmOauthClient"
+  >;
 };
 
 type PermissionContext = {

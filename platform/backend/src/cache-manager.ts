@@ -30,6 +30,8 @@ export const CacheKey = {
   WebhookRateLimit: "webhook-rate-limit",
   /** OAuth flow state during authentication */
   OAuthState: "oauth-state",
+  /** Token endpoint requests, before verifying client credentials. */
+  OAuthTokenRateLimit: "oauth-token-rate-limit",
   /** MCP Gateway session state */
   McpSession: "mcp-session",
   /** Legacy HTTP+SSE stream records for the MCP Gateway */

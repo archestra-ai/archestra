@@ -24,7 +24,7 @@ import logger from "@/logging";
 import {
   AgentModel,
   AgentTeamModel,
-  LlmOauthClientModel,
+  ManagedOauthClientModel as LlmOauthClientModel,
   LlmProviderApiKeyModel,
   MemberModel,
   OAuthAccessTokenModel,
@@ -34,6 +34,7 @@ import {
 import { validateExternalIdpToken } from "@/routes/mcp-gateway/utils";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
+import { resolveOauthClientProviderMappings } from "@/services/oauth-client-providers";
 import { resolveOauthServiceAccount } from "@/services/oauth-service-account";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
@@ -436,6 +437,15 @@ export async function validateLlmOAuthAccessToken(params: {
   }
   if (!hasLlmProxyScope(accessToken.scopes)) {
     throw new ApiError(403, "Access token is missing LLM proxy scope.");
+  }
+  const managedClient = await LlmOauthClientModel.findByClientId(
+    accessToken.clientId,
+  );
+  if (managedClient?.disabled) {
+    throw new ApiError(401, "LLM OAuth client is disabled.");
+  }
+  if (managedClient && !managedClient.scopes.includes(LLM_PROXY_OAUTH_SCOPE)) {
+    throw new ApiError(403, "OAuth client no longer grants LLM proxy access.");
   }
   if (accessToken.userId) {
     return validateUserLlmOAuthAccessToken({
@@ -990,7 +1000,7 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
     throw new ApiError(403, "Service account cannot access this LLM proxy.");
   const mappedProviderKey = isSupportedProvider(params.expectedProvider)
     ? await selectMappedProviderKey({
-        mappings: oauthClient.providerApiKeys,
+        mappings: await resolveOauthClientProviderMappings(oauthClient),
         provider: params.expectedProvider,
         modelId: params.requestedModel,
       })

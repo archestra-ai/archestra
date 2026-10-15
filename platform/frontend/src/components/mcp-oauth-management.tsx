@@ -1,15 +1,12 @@
 "use client";
 
-import {
-  type archestraApiTypes,
-  MCP_GATEWAY_OAUTH_SCOPE,
-} from "@archestra/shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import { Copy, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { CreateOAuthClientDialog } from "@/components/create-oauth-client-dialog";
+import { CreateManagedOAuthClientDialog } from "@/components/create-managed-oauth-client-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
-import { EditOAuthClientDialog } from "@/components/mcp-oauth-client-dialogs";
+import { EditManagedOAuthClientDialog } from "@/components/edit-managed-oauth-client-dialog";
 import {
   type CreatedCredentials,
   OAuthClientCreatedDialog,
@@ -23,15 +20,16 @@ import {
 } from "@/lib/auth/auth.query";
 import { holdsItemGrant } from "@/lib/auth/auth.utils";
 import { copyToClipboard } from "@/lib/clipboard";
+import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import {
-  useCreateMcpOauthClient,
-  useDeleteMcpOauthClient,
-  useMcpOauthClients,
-  useRotateMcpOauthClientSecret,
-  useUpdateMcpOauthClient,
-} from "@/lib/mcp-oauth-clients.query";
+  useAllOauthClients,
+  useCreateOauthClient,
+  useDeleteOauthClient,
+  useRotateOauthClientSecret,
+  useUpdateOauthClient,
+} from "@/lib/oauth-clients.query";
 
-type Client = archestraApiTypes.GetMcpOauthClientsResponses["200"][number];
+type Client = archestraApiTypes.GetOauthClientsResponses["200"]["data"][number];
 
 export function isMcpOauthClientApplicable(
   client: Pick<Client, "grantType" | "allowedGatewayIds">,
@@ -45,6 +43,7 @@ export function isMcpOauthClientApplicable(
 
 export function McpOauthManagement({
   resourceId,
+  resourceKind,
   heading,
 }: {
   resourceId: string;
@@ -54,24 +53,25 @@ export function McpOauthManagement({
     description: string;
   };
 }) {
-  const { data: canRead } = useHasPermissions({ mcpOauthClient: ["read"] });
-  const { data: canCreate } = useHasPermissions({ mcpOauthClient: ["create"] });
+  const { data: canRead } = useHasPermissions({ oauthClient: ["read"] });
+  const { data: canCreate } = useHasPermissions({ oauthClient: ["create"] });
   const { data: scopedGrants } = useScopedCapabilities();
   const can = (client: Client, action: "update" | "delete") =>
     holdsItemGrant({
       grants: scopedGrants,
-      resource: "mcpOauthClient",
+      resource: "oauthClient",
       action,
       id: client.id,
     });
-  const query = useMcpOauthClients({ enabled: canRead === true });
+  const query = useAllOauthClients({ enabled: canRead === true });
   const { data: resources = [] } = useProfiles({
     filters: { agentTypes: ["mcp_gateway", "agent"] },
   });
-  const create = useCreateMcpOauthClient();
-  const update = useUpdateMcpOauthClient();
-  const rotate = useRotateMcpOauthClientSecret();
-  const remove = useDeleteMcpOauthClient();
+  const { data: providerApiKeys = [] } = useLlmProviderApiKeys();
+  const create = useCreateOauthClient();
+  const update = useUpdateOauthClient();
+  const rotate = useRotateOauthClientSecret();
+  const remove = useDeleteOauthClient();
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Client | null>(null);
   const [rotating, setRotating] = useState<Client | null>(null);
@@ -117,8 +117,10 @@ export function McpOauthManagement({
 
   // Authorization-code clients are dynamically granted after user consent;
   // client-credentials clients are statically assigned to resources.
-  const clients = (query.data ?? []).filter((client) =>
-    isMcpOauthClientApplicable(client, resourceId),
+  const clients = (query.data ?? []).filter(
+    (client) =>
+      client.scopes.includes(resourceKind === "agent" ? "a2a" : "mcp") &&
+      isMcpOauthClientApplicable(client, resourceId),
   );
 
   return (
@@ -207,29 +209,28 @@ export function McpOauthManagement({
       {!heading && createButton && (
         <div className="flex justify-end">{createButton}</div>
       )}
-      <CreateOAuthClientDialog
+      <CreateManagedOAuthClientDialog
         open={creating}
         onOpenChange={setCreating}
         defaultClientType="mcp"
-        fixedClientType="mcp"
         defaultAllowedGatewayIds={[resourceId]}
         gateways={resources}
-        providerApiKeys={[]}
+        providerApiKeys={providerApiKeys}
         onSubmit={async (values) => {
-          if (values.kind !== "mcp") return;
-          const result = await create.mutateAsync(values.body);
+          const result = await create.mutateAsync(values);
           if (result) {
             setRevealed({
               ...result,
-              oauthScope: MCP_GATEWAY_OAUTH_SCOPE,
+              oauthScope: result.scopes.join(" "),
             });
             setCreating(false);
           }
         }}
         isSubmitting={create.isPending}
       />
-      <EditOAuthClientDialog
+      <EditManagedOAuthClientDialog
         oauthClient={editing}
+        providerApiKeys={providerApiKeys}
         onOpenChange={(open) => {
           if (!open) setEditing(null);
         }}
@@ -256,7 +257,7 @@ export function McpOauthManagement({
           if (!rotating) return;
           const result = await rotate.mutateAsync({ id: rotating.id });
           if (result)
-            setRevealed({ ...result, oauthScope: MCP_GATEWAY_OAUTH_SCOPE });
+            setRevealed({ ...result, oauthScope: result.scopes.join(" ") });
           setRotating(null);
         }}
       />

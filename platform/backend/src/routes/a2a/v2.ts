@@ -182,7 +182,9 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // agent a direct fetch would refuse.
       const permitted = await Promise.all(
         candidates.map(async (agent) =>
-          (await validateMCPGatewayToken(agent.id, token)) ? agent : null,
+          (await validateMCPGatewayToken(agent.id, token, "a2a"))
+            ? agent
+            : null,
         ),
       );
 
@@ -244,7 +246,7 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      const tokenAuth = await validateMCPGatewayToken(agent.id, token);
+      const tokenAuth = await validateMCPGatewayToken(agent.id, token, "a2a");
       if (!tokenAuth) {
         reply.header(
           "WWW-Authenticate",

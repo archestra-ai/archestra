@@ -112,7 +112,13 @@ function generateCustomRolesPermissionsTable(): string {
     for (const action of actions) {
       const key = `${resource}:${action}`;
       // The span anchors the row, so docs can link to `/docs/reference/permissions#agent:read`.
-      table += `| <span id="${key}"></span>\`${key}\` | ${permissionDescriptions[key]} |\n`;
+      const legacyAnchors =
+        resource === "oauthClient"
+          ? ["mcpOauthClient", "llmOauthClient"]
+              .map((old) => `<span id="${old}:${action}"></span>`)
+              .join("")
+          : "";
+      table += `| ${legacyAnchors}<span id="${key}"></span>\`${key}\` | ${permissionDescriptions[key]} |\n`;
     }
   }
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -26,7 +26,7 @@ vi.mock("@/lib/hooks/use-app-name");
 vi.mock("sonner");
 
 const origin = "http://localhost:9000";
-type Kind = "mcpOauthClient" | "llmOauthClient";
+type Kind = "oauthClient";
 let policies: Record<Kind, Policy>;
 let writes: {
   resource: string;
@@ -81,7 +81,7 @@ function makePolicy(resource: Kind): Policy {
       },
       {
         subject: { type: "team", id: "reviewers" },
-        name: resource === "mcpOauthClient" ? "MCP reviewers" : "LLM reviewers",
+        name: "OAuth reviewers",
         actions: ["read"],
       },
     ],
@@ -101,8 +101,7 @@ beforeEach(() => {
   vi.mocked(usePathname).mockReturnValue("/settings/oauth-clients");
   vi.mocked(useAppName).mockReturnValue("Example");
   policies = {
-    mcpOauthClient: makePolicy("mcpOauthClient"),
-    llmOauthClient: makePolicy("llmOauthClient"),
+    oauthClient: makePolicy("oauthClient"),
   };
   writes = [];
   vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
@@ -128,114 +127,50 @@ function renderEntry() {
   );
   return userEvent.setup();
 }
-async function switchTo(
-  user: ReturnType<typeof userEvent.setup>,
-  name: string,
-) {
-  const dialog = screen.getByRole("dialog", {
-    name: "OAuth client permissions",
-  });
-  await user.click(within(dialog).getAllByRole("link", { name })[0]);
-}
-it("saves only the selected client policy and retains the other policy", async () => {
+it("saves one unified policy without adding actions", async () => {
   const user = renderEntry();
-  expect(screen.getAllByRole("button", { name: "Permissions" })).toHaveLength(
-    1,
-  );
   await user.click(screen.getByRole("button", { name: "Permissions" }));
   await user.click(
     await screen.findByRole("button", {
-      name: "Remove direct access for MCP reviewers",
+      name: "Remove direct access for OAuth reviewers",
     }),
   );
   await user.click(screen.getByRole("button", { name: "Save permissions" }));
   await waitFor(() => expect(writes).toHaveLength(1));
   expect(writes[0]).toMatchObject({
-    resource: "mcpOauthClient",
-    body: { revision: 1, grants: [{ subject: { type: "role", id: "admin" } }] },
+    resource: "oauthClient",
+    body: {
+      revision: 1,
+      grants: [
+        {
+          subject: { type: "role", id: "admin" },
+          actions: ["read", "update", "delete", "manage-permissions"],
+        },
+      ],
+    },
   });
-  await waitFor(() =>
-    expect(
-      screen.queryByRole("button", { name: "Save permissions" }),
-    ).not.toBeInTheDocument(),
-  );
-  await switchTo(user, "LLM clients");
-  expect(await screen.findByText("LLM reviewers")).toBeVisible();
-  expect(policies.llmOauthClient.revision).toBe(1);
-  await switchTo(user, "MCP clients");
-  await screen.findByText("Admin");
-  expect(screen.queryByText("MCP reviewers")).not.toBeInTheDocument();
+  expect(screen.queryByText("MCP clients")).not.toBeInTheDocument();
+  expect(screen.queryByText("LLM clients")).not.toBeInTheDocument();
 });
-it("keeps a dirty draft when switching is cancelled and discards it only after confirmation", async () => {
-  const user = renderEntry();
-  await user.click(screen.getByRole("button", { name: "Permissions" }));
-  await user.click(
-    await screen.findByRole("button", {
-      name: "Remove direct access for MCP reviewers",
-    }),
-  );
-  await switchTo(user, "LLM clients");
-  expect(
-    screen.getByRole("dialog", { name: "Discard unsaved changes?" }),
-  ).toBeVisible();
-  await user.click(screen.getByRole("button", { name: "Keep editing" }));
-  expect(
-    screen.getByText(
-      "Manage access to all MCP OAuth clients, including future clients.",
-    ),
-  ).toBeVisible();
-  expect(screen.queryByText("MCP reviewers")).not.toBeInTheDocument();
-  await switchTo(user, "LLM clients");
-  await user.click(screen.getByRole("button", { name: "Discard changes" }));
-  expect(await screen.findByText("LLM reviewers")).toBeVisible();
-  await switchTo(user, "MCP clients");
-  expect(await screen.findByText("MCP reviewers")).toBeVisible();
-  expect(writes).toHaveLength(0);
-});
-it("guards closing a dirty dialog", async () => {
-  const user = renderEntry();
-  await user.click(screen.getByRole("button", { name: "Permissions" }));
-  await user.click(
-    await screen.findByRole("button", {
-      name: "Remove direct access for MCP reviewers",
-    }),
-  );
-  await user.click(screen.getByRole("button", { name: "Close" }));
-  await user.click(screen.getByRole("button", { name: "Keep editing" }));
-  expect(
-    screen.getByRole("dialog", { name: "OAuth client permissions" }),
-  ).toBeVisible();
-  expect(writes).toHaveLength(0);
-});
-it("lets viewers inspect both policies without allowing edits", async () => {
+it("keeps global permissions read-only for a policy reader", async () => {
   vi.mocked(useHasPermissions).mockImplementation(
-    (permissions) =>
-      ({ data: !permissions.accessPolicies?.includes("update") }) as ReturnType<
-        typeof useHasPermissions
-      >,
+    (permission) =>
+      ({
+        data: permission.accessPolicies?.includes("read") ?? false,
+      }) as ReturnType<typeof useHasPermissions>,
   );
   const user = renderEntry();
   await user.click(screen.getByRole("button", { name: "Permissions" }));
-  expect(await screen.findByText("MCP reviewers")).toBeVisible();
-  for (const button of screen.getAllByRole("button", {
-    name: /Remove direct access/,
-  }))
-    expect(button).toBeDisabled();
-  expect(
-    screen.queryByRole("combobox", { name: "Add access" }),
-  ).not.toBeInTheDocument();
+  expect(await screen.findByText("OAuth reviewers")).toBeVisible();
   expect(
     screen.queryByRole("button", { name: "Save permissions" }),
   ).not.toBeInTheDocument();
-  await switchTo(user, "LLM clients");
-  expect(await screen.findByText("LLM reviewers")).toBeVisible();
   expect(writes).toHaveLength(0);
 });
-
 it.each([
   "mcp",
   "llm",
-] as const)("opens the linked %s policy directly and removes dialog parameters on close", async (kind) => {
+])("opens the unified policy for a legacy %s deep link", async (kind) => {
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams(
       `permissions=all&permissionResource=${kind}OauthClient&search=example`,
@@ -246,20 +181,10 @@ it.each([
     typeof useRouter
   >);
   const user = renderEntry();
-  const dialog = await screen.findByRole("dialog", {
-    name: "OAuth client permissions",
-  });
-  expect(
-    await within(dialog).findByText(`${kind.toUpperCase()} reviewers`),
-  ).toBeVisible();
-  const other = kind === "mcp" ? "LLM" : "MCP";
-  expect(
-    within(dialog).queryByText(`${other} reviewers`),
-  ).not.toBeInTheDocument();
-  await user.click(within(dialog).getByRole("button", { name: "Done" }));
+  expect(await screen.findByText("OAuth reviewers")).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "Done" }));
   expect(replace).toHaveBeenCalledWith(
     "/settings/oauth-clients?search=example",
     { scroll: false },
   );
-  expect(writes).toHaveLength(0);
 });

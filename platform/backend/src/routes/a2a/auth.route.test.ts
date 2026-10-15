@@ -12,8 +12,10 @@
 
 import { randomBytes } from "node:crypto";
 import {
+  A2A_OAUTH_SCOPE,
   MCP_GATEWAY_OAUTH_SCOPE,
   MCP_OAUTH_CLIENT_REFERENCE_PREFIX,
+  OAUTH_CLIENT_REFERENCE_PREFIX,
 } from "@archestra/shared";
 import { vi } from "vitest";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
@@ -21,6 +23,7 @@ import { createFastifyInstance } from "@/fastify-instance";
 import {
   A2AContextModel,
   A2ATaskModel,
+  ManagedOauthClientModel,
   McpOauthClientModel,
   OAuthAccessTokenModel,
   TeamTokenModel,
@@ -465,7 +468,7 @@ describe("a2a route-level authentication", () => {
       clientId: oauthClient.clientId,
       userId: user.id,
       expiresAt: new Date(Date.now() + 3_600_000),
-      scopes: [MCP_GATEWAY_OAUTH_SCOPE],
+      scopes: [A2A_OAUTH_SCOPE],
       referenceId: null,
     });
 
@@ -479,6 +482,60 @@ describe("a2a route-level authentication", () => {
     expect(res.json().error).toBeUndefined();
     expect(mockExecuteA2AMessage).toHaveBeenCalledTimes(1);
   });
+
+  for (const grantType of [
+    "client_credentials",
+    "authorization_code",
+  ] as const) {
+    test(`v2 resolves task ownership for an a2a-only ${grantType} token`, async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeInternalAgent,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeInternalAgent({ organizationId: org.id });
+      const { oauthClient } = await ManagedOauthClientModel.create({
+        organizationId: org.id,
+        authorId: user.id,
+        name: "A2A-only app",
+        grantType,
+        scopes: ["a2a"],
+        allowedGatewayIds: [agent.id],
+        redirectUris:
+          grantType === "authorization_code"
+            ? ["https://app.example.com/callback"]
+            : undefined,
+      });
+      const token = randomBytes(32).toString("base64url");
+      const common = {
+        tokenHash: OAuthAccessTokenModel.hashTokenForLookup(token),
+        clientId: oauthClient.clientId,
+        expiresAt: new Date(Date.now() + 3_600_000),
+        scopes: ["a2a"],
+      };
+      if (grantType === "client_credentials") {
+        await OAuthAccessTokenModel.createClientCredentialsToken({
+          ...common,
+          referenceId: `${OAUTH_CLIENT_REFERENCE_PREFIX}${oauthClient.id}`,
+        });
+      } else {
+        await OAuthAccessTokenModel.create({ ...common, userId: user.id });
+      }
+      const response = await app.inject({
+        method: "POST",
+        url: `/v2/a2a/${agent.id}`,
+        headers: bearer(token),
+        payload: { jsonrpc: "2.0", id: 1, method: "ListTasks", params: {} },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().error, response.body).toBeUndefined();
+      expect(response.json().result.tasks).toEqual([]);
+      expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
+    });
+  }
 
   // === v2: rejection cases never reach execution ===
 

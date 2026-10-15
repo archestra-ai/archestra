@@ -136,6 +136,11 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   // LLM model
   "llmModel.updated": "LLM model updated",
   "llmModel.synced": "LLM model catalog synced",
+  "oauthClient.created": "OAuth client created",
+  "oauthClient.updated": "OAuth client updated",
+  "oauthClient.deleted": "OAuth client deleted",
+  "oauthClient.rotated": "OAuth client secret rotated",
+  "oauthClient.bulk_deleted": "OAuth clients bulk deleted",
   // LLM OAuth client
   "llmOauthClient.created": "LLM OAuth client created",
   "llmOauthClient.updated": "LLM OAuth client updated",
@@ -375,6 +380,7 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "knowledgeFile",
   "limit",
   "llmModel",
+  "oauthClient",
   "llmOauthClient",
   "llmProviderApiKey",
   "llmProxy",
@@ -408,6 +414,7 @@ const RESOURCE_LABEL_OVERRIDES: Record<string, string> = {
   internalMcpCatalog: "Internal MCP catalog",
   mcpOauthClient: "MCP OAuth client",
   llmModel: "LLM model",
+  oauthClient: "OAuth client",
   llmOauthClient: "LLM OAuth client",
   llmProviderApiKey: "LLM provider key",
   llmProxy: "LLM Proxy",

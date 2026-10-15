@@ -21,6 +21,7 @@ const included = (
   servers: [],
   credentials,
   helpers: [],
+  served: { status: "active", composed: true },
 });
 
 test("an included battery shows what its composition binds, not the stored row", () => {

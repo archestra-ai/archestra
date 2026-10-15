@@ -50,13 +50,50 @@ export function RulesCard() {
       ) : (
         <>
           <CoverageDonut totals={totals} />
-          <div className="mt-auto">
+          <div className="mt-auto space-y-2">
+            <CompositionCaption composition={summary.data?.composition} />
             <CoverageWarnings totals={totals} />
           </div>
         </>
       )}
     </StepCard>
   );
+}
+
+/** Which composition the chart describes, when it is not the latest revision's. */
+function CompositionCaption({
+  composition,
+}: {
+  composition: CoverageSummary["composition"] | undefined;
+}) {
+  if (!composition || composition.kind === "current") return null;
+  return (
+    <p
+      className="text-xs text-muted-foreground"
+      data-testid="coverage-composition-caption"
+    >
+      <span>{compositionCaption(composition)}</span>
+    </p>
+  );
+}
+
+function compositionCaption(composition: CoverageSummary["composition"]) {
+  if (composition.kind === "root_only")
+    return "Nothing is enforced: the policy could not be composed and no composition opened before it.";
+  const { servedRootRevision: served, refusedRootRevision: refused } =
+    composition;
+  const showing =
+    served === null
+      ? "Showing the earlier composition the runtime still enforces"
+      : served === refused
+        ? `Showing the earlier composition of revision ${served} the runtime still enforces`
+        : `Showing revision ${served}, which the runtime still enforces`;
+  const attempt =
+    refused === null ? "the latest revision" : `revision ${refused}`;
+  const differ = composition.rulesMayDiffer
+    ? " The rules below are the current text's and may differ from what runs."
+    : "";
+  return `${showing}; ${attempt} was refused.${differ}`;
 }
 
 const share = (count: number, of: number) => Math.round((count / of) * 100);

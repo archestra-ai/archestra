@@ -279,10 +279,11 @@ function PolicySourceCell({ tool }: { tool: CoverageTool }) {
   }
   if (!tool.rule) return null;
 
+  // A rule links to its line only while it runs: a rule of a battery the
+  // enforced composition does not hold, or of a root text alone, has no
+  // enforced line to open.
   const href =
-    tool.rule.source === "battery" &&
-    tool.rule.batteryEntry &&
-    tool.rule.batteryStatus !== "refused"
+    tool.rule.source === "battery" && tool.rule.batteryEntry && tool.enforced
       ? policyLineHref({ entry: tool.rule.batteryEntry, line: tool.rule.line })
       : tool.rule.source === "root" && tool.enforced
         ? policyLineHref({ entry: null, line: tool.rule.line })

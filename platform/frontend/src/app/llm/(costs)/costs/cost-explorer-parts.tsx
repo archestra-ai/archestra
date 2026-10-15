@@ -535,6 +535,7 @@ export function SummaryTable({
   splitLabel,
   focus,
   onToggle,
+  showTimeline = true,
 }: {
   cube: Cube;
   metric: MetricId;
@@ -542,6 +543,7 @@ export function SummaryTable({
   splitLabel: string | null;
   focus: Set<string>;
   onToggle: (key: string) => void;
+  showTimeline?: boolean;
 }) {
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({
     key: "total",
@@ -598,15 +600,19 @@ export function SummaryTable({
             ))}
             {head("total", "Total")}
             <th className="w-[15%] px-3 py-2 text-left font-medium">Share</th>
-            <th className="px-3 py-2 text-left font-medium">
-              <span className="block">Trend</span>
-              <span className="block text-[10px] font-normal">
-                {cube.buckets.length
-                  ? `${fmtBucket(cube.buckets[0])}–${fmtBucket(cube.buckets[cube.buckets.length - 1])} UTC`
-                  : "No time series"}
-              </span>
-            </th>
-            {head("peak", "Peak")}
+            {showTimeline && (
+              <>
+                <th className="px-3 py-2 text-left font-medium">
+                  <span className="block">Trend</span>
+                  <span className="block text-[10px] font-normal">
+                    {cube.buckets.length
+                      ? `${fmtBucket(cube.buckets[0])}–${fmtBucket(cube.buckets[cube.buckets.length - 1])} UTC`
+                      : "No time series"}
+                  </span>
+                </th>
+                {head("peak", "Peak")}
+              </>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -700,27 +706,31 @@ export function SummaryTable({
                       </span>
                     </div>
                   </td>
-                  <td className="px-3 py-1.5">
-                    {r.hasSeries ? (
-                      <Sparkline values={r.series} color={colorAt(i)} />
-                    ) : (
-                      <span className="text-muted-foreground text-xs">
-                        no trend
-                      </span>
-                    )}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-right text-muted-foreground text-xs">
-                    {r.hasSeries && peakIdx >= 0 ? (
-                      <>
-                        <span className="font-mono text-foreground tabular-nums">
-                          {formatCell(metric, r.series[peakIdx])}
-                        </span>{" "}
-                        <span>{fmtBucket(cube.buckets[peakIdx])}</span>
-                      </>
-                    ) : (
-                      <span>—</span>
-                    )}
-                  </td>
+                  {showTimeline && (
+                    <>
+                      <td className="px-3 py-1.5">
+                        {r.hasSeries ? (
+                          <Sparkline values={r.series} color={colorAt(i)} />
+                        ) : (
+                          <span className="text-muted-foreground text-xs">
+                            no trend
+                          </span>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-2 text-right text-muted-foreground text-xs">
+                        {r.hasSeries && peakIdx >= 0 ? (
+                          <>
+                            <span className="font-mono text-foreground tabular-nums">
+                              {formatCell(metric, r.series[peakIdx])}
+                            </span>{" "}
+                            <span>{fmtBucket(cube.buckets[peakIdx])}</span>
+                          </>
+                        ) : (
+                          <span>—</span>
+                        )}
+                      </td>
+                    </>
+                  )}
                 </tr>
                 {isOpen &&
                   r.children.slice(0, 12).map((c) => (
@@ -743,14 +753,18 @@ export function SummaryTable({
                           ? `${r.label.slice(0, 15)}…`
                           : r.label}
                       </td>
-                      <td className="px-3 py-1">
-                        <Sparkline
-                          values={c.series}
-                          color="var(--muted-foreground)"
-                          height={16}
-                        />
-                      </td>
-                      <td />
+                      {showTimeline && (
+                        <>
+                          <td className="px-3 py-1">
+                            <Sparkline
+                              values={c.series}
+                              color="var(--muted-foreground)"
+                              height={16}
+                            />
+                          </td>
+                          <td />
+                        </>
+                      )}
                     </tr>
                   ))}
               </RowGroup>
@@ -1039,4 +1053,37 @@ function Tag({ text }: { text: string }) {
 
 function RowGroup({ children }: { children: ReactNode }) {
   return <>{children}</>;
+}
+
+export function Segmented<T extends string>({
+  value,
+  onChange,
+  items,
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  items: { id: T; label: string; disabled?: boolean; title?: string }[];
+}) {
+  return (
+    <div className="inline-flex h-7 items-center rounded-md bg-muted p-0.5 text-xs">
+      {items.map((it) => (
+        <UnstyledButton
+          key={it.id}
+          type="button"
+          disabled={it.disabled}
+          title={it.title}
+          aria-pressed={value === it.id}
+          onClick={() => onChange(it.id)}
+          className={cn(
+            "h-full rounded-[5px] px-2.5 transition-colors disabled:opacity-40",
+            value === it.id
+              ? "bg-background font-medium text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          <span>{it.label}</span>
+        </UnstyledButton>
+      ))}
+    </div>
+  );
 }

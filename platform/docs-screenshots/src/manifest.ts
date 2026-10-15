@@ -435,7 +435,7 @@ export const SHOTS: Shot[] = [
     route: () => `/llm/usage?timeframe=${encodeURIComponent(USAGE_TIMEFRAME)}`,
     viewport: { width: 1440, height: 900 },
     prepare: async (page) => {
-      await page.getByText("Where your tokens went").first().waitFor();
+      await page.getByRole("region", { name: "Usage explorer" }).waitFor();
       await page.waitForLoadState("networkidle");
     },
   },

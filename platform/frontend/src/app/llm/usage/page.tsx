@@ -1,19 +1,12 @@
 "use client";
 
 import type { StatisticsTimeFrame } from "@archestra/shared";
-import { ContextSizeCard } from "@/app/llm/usage/_parts/context-size-card";
-import { TokenMixCard } from "@/app/llm/usage/_parts/token-mix-card";
-import { TopSessionsCard } from "@/app/llm/usage/_parts/top-sessions-card";
-import {
-  ClientUsageCard,
-  ModelUsageCard,
-} from "@/app/llm/usage/_parts/usage-dimension-cards";
-import { MyUsageSummary } from "@/components/my-usage-summary";
 import { PageLayout } from "@/components/page-layout";
 import { useStatisticsTimeRange } from "@/components/time-range-picker/statistics-time-range";
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMyStatistics, useMyUsageBreakdown } from "@/lib/statistics.query";
+import { UsageContent } from "./usage-content";
 
 const TIMEFRAME_STORAGE_KEY = "my-usage-timeframe";
 const DEFAULT_TIMEFRAME: StatisticsTimeFrame = "7d";
@@ -49,8 +42,6 @@ export default function MyUsagePage() {
       }
     >
       <div className="min-w-0 space-y-6">
-        <MyUsageSummary timeframe={timeframe} enabled={isTimeframeResolved} />
-
         {statisticsQuery.isPending || breakdownQuery.isPending ? (
           <div className="grid min-w-0 gap-6 xl:grid-cols-2">
             <Skeleton className="h-72 w-full" />
@@ -67,23 +58,11 @@ export default function MyUsagePage() {
             Your usage breakdown could not be loaded.
           </p>
         ) : (
-          <>
-            <div className="grid min-w-0 gap-6 xl:grid-cols-2">
-              <ModelUsageCard models={statisticsQuery.data.models} />
-              <ClientUsageCard clients={breakdownQuery.data.clients} />
-            </div>
-
-            <div className="grid min-w-0 gap-6 xl:grid-cols-2">
-              <TokenMixCard mix={breakdownQuery.data.tokenMix} />
-              <ContextSizeCard buckets={breakdownQuery.data.contextBuckets} />
-            </div>
-
-            <TopSessionsCard
-              sessions={breakdownQuery.data.topSessions}
-              totalCost={breakdownQuery.data.totalCost}
-              unsessionedRequests={breakdownQuery.data.unsessionedRequests}
-            />
-          </>
+          <UsageContent
+            statistics={statisticsQuery.data}
+            breakdown={breakdownQuery.data}
+            timeframe={timeframe}
+          />
         )}
       </div>
     </PageLayout>

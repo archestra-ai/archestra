@@ -1,6 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import path from "node:path";
 import { Readable, Transform } from "node:stream";
+import { finished } from "node:stream/promises";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
@@ -21,6 +22,7 @@ import {
 import { sanitizeUploadFilename } from "@/utils/upload-filename";
 import { resolveAgentRuntimeBackendDriver } from "./backends";
 import { AGENT_RUNTIME_ATTACHMENTS_DIR } from "./runtime-contract";
+import { heldFileRefusal, runtimeCrossingRefusal } from "./runtime-crossing";
 import { authorizeAgentWorkspaceAccess } from "./workspace-files";
 
 /** Long enough for a person to notice a failure and retry, short enough that a
@@ -52,7 +54,10 @@ class WorkspaceTransferTickets {
   private readonly tickets = new LRUCacheManager<StoredTicket>({
     maxSize: 1000,
     maxBytes: 64 * 1024 * 1024,
-    sizeOf: (ticket) => (ticket.admittedBytes?.byteLength ?? 0) + 1024,
+    sizeOf: (ticket) =>
+      (ticket.admittedBytes?.byteLength ?? 0) +
+      (ticket.chunkDigests?.length ?? 0) * 64 +
+      1024,
     defaultTtl: WORKSPACE_TRANSFER_TICKET_TTL_MS,
   });
 
@@ -76,90 +81,34 @@ class WorkspaceTransferTickets {
         }),
       ),
     );
-    let admittedBytes: Buffer | undefined;
+    let admitted: AdmittedExport | undefined;
     if (params.crossing) {
+      const driver = resolveAgentRuntimeBackendDriver(session.backend);
       try {
-        // Admit the pinned content, not a manifest that can be approved separately.
-        if (snapshot.size > PROTECTED_EXPORT_LIMIT_BYTES) {
-          throw new ApiError(
-            413,
-            "Protected exports are limited to 4 MiB per admitted file",
-          );
-        }
-        const stream = await resolveAgentRuntimeBackendDriver(
-          session.backend,
-        ).readWorkspaceTransferRange({
+        admitted = await admitExport({
+          driver,
           session,
-          transferId: snapshot.transferId,
-          offset: 0,
-          length: snapshot.size,
-          timeoutMs: TRANSFER_TIMEOUT_MS,
-        });
-        const chunks: Buffer[] = [];
-        // Cancellation can reject this before the normal await below.
-        void stream.completed.catch(() => undefined);
-        let size = 0;
-        for await (const chunk of stream.stdout) {
-          const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-          size += bytes.length;
-          if (size > snapshot.size)
-            throw new ApiError(409, "The pinned export changed size");
-          chunks.push(bytes);
-        }
-        await stream.completed;
-        const bytes = Buffer.concat(chunks);
-        if (
-          size !== snapshot.size ||
-          createHash("sha256").update(bytes).digest("hex") !== snapshot.sha256
-        ) {
-          throw new ApiError(
-            409,
-            "The pinned export failed its integrity check",
-          );
-        }
-        let encoding: "utf8" | "base64" = "utf8";
-        let data: string;
-        try {
-          data = new TextDecoder("utf-8", {
-            fatal: true,
-            ignoreBOM: true,
-          }).decode(bytes);
-        } catch {
-          encoding = "base64";
-          data = bytes.toString("base64");
-        }
-        const content = JSON.stringify({
+          snapshot,
           path: params.path,
-          encoding,
-          content: data,
-          sha256: snapshot.sha256,
+          crossing: params.crossing,
         });
-        const result = await returnRuntimeValue({
-          session: params.crossing.child,
-          operationId: `file-export:${params.crossing.operationId}:${snapshot.sha256}`,
-          value: content,
-        });
-        if (result.kind !== "admitted" || result.value !== content) {
-          throw new ApiError(
-            409,
-            "The pinned file was not admitted unchanged. No download ticket was issued.",
-          );
-        }
-        // HTTP ranges must serve the exact admitted copy, never the mutable file.
-        admittedBytes = bytes;
       } finally {
-        await resolveAgentRuntimeBackendDriver(session.backend)
-          .runWorkspaceTransferCommand({
-            session,
-            args: helperArgs(undefined, "discard", snapshot.transferId),
-            timeoutMs: CONTROL_TIMEOUT_MS,
-          })
-          .catch(() => {
-            logger.warn(
-              { transferId: snapshot.transferId },
-              "Could not discard a refused runtime export snapshot",
-            );
-          });
+        // A file kept on the host needs no snapshot. A larger file is served
+        // from its snapshot, chunk by chunk against the admitted digests.
+        if (!admitted || "bytes" in admitted) {
+          await driver
+            .runWorkspaceTransferCommand({
+              session,
+              args: helperArgs(undefined, "discard", snapshot.transferId),
+              timeoutMs: CONTROL_TIMEOUT_MS,
+            })
+            .catch(() => {
+              logger.warn(
+                { transferId: snapshot.transferId },
+                "Could not discard a refused runtime export snapshot",
+              );
+            });
+        }
       }
     }
     return this.store({
@@ -171,7 +120,12 @@ class WorkspaceTransferTickets {
       destination: { ...snapshot, present: true },
       actor: params.actor,
       taskId: params.taskId,
-      ...(admittedBytes ? { admittedBytes } : {}),
+      ...(admitted && "bytes" in admitted
+        ? { admittedBytes: admitted.bytes }
+        : {}),
+      ...(admitted && "chunkDigests" in admitted
+        ? { chunkDigests: admitted.chunkDigests }
+        : {}),
     });
   }
 
@@ -262,6 +216,16 @@ class WorkspaceTransferTickets {
         ),
         completed: Promise.resolve(),
       };
+    }
+    if (params.ticket.chunkDigests) {
+      return verifiedSnapshotRead({
+        driver: resolveAgentRuntimeBackendDriver(session.backend),
+        session,
+        ticket: params.ticket,
+        digests: params.ticket.chunkDigests,
+        offset: params.offset,
+        length: params.length,
+      });
     }
     return resolveAgentRuntimeBackendDriver(
       session.backend,
@@ -359,6 +323,7 @@ class WorkspaceTransferTickets {
       actor: A2AActor;
       taskId: string;
       admittedBytes?: Buffer;
+      chunkDigests?: readonly string[];
       crossing?: {
         parent: OpenAppaSession;
         childSessionId: string;
@@ -402,6 +367,9 @@ type StoredTicket = WorkspaceTransferTicket & {
   taskId: string;
   /** Host-private, byte-bounded copy of a protected download's admitted value. */
   admittedBytes?: Buffer;
+  /** Digest of each admitted chunk of a protected download served from its
+   * pinned snapshot, in chunk order. */
+  chunkDigests?: readonly string[];
   crossing?: {
     parent: OpenAppaSession;
     childSessionId: string;
@@ -409,7 +377,210 @@ type StoredTicket = WorkspaceTransferTicket & {
   };
 };
 
-const PROTECTED_EXPORT_LIMIT_BYTES = 4 * 1024 * 1024;
+type AdmittedExport = { bytes: Buffer } | { chunkDigests: readonly string[] };
+
+/**
+ * Largest protected export kept on the host, and the chunk size above it.
+ * A chunk crosses the guardrail as one child value, so after base64 inflation
+ * and its JSON envelope it must stay under the 8 MiB a child value may carry.
+ * No file size is refused here: an unprotected export has no limit either.
+ */
+const PROTECTED_EXPORT_CHUNK_BYTES = 4 * 1024 * 1024;
+
+const SNAPSHOT_MISMATCH =
+  "The pinned export no longer matches its admitted bytes";
+
+/**
+ * Reads the pinned snapshot once and admits it through the parent's guardrail.
+ * A file up to the chunk size crosses whole and stays on the host. A larger one
+ * crosses in order, one chunk per child value, and only the chunk digests are
+ * kept: serving checks every chunk of the snapshot against them, so the runtime
+ * still cannot change what was admitted. Content crosses, never a manifest that
+ * could be approved apart from its bytes.
+ */
+async function admitExport(params: {
+  driver: ReturnType<typeof resolveAgentRuntimeBackendDriver>;
+  session: Awaited<ReturnType<typeof authorizeAgentWorkspaceAccess>>;
+  snapshot: ReturnType<typeof WorkspaceSnapshotSchema.parse>;
+  path: string;
+  crossing: { child: OpenAppaSession; operationId: string };
+}): Promise<AdmittedExport> {
+  const { snapshot, crossing } = params;
+  const whole = snapshot.size <= PROTECTED_EXPORT_CHUNK_BYTES;
+  const count = whole
+    ? 1
+    : Math.ceil(snapshot.size / PROTECTED_EXPORT_CHUNK_BYTES);
+  const stream = await params.driver.readWorkspaceTransferRange({
+    session: params.session,
+    transferId: snapshot.transferId,
+    offset: 0,
+    length: snapshot.size,
+    timeoutMs: TRANSFER_TIMEOUT_MS,
+  });
+  // Cancellation can reject this before the normal await below.
+  void stream.completed.catch(() => undefined);
+  const fileHash = createHash("sha256");
+  const digests: string[] = [];
+  const admitChunk = async (chunk: Buffer) => {
+    const index = digests.length;
+    const digest = createHash("sha256").update(chunk).digest("hex");
+    await crossExportValue({
+      crossing,
+      operationId: `file-export:${crossing.operationId}:${snapshot.sha256}:${index}/${count}`,
+      value: JSON.stringify({
+        path: params.path,
+        encoding: "base64",
+        content: chunk.toString("base64"),
+        sha256: snapshot.sha256,
+        chunk: { index, count, sha256: digest },
+      }),
+    });
+    digests.push(digest);
+  };
+  let pending: Buffer[] = [];
+  let pendingBytes = 0;
+  let size = 0;
+  for await (const piece of stream.stdout) {
+    const bytes = Buffer.isBuffer(piece) ? piece : Buffer.from(piece);
+    size += bytes.length;
+    if (size > snapshot.size)
+      throw new ApiError(409, "The pinned export changed size");
+    fileHash.update(bytes);
+    pending.push(bytes);
+    pendingBytes += bytes.length;
+    while (!whole && pendingBytes >= PROTECTED_EXPORT_CHUNK_BYTES) {
+      const joined = Buffer.concat(pending);
+      await admitChunk(joined.subarray(0, PROTECTED_EXPORT_CHUNK_BYTES));
+      const rest = joined.subarray(PROTECTED_EXPORT_CHUNK_BYTES);
+      pending = rest.length > 0 ? [rest] : [];
+      pendingBytes = rest.length;
+    }
+  }
+  await stream.completed;
+  if (size !== snapshot.size || fileHash.digest("hex") !== snapshot.sha256) {
+    throw new ApiError(409, "The pinned export failed its integrity check");
+  }
+  if (!whole) {
+    if (pendingBytes > 0) await admitChunk(Buffer.concat(pending));
+    return { chunkDigests: digests };
+  }
+  const bytes = Buffer.concat(pending);
+  let encoding: "utf8" | "base64" = "utf8";
+  let data: string;
+  try {
+    data = new TextDecoder("utf-8", {
+      fatal: true,
+      ignoreBOM: true,
+    }).decode(bytes);
+  } catch {
+    encoding = "base64";
+    data = bytes.toString("base64");
+  }
+  await crossExportValue({
+    crossing,
+    operationId: `file-export:${crossing.operationId}:${snapshot.sha256}`,
+    value: JSON.stringify({
+      path: params.path,
+      encoding,
+      content: data,
+      sha256: snapshot.sha256,
+    }),
+  });
+  // HTTP ranges must serve the exact admitted copy, never the mutable file.
+  return { bytes };
+}
+
+/** One child value must come back admitted and byte-identical, or no ticket. */
+async function crossExportValue(params: {
+  crossing: { child: OpenAppaSession; operationId: string };
+  operationId: string;
+  value: string;
+}): Promise<void> {
+  const result = await returnRuntimeValue({
+    session: params.crossing.child,
+    operationId: params.operationId,
+    value: params.value,
+  });
+  if (result.kind !== "admitted") {
+    throw runtimeCrossingRefusal(
+      `${heldFileRefusal(result.reason)}\n\nNo download ticket was issued.`,
+    );
+  }
+  if (result.value !== params.value) {
+    throw runtimeCrossingRefusal(
+      "The pinned file was not admitted unchanged. No download ticket was issued.",
+    );
+  }
+}
+
+/**
+ * Serves a large protected download from its pinned snapshot, releasing each
+ * chunk only after it matches the digest admitted for it. A runtime that
+ * rewrites the snapshot after admission ends the stream with an error instead
+ * of changing what the parent receives.
+ */
+function verifiedSnapshotRead(params: {
+  driver: ReturnType<typeof resolveAgentRuntimeBackendDriver>;
+  session: Awaited<ReturnType<typeof authorizeAgentWorkspaceAccess>>;
+  ticket: StoredTicket;
+  digests: readonly string[];
+  offset: number;
+  length: number;
+}): { stdout: Readable; completed: Promise<void> } {
+  const { ticket, digests, offset } = params;
+  const end =
+    params.length < 0
+      ? ticket.size
+      : Math.min(ticket.size, offset + params.length);
+  async function* chunks() {
+    for (
+      let index = Math.floor(offset / PROTECTED_EXPORT_CHUNK_BYTES);
+      index * PROTECTED_EXPORT_CHUNK_BYTES < end;
+      index++
+    ) {
+      const start = index * PROTECTED_EXPORT_CHUNK_BYTES;
+      const length = Math.min(
+        PROTECTED_EXPORT_CHUNK_BYTES,
+        ticket.size - start,
+      );
+      const expected = digests[index];
+      if (!expected) throw new ApiError(409, SNAPSHOT_MISMATCH);
+      const range = await params.driver.readWorkspaceTransferRange({
+        session: params.session,
+        transferId: ticket.entryId,
+        offset: start,
+        length,
+        timeoutMs: TRANSFER_TIMEOUT_MS,
+      });
+      void range.completed.catch(() => undefined);
+      const parts: Buffer[] = [];
+      let seen = 0;
+      for await (const piece of range.stdout) {
+        const bytes = Buffer.isBuffer(piece) ? piece : Buffer.from(piece);
+        seen += bytes.length;
+        if (seen > length) throw new ApiError(409, SNAPSHOT_MISMATCH);
+        parts.push(bytes);
+      }
+      await range.completed;
+      const chunk = Buffer.concat(parts);
+      if (
+        chunk.length !== length ||
+        createHash("sha256").update(chunk).digest("hex") !== expected
+      ) {
+        throw new ApiError(409, SNAPSHOT_MISMATCH);
+      }
+      yield chunk.subarray(
+        Math.max(offset, start) - start,
+        Math.min(end, start + length) - start,
+      );
+    }
+  }
+  const stdout = Readable.from(chunks());
+  const completed = finished(stdout);
+  // The route decides how to react; an unobserved failure must not crash.
+  void completed.catch(() => undefined);
+  return { stdout, completed };
+}
 
 /** The path a person or Agent should use: absolute outside the workspace. */
 export function ticketPath(

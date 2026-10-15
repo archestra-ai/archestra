@@ -135,6 +135,27 @@ fn unknown_run_id_is_none() {
     assert!(load_run(&fixtures(), "../run_a").unwrap().is_none());
 }
 
+#[test]
+fn run_id_that_escapes_experiments_dir_is_rejected() {
+    let root = fixtures();
+    // Absolute, nested, and dot-segment ids must never reach the filesystem as paths.
+    let absolute = root.join("run_a");
+    assert!(load_run(&root, absolute.to_str().unwrap()).unwrap().is_none());
+    assert!(load_run(&root, "run_a/..").unwrap().is_none());
+    assert!(load_run(&root, "./run_a").unwrap().is_none());
+    assert!(load_run(&root, "").unwrap().is_none());
+
+    // A run dir that is a symlink to a directory outside the experiments root is not a run.
+    let scratch = tempfile::tempdir().unwrap();
+    let experiments = scratch.path().join("experiments");
+    let outside = scratch.path().join("outside_run");
+    std::fs::create_dir_all(&experiments).unwrap();
+    std::fs::create_dir_all(&outside).unwrap();
+    std::fs::write(outside.join("config.json"), "{}").unwrap();
+    std::os::unix::fs::symlink(&outside, experiments.join("linked")).unwrap();
+    assert!(load_run(&experiments, "linked").unwrap().is_none());
+}
+
 // ---------------------------------------------------------------------------
 // routes
 // ---------------------------------------------------------------------------

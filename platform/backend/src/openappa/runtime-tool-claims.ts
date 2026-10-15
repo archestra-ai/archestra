@@ -44,6 +44,25 @@ export function signRuntimeToolProof(params: {
   }
 }
 
+/**
+ * The runtime calls the proxy may sign while enforcement is off. Nothing
+ * rules a call then, so only reads qualify: what they return crosses the
+ * guardrail into the session at the gateway. A launch, steer, write or upload
+ * made while enforcement was off is refused once it is back on, so the model
+ * makes it again and the proxy rules it.
+ */
+export function isObservedRead(params: {
+  action: string;
+  args: Record<string, unknown>;
+}): boolean {
+  if (params.action === "get_run" || params.action === "read_workspace_file")
+    return true;
+  return (
+    params.action === "transfer_workspace_file" &&
+    params.args.direction === "download"
+  );
+}
+
 export function verifyRuntimeToolProof(params: {
   proof: unknown;
   organizationId: string;

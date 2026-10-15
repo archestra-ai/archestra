@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   type ArchestraToolFullName,
@@ -25,12 +24,11 @@ import {
 } from "@archestra/shared";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { ZodError, type ZodType, z } from "zod";
-import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
-import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import {
+  isObservedRead,
   RUNTIME_TOOL_PROOF_ARGUMENT,
   verifyRuntimeToolProof,
 } from "@/openappa/runtime-tool-claims";
@@ -322,67 +320,27 @@ export async function executeArchestraTool(
   context: ArchestraContext,
 ): Promise<CallToolResult> {
   const runtimeProof = args?.[RUNTIME_TOOL_PROOF_ARGUMENT];
+  let proofAccepted = false;
   if (runtimeProof !== undefined) {
-    const action = archestraMcpBranding.getToolShortName(toolName) ?? toolName;
-    const verified = context.organizationId
-      ? verifyRuntimeToolProof({
-          proof: runtimeProof,
-          organizationId: context.organizationId,
-          callerId: authenticatedRuntimeSpender({
-            userId: context.userId,
-            callerId: context.openappaSession?.caller_id,
-          }),
-          action,
-          arguments: args ?? {},
-          secret: config.openappa.offerSigningSecret,
-        })
-      : null;
-    if (!verified || (!runtimeToolNames.has(action) && !isAgentTool(action))) {
-      return errorResult(
-        "OpenAPPA could not verify this runtime tool's source.",
-      );
-    }
-    const source = await OpenAppaSessionModel.familySession({
-      organizationId: verified.session.organization_id,
-      sessionId: verified.session.session_id,
-      callerId: verified.session.caller_id,
+    const admitted = await admitRuntimeProof({
+      proof: runtimeProof,
+      toolName,
+      args: args ?? {},
+      context,
     });
-    if (!source || source.parentId !== (verified.session.parent_id ?? null)) {
-      return errorResult(
-        "OpenAPPA could not find the recorded source session.",
-      );
-    }
-    if (verified.observed) {
-      // Nothing ruled a call made while enforcement was off, so no released
-      // call exists. The record that the session made it stands in, and a
-      // launch is never accepted this way: it would bind an unruled child.
-      if (
-        verified.spawn ||
-        !(await observedCallWasMade({
-          organizationId: verified.session.organization_id,
-          sessionId: verified.session.session_id,
-          toolCallId: verified.toolCallId,
-        }))
-      ) {
-        return errorResult("OpenAPPA has no record of this runtime call.");
-      }
-    } else {
-      const released = await OpenAppaSpawnCorrelationModel.releasedCalls({
-        organizationId: verified.session.organization_id,
-        callerId: verified.session.caller_id,
-        sessionId: verified.session.session_id,
-        toolCallIds: [verified.toolCallId],
-      });
-      if (released.get(verified.toolCallId)?.spawn !== verified.spawn) {
-        return errorResult("OpenAPPA has no matching released runtime call.");
-      }
-    }
-    context = {
-      ...context,
-      openappaRuntimeCall: verified,
-      currentToolCallId: verified.toolCallId,
-    };
     const { [RUNTIME_TOOL_PROOF_ARGUMENT]: _proof, ...original } = args ?? {};
+    if (admitted.kind === "accepted") {
+      context = {
+        ...context,
+        openappaRuntimeCall: admitted.call,
+        currentToolCallId: admitted.call.toolCallId,
+      };
+      proofAccepted = true;
+    } else if (await isGuardrailsV2Active()) {
+      return errorResult(admitted.reason);
+    }
+    // While Guardrails are off a proof only matters for later crossings, so
+    // one that does not check out must not fail a call that runs without it.
     args = original;
   }
   if (
@@ -427,7 +385,7 @@ export async function executeArchestraTool(
     if ("error" in parsedArgs) {
       return parsedArgs.error;
     }
-    if (runtimeProof !== undefined && !(await claimRuntimeDispatch(context))) {
+    if (proofAccepted && !(await claimRuntimeDispatch(context))) {
       return errorResult(
         "This released runtime call was already claimed or is no longer executable. Do not redispatch it; retrieve its status before requesting a new action.",
       );
@@ -453,7 +411,7 @@ export async function executeArchestraTool(
   const admitted = await admitArchestraToolCall({ toolName, args, context });
   if ("error" in admitted) return admitted.error;
   const { toolEntry, resolvedToolName } = admitted;
-  if (runtimeProof !== undefined && !(await claimRuntimeDispatch(context))) {
+  if (proofAccepted && !(await claimRuntimeDispatch(context))) {
     return errorResult(
       "This released runtime call was already claimed or is no longer executable. Do not redispatch it; retrieve its status before requesting a new action.",
     );
@@ -839,7 +797,8 @@ async function claimRuntimeDispatch(
 ): Promise<boolean> {
   const call = context.openappaRuntimeCall;
   if (!call) return false;
-  if (call.observed) return claimObservedRuntimeDispatch(call);
+  // An observed call was claimed when its proof was admitted.
+  if (call.observed) return true;
   return OpenAppaSpawnCorrelationModel.claimRuntimeDispatch({
     organizationId: call.session.organization_id,
     callerId: call.session.caller_id,
@@ -849,49 +808,90 @@ async function claimRuntimeDispatch(
   });
 }
 
-/** Whether the proxy recorded that this session made the call while enforcement was off. */
-async function observedCallWasMade(params: {
-  organizationId: string;
-  sessionId: string;
-  toolCallId: string;
-}): Promise<boolean> {
-  const calls = await OpenAppaUnenforcedModel.findCalls({
-    organizationId: params.organizationId,
-    sessionIds: [params.sessionId],
-    toolCallIds: [params.toolCallId],
-  });
-  return calls.some(
-    (call) => call.toolCallId === params.toolCallId && call.reason === "made",
-  );
-}
-
 /**
- * One execution per observed call. A proof lives five minutes, so a claim that
- * outlives it is enough; it never needs the engine's released-call record.
+ * Checks a runtime proof against what the proxy recorded. A proof signed while
+ * enforcement was on must match a call the runtime released. One signed while
+ * it was off (`observed`) must match a read the session recorded making, and
+ * is claimed here: nothing ruled it, so it may only read, never launch,
+ * steer, or write.
  */
-async function claimObservedRuntimeDispatch(
-  call: NonNullable<ArchestraContext["openappaRuntimeCall"]>,
-): Promise<boolean> {
-  const key: AllowedCacheKey = `${CacheKey.OpenAppaObservedRuntimeDispatch}-${createHash(
-    "sha256",
-  )
-    .update(
-      [
-        call.session.organization_id,
-        call.session.caller_id ?? "",
-        call.session.session_id,
-        call.toolCallId,
-      ].join("\n"),
-    )
-    .digest("base64url")}`;
-  return cacheManager.withLock(key, async (cache) => {
-    if (await cache.get<true>(key)) return false;
-    await cache.set(key, true, OBSERVED_DISPATCH_CLAIM_TTL_MS);
-    return true;
+async function admitRuntimeProof(params: {
+  proof: unknown;
+  toolName: string;
+  args: Record<string, unknown>;
+  context: ArchestraContext;
+}): Promise<
+  | {
+      kind: "accepted";
+      call: NonNullable<ArchestraContext["openappaRuntimeCall"]>;
+    }
+  | { kind: "refused"; reason: string }
+> {
+  const { context } = params;
+  const action =
+    archestraMcpBranding.getToolShortName(params.toolName) ?? params.toolName;
+  const verified = context.organizationId
+    ? verifyRuntimeToolProof({
+        proof: params.proof,
+        organizationId: context.organizationId,
+        callerId: authenticatedRuntimeSpender({
+          userId: context.userId,
+          callerId: context.openappaSession?.caller_id,
+        }),
+        action,
+        arguments: params.args,
+        secret: config.openappa.offerSigningSecret,
+      })
+    : null;
+  if (!verified || (!runtimeToolNames.has(action) && !isAgentTool(action))) {
+    return {
+      kind: "refused",
+      reason: "OpenAPPA could not verify this runtime tool's source.",
+    };
+  }
+  const source = await OpenAppaSessionModel.familySession({
+    organizationId: verified.session.organization_id,
+    sessionId: verified.session.session_id,
+    callerId: verified.session.caller_id,
   });
+  if (!source || source.parentId !== (verified.session.parent_id ?? null)) {
+    return {
+      kind: "refused",
+      reason: "OpenAPPA could not find the recorded source session.",
+    };
+  }
+  if (verified.observed) {
+    if (
+      verified.spawn ||
+      !isObservedRead({ action, args: params.args }) ||
+      !(await OpenAppaSpawnCorrelationModel.claimObservedRuntimeDispatch({
+        organizationId: verified.session.organization_id,
+        callerId: verified.session.caller_id,
+        sessionId: verified.session.session_id,
+        toolCallId: verified.toolCallId,
+      }))
+    ) {
+      return {
+        kind: "refused",
+        reason: "OpenAPPA has no unclaimed record of this runtime call.",
+      };
+    }
+    return { kind: "accepted", call: verified };
+  }
+  const released = await OpenAppaSpawnCorrelationModel.releasedCalls({
+    organizationId: verified.session.organization_id,
+    callerId: verified.session.caller_id,
+    sessionId: verified.session.session_id,
+    toolCallIds: [verified.toolCallId],
+  });
+  if (released.get(verified.toolCallId)?.spawn !== verified.spawn) {
+    return {
+      kind: "refused",
+      reason: "OpenAPPA has no matching released runtime call.",
+    };
+  }
+  return { kind: "accepted", call: verified };
 }
-
-const OBSERVED_DISPATCH_CLAIM_TTL_MS = 10 * 60 * 1000;
 
 /**
  * Shared error-result builder for a tool-args ZodError: the per-issue error

@@ -7,6 +7,7 @@ import {
 
 const operations = schema.openappaOperationsTable;
 const sessions = schema.openappaSessionsTable;
+const unenforcedCalls = schema.openappaUnenforcedCallsTable;
 const RUNTIME_LAUNCH_PREFIX = "runtime-launch:";
 
 export type AllowedSpawnAlias = {
@@ -39,6 +40,39 @@ class OpenAppaSpawnCorrelationModel {
         AND released.status = 'complete'
         AND released.decision->>'decision' = 'allow_call'
         AND COALESCE(released.input->'semantic'->>'spawn', released.input->>'spawn', 'false') = ${String(params.spawn)}
+      ON CONFLICT DO NOTHING
+      RETURNING operation_id
+    `);
+    return result.rows.length === 1;
+  }
+
+  /**
+   * Durable single execution claim for a runtime call the proxy signed while
+   * enforcement was off. Nothing released it, so the record that the session
+   * made the call stands in for the released-call row, checked in the same
+   * statement that claims it.
+   */
+  static async claimObservedRuntimeDispatch(params: {
+    organizationId: string;
+    callerId: string | undefined;
+    sessionId: string;
+    toolCallId: string;
+  }): Promise<boolean> {
+    const result = await db.execute<{ operation_id: string }>(sql`
+      INSERT INTO ${operations} (organization_id, session_id, caller_id, root, operation_id, status, input, decision)
+      SELECT source.organization_id, source.session_id, source.caller_id, source.root,
+        ${`runtime-dispatch:${params.toolCallId}`}, 'complete',
+        ${JSON.stringify({ event: "runtime_dispatch", tool_call_id: params.toolCallId, observed: true })}::jsonb,
+        '{"decision":"ack"}'::jsonb
+      FROM ${sessions} AS source
+      JOIN ${unenforcedCalls} AS made
+        ON made.organization_id = source.organization_id
+        AND made.session_id = source.session_id
+      WHERE source.organization_id = ${params.organizationId}
+        AND source.session_id = ${params.sessionId}
+        AND source.caller_id IS NOT DISTINCT FROM ${params.callerId ?? null}
+        AND made.tool_call_id = ${params.toolCallId}
+        AND made.reason = 'made'
       ON CONFLICT DO NOTHING
       RETURNING operation_id
     `);

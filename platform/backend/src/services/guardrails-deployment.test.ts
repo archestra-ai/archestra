@@ -89,7 +89,7 @@ describe("setGuardrailsDeployment", () => {
         after: expect.objectContaining({ enabled: false }),
       },
       expect.stringMatching(
-        /^Guardrails (enforcement turned off|deployment settings changed)$/,
+        /^Guardrails (enforcement switched off|deployment settings changed)$/,
       ),
     );
   });

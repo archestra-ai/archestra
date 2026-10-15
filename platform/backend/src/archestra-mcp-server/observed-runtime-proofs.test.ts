@@ -1,6 +1,10 @@
-import { TOOL_GET_RUN_FULL_NAME } from "@archestra/shared";
+import {
+  TOOL_GET_RUN_FULL_NAME,
+  TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
+} from "@archestra/shared";
 import { vi } from "vitest";
 import { executeArchestraTool } from "@/archestra-mcp-server";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import db, { schema } from "@/database";
 import {
@@ -78,7 +82,9 @@ describe("runtime calls signed while enforcement was off", () => {
 
     const replay = await getRun(seeded, { callId: "observed-get-run" });
     expect(replay.isError).toBe(true);
-    expect(JSON.stringify(replay.content)).toContain("already claimed");
+    expect(JSON.stringify(replay.content)).toContain(
+      "no unclaimed record of this runtime call",
+    );
     expect(read).toHaveBeenCalledOnce();
   });
 
@@ -102,7 +108,7 @@ describe("runtime calls signed while enforcement was off", () => {
 
     expect(result.isError).toBe(true);
     expect(JSON.stringify(result.content)).toContain(
-      "no record of this runtime call",
+      "no unclaimed record of this runtime call",
     );
     expect(read).not.toHaveBeenCalled();
   });
@@ -130,8 +136,107 @@ describe("runtime calls signed while enforcement was off", () => {
 
     expect(result.isError).toBe(true);
     expect(JSON.stringify(result.content)).toContain(
-      "no record of this runtime call",
+      "no unclaimed record of this runtime call",
     );
+  });
+});
+
+describe("runtime calls signed while enforcement was off, beyond reads", () => {
+  const priorSecret = config.openappa.offerSigningSecret;
+  const priorOpenappa = config.openappa.enabled;
+
+  beforeEach(() => {
+    config.openappa.offerSigningSecret = SECRET;
+    config.openappa.enabled = true;
+    vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    config.openappa.offerSigningSecret = priorSecret;
+    config.openappa.enabled = priorOpenappa;
+  });
+
+  test("a write is refused once enforcement is on, so the model makes it again under a ruling", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    await GuardrailsDeploymentModel.setEnabled(true);
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    });
+    await recordMade(seeded, "observed-write");
+    const args = {
+      task_id: seeded.taskId,
+      path: "notes.txt",
+      content: "written while off",
+    };
+    const proof = signRuntimeToolProof({
+      session: seeded.parent,
+      toolCallId: "observed-write",
+      action: "write_workspace_file",
+      arguments: args,
+      spawn: false,
+      observed: true,
+      secret: SECRET,
+    });
+
+    const result = await executeArchestraTool(
+      archestraMcpBranding.getToolName(TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME),
+      { ...args, runtime_proof: proof },
+      seeded.context,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(
+      "no unclaimed record of this runtime call",
+    );
+  });
+
+  test("while enforcement is off, a proof that does not check out does not fail the call", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    await GuardrailsDeploymentModel.setEnabled(false);
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    });
+    const args = { task_id: seeded.taskId };
+    // Signed long ago: the call sat behind a slow tool, and the proof expired.
+    const stale = signRuntimeToolProof({
+      session: seeded.parent,
+      toolCallId: "stale-get-run",
+      action: "get_run",
+      arguments: args,
+      spawn: false,
+      observed: true,
+      secret: SECRET,
+      now: Math.floor(Date.now() / 1000) - 3600,
+    });
+
+    const result = await executeArchestraTool(
+      TOOL_GET_RUN_FULL_NAME,
+      { ...args, runtime_proof: stale },
+      seeded.context,
+    );
+
+    expect(JSON.stringify(result.content)).not.toContain(
+      "could not verify this runtime tool",
+    );
+    expect(JSON.stringify(result.content)).toContain(seeded.taskId);
   });
 });
 

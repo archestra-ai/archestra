@@ -71,12 +71,32 @@ describe("protected runtime protocol", () => {
           name: "archestra__start_run",
           arguments: launch,
         },
+        {
+          id: "observed-steer",
+          name: "archestra__steer_run",
+          arguments: { task_id: "task-one", message: "keep going" },
+        },
+        {
+          id: "observed-forged",
+          name: "archestra__get_run",
+          arguments: { task_id: "task-one", runtime_proof: "model-written" },
+        },
       ],
     });
 
     if (outcome?.decision !== "allow") throw new Error("nothing was signed");
-    const [read, spawn] = outcome.toolCalls;
+    const [read, spawn, steer, forged] = outcome.toolCalls;
+    // Only reads are signed while nothing rules them; a launch or a steer is
+    // made again under a ruling, and a proof the model wrote is not replaced.
     expect(spawn.arguments).toEqual(launch);
+    expect(steer.arguments).toEqual({
+      task_id: "task-one",
+      message: "keep going",
+    });
+    expect(forged.arguments).toEqual({
+      task_id: "task-one",
+      runtime_proof: "model-written",
+    });
     const signed = read.arguments as Record<string, unknown>;
     expect(
       verifyRuntimeToolProof({

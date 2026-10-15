@@ -87,9 +87,9 @@ export async function setGuardrailsDeployment(
       before: deploymentSettings(before),
       after: deploymentSettings(after),
     },
-    after.active === before.active
+    after.enabled === before.enabled
       ? "Guardrails deployment settings changed"
-      : `Guardrails enforcement turned ${after.active ? "on" : "off"}`,
+      : `Guardrails enforcement switched ${after.enabled ? "on" : "off"}`,
   );
   return after;
 }

@@ -152,8 +152,6 @@ export const CacheKey = {
   EncryptedChatSession: "encrypted-chat-session-v2",
   /** Arguments behind a Slack approval's "View arguments" button (a button value is capped at 2,000 chars) */
   SlackApprovalArguments: "chatops-slack-approval-arguments",
-  /** Single execution of a runtime call the proxy signed while enforcement was off */
-  OpenAppaObservedRuntimeDispatch: "openappa-observed-runtime-dispatch",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];

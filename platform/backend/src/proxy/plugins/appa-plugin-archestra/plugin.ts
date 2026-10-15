@@ -67,6 +67,7 @@ import {
   stripPeerProofs,
 } from "@/openappa/peer-claims";
 import {
+  isObservedRead,
   RUNTIME_TOOL_PROOF_ARGUMENT,
   signRuntimeToolProof,
   stripRuntimeToolProofs,
@@ -2922,11 +2923,11 @@ async function recordObservedCalls(
 }
 
 /**
- * Signs the runtime calls of a governed session while enforcement is off.
- * Nothing rules them now, but a call can reach the gateway after enforcement
+ * Signs the runtime reads of a governed session while enforcement is off.
+ * Nothing rules them now, but a read can reach the gateway after enforcement
  * turns on, and without a proof the gateway cannot tell this session from a
- * stranger and refuses it. With one, its runtime crossings are checked as this
- * session's. A launch stays unsigned: an unruled spawn must not bind a child.
+ * stranger and refuses it. With one, what it reads crosses into this session
+ * as for a ruled call. Anything else stays unsigned (see `isObservedRead`).
  * Signing never fails the request; an unsigned call behaves as before.
  */
 async function signObservedRuntimeCalls(
@@ -2945,8 +2946,12 @@ async function signObservedRuntimeCalls(
     const runtimeProofs: LlmProxyRuntimeToolProof[] = [];
     for (const call of calls) {
       const runtime = runtimeCalls.get(call.id);
+      // A proof the model wrote itself is left for the gateway to refuse.
       const proof =
-        runtime && !runtime.spawn
+        runtime &&
+        !runtime.spawn &&
+        isObservedRead({ action: runtime.action, args: runtime.args }) &&
+        !Object.hasOwn(runtime.args, RUNTIME_TOOL_PROOF_ARGUMENT)
           ? signRuntimeToolProof({
               session: observer.session,
               toolCallId: withoutTrajectoryStamp(call.id),

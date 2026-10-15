@@ -42,6 +42,7 @@ const native = vi.hoisted(() => {
         files: [],
       },
     ]),
+    validateHostedOpenappaPolicy: vi.fn(async () => []),
     composeOpenappaPolicy: vi.fn(
       async (input: { root: string; batteries: Array<{ name: string }> }) => {
         composed.push(input.batteries.map((battery) => battery.name));

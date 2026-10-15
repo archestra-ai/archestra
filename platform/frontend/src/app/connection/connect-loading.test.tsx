@@ -5,7 +5,7 @@ import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import type { ReactNode } from "react";
 import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
-import { useProfiles } from "@/lib/agent.query";
+import { useAgentOptions, useProfiles } from "@/lib/agent.query";
 import { useGatewayToolPreview } from "@/lib/mcp/gateway-tool-preview.query";
 import { fetchAllSkills } from "@/lib/skills/skill.query";
 import { useGatewayServers } from "./use-gateway-servers";
@@ -180,4 +180,58 @@ it("keeps gateway selector rosters lightweight unless a caller explicitly needs 
   rerender({ includeTools: true });
   await waitFor(() => expect(result.current.data?.[0].tools).toHaveLength(1));
   expect(requested).toEqual(["false", "true"]);
+});
+
+it("keeps lightweight option data separate from full editing data and retains it on request failure", async () => {
+  let failing = false;
+  server.use(
+    http.get(`${origin}/api/agents/options`, () =>
+      failing
+        ? HttpResponse.json(
+            {
+              error: { message: "Temporarily unavailable", type: "api_error" },
+            },
+            { status: 503 },
+          )
+        : HttpResponse.json([
+            { id: "gateway", name: "Gateway", agentType: "mcp_gateway" },
+          ]),
+    ),
+    http.get(`${origin}/api/agents/all`, () =>
+      HttpResponse.json([
+        {
+          id: "gateway",
+          name: "Gateway",
+          tools: [{ name: "example__search" }],
+        },
+      ]),
+    ),
+  );
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  );
+  const { result } = renderHook(
+    () => {
+      const options = useAgentOptions();
+      const full = useProfiles({ filters: { includeTools: true } });
+      return { options, full, isOptionsError: options.isError };
+    },
+    { wrapper },
+  );
+  await waitFor(() =>
+    expect(result.current.full.data?.[0].tools).toHaveLength(1),
+  );
+  await waitFor(() =>
+    expect(result.current.options.data?.[0].name).toBe("Gateway"),
+  );
+  expect(result.current.options.data?.[0]).not.toHaveProperty("tools");
+  failing = true;
+  await result.current.options.refetch();
+  await waitFor(() => expect(result.current.isOptionsError).toBe(true));
+  expect(result.current.options.data?.[0].name).toBe("Gateway");
+  expect(result.current.full.data?.[0].tools).toHaveLength(1);
+  client.clear();
 });

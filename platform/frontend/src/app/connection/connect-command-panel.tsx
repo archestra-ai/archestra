@@ -10,10 +10,12 @@ import {
   type SupportedProvider,
 } from "@archestra/shared";
 import {
+  CONNECTION_SETUP_MAX_SKILLS,
   type ConnectSetupPart,
   INSTALLER_CLIENT_KEY_PROVIDERS,
   isInstallerClientId,
   isOpenCodeFamilyClient,
+  PLUGIN_DELIVERY_MAX_COUNT,
 } from "@archestra/shared/connection-setup";
 import { Download, KeyRound, RotateCcw, TriangleAlert } from "lucide-react";
 import Link from "next/link";
@@ -26,6 +28,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { toast } from "sonner";
 import {
   AgentSelector,
   type AgentSelectorAgent,
@@ -213,6 +216,8 @@ export function ConnectCommandPanel({
   const searchParams = useSearchParams();
   const connectRequest = searchParams.get("connectRequest");
   const [customizing, setCustomizing] = useState(false);
+  const [downloadRequested, setDownloadRequested] = useState(false);
+  const preparationEnabled = variant !== "download" || downloadRequested;
   // Optional portions start from the Connect page choices and remain editable.
   const [includeProxy, setIncludeProxy] = useState(true);
   const activeLlmProxyId = includeProxy ? llmProxyId : null;
@@ -223,7 +228,7 @@ export function ConnectCommandPanel({
     eligible: skillsEligible,
     skills: allSkills,
     loading: skillsLoading,
-  } = useConnectSkills(skillsEnabled);
+  } = useConnectSkills(skillsEnabled && preparationEnabled);
   // Providers are named the way this organization names them, so a renamed
   // provider reads the same here as in the model-provider settings.
   const providerCatalog = useModelProviderCatalog();
@@ -573,6 +578,27 @@ export function ConnectCommandPanel({
   const hasAnything = Boolean(
     hasRunnableAnything || (pluginsEnabled && plugins.length > 0),
   );
+  // One setup carries a bounded number of plugins and skills. A selection over
+  // either limit is explained here instead of sent: the backend would refuse
+  // it, and the approval page would wait for a setup that never arrives.
+  const optionsPlace = connectRequest ? " in Setup options" : "";
+  const selectionProblem =
+    [
+      pluginsEnabled && selectedPlugins.length > PLUGIN_DELIVERY_MAX_COUNT
+        ? `${formatCount(selectedPlugins.length)} plugins are selected, but one setup can install at most ${formatCount(PLUGIN_DELIVERY_MAX_COUNT)}. Choose ${formatCount(PLUGIN_DELIVERY_MAX_COUNT)} or fewer${optionsPlace}, or turn plugins off.`
+        : null,
+      includeSkills && selectedSkills.length > CONNECTION_SETUP_MAX_SKILLS
+        ? `${formatCount(selectedSkills.length)} skills are shared with you, but one setup can include at most ${formatCount(CONNECTION_SETUP_MAX_SKILLS)}. Turn skills off${optionsPlace} to connect without them.`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(" ") || null;
+  useEffect(() => {
+    // The download band prepares nothing until asked, so it stays quiet too.
+    if (selectionProblem && preparationEnabled) {
+      toast.error(selectionProblem, { id: SETUP_LIMIT_TOAST_ID });
+    }
+  }, [selectionProblem, preparationEnabled]);
 
   // The setup command only registers the MCP gateway (`claude mcp add`); the
   // gateway authenticates over OAuth, so the user still finishes the handshake
@@ -616,7 +642,14 @@ export function ConnectCommandPanel({
       (client.id === "codex" && provider === "openai") ||
       openCodeFamily);
 
-  const { mutateAsync: createSetup, isPending } = useCreateConnectionSetup();
+  // The backend's reason for refusing the latest setup request, read once the
+  // request settles.
+  const refusalRef = useRef<string | null>(null);
+  const { mutateAsync: createSetup, isPending } = useCreateConnectionSetup({
+    onRefused: (message) => {
+      refusalRef.current = message;
+    },
+  });
   // Creating the personal key invalidates the available-keys query, so once the
   // user connects, `configuredProviders` updates and the command auto-generates.
   const createPerUserKey = useCreateLlmProviderApiKey();
@@ -631,7 +664,12 @@ export function ConnectCommandPanel({
   const [result, setResult] = useState<CreateConnectionSetupResult | null>(
     null,
   );
-  const [failed, setFailed] = useState(false);
+  // Why the latest setup request was refused; null while none has failed.
+  const [failure, setFailure] = useState<string | null>(null);
+  const failed = failure !== null;
+  const failureMessage = failure
+    ? `Could not prepare the setup: ${asSentence(failure)}`
+    : null;
 
   const setupPlatform =
     connectRequest && requestedPlatform === "linux" && platform === "macos"
@@ -697,6 +735,7 @@ export function ConnectCommandPanel({
         return;
       }
 
+      refusalRef.current = null;
       const created = await createSetup({
         clientId: inputs.clientId,
         platform: inputs.platform,
@@ -714,23 +753,28 @@ export function ConnectCommandPanel({
       });
       if (latestKeyRef.current !== key) return; // stale response
       setResult(created);
-      setFailed(!created);
+      setFailure(
+        created ? null : (refusalRef.current ?? "the server gave no reason"),
+      );
     },
     [createSetup],
   );
 
   useEffect(() => {
     setResult(null);
-    setFailed(false);
+    setFailure(null);
     // Don't try to generate a command until the setup can actually be produced:
-    // not before a per-user account is connected, and not for a virtual key that
-    // has no provider key to mint from — either way the backend would reject it
-    // (or the script would silently drop the proxy).
+    // not before a per-user account is connected, not for a virtual key that
+    // has no provider key to mint from, and not for a selection over a delivery
+    // limit — the backend would reject each of these (or the script would
+    // silently drop the proxy).
     if (
+      !preparationEnabled ||
       !hasRunnableAnything ||
       skillsLoading ||
       pluginsLoading ||
       needsPerUserConnect ||
+      selectionProblem !== null ||
       (primaryRoutingBlocked && canAttribute === undefined)
     ) {
       return;
@@ -741,10 +785,12 @@ export function ConnectCommandPanel({
     return () => clearTimeout(timer);
   }, [
     inputsKey,
+    preparationEnabled,
     hasRunnableAnything,
     skillsLoading,
     pluginsLoading,
     needsPerUserConnect,
+    selectionProblem,
     primaryRoutingBlocked,
     canAttribute,
     runGeneration,
@@ -1044,13 +1090,15 @@ export function ConnectCommandPanel({
     ? "Loading plugins"
     : needsPerUserConnect
       ? `Connect ${provider ? providerCatalog.label(provider) : "your provider"} to generate the setup command`
-      : failed
-        ? "Setup command generation failed"
-        : result
-          ? "Setup command ready"
-          : hasRunnableAnything
-            ? "Generating setup command"
-            : "No setup command selected";
+      : selectionProblem
+        ? selectionProblem
+        : failed
+          ? "Setup command generation failed"
+          : result
+            ? "Setup command ready"
+            : hasRunnableAnything
+              ? "Generating setup command"
+              : "No setup command selected";
 
   // The approval page's setup options: how models authenticate is shown, not
   // chosen — an admin's per-client key mapping decides it.
@@ -1089,16 +1137,20 @@ export function ConnectCommandPanel({
       <DesktopDownload
         installerUrl={result?.installerUrl ?? null}
         command={result?.command ?? null}
-        pending={hasRunnableAnything && !result && !failed}
+        pending={downloadRequested && !result && !failed}
         failed={failed}
+        requested={downloadRequested}
+        onPrepare={() => setDownloadRequested(true)}
         onRetry={() => runGeneration(inputsKey)}
         proxyActive={proxyActive}
         gate={
-          !hasRunnableAnything
-            ? "Everything is left out. Choose at least one thing to include."
-            : needsPerUserConnect
-              ? `${commandStatus}. Use the Prompt option, or ask your admin.`
-              : null
+          !downloadRequested || skillsLoading
+            ? null
+            : !hasRunnableAnything
+              ? "Everything is left out. Choose at least one thing to include."
+              : needsPerUserConnect
+                ? `${commandStatus}. Use the Prompt option, or ask your admin.`
+                : selectionProblem
         }
       />
     );
@@ -1487,18 +1539,25 @@ export function ConnectCommandPanel({
                 />
               </div>
             ) : null)}
-          {connectRequest && failed && (
-            <div role="alert" className="flex items-center gap-3 text-sm">
-              <span>Could not prepare the setup.</span>
+          {selectionProblem ? (
+            <InlineNotice variant="error" role="alert">
+              <TriangleAlert aria-hidden />
+              <InlineNoticeText>{selectionProblem}</InlineNoticeText>
+            </InlineNotice>
+          ) : connectRequest && failureMessage ? (
+            <InlineNotice variant="error" role="alert">
+              <TriangleAlert aria-hidden />
+              <InlineNoticeText>{failureMessage}</InlineNoticeText>
               <Button
                 variant="outline"
-                size="sm"
+                size="xs"
+                className="ml-auto"
                 onClick={() => runGeneration(inputsKey)}
               >
                 <span>Retry setup</span>
               </Button>
-            </div>
-          )}
+            </InlineNotice>
+          ) : null}
           <div
             className={cn(
               "overflow-hidden rounded-xl border",
@@ -1535,6 +1594,12 @@ export function ConnectCommandPanel({
                 key={connectRequest}
                 requestId={connectRequest}
                 setupId={result?.id}
+                setupProblem={
+                  selectionProblem ??
+                  (failureMessage
+                    ? `${failureMessage} Adjust Setup options, then select Retry setup.`
+                    : null)
+                }
                 clientId={client.id}
                 platform={setupPlatform}
                 gatewaySelected={!!gateway}
@@ -1576,7 +1641,7 @@ export function ConnectCommandPanel({
             ) : (
               <SetupCommandLine
                 command={result?.command ?? null}
-                pending={isPending || (!result && !failed)}
+                pending={isPending || (!result && !failed && !selectionProblem)}
                 failed={failed}
                 onRetry={() => runGeneration(inputsKey)}
               />
@@ -1686,6 +1751,8 @@ function DesktopDownload({
   pending,
   failed,
   onRetry,
+  requested,
+  onPrepare,
   proxyActive,
   gate,
 }: {
@@ -1694,6 +1761,8 @@ function DesktopDownload({
   pending: boolean;
   failed: boolean;
   onRetry: () => void;
+  requested: boolean;
+  onPrepare: () => void;
   proxyActive: boolean;
   /** Why no installer can be made here; null when one can. */
   gate: string | null;
@@ -1726,7 +1795,9 @@ function DesktopDownload({
           <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
             {pending
               ? "Preparing your installer"
-              : "Your installer, ready for 15 minutes"}
+              : requested
+                ? "Your installer, ready for 15 minutes"
+                : "Prepare an installer for this setup"}
           </span>
         )}
         {failed ? (
@@ -1741,11 +1812,14 @@ function DesktopDownload({
             </a>
           </Button>
         ) : (
-          <Button size="lg" disabled className="h-12 rounded-xl px-6">
+          <Button
+            size="lg"
+            disabled={requested}
+            onClick={onPrepare}
+            className="h-12 rounded-xl px-6"
+          >
             <Download />
-            <span>
-              {pending ? "Preparing installer" : "Download installer"}
-            </span>
+            <span>{pending ? "Preparing installer" : "Prepare installer"}</span>
           </Button>
         )}
       </div>
@@ -1935,6 +2009,16 @@ function indefiniteArticle(word: string): string {
   return /^[aeiou]/i.test(word) ? "an" : "a";
 }
 
+function formatCount(count: number): string {
+  return count.toLocaleString("en-US");
+}
+
+/** A backend message as a sentence: trimmed, ending in punctuation. */
+function asSentence(message: string): string {
+  const text = message.trim();
+  return /[.!?]$/.test(text) ? text : `${text}.`;
+}
+
 /** Label stacked above its control inside an inline editor. */
 function EditorField({
   label,
@@ -2004,3 +2088,7 @@ function ConnectionSection({
 
 const CURSOR_NO_KEYS_MESSAGE =
   "No provider keys are available for Cursor. Mark a provider key as primary, or ask an admin to choose Cursor's provider keys.";
+
+// One toast at a time for a selection over a delivery limit; a newer problem
+// replaces the older one instead of stacking.
+const SETUP_LIMIT_TOAST_ID = "connect-setup-limit";

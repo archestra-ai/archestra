@@ -518,8 +518,31 @@ describe("Archestra Tools Dynamic Assignment", () => {
       await ToolModel.backfillOpenAppaToolsToAllAgents();
       expect(await assignedToolNames(agent.id)).toEqual(before);
 
+      const firstRequiredTool = await ToolModel.findByName(
+        getArchestraToolFullName(REQUIRED_OPENAPPA_TOOL_SHORT_NAMES[0]),
+      );
+      expect(firstRequiredTool).not.toBeNull();
+      if (!firstRequiredTool) throw new Error("Required tool was not seeded");
+      await AgentToolModel.createManyIfNotExists(agent.id, [
+        firstRequiredTool.id,
+      ]);
+
       openappaConfig.enabled = true;
       await ToolModel.backfillOpenAppaToolsToAllAgents();
+      const requiredTools = await Promise.all(
+        REQUIRED_OPENAPPA_TOOL_SHORT_NAMES.map((name) =>
+          ToolModel.findByName(getArchestraToolFullName(name)),
+        ),
+      );
+      expect(
+        await AgentModel.findNonBuiltInIdsMissingToolAssignments({
+          organizationId: agent.organizationId,
+          toolIds: requiredTools.map((tool) => {
+            if (!tool) throw new Error("Required tool was not seeded");
+            return tool.id;
+          }),
+        }),
+      ).toEqual([]);
       await ToolModel.backfillOpenAppaToolsToAllAgents();
       expect((await assignedToolNames(agent.id)).sort()).toEqual(
         [

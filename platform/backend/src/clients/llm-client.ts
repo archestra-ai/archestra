@@ -1267,35 +1267,44 @@ function withCatalogOutputBudget(
     return model;
   // OpenAI chat models take the cap as max_completion_tokens: the SDK maps
   // maxOutputTokens to the legacy max_tokens for names its reasoning
-  // heuristic misses, which newer models reject (see the chat route).
-  const viaCompletionTokens = model.provider === "openai.chat";
+  // heuristic misses, which newer models reject (see the chat route). Other
+  // providers built on the OpenAI chat client (Perplexity) keep max_tokens.
+  const viaCompletionTokens =
+    target.provider === "openai" && model.provider === "openai.chat";
   // One lookup per model instance, not per generation step.
   let resolved: Promise<number | undefined> | undefined;
+  const resolveDefault = () => {
+    resolved ??= resolveModelOutputBudget(target).then((budget) =>
+      defaultMaxOutputTokens(target.provider, budget),
+    );
+    return resolved;
+  };
   return wrapLanguageModel({
     model,
     middleware: {
       specificationVersion: "v3",
       transformParams: async ({ params }) => {
+        if (!viaCompletionTokens) {
+          if (params.maxOutputTokens !== undefined) return params;
+          const maxOutputTokens = await resolveDefault();
+          return maxOutputTokens === undefined
+            ? params
+            : { ...params, maxOutputTokens };
+        }
         const openai = params.providerOptions?.openai;
-        if (
-          params.maxOutputTokens !== undefined ||
-          openai?.maxCompletionTokens !== undefined
-        )
-          return params;
-        resolved ??= resolveModelOutputBudget(target).then((budget) =>
-          defaultMaxOutputTokens(target.provider, budget),
-        );
-        const maxOutputTokens = await resolved;
-        if (maxOutputTokens === undefined) return params;
-        return viaCompletionTokens
-          ? {
-              ...params,
-              providerOptions: {
-                ...params.providerOptions,
-                openai: { ...openai, maxCompletionTokens: maxOutputTokens },
-              },
-            }
-          : { ...params, maxOutputTokens };
+        const maxCompletionTokens =
+          openai?.maxCompletionTokens ??
+          params.maxOutputTokens ??
+          (await resolveDefault());
+        if (maxCompletionTokens === undefined) return params;
+        return {
+          ...params,
+          maxOutputTokens: undefined,
+          providerOptions: {
+            ...params.providerOptions,
+            openai: { ...openai, maxCompletionTokens },
+          },
+        };
       },
     },
   });

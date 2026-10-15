@@ -50,6 +50,30 @@ describe("default output budget", () => {
     });
     expect(callers.max_completion_tokens).toBe(1_234);
     expect(callers).not.toHaveProperty("max_tokens");
+
+    const explicit = await sentBody({
+      provider: "openai",
+      modelName: "chat-latest",
+      maxOutputTokens: 2_345,
+    });
+    expect(explicit.max_completion_tokens).toBe(2_345);
+    expect(explicit).not.toHaveProperty("max_tokens");
+  });
+
+  test("Perplexity, though built on the OpenAI chat client, keeps max_tokens", async () => {
+    await ModelModel.create({
+      externalId: "perplexity/sonar",
+      provider: "perplexity",
+      modelId: "sonar",
+      outputLength: 8_000,
+      contextLength: 128_000,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+    });
+
+    const body = await sentBody({ provider: "perplexity", modelName: "sonar" });
+    expect(body.max_tokens).toBe(8_000);
+    expect(body).not.toHaveProperty("max_completion_tokens");
   });
 
   test("a shared-window model keeps its provider default, so a long prompt can use the leftover window", async () => {

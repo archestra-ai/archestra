@@ -198,6 +198,35 @@ describe("resource permission policy persistence", () => {
     expect(wildcardOnly.map((policy) => policy.scope)).toEqual(["*"]);
   });
 
+  test("read recipients resolve for scope lists beyond the PostgreSQL parameter limit", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    const organization = await makeOrganization();
+    const reader = await makeUser();
+    const target = await makeAgent({ organizationId: organization.id });
+    await ResourcePermissionPolicyModel.replace({
+      organizationId: organization.id,
+      resource: "agent",
+      scope: target.id,
+      revision: 0,
+      grants: [{ subject: { type: "user", id: reader.id }, actions: ["read"] }],
+    });
+    const scopes = Array.from(
+      { length: 65_536 },
+      (_, index) =>
+        `00000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`,
+    );
+    scopes[scopes.length - 1] = target.id;
+    const recipients = await ResourcePermissionPolicyModel.findReadRecipients({
+      resources: ["agent"],
+      scopes,
+    });
+    expect(recipients.get(target.id)?.userIds).toEqual([reader.id]);
+    expect(recipients.get(scopes[0])?.userIds).toEqual([]);
+  });
+
   test("a private agent shared with a role stays unavailable to organization credentials", async ({
     makeOrganization,
     makeUser,

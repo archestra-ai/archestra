@@ -68,7 +68,7 @@ import {
   type SortingQuery,
   type UpdateAgent,
 } from "@/types";
-import { isUniqueConstraintError } from "@/utils/db";
+import { chunkIdsForInList, isUniqueConstraintError } from "@/utils/db";
 import { escapeLikePattern } from "@/utils/sql-search";
 import { isUuid } from "@/utils/uuid";
 import A2aRemoteAgentModel from "./a2a-remote-agent";
@@ -1070,17 +1070,21 @@ class AgentModel {
     // relation lists; editing fetches the individual full agent on demand.
     const [toolRows, teamsMap, usersMap, labelsMap] = await Promise.all([
       agentIds.length > 0 && options?.includeTools !== false && !isChatView
-        ? db
-            .select({
-              agentId: schema.agentToolsTable.agentId,
-              tool: agentToolRefColumns,
-            })
-            .from(schema.agentToolsTable)
-            .innerJoin(
-              schema.toolsTable,
-              eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-            )
-            .where(inArray(schema.agentToolsTable.agentId, agentIds))
+        ? Promise.all(
+            chunkIdsForInList(agentIds).map((batch) =>
+              db
+                .select({
+                  agentId: schema.agentToolsTable.agentId,
+                  tool: agentToolRefColumns,
+                })
+                .from(schema.agentToolsTable)
+                .innerJoin(
+                  schema.toolsTable,
+                  eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+                )
+                .where(inArray(schema.agentToolsTable.agentId, batch)),
+            ),
+          ).then((batches) => batches.flat())
         : Promise.resolve([]),
       isChatView
         ? Promise.resolve(new Map())

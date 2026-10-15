@@ -28,6 +28,7 @@ import {
   sql,
 } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
+import { chunkIdsForInList } from "@/utils/db";
 import type { GrantPrincipal } from "./resource-permission-subject";
 import RoleCompositionModel from "./role-composition";
 
@@ -811,15 +812,23 @@ export default class ResourcePermissionPolicyModel {
     if (params.scopes.length === 0 || params.resources.length === 0)
       return recipients;
     const table = schema.resourcePermissionPoliciesTable;
-    const policies = await db
-      .select({ scope: table.scope, grants: table.grants })
-      .from(table)
-      .where(
-        and(
-          inArray(table.resource, params.resources),
-          inArray(table.scope, params.scopes),
-        ),
+    const policies: Array<{
+      scope: string;
+      grants: ResourcePermissionGrant[];
+    }> = [];
+    for (const scopes of chunkIdsForInList(params.scopes)) {
+      policies.push(
+        ...(await db
+          .select({ scope: table.scope, grants: table.grants })
+          .from(table)
+          .where(
+            and(
+              inArray(table.resource, params.resources),
+              inArray(table.scope, scopes),
+            ),
+          )),
       );
+    }
     for (const policy of policies) {
       const entry = recipients.get(policy.scope);
       if (!entry) continue;

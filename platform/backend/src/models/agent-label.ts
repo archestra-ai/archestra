@@ -1,6 +1,7 @@
 import { asc, eq, inArray } from "drizzle-orm";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import type { LabelGetResponse, LabelWithDetails } from "@/types";
+import { chunkIdsForInList } from "@/utils/db";
 import {
   getOrCreateLabelKey,
   getOrCreateLabelValue,
@@ -139,25 +140,36 @@ class AgentLabelModel {
       return new Map();
     }
 
-    const rows = await db
-      .select({
-        agentId: schema.agentLabelsTable.agentId,
-        keyId: schema.agentLabelsTable.keyId,
-        valueId: schema.agentLabelsTable.valueId,
-        key: schema.labelKeysTable.key,
-        value: schema.labelValuesTable.value,
-      })
-      .from(schema.agentLabelsTable)
-      .leftJoin(
-        schema.labelKeysTable,
-        eq(schema.agentLabelsTable.keyId, schema.labelKeysTable.id),
-      )
-      .leftJoin(
-        schema.labelValuesTable,
-        eq(schema.agentLabelsTable.valueId, schema.labelValuesTable.id),
-      )
-      .where(inArray(schema.agentLabelsTable.agentId, agentIds))
-      .orderBy(asc(schema.labelKeysTable.key));
+    const rows: Array<{
+      agentId: string;
+      keyId: string;
+      valueId: string;
+      key: string | null;
+      value: string | null;
+    }> = [];
+    for (const batch of chunkIdsForInList(agentIds)) {
+      rows.push(
+        ...(await db
+          .select({
+            agentId: schema.agentLabelsTable.agentId,
+            keyId: schema.agentLabelsTable.keyId,
+            valueId: schema.agentLabelsTable.valueId,
+            key: schema.labelKeysTable.key,
+            value: schema.labelValuesTable.value,
+          })
+          .from(schema.agentLabelsTable)
+          .leftJoin(
+            schema.labelKeysTable,
+            eq(schema.agentLabelsTable.keyId, schema.labelKeysTable.id),
+          )
+          .leftJoin(
+            schema.labelValuesTable,
+            eq(schema.agentLabelsTable.valueId, schema.labelValuesTable.id),
+          )
+          .where(inArray(schema.agentLabelsTable.agentId, batch))
+          .orderBy(asc(schema.labelKeysTable.key))),
+      );
+    }
 
     const labelsMap = new Map<string, LabelWithDetails[]>();
 

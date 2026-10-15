@@ -6,6 +6,7 @@ import {
   normalizeResourceUserInput,
   type ResourceUserInput,
 } from "@/types/resource-user-level";
+import { chunkIdsForInList } from "@/utils/db";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 /**
@@ -113,13 +114,18 @@ class AgentUserModel {
     agentIds: string[],
   ): Promise<Map<string, Array<{ id: string; name: string; email: string }>>> {
     if (agentIds.length === 0) return new Map();
-    const authors = await db
-      .select({
-        id: schema.agentsTable.id,
-        authorId: schema.agentsTable.authorId,
-      })
-      .from(schema.agentsTable)
-      .where(inArray(schema.agentsTable.id, agentIds));
+    const authors: Array<{ id: string; authorId: string | null }> = [];
+    for (const batch of chunkIdsForInList(agentIds)) {
+      authors.push(
+        ...(await db
+          .select({
+            id: schema.agentsTable.id,
+            authorId: schema.agentsTable.authorId,
+          })
+          .from(schema.agentsTable)
+          .where(inArray(schema.agentsTable.id, batch))),
+      );
+    }
     const details =
       await ResourcePermissionPolicyModel.findReadRecipientDetails({
         resources: ["agent", "mcpGateway"],

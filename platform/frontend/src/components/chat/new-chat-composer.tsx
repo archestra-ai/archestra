@@ -5,12 +5,15 @@ import { useMemo } from "react";
 import ArchestraPromptInput from "@/app/chat/prompt-input";
 import { AgentRuntimeCredentialPrompt } from "@/components/agent-run-credential-prompt";
 import { useChatAgents, useDefaultAgentId } from "@/lib/agent.query";
-import { useAgentRuntimePreflight } from "@/lib/agent-runtime.query";
+import {
+  runtimePreflightDisabledReason,
+  useAgentRuntimePreflight,
+} from "@/lib/agent-runtime.query";
 import { useMemberDefaultModel } from "@/lib/chat/chat.query";
 import { useInitialChatModelState } from "@/lib/chat/use-initial-chat-model-state.hook";
 import { useFeature } from "@/lib/config/config.query";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
-import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
 import { ViewTransition } from "@/lib/view-transition";
 
@@ -61,7 +64,10 @@ export function NewChatComposer({
   const { modelsByProvider, isPending: isModelsLoading } =
     useLlmModelsByProvider();
   const { data: chatModels = [] } = useLlmModels();
-  const { data: chatApiKeys = [] } = useLlmProviderApiKeys();
+  // Keys the viewer may use: one merely shared with them as read-only is
+  // refused when the chat is created.
+  const { data: chatApiKeys = [], isLoading: isApiKeysLoading } =
+    useAvailableLlmProviderApiKeys();
   const { data: organization, isPending: isOrgLoading } = useOrganization();
   const { data: memberDefault } = useMemberDefaultModel();
 
@@ -88,6 +94,7 @@ export function NewChatComposer({
     canUseSavedAgent: true,
     isPermissionResolving: false,
     isOrgLoading,
+    isApiKeysLoading,
   });
 
   const inputModalities = useMemo(() => {
@@ -107,6 +114,18 @@ export function NewChatComposer({
     agentId ?? "",
     isRuntimeMode,
   );
+
+  const agentLlmApiKeyId = (
+    internalAgents.find((a) => a.id === agentId) as
+      | Record<string, unknown>
+      | undefined
+  )?.llmApiKeyId as string | null | undefined;
+  // Keys shared only to read cannot run a chat; the agent's own key can.
+  const hasNoUsableKey =
+    !isRuntimeMode &&
+    !isApiKeysLoading &&
+    chatApiKeys.length === 0 &&
+    !agentLlmApiKeyId;
 
   if (!agentId) return null;
 
@@ -150,21 +169,23 @@ export function NewChatComposer({
           allowFileUploads={organization?.allowChatFileUploads ?? false}
           isModelsLoading={isModelsLoading}
           inputModalities={inputModalities}
-          agentLlmApiKeyId={
-            (
-              internalAgents.find((a) => a.id === agentId) as
-                | Record<string, unknown>
-                | undefined
-            )?.llmApiKeyId as string | null
-          }
+          agentLlmApiKeyId={agentLlmApiKeyId ?? null}
           selectorAgentId={agentId}
           onAgentChange={onAgentChange}
           modelSource={modelSource}
           onResetModelOverride={onResetModelOverride}
           sendDisabled={
-            isRuntimeMode &&
-            (runtimePreflight.isPending ||
-              runtimePreflight.data?.ready !== true)
+            hasNoUsableKey ||
+            (isRuntimeMode &&
+              (runtimePreflight.isPending ||
+                runtimePreflight.data?.ready !== true))
+          }
+          disabledReason={
+            isRuntimeMode
+              ? runtimePreflightDisabledReason(runtimePreflight)
+              : hasNoUsableKey
+                ? "You have no API key you can use. Ask an admin to share one."
+                : undefined
           }
           runtimeMode={isRuntimeMode}
           runtimeAgentName={runtimeAgent?.name}

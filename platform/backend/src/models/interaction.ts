@@ -2297,7 +2297,7 @@ class InteractionModel {
         const selection = {
           lastMainInteraction:
             deep.lastMainInteraction ?? sampled?.lastMainInteraction ?? null,
-          guardrailTip: deep.guardrailTip ?? sampled?.guardrailTip ?? null,
+          guardrailTip: sampled?.guardrailTip ?? null,
           claudeCodeTitle: deep.claudeCodeTitle ?? sampled?.claudeCodeTitle,
         };
         if (

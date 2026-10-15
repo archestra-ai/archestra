@@ -184,8 +184,6 @@ describe("archestra annotator", () => {
     // stands and a long prompt keeps whatever window it leaves.
     expect(body).not.toHaveProperty("max_tokens");
     expect(body).not.toHaveProperty("max_completion_tokens");
-    // The schema travels as the format, not as prompt text.
-    expect(systemOf(body)).toEqual({ role: "system", content: request.system });
     expect(source).toBe("guardrail:annotator");
     expect(internal).toBe(true);
   });
@@ -214,9 +212,11 @@ describe("archestra annotator", () => {
       false,
       false,
     ]);
-    const tagged = systemOf(sent[1].body).content as string;
-    expect(tagged.startsWith(request.system)).toBe(true);
-    expect(tagged.length).toBeGreaterThan(request.system.length);
+    // The tagged prompt extends the structured one, schema included.
+    const [structured, tagged] = sent.map(
+      ({ body }) => systemOf(body).content as string,
+    );
+    expect(tagged.startsWith(structured)).toBe(true);
   });
 
   test("does not blame the format for a request the tagged answer rejects too", async () => {

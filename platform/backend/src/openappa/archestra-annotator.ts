@@ -124,22 +124,25 @@ class OpenAppaArchestraAnnotator {
         modelName: selection.modelName,
       }),
     );
-    // The runtime's system prompt is identical across consults of one
-    // annotator, so a breakpoint after it turns every later consult's prompt
-    // into a cache read.
-    const cached = (content: string): SystemModelMessage => {
-      const [marked] = applyPromptCacheBreakpoints({
+    // The schema stays in the prompt under structured output too: some
+    // providers' JSON mode carries no schema. The prompt is identical across
+    // consults of one annotator, so a breakpoint after it turns every later
+    // consult's prompt, structured or tagged, into a cache read.
+    const [system] = applyPromptCacheBreakpoints({
+      provider: selection.provider,
+      model: selection.modelName,
+      messages: [
+        {
+          role: "system",
+          content: `${request.system}\n\nThe annotation is one JSON object that matches this JSON schema:\n${JSON.stringify(request.schema)}`,
+        },
+      ],
+      anthropicNativeEndpoint: isAnthropicNativeEndpoint({
         provider: selection.provider,
         model: selection.modelName,
-        messages: [{ role: "system", content }],
-        anthropicNativeEndpoint: isAnthropicNativeEndpoint({
-          provider: selection.provider,
-          model: selection.modelName,
-          baseUrl: selection.baseUrl,
-        }),
-      });
-      return marked as SystemModelMessage;
-    };
+        baseUrl: selection.baseUrl,
+      }),
+    }) as SystemModelMessage[];
     const refusalKey = JSON.stringify([
       selection.provider,
       selection.modelName,
@@ -150,7 +153,7 @@ class OpenAppaArchestraAnnotator {
       const structured = await structuredAnswer({
         model,
         refusalKey,
-        system: cached(request.system),
+        system,
         request,
         maxOutputTokens: budget,
       });
@@ -159,9 +162,7 @@ class OpenAppaArchestraAnnotator {
           ? structured.answer
           : await taggedAnswer({
               model,
-              system: cached(
-                `${request.system}\n\nThe annotation is one JSON object that matches this JSON schema:\n${JSON.stringify(request.schema)}`,
-              ),
+              system,
               request,
               // A fraction of the budget, so the truncation retry's extra room
               // still fits under the model's real output cap.
@@ -170,7 +171,12 @@ class OpenAppaArchestraAnnotator {
                   ? undefined
                   : Math.floor(budget / TRUNCATION_RETRY_FACTOR),
             });
-      // The same input went through without the format, so the rejection was
+      if (answer === null)
+        return {
+          kind: "failed",
+          reason: "The model did not answer a JSON object.",
+        };
+      // The same input was answered without the format, so the rejection was
       // about the format, not this request.
       if (structured.kind === "refused") {
         structuredOutputRefusals.set(refusalKey, true);
@@ -179,11 +185,6 @@ class OpenAppaArchestraAnnotator {
           "OpenAPPA archestra annotator: the model refused structured output; using tagged answers",
         );
       }
-      if (answer === null)
-        return {
-          kind: "failed",
-          reason: "The model did not answer a JSON object.",
-        };
       return { kind: "answered", answer };
     } catch (error) {
       const apiError = APICallError.isInstance(error) ? error : null;
@@ -291,7 +292,7 @@ const structuredOutputRefusals = new LRUCacheManager<true>({
 
 /**
  * The answer under the provider's structured-output format, which carries the
- * schema instead of the prompt. `refused`: the provider rejected the request.
+ * schema beside the prompt. `refused`: the provider rejected the request.
  * `fallback`: the format is known to be refused, or this answer fell outside
  * it. Either way the caller falls back to the tagged answer; authentication,
  * rate and cost limits propagate unchanged.

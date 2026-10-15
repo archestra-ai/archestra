@@ -49,9 +49,9 @@ Without enforcement, the proxy and the MCP gateway apply no tool-call guardrails
 
 The HTTP API and policy tools share validation and revision checks. Edits compile without calling external services. The next dispatch loads the latest saved revision under the runtime lock. New conversations use it, while existing conversations keep their recorded policy snapshot.
 
-The editor accepts `[policy]`, `[server_aliases]`, `[credentials]`, and URL bindings in `[externals]`. It only permits battery declarations in `include` entries. Any other include, local command, or runtime setting causes a validation failure. Reference tokens through `token_env`. Policy documents must not contain raw secrets.
+The editor accepts `[policy]`, `[aliases]`, `[credentials]`, and URL bindings in `[externals]`. It only permits battery declarations in `include` entries. Any other include, local command, or runtime setting causes a validation failure. Reference tokens through `token_env`. Policy documents must not contain raw secrets.
 
-Revision `0` is an unsaved starter template (`initialPolicy()` in [`guardrails-policy.ts`](../platform/backend/src/services/guardrails-policy.ts)). It includes the bundled Archestra battery, an Archestra server alias, `internal = ["archestra:members"]`, `context_control = true`, and a local wildcard annotator (`noop`). The wildcard annotator adds no restrictions to uncovered tools. Explicit tool rules always take precedence over the wildcard.
+Revision `0` is an unsaved starter template (`initialPolicy()` in [`guardrails-policy.ts`](../platform/backend/src/services/guardrails-policy.ts)). It includes the bundled Archestra and Claude Code batteries, an Archestra server alias under `[aliases.mcp]`, a `claude-code = ["archestra"]` host alias that rebinds the Claude Code battery's rules onto the client built-ins Archestra derives as `host/archestra/<name>`, `internal = ["archestra:members"]`, `context_control = true`, and a wildcard annotator (`archestra.undeclared-tool`) that asks the organization's default model about every uncovered tool. The battery's two shell annotators are re-declared at the root with `builtin = "archestra"`, so the default model answers them instead of a local `claude` process. Without a configured default model these annotators cannot answer and their calls are refused. Explicit tool rules always take precedence over the wildcard.
 
 Saving revision `1` through MCP local publication can auto-enable enforcement if the caller has `organizationSettings:update`, the same permission the explicit deployment toggle API checks. Direct HTTP PUT saves and GitHub imports do not auto-enable enforcement.
 
@@ -81,7 +81,8 @@ A battery packages OpenAPPA policies for one tool provider. It contains a policy
 
 Your organization policy text owns battery declarations:
 - `include`: names bundled batteries (`batteries/<name>/appa.toml`) or uploaded packages (`batteries/<name>@sha256-<64 hex>/appa.toml`).
-- `[server_aliases]`: maps battery namespaces to catalog tool prefixes.
+- `[aliases.mcp]`: maps battery namespaces to catalog tool prefixes. The legacy top-level `[server_aliases]` table still reads the same; a document may not use both.
+- `[aliases.host]`: maps a bundled client battery's host namespace onto this host's client built-ins (`claude-code = ["archestra"]`).
 - `[credentials]`: maps `APPA_PROVIDER_*` variables to runtime credential keys.
 
 Resolution is exact. Bundled names always resolve to bundled packages, and uploads never shadow them. You can include a battery name only once. Declarations in `openappa_battery_installs` form a derived read model. Recomposition updates these rows while preserving their IDs. Removing an `include` line removes that battery. Removing an alias keeps the battery included, moving its status to `server_missing`.

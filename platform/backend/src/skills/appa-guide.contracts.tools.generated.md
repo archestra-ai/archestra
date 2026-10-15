@@ -112,7 +112,7 @@ server = "demo-tools"
 delta = { trust = "suspicious" }
 ```
 
-This rule identifies `mcp/demo-tools/read_secret`. Deployment-level `[server_aliases]` maps a policy's server name to a list of configured connection identities, such as `databricks = ["genie", "sql"]`; every rule under that name then covers each listed connection. APPA does not infer a provider from a hostname or server metadata. A server qualifier cannot repair duplicate host dispatch names; the host must distinguish those tools.
+This rule identifies `mcp/demo-tools/read_secret`. Deployment-level `[aliases]` maps a policy's namespace to a list of identities the deployment reports. `aliases.mcp` maps a server name to configured connection identities, such as `databricks = ["genie", "sql"]`; every rule under that name then covers each listed connection. `aliases.host` maps a battery's host namespace to the host that serves the same tools, such as `claude-code = ["archestra"]`; every `host/claude-code/...` rule then names `host/archestra/...`. Aliases resolve after composition, so a root rule still matches before a battery rule for the same tool. APPA does not infer a provider from a hostname or server metadata. A server qualifier cannot repair duplicate host dispatch names; the host must distinguish those tools.
 
 kagent derives a default source ID from the exact configured endpoint URL. Native rules do not require that ID. Discovery supplies evidence, not permission: known tools need policy coverage, unavailable sources remain unknown, and later calls still pass runtime enforcement. A trajectory retains its opening policy and accepted identities.
 

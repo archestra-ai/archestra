@@ -8,7 +8,8 @@ import { parse, stringify } from "smol-toml";
 import { afterEach, describe, expect, test } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
-import { initialPolicy } from "./guardrails-policy";
+import { openappaDeclarations } from "@/openappa/declarations";
+import { initialPolicy, UNDECLARED_TOOL_ANNOTATOR } from "./guardrails-policy";
 
 describe("initialPolicy", () => {
   const fullWhiteLabeling = config.enterpriseFeatures.fullWhiteLabeling;
@@ -121,7 +122,7 @@ describe("initialPolicy", () => {
   test.each([
     ["the default branding", null],
     ["a white-labeled deployment", "Acme Hub"],
-  ])("under %s, run_command goes to the archestra annotator, control tools carry no label, and other tools go to noop", (_, appName) => {
+  ])("under %s, run_command goes to the archestra annotator, control tools carry no label, and other tools go to the default model", (_, appName) => {
     config.enterpriseFeatures.fullWhiteLabeling = appName !== null;
     archestraMcpBranding.syncFromOrganization({ appName, iconLogo: null });
 
@@ -153,6 +154,38 @@ describe("initialPolicy", () => {
     });
     expect(
       governing(archestraMcpBranding.getToolName(TOOL_TODO_WRITE_SHORT_NAME)),
-    ).toEqual({ name: "noop" });
+    ).toEqual(
+      expect.objectContaining({
+        name: UNDECLARED_TOOL_ANNOTATOR,
+        builtin: "archestra",
+      }),
+    );
+  });
+
+  test("the claude-code battery's model annotators answer through the archestra builtin under the battery's own mandate", async () => {
+    const battery = (await openappaDeclarations.bundledBatteries()).find(
+      ({ name }) => name === "claude-code",
+    );
+    const annotators = (document: string) =>
+      ((parse(document).policy as { annotator?: Record<string, unknown>[] })
+        .annotator ?? []) as Array<{ name: string; builtin?: string }>;
+    const root = annotators(initialPolicy());
+    const modelled = annotators(battery?.base ?? "").filter(
+      ({ builtin }) => builtin !== undefined,
+    );
+
+    expect(modelled.length).toBeGreaterThan(0);
+    for (const declared of modelled)
+      expect(root.find(({ name }) => name === declared.name)).toEqual({
+        ...declared,
+        builtin: "archestra",
+      });
+    // Offline replay and a deployment without a local model process both
+    // refuse any other model builtin.
+    expect(
+      root.flatMap(({ builtin }) =>
+        builtin === undefined || builtin === "archestra" ? [] : [builtin],
+      ),
+    ).toEqual([]);
   });
 });

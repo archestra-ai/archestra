@@ -334,7 +334,7 @@ export const BatterySummarySchema = z.object({
 });
 export type BatterySummary = z.infer<typeof BatterySummarySchema>;
 
-/** One `[server_aliases]` target beside the catalog it resolves to, if any does. */
+/** One `aliases.mcp` target beside the catalog it resolves to, if any does. */
 const BatteryServerViewSchema = z.object({
   target: z.string(),
   catalogId: z.string().nullable(),

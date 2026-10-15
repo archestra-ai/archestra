@@ -7,6 +7,7 @@ import logger from "@/logging";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import { memberRosters, openappaBatteriesService } from "@/openappa/batteries";
+import { expandCommandExecutionPolicyRules } from "@/openappa/command-normalization";
 import { compositionView } from "@/openappa/composition-view";
 import { openappaDeclarations } from "@/openappa/declarations";
 import {
@@ -263,13 +264,15 @@ async function evaluateOpenAppaPolicyTests(
   const native = await import("@archestra/openappa-rs");
   let engineVersion = native.getOpenappaReplayEngineVersion();
   let files: PolicyTestRunResult["files"];
+  // A dispatch evaluates the composition with every command tool's spelling.
+  const content = expandCommandExecutionPolicyRules(effective.content);
   const replayInput = JSON.stringify({
-    content: effective.content,
+    content,
     files: params.files,
     noopAnnotator: guardrailsPolicyService.noopAnnotator(),
   });
   const capacityError =
-    Buffer.byteLength(effective.content) > 262144
+    Buffer.byteLength(content) > 262144
       ? "The effective policy exceeds the offline replay limit of 256 KiB; configuration validation succeeded but this validation run cannot execute"
       : Buffer.byteLength(replayInput) > 2097152
         ? "The encoded replay request exceeds the 2 MiB limit"

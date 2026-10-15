@@ -7,7 +7,7 @@
  * engine over an in-memory log, where every helper consult goes unanswered and
  * only the root's no-op annotator answers.
  */
-import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { ADMIN_ROLE_NAME, ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import config from "@/config";
 import {
   createFastifyInstance,
@@ -15,12 +15,17 @@ import {
 } from "@/fastify-instance";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
+import ToolModel from "@/models/tool";
 import memberRoutes from "@/routes/member";
 import {
   deleteRuntimeCredentialConnection,
   deleteRuntimeCredentialDefinition,
 } from "@/services/agent-runtime/runtime-credentials";
-import { guardrailsPolicyService } from "@/services/guardrails-policy";
+import {
+  guardrailsPolicyService,
+  initialPolicy,
+  UNDECLARED_TOOL_ANNOTATOR,
+} from "@/services/guardrails-policy";
 import { afterEach, describe, expect, test } from "@/test";
 import { bindOrganizationCredential } from "@/test/openappa-credentials";
 import {
@@ -29,6 +34,7 @@ import {
 } from "@/test/openappa-github-roster";
 import { GitHubUserIdSchema, type User } from "@/types";
 import { openappaBatteriesService } from "./batteries";
+import { expandCommandExecutionPolicyRules } from "./command-normalization";
 import { bundledEntry, openappaDeclarations } from "./declarations";
 import { parsePolicyToml, toolEntries } from "./policy-text";
 import { recompileAllOnStart } from "./service";
@@ -48,7 +54,12 @@ describe("a deployed battery's composition reaches enforcement", () => {
     makeInternalMcpCatalog,
     makeTool,
   }) => {
-    const batteries = await openappaDeclarations.bundledBatteries();
+    // A battery whose rules name another host's tools governs no MCP server;
+    // the default policy rebinds it onto client built-ins, tested below.
+    const batteries = (await openappaDeclarations.bundledBatteries()).filter(
+      (battery) =>
+        battery.namespaces.length > 0 || toolEntries(battery.base).length === 0,
+    );
     const deployments = batteries.flatMap((battery) =>
       (battery.multiUser ? MODES : MODES.slice(0, 1)).map((mode) => ({
         battery,
@@ -87,7 +98,7 @@ describe("a deployed battery's composition reaches enforcement", () => {
         userId: admin.id,
         content: `include = ["${bundledEntry(battery.name)}"]
 
-[server_aliases]
+[aliases.mcp]
 ${[...servers].map(([namespace, server]) => `"${namespace}" = ["${server}"]`).join("\n")}
 
 [policy]
@@ -336,7 +347,138 @@ ${CATCH_ALL_RULES}`,
     });
     expect(await decide(organizationId, [READ])).toEqual([UNANSWERED_HELPER]);
   });
+
+  test("the default policy applies the claude-code battery to client built-ins and asks the default model about the rest", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+  }) => {
+    config.openappa.enabled = true;
+    const organizationId = (await makeOrganization()).id;
+    const admin = await makeAdmin();
+    await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    // The default, plus one client tool that needs a session still readable
+    // by the public: a call after a narrowing read asks for review.
+    await declareRoot({
+      organizationId,
+      userId: admin.id,
+      content: `${initialPolicy()}
+[[policy.tool]]
+name = "host/archestra/publish_probe"
+delta = {}
+requires = { audience = { contains = ["public"] } }
+`,
+    });
+    const composed = await openappaBatteriesService.recompile(organizationId);
+    expect(composed.lastError).toBeNull();
+
+    const probe = "host/archestra/publish_probe {}\nexpect allow\n";
+    const scenarios = {
+      "probe-alone": probe,
+      // Claude Code's Read, under the battery's credential rule.
+      "read-env": `host/archestra/Read {\n  file_path: "/repo/.env"\n}\nexpect allow\n${probe}`,
+      "read-readme": `host/archestra/Read {\n  file_path: "/repo/README.md"\n}\nexpect allow\n${probe}`,
+      // Codex's shell spells the command `cmd`.
+      "codex-credentials": `host/archestra/exec_command {\n  cmd: "cat ~/.aws/credentials"\n}\nexpect allow\n${probe}`,
+      "git-push": `host/archestra/Bash {\n  command: "git push origin main"\n}\nexpect allow\n`,
+      "unruled-client-tool": "host/archestra/FutureBuiltIn {}\nexpect allow\n",
+      // A subagent's return is checked when it hands back, so starting one
+      // needs no model, even from a narrowed session. A workflow's fan-out is
+      // not a spawn this deployment tracks.
+      "spawn-after-read-env": `host/archestra/Read {\n  file_path: "/repo/.env"\n}\nexpect allow\nhost/archestra/Agent {\n  prompt: "summarize"\n}\nexpect allow\nhost/archestra/Task {\n  prompt: "summarize"\n}\nexpect allow\n`,
+      workflow: 'host/archestra/Workflow {\n  script: "run"\n}\nexpect allow\n',
+      "unruled-mcp-tool": "mcp/unbatteried/delete_all {}\nexpect allow\n",
+      // A host alias rebinds only host tools: an MCP server that happens to be
+      // named like the battery's host keeps its own identity.
+      "mcp-named-like-the-host": `mcp/claude-code/Read {\n  file_path: "/repo/.env"\n}\nexpect allow\n`,
+    };
+    const dispatched = await replay({
+      organizationId,
+      scenarios,
+      content: expandCommandExecutionPolicyRules,
+    });
+
+    // A session narrowed to its requester sends the probe to review.
+    expect(
+      Object.fromEntries(
+        Object.entries(dispatched).map(([path, file]) => [
+          path,
+          file.steps.map(stepOutcome),
+        ]),
+      ),
+      JSON.stringify(dispatched, null, 1),
+    ).toEqual({
+      "probe-alone": ["allow"],
+      "read-env": ["allow", "authority hitl"],
+      "read-readme": ["allow", "allow"],
+      "codex-credentials": ["allow", "authority hitl"],
+      "git-push": ["claude-code.bash-repository-requirements"],
+      "unruled-client-tool": [UNDECLARED_TOOL_ANNOTATOR],
+      "spawn-after-read-env": ["allow", "allow", "allow"],
+      workflow: [UNDECLARED_TOOL_ANNOTATOR],
+      "unruled-mcp-tool": [UNDECLARED_TOOL_ANNOTATOR],
+      "mcp-named-like-the-host": [UNDECLARED_TOOL_ANNOTATOR],
+    });
+
+    // The runtime rebinds the battery's `host/claude-code/Bash(...)` rules onto
+    // `host/archestra/Bash(...)` when it loads the policy, after a dispatch
+    // added the other command tools' spellings to the stored composition.
+    // Without those spellings the host alias alone leaves Codex's shell to the
+    // catch-all.
+    const stored = await replay({
+      organizationId,
+      scenarios: { "codex-credentials": scenarios["codex-credentials"] },
+      content: (composed) => composed,
+    });
+    expect(stored["codex-credentials"]?.steps.map(stepOutcome)).toEqual([
+      UNDECLARED_TOOL_ANNOTATOR,
+    ]);
+  });
 });
+
+type ReplayFile = {
+  path: string;
+  status: string;
+  error?: string;
+  steps: { status: string; actual: string | null; error?: string }[];
+};
+
+/**
+ * Scenario files replayed over the stored composition as `content` hands it
+ * to the runtime. Keyed by path without its extension.
+ */
+async function replay(params: {
+  organizationId: string;
+  scenarios: Record<string, string>;
+  content: (composed: string) => string;
+}): Promise<Record<string, ReplayFile>> {
+  const { content } = await openappaBatteriesService.getEffectivePolicy(
+    params.organizationId,
+  );
+  const native = await import("@archestra/openappa-rs");
+  const response = JSON.parse(
+    await native.replayOpenappaPolicy(
+      JSON.stringify({
+        content: params.content(content),
+        files: Object.entries(params.scenarios).map(([path, scenario]) => ({
+          path: `${path}.appa`,
+          content: scenario,
+        })),
+      }),
+    ),
+  ) as { files: ReplayFile[] };
+  return Object.fromEntries(
+    response.files.map((file) => [file.path.replace(/\.appa$/, ""), file]),
+  );
+}
+
+/** What a step decided, or the annotator whose consult it waited on in vain. */
+function stepOutcome(step: ReplayFile["steps"][number]): string | null {
+  return step.status === "cannot_run"
+    ? (UNANSWERED_ANNOTATOR.exec(step.error ?? "")?.[1] ?? null)
+    : step.actual;
+}
 
 /** A repository read: the multi-user target asks a helper, the base labels it. */
 const READ: Call = {
@@ -574,7 +716,7 @@ async function decide(
     const response = JSON.parse(
       await native.replayOpenappaPolicy(
         JSON.stringify({
-          content,
+          content: expandCommandExecutionPolicyRules(content),
           files: chunk.map((call, index) => ({
             path: `${String(index).padStart(2, "0")}.appa`,
             content: `${call.tool} {\n${Object.entries(call.arguments)

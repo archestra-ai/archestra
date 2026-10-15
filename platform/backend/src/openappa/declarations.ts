@@ -46,7 +46,7 @@ export type EntryResolution = {
   battery: NativeBatteryPackage | null;
 };
 
-/** One `[server_aliases]` binding as the root authors it. */
+/** One `aliases.mcp` binding as the root authors it. */
 export type AliasDeclaration = {
   namespace: string;
   servers: string[];

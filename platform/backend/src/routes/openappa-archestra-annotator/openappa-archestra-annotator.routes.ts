@@ -10,6 +10,7 @@ import {
 import { openappaEnabled } from "@/openappa/service";
 import { OPENAPPA_ARCHESTRA_ANNOTATOR_PATH } from "@/routes/route-paths";
 import { ApiError, constructResponseSchema } from "@/types";
+import { clientDisconnectSignal } from "@/utils/client-disconnect-signal";
 import { isLoopbackRequest } from "@/utils/network";
 
 const AnnotationRequestSchema = z.object({
@@ -52,13 +53,15 @@ const routes: FastifyPluginAsyncZod = async (app) => {
           throw new ApiError(401, "Unauthorized");
       },
     },
-    async (request) => {
-      const outcome = await openappaArchestraAnnotator.annotate(
-        request.body,
-        openappaAnnotatorContext(
+    async (request, reply) => {
+      const outcome = await openappaArchestraAnnotator.annotate({
+        request: request.body,
+        encryptedChat: openappaAnnotatorContext(
           request.headers[OPENAPPA_CONTEXT_HEADER] as string | undefined,
         ),
-      );
+        // The runtime closes the connection when its consult times out.
+        abortSignal: clientDisconnectSignal({ request, reply }),
+      });
       switch (outcome.kind) {
         case "answered":
           return outcome.answer;

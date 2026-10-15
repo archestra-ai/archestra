@@ -1,5 +1,6 @@
 import {
   AGENT_TOOL_PREFIX,
+  ARCHESTRA_MCP_CATALOG_ID,
   MCP_APPS_EXTENSION_ID,
   MCP_ENTERPRISE_AUTH_EXTENSION_ID,
   MCP_OAUTH_CLIENT_CREDENTIALS_EXTENSION_ID,
@@ -23,10 +24,12 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { vi } from "vitest";
+import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import config from "@/config";
 import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import {
   AgentExcludedSubagentModel,
+  AgentExcludedToolModel,
   AgentModel,
   AppModel,
   McpServerModel,
@@ -686,6 +689,97 @@ describe("MCP Gateway (stateless mode)", () => {
     // A non-app tool's title still falls back to its name — derivation is app-only.
     expect(remote?.title).toBe("linear_search_issues");
   });
+
+  for (const scenario of [
+    "auto",
+    "custom compact",
+    "custom empty",
+    "excluded tool",
+    "no create permission",
+  ] as const) {
+    test(`scheduling discovery guidance: ${scenario}`, async ({
+      makeAgent,
+      makeAgentTool,
+      makeCustomRole,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      const restrictedRole =
+        scenario === "no create permission"
+          ? await makeCustomRole(org.id, {
+              permission: { agent: ["read"], project: ["create"] },
+            })
+          : null;
+      await makeMember(user.id, org.id, {
+        role: restrictedRole?.role ?? "admin",
+      });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        authorId: user.id,
+        agentType: "agent",
+        accessAllTools: !scenario.startsWith("custom"),
+        toolExposureMode: "search_and_run_only",
+      });
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+      const schedulingToolName = archestraMcpBranding.getToolName(
+        "create_schedule_trigger",
+      );
+      const scheduleTool = mustExist(
+        await ToolModel.findByName(schedulingToolName),
+      );
+      if (scenario === "custom compact") {
+        await makeAgentTool(agent.id, scheduleTool.id);
+      }
+      if (scenario === "excluded tool") {
+        await AgentExcludedToolModel.replaceForAgent(agent.id, [
+          scheduleTool.id,
+        ]);
+      }
+      const token = await UserTokenModel.create(user.id, org.id);
+      await initializeMcpSession({
+        app,
+        agentId: agent.id,
+        token: token.value,
+      });
+      const listing = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: makeMcpHeaders(token.value),
+        payload: { jsonrpc: "2.0", method: "tools/list", params: {}, id: 2 },
+      });
+      expect(listing.statusCode).toBe(200);
+      const listedTools: Array<{ name: string; description?: string }> =
+        listing.json().result.tools;
+      const searchDescription = mustExist(
+        listedTools.find((tool) => tool.name === TOOL_SEARCH_TOOLS_FULL_NAME),
+      ).description;
+      const available = scenario === "auto" || scenario === "custom compact";
+      expect(searchDescription?.includes("schedule this agent")).toBe(
+        available,
+      );
+      expect(searchDescription?.includes("project_id is omitted")).toBe(
+        available,
+      );
+
+      const search = await callMcpTool({
+        app,
+        agentId: agent.id,
+        token: token.value,
+        name: TOOL_SEARCH_TOOLS_FULL_NAME,
+        arguments: { query: "schedule agent" },
+      });
+      expect(search.statusCode).toBe(200);
+      expect(search.json().result.isError).not.toBe(true);
+      const matches: Array<{ toolName: string }> =
+        search.json().result.structuredContent.tools;
+      expect(matches.some((tool) => tool.toolName === schedulingToolName)).toBe(
+        available,
+      );
+    });
+  }
 
   test("Auto-tool mode exclusions: tools/list drops excluded assigned tools and their catalog from the search_tools description", async ({
     makeAgent,

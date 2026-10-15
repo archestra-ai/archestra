@@ -1020,7 +1020,7 @@ Required RBAC permission: [`app:read`](/docs/reference/permissions#app:read)
 | `get_project` | Read one project's context in a single call: its metadata, its instructions (the `instructions.md` that steers every chat in the project), the files it owns, and the apps linked into it that you ca... | [`project:read`](/docs/reference/permissions#project:read) † |
 | `link_app_to_project` | Link an existing app into a project so it is listed with the project's files and chats. | [`project:read`](/docs/reference/permissions#project:read) |
 | `unlink_app_from_project` | Remove an app's link from a project. | [`project:read`](/docs/reference/permissions#project:read) |
-| `create_schedule_trigger` | Create a scheduled agent task in a project you can access. | [`scheduledTask:create`](/docs/reference/permissions#scheduledTask:create) |
+| `create_schedule_trigger` | Schedule an agent from chat, Slack, or Teams. | [`scheduledTask:create`](/docs/reference/permissions#scheduledTask:create) † |
 | `update_schedule_trigger` | Edit a scheduled task. | [`scheduledTask:update`](/docs/reference/permissions#scheduledTask:update) † |
 | `delete_schedule_trigger` | Delete a scheduled task and its run history. | [`scheduledTask:delete`](/docs/reference/permissions#scheduledTask:delete) † |
 | `list_schedule_triggers` | List the scheduled agent triggers the caller can see: which agent each one runs, its cron expression and timezone, whether it is enabled, and when it last fired. | [`scheduledTask:read`](/docs/reference/permissions#scheduledTask:read) |
@@ -1177,13 +1177,15 @@ Required RBAC permission: [`project:read`](/docs/reference/permissions#project:r
 
 Required RBAC permission: [`scheduledTask:create`](/docs/reference/permissions#scheduledTask:create)
 
+Additional access requirement: Requires an acting user. Omitting `project_id` also requires [`project:create`](/docs/reference/permissions#project:create); it creates a private project with the task prompt as its instructions. Repeating the same new-project task returns the existing schedule. An existing project must be accessible to the caller.
+
 ##### Input
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `name` | `string` | Yes | Name of the scheduled task. |
-| `project_id` | `string` | Yes | Project containing the scheduled task. |
-| `agent_id` | `string` | No | Agent to run. Defaults to the project's agent, then the organization default. |
+| `project_id` | `string` | No | Existing project to schedule in. Omit to create a private project using name and message_template as its instructions. |
+| `agent_id` | `string` | No | Agent to run. For a new project, defaults to the current agent; for an existing project, its agent then the organization default. |
 | `cron_expression` | `string` | Yes | Cron expression, for example 0 9 * * 1-5. |
 | `timezone` | `string` | Yes | IANA timezone, for example America/Toronto. |
 | `message_template` | `string` | Yes | Prompt sent to the agent on each run. |
@@ -1206,6 +1208,7 @@ Required RBAC permission: [`scheduledTask:create`](/docs/reference/permissions#s
 | `actor_name` | `string \| null` | Yes | Display name of that user. |
 | `created_at` | `string` | Yes | ISO 8601 creation timestamp. |
 | `message_template` | `string` | Yes | The prompt sent to the agent on every run. |
+| `created` | `boolean` | Yes | False when an identical new-project request reused an existing schedule. |
 
 #### update_schedule_trigger
 

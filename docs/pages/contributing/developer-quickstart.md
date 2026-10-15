@@ -2,7 +2,7 @@
 title: Developer Quickstart
 description: Run Archestra from source with Tilt and a local Kubernetes cluster.
 order: 1
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -10,6 +10,8 @@ lastUpdated: 2026-10-05
 The development environment runs the backend and frontend on your machine with hot reload. PostgreSQL and MCP servers run in a local Kubernetes cluster. [Tilt](https://tilt.dev) starts all of it with one command and rebuilds what you change.
 
 ## Prerequisites
+
+Install the tools below and confirm `kubectl config current-context` names your local cluster.
 
 - **Node.js** 20 to 24.
 - pnpm. Run `corepack enable` to use the version pinned in `platform/package.json`.
@@ -29,7 +31,7 @@ On the first run, Tilt copies `.env.example` to `.env`, installs dependencies an
 
 When `pnpm-dev-backend` and `pnpm-dev-frontend` are green in the Tilt UI, open <http://localhost:3000> and sign in as `admin@example.com` with the password `password`.
 
-`tilt down` stops the environment.
+Run `tilt down` from `platform/` to remove its Kubernetes resources; stop the foreground Tilt process with Ctrl+C.
 
 ## Configuring the Environment
 
@@ -43,7 +45,7 @@ ARCHESTRA_CHAT_ANTHROPIC_API_KEY=sk-ant-...
 
 To skip the sign-in screen, set [`ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL=admin@example.com`](/docs/reference/configuration#ARCHESTRA_AUTH_DEV_AUTO_AUTHENTICATE_EMAIL). It has no effect in a production build.
 
-Two features deploy extra services only when you turn them on:
+These settings control additional local services:
 
 - [`ARCHESTRA_CODE_RUNTIME_ENABLED=true`](/docs/reference/configuration#ARCHESTRA_CODE_RUNTIME_ENABLED) deploys the Dagger engine behind the [Code Sandbox](/docs/agents#code-sandbox).
 - [`ARCHESTRA_FILE_STORAGE_PROVIDER=s3`](/docs/reference/configuration#ARCHESTRA_FILE_STORAGE_PROVIDER) deploys MinIO as the file store.
@@ -59,7 +61,7 @@ Run these from `platform/`:
 - `pnpm db:generate` generates a migration after you change a Drizzle schema.
 - `tilt logs pnpm-dev-backend` prints the backend logs. Use `pnpm-dev-frontend` for the frontend.
 
-The pre-commit hook runs the type check, Biome, and Knip (unused exports). It blocks the commit when one fails.
+The pre-commit hook runs the type check, Biome, and Knip (unused exports). It blocks the commit when one fails. Read the applicable testing skill before adding backend or end-to-end tests.
 
 To query the development database:
 
@@ -82,7 +84,7 @@ pnpm dev:stack:up --detach
 
 ## Installing Dependencies
 
-pnpm refuses package versions published less than seven days ago. When an install fails for that reason, choose an older version.
+Use the pinned lockfile with `pnpm install --frozen-lockfile`. pnpm refuses package versions published less than seven days ago. When an install fails for that reason, choose an older version.
 
 pnpm also does not run package install scripts in this repository. Both settings are in `platform/pnpm-workspace.yaml`. If a package needs its install script to work, run it for that package only:
 

@@ -2,14 +2,12 @@
 title: "Single Sign-On"
 description: "Sign users in with OIDC or SAML, map IdP claims to roles, and sync directory groups to teams"
 order: 1
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Sign users in to Archestra with their workplace identity provider (IdP) and manage access permissions directly from your directory.
-
-Single Sign-On (SSO) automates onboarding: users authenticate through your IdP, and Archestra provisions accounts and assigns roles and team memberships from directory claims.
+Sign people in with their workplace identity and assign their Archestra roles and teams from directory claims. Start with [Adding a Provider](/docs/admin/identity#adding-a-provider), then configure the mappings below.
 
 Identity providers are an enterprise feature. See [Pricing Model](/docs/get-started/pricing-model).
 
@@ -30,10 +28,10 @@ sequenceDiagram
 
 ## Supported Protocols
 
-Archestra supports two SSO protocols:
+Use the protocol your identity provider supports:
 
 - **OIDC (OpenID Connect):** Modern OAuth 2.0 + OIDC for Microsoft Entra ID, Okta, Google, GitHub, GitLab, Auth0, and Keycloak.
-- **SAML 2.0:** Legacy enterprise identity providers that require SAML assertions.
+- **SAML 2.0:** Providers configured to send SAML assertions.
 
 ## Callback URLs
 
@@ -62,13 +60,13 @@ For OIDC providers, keep **User ID Claim** unchanged when changing **Email Claim
 
 With OIDC profile updates enabled, the user's next successful sign-in updates their email on the same account. Saving the mapping leaves their email and active sessions unchanged. If that account also has a password, use the updated email with the existing password afterward.
 
-If the updated email belongs to a pending Microsoft Teams user who has never signed in, Archestra can reconcile that pending user automatically. Its supported chat history, resources, and team memberships move to the existing SSO user. An account with login credentials, an active session, ongoing work, or other owned resources requires manual resolution; sign-in reports an email conflict and preserves both users.
+An email already used by another signed-in account causes a conflict. Resolve the duplicate account before retrying; changing the claim does not merge established accounts.
 
 ## Role Mapping
 
 <span id="role-mapping"></span>
 
-Map directory attributes and groups to Archestra roles at each sign-in using [Handlebars](https://handlebarsjs.com/) templates.
+Use [Handlebars](https://handlebarsjs.com/) templates to map directory claims to Archestra roles. Editing a provider requires [`identityProvider:update`](/docs/reference/permissions#identityProvider:update).
 
 When a user signs in, Archestra tests the token claims against your mapping rules in order. The first rule whose template returns a non-empty string assigns its roles.
 
@@ -78,7 +76,11 @@ When a user signs in, Archestra tests the token claims against your mapping rule
 4. Optional: Turn on **Strict Mode** to block sign-in for users who match no rule.
 5. Optional: Turn on **Skip Role Sync** to evaluate roles only on first sign-in, leaving subsequent role changes to manual administration.
 
+Sign in with a test user in each mapped group and check their assigned roles in **Settings → Users**.
+
 ### Template Helpers
+
+Return a non-empty string only when the rule should match.
 
 | Helper | Purpose | Example |
 | --- | --- | --- |
@@ -102,20 +104,25 @@ Sync creates direct membership in the mapped team, while preserving members adde
 3. Go to **Settings → Teams**, click **Edit** on target team, and open **External Group Sync**.
 4. Enter the external group identifier (such as an Entra group object ID or Okta group name) and click **Add**.
 
+Sign in with a test user and check membership in the mapped team. Then remove the source group membership and sign in again to verify removal. Manually added memberships remain.
+
 ## Enforcing SSO
 
-Lock down authentication to your identity provider once SSO sign-in is tested and verified:
+Test SSO in a separate browser session before disabling password sign-in. Keep a working session open while checking the change:
 
 1. **Disable password sign-in:** Set [`ARCHESTRA_AUTH_DISABLE_BASIC_AUTH=true`](/docs/reference/configuration#ARCHESTRA_AUTH_DISABLE_BASIC_AUTH) in the backend environment and restart. This hides the email/password form and requires SSO.
 2. **Disable invitations:** Set [`ARCHESTRA_AUTH_DISABLE_INVITATIONS=true`](/docs/reference/configuration#ARCHESTRA_AUTH_DISABLE_INVITATIONS) to disable manual user invite workflows.
+3. Open a fresh private browser window. Confirm the password form is absent and an SSO sign-in completes.
 
 If SSO fails while password authentication is disabled, recover via the command line with [Account Security](/docs/admin/identity/account-security#reset-a-password-from-the-cli).
 
 ## Troubleshooting
 
+Start with the callback and claims sent by your IdP.
+
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| `state_mismatch` | Cookies blocked or mismatched callback URL | Enable browser third-party cookies and verify the IdP redirect URI matches the case-sensitive `{ProviderId}`. |
+| `state_mismatch` | Cookies blocked or mismatched callback URL | Retry the flow in one browser session and verify its cookies are accepted. Check the redirect URI and case-sensitive `{ProviderId}`. |
 | `account not linked` | Mismatched or unverified email | Confirm the user signs in with the email address registered on Archestra, and verify the email in the IdP. |
 | `account_not_found` (SAML) | Missing user attributes | Configure your SAML IdP to include `NameID` in `emailAddress` format, plus `email`, `firstName`, and `lastName`. |
 | `signature_validation_failed` | Expired or rotated SAML certificate | Re-download your IdP SAML metadata and update the certificate in Archestra. |

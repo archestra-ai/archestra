@@ -2,7 +2,7 @@
 title: LLM Proxy
 description: See and control every model call your company makes, from coding agents to your own apps
 order: 4
-lastUpdated: 2026-10-13
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -66,3 +66,9 @@ To tie a request to a person for certain, use a credential that names them. See 
 
 - Add your providers first. The proxy uses the keys and subscriptions on **Model Providers**. See [Model Providers](/docs/llm-proxy/providers).
 - Self-hosted models work too, such as Ollama, vLLM, or any OpenAI-compatible server. See [supported providers](/docs/llm-proxy/providers#supported-providers).
+
+## Connection Failures
+
+Archestra retries an early provider connection failure at most twice, only before output begins. It does not retry provider error responses, timeouts, or an interrupted response after output starts. Gemini requests do not use these proxy retries.
+
+After partial output, recovery depends on your client's retry policy. During an upgrade, active requests have a limited shutdown window; see [Release Channels and Upgrades](/docs/admin/deployment#release-channels-and-upgrades).

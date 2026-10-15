@@ -2,12 +2,13 @@
 title: Integrations
 description: Connect AI clients and agent frameworks to the LLM Proxy and MCP Gateway
 order: 8
-lastUpdated: 2026-10-13
+explore: false
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-An integration connects your existing AI client to Archestra. Model requests route through the LLM Proxy for central authentication, audit logging, spending controls, and security guardrails. Clients that support MCP can also use the MCP Gateway to invoke tools assigned to an Archestra agent or gateway.
+Keep using your existing client while Archestra supplies its models and tools. Route model calls through the LLM Proxy for logs, limits, and configured Guardrails; connect its MCP client to a gateway for tool access.
 
 Choose the guide for your client:
 

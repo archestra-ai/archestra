@@ -2,12 +2,12 @@
 title: Connect Your Agents
 description: Connect your AI client to Archestra's tools, models, and shared skills
 order: 2
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Connect your AI client once, and Archestra governs everything it does. It gets Archestra's tools, models, and shared skills. Your access rules, [Guardrails](/docs/agents/guardrails), cost limits, and logs then apply to it.
+Connect your client to Archestra's tools, models, and shared skills. Requests routed through Archestra follow your access rules, configured [Guardrails](/docs/agents/guardrails), cost limits, and logs.
 
 - **Tools** come through the [MCP Gateway](/docs/mcp/gateway).
 - **Model requests** go through the [LLM Proxy](/docs/llm-proxy).
@@ -84,5 +84,22 @@ Some clients need one more step. The installer prints any other steps under **Go
 - **Setup reference:** the first conversation that presents the installer's reference with a valid session ID is exempt from Guardrails for the rest of the ten-minute setup window. Later requests must carry both the reference and that session ID. Different session IDs and requests without the reference remain governed.
 - **Exemption limits:** the first conversation wins, even if it did not run the installer. Session IDs come from the client, so this does not protect against a client that copies both the reference and the session ID. If the server loses the short-lived ownership record, another conversation can claim the rest of the window.
 - **Setup failed or expired:** run it again. Approval requests expire after ten minutes. Only approve a request you started.
+
+## Organization Settings
+
+With [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update), configure the page under **Settings → Connect Page**, or with **Connection settings** on the Connect page:
+
+| Setting | Effect |
+| --- | --- |
+| Default client, Default MCP Gateway | Pre-selected for everyone. Users can still switch. |
+| LLM Proxy, Skills, and Plugins on Connect | Turning one off removes it from new setups. Existing setups keep working. |
+| Agents users can connect | The agents offered on Connect, in order. Drag to reorder, click **✕** to remove one, and use **Add back** to restore it. Click an agent to pick the provider keys its setup command shares with everyone who connects it. An agent with no keys picked uses each user's own. **Generic client** is always shown last. |
+| Instructions for connected agents | Added to the system prompt of every agent users connect from the Connect page. The default asks agents to offer moving a session to your deployment's Cloud runtime. CLI wrappers fetch saved changes before the next launch. |
+
+Claude Code, Codex, Copilot CLI, OpenCode, and Kilo Code refresh these instructions before launch. Changes replace the managed copy and preserve the user’s own instructions.
+
+- **Existing connections:** Run setup once to install the refresh capability. Unix wrappers require Python 3 to fetch updates.
+- **Temporary outages:** The client uses its last fetched copy.
+- **Other clients:** Cursor’s User Rules and Claude Desktop’s organization instructions still need a setup update.
 
 **Next:** [See it work](/docs/get-started/see-it-work).

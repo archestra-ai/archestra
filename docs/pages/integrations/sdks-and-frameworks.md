@@ -1,48 +1,47 @@
 ---
 title: AI SDKs and Frameworks
-description: Route Vercel AI SDK, Pydantic AI, and Mastra model requests through Archestra
+description: Route Vercel AI SDK, Pydantic AI, and Mastra requests through the LLM Proxy
 order: 5
-lastUpdated: 2026-10-13
+lastUpdated: 2026-10-15
 ---
 
-<!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
-
-You can route requests from any OpenAI-compatible AI SDK or framework through Archestra's LLM Proxy. Requests gain central authentication, audit logging, cost tracking, and security guardrails.
+Keep your SDK's model calls and route them through Archestra for usage logs, spending limits, and Guardrails. The examples below use OpenAI Chat Completions.
 
 ## Requirements
 
-You need a running [Archestra deployment](/docs/admin/deployment), an OpenAI provider key configured in Archestra, and a standard [virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) mapped to that provider. Use the virtual key as the client API key.
+Configure an OpenAI provider key and a [standard virtual key](/docs/llm-proxy/authentication#standard-virtual-keys) mapped to it.
 
-The client application must be able to reach Archestra's API. The examples use `http://localhost:9000/v1/openai`; replace this with your deployment's base URL. Applications running inside Docker containers should use a reachable network host such as `host.docker.internal` rather than `localhost`.
+Set `OPENAI_API_KEY` in your application's server environment to the virtual key. Replace `http://localhost:9000/v1/openai` with your reachable Archestra endpoint. A container's `localhost` refers to that container; use its host-network address, such as Docker Desktop's `host.docker.internal`, when Archestra runs on the host.
 
 ## Session IDs for Guardrails
 
-Send the same `X-Appa-Session-ID` for every model call in a conversation. Guardrails use this ID to keep policy state, approvals, and restrictions across follow-up turns, tool results, and retries.
+Use one stable [session ID](/docs/agents/guardrails/clients#session-headers) per conversation, including retries and follow-up turns.
 
-If your app already has a conversation or thread ID, use it. If not, generate a UUID when the conversation starts, save it in your database, and load it again when the user replies. Never generate a new ID on every request, and never share one client instance across different users.
+Each example creates a client for a conversation already loaded by your application. Replace `conversation.id` with your stored conversation or thread ID. If you generate a UUID, save it once and reload it for subsequent turns.
+
+| Header | Value |
+| --- | --- |
+| `X-Appa-Session-ID` | This conversation's ID. |
+| `X-Appa-Parent-ID` | The parent's session ID, only for a delegated child. Give the child its own session ID. |
+
+Keep clients carrying session headers scoped to that conversation. A process-wide client with a fixed ID mixes unrelated conversations' policy state.
 
 ## Vercel AI SDK
 
 <span id="vercel-ai"></span>
 <span id="vercel-ai-sdk"></span>
 
-The Vercel AI SDK OpenAI provider accepts a custom base URL and API key.
-
-Install the required packages in your application:
-
-```bash
-pnpm add ai @ai-sdk/openai
-```
-
-Configure the provider with your Archestra base URL and virtual key:
+Install `ai` and `@ai-sdk/openai`, then configure [the OpenAI provider](https://ai-sdk.dev/providers/ai-sdk-providers/openai) with your proxy URL.
 
 ```typescript
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateText } from "ai";
 
+// Load this conversation from your application before creating the client.
 const openai = createOpenAI({
   baseURL: "http://localhost:9000/v1/openai",
   apiKey: process.env.OPENAI_API_KEY,
+  headers: { "X-Appa-Session-ID": conversation.id },
 });
 
 const result = await generateText({
@@ -52,126 +51,44 @@ const result = await generateText({
 console.log(result.text);
 ```
 
-The explicit `.chat()` selects Chat Completions. Keep this code in your server environment so virtual keys are not leaked into client-side browser bundles.
+Use `.chat()` to select Chat Completions explicitly. Keep the key and client in server-side code.
 
-### Configure Guardrails
-
-Add the session header to `createOpenAI`:
-
-```typescript
-import { randomUUID } from "node:crypto";
-import { createOpenAI } from "@ai-sdk/openai";
-
-// Create once per conversation; save and reuse across all its turns.
-const sessionId = randomUUID();
-const openai = createOpenAI({
-  baseURL: "http://localhost:9000/v1/openai",
-  apiKey: process.env.OPENAI_API_KEY,
-  headers: {
-    "X-Appa-Session-ID": sessionId,
-  },
-});
-```
-
-Reuse `openai` for every model call in this conversation. For a subagent, pass its own ID along with the parent's `sessionId`:
-
-```typescript
-const childSessionId = randomUUID();
-const childOpenai = createOpenAI({
-  baseURL: "http://localhost:9000/v1/openai",
-  apiKey: process.env.OPENAI_API_KEY,
-  headers: {
-    "X-Appa-Session-ID": childSessionId,
-    "X-Appa-Parent-ID": sessionId,
-  },
-});
-```
+<span id="configure-guardrails"></span>
 
 ## Pydantic AI
 
 <span id="pydantic"></span>
 <span id="pydantic-ai"></span>
 
-Pydantic AI connects to Archestra using its built-in `OpenAIProvider` with a custom base URL.
-
-Install Pydantic AI in your Python environment:
-
-```bash
-pip install pydantic-ai
-```
-
-Configure the model with your Archestra endpoint and virtual key:
+Install `pydantic-ai`, then pass a custom client to [`OpenAIProvider`](https://ai.pydantic.dev/models/openai/#custom-openai-client).
 
 ```python
 import os
-from pydantic_ai import Agent
-from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.openai import OpenAIProvider
-
-model = OpenAIChatModel(
-    "gpt-4o",
-    provider=OpenAIProvider(
-        base_url="http://localhost:9000/v1/openai",
-        api_key=os.environ["OPENAI_API_KEY"],
-    ),
-)
-agent = Agent(model)
-result = agent.run_sync("Reply with connection verified.")
-print(result.output)
-```
-
-`OpenAIChatModel` selects Chat Completions. For Responses, use `OpenAIResponsesModel` with the same provider.
-
-### Configure Guardrails
-
-Pass an `AsyncOpenAI` client with the session header to `OpenAIProvider`:
-
-```python
-import os
-import uuid
 from openai import AsyncOpenAI
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
-# Create once per conversation; save and reuse across all its turns.
-session_id = str(uuid.uuid4())
 client = AsyncOpenAI(
     base_url="http://localhost:9000/v1/openai",
     api_key=os.environ["OPENAI_API_KEY"],
-    default_headers={"X-Appa-Session-ID": session_id},
+    default_headers={"X-Appa-Session-ID": conversation.id},
 )
 model = OpenAIChatModel("gpt-4o", provider=OpenAIProvider(openai_client=client))
 agent = Agent(model)
+result = agent.run_sync("Reply with connection verified.")
+print(result.output)
 ```
 
-Reuse `agent` and `client` for all calls in this conversation. For a subagent, create its own ID and pass the parent's `session_id`:
+`OpenAIChatModel` selects Chat Completions. Use `OpenAIResponsesModel` with the same provider for Responses.
 
-```python
-child_session_id = str(uuid.uuid4())
-child_client = AsyncOpenAI(
-    base_url="http://localhost:9000/v1/openai",
-    api_key=os.environ["OPENAI_API_KEY"],
-    default_headers={
-        "X-Appa-Session-ID": child_session_id,
-        "X-Appa-Parent-ID": session_id,
-    },
-)
-```
+<span id="configure-guardrails-1"></span>
 
 ## Mastra
 
 <span id="mastra"></span>
 
-Mastra supports custom OpenAI-compatible endpoints for agent execution.
-
-Install Mastra in your TypeScript project:
-
-```bash
-pnpm add @mastra/core
-```
-
-Configure your agent's model with the Archestra base URL:
+Install `@mastra/core` and configure the agent's [custom model endpoint](https://mastra.ai/models#use-local-models-with-mastra).
 
 ```typescript
 import { Agent } from "@mastra/core/agent";
@@ -184,6 +101,7 @@ const agent = new Agent({
     id: "openai/gpt-4o",
     url: "http://localhost:9000/v1/openai",
     apiKey: process.env.OPENAI_API_KEY,
+    headers: { "X-Appa-Session-ID": conversation.id },
   },
 });
 
@@ -191,63 +109,19 @@ const result = await agent.generate("Reply with connection verified.");
 console.log(result.text);
 ```
 
-Use the base URL rather than `/chat/completions`. The `openai/` prefix selects the provider, followed by the upstream model name.
+Use the base URL, without `/chat/completions`. The `openai/` prefix identifies the provider.
 
-### Configure Guardrails
-
-Add the session header to the model configuration:
-
-```typescript
-import { randomUUID } from "node:crypto";
-import { Agent } from "@mastra/core/agent";
-
-// Create once per conversation; save and reuse across all its turns.
-const sessionId = randomUUID();
-const agent = new Agent({
-  id: "connection-check",
-  name: "Connection Check",
-  instructions: "Answer the user's request.",
-  model: {
-    id: "openai/gpt-4o",
-    url: "http://localhost:9000/v1/openai",
-    apiKey: process.env.OPENAI_API_KEY,
-    headers: {
-      "X-Appa-Session-ID": sessionId,
-    },
-  },
-});
-```
-
-Reuse `agent` for every call in this conversation. For a subagent, create its own ID and pass the parent's `sessionId`:
-
-```typescript
-const childSessionId = randomUUID();
-const subagent = new Agent({
-  id: "subagent",
-  name: "Subagent",
-  instructions: "Handle delegated tasks.",
-  model: {
-    id: "openai/gpt-4o",
-    url: "http://localhost:9000/v1/openai",
-    apiKey: process.env.OPENAI_API_KEY,
-    headers: {
-      "X-Appa-Session-ID": childSessionId,
-      "X-Appa-Parent-ID": sessionId,
-    },
-  },
-});
-```
-
-Keep the child agent instance for all requests in that child's task. Only create a new ID when starting a different child agent.
+<span id="configure-guardrails-2"></span>
 
 ## Verify the Connection
 
-<span id="verify-the-connection"></span>
+Find the test request in **Logs → LLM Proxy** with the expected model, virtual key, and timestamp.
 
-Send `Reply with connection verified.` from your application and verify the response. Open **Logs → LLM Proxy** in Archestra to confirm the request appears with the expected model, virtual key, and timestamp.
+| Symptom | Check |
+| --- | --- |
+| `401` | The application sends the virtual key and the key has an active provider mapping. |
+| Connection refused or timeout | The application's network can reach the configured host and API port. |
+| Model error | The mapped provider supports the requested model. |
+| Unrecognized client or missing policy state | Every call carries the intended conversation's session header. Check [Guardrail Clients](/docs/agents/guardrails/clients). |
 
-- A `401` status indicates a missing or invalid virtual key. Ensure the virtual key has an active provider mapping.
-- A connection error means the client cannot reach Archestra's API endpoint.
-- A model error indicates the requested model is unavailable under the mapped provider.
-
-To grant your SDK agents access to remote tools, connect them to an [MCP Gateway](/docs/mcp/gateway).
+For tool access, connect your SDK's MCP client to an [MCP Gateway](/docs/mcp/gateway) as well.

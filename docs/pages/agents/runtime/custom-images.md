@@ -3,7 +3,7 @@ title: Custom Images
 description: Run your own coding agent image in Agent Runtime
 order: 3
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -82,6 +82,25 @@ Each value is an environment variable that Archestra sets in the container.
 - **Maintained images:** an image built on a maintained image sends all four when it runs that image's launcher. Keep the base tag current, because a launcher sends only the headers its version knows.
 - **Every turn:** the binding is new for each turn, and Archestra starts your command again for each turn. Set the header from the variable on every start, not once per container. A copy saved from an earlier turn is rejected.
 - **A credential:** send the binding only to the supplied LLM Proxy and MCP Gateway. Never print it, and never pass it to a model provider or a tool.
+
+## Refresh Credentials
+
+Read expiring credentials again before each API call. Archestra updates a managed file while the process runs; environment variables retain their startup values.
+
+The file named by `ARCHESTRA_AGENT_RUNTIME_CREDENTIALS_FILE` contains this shape:
+
+```json
+{
+  "taskId": "<current-run-id>",
+  "credentials": {
+    "GITHUB_TOKEN": {"value": "<token>", "expiresAt": 1792069200000}
+  }
+}
+```
+
+Check that `taskId` matches `ARCHESTRA_AGENT_RUNTIME_TASK_ID`, select the variable your client needs, and reject a token whose `expiresAt` has passed. Expiry is Unix time in milliseconds. Never log the bundle or pass it to the model.
+
+A client that caches a token can fail after an hour even while renewal works. Reopen the file before authenticating; do not restart the whole workspace to read it. See [Token Refresh](/docs/admin/security/credentials#token-refresh) for managed image behavior.
 
 ## Troubleshooting
 

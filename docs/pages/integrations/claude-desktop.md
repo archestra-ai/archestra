@@ -2,7 +2,7 @@
 title: Claude Desktop
 description: Route Claude Desktop's inference and tools through Archestra
 order: 2
-lastUpdated: 2026-10-13
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -27,13 +27,13 @@ The installer checks inference before changing your configuration. It backs up c
 
 ## Subscription Inference
 
-Subscription setup opens Claude’s browser authorization page. Its consent screen names the subscription connection “Claude Code”. The CLI does not need to be installed. Only inference access is requested. The resulting token stays on your computer. You do not copy it into Archestra. Valid existing tokens are reused when you rerun setup. Rerun setup if subscription authorization expires or is revoked.
+Subscription setup opens Claude’s browser authorization page. Its consent screen names the subscription connection “Claude Code”. The CLI does not need to be installed. Only inference access is requested. Setup stores the token on your computer rather than as a provider credential in Archestra. Model requests send it through the proxy for upstream authentication. Valid existing tokens are reused when you rerun setup. Rerun setup if subscription authorization expires or is revoked.
 
 Model access and usage limits depend on your Anthropic account. Send a message and check **Logs → LLM Proxy** for its response and billing mode. Subscription credentials are recorded with subscription billing mode.
 
 ## API-Key Inference
 
-Your admin decides which one Desktop uses. When an admin picks provider keys for Claude Desktop under **Settings → Connect Page**, setup uses a personal Archestra virtual key backed by those keys, if you hold [`llmVirtualKey:create`](/docs/reference/permissions#llmVirtualKey:create). The installer applies it without a Claude subscription sign-in. Otherwise setup uses your Claude subscription.
+The organization's Connect settings choose between shared provider keys and your subscription. When provider keys are selected for Claude Desktop under **Settings → Connect Page**, setup creates a personal virtual key backed by them if you hold [`llmVirtualKey:create`](/docs/reference/permissions#llmVirtualKey:create). The installer applies it without a Claude subscription sign-in. Otherwise setup uses your Claude subscription.
 
 <span id="tools-and-skills"></span>
 
@@ -58,7 +58,6 @@ To return to standard Claude Desktop, choose Anthropic sign-in on Desktop's sign
 Keep the `Claude-3p` application data directory. Deleting it can remove conversations created in third-party mode. Removing the setup extension alone does not revert your inference settings.
 
 To use another third-party profile, select it in **Configure Third-Party Inference** and restart Desktop. To return to another deployment, run its installer again. The installer keeps `.before-archestra` backups of existing configuration files it changes. These backups do not include conversation history.
-
 
 ## Verify the Connection
 

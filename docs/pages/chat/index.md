@@ -2,12 +2,12 @@
 title: Chat & Projects
 description: Start conversations, delegate tasks, attach files, and collaborate with autonomous agents in real time
 order: 6
-lastUpdated: 2026-10-12
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Start a conversation to delegate tasks to an agent, attach reference files, and collaborate in real time. Every prompt flows through the [LLM Proxy](/docs/llm-proxy) and [MCP Gateway](/docs/mcp/gateway), enforcing guardrails, access policies, and audit logging.
+Ask an agent to investigate an issue, work with attached files, or run a task, then follow its progress in chat. Model requests pass through the [LLM Proxy](/docs/llm-proxy); tool calls use the [MCP Gateway](/docs/mcp/gateway) with your access and configured policies.
 
 ![The chat composer with agent and model selectors](/docs/automated_screenshots/chat_composer.webp)
 
@@ -45,7 +45,7 @@ Review sensitive tool calls and provide real-time clarifications during agent ex
 
 When a tool requires human approval, execution pauses and an approval card appears inline. Select **Approve** to run the tool, or **Decline** to cancel execution and prompt the agent to adjust its plan.
 
-If an agent requires clarification mid-run, an interactive question prompt renders in the message feed. Submit your response directly in the card or select **Dismiss question**.
+When an agent asks a question, choose an answer in the card or write a response in the composer. Selecting a choice submits it; dismiss the question if you want the agent to proceed without an answer. Links and commands appear beside the question so you can follow them before answering.
 
 ## Managing and Sharing Conversations
 
@@ -57,12 +57,14 @@ Open **Chat actions** in the conversation header and choose **Share** to grant a
 
 ## Encrypted Chats
 
-Protect sensitive discussions with end-to-end encryption where only the originating browser holds the decryption key.
+Keep a chat's saved content encrypted with a key held by its originating browser. The server processes content while handling requests; browser-held encryption protects the stored copies. Organization escrow permits recovery by designated key holders.
+
+To enable encrypted chats and recover them if browser storage is lost, the deployment operator configures key escrow; see [Key Escrow for Encrypted Chats](/docs/admin/security/content-encryption#key-escrow).
+
+Encrypted chats support [Guardrails enforcement](/docs/agents/guardrails). OpenAPPA checks tool calls and encrypts stored trajectory and annotation content with the conversation key. A governed request requires the matching browser key and the chat's escrow record before it can reach the model.
 
 Select the lock icon in the composer, or press `Option+I` (or `Alt+I` on Windows/Linux), before sending your first message. Your browser generates a unique AES key client-side and retains it locally. Archestra encrypts conversation messages, attachments, logs, and error outputs with that key before saving them to the database.
 
-Encrypted conversations open only on the browser and device that created them. Sharing, chat forking, project assignment, compaction, and saving files to knowledge are disabled for encrypted conversations.
+Encrypted conversations normally open only in their originating browser, unless recovered through escrow. Sharing, chat forking, project assignment, compaction, and saving files to knowledge are disabled for encrypted conversations.
 
-To enable encrypted chats organization-wide and allow designated key holders to recover them if browser storage is lost, administrators configure key escrow; see [Key Escrow for Encrypted Chats](/docs/admin/security/content-encryption#key-escrow).
-
-<span id="encrypted-chats"></span><span id="key-escrow"></span>
+<span id="key-escrow"></span>

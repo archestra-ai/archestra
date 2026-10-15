@@ -2,12 +2,12 @@
 title: Extending Archestra
 description: Add LLM providers, knowledge connectors, and retrieval backends to Archestra
 order: 2
-lastUpdated: 2026-10-06
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Archestra provides modular extension points for adding model providers, knowledge data sources, and custom vector search backends. Paths on this page are relative to `platform/`.
+Add a model provider, synchronize a new knowledge source, or implement a retrieval backend. Start with the [Developer Quickstart](/docs/contributing/developer-quickstart), read the repository instructions, and run commands from `platform/`; source paths below are relative to that directory.
 
 ## Adding LLM Providers
 
@@ -15,7 +15,7 @@ Archestra provides modular extension points for adding model providers, knowledg
 
 A provider touches two parts of Archestra. The [LLM Proxy](/docs/llm-proxy) route receives client requests, applies security guardrails, logs token usage, and forwards requests to the provider. [Chat](/docs/chat) queries the provider's models and renders completions in the built-in interface.
 
-Most providers serve an OpenAI-compatible API. They reuse OpenAI's schemas and adapter with minimal custom code. Providers with proprietary wire formats also require custom schemas, adapters, and a translator for the Model Router. The Moonshot (Kimi) provider (`backend/src/routes/proxy/adapters/kimi.ts`) serves as the reference implementation for OpenAI-compatible providers.
+Use Kimi (`backend/src/routes/proxy/adapters/kimi.ts`) as the OpenAI-compatible example. A native wire format needs its own request, response, stream, and Model Router translation. Read `.agents/skills/archestra-dev-llm-providers/SKILL.md` at the repository root before starting.
 
 ### TypeScript-Guided Changes
 
@@ -25,10 +25,12 @@ Most providers serve an OpenAI-compatible API. They reuse OpenAI's schemas and a
 
 ### OpenAI-Compatible Providers
 
+Follow the request from schema to proxy, chat, and logs. Compiler errors identify exhaustive registrations, but cannot prove wire compatibility.
+
 - **Types:** Create `backend/src/types/llm-providers/<provider>/` with `api.ts`, `messages.ts`, `tools.ts`, and `index.ts`. Re-export OpenAI schemas with `.passthrough()` to retain custom fields. Export the namespace from `backend/src/types/llm-providers/index.ts` and update `backend/src/types/interaction.ts`.
 - **Adapter:** Build an adapter in `backend/src/routes/proxy/adapters/<provider>.ts` using `createOpenAiCompatibleAdapterFactory` and export it from `adapters/index.ts`.
 - **Proxy Route:** Copy `backend/src/routes/proxy/routes/kimi.ts` to `backend/src/routes/proxy/routes/<provider>.ts`. Register the route IDs in `shared/routes.ts`, export the plugin from `backend/src/routes/index.ts`, and register it in `backend/src/server.ts`.
-- **Configuration:** In `backend/src/config.ts`, expose `llm.<provider>.baseUrl` and `chat.<provider>.apiKey`. Add both to `platform/.env.example` and the [Configuration](/docs/reference/configuration) reference.
+- **Configuration:** In `backend/src/config.ts`, expose `llm.<provider>.baseUrl` and `chat.<provider>.apiKey`. Add both to `.env.example` and the [Configuration](/docs/reference/configuration) reference.
 - **Chat Support:** Add a model fetcher in `backend/src/routes/chat/model-fetchers/index.ts` (use `makeBearerFetcher` for standard `GET /models` endpoints), configure `providerModelConfigs` in `backend/src/clients/llm-client.ts`, and register error handlers in `backend/src/routes/chat/errors.ts`.
 - **Frontend & Logging:** Add the provider logo in `frontend/public/icons/`, register credentials in `frontend/src/components/llm-provider-api-key-form.tsx`, and add a log parser in `shared/interactions/llmProviders/`.
 
@@ -43,10 +45,13 @@ Providers with distinct wire formats (such as Anthropic, Gemini, Bedrock, or Coh
 
 ### Additional Registrations and Testing
 
+Verify the provider through both its direct endpoint and the Model Router, including streaming and tool calls.
+
 - Add the provider to `MODEL_ROUTER_SUPPORTED_PROVIDERS` in `shared/model-constants.ts` and `openAiWireProviders` in `backend/src/routes/proxy/routes/model-router.ts`.
 - Add provider support to `frontend/src/app/connection/clients.ts` and `shared/opencode-provider-routes.ts`.
 - Run `pnpm codegen` to update `docs/openapi.json` and generated client libraries.
-- Add test cases to `backend/src/routes/proxy/routes/provider-matrix.rollback.test.ts`.
+- Add the provider to the rollback matrix and test request/response translation, streaming, errors, and usage accounting. Run the relevant adapter tests and `pnpm --filter @backend test -- provider-matrix.rollback`.
+- Run `pnpm type-check` and inspect generated changes. A successful request must appear in **Logs → LLM Proxy** with the correct provider, model, token usage, and cost.
 
 ---
 
@@ -64,7 +69,7 @@ A [knowledge connector](/docs/knowledge/connectors) synchronizes documents from 
 
 ### Schemas and Connector Class
 
-Define configuration and checkpoint schemas in `backend/src/types/knowledge-connector.ts`:
+Use a checkpoint to resume from the latest source item you processed, so retries do not skip documents. Define configuration and checkpoint schemas in `backend/src/types/knowledge-connector.ts`:
 
 ```typescript
 export const AcmeConfigSchema = z.object({
@@ -88,10 +93,14 @@ Create `backend/src/knowledge-base/connectors/acme/acme-connector.ts` extending 
 
 ### Registration and UI
 
+Expose the connector in both the backend registry and the creation form.
+
 - Add the factory to `connectorRegistry` in `backend/src/knowledge-base/connectors/registry.ts`.
 - Add the display name to `CONNECTOR_TYPE_LABELS` in `shared/knowledge-base.ts`.
 - Create `frontend/src/app/knowledge/knowledge-bases/_parts/acme-config-fields.tsx` and register it in `connector-dialog-config.tsx`. Add the icon to `frontend/public/icons/`.
-- Add unit tests in `backend/src/knowledge-base/connectors/acme/acme-connector.test.ts`.
+- Add tests in `backend/src/knowledge-base/connectors/acme/acme-connector.test.ts` for pagination, retry, checkpoint resume, document updates, and access metadata.
+
+Run `pnpm --filter @backend test -- acme-connector`, `pnpm codegen`, and `pnpm type-check`. In the local UI, create the connector, test its connection, sync a small source, and confirm an authorized query finds the imported document. Check that an unauthorized user cannot retrieve it.
 
 ---
 
@@ -99,16 +108,18 @@ Create `backend/src/knowledge-base/connectors/acme/acme-connector.ts` extending 
 
 <span id="adding-knowledge-retrieval-backends"></span>
 
-A retrieval backend indexes knowledge chunks and executes semantic vector and keyword searches. PostgreSQL with pgvector is Archestra's default built-in backend. Deployments can configure secondary search clusters (such as OpenSearch) to index chunks externally while keeping PostgreSQL as the authoritative store for documents and access control.
+PostgreSQL with pgvector is the only shipped retrieval backend. The interface below supports implementing another backend; there is no configuration switch for an external search cluster.
 
 ### The Contract
 
-Implement `KnowledgeRetrievalBackend` in `backend/src/knowledge-base/retrieval-backend.ts`:
+Implement every method of `KnowledgeRetrievalBackend` in `backend/src/knowledge-base/retrieval-backend.ts`. Preserve document and chunk IDs for citations and context expansion:
 
 - `insertChunks`: Persists chunks and indexes searchable text fields.
 - `indexEmbeddings`: Stores embedding vectors for a specific dimension.
 - `vectorSearch` and `keywordSearch`: Executes ranking queries against semantic embeddings and keyword indexes.
 - `findNeighbors` and `findParentSiblings`: Retrieves adjacent chunks for context expansion.
+- `getDocumentChunks` and `countDocumentChunks`: Read and count a document's indexed chunks.
+- `getTextSearchLanguages` and `getPopulatedEmbeddingDimensions`: Report available search languages and vector dimensions.
 - `deleteDocumentChunks`: Idempotently removes indexed chunks when documents change or delete.
 
 ### Security and Verification
@@ -117,7 +128,9 @@ Always set `requiresResultVerification = true` on external backends. Archestra r
 
 ### Registration and Configuration
 
-1. Expose backend connection parameters under `kb` in `backend/src/config.ts`.
-2. Register the implementation in `backend/src/knowledge-base/retrieval-backends/registry.ts` based on `config.kb.retrievalBackend`.
-3. Document environment variables in `platform/.env.example` and [Configuration](/docs/reference/configuration).
-4. Run backend tests with `pnpm --filter @backend test -- knowledge-base`.
+Construction lives in `backend/src/knowledge-base/retrieval-backends/registry.ts`, which currently selects PostgreSQL directly.
+
+1. Add your implementation and its connection configuration. Introduce runtime selection only with a working second implementation.
+2. Document any new deployment variables in `.env.example` and [Configuration](/docs/reference/configuration).
+3. Test ingestion, embedding dimensions, vector and keyword ranking, neighboring chunks, deletion, citations, ACLs, environments, and metadata filters.
+4. Run `pnpm --filter @backend test -- knowledge-base` and `pnpm type-check`. Query the same fixture through both backends and verify that inaccessible chunks never appear.

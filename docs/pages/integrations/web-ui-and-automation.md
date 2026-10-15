@@ -2,12 +2,12 @@
 title: Web UIs and Automation
 description: Connect n8n workflows and Open WebUI to Archestra LLM Proxy and MCP Gateway
 order: 4
-lastUpdated: 2026-10-13
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-You can connect visual chat interfaces and workflow automation platforms to Archestra. Routing model requests through the LLM Proxy provides unified logs, spending limits, and guardrails, while the MCP Gateway supplies tools to your workflows.
+Give an n8n workflow or Open WebUI chat access to Archestra's models and tools. Configure inference and MCP separately: each uses its own endpoint and credential.
 
 ## Requirements
 
@@ -33,8 +33,6 @@ Use an OpenAI credential to keep the virtual key out of workflow expressions.
 3. Configure the OpenAI credential: set **Base URL** to `http://localhost:9000/v1/openai` and **API Key** to your Archestra virtual key.
 4. Select a model supported by your provider and save the workflow.
 5. If Guardrails are active, add the [session header](#configure-guardrails).
-
-Store virtual keys in n8n's credential manager rather than inline workflow expressions.
 
 ### Configure Guardrails
 
@@ -66,7 +64,7 @@ Attach a gateway to give the agent the tools assigned in Archestra.
 4. Choose **Bearer Auth** and supply your Archestra gateway token.
 5. Select the tools to expose to the agent.
 
-Archestra supports both legacy SSE and modern Streamable HTTP transports.
+Use Streamable HTTP when the client offers it; Archestra also supports legacy SSE.
 
 ## Open WebUI
 
@@ -90,7 +88,7 @@ Add Archestra as an OpenAI-compatible connection in Open WebUI.
 
 Do not add `X-Appa-Session-ID` to Open WebUI's global connection headers. Because connection headers apply to every request, setting one there gives all chats the same session ID and mixes their guardrail policies together.
 
-To use Guardrails with Open WebUI, route requests through a custom integration that forwards Open WebUI's chat ID in `X-Appa-Session-ID`. Without that header, Open WebUI follows your [unrecognized client setting](/docs/agents/guardrails/clients#unrecognized-clients): allowed without checks by default, or blocked if set to **Blocked**.
+Guardrails require an integration that sends the chat's ID on every model request. The ordinary shared connection setup below does not supply a per-chat ID. Without it, requests follow your [unrecognized client setting](/docs/agents/guardrails/clients#unrecognized-clients): allowed without checks by default, or refused when set to **Blocked**.
 
 ### Connect Tools
 

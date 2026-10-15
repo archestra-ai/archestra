@@ -3,15 +3,14 @@ title: How to Contribute
 sidebarTitle: Contributing
 description: Propose changes, report bugs, responsibly disclose vulnerabilities, and develop platform extensions
 order: 9
-lastUpdated: 2026-10-06
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Archestra accepts feature proposals and bug reports through GitHub issues. Maintainers implement accepted changes with autonomous coding agents.
+Report a reproducible bug, propose a feature, or work on an accepted change through GitHub. Maintainers use autonomous coding agents to implement accepted changes.
 
-- [Developer Quickstart](/docs/contributing/developer-quickstart): Run Archestra from source using Tilt and a local Kubernetes cluster.
-- [Extending Archestra](/docs/contributing/extending-archestra): Add LLM providers, knowledge connectors, or vector search backends.
+For code changes, read the repository's `AGENTS.md` and the matching `.agents/skills/` instructions. The [Developer Quickstart](/docs/contributing/developer-quickstart) runs a local stack; [Extending Archestra](/docs/contributing/extending-archestra) covers provider and Knowledge integrations.
 
 ## Opening an Issue
 
@@ -35,7 +34,7 @@ Report security vulnerabilities privately. Never report security issues in publi
 Submit reports through either channel:
 
 - Email **security@archestra.ai**.
-- Open a private security advisory through GitHub's [Security Advisories](https://github.com/archestra-ai/archestra/security/advisories/new). Only repository maintainers can view the advisory.
+- Open a private security advisory through GitHub's [Security Advisories](https://github.com/archestra-ai/archestra/security/advisories/new). GitHub keeps the report private to its participants.
 
 Please include:
 

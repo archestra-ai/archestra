@@ -101,46 +101,6 @@ export const SHOTS: Shot[] = [
   {
     asset: "automated_screenshots/chat_composer",
     route: (seed) => `/chat?agentId=${seed.agents["Support Triage"]}`,
-    beforeNavigate: async (page) => {
-      await page.route("**/api/llm-models/available*", async (route) => {
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify([
-            {
-              id: "claude-3-5-sonnet-20241022",
-              dbId: "m0000000-0000-4000-8000-000000000001",
-              displayName: "Claude 3.5 Sonnet",
-              provider: "anthropic",
-              isBest: true,
-              isFree: false,
-            },
-          ]),
-        });
-      });
-      await page.route(
-        "**/api/llm-provider-api-keys/available*",
-        async (route) => {
-          await route.fulfill({
-            status: 200,
-            contentType: "application/json",
-            body: JSON.stringify([
-              {
-                id: "k0000000-0000-4000-8000-000000000001",
-                name: "Anthropic Production",
-                provider: "anthropic",
-                scope: "org",
-                isPrimary: true,
-                isSystem: false,
-              },
-            ]),
-          });
-        },
-      );
-    },
-    prepare: async (page) => {
-      await page.getByText("Claude 3.5 Sonnet").first().waitFor();
-    },
   },
   {
     asset: "automated_screenshots/chat-apps_gallery",
@@ -150,11 +110,20 @@ export const SHOTS: Shot[] = [
       const convId = "c0000000-0000-4000-8000-000000000099";
       const appId = "7b8e1a20-0000-4000-8000-000000000099";
 
-      await page.addInitScript(({ id }) => {
-        window.localStorage.setItem(`archestra-chat-right-panel-open-${id}`, "true");
-        window.localStorage.setItem(`archestra-chat-right-panel-tab-${id}`, "apps");
-        window.localStorage.setItem("archestra-right-panel-width", "560");
-      }, { id: convId });
+      await page.addInitScript(
+        ({ id }) => {
+          window.localStorage.setItem(
+            `archestra-chat-right-panel-open-${id}`,
+            "true",
+          );
+          window.localStorage.setItem(
+            `archestra-chat-right-panel-tab-${id}`,
+            "apps",
+          );
+          window.localStorage.setItem("archestra-right-panel-width", "560");
+        },
+        { id: convId },
+      );
 
       await page.route("**/api/llm-models/available*", async (route) => {
         await route.fulfill({
@@ -192,75 +161,78 @@ export const SHOTS: Shot[] = [
         },
       );
 
-      await page.route(`**/api/chat/conversations/${convId}*`, async (route) => {
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({
-            id: convId,
-            userId: "u0000000-0000-4000-8000-000000000001",
-            organizationId: "o0000000-0000-4000-8000-000000000001",
-            title: "Incident INC-4091 Command Center",
-            selectedModel: "m0000000-0000-4000-8000-000000000001",
-            selectedProvider: "anthropic",
-            modelId: "claude-3-5-sonnet-20241022",
-            thinkingEffort: "medium",
-            hasCustomToolSelection: false,
-            hooksDebugEnabled: false,
-            todoList: null,
-            artifact: null,
-            projectId: null,
-            origin: "user",
-            titleIsPlaceholder: false,
-            encryptedChat: false,
-            pinnedAt: null,
-            lastMessageAt: "2026-10-12T12:00:00.000Z",
-            createdAt: "2026-10-12T12:00:00.000Z",
-            updatedAt: "2026-10-12T12:00:00.000Z",
-            deletedAt: null,
-            chatErrors: [],
-            compactions: [],
-            messages: [
-              {
-                id: "msg-user-1",
-                role: "user",
-                parts: [
-                  {
-                    type: "text",
-                    text: "Deploy the Incident Command Center for INC-4091 to coordinate remediation.",
-                  },
-                ],
-              },
-              {
-                id: "msg-assistant-1",
-                role: "assistant",
-                parts: [
-                  {
-                    type: "text",
-                    text: "I've launched the Incident Command Center for INC-4091. Real-time telemetry, blast radius metrics, and remediation controls are ready in the right panel.",
-                  },
-                  {
-                    type: "dynamic-tool",
-                    toolName: "archestra__render_app",
-                    toolCallId: "call_render_app_1",
-                    state: "output-available",
-                    input: { app_id: appId },
-                    output: {
-                      content: "Rendered Incident Command Center",
-                      structuredContent: {
-                        id: appId,
-                        name: "Incident Command Center",
-                        latestVersion: 1,
+      await page.route(
+        `**/api/chat/conversations/${convId}*`,
+        async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              id: convId,
+              userId: "u0000000-0000-4000-8000-000000000001",
+              organizationId: "o0000000-0000-4000-8000-000000000001",
+              title: "Incident INC-4091 Command Center",
+              selectedModel: "m0000000-0000-4000-8000-000000000001",
+              selectedProvider: "anthropic",
+              modelId: "claude-3-5-sonnet-20241022",
+              thinkingEffort: "medium",
+              hasCustomToolSelection: false,
+              hooksDebugEnabled: false,
+              todoList: null,
+              artifact: null,
+              projectId: null,
+              origin: "user",
+              titleIsPlaceholder: false,
+              encryptedChat: false,
+              pinnedAt: null,
+              lastMessageAt: "2026-10-12T12:00:00.000Z",
+              createdAt: "2026-10-12T12:00:00.000Z",
+              updatedAt: "2026-10-12T12:00:00.000Z",
+              deletedAt: null,
+              chatErrors: [],
+              compactions: [],
+              messages: [
+                {
+                  id: "msg-user-1",
+                  role: "user",
+                  parts: [
+                    {
+                      type: "text",
+                      text: "Deploy the Incident Command Center for INC-4091 to coordinate remediation.",
+                    },
+                  ],
+                },
+                {
+                  id: "msg-assistant-1",
+                  role: "assistant",
+                  parts: [
+                    {
+                      type: "text",
+                      text: "I've launched the Incident Command Center for INC-4091. Real-time telemetry, blast radius metrics, and remediation controls are ready in the right panel.",
+                    },
+                    {
+                      type: "dynamic-tool",
+                      toolName: "archestra__render_app",
+                      toolCallId: "call_render_app_1",
+                      state: "output-available",
+                      input: { app_id: appId },
+                      output: {
+                        content: "Rendered Incident Command Center",
+                        structuredContent: {
+                          id: appId,
+                          name: "Incident Command Center",
+                          latestVersion: 1,
+                        },
                       },
                     },
-                  },
-                ],
-                metadata: { createdAt: "2026-10-12T12:00:00.000Z" },
-              },
-            ],
-          }),
-        });
-      });
+                  ],
+                  metadata: { createdAt: "2026-10-12T12:00:00.000Z" },
+                },
+              ],
+            }),
+          });
+        },
+      );
 
       await page.route(`**/api/apps/${appId}*`, async (route) => {
         await route.fulfill({
@@ -935,4 +907,3 @@ const INCIDENT_COMMAND_CENTER_HTML = `<!DOCTYPE html>
   </div>
 </body>
 </html>`;
-

@@ -2,24 +2,24 @@
 title: Apps SDK Reference
 description: The window.archestra SDK, styling, security model, and authoring tools for MCP Apps
 order: 3
-lastUpdated: 2026-10-13
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-The HTML of an [MCP App](/docs/chat/apps) runs against the `window.archestra` SDK, the platform's injected styles, and the limits of its sandbox. Agents write apps with the built-in **Build App** skill, which follows the same rules.
+Call assigned MCP tools and keep viewer-specific state from an [MCP App](/docs/chat/apps) through `window.archestra`. The platform supplies the SDK, the viewer's identity, and theme styles; app code contains no platform credentials.
 
 ## The SDK
 
 The platform injects the SDK into every app at serve time as `window.archestra`. Do not import the SDK, load its script, or wire `postMessage` yourself: a save is rejected when the HTML sets up its own host connection.
 
-`window.archestra` exists as soon as the page loads. Await `archestra.ready` before the first call. Every method is async except `files.onChange`, `ui.updateModelContext`, and `llm.prompt`.
+`window.archestra` exists as soon as the page loads. Await `archestra.ready` before the first call. Methods return promises except `files.onChange`, `ui.updateModelContext`, and `llm.prompt`. Identity and context are properties.
 
 ```html
 <script type="module">
   await archestra.ready;
   const saved = await archestra.storage.user.get("settings");
-  render(saved ? saved.value : { theme: "light" });
+  document.body.textContent = JSON.stringify(saved?.value ?? {});
 </script>
 ```
 
@@ -49,9 +49,9 @@ Values are plain JSON. Pass objects to `set` directly, without `JSON.stringify`.
 After a `get` or `list`, a `set` of the same key succeeds only if nobody else wrote it in between. Otherwise it rejects with `{ code: "conflict" }`; read the key again and retry. Two `set` options change this:
 
 - `ifRevision` - Write only if the stored revision matches this number. `0` means "create, and fail if the key exists". `null` turns the check off, and the last write wins.
-- `owned: true` - Claim a new shared key for the viewer. Only that viewer, the app's author, and admins can then overwrite or delete it. Other writes reject with `{ code: "forbidden" }`.
+- `owned: true` - Claim a new shared key for the viewer. Only that viewer, the app's author, and callers with organization-wide app administration access can then overwrite or delete it. Other writes reject with `{ code: "forbidden" }`.
 
-Do not use `localStorage`, `sessionStorage`, or IndexedDB. The sandbox runs the app in an opaque origin, where they throw.
+Use SDK storage for persistent state. Without a dedicated sandbox origin, browser storage APIs throw; SDK storage also keeps state consistent when the app runs in another MCP host.
 
 ### Files
 
@@ -75,7 +75,7 @@ Use files for documents the app produces or the viewer keeps, such as a generate
 `tools.call` resolves to the first of these that the result has:
 
 1. `structuredContent`
-2. `{ text, resources: [{ uri, mimeType, text }] }` when the result embeds resources. A file-read tool, such as GitHub's `get_file_contents`, returns the file body in `resources[0].text`. A binary file carries `dataUrl` instead of `text`.
+2. `{ text, resources: [{ uri, mimeType, text }] }` when the result embeds resources. If a file-read tool embeds its text result, read the body from `resources[0].text`. A binary file carries `dataUrl` instead of `text`.
 3. JSON parsed from the text output
 4. The raw text
 5. `{ media: [{ type, mimeType, dataUrl }] }` for an image-only or audio-only result. Use `dataUrl` directly as an `img` or `audio` source.
@@ -123,9 +123,11 @@ Write only the CSS your app needs, not a full theme.
 
 ## Security Model
 
+The viewer's permissions govern each SDK call. Sandbox restrictions described below apply when Archestra renders the app; external MCP hosts enforce their own iframe policy.
+
 ### Network Access
 
-Every app renders under one platform policy; app authors cannot change it. The app has no network access: `fetch`, XHR, and WebSockets to any external address fail. Assigned MCP tools are the only way to get data in or out.
+Every app renders under one platform policy; app authors cannot change it. The policy blocks direct `fetch`, XHR, and WebSocket connections. Use assigned MCP tools for external data and SDK storage, files, and LLM methods for platform capabilities.
 
 Scripts, styles, fonts, and images can load from these CDNs, so apps can use client-side libraries:
 
@@ -135,7 +137,7 @@ Scripts, styles, fonts, and images can load from these CDNs, so apps can use cli
 - `fonts.googleapis.com`
 - `fonts.gstatic.com`
 
-A script loaded from a CDN runs inside the app and can call its tools as the viewer. Pin the versions of well-known packages.
+CDN assets are an exception to the network restrictions: their URLs can send information to the CDN. A loaded script can call the app's tools as the viewer. Review dependencies and pin their versions.
 
 ### Device Permissions
 
@@ -146,14 +148,14 @@ An app can declare `camera`, `microphone`, `geolocation`, or `clipboardWrite` in
 A team or organization app runs code its author wrote in each viewer's browser. Three layers protect the viewer:
 
 - The HTML runs in an isolated sandbox iframe.
-- The network policy blocks every path except assigned MCP tools.
+- The network policy restricts data connections to the SDK; it separately allows the listed CDN assets.
 - Every tool, storage, and file call is checked against the viewer's permissions, not the author's.
 
 The app's code can read the viewer's name and email, and its tool calls use the viewer's credentials. Share an app only with people you would give its tool and data access.
 
 ### Permissions
 
-Storage reads and LLM calls need [`app:read`](/docs/reference/permissions#app:read), and storage writes need `app:update`. A `use` grant on the app allows both. File calls need [`agent:read`](/docs/reference/permissions#agent:read). See [Access Control](/docs/admin/access-control).
+A **Can use** grant on the app permits its storage reads and writes and its LLM calls; it does not permit editing the app's HTML. File calls also need [`agent:read`](/docs/reference/permissions#agent:read). See [Access Control](/docs/admin/access-control).
 
 ## Authoring Tools
 
@@ -172,7 +174,7 @@ Agents build apps with these built-in tools. A new app created without HTML star
 
 ### Render Diagnostics
 
-Each render captures runtime errors, unhandled rejections, `console.error` output, and policy violations from the sandbox. The app card shows an error badge. The errors are also attached to the viewer's next chat message, for the agent to fix. [`get_app_diagnostics`](/docs/reference/archestra-mcp-server#get_app_diagnostics) reads the same result within the agent's turn. A render happens only when someone opens the app.
+Open the app to produce a render result before asking an agent to inspect it. Each render captures runtime errors, unhandled rejections, `console.error` output, and policy violations from the sandbox. The app card shows an error badge. The errors are also attached to the viewer's next chat message, for the agent to fix. [`get_app_diagnostics`](/docs/reference/archestra-mcp-server#get_app_diagnostics) reads the same result within the agent's turn. A render happens only when someone opens the app.
 
 ## External MCP Clients
 

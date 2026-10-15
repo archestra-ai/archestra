@@ -219,7 +219,7 @@ export function usePermissionMap<Key extends string>(
   const { data: userPermissions, isLoading } = useAllPermissions();
   const capabilities = useScopedCapabilities();
 
-  if (isLoading || capabilities.isLoading) {
+  if (isLoading || (userPermissions === undefined && capabilities.isLoading)) {
     return null;
   }
 

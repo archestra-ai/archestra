@@ -386,6 +386,63 @@ describe("useHasPermissions", () => {
 });
 
 describe("usePermissionMap", () => {
+  it("shows known role links while scoped capabilities load", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    queryClient.setQueryData(authQueryKeys.session(), {
+      user: { id: "viewer", email: "viewer@example.com" },
+      session: { id: "viewer-session" },
+    });
+    queryClient.setQueryData(authQueryKeys.userPermissions(), {
+      project: ["read"],
+    });
+    const capabilitiesMock = vi.mocked(
+      archestraApiSdk.getScopedCapabilities<false>,
+    );
+    type CapabilitiesResult = Awaited<
+      Parameters<typeof capabilitiesMock.mockReturnValue>[0]
+    >;
+    let resolveCapabilities!: (value: CapabilitiesResult) => void;
+    capabilitiesMock.mockReturnValue(
+      new Promise<CapabilitiesResult>((resolve) => {
+        resolveCapabilities = resolve;
+      }),
+    );
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(
+      () =>
+        usePermissionMap({
+          projects: { project: ["read"] },
+          skills: { skill: ["read"] },
+        }),
+      { wrapper },
+    );
+    await waitFor(() =>
+      expect(result.current).toEqual({ projects: true, skills: false }),
+    );
+    await act(async () => {
+      resolveCapabilities({
+        data: [
+          {
+            organizationId: "org-1",
+            resource: "skill",
+            scope: "00000000-0000-4000-8000-000000000001",
+            action: "read",
+          },
+        ],
+        error: undefined,
+        request: new Request("http://localhost"),
+        response: new Response(),
+      });
+    });
+    await waitFor(() =>
+      expect(result.current).toEqual({ projects: true, skills: true }),
+    );
+  });
+
   it("allows discovery through an object grant without widening mutation permissions", async () => {
     vi.mocked(archestraApiSdk.getUserPermissions).mockResolvedValue({
       data: { organization: ["read"] },

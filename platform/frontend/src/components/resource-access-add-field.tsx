@@ -12,6 +12,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useListboxNavigation } from "@/lib/hooks/use-listbox-navigation";
 import {
@@ -50,6 +51,10 @@ export function ResourceAccessAddField({
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  // The server offers service accounts only to those who may see them.
+  const { data: seesServiceAccounts } = useHasPermissions({
+    serviceAccount: ["read"],
+  });
   const query = useDebouncedValue(search, 250);
   const recipients = usePermissionRecipients({
     resource,
@@ -103,9 +108,10 @@ export function ResourceAccessAddField({
         >
           <Plus className="size-3.5" aria-hidden="true" />
           <span className="min-w-0 flex-1 truncate text-left">
-            {canShareOrganizationWide
-              ? "Add access: everyone, a role, a team, a person or a service account…"
-              : "Add access: a team, a person or a service account…"}
+            {addAccessLabel({
+              canShareOrganizationWide,
+              seesServiceAccounts: !!seesServiceAccounts,
+            })}
           </span>
         </Button>
       </PopoverTrigger>
@@ -233,4 +239,18 @@ function recipientNote(recipient: PermissionRecipient) {
 
 function subjectKey(subject: PermissionSubject) {
   return `${subject.type}:${subject.id}`;
+}
+
+/** Names only the kinds of recipient the picker will offer this caller. */
+function addAccessLabel(params: {
+  canShareOrganizationWide: boolean;
+  seesServiceAccounts: boolean;
+}): string {
+  const kinds = [
+    ...(params.canShareOrganizationWide ? ["everyone", "a role"] : []),
+    "a team",
+    "a person",
+    ...(params.seesServiceAccounts ? ["a service account"] : []),
+  ];
+  return `Add access: ${kinds.slice(0, -1).join(", ")} or ${kinds.at(-1)}…`;
 }

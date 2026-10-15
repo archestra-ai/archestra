@@ -45,9 +45,11 @@ describe("resource permission routes", () => {
   test("a member who manages an agent cannot make it org-wide, while an admin can", async ({
     makeAgent,
     makeTeam,
+    makeTeamMember,
   }) => {
     const admin = user;
     const team = await makeTeam(organizationId, admin.id);
+    await makeTeamMember(team.id, admin.id);
     const agent = await makeAgent({
       organizationId,
       agentType: "agent",

@@ -318,6 +318,7 @@ describe("catalog object grants", () => {
 
   test("creation shares with everyone or a role only for someone who manages every entry", async ({
     makeTeam,
+    makeTeamMember,
     makeCustomRole,
   }) => {
     const creator = await makeCustomRole(organizationId, {
@@ -325,6 +326,8 @@ describe("catalog object grants", () => {
     });
     await MemberModel.updateRole(user.id, organizationId, creator.role);
     const team = await makeTeam(organizationId, user.id);
+    await makeTeamMember(team.id, user.id);
+    const otherTeam = await makeTeam(organizationId, user.id);
     const create = (name: string, initialGrants: unknown[]) =>
       app.inject({
         method: "POST",
@@ -353,6 +356,14 @@ describe("catalog object grants", () => {
         (item) => item.name === "context7",
       ),
     ).toBe(false);
+    // Every team is close to everyone, so only one's own teams are offered.
+    const toOtherTeam = await create("context7", [
+      { subject: { type: "team", id: otherTeam.id }, actions: ["read", "use"] },
+    ]);
+    expect(toOtherTeam.statusCode, toOtherTeam.body).toBe(403);
+    expect(toOtherTeam.json().error.message).toBe(
+      "Only someone with Full access to every MCP registry entry can share it with a team they are not in.",
+    );
     const toTeam = await create("context7", [
       { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
     ]);

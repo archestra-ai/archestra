@@ -305,11 +305,12 @@ it("names everyone and the roles in the add-access field only for a creator who 
       </QueryClientProvider>,
     );
   // Seeing every agent is not enough. It takes Full access on every agent.
+  // This creator may not see service accounts, so the field leaves them out.
   scopedCapabilities.data = [{ resource: "agent", scope: "*", action: "read" }];
   const { unmount } = renderForm();
   expect(
     screen.getByRole("combobox", { name: "Add access" }),
-  ).toHaveTextContent("Add access: a team, a person or a service account…");
+  ).toHaveTextContent("Add access: a team or a person…");
   unmount();
 
   scopedCapabilities.data = [
@@ -318,9 +319,7 @@ it("names everyone and the roles in the add-access field only for a creator who 
   renderForm();
   expect(
     screen.getByRole("combobox", { name: "Add access" }),
-  ).toHaveTextContent(
-    "Add access: everyone, a role, a team, a person or a service account…",
-  );
+  ).toHaveTextContent("Add access: everyone, a role, a team or a person…");
 });
 
 async function pick(user: ReturnType<typeof userEvent.setup>, name: string) {

@@ -33,6 +33,8 @@ describe("outbound A2A visibility reads", () => {
     const team = await makeTeam(ctx.organizationId, owner.id, {
       name: "A2A Shared Team",
     });
+    // A member shares with the teams they are in.
+    await makeTeamMember(team.id, owner.id);
     await makeTeamMember(team.id, viewer.id);
 
     const personal = await createRemote(ctx, { name: "Owner only" });

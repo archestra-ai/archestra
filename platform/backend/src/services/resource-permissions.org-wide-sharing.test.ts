@@ -147,11 +147,12 @@ describe("making an object org-wide", () => {
     ).rejects.toThrow(expect.objectContaining({ statusCode: 403 }));
   });
 
-  test("a member still shares with a team, a person, or a service account", async ({
+  test("a member shares with their own teams and with people, not with other teams or service accounts", async ({
     makeOrganization,
     makeUser,
     makeMember,
     makeTeam,
+    makeTeamMember,
     makeServiceAccount,
     makeInternalMcpCatalog,
   }) => {
@@ -161,6 +162,8 @@ describe("making an object org-wide", () => {
     const colleague = await makeUser();
     await makeMember(colleague.id, org.id);
     const team = await makeTeam(org.id, member.id);
+    await makeTeamMember(team.id, member.id);
+    const otherTeam = await makeTeam(org.id, colleague.id);
     const account = await makeServiceAccount(org.id);
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
@@ -181,12 +184,48 @@ describe("making an object org-wide", () => {
       own,
       { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
       { subject: { type: "user", id: colleague.id }, actions: ["read", "use"] },
-      {
-        subject: { type: "serviceAccount", id: account.id },
-        actions: ["read", "use"],
-      },
     ];
     await save({ ...context, grants });
+    expect((await policyOf(context))?.grants).toEqual(grants);
+
+    // Adding every team would reach close to everyone.
+    await expect(
+      save({
+        ...context,
+        grants: [
+          ...grants,
+          {
+            subject: { type: "team", id: otherTeam.id },
+            actions: ["read", "use"],
+          },
+        ],
+      }),
+    ).rejects.toThrow(
+      expect.objectContaining({
+        statusCode: 403,
+        message:
+          "Only someone with Full access to every MCP registry entry can share it with a team they are not in.",
+      }),
+    );
+    // A member cannot see service accounts, so cannot pick one either.
+    await expect(
+      save({
+        ...context,
+        grants: [
+          ...grants,
+          {
+            subject: { type: "serviceAccount", id: account.id },
+            actions: ["read", "use"],
+          },
+        ],
+      }),
+    ).rejects.toThrow(
+      expect.objectContaining({
+        statusCode: 403,
+        message:
+          "Sharing with a service account needs permission to see service accounts.",
+      }),
+    );
     expect((await policyOf(context))?.grants).toEqual(grants);
   });
 
@@ -340,6 +379,8 @@ describe("making an object org-wide", () => {
     makeUser,
     makeMember,
     makeTeam,
+    makeTeamMember,
+    makeServiceAccount,
     makeInternalMcpCatalog,
   }) => {
     const org = await makeOrganization();
@@ -347,7 +388,10 @@ describe("making an object org-wide", () => {
     await makeMember(member.id, org.id);
     const admin = await makeUser();
     await makeMember(admin.id, org.id, { role: "admin" });
-    await makeTeam(org.id, member.id, { name: "Platform" });
+    const platform = await makeTeam(org.id, member.id, { name: "Platform" });
+    await makeTeamMember(platform.id, member.id);
+    await makeTeam(org.id, admin.id, { name: "Finance" });
+    await makeServiceAccount(org.id);
     const catalog = await makeInternalMcpCatalog({
       organizationId: org.id,
       access: "personal",
@@ -374,11 +418,39 @@ describe("making an object org-wide", () => {
     const memberTypes = await typesFor(member.id);
     expect(memberTypes.has("organization")).toBe(false);
     expect(memberTypes.has("role")).toBe(false);
+    expect(memberTypes.has("serviceAccount")).toBe(false);
     expect(memberTypes.has("team")).toBe(true);
     expect(memberTypes.has("user")).toBe(true);
     const adminTypes = await typesFor(admin.id);
     expect(adminTypes.has("organization")).toBe(true);
     expect(adminTypes.has("role")).toBe(true);
+    expect(adminTypes.has("serviceAccount")).toBe(true);
+
+    // A member's picker holds their own teams, and leaves out the admin, whose
+    // role already has Full access to every entry.
+    const memberNames = (
+      await ResourcePermissions.searchSubjects({
+        ...context,
+        userId: member.id,
+        query: "",
+      })
+    ).flatMap((recipient) =>
+      recipient.subject.type === "team" || recipient.subject.type === "user"
+        ? [recipient.subject.id]
+        : [],
+    );
+    expect(memberNames).toContain(platform.id);
+    expect(memberNames).toContain(member.id);
+    expect(memberNames).not.toContain(admin.id);
+    expect(
+      (
+        await ResourcePermissions.searchSubjects({
+          ...context,
+          userId: member.id,
+          query: "Finance",
+        })
+      ).length,
+    ).toBe(0);
 
     const initialTypes = async (userId: string) =>
       (

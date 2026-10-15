@@ -5,10 +5,11 @@ import { throwOnApiError } from "@/lib/utils/api";
 export function useGatewayToolPreview(params: {
   agentId: string | undefined;
   client: "claude-code" | "generic";
+  enabled?: boolean;
 }) {
   return useQuery({
     queryKey: ["agents", params.agentId, "mcp-tool-preview", params.client],
-    enabled: !!params.agentId,
+    enabled: !!params.agentId && (params.enabled ?? true),
     staleTime: 0,
     queryFn: async () => {
       if (!params.agentId) return undefined;

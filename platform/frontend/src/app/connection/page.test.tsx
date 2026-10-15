@@ -124,6 +124,14 @@ function render(ui: ReactElement) {
   });
 }
 
+/** Tool definitions and token counting start only after opening server details. */
+async function requestToolCounts() {
+  await userEvent.click(
+    screen.getByRole("button", { name: /^\d+ MCP servers?$/ }),
+  );
+  await userEvent.keyboard("{Escape}");
+}
+
 function mockOrganization(overrides: Record<string, unknown>) {
   vi.mocked(useOrganization).mockReturnValue({
     data: {},
@@ -251,18 +259,23 @@ describe("ConnectPage gateway footprint", () => {
   });
 
   it("counts served tools instead of catalog rows and changes the estimate with the client", async () => {
+    let requests = 0;
     api.use(
-      http.get(previewUrl, ({ request }) =>
-        HttpResponse.json(
+      http.get(previewUrl, ({ request }) => {
+        requests++;
+        return HttpResponse.json(
           listed(
             new URL(request.url).searchParams.get("client") === "claude-code"
               ? 1200
               : 550,
           ),
-        ),
-      ),
+        );
+      }),
     );
     show();
+    expect(screen.getByText("View tool counts and context cost")).toBeVisible();
+    expect(requests).toBe(0);
+    await requestToolCounts();
     const summary = screen.getByRole("complementary", {
       name: "What Claude Code gets",
     });
@@ -270,6 +283,7 @@ describe("ConnectPage gateway footprint", () => {
     expect(within(summary).getByText("~2.4K tokens")).toBeVisible();
     expect(within(summary).queryByText("3 tools")).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: /Codex$/ }));
+    await requestToolCounts();
     expect(await screen.findByText("~1.1K tokens")).toBeVisible();
   });
 
@@ -283,6 +297,7 @@ describe("ConnectPage gateway footprint", () => {
       ),
     );
     show();
+    await requestToolCounts();
     const summary = screen.getByRole("complementary", {
       name: "What Claude Code gets",
     });
@@ -310,6 +325,7 @@ describe("ConnectPage gateway footprint", () => {
       ),
     );
     show();
+    await requestToolCounts();
     const summary = screen.getByRole("complementary", {
       name: "What Claude Code gets",
     });
@@ -335,6 +351,7 @@ describe("ConnectPage gateway footprint", () => {
       ),
     );
     show();
+    await requestToolCounts();
     expect(await screen.findByText("0 tools")).toBeVisible();
     expect(screen.queryByText("3 tools")).toBeNull();
     expect(screen.queryByText("Example server")).toBeNull();
@@ -350,6 +367,7 @@ describe("ConnectPage gateway footprint", () => {
       ),
     );
     show();
+    await requestToolCounts();
     expect(await screen.findByText("Tool counts unavailable")).toBeVisible();
     expect(screen.queryByText("3 tools")).toBeNull();
   });
@@ -1105,6 +1123,7 @@ describe("ConnectPage gateway pick", () => {
     expect(
       await screen.findByText(/--client claude-code --gateway coding-gateway$/),
     ).toBeVisible();
+    await requestToolCounts();
     expect(await screen.findByText("~2.3K tokens")).toBeVisible();
   });
 });

@@ -180,7 +180,7 @@ test("the dashboard summarizes the latest run time and validation count with a d
   expect(summary).not.toHaveTextContent("1 failed");
   expect(summary).not.toHaveTextContent("1 cannot run");
   expect(summary).toHaveTextContent(
-    `Last run executed on ${formatDate({ date: validationRun.createdAt })}.`,
+    `Last run ${formatDate({ date: validationRun.createdAt })}`,
   );
   expect(
     within(summary).getByRole("img", {
@@ -269,18 +269,28 @@ test("unavailable runs show cannot run without detailed errors or invented count
   expect(summary).not.toHaveTextContent(
     "GitHub denied access to validation files",
   );
-  expect(summary).not.toHaveTextContent("0 passed");
+  expect(summary).not.toHaveTextContent("passed");
+  expect(summary).toHaveTextContent("could not run");
 });
 
 test("no saved runs is distinguished from a history-loading failure", async () => {
   revision = 1;
+  server.use(
+    http.get(`${api}/openappa/policy-tests`, () =>
+      HttpResponse.json({
+        source: "local",
+        files: [],
+        version: "empty",
+        sourceCommit: null,
+        directory: "traces",
+        activeDirectory: "traces",
+        error: null,
+      }),
+    ),
+  );
   show();
-  expect(
-    await screen.findByText(/Validations are unit tests for your policy/),
-  ).toBeVisible();
-  expect(
-    screen.getByRole("button", { name: "Write a validation" }),
-  ).toBeVisible();
+  expect(await screen.findByText("No validations yet")).toBeVisible();
+  expect(screen.getByText("Write a validation")).toBeVisible();
   expect(screen.queryByText("Passed", statusBadge)).not.toBeInTheDocument();
 });
 
@@ -296,9 +306,7 @@ test("failed history loading is retryable rather than presented as empty or pass
   );
   show();
   expect(await screen.findByText("Could not load validation")).toBeVisible();
-  expect(
-    screen.queryByText(/Validations are unit tests for your policy/),
-  ).not.toBeInTheDocument();
+  expect(screen.queryByText("No validations yet")).not.toBeInTheDocument();
   expect(screen.queryByText("Passed", statusBadge)).not.toBeInTheDocument();
   unavailable = false;
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));

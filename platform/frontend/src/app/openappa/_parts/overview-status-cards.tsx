@@ -33,15 +33,23 @@ import {
   useAppaGithubSync,
   useUpdateAppaGithubSync,
 } from "@/lib/openappa-github-sync.query";
-import { useOpenAppaPolicyTestRuns } from "@/lib/openappa-policy-tests.query";
+import {
+  useOpenAppaPolicyTestRuns,
+  useOpenAppaPolicyTests,
+} from "@/lib/openappa-policy-tests.query";
 import { useOpenAppaYellsSummary } from "@/lib/openappa-yells.query";
 import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
 import { ValidationStatusBadge } from "../validation/_parts/validation-parts";
 import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
 import { OpenAppaChatButton } from "./openappa-chat-button";
-import { ValidationRunChart } from "./validation-run-chart";
+import { useValidationFileHashes } from "./use-validation-file-hashes";
 import {
+  ValidationRunChart,
+  ValidationRunChartPlaceholder,
+} from "./validation-run-chart";
+import {
+  currentValidationRun,
   validationRunBars,
   validationRunStatus,
 } from "./validation-run-history";
@@ -209,36 +217,50 @@ function GithubSyncCard() {
 
 function ValidationCard() {
   const history = useOpenAppaPolicyTestRuns(true);
-  const run = history.data?.[0];
+  const collection = useOpenAppaPolicyTests(true);
+  // Without the files (a GitHub source the viewer cannot read), the newest run
+  // stands in for the current one, as before files were compared.
+  const files = collection.data?.error ? undefined : collection.data?.files;
+  const hashes = useValidationFileHashes(files);
+  const known = Boolean(files && hashes.data);
+  const run = !history.data
+    ? null
+    : known && hashes.data
+      ? currentValidationRun(hashes.data, history.data)
+      : (history.data[0] ?? null);
   const status = run ? validationRunStatus(run) : null;
-  const statusLabel = status
-    ? { passed: "Passed", failed: "Failed", cannot_run: "Cannot run" }[status]
-    : "";
-  const qualifiers = [run?.draft && "draft"].filter(Boolean);
+  const passed = run?.files.filter((file) => file.status === "passed").length;
+  const pending =
+    history.isPending ||
+    (collection.isPending && !collection.isError) ||
+    (files !== undefined && hashes.isPending);
+  const noFiles = known && files?.length === 0;
   return (
     <StatusCard
       icon={<ClipboardCheck />}
       title="Validations"
       status={
-        !history.isError && status ? (
-          <ValidationStatusBadge status={status}>
-            <span>{`${statusLabel}${qualifiers.length ? ` (${qualifiers.join(", ")})` : ""}`}</span>
+        history.isError || pending || noFiles ? undefined : (
+          <ValidationStatusBadge status={status ?? "not_run"}>
+            <span>
+              {status
+                ? `${{ passed: "Passed", failed: "Failed", cannot_run: "Cannot run" }[status]}${run?.draft ? " (draft)" : ""}`
+                : "Not run"}
+            </span>
           </ValidationStatusBadge>
-        ) : undefined
+        )
       }
       action={
         <div className="flex flex-wrap gap-2">
-          {!history.isError && !history.isPending && !run && (
-            <OpenAppaChatButton
-              size="sm"
-              variant="outline"
-              promptKey="writeValidations"
-              permissions={{ openappaPolicy: ["read", "update"] }}
-            >
-              <MessageCircle />
-              <span>Write a validation</span>
-            </OpenAppaChatButton>
-          )}
+          <OpenAppaChatButton
+            size="sm"
+            variant="outline"
+            promptKey="writeValidations"
+            permissions={{ openappaPolicy: ["read", "update"] }}
+          >
+            <MessageCircle />
+            <span>Write a validation</span>
+          </OpenAppaChatButton>
           <Button size="sm" variant="outline" asChild>
             <Link href="/openappa/validation">
               <span>View Validations</span>
@@ -256,25 +278,29 @@ function ValidationCard() {
             <span>Retry</span>
           </Button>
         </InlineNotice>
-      ) : history.isPending ? (
-        <Skeleton className="h-12 w-full" />
+      ) : pending ? (
+        <Skeleton className="h-32 w-full" />
+      ) : noFiles ? (
+        <ValidationRunChartPlaceholder
+          title="No validations yet"
+          description="Unit tests for your policy: each checks that a case is allowed or blocked."
+        />
       ) : run ? (
         <section
           className="space-y-3"
           aria-label="Last validation run"
           aria-live="polite"
         >
-          <CardDescription className="leading-relaxed">
-            {`Last run executed on ${formatDate({ date: run.createdAt })}.`}
+          <ValidationRunChart bars={validationRunBars(history.data ?? [])} />
+          <CardDescription className="text-center">
+            {`Last run ${formatDate({ date: run.createdAt })} · ${run.files.length ? `${passed} of ${run.files.length} passed` : "could not run"}`}
           </CardDescription>
-          <ValidationRunChart bars={validationRunBars(history.data)} />
         </section>
       ) : (
-        <CardDescription className="leading-relaxed">
-          Validations are unit tests for your policy. Each one checks that a
-          case you care about is blocked or allowed, for example that Slack data
-          never reaches a public GitHub repository.
-        </CardDescription>
+        <ValidationRunChartPlaceholder
+          title="No validations run yet"
+          description="Results appear here after a run."
+        />
       )}
     </StatusCard>
   );

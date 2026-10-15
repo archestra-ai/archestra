@@ -7,6 +7,7 @@ import {
   LockKeyhole,
 } from "lucide-react";
 import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import { appaGitHost } from "./appa-git-host";
@@ -65,6 +66,10 @@ export function GithubManagedPolicyNotice({
       </InlineNotice>
     );
 
+  // A healthy sync needs no banner: the page header's chip says where the
+  // source lives. Only a failure, or validations switched off, asks for action.
+  if (!failed && !(validations && validationDirectory === "")) return null;
+
   return (
     <InlineNotice variant={failed ? "error" : "neutral"}>
       {failed ? <AlertTriangle /> : <LockKeyhole />}
@@ -112,6 +117,42 @@ export function GithubManagedPolicyNotice({
         )}
       </InlineNoticeText>
     </InlineNotice>
+  );
+}
+
+/**
+ * Where the policy lives while Git sync is on, as a chip beside the page title.
+ * It links to the synced policy file.
+ */
+export function GitManagedChip() {
+  const { data } = useAppaGithubSync();
+  const source = data?.source;
+  if (!source?.repo || source.interval == null) return null;
+  const git = appaGitHost(data);
+  const href = githubPolicyFileUrl(data, "blob");
+  const content = (
+    <>
+      <LockKeyhole aria-hidden />
+      <span>{`Managed in ${git.label}`}</span>
+      {href && <ExternalLink aria-hidden />}
+    </>
+  );
+  return (
+    <Badge
+      variant="outline"
+      className="align-middle font-normal"
+      title={`The policy and its validations live in the ${git.repository}. Change them there.`}
+      asChild={Boolean(href)}
+    >
+      {href ? (
+        <a href={href} target="_blank" rel="noopener noreferrer">
+          {content}
+          <span className="sr-only">(opens in new tab)</span>
+        </a>
+      ) : (
+        <span>{content}</span>
+      )}
+    </Badge>
   );
 }
 

@@ -1,10 +1,10 @@
 "use client";
 import {
   Clock,
+  History,
   Info,
   MessageCircle,
   Play,
-  Plus,
   TriangleAlert,
 } from "lucide-react";
 import Link from "next/link";
@@ -12,7 +12,6 @@ import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -26,6 +25,11 @@ import type { PolicyTestRun } from "@/lib/openappa-policy-tests.query";
 import { formatDate } from "@/lib/utils/date-time";
 import { GithubManagedPolicyNotice } from "../../_parts/github-managed-policy-notice";
 import { OpenAppaChatButton } from "../../_parts/openappa-chat-button";
+import { useValidationFileHashes } from "../../_parts/use-validation-file-hashes";
+import {
+  currentValidationRun,
+  validationRunStatus,
+} from "../../_parts/validation-run-history";
 import { useValidation } from "./validation-context";
 
 export function ValidationNotices({
@@ -102,7 +106,7 @@ export function ValidationNotices({
 }
 
 export function ValidationActions() {
-  const { files, busy, github, canWrite, add } = useValidation();
+  const { busy } = useValidation();
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
       <OpenAppaChatButton
@@ -124,20 +128,6 @@ export function ValidationActions() {
         <MessageCircle />
         <span>Write a validation</span>
       </OpenAppaChatButton>
-      {!github && canWrite && (
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={busy || files.length >= 32}
-          title={
-            files.length >= 32 ? "The current limit is 32 files" : undefined
-          }
-          onClick={add}
-        >
-          <Plus />
-          <span>Add validation</span>
-        </Button>
-      )}
     </div>
   );
 }
@@ -145,47 +135,55 @@ export function ValidationActions() {
 export function ValidationRunAction() {
   const { files, runnable, runAll } = useValidation();
   return (
-    <Button size="sm" disabled={!runnable || !files.length} onClick={runAll}>
-      <Play />
-      <span>Run all</span>
-    </Button>
+    <div className="flex flex-wrap items-center gap-2">
+      <Button size="sm" variant="outline" asChild>
+        <Link href="/openappa/validation/history">
+          <History />
+          <span>Run history</span>
+        </Link>
+      </Button>
+      <Button size="sm" disabled={!runnable || !files.length} onClick={runAll}>
+        <Play />
+        <span>Run all</span>
+      </Button>
+    </div>
   );
 }
 
 export function ValidationLastRun() {
-  const { currentRun, history } = useValidation();
+  const { files, history } = useValidation();
+  const hashes = useValidationFileHashes(files);
+  const run = hashes.data
+    ? currentValidationRun(hashes.data, history.data ?? [])
+    : null;
+  const passed = run?.files.filter((file) => file.status === "passed").length;
   return (
     <div className="space-y-2">
-      <InlineNotice
-        variant="neutral"
-        role="status"
-        aria-label="Last validation run"
-      >
-        <Clock />
-        <span className="font-medium">Last run</span>
-        {currentRun ? (
-          <>
-            <InlineNoticeText>
-              {formatDate({ date: currentRun.createdAt })}
-            </InlineNoticeText>
-            <ValidationRunOutcome run={currentRun} binary />
-            {currentRun.trigger === "github_sync" && (
-              <Badge variant="outline">Git sync run</Badge>
-            )}
-            {currentRun.trigger === "policy_change" && (
-              <Badge variant="outline">Policy change run</Badge>
-            )}
-            {currentRun.draft && <Badge variant="secondary">Draft run</Badge>}
-          </>
-        ) : history.isLoading ? (
-          <Skeleton className="h-4 w-32" />
-        ) : !history.isError ? (
-          <InlineNoticeText>No runs yet.</InlineNoticeText>
-        ) : null}
-        <Button size="sm" variant="link" className="ml-auto" asChild>
-          <Link href="/openappa/validation/history">Run history</Link>
-        </Button>
-      </InlineNotice>
+      {run && (
+        <InlineNotice
+          variant="neutral"
+          role="status"
+          aria-label="Last validation run"
+        >
+          <Clock />
+          <span className="font-medium">Last run</span>
+          <InlineNoticeText>
+            {formatDate({ date: run.createdAt })}
+          </InlineNoticeText>
+          <ValidationStatusBadge status={validationRunStatus(run)}>
+            {run.files.length
+              ? `${passed} of ${run.files.length} passed`
+              : "Cannot run"}
+          </ValidationStatusBadge>
+          {run.trigger === "github_sync" && (
+            <Badge variant="outline">Git sync run</Badge>
+          )}
+          {run.trigger === "policy_change" && (
+            <Badge variant="outline">Policy change run</Badge>
+          )}
+          {run.draft && <Badge variant="secondary">Draft run</Badge>}
+        </InlineNotice>
+      )}
       {history.isError && (
         <InlineNotice variant="error">
           <TriangleAlert />
@@ -200,7 +198,7 @@ export function ValidationLastRun() {
           </Button>
         </InlineNotice>
       )}
-      {currentRun && <ValidationRunDiagnostics run={currentRun} />}
+      {run && <ValidationRunDiagnostics run={run} />}
     </div>
   );
 }

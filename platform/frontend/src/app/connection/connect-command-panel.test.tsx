@@ -358,6 +358,14 @@ describe("ConnectCommandPanel", () => {
       variant: "download",
       exclude: ["tools", "skills", "proxy", "plugins"],
     });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(createSetupMock).not.toHaveBeenCalled();
+    expect(allSkillsMock.mock.calls.every(([params]) => !params.enabled)).toBe(
+      true,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Prepare installer" }),
+    );
     const link = await screen.findByRole("link", {
       name: "Download installer",
     });

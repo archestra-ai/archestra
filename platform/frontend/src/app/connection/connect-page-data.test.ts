@@ -81,7 +81,7 @@ vi.mock("@/lib/plugins/plugin.query", () => ({
   usePlugins: () => ({ data: mocks.plugins }),
 }));
 vi.mock("@/lib/skills/skill.query", () => ({
-  useAllSkills: () => ({ data: undefined }),
+  useSkillsPaginated: () => ({ data: undefined }),
 }));
 vi.mock("./use-gateway-servers", () => ({
   useGatewayServers: () => ({

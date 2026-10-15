@@ -46,6 +46,7 @@ describe("model-router-resolver", () => {
         requestedModel: "anthropic:claude-haiku-resolver-test",
         // Single-surface provider: nothing for the router to choose between.
         supportedEndpoints: null,
+        outputBudget: { kind: "uncatalogued", tokens: 8_192 },
       });
     });
 

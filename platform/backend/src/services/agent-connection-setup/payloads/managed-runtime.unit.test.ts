@@ -481,6 +481,66 @@ describe("pre-bind local repair", () => {
     ).toEqual({ type: "remote", url });
   });
 
+  test.each([
+    "launch",
+    "install",
+  ])("%s retries when the previous owner releases the lock before inspection", async (operation) => {
+    const files = await fixture();
+    const action =
+      operation === "launch"
+        ? `await require(${JSON.stringify(path.join(files.root, "bootstrap.cjs"))}).locked(root, async () => {});`
+        : `eval(${JSON.stringify(files.install.script)});`;
+    const result = await files.run(`
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+const fs = require("node:fs");
+const root = ${JSON.stringify(files.root)};
+const lock = root + "/lock";
+const mkdir = fs.mkdirSync;
+let attempts = 0;
+fs.mkdirSync = (file, ...args) => {
+  if (file === lock && ++attempts === 1) {
+    // The competing owner released its lock after mkdir observed EEXIST.
+    const error = new Error("Already held");
+    error.code = "EEXIST";
+    throw error;
+  }
+  return mkdir(file, ...args);
+};
+${action}
+console.log(JSON.stringify({ attempts, released: !fs.existsSync(lock) }));
+`);
+    expect(JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "")).toEqual({
+      attempts: 2,
+      released: true,
+    });
+  });
+
+  test.each([
+    "launch",
+    "install",
+  ])("%s still rejects an unsafe existing lock", async (operation) => {
+    const files = await fixture();
+    const action =
+      operation === "launch"
+        ? `await require(${JSON.stringify(path.join(files.root, "bootstrap.cjs"))}).locked(root, async () => {});`
+        : `eval(${JSON.stringify(files.install.script)});`;
+    await expect(
+      files.run(`
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+const fs = require("node:fs");
+const root = ${JSON.stringify(files.root)};
+const lock = root + "/lock";
+fs.mkdirSync(lock, { mode: 0o700 });
+fs.chmodSync(lock, 0o777);
+${action}
+`),
+    ).rejects.toMatchObject({
+      stderr: expect.stringContaining("Unsafe managed runtime ownership"),
+    });
+  });
+
   test("concurrent offline startup repairs preserve one active alias and the original snapshot", async () => {
     const files = await fixture();
     await writeFile(

@@ -4,7 +4,7 @@ sidebarTitle: Batteries
 description: Cover an MCP server's tools with a ready-made policy package
 order: 2
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -23,7 +23,7 @@ Including a battery needs [`openappaPolicy:update`](/docs/reference/permissions#
 
 ## Fix a Battery
 
-An included battery that cannot run shows a problem instead of **Active**:
+An included battery that cannot run shows a problem instead of **Enforced**:
 
 - **Needs a credential:** the battery calls an API, for example to check if a repository is public. Bind a key from [Credentials](/docs/admin/security/credentials) in the battery's edit dialog. A battery holds no keys, and the key never appears in the policy.
 - **No server bound:** attach the battery to an installed MCP server.
@@ -32,6 +32,15 @@ What to know:
 
 - Archestra saves the key beside the policy, not in it. So you can bind a key before the battery is included, and while [Git sync](/docs/agents/guardrails/policies#git-sync) owns the policy.
 - A `[credentials]` line in the policy wins over a key bound here. Remove the line to manage the key in the dialog.
+
+## When a Revision Is Refused
+
+A refused revision does not turn your guardrails off. The runtime keeps enforcing the last composition that opened, until a revision composes again.
+
+- The **Batteries** tab names the refused revision and the one that stays enforced. Fix what the refusal message names, or save a revision that composes.
+- Each battery shows how the enforced composition holds it. A **Now** line, such as **Now: Needs a credential**, shows what the current text would change.
+- **Not yet enforced:** the current text includes the battery, but the enforced composition does not.
+- **Nothing is enforced:** no composition opened before the refusal, so governed calls are refused until the text composes.
 
 ## Write Your Own
 

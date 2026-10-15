@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 2
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -1465,6 +1465,11 @@ Retention is an Enterprise feature: the backend does not start when a window is 
 - **`ARCHESTRA_OPENAPPA_YELL_ENABLED`** - Lets agents report confusing blocks with the [`yell`](/docs/reference/archestra-mcp-server#yell) tool. Reports are stored locally. They also go to the shared OpenAPPA reporting service when [`ARCHESTRA_ANALYTICS`](/docs/reference/configuration#ARCHESTRA_ANALYTICS) is enabled.
   - Default: `true` (when Guardrails are on)
   - Values: `true`, `false`
+
+- **`ARCHESTRA_OPENAPPA_KEPT_ANNOTATOR_HORIZON_DAYS`** - How long an annotator stays available to conversations that started under an earlier policy after the policy stops declaring it.
+  - Default: `30`
+  - Values: `0`–`3650` days. `0` keeps it for as long as such a policy is stored.
+  - The time counts from the last activity of any conversation that uses it. After that, such a conversation is told to start a new one when it next needs the annotator.
 
 - **`ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS`** - PostgreSQL connections each backend process opens for guardrail checks.
   - Default: `4`

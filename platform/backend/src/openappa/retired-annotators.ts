@@ -12,6 +12,19 @@ import { asRecord, parsePolicyToml } from "./policy-text";
  * opening policy did, with the externals table and credential binding that
  * answered it. The runtime's stored opening policies are the ledger.
  *
+ * Only a name an opening policy's tool rules route to is ever consulted under
+ * it, so only those are kept. A name is kept while a conversation under a
+ * policy that routes to it was active within the configured horizon
+ * (`ARCHESTRA_OPENAPPA_KEPT_ANNOTATOR_HORIZON_DAYS`, 0 for no limit); after
+ * that, such a conversation is told to start a new one when it next needs it.
+ *
+ * What is kept follows the ledger and the organization's readable credential
+ * keys (batteries.ts `retirement`). A change the host makes itself recomposes
+ * at once; a credential that becomes unreadable behind the host's back is
+ * caught by the next dispatch; one that becomes readable again, or a session
+ * that opened under the previous composition while a new one was stored,
+ * waits for the next reading of those inputs, at most a minute per replica.
+ *
  * Temporary: this goes away once the runtime answers a session's consults
  * from the policy it opened with.
  */
@@ -36,6 +49,15 @@ export type KeptAnnotator = {
   credentials: Record<string, string>;
   /** What answers it, for logs and warnings: `builtin "x"` or its URL. */
   binding: string;
+  /** The opening policies that route to it with this binding, by hash. */
+  openingHashes: string[];
+};
+
+/** A name no live opening policy needs: kept no longer, with the policies that routed to it. */
+export type InactiveAnnotator = {
+  name: string;
+  binding: string;
+  openingHashes: string[];
 };
 
 /** Read what keeping needs from a stored opening policy; null when it is not TOML. */
@@ -133,28 +155,42 @@ export function retiredAnnotators(params: {
   helperTokenEnv: string;
   /** Install ids that exist now. */
   installs: ReadonlySet<string>;
+  /**
+   * The opening policies a conversation was active under lately, by hash; a
+   * name only other policies route to is not kept. Null counts every policy.
+   */
+  live: ReadonlySet<string> | null;
 }): {
   kept: KeptAnnotator[];
   dropped: { name: string; reason: string }[];
   conflicts: string[];
   rebound: Rebinding[];
+  inactive: InactiveAnnotator[];
 } {
   const composed = readOpeningPolicy("", params.composed);
-  if (!composed) return { kept: [], dropped: [], conflicts: [], rebound: [] };
+  if (!composed)
+    return { kept: [], dropped: [], conflicts: [], rebound: [], inactive: [] };
   const declared = new Map(
     composed.annotators.map((table) => [table.name, table]),
   );
   const winners = new Map<string, KeptAnnotator>();
   const conflicts = new Set<string>();
   const rebound = new Map<string, Rebinding>();
+  const inactive = new Map<string, InactiveAnnotator>();
   const ordered = [...params.openings].sort((a, b) =>
     a.hash < b.hash ? -1 : a.hash > b.hash ? 1 : 0,
   );
   for (const opening of ordered)
     for (const declaration of opening.annotators) {
       const name = declaration.name;
-      if (typeof name !== "string") continue;
-      const candidate = keptFrom({ opening, declaration, name });
+      // A declaration nothing routes to is never consulted under this policy,
+      // as when a composition carries a kept name its own rules do not use.
+      if (typeof name !== "string" || !opening.routedAnnotators.has(name))
+        continue;
+      const candidate = {
+        ...keptFrom({ opening, declaration, name }),
+        openingHashes: [opening.hash],
+      };
       const current = declared.get(name);
       if (current) {
         const now = keptFrom({ opening: composed, declaration: current, name });
@@ -172,6 +208,16 @@ export function retiredAnnotators(params: {
         }
         continue;
       }
+      if (params.live !== null && !params.live.has(opening.hash)) {
+        const entry = inactive.get(name) ?? {
+          name,
+          binding: described(candidate),
+          openingHashes: [],
+        };
+        entry.openingHashes.push(opening.hash);
+        inactive.set(name, entry);
+        continue;
+      }
       const earlier = winners.get(name);
       if (
         earlier &&
@@ -179,11 +225,14 @@ export function retiredAnnotators(params: {
       ) {
         // Snapshots of one helper differ only in what the host generated:
         // keep the one whose install still answers.
-        if (
+        const openingHashes = [...earlier.openingHashes, opening.hash];
+        winners.set(
+          name,
           !helperAnswers({ ...params, annotator: earlier }) &&
-          helperAnswers({ ...params, annotator: candidate })
-        )
-          winners.set(name, candidate);
+            helperAnswers({ ...params, annotator: candidate })
+            ? { ...candidate, openingHashes }
+            : { ...earlier, openingHashes },
+        );
         continue;
       }
       if (earlier) conflicts.add(name);
@@ -213,7 +262,35 @@ export function retiredAnnotators(params: {
     dropped,
     conflicts: [...conflicts],
     rebound: [...rebound.values()],
+    // A name some live policy still needs is answered above, not retired.
+    inactive: [...inactive.values()].filter(({ name }) => !winners.has(name)),
   };
+}
+
+/**
+ * When a composition that keeps these annotators should look again: when the
+ * first of them may lose its last active conversation, but not sooner than
+ * an hour, and in an hour when activity could not be read. Null when nothing
+ * kept can retire.
+ */
+export function retentionRecheckAt(params: {
+  now: Date;
+  horizonDays: number;
+  livenessKnown: boolean;
+  kept: readonly { lastActivityAt: Date | null }[];
+}): Date | null {
+  const { now, horizonDays, livenessKnown, kept } = params;
+  if (horizonDays === 0) return null;
+  const floor = now.getTime() + RECHECK_FLOOR_MS;
+  if (!livenessKnown) return new Date(floor);
+  if (kept.length === 0) return null;
+  const horizon = horizonDays * DAY_MS;
+  const first = Math.min(
+    ...kept.map(
+      ({ lastActivityAt }) => (lastActivityAt ?? now).getTime() + horizon,
+    ),
+  );
+  return new Date(Math.max(floor, first));
 }
 
 /**
@@ -284,6 +361,7 @@ function keptFrom(params: {
     credentials,
     binding:
       builtin !== null ? `builtin "${builtin}"` : (url ?? "its own table"),
+    openingHashes: [],
   };
 }
 
@@ -469,6 +547,10 @@ function records(value: unknown): Record<string, unknown>[] {
       })
     : [];
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** Retirement is checked at most hourly; the horizon counts in days. */
+const RECHECK_FLOOR_MS = 60 * 60 * 1000;
 
 /** Builtins the runtime answers without an externals table. */
 const CONFIGLESS_BUILTINS = new Set(["archestra", "claude-code"]);

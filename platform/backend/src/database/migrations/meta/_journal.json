@@ -3844,6 +3844,20 @@
       "when": 1792017863638,
       "tag": "0548_unify-oauth-client-scopes",
       "breakpoints": true
+    },
+    {
+      "idx": 549,
+      "version": "7",
+      "when": 1792059298771,
+      "tag": "0549_clever_polaris",
+      "breakpoints": true
+    },
+    {
+      "idx": 550,
+      "version": "7",
+      "when": 1792062478553,
+      "tag": "0550_lethal_joshua_kane",
+      "breakpoints": true
     }
   ]
 }

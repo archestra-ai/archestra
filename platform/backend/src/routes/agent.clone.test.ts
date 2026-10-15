@@ -17,7 +17,6 @@ import { createFastifyInstance } from "@/fastify-instance";
 import { AgentModel, AgentToolModel, ToolModel } from "@/models";
 import AgentExcludedSubagentModel from "@/models/agent-excluded-subagent";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
-import ServiceAccountModel from "@/models/service-account";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { type Agent, ApiError, type User } from "@/types";
 
@@ -402,18 +401,18 @@ describe("clone agent route", () => {
 
   test("cloning uses explicit grants and does not copy the source audience", async ({
     makeInternalAgent,
+    makeMember,
     makeTeam,
+    makeTeamMember,
+    makeUser,
   }) => {
     const team = await makeTeam(organizationId, user.id);
+    await makeTeamMember(team.id, user.id);
+    const colleague = await makeUser();
+    await makeMember(colleague.id, organizationId);
     const source = await makeInternalAgent({
       organizationId,
       authorId: user.id,
-    });
-    const serviceAccount = await ServiceAccountModel.create({
-      organizationId,
-      name: "Clone automation",
-      role: "member",
-      createdBy: null,
     });
     const grants = [
       {
@@ -421,7 +420,7 @@ describe("clone agent route", () => {
         actions: ["read", "use", "update"],
       },
       {
-        subject: { type: "serviceAccount", id: serviceAccount.id },
+        subject: { type: "user", id: colleague.id },
         actions: ["read", "use"],
       },
     ];

@@ -5,6 +5,7 @@ import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-defini
 import SkillModel from "@/models/skill";
 import { secretManager } from "@/secrets-manager";
 import { deleteRuntimeCredentialDefinition } from "@/services/agent-runtime/runtime-credentials";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
   type CreateGithubAppConfigRequest,
@@ -49,6 +50,15 @@ export async function createGithubAppConfig(params: {
       appId: data.appId,
       installationId: data.installationId,
       secretId: secret.id,
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      initialPermissionGrants:
+        await ResourcePermissions.defaultCredentialGrants({
+          organizationId,
+          userId: params.userId,
+        }),
+      // SPDX-SnippetEnd
     },
     params.userId,
   );

@@ -409,6 +409,42 @@ describe("service account routes", () => {
     });
   });
 
+  test("hides the built-in system account from list, get, update and delete", async () => {
+    const system =
+      await ServiceAccountModel.ensureSystemServiceAccount(organizationId);
+
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/service-accounts",
+    });
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json().map((a: { id: string }) => a.id)).not.toContain(
+      system.id,
+    );
+
+    const fetched = await app.inject({
+      method: "GET",
+      url: `/api/service-accounts/${system.id}`,
+    });
+    expect(fetched.statusCode).toBe(404);
+
+    const updated = await app.inject({
+      method: "PATCH",
+      url: `/api/service-accounts/${system.id}`,
+      payload: { name: "renamed" },
+    });
+    expect(updated.statusCode).toBe(404);
+
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/api/service-accounts/${system.id}`,
+    });
+    expect(deleted.statusCode).toBe(404);
+    expect(
+      await ServiceAccountModel.findAccount(system.id, organizationId),
+    ).toMatchObject({ id: system.id, isSystem: true });
+  });
+
   test("links an account to a team and audits the change", async ({
     makeTeam,
   }) => {

@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   boolean,
@@ -33,6 +34,12 @@ const serviceAccountsTable = pgTable(
       onDelete: "set null",
     }),
     /**
+     * The organization's built-in account for headless work that has no user
+     * behind it (scheduled triggers, incoming email, system runs). Created on
+     * demand, one per organization, and never listed or editable.
+     */
+    isSystem: boolean("is_system").notNull().default(false),
+    /**
      * Who created this. Nullable: rows predating creator tracking have no
      * answer, and `ON DELETE SET NULL` gives the column back to "unknown" when
      * the account is deleted rather than taking the account with it — the
@@ -59,6 +66,9 @@ const serviceAccountsTable = pgTable(
       table.organizationId,
       table.name,
     ),
+    uniqueIndex("service_accounts_organization_id_system_unique_idx")
+      .on(table.organizationId)
+      .where(sql`${table.isSystem}`),
   ],
 );
 

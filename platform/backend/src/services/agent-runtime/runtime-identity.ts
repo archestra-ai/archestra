@@ -86,6 +86,7 @@ type GatewayTokenActor = {
   isOrganizationToken: boolean;
   oauthClientId?: string;
   serviceAccountId?: string;
+  isSystemServiceAccount?: boolean;
 };
 
 /** @public — principal constructor shared with review and gateway callers */
@@ -608,6 +609,16 @@ function tokenOwnsActor(
   // Before the team check: an account acting for a team carries its teamId
   // but is never the team.
   if (token.serviceAccountId) {
+    // The built-in system account runs the host's system and organization
+    // runs; the signed binding, not the key alone, names the workload.
+    if (token.isSystemServiceAccount) {
+      return (
+        claims.organizationId === organizationId &&
+        ((claims.actorKind === "system" && claims.actorId === "system") ||
+          (claims.actorKind === "organization" &&
+            claims.actorId === organizationId))
+      );
+    }
     return (
       claims.actorKind === "serviceAccount" &&
       claims.actorId === token.serviceAccountId

@@ -14,7 +14,7 @@ import { jsonSchema, type Tool } from "ai";
 import { beforeEach, vi } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
-import { AgentModel, TeamTokenModel } from "@/models";
+import { AgentModel, ServiceAccountModel, TeamTokenModel } from "@/models";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import { describe, expect, test } from "@/test";
 import { agentOwner } from "@/types";
@@ -2513,7 +2513,71 @@ describe("buildArchestraToolOutput", () => {
 });
 
 describe("selectMCPGatewayToken synthetic principals", () => {
-  test("service-account principal does not mint a personal user token and falls back to the org token", async ({
+  test("a service-account principal presents its own platform key, never the org token", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeAgent,
+    makeServiceAccount,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ organizationId: org.id });
+    await TeamTokenModel.create({
+      organizationId: org.id,
+      isOrganizationToken: true,
+      name: "Org Token",
+    });
+    const account = await makeServiceAccount(org.id, { teamId: team.id });
+
+    const first = await chatClient.selectMCPGatewayToken(
+      agent.id,
+      `service-account:${account.id}`,
+      org.id,
+    );
+    const again = await chatClient.selectMCPGatewayToken(
+      agent.id,
+      `service-account:${account.id}`,
+      org.id,
+    );
+
+    expect(first).toMatchObject({
+      serviceAccountId: account.id,
+      teamId: team.id,
+      isOrganizationToken: false,
+    });
+    expect(again?.tokenValue).toBe(first?.tokenValue);
+    expect(
+      (await ServiceAccountModel.verifyToken(first?.tokenValue ?? ""))
+        ?.serviceAccount.id,
+    ).toBe(account.id);
+    // No personal user token row may be created for the synthetic principal
+    // (that path fails on the user_id foreign key).
+    const userTokens = await db.select().from(schema.userTokensTable);
+    expect(userTokens).toHaveLength(0);
+
+    // The platform key is listed with the account's keys, and deleting it
+    // rotates it on next use.
+    const listed = (await ServiceAccountModel.findById(account.id, org.id))
+      ?.tokens;
+    expect(listed).toEqual([
+      expect.objectContaining({ id: first?.tokenId, name: "Platform key" }),
+    ]);
+    await ServiceAccountModel.deleteToken({
+      serviceAccountId: account.id,
+      tokenId: first?.tokenId ?? "",
+      organizationId: org.id,
+    });
+    const rotated = await chatClient.selectMCPGatewayToken(
+      agent.id,
+      `service-account:${account.id}`,
+      org.id,
+    );
+    expect(rotated?.tokenValue).not.toBe(first?.tokenValue);
+  });
+
+  test("the system principal acts as the built-in system account", async ({
     makeOrganization,
     makeAgent,
   }) => {
@@ -2527,32 +2591,36 @@ describe("selectMCPGatewayToken synthetic principals", () => {
 
     const result = await chatClient.selectMCPGatewayToken(
       agent.id,
-      `service-account:${crypto.randomUUID()}`,
+      "system",
       org.id,
     );
 
-    expect(result).toMatchObject({ isOrganizationToken: true });
-
-    // No personal user token row may be created for the synthetic principal
-    // (previously this path failed on the user_id foreign key).
-    const userTokens = await db.select().from(schema.userTokensTable);
-    expect(userTokens).toHaveLength(0);
+    const system = await ServiceAccountModel.ensureSystemServiceAccount(org.id);
+    expect(result).toMatchObject({
+      serviceAccountId: system.id,
+      isOrganizationToken: false,
+    });
+    // Hidden from the organization's accounts.
+    expect(await ServiceAccountModel.findById(system.id, org.id)).toBeNull();
   });
 
-  test("service-account principal without any org token gets null instead of an error", async ({
+  test("a disabled or unknown service account gets no token", async ({
     makeOrganization,
     makeAgent,
+    makeServiceAccount,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
+    const disabled = await makeServiceAccount(org.id, { disabled: true });
 
-    const result = await chatClient.selectMCPGatewayToken(
-      agent.id,
+    for (const userId of [
+      `service-account:${disabled.id}`,
       `service-account:${crypto.randomUUID()}`,
-      org.id,
-    );
-
-    expect(result).toBeNull();
+    ]) {
+      expect(
+        await chatClient.selectMCPGatewayToken(agent.id, userId, org.id),
+      ).toBeNull();
+    }
   });
 
   test("team actor uses its own team token over the org token", async ({

@@ -169,6 +169,27 @@ describe("blocked-history reporting recovery", () => {
     expect(body).toEqual(before);
   });
 
+  test.each([
+    "<task-force>",
+    "<task_resultant>",
+    "<task-notification-help>",
+  ])("keeps a user request containing a similarly named tag: %s", (tag) => {
+    const request = `Please report the issue in ${tag}`;
+    const body = {
+      messages: [
+        { role: "user", content: "Earlier task" },
+        { role: "user", content: request },
+      ],
+    };
+    recoverDiagnosticTurn({
+      body,
+      family: "anthropic:messages",
+      refusal: "Blocked",
+      ...reporting,
+    });
+    expect(JSON.stringify(body.messages[0])).toContain(request);
+  });
+
   test("does not lose the reporting result when a client appends a system reminder to its tool-result turn", () => {
     const body = {
       messages: [

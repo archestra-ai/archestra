@@ -36,7 +36,7 @@ export function recoverDiagnosticTurn(params: {
     // Client-authored child notifications are not a new user request.
     return (
       text.trim().length > 0 &&
-      !/<(?:task_result|task-notification|task\b)/.test(text)
+      !/<(?:task_result|task-notification|task)(?=[\s>])/.test(text)
     );
   });
   const guidance = `[appa] OpenAPPA blocked this conversation. Earlier task history is withheld. Only reporting tools and their approval flow may run; ordinary work must remain blocked. Follow the user's intent, without requiring any special command wording. If the user wants to report the failure, use yell; if they want to turn OpenAPPA off for this session, use superyell and its required approval flow. Do not include task content in a report.\n${params.refusal}`;

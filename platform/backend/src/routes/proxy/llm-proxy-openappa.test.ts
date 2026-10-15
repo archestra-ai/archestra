@@ -1780,19 +1780,28 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       JSON.stringify((providerRequests.at(-1) as { tools: unknown[] }).tools),
     ).not.toContain("Bash");
     const recoveryReview = vi.spyOn(appaService, "loadOfferReview");
-    for (const reviewedTool of ["other__write", "archestra__superyell"]) {
-      recoveryReview.mockResolvedValue({
-        offer_id: "recovery-review-offer",
-        session_id: `user:${userId}|blocked-reporting`,
-        text: "Review this operation",
-        tool: reviewedTool,
-        arguments: JSON.stringify(reportArgs),
-      });
+    for (const reviewedTool of [
+      "other__write",
+      "archestra__superyell",
+      "unavailable",
+    ]) {
+      if (reviewedTool === "unavailable")
+        recoveryReview.mockRejectedValue(
+          new Error("Test review lookup unavailable"),
+        );
+      else
+        recoveryReview.mockResolvedValue({
+          offer_id: "recovery-review-offer",
+          session_id: `user:${userId}|blocked-reporting`,
+          text: "Review this operation",
+          tool: reviewedTool,
+          arguments: JSON.stringify(reportArgs),
+        });
       const use = {
         id:
-          reviewedTool === "other__write"
-            ? "toolu_ordinary_remedy"
-            : "toolu_reporting_remedy",
+          reviewedTool === "archestra__superyell"
+            ? "toolu_reporting_remedy"
+            : `toolu_ordinary_remedy_${reviewedTool}`,
         name: "archestra__execute_remedy_plan",
         input: { offer_id: "recovery-review-offer" },
       };
@@ -1804,9 +1813,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       ]);
       expect(reviewed.statusCode, reviewed.body).toBe(200);
       expect(noticeFrom(reviewed.body, stream).name).toBe(
-        reviewedTool === "other__write"
-          ? "archestra__get_remedy_plans"
-          : "archestra__execute_remedy_plan",
+        reviewedTool === "archestra__superyell"
+          ? "archestra__execute_remedy_plan"
+          : "archestra__get_remedy_plans",
       );
     }
     recoveryReview.mockRestore();

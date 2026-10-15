@@ -165,6 +165,7 @@ import { withCallerScope, withoutCallerScope } from "./utils";
 type AppaPluginBinding = {
   /** The request continues a provider thread that holds the system prompt. */
   threadContinue: boolean;
+  /** Limits later hooks to reporting and prevents a second recovery attempt. */
   reportingRecovery?: boolean;
   session: OpenAppaSession;
   identity: AppaTrustedContext["toolIdentity"];
@@ -389,6 +390,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       binding.reportingRecovery = true;
       if (trustedContext) trustedContext.childReturnRefusal = undefined;
       Object.assign(binding.request, {
+        // Any malformed frame left after filtering must fail closed here.
         childReturns: collectAndStripChildReturns(binding.requestBody, {
           openCodeBackgroundReturns:
             !!binding.adapter && isOpenCodeFamilyClient(binding.adapter.id),
@@ -397,6 +399,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         promptOperationId: undefined,
         ...appaTurnBoundaries({ family, body: binding.requestBody }),
       });
+      // reportingRecovery prevents this filtered pass from recovering again.
       return this.onToolResults({
         ...context,
         toolResults: context.toolResults.filter((result) =>
@@ -1122,7 +1125,15 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
                 )?.tool)
               : undefined;
           if (!isReportingReviewTool(tool)) blockedTranscriptCalls.add(call.id);
-        } catch {
+        } catch (error) {
+          logger.warn(
+            {
+              err: error,
+              sessionId: binding.session.session_id,
+              callId: call.id,
+            },
+            "OpenAPPA withheld a reporting remedy because its review could not be loaded",
+          );
           blockedTranscriptCalls.add(call.id);
         }
       }
@@ -2663,6 +2674,7 @@ async function approveChildReturnCarriers(params: {
 class ChildReturnRefusal extends ApiError {}
 
 function isReportingReviewTool(tool: string | undefined): boolean {
+  // The native intrinsic is unprefixed; gateway tools have branded names.
   return (
     tool === "yell" ||
     isYellToolShortName(archestraMcpBranding.getToolShortName(tool ?? ""))

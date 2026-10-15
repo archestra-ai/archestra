@@ -1,5 +1,6 @@
 import {
   TOOL_GET_RUN_FULL_NAME,
+  TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
   TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import { vi } from "vitest";
@@ -189,6 +190,50 @@ describe("runtime calls signed while enforcement was off, beyond reads", () => {
 
     const result = await executeArchestraTool(
       archestraMcpBranding.getToolName(TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME),
+      { ...args, runtime_proof: proof },
+      seeded.context,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(
+      "no unclaimed record of this runtime call",
+    );
+  });
+
+  test("an upload is refused once enforcement is on, as a write is", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  }) => {
+    await GuardrailsDeploymentModel.setEnabled(true);
+    const seeded = await seededRun({
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+      seedAndAssignArchestraTools,
+    });
+    await recordMade(seeded, "observed-upload");
+    const args = {
+      task_id: seeded.taskId,
+      direction: "upload",
+      path: "in/data.csv",
+      local_path: "/tmp/data.csv",
+    };
+    const proof = signRuntimeToolProof({
+      session: seeded.parent,
+      toolCallId: "observed-upload",
+      action: "transfer_workspace_file",
+      arguments: args,
+      spawn: false,
+      observed: true,
+      secret: SECRET,
+    });
+
+    const result = await executeArchestraTool(
+      archestraMcpBranding.getToolName(TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME),
       { ...args, runtime_proof: proof },
       seeded.context,
     );

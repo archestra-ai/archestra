@@ -49,7 +49,8 @@ export function signRuntimeToolProof(params: {
  * rules a call then, so only reads qualify: what they return crosses the
  * guardrail into the session at the gateway. A launch, steer, write or upload
  * made while enforcement was off is refused once it is back on, so the model
- * makes it again and the proxy rules it.
+ * makes it again and the proxy rules it. An allowlist: an action or transfer
+ * direction not named here, including one added later, is not a read.
  */
 export function isObservedRead(params: {
   action: string;

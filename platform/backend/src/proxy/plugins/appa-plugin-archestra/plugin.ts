@@ -29,6 +29,7 @@ import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaSpawnCorrelationModel, {
   type AllowedSpawnAlias,
 } from "@/models/openappa-spawn-correlation";
+import { reportAgentRuntimeObservedReads } from "@/observability/metrics/agent-runtime";
 import { childSessionId, clientSessionId } from "@/openappa/actor";
 import {
   type AppaChildReturnCompletion,
@@ -1099,8 +1100,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (observer) {
       // A call is signed only once the record that this session made it
       // exists: that record is what the gateway checks an observed proof by.
-      if (!(await recordObservedCalls(observer, context.toolCalls))) return;
-      return signObservedRuntimeCalls(observer, context.toolCalls);
+      const recorded = await recordObservedCalls(observer, context.toolCalls);
+      return signObservedRuntimeCalls(observer, context.toolCalls, recorded);
     }
     const binding = this.bindings.get(context.resources);
     if (!binding) return;
@@ -3005,11 +3006,14 @@ async function recordObservedCalls(
  * turns on, and without a proof the gateway cannot tell this session from a
  * stranger and refuses it. With one, what it reads crosses into this session
  * as for a ruled call. Anything else stays unsigned (see `isObservedRead`).
- * Signing never fails the request; an unsigned call behaves as before.
+ * Signing never fails the request; an unsigned call behaves as before. When
+ * the calls could not be recorded nothing is signed, and the reads are
+ * counted as unsigned.
  */
 async function signObservedRuntimeCalls(
   observer: AppaPluginObserver,
   calls: readonly ToolCall[],
+  recorded: boolean,
 ): Promise<LlmProxyToolCallsOutcome | undefined> {
   const secret = config.openappa.offerSigningSecret;
   if (!secret) return undefined;
@@ -3021,14 +3025,18 @@ async function signObservedRuntimeCalls(
     });
     const toolCalls: ToolCall[] = [];
     const runtimeProofs: LlmProxyRuntimeToolProof[] = [];
+    let unsigned = 0;
     for (const call of calls) {
       const runtime = runtimeCalls.get(call.id);
       // A proof the model wrote itself is left for the gateway to refuse.
-      const proof =
-        runtime &&
+      const read =
+        runtime !== undefined &&
         !runtime.spawn &&
         isObservedRead({ action: runtime.action, args: runtime.args }) &&
-        !Object.hasOwn(runtime.args, RUNTIME_TOOL_PROOF_ARGUMENT)
+        !Object.hasOwn(runtime.args, RUNTIME_TOOL_PROOF_ARGUMENT);
+      if (read && !recorded) unsigned++;
+      const proof =
+        runtime && read && recorded
           ? signRuntimeToolProof({
               session: observer.session,
               toolCallId: withoutTrajectoryStamp(call.id),
@@ -3053,6 +3061,8 @@ async function signObservedRuntimeCalls(
       });
       toolCalls.push(signedCall({ call, runtime, proof }));
     }
+    reportAgentRuntimeObservedReads("signed", runtimeProofs.length);
+    reportAgentRuntimeObservedReads("unsigned", unsigned);
     return runtimeProofs.length > 0
       ? { decision: "allow", toolCalls, runtimeProofs }
       : undefined;

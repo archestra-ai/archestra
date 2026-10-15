@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isObservedRead,
   RUNTIME_TOOL_PROOF_ARGUMENT,
   signRuntimeToolProof,
   stripRuntimeToolProofs,
@@ -212,5 +213,24 @@ describe("runtime tool origin proofs", () => {
     expect(() =>
       stripRuntimeToolProofs({ arguments: JSON.stringify(args) }),
     ).toThrow("too deep");
+  });
+});
+
+describe("runtime reads signed while enforcement is off", () => {
+  it("names reads only, so a new transfer direction is not one", () => {
+    const transfer = (args: Record<string, unknown>) =>
+      isObservedRead({ action: "transfer_workspace_file", args });
+
+    expect(isObservedRead({ action: "get_run", args: {} })).toBe(true);
+    expect(isObservedRead({ action: "read_workspace_file", args: {} })).toBe(
+      true,
+    );
+    expect(transfer({ direction: "download" })).toBe(true);
+    expect(transfer({ direction: "upload" })).toBe(false);
+    expect(transfer({ direction: "sync" })).toBe(false);
+    expect(transfer({})).toBe(false);
+    for (const action of ["start_run", "steer_run", "write_workspace_file"]) {
+      expect(isObservedRead({ action, args: {} })).toBe(false);
+    }
   });
 });

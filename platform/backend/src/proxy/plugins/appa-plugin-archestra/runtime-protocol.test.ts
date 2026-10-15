@@ -5,9 +5,11 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
 import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
+import * as agentRuntimeMetrics from "@/observability/metrics/agent-runtime";
 import { openappaActor } from "@/openappa/actor";
 import { verifyRuntimeToolProof } from "@/openappa/runtime-tool-claims";
 import * as service from "@/openappa/service";
+import * as unenforced from "@/openappa/unenforced";
 import { LlmProxyPluginRegistry } from "@/proxy/plugins/registry";
 import { resolveGatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
 import { expect, test } from "@/test";
@@ -57,6 +59,10 @@ describe("protected runtime protocol", () => {
     });
     const plugin = new AppaPluginArchestra([]);
     await plugin.onSessionInit(context);
+    const counted = vi.spyOn(
+      agentRuntimeMetrics,
+      "reportAgentRuntimeObservedReads",
+    );
     const launch = { agent_id: agent.id, prompt: "Private report" };
     const outcome = await plugin.onToolCalls({
       ...context,
@@ -120,6 +126,52 @@ describe("protected runtime protocol", () => {
         toolCallIds: ["observed-read"],
       }),
     ).resolves.toEqual([expect.objectContaining({ reason: "made" })]);
+    expect(counted).toHaveBeenCalledWith("signed", 1);
+  });
+
+  test("leaves a read unsigned and counts it when its call could not be recorded", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const context = request(org.id);
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    trusted.enforcement = "inactive";
+    await db.insert(schema.openappaSessionsTable).values({
+      organizationId: org.id,
+      callerId: trusted.session.caller_id,
+      sessionId: trusted.session.session_id,
+      actor: openappaActor(trusted.session.session_id),
+      root: openappaActor(trusted.session.session_id),
+      parentId: null,
+      startDecision: { decision: "ack" },
+    });
+    const plugin = new AppaPluginArchestra([]);
+    await plugin.onSessionInit(context);
+    vi.spyOn(unenforced, "recordUnenforcedCalls").mockRejectedValue(
+      new Error("database unavailable"),
+    );
+    const counted = vi.spyOn(
+      agentRuntimeMetrics,
+      "reportAgentRuntimeObservedReads",
+    );
+
+    const outcome = await plugin.onToolCalls({
+      ...context,
+      toolCalls: [
+        {
+          id: "unrecorded-read",
+          name: "archestra__get_run",
+          arguments: { task_id: "task-one" },
+        },
+      ],
+    });
+
+    // Without the record the gateway would refuse the proof: sign nothing.
+    expect(outcome).toBeUndefined();
+    expect(counted).toHaveBeenCalledWith("unsigned", 1);
+    expect(counted).toHaveBeenCalledWith("signed", 0);
   });
 
   for (const wrapped of [false, true]) {

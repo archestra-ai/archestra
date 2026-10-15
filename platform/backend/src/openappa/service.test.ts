@@ -512,9 +512,11 @@ describe("APPA feature boundary", () => {
         tool: "yell",
         arguments: args,
         spawn: false,
+        // Reporting is on, so a block names yell the way the model calls it.
         presentation: {
           control_tool: "archestra__execute_remedy_plan",
           supports_delegation: false,
+          yell_tool: "archestra__yell",
         },
         withhold_consult_content: false,
       },

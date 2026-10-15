@@ -2199,13 +2199,31 @@ function nativePresentation(
 ): {
   control_tool: string;
   supports_delegation: boolean;
+  yell_tool?: string;
 } {
+  const controlTool =
+    controlToolName ??
+    archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME);
+  const yellTool = openappaYellEnabled()
+    ? yellSpelling(controlTool)
+    : undefined;
   return {
-    control_tool:
-      controlToolName ??
-      archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
+    control_tool: controlTool,
     supports_delegation: supportsDelegation,
+    ...(yellTool ? { yell_tool: yellTool } : {}),
   };
+}
+
+/**
+ * yell as the model calls it. The gateway always lists yell beside
+ * execute_remedy_plan, so a client spells both with the same prefix
+ * (`mcp__gateway__archestra__…`); a control tool spelled any other way names
+ * no yell.
+ */
+function yellSpelling(controlTool: string): string | undefined {
+  return controlTool.endsWith(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME)
+    ? `${controlTool.slice(0, -TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME.length)}yell`
+    : undefined;
 }
 
 /**

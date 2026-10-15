@@ -311,6 +311,10 @@ enum ExecutionOutcome {
 struct PresentationInput {
     control_tool: String,
     supports_delegation: bool,
+    /// The reporting tool a block names, spelled the way the model calls it. Absent when
+    /// reporting is off, and then a block does not mention it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    yell_tool: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -451,6 +455,7 @@ fn presentation_options(input: &Input) -> EmbeddedPresentationOptions {
                 control_tool: presentation.control_tool.clone(),
                 supports_delegation: presentation.supports_delegation,
                 include_display_plan: true,
+                yell_tool: presentation.yell_tool.clone(),
             }
         })
 }
@@ -465,6 +470,7 @@ fn result_presentation_options(input: &Input, call: &RecordedCall) -> EmbeddedPr
                 control_tool: presentation.control_tool.clone(),
                 supports_delegation: presentation.supports_delegation,
                 include_display_plan: true,
+                yell_tool: presentation.yell_tool.clone(),
             }
         })
 }
@@ -1167,6 +1173,14 @@ fn validate(input: &Input) -> napi::Result<()> {
             || presentation.control_tool.chars().any(char::is_control))
     {
         return Err(error("invalid control tool presentation"));
+    }
+    if let Some(yell) = input
+        .presentation
+        .as_ref()
+        .and_then(|presentation| presentation.yell_tool.as_ref())
+        && (yell.is_empty() || yell.len() > 1024 || yell.chars().any(char::is_control))
+    {
+        return Err(error("invalid yell tool presentation"));
     }
     for (name, value) in [
         ("tool spelling", &input.spelling),

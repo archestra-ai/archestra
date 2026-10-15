@@ -292,6 +292,10 @@ describe("SlackAgentBotsSection", () => {
     });
 
     expect(screen.getByText("@archestra")).toBeVisible();
+    // Its commands are named after the app, as Slack shows them.
+    expect(screen.getByText("/archestra-select-agent")).toBeVisible();
+    expect(screen.getByText("@archestra Agent > message")).toBeVisible();
+    expect(screen.getByText("@archestra list")).toBeVisible();
     expect(screen.getByText("@archestra_marketing")).toBeVisible();
     expect(convert).not.toHaveBeenCalled();
 
@@ -328,11 +332,11 @@ describe("SlackAgentBotsSection", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Add router bot" }),
     );
-    expect(screen.getByLabelText("Slack name")).toHaveValue("archestra");
+    expect(screen.getByLabelText("Slack name")).toHaveValue("archestra_all");
     await userEvent.click(screen.getByRole("button", { name: "Create bot" }));
 
     expect(create).toHaveBeenCalledWith({
-      appName: "archestra",
+      appName: "archestra_all",
       connectionMode: "socket",
     });
     expect(openSpy).toHaveBeenCalledWith(

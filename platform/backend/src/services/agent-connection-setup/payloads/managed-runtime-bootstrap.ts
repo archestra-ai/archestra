@@ -68,7 +68,10 @@ async function locked(root, callback) {
         throw error;
       }
       if (error.code !== "EEXIST") throw error;
-      owned(lock, true);
+      // A live owner may release the lock after mkdir observes EEXIST.
+      try { owned(lock, true); } catch (inspection) {
+        if (inspection.code !== "ENOENT") throw inspection;
+      }
       // Never steal a live lock, including slow starts. Dead processes leave no writer.
       try {
         const pid = Number(fs.readFileSync(path.join(lock, "pid"), "utf8"));

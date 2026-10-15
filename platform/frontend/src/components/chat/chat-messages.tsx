@@ -1836,8 +1836,8 @@ const MessageTool = memo(
     const errorText = getToolErrorText({ part, toolResultPart });
     const policyToolName = parseFullToolName(mcpAppToolName).toolName;
     const validationChange = [
-      "preview_openappa_validation_change",
-      "publish_openappa_validation_change",
+      "preview_guardrails_validation_change",
+      "update_guardrails_validation",
     ].includes(getToolShortName(mcpAppToolName) ?? "");
     const policyChange =
       (validationChange ||

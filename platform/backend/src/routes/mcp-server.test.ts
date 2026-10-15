@@ -4492,6 +4492,17 @@ describe("mcp server core route coverage", () => {
           pinned: false,
         },
       ]);
+      const compact = await app.inject({
+        method: "GET",
+        url: "/api/mcp_server?includeAssignedAgents=false",
+      });
+      expect(compact.statusCode).toBe(200);
+      expect(compact.json()).toEqual(
+        servers.map((entry: { assignedAgents: unknown[] }) => ({
+          ...entry,
+          assignedAgents: [],
+        })),
+      );
     });
 
     test("names to a member only the agents they can open, on the list and on one server", async ({

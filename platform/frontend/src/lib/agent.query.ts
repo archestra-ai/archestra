@@ -125,6 +125,8 @@ export function useProfiles(
 ) {
   const filters = {
     excludeBuiltIn: true,
+    // Roster consumers use metadata; selected-agent tools load from detail queries.
+    includeTools: false,
     ...params?.filters,
   } satisfies archestraApiTypes.GetAllAgentsData["query"];
   return useQuery({

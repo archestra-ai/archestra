@@ -10,7 +10,7 @@ A validation is a unit test for one case the operator cares about: a short \`.ap
 
 Offer a validation only at these points, in one sentence, and never more than once per conversation:
 
-- **After a targeted behavior change is approved**: ask with one \`archestra__ask_user\` question, "Add a validation for this change?", with options "Write validation" and "Not now". With local delivery, ask after the save. When approval opens a pull request, ask before publishing, so the check joins the same pull request: preview it with the complete proposed policy as \`policyContent\`, and publish both with \`archestra__publish_openappa_validation_change\` instead of \`archestra__update_guardrails_policy\`.
+- **After a targeted behavior change is approved**: ask with one \`archestra__ask_user\` question, "Add a validation for this change?", with options "Write validation" and "Not now". Ask after the policy is saved or its pull request is opened. The validation is a separate change: preview replays it against the saved policy, so while a policy pull request is not merged, a failure means the change is not active yet.
 - **When the operator asks to validate the policy or write a validation**: go to **Get the case**.
 
 Do not offer one after a first policy or \`init\`, for explain, review, or yell requests, after the operator declines, or just to add coverage.
@@ -38,21 +38,18 @@ Do not offer one after a first policy or \`init\`, for explain, review, or yell 
 1. Build the calls from \`effective.content\` as the writing reference says. Inspect a tool's metadata only when the case needs arguments the policy's contracts do not show.
 2. Write exactly one file for the case, unless the operator asks for more, with a descriptive file name and one to three assertions. Its first line is a \`#\` comment naming the case in plain words, under 60 characters (for example \`# Data read from <server> can't be posted publicly\`, with the policy's own server and tool names): the Validations page shows it as the validation's name. Cover a variant of the same case (another read, another argument) as another assertion in that file, not a second file. For Git, its path is a direct \`.appa\` child of \`activeDirectory\`; locally, use the returned directory. Reuse an existing file that already covers the case instead of adding a duplicate.
 3. Expectations come from the operator's case, even when the policy fails it today. Ask only if a missing detail changes what should be allowed or blocked. If the case needs a starting state, a contract or the deployment's starting label must establish it; tool names and imagined results do not. If nothing does, explain the gap and ask for the setup.
-4. Preview with \`archestra__preview_openappa_validation_change\`: explicit \`upsert\` and \`delete\`, \`expectedRevision\`, and \`expectedVersion\`. Omit \`policyContent\` unless a policy change is part of the request; never pass the current policy or blank text as a placeholder. Preview checks syntax and any proposed policy only; it does not run the validation. Fix \`.appa\` syntax errors in the file only and preview again.
-5. Explain in at most two sentences, without tool calls or \`.appa\` text: the situation and the expected decision.
+4. Preview with \`archestra__preview_guardrails_validation_change\`: explicit \`upsert\` and \`delete\`, \`expectedRevision\`, and \`expectedVersion\`. Preview checks syntax, then replays the files you add or edit against the saved policy. Its \`tests\` field holds each file's result. Fix \`.appa\` syntax errors in the file only and preview again.
+5. Explain in at most two sentences, without tool calls or \`.appa\` text: the situation, the expected decision, and whether the preview replay passed, failed, or could not run. Keep these distinct: \`cannot_run\` means replay could not decide offline, for example because the step needs a remote annotator; it is not a pass. If it failed, say the policy does not handle this case yet; saving the check is still the operator's call, and you can offer to change the policy (\`references/adjust.md\`). Never weaken an expectation to make it pass.
 6. End the turn with one \`archestra__ask_user\` question, "Save this validation?", with options "Save" and "Not now". A typed answer is a change: apply it, preview again, and ask again. Respect "don't save yet".
 
-## Save and run
+## Save
 
-1. Call \`archestra__publish_openappa_validation_change\` with the exact patch you previewed and the same \`expectedRevision\` and \`expectedVersion\`. On a conflict, read the policy and suite again, re-apply the file, preview, and ask again if the result changed.
-2. With Git sync, give the pull request URL: the validation is saved and can run only after merge and sync. Stop here.
-3. Locally, run the saved file right away, without asking: \`archestra__run_openappa_policy_tests\` with its \`path\`. This records the result on the Validations page.
-4. Report in one or two sentences: the file path and whether it passed, failed, or could not run. Keep these distinct: \`cannot_run\` means replay could not decide offline, for example because the step needs a remote annotator; it is not a pass.
-5. If it failed, say the policy does not handle this case yet and offer to change the policy (\`references/adjust.md\`). Never weaken or delete a check to make it pass.
+1. Call \`archestra__update_guardrails_validation\` with the exact patch you previewed and the same \`expectedRevision\` and \`expectedVersion\`. On a conflict, read the policy and suite again, re-apply the file, preview, and ask again if the result changed.
+2. With Git sync, give the pull request URL: the validation takes effect after merge and sync. Locally, give the file path. Do not run it again: the preview already replayed it. The Validations page shows it as **Not run** until someone runs saved validations.
 
 ## Run or explain saved validations
 
-- To run one validation: \`archestra__run_openappa_policy_tests\` with its \`path\`. To run all: call it without \`path\` (after merge and sync for Git). Report the passed, failed, and cannot-run counts. Only this tool runs validations; preview and publication never do.
+- To run one validation: \`archestra__run_openappa_policy_tests\` with its \`path\`. To run all: call it without \`path\` (after merge and sync for Git). Report the passed, failed, and cannot-run counts. This tool runs saved files and records the result; preview replays a draft without recording it.
 - To explain: read the policy and the suite, then say in plain language which case each validation checks and its latest result. Change nothing.
 `;
 
@@ -84,13 +81,13 @@ mcp/records/delete {
 expect deny
 \`\`\`
 
-Once the relevant contracts and arguments are known, save the file and run it with \`archestra__run_openappa_policy_tests\` to check its decisions instead of simulating the engine in prose. Do not invent a state-changing prerequisite: a tool's name or imagined result does not establish a label.
+Once the relevant contracts and arguments are known, preview the file to replay its decisions instead of simulating the engine in prose. Do not invent a state-changing prerequisite: a tool's name or imagined result does not establish a label.
 
 Add a matched control when claiming that a particular event caused a decision to change. For a read that restricts later sharing or lowers trust, load \`references/validation-read-restriction.md\` for a worked example. Otherwise this reference is sufficient.
 
 Argument blocks are not JSON objects: put each unquoted name on its own line, followed by a colon and one JSON value, without commas between argument lines. Inside a value, use ordinary JSON: quote object keys and keep arrays or objects on one line. Start with one file or a small pair. Preserve existing expectations; explain conflicts rather than rewriting them to force a pass. Do not invent call arguments from a Yell archive.
 
-A run replays offline with the same native policy engine as enforcement, against the current composed policy. It executes no tools, models or remote helpers. The host's catch-all annotator (\`noop\`) answers offline; a step that needs any other annotator, such as \`archestra.run-command\`, or an audience lookup such as team membership reports cannot_run. Steps before a missing annotator still pass or fail; after an unanswered audience lookup, replay stops at the first call in the file that was not allowed, which can be an earlier denial. A policy with a model annotator other than \`archestra\`, a model profile, or an external authority or sanitizer cannot run at all. A passing replay demonstrates only the decisions represented by the scenario; it does not prove live client integration or provider behavior.
+Preview and runs replay offline with the same native policy engine as enforcement, against the saved composed policy. It executes no tools, models or remote helpers. The host's catch-all annotator (\`noop\`) answers offline; a step that needs any other annotator, such as \`archestra.run-command\`, or an audience lookup such as team membership reports cannot_run. Steps before a missing annotator still pass or fail; after an unanswered audience lookup, replay stops at the first call in the file that was not allowed, which can be an earlier denial. A policy with a model annotator other than \`archestra\`, a model profile, or an external authority or sanitizer cannot run at all. A passing replay demonstrates only the decisions represented by the scenario; it does not prove live client integration or provider behavior.
 `;
 
 /** `references/validation-read-restriction.md`: Optional causal-check recipe. */

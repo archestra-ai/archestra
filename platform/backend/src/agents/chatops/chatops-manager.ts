@@ -108,6 +108,7 @@ import {
   buildHistorySkippedAttachmentsNote,
   buildSkippedAttachmentsNote,
   errorMessage,
+  isAgentListCommand,
   isLlmProviderAuthError,
   isSessionResetCommand,
   isSlackDmChannel,
@@ -978,6 +979,20 @@ export class ChatOpsManager {
 
     if (!binding) {
       return { success: true, error: "NO_BINDING" };
+    }
+
+    // "@router list": the agents this person can reach with "Agent > message".
+    if (
+      provider.providerId === "slack" &&
+      !provider.pinnedAgentId &&
+      isAgentListCommand(message.text)
+    ) {
+      return await this.replyWithAgentList({
+        provider,
+        message,
+        isDm: binding.isDm,
+        sendReply,
+      });
     }
 
     // A pinned bot answers as its own agent, whatever the channel is bound to.
@@ -3185,6 +3200,36 @@ export class ChatOpsManager {
       });
     }
     return { success: true, agentResponse: CHATOPS_SESSION_RESET_REPLY };
+  }
+
+  private async replyWithAgentList(params: {
+    provider: ChatOpsProvider;
+    message: IncomingChatMessage;
+    isDm: boolean;
+    sendReply: boolean;
+  }): Promise<ChatOpsProcessingResult> {
+    const { provider, message, isDm, sendReply } = params;
+    const agents = await this.getAccessibleChatopsAgents({
+      senderEmail: message.senderEmail,
+      isDm,
+    });
+    const text =
+      agents.length === 0
+        ? "No agents are available for you here."
+        : [
+            "*Agents you can use:*",
+            ...agents.map((agent) => `• ${agent.name}`),
+            "",
+            `Start a message with the agent's name to send it there, for example _${agents[0].name} > what's new?_`,
+          ].join("\n");
+    if (sendReply) {
+      await provider.sendReply({
+        originalMessage: message,
+        text,
+        conversationReference: message.metadata?.conversationReference,
+      });
+    }
+    return { success: true, agentResponse: text };
   }
 
   /**

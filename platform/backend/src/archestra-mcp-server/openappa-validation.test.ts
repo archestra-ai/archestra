@@ -7,15 +7,6 @@ import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { beforeEach, expect, test } from "@/test";
 import { executeArchestraTool } from ".";
 
-const originalPolicy = `[policy]
-version = 2
-[[policy.tool]]
-name = 'files__read'
-delta = {}
-[[policy.tool]]
-name = 'mail__send'
-delta = {}
-`;
 const candidatePolicy = `[policy]
 version = 2
 [[policy.tool]]
@@ -41,7 +32,7 @@ beforeEach(() => {
   config.openappa.enabled = true;
 });
 
-test("the agent previews against a proposed policy and saves the patch without losing unrelated checks", async ({
+test("the agent previews a validation against the saved policy and saves it without touching the policy or other checks", async ({
   makeOrganization,
   makeUser,
   makeMember,
@@ -53,15 +44,11 @@ test("the agent previews against a proposed policy and saves the patch without l
   await makeMember(user.id, organization.id, { role: "admin" });
   const agent = await makeAgent({ organizationId: organization.id });
   await seedAndAssignArchestraTools(agent.id);
-  const context = {
-    organizationId: organization.id,
-    userId: user.id,
-    agent: { id: agent.id, name: agent.name },
-  };
+  await GuardrailsDeploymentModel.set({ enabled: false });
   await GuardrailsPolicyModel.save({
     organizationId: organization.id,
-    content: originalPolicy,
-    contentHash: createHash("sha256").update(originalPolicy).digest("hex"),
+    content: candidatePolicy,
+    contentHash: createHash("sha256").update(candidatePolicy).digest("hex"),
     updatedBy: user.id,
     expectedRevision: 0,
   });
@@ -70,65 +57,52 @@ test("the agent previews against a proposed policy and saves the patch without l
     files: [existing],
     expectedVersion: "empty",
   });
-  const read = await executeArchestraTool(
-    "archestra__get_openappa_policy_tests",
-    {},
-    context,
-  );
-  expect(read.isError).not.toBe(true);
-  expect(read.structuredContent).toMatchObject({
-    source: "local",
-    version: initialSuite?.version,
-    files: [existing],
-  });
+  const context = {
+    organizationId: organization.id,
+    userId: user.id,
+    agent: { id: agent.id, name: agent.name },
+  };
   const request = {
     expectedRevision: 1,
     expectedVersion: initialSuite?.version,
     changes: { upsert: [regression], delete: [] },
-    policyContent: candidatePolicy,
   };
   const preview = await executeArchestraTool(
-    "archestra__preview_openappa_validation_change",
+    "archestra__preview_guardrails_validation_change",
     request,
     context,
   );
   expect(preview.isError, JSON.stringify(preview.content)).not.toBe(true);
+  // Only the new file is replayed, against the saved policy.
   expect(preview.structuredContent).toMatchObject({
     stage: "preview",
-    policy: { before: originalPolicy, after: candidatePolicy, changed: true },
+    policyRevision: 1,
     validation: { valid: true },
+    tests: [{ path: regression.path, status: "passed" }],
   });
-  expect(
-    (await GuardrailsPolicyModel.findLatest(organization.id))?.content,
-  ).toBe(originalPolicy);
-  expect((await OpenAppaPolicyTestsModel.find(organization.id))?.files).toEqual(
-    [existing],
-  );
-  const publish = await executeArchestraTool(
-    "archestra__publish_openappa_validation_change",
+  const saved = await executeArchestraTool(
+    "archestra__update_guardrails_validation",
     request,
     context,
   );
-  expect(publish.isError, JSON.stringify(publish.content)).not.toBe(true);
-  expect(publish.structuredContent).toMatchObject({
+  expect(saved.isError, JSON.stringify(saved.content)).not.toBe(true);
+  expect(saved.structuredContent).toMatchObject({
     delivery: "revision",
-    revision: 2,
-    policyChanged: true,
+    revision: 1,
     validation: { valid: true },
   });
-  expect(
-    (await GuardrailsPolicyModel.findLatest(organization.id))?.content,
-  ).toBe(candidatePolicy);
+  expect(await guardrailsPolicyService.get(organization.id)).toMatchObject({
+    revision: 1,
+    content: candidatePolicy,
+  });
   expect((await OpenAppaPolicyTestsModel.find(organization.id))?.files).toEqual(
     [regression, existing],
   );
+  expect((await GuardrailsDeploymentModel.get()).enabled).toBe(false);
   expect(await OpenAppaPolicyTestsModel.listRuns(organization.id)).toEqual([]);
 });
 
-test.for([
-  undefined,
-  null,
-])("specification-only writes with policyContent=%s preserve unrelated checks and the unsaved starter without enabling enforcement", async (policyContent, {
+test("validations save beside the unsaved starter policy without saving it or enabling enforcement", async ({
   makeOrganization,
   makeUser,
   makeMember,
@@ -148,12 +122,11 @@ test.for([
     expectedVersion: "empty",
   });
   const result = await executeArchestraTool(
-    "archestra__publish_openappa_validation_change",
+    "archestra__update_guardrails_validation",
     {
       expectedRevision: before.revision,
       expectedVersion: initialSuite?.version,
       changes: { upsert: [regression] },
-      policyContent,
     },
     {
       organizationId: organization.id,
@@ -164,7 +137,6 @@ test.for([
   expect(result.isError, JSON.stringify(result.content)).not.toBe(true);
   expect(result.structuredContent).toMatchObject({
     delivery: "revision",
-    policyChanged: false,
     revision: 0,
   });
   expect(await GuardrailsPolicyModel.findLatest(organization.id)).toBeNull();
@@ -172,16 +144,9 @@ test.for([
   expect((await OpenAppaPolicyTestsModel.find(organization.id))?.files).toEqual(
     [regression, existing],
   );
-  expect(await OpenAppaPolicyTestsModel.listRuns(organization.id)).toEqual([]);
 });
 
-test.for([
-  { label: "omitted", policyContent: undefined },
-  { label: "null", policyContent: null },
-  { label: "unchanged", policyContent: originalPolicy },
-])("validation-only previews and saves with $label policy content keep the saved policy and failed expectations", async ({
-  policyContent,
-}, {
+test("the validation tools refuse policy text", async ({
   makeOrganization,
   makeUser,
   makeMember,
@@ -193,196 +158,28 @@ test.for([
   await makeMember(user.id, organization.id, { role: "admin" });
   const agent = await makeAgent({ organizationId: organization.id });
   await seedAndAssignArchestraTools(agent.id);
-  await GuardrailsDeploymentModel.set({ enabled: false });
-  await GuardrailsPolicyModel.save({
-    organizationId: organization.id,
-    content: originalPolicy,
-    contentHash: createHash("sha256").update(originalPolicy).digest("hex"),
-    updatedBy: user.id,
-    expectedRevision: 0,
-  });
-  const initialSuite = await OpenAppaPolicyTestsModel.saveLocal({
-    organizationId: organization.id,
-    files: [existing],
-    expectedVersion: "empty",
-  });
-  const context = {
-    organizationId: organization.id,
-    userId: user.id,
-    agent: { id: agent.id, name: agent.name },
-  };
-  const request = {
-    expectedRevision: 1,
-    expectedVersion: initialSuite?.version,
-    changes: { upsert: [regression], delete: [] },
-    policyContent,
-  };
-  const preview = await executeArchestraTool(
-    "archestra__preview_openappa_validation_change",
-    request,
-    context,
-  );
-  expect(preview.isError, JSON.stringify(preview.content)).not.toBe(true);
-  expect(preview.structuredContent).toMatchObject({
-    stage: "preview",
-    policy: { revision: 1, changed: false },
-    changes: request.changes,
-    validation: { valid: true },
-  });
-  expect(preview.structuredContent?.policy).not.toHaveProperty("before");
-  expect(preview.structuredContent?.policy).not.toHaveProperty("after");
-  expect((await OpenAppaPolicyTestsModel.find(organization.id))?.files).toEqual(
-    [existing],
-  );
-  const saved = await executeArchestraTool(
-    "archestra__publish_openappa_validation_change",
-    request,
-    context,
-  );
-  expect(saved.isError, JSON.stringify(saved.content)).not.toBe(true);
-  expect(saved.structuredContent).toMatchObject({
-    revision: 1,
-    policyChanged: false,
-    validation: { valid: true },
-  });
-  expect(await guardrailsPolicyService.get(organization.id)).toMatchObject({
-    revision: 1,
-    content: originalPolicy,
-  });
-  expect((await OpenAppaPolicyTestsModel.find(organization.id))?.files).toEqual(
-    [regression, existing],
-  );
-  expect((await GuardrailsDeploymentModel.get()).enabled).toBe(false);
-  expect(await OpenAppaPolicyTestsModel.listRuns(organization.id)).toEqual([]);
-});
-
-test("blank policy placeholders are rejected before proposing or publishing a policy replacement", async ({
-  makeOrganization,
-  makeUser,
-  makeMember,
-  makeAgent,
-  seedAndAssignArchestraTools,
-}) => {
-  const organization = await makeOrganization();
-  const user = await makeUser();
-  await makeMember(user.id, organization.id, { role: "admin" });
-  const agent = await makeAgent({ organizationId: organization.id });
-  await seedAndAssignArchestraTools(agent.id);
-  await GuardrailsDeploymentModel.set({ enabled: false });
   for (const name of [
-    "preview_openappa_validation_change",
-    "publish_openappa_validation_change",
+    "preview_guardrails_validation_change",
+    "update_guardrails_validation",
   ]) {
-    for (const policyContent of ["", " ", "\n\t"]) {
-      const response = await executeArchestraTool(
-        `archestra__${name}`,
-        {
-          expectedRevision: 0,
-          expectedVersion: "empty",
-          changes: { upsert: [regression] },
-          policyContent,
-        },
-        {
-          organizationId: organization.id,
-          userId: user.id,
-          agent: { id: agent.id, name: agent.name },
-        },
-      );
-      expect(response.isError).toBe(true);
-      expect(response.structuredContent).toBeUndefined();
-      expect(response.content).toEqual([
-        {
-          type: "text",
-          text: expect.stringContaining("omit policyContent or pass null"),
-        },
-      ]);
-    }
+    const result = await executeArchestraTool(
+      `archestra__${name}`,
+      {
+        expectedRevision: 0,
+        expectedVersion: "empty",
+        changes: { upsert: [existing] },
+        policyContent: candidatePolicy,
+      },
+      {
+        organizationId: organization.id,
+        userId: user.id,
+        agent: { id: agent.id, name: agent.name },
+      },
+    );
+    expect(result.isError).toBe(true);
   }
   expect(await GuardrailsPolicyModel.findLatest(organization.id)).toBeNull();
   expect(await OpenAppaPolicyTestsModel.find(organization.id)).toBeNull();
-  expect((await GuardrailsDeploymentModel.get()).enabled).toBe(false);
-});
-
-test("a first combined policy save enables enforcement", async ({
-  makeOrganization,
-  makeUser,
-  makeMember,
-  makeAgent,
-  seedAndAssignArchestraTools,
-}) => {
-  const organization = await makeOrganization();
-  const user = await makeUser();
-  await makeMember(user.id, organization.id, { role: "admin" });
-  const agent = await makeAgent({ organizationId: organization.id });
-  await seedAndAssignArchestraTools(agent.id);
-  await GuardrailsDeploymentModel.set({ enabled: false });
-  const result = await executeArchestraTool(
-    "archestra__publish_openappa_validation_change",
-    {
-      expectedRevision: 0,
-      expectedVersion: "empty",
-      policyContent: originalPolicy,
-      changes: { upsert: [regression] },
-    },
-    {
-      organizationId: organization.id,
-      userId: user.id,
-      agent: { id: agent.id, name: agent.name },
-    },
-  );
-  expect(result.isError, JSON.stringify(result.content)).not.toBe(true);
-  expect(result.structuredContent).toMatchObject({
-    revision: 1,
-    policyChanged: true,
-    validation: { valid: true },
-    enforcement: { enabled: true, turnedOn: true },
-  });
-  expect((await GuardrailsDeploymentModel.get()).enabled).toBe(true);
-});
-
-test("explicitly publishing the unchanged first starter with specifications saves and enables it", async ({
-  makeOrganization,
-  makeUser,
-  makeMember,
-  makeAgent,
-  seedAndAssignArchestraTools,
-}) => {
-  const organization = await makeOrganization();
-  const user = await makeUser();
-  await makeMember(user.id, organization.id, { role: "admin" });
-  const agent = await makeAgent({ organizationId: organization.id });
-  await seedAndAssignArchestraTools(agent.id);
-  await GuardrailsDeploymentModel.set({ enabled: false });
-  const starter = await guardrailsPolicyService.get(organization.id);
-  expect(starter.revision).toBe(0);
-  const result = await executeArchestraTool(
-    "archestra__publish_openappa_validation_change",
-    {
-      expectedRevision: 0,
-      expectedVersion: "empty",
-      policyContent: starter.content,
-      changes: { upsert: [existing] },
-    },
-    {
-      organizationId: organization.id,
-      userId: user.id,
-      agent: { id: agent.id, name: agent.name },
-    },
-  );
-  expect(result.isError, JSON.stringify(result.content)).not.toBe(true);
-  expect(result.structuredContent).toMatchObject({
-    revision: 1,
-    policyChanged: true,
-    enforcement: { enabled: true, turnedOn: true },
-  });
-  expect(
-    (await GuardrailsPolicyModel.findLatest(organization.id))?.content,
-  ).toBe(starter.content);
-  expect((await OpenAppaPolicyTestsModel.find(organization.id))?.files).toEqual(
-    [existing],
-  );
-  expect((await GuardrailsDeploymentModel.get()).enabled).toBe(true);
-  expect(await OpenAppaPolicyTestsModel.listRuns(organization.id)).toEqual([]);
 });
 
 test("readers can inspect and preview but cannot publish specifications", async ({
@@ -418,13 +215,13 @@ test("readers can inspect and preview but cannot publish specifications", async 
     changes: { upsert: [existing] },
   };
   const preview = await executeArchestraTool(
-    "archestra__preview_openappa_validation_change",
+    "archestra__preview_guardrails_validation_change",
     request,
     context,
   );
   expect(preview.isError, JSON.stringify(preview.content)).not.toBe(true);
   const denied = await executeArchestraTool(
-    "archestra__publish_openappa_validation_change",
+    "archestra__update_guardrails_validation",
     request,
     context,
   );
@@ -452,8 +249,8 @@ test("stale suite versions yield recoverable conflicts and write nothing", async
   const agent = await makeAgent({ organizationId: organization.id });
   await seedAndAssignArchestraTools(agent.id);
   for (const name of [
-    "preview_openappa_validation_change",
-    "publish_openappa_validation_change",
+    "preview_guardrails_validation_change",
+    "update_guardrails_validation",
   ]) {
     const result = await executeArchestraTool(
       `archestra__${name}`,
@@ -475,4 +272,55 @@ test("stale suite versions yield recoverable conflicts and write nothing", async
   }
   expect(await GuardrailsPolicyModel.findLatest(organization.id)).toBeNull();
   expect(await OpenAppaPolicyTestsModel.find(organization.id)).toBeNull();
+});
+
+test("a policy preview replays the saved validations against the proposed policy without recording a run", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeAgent,
+  seedAndAssignArchestraTools,
+}) => {
+  const organization = await makeOrganization();
+  const user = await makeUser();
+  await makeMember(user.id, organization.id, { role: "admin" });
+  const agent = await makeAgent({ organizationId: organization.id });
+  await seedAndAssignArchestraTools(agent.id);
+  await GuardrailsPolicyModel.save({
+    organizationId: organization.id,
+    content: candidatePolicy,
+    contentHash: createHash("sha256").update(candidatePolicy).digest("hex"),
+    updatedBy: user.id,
+    expectedRevision: 0,
+  });
+  await OpenAppaPolicyTestsModel.saveLocal({
+    organizationId: organization.id,
+    files: [existing, regression],
+    expectedVersion: "empty",
+  });
+  // Dropping the trust requirement lets mail go out after a suspicious read.
+  const loosened = candidatePolicy.replace(
+    "requires = { trust = 'trusted' }\n",
+    "",
+  );
+  const preview = await executeArchestraTool(
+    "archestra__preview_guardrails_policy_change",
+    { content: loosened, expectedRevision: 1 },
+    {
+      organizationId: organization.id,
+      userId: user.id,
+      agent: { id: agent.id, name: agent.name },
+    },
+  );
+  expect(preview.isError, JSON.stringify(preview.content)).not.toBe(true);
+  expect(preview.structuredContent?.validations).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ path: existing.path, status: "passed" }),
+      expect.objectContaining({ path: regression.path, status: "failed" }),
+    ]),
+  );
+  expect(
+    (await GuardrailsPolicyModel.findLatest(organization.id))?.content,
+  ).toBe(candidatePolicy);
+  expect(await OpenAppaPolicyTestsModel.listRuns(organization.id)).toEqual([]);
 });

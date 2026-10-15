@@ -2666,7 +2666,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         user,
         organizationId,
       } = request;
-      const conversation = await findReadableConversationById({
+      const conversation = await findReadableConversationMetadataById({
         conversationId: id,
         userId: user.id,
         organizationId,
@@ -2680,11 +2680,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // which is the same tombstone posture the transcript takes.
       const access = resolveEncryptedChatAccess({
         request,
-        conversation: (await ConversationModel.getEncryptedChatKeyInfo(id)) ?? {
-          id,
-          encryptedChat: conversation.encryptedChat,
-          encryptedChatDekFingerprint: null,
-        },
+        conversation,
       });
 
       return reply.send(
@@ -2730,7 +2726,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Verify the requester can read the conversation that owns this
       // attachment. Without this check, any org member with chat:read could
       // fetch any attachment in the org regardless of per-conversation ACLs.
-      const conversation = await findReadableConversationById({
+      const conversation = await findReadableConversationMetadataById({
         conversationId: meta.conversationId,
         userId: user.id,
         organizationId,
@@ -2746,13 +2742,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const attachmentKey = meta.encryptedChat
         ? requireEncryptedChatKey({
             request,
-            conversation: (await ConversationModel.getEncryptedChatKeyInfo(
-              meta.conversationId,
-            )) ?? {
-              id: meta.conversationId,
-              encryptedChat: true,
-              encryptedChatDekFingerprint: null,
-            },
+            conversation,
           })
         : null;
 
@@ -4821,11 +4811,49 @@ async function findReadableConversationById(params: {
   );
 }
 
+async function findReadableConversationMetadataById(params: {
+  conversationId: string;
+  userId: string;
+  organizationId: string;
+}) {
+  const conversation = await ConversationModel.findAccessibleMetadataById({
+    id: params.conversationId,
+    userId: params.userId,
+    organizationId: params.organizationId,
+    canReadOthersViaProject: () =>
+      ResourcePermissions.allows({
+        userId: params.userId,
+        organizationId: params.organizationId,
+        resource: "conversation",
+        scope: "*",
+        action: "read",
+      }),
+  });
+  if (conversation) return conversation;
+  if (!(await canReadScheduleRunConversation(params))) return null;
+  return ConversationModel.getReadAccessMetadata({
+    id: params.conversationId,
+    organizationId: params.organizationId,
+  });
+}
+
 async function findScheduleRunConversationForAdmin(params: {
   conversationId: string;
   userId: string;
   organizationId: string;
 }): Promise<z.infer<typeof SelectConversationSchema> | null> {
+  if (!(await canReadScheduleRunConversation(params))) return null;
+  return ConversationModel.findByIdInOrganization({
+    id: params.conversationId,
+    organizationId: params.organizationId,
+  });
+}
+
+async function canReadScheduleRunConversation(params: {
+  conversationId: string;
+  userId: string;
+  organizationId: string;
+}): Promise<boolean> {
   const hasProjectOversight = await ResourcePermissions.allows({
     userId: params.userId,
     organizationId: params.organizationId,
@@ -4834,25 +4862,22 @@ async function findScheduleRunConversationForAdmin(params: {
     action: "read",
   });
   if (!hasProjectOversight) {
-    return null;
+    return false;
   }
 
   const run = await ScheduleTriggerRunModel.findByChatConversationId(
     params.conversationId,
   );
   if (!run || run.organizationId !== params.organizationId) {
-    return null;
+    return false;
   }
 
   const trigger = await ScheduleTriggerModel.findById(run.triggerId);
   if (!trigger || trigger.organizationId !== params.organizationId) {
-    return null;
+    return false;
   }
 
-  return await ConversationModel.findByIdInOrganization({
-    id: params.conversationId,
-    organizationId: params.organizationId,
-  });
+  return true;
 }
 
 async function forkConversation(params: {

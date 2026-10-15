@@ -15,7 +15,7 @@ import { expect, test } from "vitest";
 const exec = promisify(execFile);
 const binDirectory = path.resolve(
   import.meta.dirname,
-  "../../../../agent_images/bin",
+  "../../../../docker_images/agent/bin",
 );
 
 test.each([

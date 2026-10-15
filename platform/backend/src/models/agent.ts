@@ -440,7 +440,9 @@ class AgentModel {
       const resource =
         agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent";
       const key = `${agent.organizationId}\u0000${resource}`;
-      byKey.set(key, [...(byKey.get(key) ?? []), agent.id]);
+      const scopes = byKey.get(key);
+      if (scopes) scopes.push(agent.id);
+      else byKey.set(key, [agent.id]);
     }
     const audiences = new Map<string, AgentScope>();
     for (const [key, scopes] of byKey) {
@@ -1034,17 +1036,12 @@ class AgentModel {
 
     // Apply access control filtering for non-agent admins
     if (userId && !isAgentAdmin) {
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-        principals,
+      whereConditions.push(
+        inArray(
+          schema.agentsTable.id,
+          accessibleAgentIdsQuery({ userId, isAgentAdmin: false, principals }),
+        ),
       );
-
-      if (accessibleAgentIds.length === 0) {
-        return [];
-      }
-
-      whereConditions.push(inArray(schema.agentsTable.id, accessibleAgentIds));
     }
 
     const where = and(...whereConditions);
@@ -2235,15 +2232,11 @@ class AgentModel {
       (filters?.status ?? "active") !== "deleted";
     const restrictToAccessible = !isAgentAdmin || isDefaultActiveAllView;
     if (userId && restrictToAccessible) {
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        userId,
-        false,
-        principals,
-      );
       whereConditions.push(
-        accessibleAgentIds.length > 0
-          ? inArray(schema.agentsTable.id, accessibleAgentIds)
-          : sql<boolean>`false`,
+        inArray(
+          schema.agentsTable.id,
+          accessibleAgentIdsQuery({ userId, isAgentAdmin: false, principals }),
+        ),
       );
     }
 
@@ -2613,19 +2606,11 @@ class AgentModel {
     const readers =
       principals ??
       (await ResourcePermissionSubjectModel.resolvePrincipals({ userId }));
-    const rows = await db
-      .select({ id: schema.agentsTable.id })
-      .from(schema.agentsTable)
-      .where(
-        and(
-          notDeleted(schema.agentsTable),
-          or(
-            explicitAgentReadCondition(readers),
-            isAgentAdmin ? sql`true` : undefined,
-            organizationLlmProxyCondition(userId),
-          ),
-        ),
-      );
+    const rows = await accessibleAgentIdsQuery({
+      userId,
+      isAgentAdmin,
+      principals: readers,
+    });
 
     return rows.map((row) => row.id);
   }
@@ -3822,6 +3807,37 @@ class AgentModel {
     return rows.length > 0;
   }
 
+  /** Startup candidates only: existing live personal agents need no repair. */
+  static async findMembersMissingPersonalChatAgents() {
+    return db
+      .select({
+        userId: schema.membersTable.userId,
+        organizationId: schema.membersTable.organizationId,
+      })
+      .from(schema.membersTable)
+      .where(
+        and(
+          isNull(schema.membersTable.defaultAgentId),
+          not(
+            exists(
+              db
+                .select({ id: schema.agentsTable.id })
+                .from(schema.agentsTable)
+                .where(
+                  and(
+                    ...personalChatAgentConditions({
+                      userId: schema.membersTable.userId,
+                      organizationId: schema.membersTable.organizationId,
+                    }),
+                    notDeleted(schema.agentsTable),
+                  ),
+                ),
+            ),
+          ),
+        ),
+      );
+  }
+
   /**
    * Ensure a personal chat agent exists for a member, and return the one they
    * should chat with — their oldest live personal chat agent.
@@ -3907,14 +3923,7 @@ class AgentModel {
       .from(schema.agentsTable)
       .where(
         and(
-          eq(schema.agentsTable.organizationId, params.organizationId),
-          eq(schema.agentsTable.authorId, params.userId),
-          eq(schema.agentsTable.agentType, "agent"),
-          agentAudienceIs("personal"),
-          eq(schema.agentsTable.builtIn, false),
-          params.excludeId
-            ? ne(schema.agentsTable.id, params.excludeId)
-            : undefined,
+          ...personalChatAgentConditions(params),
           notDeleted(schema.agentsTable),
         ),
       )
@@ -3932,15 +3941,7 @@ class AgentModel {
     const [row] = await db
       .select({ id: schema.agentsTable.id })
       .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.organizationId, params.organizationId),
-          eq(schema.agentsTable.authorId, params.userId),
-          eq(schema.agentsTable.agentType, "agent"),
-          agentAudienceIs("personal"),
-          eq(schema.agentsTable.builtIn, false),
-        ),
-      )
+      .where(and(...personalChatAgentConditions(params)))
       .limit(1);
     return row !== undefined;
   }
@@ -4915,6 +4916,35 @@ function agentListFence(principals: GrantPrincipal[]): SQL {
 }
 
 /**
+ * Shared accessible-ID query. List filters embed this exact authorization set
+ * instead of fetching the whole roster and sending its IDs back as parameters,
+ * so selective filters such as pins can narrow the work in the database.
+ */
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+function accessibleAgentIdsQuery(params: {
+  userId: string;
+  isAgentAdmin: boolean;
+  principals: GrantPrincipal[];
+}) {
+  return db
+    .select({ id: schema.agentsTable.id })
+    .from(schema.agentsTable)
+    .where(
+      and(
+        notDeleted(schema.agentsTable),
+        or(
+          explicitAgentReadCondition(params.principals),
+          params.isAgentAdmin ? sql`true` : undefined,
+          organizationLlmProxyCondition(params.userId),
+        ),
+      ),
+    );
+}
+// SPDX-SnippetEnd
+
+/**
  * The organization's LLM Proxy, for a member of that organization. A proxy has
  * no grant namespace of its own: the one row every proxy request resolves to
  * serves the whole organization, and the retired per-user proxy rows it
@@ -5187,4 +5217,20 @@ const ALL_SORTS_ABOVE_ANY_COUNT = 2147483647;
  */
 function qualified(column: AnyPgColumn): SQL {
   return sql`${sql.identifier(getTableName(column.table))}.${sql.identifier(column.name)}`;
+}
+
+/** Shared by the startup preflight and the per-member creation guard. */
+function personalChatAgentConditions(params: {
+  userId: string | AnyPgColumn;
+  organizationId: string | AnyPgColumn;
+  excludeId?: string;
+}) {
+  return [
+    eq(schema.agentsTable.organizationId, params.organizationId),
+    eq(schema.agentsTable.authorId, params.userId),
+    eq(schema.agentsTable.agentType, "agent"),
+    agentAudienceIs("personal"),
+    eq(schema.agentsTable.builtIn, false),
+    params.excludeId ? ne(schema.agentsTable.id, params.excludeId) : undefined,
+  ];
 }

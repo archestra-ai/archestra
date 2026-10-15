@@ -54,10 +54,13 @@ import {
   getHitlAskUserArguments,
   getHitlReview,
   getHitlReviewResult,
+  HITL_QUESTION_TTL_MS,
   type HitlReviewOutcome,
   hitlReviewAskedInForm,
   isHitlReviewOutcome,
+  peekHitlDecision,
   recordHitlRuling,
+  renewHitlReview,
   sealHitlClosure,
 } from "@/openappa/hitl-review";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
@@ -160,7 +163,11 @@ import {
   type NativeQuestionNoAnswer,
   type NativeQuestionReading,
 } from "./types";
-import { withCallerScope, withoutCallerScope } from "./utils";
+import {
+  withCallerScope,
+  withoutCallerScope,
+  withoutRemedySections,
+} from "./utils";
 
 type AppaPluginBinding = {
   /** The request continues a provider thread that holds the system prompt. */
@@ -177,12 +184,6 @@ type AppaPluginBinding = {
   sessionInitialized?: boolean;
   /** True when the model's response contained tool calls awaiting client execution. */
   turnOpen: boolean;
-  /**
-   * Admitted return text when a native handback is the only call in the batch.
-   * A buffered stream replacement prevents the start proof from accompanying
-   * the return.
-   */
-  completedHandbackReturn: string | undefined;
   /** True on internal loopback Chat requests. */
   chat: boolean;
   compaction: boolean;
@@ -197,6 +198,8 @@ type AppaPluginBinding = {
   nativeHitlRulings: RecordedNativeHitlRuling[];
   /** Offers whose native answer could not be read; asked again in a form. */
   unreadNativeAnswerOfferIds: string[];
+  /** Offers whose native answer came after their review expired; staged again on request. */
+  expiredNativeQuestionOfferIds: string[];
   /** The native id this request's children will report as their parent. */
   spawnerNativeId: string | undefined;
   /** Server-bound child metadata needed to correlate its terminal return. */
@@ -283,7 +286,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       runtimeSessionId: trustedContext.runtimeSessionId,
       runtimeTaskId: trustedContext.runtimeTaskId,
       turnOpen: false,
-      completedHandbackReturn: undefined,
       chat,
       compaction: trustedContext.compaction === true,
       threadContinue: trustedContext.thread === "continue",
@@ -293,6 +295,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       pendingHitlReviewOfferIds: [],
       nativeHitlRulings: [],
       unreadNativeAnswerOfferIds: [],
+      expiredNativeQuestionOfferIds: [],
       spawnerNativeId: trajectory.adapter?.nativeConversationId(
         trajectory.matchContext,
       ),
@@ -441,12 +444,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     binding.nativeHitlRulings = nativeAnswers.rulings;
     // An unread answer leaves its review pending. Its own guidance asks again.
     binding.unreadNativeAnswerOfferIds = nativeAnswers.unreadOfferIds;
+    // An answer whose review expired is no ruling. Its own guidance has the
+    // review staged again.
+    binding.expiredNativeQuestionOfferIds = nativeAnswers.expiredOfferIds;
     binding.pendingHitlReviewOfferIds = await pendingNativeHitlOfferIds({
       binding,
       results: toolResults,
       resolvedOfferIds: new Set([
         ...binding.nativeHitlRulings.map((entry) => entry.offerId),
         ...nativeAnswers.unreadOfferIds,
+        ...nativeAnswers.expiredOfferIds,
       ]),
     });
     // A handback's result and a message's delivery receipt are the client's
@@ -704,6 +711,17 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         request: context.request,
         interactionType: context.interactionType,
         guidance: unreadNativeAnswerGuidance(offerIds),
+        onContinue: binding.threadContinue ? "turn" : undefined,
+      });
+      requireCodexToolCall({ binding, context });
+    }
+    if (binding && binding.expiredNativeQuestionOfferIds.length > 0) {
+      const offerIds = binding.expiredNativeQuestionOfferIds;
+      binding.expiredNativeQuestionOfferIds = [];
+      appendQuestionContinuation({
+        request: context.request,
+        interactionType: context.interactionType,
+        guidance: expiredNativeQuestionGuidance(offerIds),
         onContinue: binding.threadContinue ? "turn" : undefined,
       });
       requireCodexToolCall({ binding, context });
@@ -1336,10 +1354,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       if (handbackIds.has(call.id)) {
         const handback = await admitChildHandback({ binding, call });
         rewritten.push({ id: call.id, name: call.name });
+        // The rewritten call carries the admitted return. Claude Code takes a
+        // report only through this call, so it must reach the client as a
+        // call, streamed or not; text in its place is an undelivered report.
         released.push(handback.call);
-        if (calls.length === 1) {
-          binding.completedHandbackReturn = handback.returnText;
-        }
         continue;
       }
       const inbox = peerInbox.get(call.id);
@@ -1524,18 +1542,22 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             ruling: decision.feedback,
           });
         }
-        // A call that only needs loading gets that one instruction.
+        // A call that only needs loading gets that one instruction. A client
+        // that defers tools can still load the remedy tools and act on the
+        // plans. Any other session cannot act on them, so the ruling loses its
+        // plan and delegation sections: the model would otherwise pass them
+        // on to the person as options.
+        // A ruling with no plan can still advise a subagent route, which the
+        // runtime renders whether or not it offers a plan; here it is cut too.
         const contentMessage = notLoaded.has(call.id)
           ? decision.feedback
-          : noPlan
-            ? ruling
-            : transient
-              ? `${ruling}\n\n[appa] This request did not include the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the ruling could not be offered as a remedy and the call is refused. The gateway tools usually finish loading a moment after the session starts. Send your message again.`
-              : binding.request.defersTools
-                ? `${ruling}\n\n[appa] This client defers tools it has not loaded, and the ${archestraMcpBranding.serverName} MCP gateway remedy tools are not loaded in this session, so the ruling could not be offered as a remedy and the call is refused. Search for ${TOOL_GET_REMEDY_PLANS_SHORT_NAME} and ${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME} with your tool search, then call the denied tool again to receive the remedy.`
-                : binding.request.declaredTools.length === 0
-                  ? `${ruling}\n\n[appa] This request listed no tools, so the ruling could not be offered as a remedy and the call is refused. Remedies need the ${archestraMcpBranding.serverName} MCP gateway tools in the request. Connect the gateway, then start a new session. In Codex, also set code_mode_host = false: code mode keeps its tools out of the request.`
-                  : `${ruling}\n\n[appa] This client did not declare the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the call is refused. Connect the MCP gateway and allow both remedy tools to use approval plans.`;
+          : binding.request.defersTools
+            ? noPlan
+              ? ruling
+              : `${ruling}\n\n[appa] This client defers tools it has not loaded, and the ${archestraMcpBranding.serverName} MCP gateway remedy tools are not loaded in this session, so the ruling could not be offered as a remedy and the call is refused. Search for ${TOOL_GET_REMEDY_PLANS_SHORT_NAME} and ${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME} with your tool search, then call the denied tool again to receive the remedy.`
+            : noPlan
+              ? `${withoutRemedySections(decision.feedback)}${clarification}${NO_REMEDY_PLAN_HINT}`
+              : `${withoutRemedySections(decision.feedback)}${clarification}\n\n${remedylessRefusalNote({ binding, transient })}`;
         return {
           decision: "refuse",
           refusal: {
@@ -1626,12 +1648,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       binding.compaction = true;
     }
     if (binding?.compaction) return { decision: "release" };
-    if (binding?.completedHandbackReturn !== undefined && context.streaming) {
-      return {
-        decision: "replace",
-        responseText: binding.completedHandbackReturn,
-      };
-    }
     if (!binding || binding.turnOpen || !binding.session.parent_id) {
       return;
     }
@@ -1999,6 +2015,30 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
 
 const NO_REMEDY_PLAN_HINT =
   "\n\n[appa] This ruling offers no remedy plan. Explain the ruling to the user and STOP this blocked action. Do not retry the same call, directly or through a wrapper.";
+
+/**
+ * Why a refused call got no remedy, and what the person does about it. The
+ * client's adapter knows where its gateway state is seen and how to sign in.
+ * Without one, the first miss in a session is read as tools still loading.
+ */
+function remedylessRefusalNote(params: {
+  binding: AppaPluginBinding;
+  transient: boolean;
+}): string {
+  const server = archestraMcpBranding.serverName;
+  // A request with no tools at all is not a gateway that is still loading or
+  // needs a sign-in. The client known to send one is Codex in code mode, which
+  // runs its tools outside the request, so the text names its setting.
+  if (params.binding.request.declaredTools.length === 0) {
+    return `[appa] This request listed no tools, so the ruling could not be offered as a remedy and the call is refused. Remedies need the ${server} MCP gateway tools in the request. Connect the gateway, then start a new session. In Codex, also set code_mode_host = false: code mode keeps its tools out of the request.`;
+  }
+  const lead = `[appa] This request did not include the ${server} MCP gateway tools, so no remedy plan can be used in this session, and a subagent started from it has the same limit. The call is refused.`;
+  const hint = params.binding.adapter?.gatewayToolsHint?.(server);
+  if (hint) return `${lead} ${hint}`;
+  return params.transient
+    ? `${lead} The gateway tools usually finish loading a moment after the session starts. Send your message again.`
+    : `${lead} Connect this client to the ${server} MCP gateway, then start a new session.`;
+}
 
 function deniedCallClarificationKey(params: {
   session: OpenAppaSession;
@@ -4670,10 +4710,23 @@ async function rememberNativeQuestions(
             ? { offerIds: question.offerIds }
             : {}),
         },
-        TimeInMs.Minute * 10,
+        HITL_QUESTION_TTL_MS,
       ),
     ),
   );
+  // The review a question asks about must outlive the question: an answer
+  // that still binds to its question is read against that review, and a
+  // review gone by then would turn the answer into no ruling.
+  for (const question of questions) {
+    for (const offerId of question.offerIds) {
+      if (await renewHitlReview({ session: binding.session, offerId }))
+        continue;
+      logger.warn(
+        { client: binding.adapter?.id, offerId },
+        "OpenAPPA asked a native approval question about a review that is not staged",
+      );
+    }
+  }
 }
 
 function isUserQuestionResult(params: {
@@ -4746,36 +4799,64 @@ async function recordNativeHitlRulings(params: {
 }): Promise<{
   rulings: RecordedNativeHitlRuling[];
   unreadOfferIds: string[];
+  expiredOfferIds: string[];
 }> {
   const native = params.binding.adapter?.nativeQuestion;
   const parse = native?.rulingFromResult;
-  if (!parse) return { rulings: [], unreadOfferIds: [] };
+  if (!parse) return { rulings: [], unreadOfferIds: [], expiredOfferIds: [] };
   const recorded: RecordedNativeHitlRuling[] = [];
   const unreadOfferIds: string[] = [];
+  const expiredOfferIds: string[] = [];
   for (const [answer, claim] of params.verifiedNativeQuestionResults) {
     if (!claim.offerIds || claim.offerIds.length === 0 || !isRecord(answer))
       continue;
     // The question the answer is read against comes from the review this
-    // server holds, the same source the question was issued from. Without
-    // that review the answer is not a ruling.
+    // server holds, the same source the question was issued from.
     const asked = await getHitlAskUserArguments({
       session: params.binding.session,
       offerIds: claim.offerIds,
     });
-    const reading = asked
-      ? parse(
+    if (!asked) {
+      // Without the review the answer cannot be read. A decision the review
+      // already reached stands. Otherwise the review expired, and no closure
+      // is sealed: a person who answered must not read as a refusal, and the
+      // next remedy call stages the review again.
+      for (const offerId of claim.offerIds) {
+        const decision = await peekHitlDecision({
+          session: params.binding.session,
+          offerId,
+        });
+        if (
+          decision?.ruling === "deny" ||
+          (decision?.ruling === "none" && decision.closure)
+        ) {
+          recorded.push({ offerId, ruling: decision.ruling });
+          continue;
+        }
+        logger.warn(
           {
-            content:
-              typeof answer.content === "string"
-                ? answer.content
-                : JSON.stringify(answer.content ?? null),
-            ...(typeof answer.isError === "boolean"
-              ? { isError: answer.isError }
-              : {}),
+            client: params.binding.adapter?.id,
+            userAgent: params.binding.requestHeaders["user-agent"],
+            offerId,
           },
-          asked,
-        )
-      : "none";
+          "OpenAPPA native approval answer arrived after its review expired",
+        );
+        expiredOfferIds.push(offerId);
+      }
+      continue;
+    }
+    const reading = parse(
+      {
+        content:
+          typeof answer.content === "string"
+            ? answer.content
+            : JSON.stringify(answer.content ?? null),
+        ...(typeof answer.isError === "boolean"
+          ? { isError: answer.isError }
+          : {}),
+      },
+      asked,
+    );
     if (reading === "unrecognized") {
       // A client version may word its answer differently. Nothing is read
       // from it; a client with forms is asked again there. A known no-answer
@@ -4858,7 +4939,7 @@ async function recordNativeHitlRulings(params: {
       }
     }
   }
-  return { rulings: recorded, unreadOfferIds };
+  return { rulings: recorded, unreadOfferIds, expiredOfferIds };
 }
 
 function assertUniqueNativeQuestionResultIds(params: {
@@ -5318,6 +5399,15 @@ function unreadNativeAnswerGuidance(offerIds: readonly string[]): string {
     "Ask once more with the declared ask_user tool, one call for each offer ID below.",
     HITL_ASK_USER_CALL,
     "The platform replaces the question text with the exact review. This time it opens as a form.",
+    `Offer IDs: ${JSON.stringify(offerIds)}.`,
+  ].join(" ");
+}
+
+function expiredNativeQuestionGuidance(offerIds: readonly string[]): string {
+  return [
+    "The last approval question was answered after its OpenAPPA review expired, so the platform recorded no ruling and the call stays blocked.",
+    "Call execute_remedy_plan again with the plan shown earlier in the conversation; the platform then asks the user again.",
+    "Retry the blocked call only after execute_remedy_plan reports that the plan is authorized.",
     `Offer IDs: ${JSON.stringify(offerIds)}.`,
   ].join(" ");
 }

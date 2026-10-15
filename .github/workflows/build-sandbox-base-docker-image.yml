@@ -57,10 +57,10 @@ jobs:
 
       - name: Regenerate lockfile and verify it is committed
         run: |
-          make -C sandbox_base update-lockfile
+          make -C docker_images/sandbox_base update-lockfile
 
-          if ! git diff --exit-code -- sandbox_base/requirements.lock; then
-            echo "::error::sandbox_base/requirements.lock is out of date. Regenerate it with 'make -C sandbox_base update-lockfile'."
+          if ! git diff --exit-code -- docker_images/sandbox_base/requirements.lock; then
+            echo "::error::docker_images/sandbox_base/requirements.lock is out of date. Regenerate it with 'make -C docker_images/sandbox_base update-lockfile'."
             exit 1
           fi
 
@@ -73,8 +73,8 @@ jobs:
       id-token: write # Required for Workload Identity Federation when pushing images.
     uses: ./.github/workflows/build-native-multi-arch-image.yml
     with:
-      image_directory: ./platform/sandbox_base
-      dockerfile: ./platform/sandbox_base/Dockerfile
+      image_directory: ./platform/docker_images/sandbox_base
+      dockerfile: ./platform/docker_images/sandbox_base/Dockerfile
       image_name: sandbox-base
       image_registry: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
       version: ${{ inputs.version }}
@@ -82,7 +82,7 @@ jobs:
       auth_provider: gar
       checkout_ref: ${{ inputs.checkout_ref }}
       reuse_from_version: ${{ inputs.reuse_from_version }}
-      reuse_paths: '["platform/sandbox_base", ".github/workflows/build-sandbox-base-docker-image.yml"]'
+      reuse_paths: '["platform/docker_images/sandbox_base", ".github/workflows/build-sandbox-base-docker-image.yml"]'
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}

@@ -28,8 +28,8 @@ export interface McpServerFacetCounts {
 
 /**
  * Issues across every MCP server the viewer can see, scoped to what they can
- * act on. Reads the same catalog + installed-server queries the registry page
- * uses (cached, so it costs nothing extra there).
+ * act on. Shares the catalog query and uses an installed-server projection
+ * that omits agent assignments, which issue classification never reads.
  *
  * `deploymentStatuses` is required rather than defaulted: runtime faults
  * (Failed to start, Not running) are classified from the live feed, so a
@@ -44,7 +44,7 @@ export function useMcpServerIssues(
   facetCounts: McpServerFacetCounts;
 } {
   const { data: catalogItems } = useInternalMcpCatalog();
-  const { data: servers } = useMcpServers();
+  const { data: servers } = useMcpServers({ includeAssignedAgents: false });
   const { data: session } = useSession();
   const userId = session?.user?.id ?? null;
   const canReauthenticate = useCanReauthenticate();

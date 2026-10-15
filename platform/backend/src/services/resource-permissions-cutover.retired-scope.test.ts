@@ -187,3 +187,45 @@ test("an explicitly empty migrated relative policy suppresses legacy Editor auth
     ).toBe(false);
   }
 });
+
+test("replaying a completed cutover leaves team grants unchanged without relative authority", async ({
+  makeOrganization,
+  makeUser,
+  makeMember,
+  makeTeam,
+  makeTeamMember,
+  makeAgent,
+}) => {
+  const org = await makeOrganization();
+  const owner = await makeUser();
+  const editor = await makeUser();
+  await makeMember(owner.id, org.id);
+  await makeMember(editor.id, org.id, { role: "editor" });
+  const team = await makeTeam(org.id, owner.id);
+  await makeTeamMember(team.id, editor.id);
+  const agent = await makeAgent({
+    organizationId: org.id,
+    authorId: owner.id,
+    agentType: "agent",
+    access: { teams: [team.id] },
+  });
+  await runScopedResourcePermissionCutover();
+  const key = {
+    organizationId: org.id,
+    resource: "agent" as const,
+    scope: agent.id,
+  };
+  const before = await ResourcePermissionPolicyModel.find(key);
+  expect(before).not.toBeNull();
+  for (let replay = 0; replay < 2; replay++) {
+    await runScopedResourcePermissionCutover();
+    expect(await ResourcePermissionPolicyModel.find(key)).toEqual(before);
+    const access = { ...key, userId: editor.id };
+    expect(
+      await ResourcePermissions.allows({ ...access, action: "read" }),
+    ).toBe(true);
+    expect(
+      await ResourcePermissions.allows({ ...access, action: "update" }),
+    ).toBe(false);
+  }
+});

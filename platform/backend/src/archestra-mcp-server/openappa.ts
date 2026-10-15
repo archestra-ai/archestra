@@ -91,6 +91,7 @@ import {
   connectAppaGithubRepository,
   createAppaGithubRepository,
   getAppaGithubSync,
+  updateAppaGithubSync,
 } from "@/services/openappa-github-sync";
 import {
   credentialLineWarnings,
@@ -100,6 +101,7 @@ import {
 } from "@/services/openappa-policy-change";
 import {
   getOpenAppaPolicyTests,
+  replaySavedValidations,
   runOpenAppaPolicyTests,
 } from "@/services/openappa-policy-tests";
 import {
@@ -522,6 +524,26 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
+    shortName: "sync_guardrails_repository",
+    title: "Sync OpenAPPA policy repository",
+    description:
+      "Pull the policy file from the connected Git repository now instead of waiting for the next scheduled sync, so a merged policy or validation pull request takes effect. Call it after the user says the pull request is merged. It changes nothing in the repository. Report `source.lastSyncError` when it is set, and a held pull (`source.heldContentHash`) as waiting for an operator to accept it in the guardrails panel. Without a connected repository it fails; point the user to Git sync setup in the guardrails settings.",
+    schema: z.strictObject({}),
+    async handler({ context }) {
+      const { organizationId } = organizationUser(context);
+      try {
+        return result(
+          await updateAppaGithubSync({ organizationId, action: "sync" }),
+        );
+      } catch (error) {
+        // No connected source is the agent's to explain, not a provider failure.
+        if (error instanceof ApiError && error.statusCode < 500)
+          return errorResult(error.message);
+        throw error;
+      }
+    },
+  }),
+  defineArchestraTool({
     shortName: "yell",
     title: "Report OpenAPPA feedback",
     description:
@@ -791,7 +813,7 @@ const registry = defineArchestraTools([
     title: "Preview OpenAPPA policy change",
     annotations: { readOnlyHint: true },
     description:
-      "Validate a proposed change to organization.appa.toml and return its unified `diff` and `changed` line counts. This saves nothing. Read the current policy and pass its revision as expectedRevision. To change an existing policy, send `edits`: only the text being replaced and its replacement. To insert rules, replace an anchor line with the new rules followed by that same anchor line. Send `content` only for a first policy or a full rewrite. Check `diff` and `changed` to confirm only the intended lines change. Explain what the change does and its warnings to the user, then publish with update_guardrails_policy using the same edits or content and expectedRevision; show the diff when the user asks.",
+      "Validate a proposed change to organization.appa.toml and return its unified `diff` and `changed` line counts. This saves nothing. Read the current policy and pass its revision as expectedRevision. To change an existing policy, send `edits`: only the text being replaced and its replacement. To insert rules, replace an anchor line with the new rules followed by that same anchor line. Send `content` only for a first policy or a full rewrite. Check `diff` and `changed` to confirm only the intended lines change. `validations` replays the saved validations against the proposed policy, without recording a run: pass/fail/cannot-run per file, or null when there are none. Explain what the change does, its warnings and any validation it fails to the user, then publish with update_guardrails_policy using the same edits or content and expectedRevision; show the diff when the user asks.",
     schema: ProposedGuardrailsPolicySchema,
     handler: ({ args, context }) =>
       refusalAsResult(async () => {
@@ -819,10 +841,25 @@ const registry = defineArchestraTools([
           organizationId,
           previous: before.content,
         });
-        const sync = await getAppaGithubSync(organizationId);
+        const [sync, validations] = await Promise.all([
+          getAppaGithubSync(organizationId),
+          // Replay the saved validations against the unsaved policy, so the
+          // user sees which checks the change breaks before approving it.
+          validation.valid
+            ? replaySavedValidations({
+                organizationId,
+                userId,
+                proposedPolicy: {
+                  content: after,
+                  expectedRevision: before.revision,
+                },
+              })
+            : null,
+        ]);
         const delivery = sync.source?.interval ? "pull_request" : "revision";
         return policyChangeResult({
           stage: "preview",
+          validations,
           delivery,
           // Whether publishing this turns enforcement on: only the first saved
           // policy does, and only for an administrator (see turnOnForFirstPolicy).
@@ -940,7 +977,7 @@ const registry = defineArchestraTools([
     shortName: "run_openappa_policy_tests",
     title: "Run saved OpenAPPA validations",
     description:
-      "Replay saved validations offline against the current policy and record the result in validation run history. This is the only way to run validations: preview and publication check syntax but do not replay. Pass `path` to run one saved validation file, for example right after saving it; omit it to run the whole suite. Loads the authoritative saved files itself; no draft files or policy changes are accepted. This records a run only: it does not edit validations, change or enable the policy, execute business tools, or contact models or remote helpers. Report the returned run ID and pass/fail/cannot-run outcomes.",
+      "Replay saved validations offline against the current policy and record the result in validation run history. Use it to run what is saved and keep the result; preview_guardrails_validation_change already replays a draft before it is saved. Pass `path` to run one saved validation file; omit it to run the whole suite. Loads the authoritative saved files itself; no draft files or policy changes are accepted. This records a run only: it does not edit validations, change or enable the policy, execute business tools, or contact models or remote helpers. Report the returned run ID and pass/fail/cannot-run outcomes.",
     schema: z.strictObject({
       path: z
         .string()
@@ -990,11 +1027,11 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "preview_openappa_validation_change",
+    shortName: "preview_guardrails_validation_change",
     title: "Preview OpenAPPA validations",
     annotations: { readOnlyHint: true },
     description:
-      "Preview a patch of .appa validation files: checks each changed file's syntax and, when policyContent is given, the proposed policy. It does not replay or run validations; after saving, run them with run_openappa_policy_tests. Read the policy revision and specification version first. Upserts replace only named files; deletions must be explicit; unrelated files are preserved. Omit policyContent or pass null for validation-only work; never send the current policy or blank text as a placeholder. Include a complete proposed policy only when the user explicitly requested a policy change. Correct scenario syntax errors in the .appa files without changing the policy. This saves nothing and does not affect run history. Before publishing, explain the scenario in ordinary language and its expected behavior. Give the file path and provide its exact source on request. Keep specifications small and focused on the user's intended behavior.",
+      "Validate a proposed change to the .appa validation files and replay it. This saves nothing and records no run. Read the policy and the suite first and pass their revision as expectedRevision and version as expectedVersion. Send `changes`: `upsert` files to add or replace, and explicit `delete` paths; unrelated files are kept. Checks each upserted file's syntax, then replays those files offline against the saved policy; `tests` holds pass/fail/cannot-run per file, or null when a syntax check failed or nothing was upserted. Fix syntax errors in the files only. Explain the case, its expected decision and the replay result to the user, then save with update_guardrails_validation. A failed check does not authorize a policy change or weakening an expectation. This tool never changes the policy; change it with preview_guardrails_policy_change and update_guardrails_policy.",
     schema: PreviewOpenAppaValidationChangeSchema,
     async handler({ args, context }) {
       const { organizationId, userId } = organizationUser(
@@ -1011,17 +1048,14 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "publish_openappa_validation_change",
-    title: "Publish OpenAPPA validations",
+    shortName: "update_guardrails_validation",
+    title: "Save OpenAPPA validations",
     description:
-      "Publish the exact validation patch explained after preview_openappa_validation_change, only when the user authorized saving it. Checks syntax and any proposed policy, then saves without replaying; run the saved files with run_openappa_policy_tests. Omit policyContent or pass null for validation-only work. Saving validations does not authorize a policy change; include a complete proposed policy only for an explicitly requested policy change. With Git sync, opens one repository PR using the configured GitHub App or PAT, containing only the changed files; nothing becomes active until merge and sync. Otherwise saves locally, atomically when policy and validations both change. Preserve existing expectations and unrelated rules. On a conflict, re-read and reconcile before retrying. Tests-only writes do not enable enforcement. A first local policy change turns enforcement on for an administrator; report enforcement and inactive batteries. Policy-only setup can continue to use update_guardrails_policy without creating tests.",
+      "Save a change to the .appa validation files. Call preview_guardrails_validation_change first, explain it, then send the same `changes`, expectedRevision and expectedVersion that were previewed, only when the user approved saving. Checks syntax again and saves without replaying. When Git sync is configured, this opens a pull request containing only the changed files; they take effect after merge and sync. Otherwise it saves locally. This tool never changes the policy or enforcement. On a conflict, read the policy and suite again and preview again.",
     schema: PublishOpenAppaValidationChangeSchema,
     async handler({ args, context }) {
       const ids = organizationUser(context, AUTHENTICATED_CONTEXT_REQUIRED);
-      const saved = await publishOpenAppaValidationChange({ ...args, ...ids });
-      if (saved.delivery !== "revision" || !saved.policyChanged)
-        return result(saved);
-      return result(await withLocalEnforcement(saved, ids));
+      return result(await publishOpenAppaValidationChange({ ...args, ...ids }));
     },
   }),
   defineArchestraTool({
@@ -1432,7 +1466,7 @@ function organization(context: ArchestraContext): string {
 }
 
 const PREVIEW_APPROVAL_INSTRUCTION =
-  "Nothing is saved yet. In this same turn, summarize in 2-4 short bullets what the change does to agents and tools (not the TOML), then ask the user to approve it with the ask_user tool, or the client's own question tool. Do not end the turn without that question, even when the user said not to publish until they approve: the question is how they approve. After approval, call update_guardrails_policy with the same edits or content and expectedRevision.";
+  "Nothing is saved yet. In this same turn, summarize in 2-4 short bullets what the change does to agents and tools (not the TOML), and name any saved validation in `validations` that failed or could not run, then ask the user to approve it with the ask_user tool, or the client's own question tool. Do not end the turn without that question, even when the user said not to publish until they approve: the question is how they approve. After approval, call update_guardrails_policy with the same edits or content and expectedRevision.";
 
 /** What a yell tells the agent when break the glass is off. */
 const YELL_RESULT_GUARDRAILS_UNCHANGED =

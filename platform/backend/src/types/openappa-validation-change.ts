@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { ValidateGuardrailsPolicySchema } from "./guardrails-policy";
 import {
   PolicyTestFileSchema,
   PolicyTestFilesSchema,
@@ -24,15 +23,6 @@ export const PreviewOpenAppaValidationChangeSchema = z.strictObject({
   expectedRevision: z.number().int().nonnegative(),
   expectedVersion: z.string().min(1),
   changes: PolicyTestChangesSchema.default({ upsert: [], delete: [] }),
-  policyContent: ValidateGuardrailsPolicySchema.shape.content
-    .refine(
-      (content) => content.trim().length > 0,
-      "Policy content must not be blank; omit policyContent or pass null to keep the current policy",
-    )
-    .nullish()
-    .describe(
-      "Complete proposed root policy, only when the user explicitly requested a policy change. Omit or pass null for validation-only work. Never use an empty string, whitespace, or a copy of the current policy as a placeholder.",
-    ),
 });
 
 export const PublishOpenAppaValidationChangeSchema =
@@ -47,7 +37,7 @@ export const PublishOpenAppaValidationChangeSchema =
       .string()
       .trim()
       .max(4000)
-      .default("OpenAPPA changes proposed in chat."),
+      .default("OpenAPPA validations proposed in chat."),
   });
 
 export type PreviewOpenAppaValidationChange = z.infer<

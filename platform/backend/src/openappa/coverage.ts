@@ -50,8 +50,8 @@ import {
  * canonical `mcp/…` spellings in the root are not evaluated, so a named rule
  * is not proof that the runtime judges a given call by it.
  *
- * The whole report is computed per request, then filtered, sorted and paged
- * in memory.
+ * Summary reports omit agent assignments. Server pages sorted by metadata
+ * select their catalog page before the tools and policy counts are hydrated.
  */
 class OpenAppaCoverageService {
   /** Complete policy rows for one caller-readable catalog, without list facets. */
@@ -138,13 +138,46 @@ class OpenAppaCoverageService {
     params: { organizationId: string } & CoverageEntitiesQuery &
       CoverageVisibility,
   ): Promise<CoverageEntitiesPage> {
+    // Server names and types do not depend on policy or tool assignments.
+    // Choose that page first, then classify only its catalogs' tools.
+    if (!params.toolId && params.sortBy !== "tools") {
+      const catalogs = await ToolModel.findCoverageCatalogs({
+        organizationId: params.organizationId,
+        catalogIds: params.visibleCatalogIds ?? [],
+      });
+      const search = params.search?.toLowerCase();
+      const candidates = catalogs
+        .map((catalog) => ({ ...catalog, type: "mcp_server" as const }))
+        .filter(
+          (catalog) =>
+            (!params.entityId || catalog.id === params.entityId) &&
+            (!params.type || catalog.type === params.type) &&
+            (!search || catalog.name.toLowerCase().includes(search)),
+        )
+        .sort(compareTargets(params));
+      const selected = page(candidates, params);
+      if (selected.data.length === 0)
+        return { data: [], pagination: selected.pagination };
+      const { entities } = await buildReport(params.organizationId, {
+        ...params,
+        includeAutoModeTools: false,
+        includeAgentAssignments: false,
+        inventoryCatalogIds: selected.data.map((catalog) => catalog.id),
+      });
+      const byId = new Map(entities.map((entity) => [entity.id, entity]));
+      return {
+        data: selected.data.flatMap((catalog) => {
+          const entity = byId.get(catalog.id);
+          return entity ? [entity] : [];
+        }),
+        pagination: selected.pagination,
+      };
+    }
     const { tools, entities } = await buildReport(params.organizationId, {
       ...params,
-      // Server rows count inventory, not which Auto-mode agents can reach it.
-      includeAutoModeTools: params.type !== "mcp_server",
-      // Sorting by a count needs every target's Auto-mode tools, not a page's.
-      autoModePage:
-        params.toolId || params.sortBy === "tools" ? undefined : params,
+      includeAutoModeTools: false,
+      includeAgentAssignments: false,
+      inventoryCatalogIds: params.visibleCatalogIds ?? [],
     });
     const tool = params.toolId
       ? tools.find((row) => row.own && row.tool.toolId === params.toolId)?.tool
@@ -337,18 +370,23 @@ async function listedTools(
 ) {
   const { tools, included, composition, rootRevision } = await buildReport(
     params.organizationId,
-    { ...params, includeAutoModeTools: false },
+    {
+      ...params,
+      includeAutoModeTools: false,
+      includeAgentAssignments: false,
+      inventoryCatalogIds: params.visibleCatalogIds ?? [],
+    },
   );
   const visibleCatalogIds = new Set(params.visibleCatalogIds ?? []);
   const listed = tools
     .filter((row) => row.own && visibleCatalogIds.has(row.tool.catalogId))
     .map((row) => row.tool);
   const toolsByCatalog = new Map<string, CoverageTool[]>();
-  for (const tool of listed)
-    toolsByCatalog.set(tool.catalogId, [
-      ...(toolsByCatalog.get(tool.catalogId) ?? []),
-      tool,
-    ]);
+  for (const tool of listed) {
+    const catalogTools = toolsByCatalog.get(tool.catalogId);
+    if (catalogTools) catalogTools.push(tool);
+    else toolsByCatalog.set(tool.catalogId, [tool]);
+  }
   return { listed, toolsByCatalog, included, composition, rootRevision };
 }
 
@@ -464,12 +502,14 @@ type CoverageVisibility = {
   visibleCatalogIds?: string[];
   /** Resolve the current viewer's dynamic Auto-mode tool access. */
   includeAutoModeTools?: boolean;
-  /** Only resolve Auto-mode access for rows returned by an entities page. */
-  autoModePage?: CoverageEntitiesQuery;
   /** Only resolve Auto-mode access for the target whose tools are requested. */
   autoModeEntityId?: string;
   /** Per-catalog inspection reads app catalogs too; the overview leaves them out. */
   includeAppCatalogs?: boolean;
+  /** Summary and server rows never expose agent membership. */
+  includeAgentAssignments?: boolean;
+  /** Visible catalogs, narrowed to the selected page when counts do not sort it. */
+  inventoryCatalogIds?: string[];
 };
 
 /** A rule as it applies to one full tool name, battery rules once per alias target. */
@@ -502,6 +542,8 @@ async function buildReport(
           }
         : undefined,
       includeAppCatalogs: visibility?.includeAppCatalogs,
+      includeAgentAssignments: visibility?.includeAgentAssignments,
+      catalogIds: visibility?.inventoryCatalogIds,
       catalogId,
     }),
   ]);
@@ -603,18 +645,18 @@ async function buildReport(
     }
   }
   const byMatch = new Map<string, Candidate[]>();
-  for (const entry of candidates)
-    byMatch.set(entry.match, [...(byMatch.get(entry.match) ?? []), entry]);
+  for (const entry of candidates) {
+    const matches = byMatch.get(entry.match);
+    if (matches) matches.push(entry);
+    else byMatch.set(entry.match, [entry]);
+  }
 
   const agentsByTool = new Map<string, Map<string, string>>();
   const inCoverage = new Set(inventory.tools.map((tool) => tool.id));
   const autoAccess = new Map<string, Set<string>>();
-  const autoModeEntityIds =
-    visibility?.includeAutoModeTools && visibility.autoModePage
-      ? autoModePageEntityIds(inventory, visibility, visibility.autoModePage)
-      : visibility?.autoModeEntityId
-        ? new Set([visibility.autoModeEntityId])
-        : null;
+  const autoModeEntityIds = visibility?.autoModeEntityId
+    ? new Set([visibility.autoModeEntityId])
+    : null;
   if (visibility?.includeAutoModeTools && visibility.userId) {
     await Promise.all(
       inventory.entities
@@ -824,42 +866,6 @@ async function buildReport(
 /** Only registry servers are policy targets; agents and gateways are not listed. */
 function isListedTarget(entity: { type: string }): boolean {
   return entity.type === "mcp_server";
-}
-
-/** Compute the visible page before resolving each Auto-mode agent's tool access. */
-function autoModePageEntityIds(
-  inventory: Awaited<ReturnType<typeof ToolModel.findCoverageInventory>>,
-  visibility: CoverageVisibility,
-  autoModePage: CoverageEntitiesQuery,
-): Set<string> {
-  const visibleCatalogIds = new Set(visibility.visibleCatalogIds ?? []);
-  const candidates = [
-    ...inventory.entities.map((entity) => ({
-      id: entity.id,
-      name: entity.name,
-      type: entity.agentType,
-    })),
-    ...inventory.catalogs
-      .filter((catalog) => visibleCatalogIds.has(catalog.id))
-      .map((catalog) => ({
-        id: catalog.id,
-        name: catalog.name,
-        type: "mcp_server" as const,
-      })),
-  ];
-  const matching = candidates
-    .filter(
-      (entity) =>
-        isListedTarget(entity) &&
-        (!autoModePage.entityId || entity.id === autoModePage.entityId) &&
-        (!autoModePage.type || entity.type === autoModePage.type) &&
-        (!autoModePage.search ||
-          entity.name
-            .toLowerCase()
-            .includes(autoModePage.search.toLowerCase())),
-    )
-    .sort(compareTargets(autoModePage));
-  return new Set(page(matching, autoModePage).data.map((entity) => entity.id));
 }
 
 const TARGET_TYPE_ORDER: Record<CoverageEntity["type"], number> = {

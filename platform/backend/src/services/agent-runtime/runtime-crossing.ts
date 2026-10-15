@@ -33,11 +33,21 @@ export type RuntimeCrossing = {
   spawn: boolean;
 };
 
-class RuntimeCrossingRefusal extends Error {
+/**
+ * A refusal the caller is meant to read. Tool handlers surface it verbatim
+ * through `crossingRefusal`; HTTP routes answer it as a conflict rather than
+ * an internal error, because nothing on the server went wrong.
+ */
+class RuntimeCrossingRefusal extends ApiError {
   constructor(message: string) {
-    super(message);
+    super(409, message);
     this.name = "RuntimeCrossingRefusal";
   }
+}
+
+/** Shared with protected transfers so a held export refuses the same way a held read does. */
+export function runtimeCrossingRefusal(message: string): Error {
+  return new RuntimeCrossingRefusal(message);
 }
 
 function crossingFromContext(
@@ -84,7 +94,8 @@ export async function guardRuntimeCrossing(
  * A runtime bound to a parent answers only to that parent's proof. Returns the
  * refusal for a caller without one, or undefined when the runtime has no
  * parent. A runtime whose session cannot be resolved is refused, not assumed
- * to be unbound.
+ * to be unbound. Without a proof the gateway cannot tell the parent from a
+ * stranger, so the refusal names the missing proof, not a different session.
  */
 export async function refuseUnrecognizedCaller(params: {
   organizationId: string;
@@ -97,7 +108,9 @@ export async function refuseUnrecognizedCaller(params: {
       })
     : null;
   if (!resolved) return UNVERIFIED_RUNTIME_SESSION;
-  return resolved.session.parent_id ? BOUND_TO_ANOTHER_SESSION : undefined;
+  return resolved.session.parent_id
+    ? UNPROVEN_CALLER_ON_BOUND_RUNTIME
+    : undefined;
 }
 
 export function promptWithContract(
@@ -272,7 +285,11 @@ export async function crossRuntimeOutput(params: {
   return { kind: "admitted", value: last.value };
 }
 
-/** Crosses exact file bytes. Held or unavailable does not release the original. */
+/**
+ * Crosses exact file bytes. Held or unavailable does not release the original.
+ * The ruling travels with the refusal: it is the same model-facing text a
+ * blocked tool call gets, and it carries the remedy offers the caller can act on.
+ */
 export async function crossRuntimeFile(params: {
   child: OpenAppaSession;
   operationId: string;
@@ -284,11 +301,14 @@ export async function crossRuntimeFile(params: {
     value: params.value,
   });
   if (result.kind !== "admitted") {
-    throw new RuntimeCrossingRefusal(
-      "The protected file could not be admitted. No original bytes were returned.",
-    );
+    throw new RuntimeCrossingRefusal(heldFileRefusal(result.reason));
   }
   return result.value;
+}
+
+/** Shared with protected transfers so both file paths explain a hold the same way. */
+export function heldFileRefusal(reason: string): string {
+  return `The protected file could not be admitted. No original bytes were returned.\n\nGuardrails ruling: ${reason}`;
 }
 
 const UNVERIFIED_RUNTIME_SESSION =
@@ -296,3 +316,6 @@ const UNVERIFIED_RUNTIME_SESSION =
 
 const BOUND_TO_ANOTHER_SESSION =
   "This runtime is bound to a different session. The request was refused.";
+
+const UNPROVEN_CALLER_ON_BOUND_RUNTIME =
+  "This runtime is bound to a Guardrails session, and this call carried no proof of its source. The request was refused. Retry from the conversation that started the run, with its model requests going through the LLM Proxy.";

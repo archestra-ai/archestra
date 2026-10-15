@@ -396,7 +396,12 @@ describe("model-facing runtime tools", () => {
 
     for (const result of [read, steered, written]) {
       expect(result.isError).toBe(true);
-      expect(JSON.stringify(result)).toContain("bound to a different session");
+      // Without a proof the gateway cannot tell the parent from a stranger,
+      // so the refusal names the missing proof rather than another session.
+      expect(JSON.stringify(result)).toContain(
+        "carried no proof of its source",
+      );
+      expect(JSON.stringify(result)).not.toContain("different session");
     }
     expect(JSON.stringify(read)).not.toContain("RAW ARTIFACT");
     expect(steer).not.toHaveBeenCalled();
@@ -957,7 +962,7 @@ for (const transformed of [false, true]) {
   });
 }
 
-test("an oversized protected export reads no bytes and issues no ticket", async ({
+test("a protected export above the inline size crosses chunk by chunk and is served only from verified chunks", async ({
   makeAgent,
   makeMember,
   makeOrganization,
@@ -971,16 +976,124 @@ test("an oversized protected export reads no bytes and issues no ticket", async 
     makeUser,
     seedAndAssignArchestraTools,
   });
+  const chunk = 4 * 1024 * 1024;
+  const size = chunk + 5;
+  const bytes = Buffer.alloc(size);
+  for (let i = 0; i < chunk; i += 4099) bytes[i] = (i * 31) & 0xff;
+  bytes.write("tail!", chunk);
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
   vi.spyOn(backend, "runWorkspaceTransferCommand").mockResolvedValue({
-    transfer_id: "oversized",
+    transfer_id: "big",
     path: "report.bin",
-    size: 4 * 1024 * 1024 + 1,
-    sha256: "0".repeat(64),
+    size,
+    sha256,
     mtime_ns: "1",
     ino: "1",
   });
-  const reader = vi.spyOn(backend, "readWorkspaceTransferRange");
-  const crossing = vi.spyOn(openappa, "returnRuntimeValue");
+  vi.spyOn(backend, "readWorkspaceTransferRange").mockImplementation(
+    async ({ offset, length }) => ({
+      stdout: Readable.from([
+        bytes.subarray(offset, length < 0 ? undefined : offset + length),
+      ]),
+      completed: Promise.resolve(),
+    }),
+  );
+  const crossing = vi
+    .spyOn(openappa, "returnRuntimeValue")
+    .mockImplementation(async ({ value }) => ({ kind: "admitted", value }));
+  const minted = await workspaceTransferTickets.mintDownload({
+    actor: {
+      kind: "user",
+      id: seeded.context.userId,
+      organizationId: seeded.organizationId,
+    },
+    taskId: seeded.task.id,
+    path: "report.bin",
+    crossing: { child: seeded.child, operationId: "big-export" },
+  });
+  expect(minted.ticket).toMatchObject({ sha256, size });
+  expect(minted.ticket).not.toHaveProperty("admittedBytes");
+  // Every byte crossed as content, in order, each chunk naming its digest.
+  expect(crossing.mock.calls.map((call) => call[0].operationId)).toEqual([
+    `file-export:big-export:${sha256}:0/2`,
+    `file-export:big-export:${sha256}:1/2`,
+  ]);
+  const tail = JSON.parse(crossing.mock.calls[1][0].value);
+  expect(tail).toMatchObject({
+    path: "report.bin",
+    encoding: "base64",
+    sha256,
+    chunk: {
+      index: 1,
+      count: 2,
+      sha256: createHash("sha256").update("tail!").digest("hex"),
+    },
+  });
+  expect(Buffer.from(tail.content, "base64").toString()).toBe("tail!");
+  // The snapshot stays pinned: it is what the download is served from.
+  expect(backend.runWorkspaceTransferCommand).not.toHaveBeenCalledWith(
+    expect.objectContaining({ args: ["discard", "big"] }),
+  );
+  const ticket = workspaceTransferTickets.resolve(
+    minted.ticket.id,
+    minted.token,
+  );
+  const across = await workspaceTransferTickets.read({
+    ticket,
+    offset: chunk - 3,
+    length: -1,
+  });
+  const parts: Buffer[] = [];
+  for await (const part of across.stdout) parts.push(Buffer.from(part));
+  await across.completed;
+  expect(Buffer.concat(parts).equals(bytes.subarray(chunk - 3))).toBe(true);
+  // A runtime that rewrites the snapshot after admission releases nothing.
+  bytes[chunk + 2] ^= 0xff;
+  const tampered = await workspaceTransferTickets.read({
+    ticket,
+    offset: chunk,
+    length: 2,
+  });
+  await expect(
+    (async () => {
+      for await (const _part of tampered.stdout) {
+        // drain
+      }
+    })(),
+  ).rejects.toThrow("no longer matches its admitted bytes");
+});
+
+test("a held protected export names the Guardrails ruling and issues no ticket", async ({
+  makeAgent,
+  makeMember,
+  makeOrganization,
+  makeUser,
+  seedAndAssignArchestraTools,
+}) => {
+  const seeded = await seededRun({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    seedAndAssignArchestraTools,
+  });
+  const bytes = Buffer.from("held report");
+  vi.spyOn(backend, "runWorkspaceTransferCommand").mockResolvedValue({
+    transfer_id: "held",
+    path: "report.txt",
+    size: bytes.length,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    mtime_ns: "1",
+    ino: "1",
+  });
+  vi.spyOn(backend, "readWorkspaceTransferRange").mockResolvedValue({
+    stdout: Readable.from([bytes]),
+    completed: Promise.resolve(),
+  });
+  vi.spyOn(openappa, "returnRuntimeValue").mockResolvedValue({
+    kind: "held",
+    reason: "ruling-sentinel: allowed readers would narrow",
+  });
   await expect(
     workspaceTransferTickets.mintDownload({
       actor: {
@@ -989,14 +1102,12 @@ test("an oversized protected export reads no bytes and issues no ticket", async 
         organizationId: seeded.organizationId,
       },
       taskId: seeded.task.id,
-      path: "report.bin",
-      crossing: { child: seeded.child, operationId: "oversized-export" },
+      path: "report.txt",
+      crossing: { child: seeded.child, operationId: "held-export" },
     }),
-  ).rejects.toThrow("limited to 4 MiB");
-  expect(reader).not.toHaveBeenCalled();
-  expect(crossing).not.toHaveBeenCalled();
+  ).rejects.toThrow("ruling-sentinel: allowed readers would narrow");
   expect(backend.runWorkspaceTransferCommand).toHaveBeenLastCalledWith(
-    expect.objectContaining({ args: ["discard", "oversized"] }),
+    expect.objectContaining({ args: ["discard", "held"] }),
   );
 });
 
@@ -1092,10 +1203,10 @@ test.for([
   }
 });
 
-test("a held file returns a generic refusal without private native diagnostics", async () => {
+test("a held file carries the Guardrails ruling with its refusal", async () => {
   vi.spyOn(openappa, "returnRuntimeValue").mockResolvedValue({
     kind: "held",
-    reason: "private-diagnostic-qa-sentinel",
+    reason: "ruling-sentinel: allowed readers would narrow",
   });
   const result = crossRuntimeFile({
     child: {
@@ -1107,9 +1218,12 @@ test("a held file returns a generic refusal without private native diagnostics",
     value: "private file bytes",
   });
   await expect(result).rejects.toThrow("protected file could not be admitted");
-  await result.catch((error: Error) =>
-    expect(error.message).not.toContain("private-diagnostic-qa-sentinel"),
-  );
+  await result.catch((error: Error) => {
+    expect(error.message).toContain(
+      "Guardrails ruling: ruling-sentinel: allowed readers would narrow",
+    );
+    expect(error.message).not.toContain("private file bytes");
+  });
 });
 
 async function runnable(params: {

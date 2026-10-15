@@ -50,6 +50,7 @@ import {
   OpenappaRetiredAnnotatorError,
   OpenappaRootOnlyError,
   openappaFailure,
+  unansweredAnnotationNotice,
 } from "@/openappa/failure";
 import { unservedAnnotator } from "@/openappa/retired-annotators";
 import { captureYellReport } from "@/openappa/yell-receiver";
@@ -1137,6 +1138,11 @@ type AppaCallDecision =
        * that id's result with the ruling.
        */
       recorded?: true;
+      /**
+       * The call's annotator gave no answer. The runtime has no record of
+       * the call, so its result is answered by the proxy, not the runtime.
+       */
+      unanswered?: true;
     };
 
 // SPDX-SnippetBegin
@@ -1290,7 +1296,30 @@ export async function evaluateToolCalls(
         });
         if (refusal) return refusal;
       }
-      const decision = await dispatchCall(event);
+      let decision: Awaited<ReturnType<typeof dispatchCall>>;
+      try {
+        decision = await dispatchCall(event);
+      } catch (error) {
+        // An annotator that gives no answer refuses only this call. Failing the
+        // batch would cancel the calls already admitted, and an admitted call
+        // that spent an approval would lose it.
+        const notice = unansweredAnnotationNotice(error);
+        if (notice === null) throw error;
+        logger.warn(
+          {
+            err: error,
+            toolCallId: call.id,
+            sessionId: session.session_id,
+            tool,
+          },
+          "OpenAPPA could not rule on a tool call because its annotator gave no answer; the call is returned as a notice",
+        );
+        return {
+          kind: "deny" as const,
+          feedback: notice,
+          unanswered: true as const,
+        };
+      }
       if (
         spawn &&
         (decision.decision === "pass_control" ||

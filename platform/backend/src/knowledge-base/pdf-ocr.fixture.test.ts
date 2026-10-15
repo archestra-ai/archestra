@@ -42,6 +42,7 @@ test("the scanned fixture becomes searchable text when OCR is configured", async
     modelName: "mock-vision",
     provider: "anthropic",
     llmModel: model as never,
+    maxOutputTokens: 16_384,
   };
 
   const result = await extractPdfText({

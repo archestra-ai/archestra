@@ -37,7 +37,7 @@ import {
   UserFilterSelect,
 } from "@/components/user-client-filter-selects";
 import { VirtualKeyBadge } from "@/components/virtual-key-badge";
-import { useAgentOptions } from "@/lib/agent.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
@@ -268,14 +268,15 @@ function SessionsTable() {
     toastOnError: false,
   });
 
-  const { data: agents } = useAgentOptions({
-    filters: { agentTypes: ["agent"] },
-  });
-
   const { data: uniqueUsers } = useUniqueUserIds();
   const { data: canSeeAllLogs } = useHasPermissions({ log: ["admin"] });
 
   const sessions = sessionsResponse?.data ?? [];
+  const { data: agents } = useAgentOptionsByIds({
+    ids: sessions.flatMap((session) =>
+      session.profileId ? [session.profileId] : [],
+    ),
+  });
   const paginationMeta = sessionsResponse?.pagination;
   const hasFilters =
     profileFilter !== "all" ||
@@ -564,7 +565,7 @@ function SessionsTable() {
             mode="single"
             flat
             compactTrigger
-            agents={agents ?? []}
+            remote={{ filters: { agentTypes: ["agent"] } }}
             value={profileFilter}
             onValueChange={handleProfileFilterChange}
             sentinelOption={{

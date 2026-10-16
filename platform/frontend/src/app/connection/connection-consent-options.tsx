@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import type { AgentOptionFilters } from "@/lib/agent-options.query";
 import type { PluginListItem } from "@/lib/plugins/plugin.query";
 import { cn } from "@/lib/utils/tailwind";
 
@@ -64,6 +65,7 @@ export function ConnectionConsentOptions({
   clientLabel: string;
   tools: {
     gateways: AgentSelectorAgent[];
+    gatewayFilters?: AgentOptionFilters;
     selectedGatewayId: string;
     onGatewaySelect: (id: string) => void;
   } | null;
@@ -146,6 +148,11 @@ export function ConnectionConsentOptions({
                     flat
                     triggerLabel="Change"
                     agents={tools.gateways}
+                    remote={
+                      tools.gatewayFilters
+                        ? { filters: tools.gatewayFilters }
+                        : undefined
+                    }
                     value={tools.selectedGatewayId}
                     onValueChange={tools.onGatewaySelect}
                     searchPlaceholder="Search gateways…"

@@ -19,10 +19,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AgentIcon } from "@/components/agent-icon";
-import {
-  AgentSelector,
-  type AgentSelectorAgent,
-} from "@/components/agent-selector";
+import { AgentSelector } from "@/components/agent-selector";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FormDialog } from "@/components/form-dialog";
 import { SlackBotEditDialog } from "@/components/slack-bot-edit-dialog";
@@ -57,7 +54,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { useInternalAgentOptions } from "@/lib/agent.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { useSession } from "@/lib/auth/auth.query";
 import { useAllChatOpsBindings } from "@/lib/chatops/chatops.query";
 import {
@@ -96,7 +93,9 @@ export function SlackAgentBotsSection({
   const { data, isLoading, refetch, isFetching } = useSlackAgentBots();
   const bots = data?.bots ?? [];
   const canCreateApps = data?.canCreateApps ?? false;
-  const { data: agents = [] } = useInternalAgentOptions();
+  const { data: agents = [] } = useAgentOptionsByIds({
+    ids: bots.map((bot) => bot.agentId),
+  });
   const deleteMutation = useDeleteSlackAgentBot();
   const { data: session } = useSession();
   const userId = session?.user?.id;
@@ -190,9 +189,7 @@ export function SlackAgentBotsSection({
     router.replace("/settings/messaging-channels/slack");
   }, [addBotFor, isLoading, canCreateApps, router]);
 
-  const agentsWithoutBot = agents.filter(
-    (agent) => !bots.some((bot) => bot.agentId === agent.id),
-  );
+  const excludedAgentIds = bots.map((bot) => bot.agentId);
   // The router bot answers as whichever agent each DM or channel picks.
   const routerBot = data?.unassignedApp ?? null;
   const isEmpty = !isLoading && bots.length === 0 && !routerBot;
@@ -540,7 +537,7 @@ export function SlackAgentBotsSection({
 
       {addOpen && (
         <AddBotDialog
-          agents={agentsWithoutBot}
+          excludedAgentIds={excludedAgentIds}
           initialAgentId={presetAgentId ?? ""}
           connectionMode={connectionMode}
           onClose={() => setAddOpen(false)}
@@ -583,7 +580,7 @@ export function SlackAgentBotsSection({
       {convertOpen && routerBot && (
         <ConvertRouterBotDialog
           bot={routerBot}
-          agents={agentsWithoutBot}
+          excludedAgentIds={excludedAgentIds}
           onClose={() => setConvertOpen(false)}
         />
       )}
@@ -993,20 +990,31 @@ function RouterBotCard({
  */
 function ConvertRouterBotDialog({
   bot,
-  agents,
+  excludedAgentIds,
   onClose,
 }: {
   bot: UnassignedApp;
-  agents: AgentSelectorAgent[];
+  excludedAgentIds: string[];
   onClose: () => void;
 }) {
   const appName = useAppName();
   const mutation = useConvertSlackAppToAgentBot();
+  const { data: candidates = [] } = useAgentOptionsByIds({
+    ids: bot.agentUsage
+      .map((usage) => usage.agentId)
+      .filter((id) => !excludedAgentIds.includes(id)),
+  });
   const suggested = bot.agentUsage.find((usage) =>
-    agents.some((agent) => agent.id === usage.agentId),
+    candidates.some((agent) => agent.id === usage.agentId),
   );
-  const [agentId, setAgentId] = useState(suggested?.agentId ?? "");
-  const picked = agents.find((agent) => agent.id === agentId);
+  const [selectedId, setAgentId] = useState<string | null>(null);
+  const agentId = selectedId ?? suggested?.agentId ?? "";
+  const { data: selectedAgents = [] } = useAgentOptionsByIds({
+    ids: agentId ? [agentId] : [],
+  });
+  const picked = selectedAgents.find(
+    (agent) => agent.id === agentId && !excludedAgentIds.includes(agent.id),
+  );
   const handle = bot.handle ?? appName.toLowerCase();
 
   return (
@@ -1034,7 +1042,13 @@ function ConvertRouterBotDialog({
             <AgentSelector
               mode="single"
               flat
-              agents={agents}
+              remote={{
+                filters: {
+                  agentType: "agent",
+                  excludeBuiltIn: true,
+                  excludeIds: excludedAgentIds,
+                },
+              }}
               value={agentId}
               onValueChange={setAgentId}
               placeholder="Choose an agent…"
@@ -1401,14 +1415,14 @@ function Step({
  * the admin pastes the tokens Slack shows.
  */
 function AddBotDialog({
-  agents,
+  excludedAgentIds,
   connectionMode,
   onClose,
   onManual,
   onNeedsTokens,
   initialAgentId,
 }: {
-  agents: AgentSelectorAgent[];
+  excludedAgentIds: string[];
   connectionMode: ConnectionMode;
   onClose: () => void;
   onManual: (agent: AgentRef) => void;
@@ -1421,7 +1435,12 @@ function AddBotDialog({
   const [agentId, setAgentId] = useState(initialAgentId);
   // Null until edited: the handle then follows the picked agent's name.
   const [customHandle, setCustomHandle] = useState<string | null>(null);
-  const picked = agents.find((agent) => agent.id === agentId);
+  const { data: selectedAgents = [] } = useAgentOptionsByIds({
+    ids: agentId ? [agentId] : [],
+  });
+  const picked = selectedAgents.find(
+    (agent) => agent.id === agentId && !excludedAgentIds.includes(agent.id),
+  );
   const handle =
     customHandle ?? (picked ? slackHandleFor(appName, picked.name) : "");
   const handleValid = SLACK_BOT_HANDLE_PATTERN.test(handle);
@@ -1469,7 +1488,13 @@ function AddBotDialog({
             <AgentSelector
               mode="single"
               flat
-              agents={agents}
+              remote={{
+                filters: {
+                  agentType: "agent",
+                  excludeBuiltIn: true,
+                  excludeIds: excludedAgentIds,
+                },
+              }}
               value={agentId}
               onValueChange={(value) => {
                 setAgentId(value);

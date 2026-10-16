@@ -49,12 +49,22 @@ it.each([
   const updates: unknown[] = [];
   const detailIds: string[] = [];
   server.use(
-    http.get(`${origin}/api/agents/options`, () =>
-      HttpResponse.json([
-        { id: "other-agent", name: "Knowledge helper", authorId: "other-user" },
-        { id: "selected-agent", name: "Knowledge helper", authorId: "user-1" },
-      ]),
-    ),
+    http.get(`${origin}/api/agents/options/page`, ({ request }) => {
+      const query = new URL(request.url).searchParams;
+      expect(query.get("exactName")).toBe("Knowledge helper");
+      expect(query.get("authorId")).toBe("user-1");
+      expect(query.get("limit")).toBe("1");
+      return HttpResponse.json({
+        data: [
+          {
+            id: "selected-agent",
+            name: "Knowledge helper",
+            authorId: "user-1",
+          },
+        ],
+        pagination: { limit: 1, nextCursor: null, hasNext: false },
+      });
+    }),
     http.get(`${origin}/api/agents/:id`, ({ params }) => {
       detailIds.push(String(params.id));
       return HttpResponse.json({

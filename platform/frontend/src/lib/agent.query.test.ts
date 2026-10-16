@@ -5,7 +5,7 @@ import { createElement, type ReactNode } from "react";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  useChatAgents,
+  useChatAgentBootstrap,
   useCreateProfile,
   usePinAgent,
   useProfile,
@@ -255,7 +255,7 @@ describe("chat agent roster", () => {
       error: undefined,
     } as never);
 
-    const { result } = setup(() => useChatAgents());
+    const { result } = setup(() => useChatAgentBootstrap());
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(sdk.getChatAgentRoster).toHaveBeenCalledOnce();
@@ -284,7 +284,7 @@ describe("chat agent roster", () => {
     });
     const wrapper = ({ children }: { children: ReactNode }) =>
       createElement(QueryClientProvider, { client: queryClient }, children);
-    const { result } = renderHook(() => useChatAgents(), { wrapper });
+    const { result } = renderHook(() => useChatAgentBootstrap(), { wrapper });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual([{ id: "agent-1", name: "Agent" }]);

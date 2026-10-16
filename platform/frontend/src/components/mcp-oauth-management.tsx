@@ -13,7 +13,6 @@ import {
 } from "@/components/oauth-client-created-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
-import { useAgentOptions } from "@/lib/agent.query";
 import {
   useHasPermissions,
   useScopedCapabilities,
@@ -64,9 +63,6 @@ export function McpOauthManagement({
       id: client.id,
     });
   const query = useAllOauthClients({ enabled: canRead === true });
-  const { data: resources = [] } = useAgentOptions({
-    filters: { agentTypes: ["mcp_gateway", "agent"] },
-  });
   const { data: providerApiKeys = [] } = useLlmProviderApiKeys();
   const create = useCreateOauthClient();
   const update = useUpdateOauthClient();
@@ -214,7 +210,6 @@ export function McpOauthManagement({
         onOpenChange={setCreating}
         defaultClientType="mcp"
         defaultAllowedGatewayIds={[resourceId]}
-        gateways={resources}
         providerApiKeys={providerApiKeys}
         onSubmit={async (values) => {
           const result = await create.mutateAsync(values);
@@ -234,7 +229,6 @@ export function McpOauthManagement({
         onOpenChange={(open) => {
           if (!open) setEditing(null);
         }}
-        gateways={resources}
         onSubmit={async (id, body) => {
           if (await update.mutateAsync({ id, body })) setEditing(null);
         }}

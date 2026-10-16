@@ -1,6 +1,7 @@
 import {
   type ArchestraToolShortName,
   BUILT_IN_AGENT_IDS,
+  type CursorQuery,
   DEFAULT_LLM_PROXY_NAME,
   getCreationDefaultArchestraToolShortNames,
   type PaginationQuery,
@@ -40,13 +41,16 @@ import {
   sql,
 } from "drizzle-orm";
 import { type AnyPgColumn, unionAll } from "drizzle-orm/pg-core";
+import { z } from "zod";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { hardDelete, restore, softDelete } from "@/database/soft-delete";
 import {
+  createCursorPaginatedResult,
   createPaginatedResult,
+  decodeCursor,
   type PaginatedResult,
 } from "@/database/utils/pagination";
 import { enterpriseTier } from "@/enterprise-tier";
@@ -71,6 +75,7 @@ import {
   type SortingQuery,
   type UpdateAgent,
 } from "@/types";
+import type { AgentOptionFilters } from "@/types/agent";
 import { isUniqueConstraintError } from "@/utils/db";
 import { escapeLikePattern } from "@/utils/sql-search";
 import { isUuid } from "@/utils/uuid";
@@ -982,12 +987,164 @@ class AgentModel {
     options: AgentRosterOptions;
   }): Promise<ChatAgentRoster[]> {
     const where = await AgentModel.buildRosterWhere(params);
-    const agents = await db
-      .select(CHAT_ROSTER_COLUMNS)
-      .from(schema.agentsTable)
-      .where(where);
-    await AgentModel.populateGrantedScope(agents);
-    return agents;
+    return AgentModel.findChatRosterRows(where);
+  }
+
+  /** Bounded fallback identities; explicit URL references use findChatRoster IDs. */
+  static async findChatRosterBootstrap(params: {
+    userId: string;
+    isAgentAdmin: boolean;
+    options: AgentRosterOptions;
+  }): Promise<ChatAgentRoster[]> {
+    const table = schema.agentsTable;
+    const where = await AgentModel.buildRosterWhere(params);
+    const fallbackBase = await AgentModel.buildRosterWhere({
+      ...params,
+      options: { ...params.options, excludeOtherPersonalAgents: true },
+    });
+    const fallbackWhere = and(
+      fallbackBase,
+      or(not(agentAudienceIs("personal")), eq(table.authorId, params.userId)),
+    );
+    const first = (condition: SQL | undefined) =>
+      db
+        .select({ id: table.id })
+        .from(table)
+        .where(condition)
+        .orderBy(desc(table.createdAt), desc(table.id))
+        .limit(1);
+    const [fallback, system] = await Promise.all([
+      (async () => {
+        const personal = await first(
+          and(
+            fallbackWhere,
+            eq(table.builtIn, false),
+            eq(table.authorId, params.userId),
+            agentAudienceIs("personal"),
+          ),
+        );
+        return personal.length > 0
+          ? personal
+          : first(and(fallbackWhere, eq(table.builtIn, false)));
+      })(),
+      first(
+        and(
+          where,
+          eq(table.builtIn, true),
+          sql`${table.builtInAgentConfig}->>'name' = ${BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG}`,
+        ),
+      ),
+    ]);
+    const ids = [...new Set([...fallback, ...system].map((row) => row.id))];
+    const rows = await AgentModel.findChatRosterRows(
+      and(where, idArrayCondition(table.id, ids)),
+    );
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    return ids.flatMap((id) => {
+      const row = byId.get(id);
+      return row ? [row] : [];
+    });
+  }
+
+  /** Search all permitted chat choices without materializing the full roster. */
+  static async findChatRosterPage(params: {
+    userId: string;
+    isAgentAdmin: boolean;
+    options: AgentRosterOptions;
+    filters: Pick<AgentOptionFilters, "search"> & {
+      sortBy?: "createdAt" | "name" | "chat";
+    };
+    pagination: CursorQuery;
+  }) {
+    const table = schema.agentsTable;
+    const base = await AgentModel.buildRosterWhere({
+      ...params,
+      options: { ...params.options, excludeOtherPersonalAgents: true },
+    });
+    const pattern = params.filters.search
+      ? `%${escapeLikePattern(params.filters.search)}%`
+      : undefined;
+    const where = and(
+      base,
+      or(not(agentAudienceIs("personal")), eq(table.authorId, params.userId)),
+      eq(table.builtIn, false),
+      pattern
+        ? or(ilike(table.name, pattern), ilike(table.description, pattern))
+        : undefined,
+    );
+    const page = await AgentModel.findRosterPageIds({
+      where,
+      sortBy: params.filters.sortBy ?? "chat",
+      pagination: params.pagination,
+    });
+    const rows = await AgentModel.findChatRosterRows(
+      and(
+        base,
+        idArrayCondition(
+          table.id,
+          page.data.map((row) => row.id),
+        ),
+      ),
+    );
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    return {
+      data: page.data.flatMap((row) => {
+        const agent = byId.get(row.id);
+        return agent ? [agent] : [];
+      }),
+      pagination: page.pagination,
+    };
+  }
+
+  /** Authorize and bound selector rows before loading any presentation relations. */
+  static async findOptionsPage(params: {
+    userId: string;
+    isAgentAdmin: boolean;
+    options: AgentRosterOptions;
+    filters: AgentOptionFilters;
+    pagination: CursorQuery;
+  }) {
+    const { where, rosterWhere } = await AgentModel.buildOptionWhere(params);
+    const table = schema.agentsTable;
+    const page = await AgentModel.findRosterPageIds({
+      where,
+      sortBy: params.filters.sortBy,
+      pagination: params.pagination,
+    });
+    const options = await AgentModel.findOptionRows(
+      and(
+        rosterWhere,
+        idArrayCondition(
+          table.id,
+          page.data.map((row) => row.id),
+        ),
+      ),
+    );
+    const byId = new Map(options.map((option) => [option.id, option]));
+    return {
+      data: page.data.flatMap((row) => {
+        const option = byId.get(row.id);
+        return option ? [option] : [];
+      }),
+      pagination: page.pagination,
+    };
+  }
+
+  /** Complete IDs for an explicit select-all action, without hydrating metadata. */
+  static async findOptionIds(params: {
+    userId: string;
+    isAgentAdmin: boolean;
+    options: AgentRosterOptions;
+    filters: AgentOptionFilters;
+  }): Promise<string[]> {
+    const { where } = await AgentModel.buildOptionWhere(params);
+    const table = schema.agentsTable;
+    const rows = await db
+      .select({ id: table.id })
+      .from(table)
+      .where(where)
+      .orderBy(desc(table.createdAt), desc(table.id));
+    return rows.map((row) => row.id);
   }
 
   /** Find all agents with optional filtering by agent type. */
@@ -4923,6 +5080,163 @@ class AgentModel {
     return and(...whereConditions);
   }
   // SPDX-SnippetEnd
+  private static async findChatRosterRows(
+    where: SQL | undefined,
+  ): Promise<ChatAgentRoster[]> {
+    const agents = await db
+      .select(CHAT_ROSTER_COLUMNS)
+      .from(schema.agentsTable)
+      .where(where);
+    await AgentModel.populateGrantedScope(agents);
+    return agents;
+  }
+
+  private static async findRosterPageIds(params: {
+    where: SQL | undefined;
+    sortBy?: "name" | "createdAt" | "chat";
+    pagination: CursorQuery;
+  }) {
+    const table = schema.agentsTable;
+    const cursor = decodeCursor(params.pagination.cursor);
+    const nameOrder = params.sortBy === "name";
+    const chatOrder = params.sortBy === "chat";
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const chatRank = chatOrder
+      ? sql<number>`CASE ${ResourcePermissionPolicyModel.sharedAudience({ organizationId: table.organizationId, resource: "agent", scopeColumn: table.id, ownerColumn: table.authorId })} WHEN 'organization' THEN 2 WHEN 'team' THEN 1 ELSE 0 END`
+      : sql<number>`0`;
+    // SPDX-SnippetEnd
+    let chatPosition: { rank: number; name: string } | undefined;
+    if (chatOrder && cursor) {
+      try {
+        const parsed = ChatRosterCursorPositionSchema.safeParse(
+          JSON.parse(cursor.value),
+        );
+        if (parsed.success) chatPosition = parsed.data;
+      } catch {
+        /* An invalid cursor restarts the page. */
+      }
+    }
+    const validCursor =
+      cursor &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        cursor.id,
+      ) &&
+      (chatOrder
+        ? chatPosition !== undefined
+        : nameOrder || !Number.isNaN(Date.parse(cursor.value)))
+        ? cursor
+        : null;
+    const boundary = validCursor
+      ? chatOrder && chatPosition
+        ? sql`(${chatRank}, ${table.name} COLLATE "C", ${table.id}) > (${chatPosition.rank}, ${chatPosition.name} COLLATE "C", ${validCursor.id}::uuid)`
+        : nameOrder
+          ? sql`(${table.name} COLLATE "C", ${table.id}) > (${validCursor.value} COLLATE "C", ${validCursor.id}::uuid)`
+          : sql`(${table.createdAt}, ${table.id}) < (${validCursor.value}::timestamp, ${validCursor.id}::uuid)`
+      : undefined;
+    const rows = await db
+      .select({
+        id: table.id,
+        name: table.name,
+        cursorValue: sql<string>`${table.createdAt}::text`,
+        chatRank,
+      })
+      .from(table)
+      .where(and(params.where, boundary))
+      .orderBy(
+        ...(chatOrder
+          ? [asc(chatRank), asc(sql`${table.name} COLLATE "C"`), asc(table.id)]
+          : nameOrder
+            ? [asc(sql`${table.name} COLLATE "C"`), asc(table.id)]
+            : [desc(table.createdAt), desc(table.id)]),
+      )
+      .limit(params.pagination.limit + 1);
+    return createCursorPaginatedResult(rows, params.pagination, (row) => ({
+      id: row.id,
+      value: chatOrder
+        ? JSON.stringify({ rank: row.chatRank, name: row.name })
+        : nameOrder
+          ? row.name
+          : row.cursorValue,
+    }));
+  }
+
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  private static async buildOptionWhere(params: {
+    userId: string;
+    isAgentAdmin: boolean;
+    options: AgentRosterOptions;
+    filters: AgentOptionFilters;
+  }) {
+    const table = schema.agentsTable;
+    const rosterWhere = await AgentModel.buildRosterWhere(params);
+    const filters: (SQL | undefined)[] = [rosterWhere];
+    const query = params.filters;
+    if (query.onlyOwnPersonalAgents)
+      filters.push(
+        or(
+          not(optionScopeCondition("personal")),
+          eq(table.authorId, params.userId),
+        ),
+      );
+    if (query.excludeIds?.length)
+      filters.push(not(idArrayCondition(table.id, query.excludeIds)));
+    if (query.runtimeCommand !== undefined)
+      filters.push(
+        sql`${table.runtime}->'command'->>0 = ${query.runtimeCommand}`,
+      );
+    if (query.exactName !== undefined)
+      filters.push(eq(table.name, query.exactName));
+    if (query.authorId !== undefined)
+      filters.push(eq(table.authorId, query.authorId));
+    if (query.excludePersonalGateways)
+      filters.push(eq(table.isPersonalGateway, false));
+    if (query.search) filters.push(optionSearchCondition(query));
+    if (query.audienceVisibility !== undefined) {
+      const org = optionScopeCondition("org");
+      switch (query.audienceVisibility) {
+        case "organization":
+          filters.push(org);
+          break;
+        case "team":
+          filters.push(
+            or(
+              org,
+              and(
+                optionScopeCondition("team"),
+                (query.audienceTeamIds?.length ?? 0) > 0
+                  ? optionRecipientCondition(
+                      "team",
+                      query.audienceTeamIds ?? [],
+                    )
+                  : sql`false`,
+              ),
+            ),
+          );
+          break;
+        case "user":
+          filters.push(
+            or(
+              org,
+              and(
+                optionScopeCondition("personal"),
+                optionRecipientCondition("user", query.audienceUserIds ?? []),
+              ),
+            ),
+          );
+          break;
+        case "none":
+          if (!query.audienceEditorIsOwner) filters.push(org);
+          break;
+      }
+    }
+    return { where: and(...filters), rosterWhere };
+  }
+  // SPDX-SnippetEnd
+
   /** Select only selector fields and hydrate their presentation in batches. */
   private static async findOptionRows(
     where: SQL | undefined,
@@ -5455,3 +5769,82 @@ function personalChatAgentConditions(params: {
     params.excludeId ? ne(schema.agentsTable.id, params.excludeId) : undefined,
   ];
 }
+
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+/** Match the scope actually returned by selector hydration, including proxy rows. */
+function optionScopeCondition(scope: AgentScope): SQL {
+  const table = schema.agentsTable;
+  return or(
+    and(eq(table.agentType, "llm_proxy"), eq(table.scope, scope)),
+    and(ne(table.agentType, "llm_proxy"), agentAudienceIs(scope)),
+  ) as SQL;
+}
+
+/** Same direct read recipients and existing-row filter as findReadRecipientDetails. */
+function optionRecipientCondition(
+  subject: "team" | "user",
+  ids: string[],
+): SQL {
+  if (ids.length === 0) return sql`true`;
+  const recipientTable = subject === "team" ? sql`team` : sql`"user"`;
+  const grant =
+    subject === "team"
+      ? ResourcePermissionPolicyModel.teamReadGrantCondition(
+          sql`recipient_entry`,
+        )
+      : sql`(recipient_entry->'actions') ? 'read' AND recipient_entry->'subject'->>'type' = 'user'`;
+  return sql`NOT EXISTS (
+    SELECT 1 FROM unnest(${sql.param(ids)}::text[]) desired(id)
+    WHERE NOT (${subject === "user" ? sql`coalesce(${schema.agentsTable.authorId} = desired.id, false) OR` : sql``} EXISTS (
+      SELECT 1 FROM resource_permission_policies recipient_policy
+      CROSS JOIN LATERAL jsonb_array_elements(recipient_policy.grants) recipient_entry
+      JOIN ${recipientTable} existing_recipient ON existing_recipient.id = recipient_entry->'subject'->>'id'
+      WHERE recipient_policy.scope = ${schema.agentsTable.id}::text
+        AND recipient_policy.resource IN ('agent', 'mcpGateway')
+        AND ${grant} AND existing_recipient.id = desired.id
+    ))
+  )`;
+}
+
+/** Search the existing picker text in SQL; relation names are grouped set-wise. */
+function optionSearchCondition(filters: AgentOptionFilters): SQL {
+  const pattern = `%${escapeLikePattern(filters.search ?? "")}%`;
+  const table = schema.agentsTable;
+  if (filters.searchMode === "name") return ilike(table.name, pattern);
+  if (filters.searchMode === "name_or_description")
+    return or(
+      ilike(table.name, pattern),
+      ilike(table.description, pattern),
+    ) as SQL;
+  const teamGrant =
+    ResourcePermissionPolicyModel.teamReadGrantCondition(sql`search_entry`);
+  return sql`${table.id} IN (
+    SELECT search_agent.id FROM agents search_agent
+    LEFT JOIN "user" search_owner ON search_owner.id = search_agent.author_id AND search_agent.created_by_service_account_id IS NULL
+    LEFT JOIN service_accounts search_account ON search_account.id = search_agent.created_by_service_account_id
+    LEFT JOIN (
+      SELECT scope, string_agg(name, ' ' ORDER BY first_position) names
+      FROM (
+        SELECT search_policy.scope, search_team.id, search_team.name,
+          min(search_policy.organization_id || ':' || search_policy.resource || ':' || lpad(search_position::text, 20, '0')) first_position
+        FROM resource_permission_policies search_policy
+        CROSS JOIN LATERAL jsonb_array_elements(search_policy.grants) WITH ORDINALITY AS entries(search_entry, search_position)
+        JOIN team search_team ON search_team.id = search_entry->'subject'->>'id'
+        WHERE search_policy.resource IN ('agent', 'mcpGateway') AND ${teamGrant}
+        GROUP BY search_policy.scope, search_team.id, search_team.name
+      ) search_distinct_teams GROUP BY scope
+    ) search_teams ON search_teams.scope = search_agent.id::text
+    WHERE concat_ws(' ', search_agent.name,
+      nullif(search_owner.email, ''),
+      nullif(CASE WHEN search_agent.created_by_service_account_id IS NOT NULL THEN search_account.name ELSE search_owner.name END, ''),
+      nullif(search_teams.names, '')) ILIKE ${pattern}
+  )`;
+}
+// SPDX-SnippetEnd
+
+const ChatRosterCursorPositionSchema = z.object({
+  rank: z.number().int().min(0).max(3),
+  name: z.string(),
+});

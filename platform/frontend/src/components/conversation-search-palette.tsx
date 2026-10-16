@@ -52,7 +52,7 @@ import {
   SHORTCUT_SEARCH,
   SHORTCUT_SIDEBAR,
 } from "@/consts";
-import { useAgentOptions } from "@/lib/agent.query";
+import { useAgentOptionsPage } from "@/lib/agent-options.query";
 import { useMyAgentRuns } from "@/lib/agent-runtime.query";
 import { APPS_FIRST_PAGE, useApps } from "@/lib/app.query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
@@ -260,9 +260,19 @@ export function ConversationSearchPalette({
   const { data: canReadMcpRegistry } = useHasPermissions({
     mcpRegistry: ["read"],
   });
-  const { data: agents = [] } = useAgentOptions({
-    enabled: open && isAuthenticated && canReadAgents === true,
+  const agentOptions = useAgentOptionsPage({
+    filters: { searchMode: "name" },
+    search: debouncedSearch.trim(),
+    enabled:
+      open &&
+      isAuthenticated &&
+      canReadAgents === true &&
+      debouncedSearch.trim().length > 0,
   });
+  const agents = useMemo(
+    () => agentOptions.data?.pages.flatMap((page) => page.data) ?? [],
+    [agentOptions.data],
+  );
   const { data: mcpCatalogItems = [] } = useInternalMcpCatalog({
     enabled: open && isAuthenticated && canReadMcpRegistry === true,
   });
@@ -924,6 +934,15 @@ export function ConversationSearchPalette({
                     label: agent.name,
                     icon: Bot,
                   }),
+                )}
+                {agentOptions.hasNextPage && (
+                  <CommandItem
+                    value="load-more-agents"
+                    disabled={agentOptions.isFetchingNextPage}
+                    onSelect={() => void agentOptions.fetchNextPage()}
+                  >
+                    <span>More agents</span>
+                  </CommandItem>
                 )}
               </CommandGroup>
             )}

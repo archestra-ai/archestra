@@ -18,7 +18,7 @@ import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useInternalAgentOptions } from "@/lib/agent.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   agentsForProjectAudience,
@@ -88,10 +88,6 @@ function EditProjectDialogForm({
   // Without `agent:read` the list comes back empty, which would read as "this
   // org has no agents" rather than "not yours to set" — hide the field instead.
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
-  const { data: accessibleAgents = [], isPending: isAgentsPending } =
-    useInternalAgentOptions({
-      enabled: open && canReadAgents === true,
-    });
 
   const form = useForm<EditProjectForm>({
     defaultValues: {
@@ -106,6 +102,14 @@ function EditProjectDialogForm({
   const name = form.watch("name");
   const description = form.watch("description");
   const defaultAgentId = form.watch("defaultAgentId");
+  const selectedAgent = useAgentOptionsByIds({
+    ids: defaultAgentId ? [defaultAgentId] : [],
+    filters: { agentType: "agent", excludeBuiltIn: true },
+    enabled: open && canReadAgents === true,
+  });
+  const accessibleAgents = selectedAgent.data ?? [];
+  const awaitingSelectedAgent =
+    canReadAgents === true && !!defaultAgentId && !selectedAgent.isSuccess;
   const [labels, setLabels] = useState<ProfileLabel[]>(project.labels);
   const labelsRef = useRef<ProfileLabelsRef>(null);
 
@@ -129,10 +133,8 @@ function EditProjectDialogForm({
   // back to the organization default rather than leave a selection the save
   // would reject.
   useEffect(() => {
-    // Every agent looks unreachable before the list arrives, which would clear
-    // the project's saved pin the moment the dialog opened. `isPending` also
-    // stays true while the query is disabled, so a hidden field never resets.
-    if (isAgentsPending) return;
+    // A failed or pending reference read cannot prove the saved pin invalid.
+    if (!selectedAgent.isSuccess || canReadAgents !== true) return;
     // On someone else's project the offer is deliberately conservative (the
     // owner's reach is unknowable here), so absence from it is no evidence the
     // pin is broken. Resetting on that would let an admin fixing a typo wipe
@@ -141,7 +143,14 @@ function EditProjectDialogForm({
     if (!defaultAgentId) return;
     if (selectableAgents.some((agent) => agent.id === defaultAgentId)) return;
     form.setValue("defaultAgentId", null, { shouldDirty: true });
-  }, [defaultAgentId, selectableAgents, isAgentsPending, editorIsOwner, form]);
+  }, [
+    defaultAgentId,
+    selectableAgents,
+    selectedAgent.isSuccess,
+    canReadAgents,
+    editorIsOwner,
+    form,
+  ]);
 
   const hasLengthError =
     name.length > PROJECT_NAME_MAX_LENGTH ||
@@ -149,6 +158,7 @@ function EditProjectDialogForm({
 
   const onSubmit = form.handleSubmit(
     async ({ name, description, icon, defaultAgentId }) => {
+      if (awaitingSelectedAgent) return;
       const nextLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
       await permissionsSave.current?.();
 
@@ -192,7 +202,10 @@ function EditProjectDialogForm({
           <Button
             type="submit"
             disabled={
-              updateProject.isPending || !name.trim().length || hasLengthError
+              updateProject.isPending ||
+              awaitingSelectedAgent ||
+              !name.trim().length ||
+              hasLengthError
             }
           >
             Save
@@ -256,9 +269,31 @@ function EditProjectDialogForm({
             Preselected for new chats and scheduled tasks in this project.
             Anyone can still pick a different agent for an individual chat.
           </FieldDescription>
+          {selectedAgent.isError && (
+            <div role="alert" className="text-sm text-destructive">
+              The saved agent could not be loaded.
+              <Button
+                type="button"
+                variant="link"
+                onClick={() => selectedAgent.refetch()}
+              >
+                Retry agent lookup
+              </Button>
+            </div>
+          )}
           <AgentSelector
             mode="single"
-            agents={selectableAgents}
+            remote={{
+              filters: {
+                agentType: "agent",
+                excludeBuiltIn: true,
+                audienceVisibility: share.visibility,
+                audienceTeamIds: share.teamIds,
+                audienceUserIds: share.userIds,
+                audienceEditorIsOwner: editorIsOwner,
+              },
+              enabled: open,
+            }}
             value={defaultAgentId ?? NO_DEFAULT_AGENT}
             onValueChange={(value) =>
               form.setValue(

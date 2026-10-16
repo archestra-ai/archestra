@@ -4,16 +4,19 @@ import {
   AgentSelector,
   type AgentSelectorAgent,
 } from "@/components/agent-selector";
+import type { AgentOptionFilters } from "@/lib/agent-options.query";
 
 /** Shares grouping, search and personal-owner labels with other resource pickers. */
 export function GatewayPicker({
   gateways,
+  remoteFilters,
   value,
   onValueChange,
   label,
   description = "Choose which agents and MCP gateways this application can access.",
 }: {
   gateways: AgentSelectorAgent[];
+  remoteFilters?: AgentOptionFilters;
   value: string[];
   onValueChange: (value: string[]) => void;
   label: string;
@@ -24,7 +27,9 @@ export function GatewayPicker({
       <div className="flex items-center justify-between gap-2">
         <span className="font-medium text-sm">{label}</span>
         <span className="text-xs text-muted-foreground">
-          {value.length} of {gateways.length} selected
+          {remoteFilters
+            ? `${value.length} selected`
+            : `${value.length} of ${gateways.length} selected`}
         </span>
       </div>
       <p className="text-sm text-muted-foreground">
@@ -33,6 +38,7 @@ export function GatewayPicker({
       <AgentSelector
         mode="multiple"
         agents={gateways}
+        remote={remoteFilters ? { filters: remoteFilters } : undefined}
         value={value}
         onValueChange={onValueChange}
         placeholder="Select agents and MCP gateways"

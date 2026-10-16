@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useCredentialsPage } from "@/app/_parts/use-credentials-page";
 import { ClaudeCodeSubscription } from "@/app/account/_components/claude-code-subscription";
 import AccountLayout from "@/app/account/layout";
-import { useInternalAgentOptions } from "@/lib/agent.query";
+import { useAgentOptionsPage } from "@/lib/agent-options.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import AccountCredentialsPage from "./page";
@@ -18,7 +18,7 @@ vi.mock("@/app/_parts/use-credentials-page", () => ({
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/hooks/use-app-name");
-vi.mock("@/lib/agent.query", () => ({ useInternalAgentOptions: vi.fn() }));
+vi.mock("@/lib/agent-options.query", () => ({ useAgentOptionsPage: vi.fn() }));
 vi.mock("@/components/claude-code-account", () => ({
   ClaudeCodeAccount: () => <div>Claude Code sign-in</div>,
 }));
@@ -49,12 +49,12 @@ function setUp(params: {
   vi.mocked(useFeature).mockImplementation(
     (feature) => (feature === "agentRuntime") as never,
   );
-  vi.mocked(useInternalAgentOptions).mockReturnValue({
-    data: params.agents?.data ?? [],
+  vi.mocked(useAgentOptionsPage).mockReturnValue({
+    data: { pages: [{ data: params.agents?.data ?? [] }] },
     isError: params.agents?.isError ?? false,
     isPending: false,
     refetch,
-  } as unknown as ReturnType<typeof useInternalAgentOptions>);
+  } as unknown as ReturnType<typeof useAgentOptionsPage>);
 }
 
 beforeEach(() => {

@@ -806,6 +806,12 @@ export function ConnectCommandPanel({
             flat
             className="w-full"
             agents={mcpGateways}
+            remote={{
+              filters: {
+                agentTypes: ["profile", "mcp_gateway"],
+                excludeOtherPersonalAgents: true,
+              },
+            }}
             value={gateway.id}
             onValueChange={onMcpGatewaySelect}
             placeholder="Select gateway"
@@ -1378,6 +1384,10 @@ export function ConnectCommandPanel({
               mcpGatewayId && mcpGateways !== null
                 ? {
                     gateways: mcpGateways,
+                    gatewayFilters: {
+                      agentTypes: ["profile", "mcp_gateway"],
+                      excludeOtherPersonalAgents: true,
+                    },
                     selectedGatewayId: mcpGatewayId,
                     onGatewaySelect: onMcpGatewaySelect,
                   }

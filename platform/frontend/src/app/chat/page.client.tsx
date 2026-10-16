@@ -426,9 +426,8 @@ export function ChatPageContent({
   const canUseProviderSettings =
     canReadLlmProvider === true && canReadLlmModels === true;
 
-  // Fetch the compact roster needed to resolve the new-chat agent.
-  const { data: internalAgents = [], isPending: isLoadingAgents } =
-    useChatAgents({ enabled: hasChatAccess });
+  const { data: conversation, isLoading: isLoadingConversation } =
+    useConversation(conversationId);
   const { data: defaultAgentId } = useDefaultAgentId();
   const runtimeEnabled = useFeature("agentRuntime") === true;
   const startAgentRunMutation = useStartAgentRun();
@@ -465,9 +464,25 @@ export function ChatPageContent({
   const { data: newChatProject, isPending: isNewChatProjectPending } =
     useProject(newChatProjectId ?? undefined);
 
+  const {
+    data: internalAgents = [],
+    isPending: isLoadingAgents,
+    resolveAgent,
+  } = useChatAgents({
+    enabled: hasChatAccess,
+    ids: [
+      searchParams.get("agentId"),
+      newChatProject?.defaultAgent?.id,
+      conversation?.agentId,
+      conversation?.agent?.id,
+      forkAgentId,
+    ],
+  });
+
   // Shared new-chat initialization (agent/model/key resolution + persistence).
   const {
     agentId: initialAgentId,
+    selectedAgent: initialAgentReference,
     modelId: initialModel,
     apiKeyId: initialApiKeyId,
     provider: initialProvider,
@@ -481,6 +496,8 @@ export function ChatPageContent({
     onResetModelOverride: handleResetModelOverride,
   } = useInitialChatModelState({
     agents: internalAgents,
+    resolveAgent,
+    isAgentsLoading: isLoadingAgents,
     organization: organization ?? null,
     defaultAgentId,
     modelsByProvider,
@@ -496,11 +513,13 @@ export function ChatPageContent({
     isApiKeysLoading: isLoadingUsableApiKeys,
     routeConversationId,
   });
-  const initialRuntimeAgent = runtimeEnabled
-    ? internalAgents.find(
-        (agent) => agent.id === initialAgentId && agent.runtime !== null,
-      )
-    : undefined;
+  const initialRuntimeCandidate =
+    internalAgents.find((agent) => agent.id === initialAgentId) ??
+    initialAgentReference;
+  const initialRuntimeAgent =
+    runtimeEnabled && initialRuntimeCandidate?.runtime
+      ? initialRuntimeCandidate
+      : undefined;
   const isInitialRuntimeMode = !!initialRuntimeAgent;
   const runtimePreflight = useAgentRuntimePreflight(
     initialAgentId ?? "",
@@ -834,9 +853,6 @@ export function ChatPageContent({
     clearAllAppDiagnostics();
   }, [conversationId]);
 
-  // Fetch conversation with messages
-  const { data: conversation, isLoading: isLoadingConversation } =
-    useConversation(conversationId);
   usePageTitle(
     conversation
       ? getConversationDisplayTitle(conversation.title, conversation.messages)
@@ -976,9 +992,9 @@ export function ChatPageContent({
   const conversationAgentSummary = internalAgents.find(
     (agent) => agent.id === conversation?.agentId,
   );
-  const initialAgentSummary = internalAgents.find(
-    (agent) => agent.id === initialAgentId,
-  );
+  const initialAgentSummary =
+    internalAgents.find((agent) => agent.id === initialAgentId) ??
+    initialAgentReference;
   const selectedAgentSummary = conversationId
     ? conversationAgentSummary
     : initialAgentSummary;

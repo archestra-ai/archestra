@@ -18,6 +18,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import type { AgentSelectorAgent } from "@/components/agent-selector";
 import { useAgentOptions, useDefaultMcpGateway } from "@/lib/agent.query";
+import { useAgentOptionsPage } from "@/lib/agent-options.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -252,17 +253,38 @@ export function useConnectPageData({
     useDefaultMcpGateway();
   const defaultGatewayId =
     org?.connectionDefaultMcpGatewayId ?? defaultGateway?.id ?? null;
-  // The same list the browser approval offers.
-  const { data: gatewayList, isPending: gatewaysPending } = useAgentOptions({
-    filters: {
-      agentTypes: ["profile", "mcp_gateway"],
-      excludeOtherPersonalAgents: true,
-    },
+  const gatewayFilters = {
+    agentTypes: ["profile", "mcp_gateway"] as ("profile" | "mcp_gateway")[],
+    excludeOtherPersonalAgents: true,
+  };
+  const gatewayPage = useAgentOptionsPage({
+    filters: gatewayFilters,
+    limit: 20,
     enabled: canReadGateways === true,
   });
+  const { data: gatewayReferences, isPending: gatewaysPending } =
+    useAgentOptions({
+      filters: {
+        ...gatewayFilters,
+        ids: [pickedGatewayId, defaultGatewayId].filter(
+          (id): id is string => !!id,
+        ),
+      },
+      enabled: canReadGateways === true,
+    });
   const gateways = useMemo<ConnectGateway[]>(
-    () => (gatewayList ?? []).map((g) => ({ ...g, slug: g.slug ?? g.id })),
-    [gatewayList],
+    () => [
+      ...new Map(
+        [
+          ...(gatewayPage.data?.pages[0]?.data ?? []),
+          ...(gatewayReferences ?? []),
+        ].map((gateway) => [
+          gateway.id,
+          { ...gateway, slug: gateway.slug ?? gateway.id },
+        ]),
+      ).values(),
+    ],
+    [gatewayPage.data, gatewayReferences],
   );
   const gatewayId =
     (pickedGatewayId && gateways.some((g) => g.id === pickedGatewayId)

@@ -7,6 +7,7 @@ import { type ReactNode, useMemo, useState } from "react";
 import { AgentSelector } from "@/components/agent-selector";
 import { WizardStep } from "@/components/wizard-step";
 import { useAgentOptions } from "@/lib/agent.query";
+import { useAgentOptionsPage } from "@/lib/agent-options.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { isInstallerClientId, visibleClients } from "./clients";
 import { ConnectCommandPanel } from "./connect-command-panel";
@@ -65,13 +66,6 @@ export function ConnectionFlow({
 
   const updateUrlParams = useUpdateUrlParams();
 
-  const { data: mcpGateways } = useAgentOptions({
-    filters: {
-      agentTypes: ["profile", "mcp_gateway"],
-      excludeOtherPersonalAgents: true,
-    },
-  });
-
   const { data: canReadMcpGateway } = useHasPermissions({
     mcpGateway: ["read"],
   });
@@ -93,6 +87,36 @@ export function ConnectionFlow({
   const client = shownClients.find((c) => c.id === initialClientId) ?? null;
 
   const [selectedMcpId, setSelectedMcpId] = useState<string | null>(null);
+
+  const gatewayFilters = {
+    agentTypes: ["profile", "mcp_gateway"] as ("profile" | "mcp_gateway")[],
+    excludeOtherPersonalAgents: true,
+  };
+  const gatewayPage = useAgentOptionsPage({
+    filters: gatewayFilters,
+    limit: 20,
+    enabled: canReadMcpGateway === true,
+  });
+  const { data: gatewayReferences } = useAgentOptions({
+    filters: {
+      ...gatewayFilters,
+      ids: [
+        selectedMcpId,
+        urlGatewayId,
+        adminDefaultMcpGatewayId,
+        defaultMcpGatewayId,
+      ].filter((id): id is string => !!id),
+    },
+    enabled: canReadMcpGateway === true,
+  });
+  const mcpGateways = [
+    ...new Map(
+      [
+        ...(gatewayPage.data?.pages[0]?.data ?? []),
+        ...(gatewayReferences ?? []),
+      ].map((gateway) => [gateway.id, gateway]),
+    ).values(),
+  ];
 
   // Connection base URL — chosen once for the whole page, threaded into each
   // instruction panel below.
@@ -143,7 +167,8 @@ export function ConnectionFlow({
               mode="single"
               flat
               className="w-64"
-              agents={mcpGateways ?? []}
+              agents={mcpGateways}
+              remote={{ filters: gatewayFilters }}
               value={effectiveMcpId ?? ""}
               onValueChange={handleMcpSelect}
               placeholder="Select gateway"

@@ -25,6 +25,7 @@ import { useSetCostsAction } from "@/app/llm/(costs)/layout";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import { AgentIcon } from "@/components/agent-icon";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
+import { AgentSelector } from "@/components/agent-selector";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
@@ -241,7 +242,12 @@ export default function LimitsPage() {
   });
   const oauthClients = oauthClientsData?.data ?? [];
   const { data: agents = [] } = useAgentOptions({
-    filters: { agentTypes: ["agent"] },
+    filters: {
+      agentTypes: ["agent"],
+      ids: limits
+        .filter((limit) => limit.entityType === "agent")
+        .map((limit) => limit.entityId),
+    },
   });
   const { data: environmentsData } = useEnvironments();
   const environments = environmentsData?.environments ?? [];
@@ -1071,7 +1077,15 @@ export default function LimitsPage() {
                 )}
 
                 {formState.entityType === "agent" && (
-                  <SearchableSelect
+                  <AgentSelector
+                    mode="single"
+                    flat
+                    remote={{
+                      filters: {
+                        agentType: "agent",
+                        searchMode: "name_or_description",
+                      },
+                    }}
                     value={formState.entityId}
                     onValueChange={(value) =>
                       setFormState((current) => ({
@@ -1080,11 +1094,6 @@ export default function LimitsPage() {
                       }))
                     }
                     placeholder="Select agent"
-                    items={agents.map((agent) => ({
-                      value: agent.id,
-                      label: agent.name,
-                      description: agent.description ?? undefined,
-                    }))}
                     className="w-full sm:flex-1"
                   />
                 )}

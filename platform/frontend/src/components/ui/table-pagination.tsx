@@ -109,6 +109,7 @@ function PaginationNavButtons({
   return (
     <>
       <Button
+        type="button"
         variant="outline"
         size="icon-sm"
         className={className}
@@ -120,6 +121,7 @@ function PaginationNavButtons({
       </Button>
       {children}
       <Button
+        type="button"
         variant="outline"
         size="icon-sm"
         className={className}
@@ -184,6 +186,7 @@ export function TablePagination({
               </span>
             )}
             <Button
+              type="button"
               variant="outline"
               size="icon-sm"
               className="hidden lg:flex"
@@ -200,6 +203,7 @@ export function TablePagination({
               onNext={goNext}
             />
             <Button
+              type="button"
               variant="outline"
               size="icon-sm"
               className="hidden lg:flex"
@@ -279,6 +283,7 @@ export function CursorTablePagination({
         </span>
         <div className="flex items-center gap-2">
           <Button
+            type="button"
             variant="outline"
             size="sm"
             onClick={onNewer}
@@ -288,6 +293,7 @@ export function CursorTablePagination({
             <span>Newer</span>
           </Button>
           <Button
+            type="button"
             variant="outline"
             size="sm"
             onClick={onOlder}

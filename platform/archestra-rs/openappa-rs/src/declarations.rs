@@ -1,5 +1,5 @@
 //! The declarations a root document makes about its batteries — the `include` list,
-//! the `[server_aliases]` bindings and the `[credentials]` table — read out of the
+//! the `aliases.mcp` bindings and the `[credentials]` table — read out of the
 //! authored text with the line each one sits on, and written back through the
 //! runtime's own comment-preserving editor.
 //!
@@ -14,7 +14,7 @@ pub(crate) struct IncludeDeclaration {
     pub line: u32,
 }
 
-/// One `[server_aliases]` binding: a battery namespace and the catalog tool prefixes
+/// One `aliases.mcp` binding: a battery namespace and the catalog tool prefixes
 /// it names.
 pub(crate) struct AliasDeclaration {
     pub namespace: String,
@@ -43,7 +43,7 @@ pub(crate) struct TokenEnvReader {
 #[derive(Default)]
 pub(crate) struct Declarations {
     pub include: Vec<IncludeDeclaration>,
-    pub server_aliases: Vec<AliasDeclaration>,
+    pub mcp_aliases: Vec<AliasDeclaration>,
     pub credentials: Vec<CredentialDeclaration>,
     /// The annotators the root's own tool rules route calls to.
     pub routed_annotators: Vec<String>,
@@ -138,15 +138,41 @@ fn read_include(content: &str, document: &Document<&str>, declarations: &mut Dec
     }
 }
 
+/// The MCP bindings live in `aliases.mcp`; a document may still spell them as the
+/// legacy top-level `server_aliases` table, but not both ways at once.
 fn read_aliases(content: &str, document: &Document<&str>, declarations: &mut Declarations) {
-    let Some((key, item)) = document.get_key_value("server_aliases") else {
-        return;
+    let (path, key, item) = match (
+        document.get_key_value("aliases"),
+        document.get_key_value(LEGACY_MCP_ALIASES),
+    ) {
+        (Some((key, _)), Some(_)) => {
+            let at = line(content, key.span());
+            declarations.errors.push(format!(
+                "aliases (line {at}): declare MCP aliases in aliases.mcp or in the legacy {LEGACY_MCP_ALIASES} table, not both"
+            ));
+            return;
+        }
+        (Some((key, item)), None) => {
+            let Some(aliases) = item.as_table_like() else {
+                let at = line(content, key.span());
+                declarations
+                    .errors
+                    .push(format!("aliases (line {at}): must be a table"));
+                return;
+            };
+            let Some((mcp, item)) = aliases.get_key_value("mcp") else {
+                return;
+            };
+            ("aliases.mcp", mcp, item)
+        }
+        (None, Some((key, item))) => (LEGACY_MCP_ALIASES, key, item),
+        (None, None) => return,
     };
     let at = line(content, key.span());
     let Some(aliases) = item.as_table_like() else {
         declarations
             .errors
-            .push(format!("server_aliases (line {at}): must be a table"));
+            .push(format!("{path} (line {at}): must be a table"));
         return;
     };
     for (namespace, targets) in aliases.iter() {
@@ -156,7 +182,7 @@ fn read_aliases(content: &str, document: &Document<&str>, declarations: &mut Dec
             .map_or(at, |span| line(content, Some(span)));
         let Some(targets) = targets.as_array() else {
             declarations.errors.push(format!(
-                "server_aliases.{namespace} (line {at}): must be an array of strings"
+                "{path}.{namespace} (line {at}): must be an array of strings"
             ));
             continue;
         };
@@ -165,17 +191,19 @@ fn read_aliases(content: &str, document: &Document<&str>, declarations: &mut Dec
             .map(|target| target.as_str().map(str::to_owned))
             .collect();
         match servers {
-            Some(servers) => declarations.server_aliases.push(AliasDeclaration {
+            Some(servers) => declarations.mcp_aliases.push(AliasDeclaration {
                 namespace: namespace.to_owned(),
                 servers,
                 line: at,
             }),
             None => declarations.errors.push(format!(
-                "server_aliases.{namespace} (line {at}): every server must be a string"
+                "{path}.{namespace} (line {at}): every server must be a string"
             )),
         }
     }
 }
+
+const LEGACY_MCP_ALIASES: &str = "server_aliases";
 
 fn read_credentials(content: &str, document: &Document<&str>, declarations: &mut Declarations) {
     let Some((key, item)) = document.get_key_value("credentials") else {
@@ -328,7 +356,7 @@ include = [
 ]
 
 # which catalogs a battery governs
-[server_aliases]
+[aliases.mcp]
 github = ["github_prod", "github_sandbox"]
 linear = ["linear"]
 
@@ -368,7 +396,7 @@ version = 2
         );
         assert_eq!(
             declarations
-                .server_aliases
+                .mcp_aliases
                 .iter()
                 .map(|alias| (alias.namespace.as_str(), alias.servers.len(), alias.line))
                 .collect::<Vec<_>>(),
@@ -389,11 +417,38 @@ version = 2
     }
 
     #[test]
+    fn the_legacy_server_aliases_table_reads_as_the_mcp_aliases_and_host_aliases_bind_no_server() {
+        let read = |content: &str| {
+            parse(content)
+                .mcp_aliases
+                .into_iter()
+                .map(|alias| (alias.namespace, alias.servers, alias.line))
+                .collect::<Vec<_>>()
+        };
+        let current = read(AUTHORED);
+        assert_eq!(
+            read(&AUTHORED.replace("[aliases.mcp]", "[server_aliases]")),
+            current
+        );
+        let inline = "[aliases]\nmcp = { github = [\"github_prod\", \"github_sandbox\"] }\nhost = { claude-code = [\"archestra\"] }\n";
+        assert!(parse(inline).errors.is_empty());
+        assert_eq!(
+            read(inline),
+            [(
+                "github".to_owned(),
+                vec!["github_prod".to_owned(), "github_sandbox".to_owned()],
+                2
+            )]
+        );
+        assert!(read("[aliases]\nhost = { claude-code = [\"archestra\"] }\n").is_empty());
+    }
+
+    #[test]
     fn a_document_with_no_declarations_reads_as_none() {
         let declarations = parse("[policy]\nversion = 2\n");
         assert!(declarations.errors.is_empty());
         assert!(declarations.include.is_empty());
-        assert!(declarations.server_aliases.is_empty());
+        assert!(declarations.mcp_aliases.is_empty());
         assert!(declarations.credentials.is_empty());
         assert!(declarations.routed_annotators.is_empty());
     }
@@ -439,6 +494,13 @@ version = 2
                 "server_aliases.github",
             ),
             ("[server_aliases]\ngithub = [3]\n", "server_aliases.github"),
+            ("aliases = 3\n", "aliases"),
+            ("[aliases]\nmcp = 3\n", "aliases.mcp"),
+            ("[aliases.mcp]\ngithub = [3]\n", "aliases.mcp.github"),
+            (
+                "[aliases.mcp]\ngithub = [\"github_prod\"]\n[server_aliases]\ngithub = [\"github_prod\"]\n",
+                "server_aliases",
+            ),
             ("credentials = 3\n", "credentials"),
             (
                 "[credentials]\nAPPA_PROVIDER_GITHUB_TOKEN = 3\n",
@@ -457,6 +519,26 @@ version = 2
         let broken = parse("include = [\n");
         assert_eq!(broken.errors.len(), 1);
         assert!(broken.include.is_empty());
+    }
+
+    #[test]
+    fn aliases_mcp_bindings_read_like_the_legacy_table() {
+        let declarations = parse("[aliases.mcp]\ngithub = [\"github_prod\"]\n");
+        assert!(declarations.errors.is_empty());
+        assert_eq!(
+            declarations
+                .mcp_aliases
+                .iter()
+                .map(|alias| (alias.namespace.as_str(), alias.servers.clone(), alias.line))
+                .collect::<Vec<_>>(),
+            [("github", vec!["github_prod".to_string()], 2)]
+        );
+        let broken = parse("[aliases.mcp]\ngithub = \"github_prod\"\n");
+        assert!(
+            broken.errors[0].contains("aliases.mcp.github"),
+            "{:?}",
+            broken.errors
+        );
     }
 
     #[test]
@@ -501,7 +583,7 @@ version = 2
         );
         assert_eq!(
             declarations
-                .server_aliases
+                .mcp_aliases
                 .iter()
                 .map(|alias| (alias.namespace.as_str(), alias.servers.clone()))
                 .collect::<Vec<_>>(),
@@ -552,6 +634,33 @@ version = 2
         )
         .unwrap();
         assert_eq!(unchanged, AUTHORED);
+    }
+
+    #[test]
+    fn an_edit_of_a_legacy_document_is_byte_idempotent_or_moves_every_binding_to_aliases_mcp() {
+        let legacy = AUTHORED.replace("[aliases.mcp]", "[server_aliases]");
+        let bind = |namespace: &str, servers: &[&str]| EditRequest {
+            namespace: Some(namespace.into()),
+            servers: Some(servers.iter().map(|server| (*server).to_owned()).collect()),
+            ..request("bindServers")
+        };
+        assert_eq!(
+            edit(&legacy, vec![bind("linear", &["linear"])]).unwrap(),
+            legacy
+        );
+        let edited = edit(&legacy, vec![bind("slack", &["slack_prod"])]).unwrap();
+        let document: toml::Table = toml::from_str(&edited).unwrap();
+        assert!(!document.contains_key(LEGACY_MCP_ALIASES), "{edited}");
+        let declarations = parse(&edited);
+        assert!(declarations.errors.is_empty());
+        assert_eq!(
+            declarations
+                .mcp_aliases
+                .iter()
+                .map(|alias| alias.namespace.as_str())
+                .collect::<Vec<_>>(),
+            ["github", "linear", "slack"]
+        );
     }
 
     #[test]

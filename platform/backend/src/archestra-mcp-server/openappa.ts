@@ -595,7 +595,7 @@ const registry = defineArchestraTools([
     title: "Read OpenAPPA policy",
     annotations: { readOnlyHint: true },
     description:
-      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; its `include` list names the batteries that compose into enforcement on top of it, `[server_aliases]` points each battery's namespace at the MCP servers it governs, and `effective` shows the composed result the runtime enforces, with one entry per declared battery and the status it composed under. Battery credential variables are bound with bind_guardrails_credential, outside the text, and `effective` lists each bound one under `[credentials]`. The text may not name credentials: validation refuses a `[credentials]` line and a `token_env` in the policy's own externals. `enforcement.active` reports whether deployment enforcement is actually on; healthy composition alone does not prove enforcement. Without Git sync, `delivery.githubSyncSetupUrl` links to where the operator sets it up. Use this read to recover after a lost local publish response, without publishing again. `effective.served.kind` says what the runtime opens: `current` (the latest revision), `previous` (the latest attempt was refused and an earlier composition stays enforced; each battery's `served` is how that composition holds it, its `status` what the current text would give it), or `root_only` (nothing ever composed, so governed calls are refused). Report any battery whose status is not `active`, and any `effective.error`, to the user. Preserve unrelated rules and comments when editing.",
+      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; its `include` list names the batteries that compose into enforcement on top of it, `[aliases.mcp]` points each battery's namespace at the MCP servers it governs, and `effective` shows the composed result the runtime enforces, with one entry per declared battery and the status it composed under. Battery credential variables are bound with bind_guardrails_credential, outside the text, and `effective` lists each bound one under `[credentials]`. The text may not name credentials: validation refuses a `[credentials]` line and a `token_env` in the policy's own externals. `enforcement.active` reports whether deployment enforcement is actually on; healthy composition alone does not prove enforcement. Without Git sync, `delivery.githubSyncSetupUrl` links to where the operator sets it up. Use this read to recover after a lost local publish response, without publishing again. `effective.served.kind` says what the runtime opens: `current` (the latest revision), `previous` (the latest attempt was refused and an earlier composition stays enforced; each battery's `served` is how that composition holds it, its `status` what the current text would give it), or `root_only` (nothing ever composed, so governed calls are refused). Report any battery whose status is not `active`, and any `effective.error`, to the user. Preserve unrelated rules and comments when editing.",
     schema: z.strictObject({}),
     async handler({ context }) {
       const organizationId = organization(context);
@@ -769,7 +769,7 @@ const registry = defineArchestraTools([
     title: "List OpenAPPA batteries that fit",
     annotations: { readOnlyHint: true },
     description:
-      "List the batteries that fit the MCP servers you can see and are not declared yet, or only those fitting one server when mcpServerId is a catalog ID. Omit mcpServerId for all visible servers. Each fit gives the `include` entry to add, the battery's namespaces to point at the server's `toolPrefixes` in `[server_aliases]`, the credential variables to bind to a runtime credential key with bind_guardrails_credential (the policy text may not hold a `[credentials]` line), `newlyCovered` (the server's tools no rule names today that it would judge), and every battery rule for the server's tools: its kind (`read` narrows labels, `write` requires labels and can block a call, `approval` asks a person, `neutral` does neither), delta, requires, annotator, and `currentRule`, what judges the tool today. A root rule keeps priority over the battery's. This changes nothing. Declared batteries and their status are in get_guardrails_policy.",
+      "List the batteries that fit the MCP servers you can see and are not declared yet, or only those fitting one server when mcpServerId is a catalog ID. Omit mcpServerId for all visible servers. Each fit gives the `include` entry to add, the battery's namespaces to point at the server's `toolPrefixes` in `[aliases.mcp]`, the credential variables to bind to a runtime credential key with bind_guardrails_credential (the policy text may not hold a `[credentials]` line), `newlyCovered` (the server's tools no rule names today that it would judge), and every battery rule for the server's tools: its kind (`read` narrows labels, `write` requires labels and can block a call, `approval` asks a person, `neutral` does neither), delta, requires, annotator, and `currentRule`, what judges the tool today. A root rule keeps priority over the battery's. This changes nothing. Declared batteries and their status are in get_guardrails_policy.",
     schema: z.strictObject({
       mcpServerId: UuidIdSchema.nullish().describe(
         "The catalog ID of one MCP server. Omit it for every server you can see.",
@@ -951,16 +951,16 @@ const registry = defineArchestraTools([
       );
       return result({
         ...(await getOpenAppaPolicyTests(organizationId, userId)),
-        offlineReplay: {
+        replay: {
           scope:
             "Ordered tool-call policy decisions in a fresh session per file",
           inputSchemas:
             "Effective policy contracts; no installed MCP schema lookup",
           toolExecution: false,
           toolResults: "Empty results only",
-          modelExecution: false,
-          remoteHelpers: false,
-          hostNoopAnnotator: true,
+          annotators:
+            "Asked live with the organization's credentials, models and battery helpers included",
+          externalRemedyParties: "A policy naming one cannot run",
           subagentLifecycleEvents: false,
           missingDependency: "cannot_run, not an allow or deny decision",
         },
@@ -971,7 +971,7 @@ const registry = defineArchestraTools([
     shortName: "run_openappa_policy_tests",
     title: "Run saved OpenAPPA validations",
     description:
-      "Replay saved validations offline against the current policy and record the result in validation run history. Use it to run what is saved and keep the result; preview_guardrails_validation_change already replays a draft before it is saved. Pass `path` to run one saved validation file; omit it to run the whole suite. Loads the authoritative saved files itself; no draft files or policy changes are accepted. This records a run only: it does not edit validations, change or enable the policy, execute business tools, or contact models or remote helpers. Report the returned run ID and pass/fail/cannot-run outcomes.",
+      "Replay saved validations against the current policy and record the result in validation run history. Use it to run what is saved and keep the result; preview_guardrails_validation_change already replays a draft before it is saved. Pass `path` to run one saved validation file; omit it to run the whole suite. Loads the authoritative saved files itself; no draft files or policy changes are accepted. This records a run only: it does not edit validations, change or enable the policy, or execute business tools; the policy's annotators, models included, are asked live. Report the returned run ID and pass/fail/cannot-run outcomes.",
     schema: z.strictObject({
       path: z
         .string()
@@ -1025,7 +1025,7 @@ const registry = defineArchestraTools([
     title: "Preview OpenAPPA validations",
     annotations: { readOnlyHint: true },
     description:
-      "Validate a proposed change to the .appa validation files and replay it. This saves nothing and records no run. Read the policy and the suite first and pass their revision as expectedRevision and version as expectedVersion. Send `changes`: `upsert` files to add or replace, and explicit `delete` paths; unrelated files are kept. Checks each upserted file's syntax, then replays those files offline against the saved policy; `tests` holds pass/fail/cannot-run per file, or null when a syntax check failed or nothing was upserted. Fix syntax errors in the files only. Explain the case, its expected decision and the replay result to the user, then save with update_guardrails_validation. A failed check does not authorize a policy change or weakening an expectation. This tool never changes the policy; change it with preview_guardrails_policy_change and update_guardrails_policy.",
+      "Validate a proposed change to the .appa validation files and replay it. This saves nothing and records no run. Read the policy and the suite first and pass their revision as expectedRevision and version as expectedVersion. Send `changes`: `upsert` files to add or replace, and explicit `delete` paths; unrelated files are kept. Checks each upserted file's syntax, then replays those files against the saved policy, asking its annotators live; `tests` holds pass/fail/cannot-run per file, or null when a syntax check failed or nothing was upserted. Fix syntax errors in the files only. Explain the case, its expected decision and the replay result to the user, then save with update_guardrails_validation. A failed check does not authorize a policy change or weakening an expectation. This tool never changes the policy; change it with preview_guardrails_policy_change and update_guardrails_policy.",
     schema: PreviewOpenAppaValidationChangeSchema,
     async handler({ args, context }) {
       const { organizationId, userId } = organizationUser(

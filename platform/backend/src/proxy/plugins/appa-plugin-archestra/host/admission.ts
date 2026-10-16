@@ -359,11 +359,13 @@ export async function admitOpenappaRequest(params: {
     !APPA_CLIENT_ADAPTERS.some((adapter) =>
       adapter.matches({ headers, requestBody: body }),
     );
-  // The platform's own guardrail models bypass instead of being blocked.
+  // The platform's own guardrail models bypass OpenAPPA entirely. The proof
+  // is a per-process secret, so it alone identifies them, whatever credential
+  // they carry: the organization's default key may be a virtual key.
   if (
     unsupportedClient &&
     params.deployment.unsupportedClientAction === "block" &&
-    !(platformLoopback && params.internalCall)
+    !params.internalCall
   ) {
     throw new ApiError(
       400,
@@ -392,7 +394,7 @@ export async function admitOpenappaRequest(params: {
     appaActive &&
     !installerSetupBypass &&
     !delegatedRun &&
-    !(platformLoopback && params.internalCall) &&
+    !params.internalCall &&
     !unsupportedClient
   ) {
     // Extract client-native session metadata into APPA session identity.
@@ -570,6 +572,7 @@ export async function admitOpenappaRequest(params: {
     appaObserving &&
     !delegatedRun &&
     !subagentToken &&
+    !params.internalCall &&
     (isInternalRequest ||
       authenticatedUserId ||
       authenticatedApp ||

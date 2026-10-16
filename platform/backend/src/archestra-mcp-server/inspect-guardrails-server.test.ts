@@ -13,7 +13,10 @@ import {
   EnvironmentModel,
   InternalMcpCatalogModel,
 } from "@/models";
-import { guardrailsPolicyService } from "@/services/guardrails-policy";
+import {
+  guardrailsPolicyService,
+  UNDECLARED_TOOL_ANNOTATOR,
+} from "@/services/guardrails-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { seedCoverage } from "@/test/openappa-coverage";
 import { ApiError } from "@/types";
@@ -174,7 +177,7 @@ describe("inspect_guardrails_server", () => {
             {
               rule: expect.objectContaining({
                 source: "catchall",
-                annotator: "noop",
+                annotator: UNDECLARED_TOOL_ANNOTATOR,
                 delta: {},
               }),
             },

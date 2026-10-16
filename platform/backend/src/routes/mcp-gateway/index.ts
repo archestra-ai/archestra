@@ -10,6 +10,7 @@ import type { TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
 import { AgentModel, AgentRunModel, McpToolCallModel } from "@/models";
+import { setMcpMethodOnRequestSpans } from "@/observability/tracing";
 import {
   APPA_SESSION_HEADER,
   isWellFormedAppaId,
@@ -1013,6 +1014,11 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
           error: { code: routingError.code, message: routingError.message },
           id: (request.body as { id?: string | number })?.id ?? null,
         };
+      }
+
+      const mcpMethod = (request.body as { method?: unknown }).method;
+      if (typeof mcpMethod === "string") {
+        setMcpMethodOnRequestSpans(request.raw, mcpMethod);
       }
 
       // An MRTR retry carries state the gateway minted. It travels through the

@@ -240,9 +240,9 @@ test.describe("Chat message queue", () => {
       .first();
     await expect(modelSelectorTrigger).toBeVisible({ timeout: 10_000 });
     await modelSelectorTrigger.click();
-    await expect(
-      page.getByRole("dialog", { name: "Select Model" }),
-    ).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByTestId(E2eTestId.ChatSetupMenu)).toBeVisible({
+      timeout: 5_000,
+    });
     await selectRuntimeModelFromDialog(page, runtimeModel);
 
     // Hold the compaction response open so the in-flight window is wide enough

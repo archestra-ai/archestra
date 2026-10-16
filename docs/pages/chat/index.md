@@ -25,12 +25,14 @@ You can continue typing while the agent generates a response. Queued messages wa
 
 Switch the model, agent, or provider key for one conversation without changing the agent itself.
 
-- **New chat:** the agent, key, and model controls sit under the prompt. On a narrow screen they move into the **More options** menu (⋮).
+- **New chat:** the agent and the model sit under the prompt. Click the model to search models or switch to the **Key** tab. On a narrow screen both move into the **More options** menu (⋮).
 - **Started chat:** open **More options** (⋮). Its tabs show the current model, agent, and key. Pick a tab, search, and choose. Picking a key switches to its models.
+
+Each model lists its context size, price per million tokens, and what it can read or do.
 
 What to know:
 
-- When the model supports extended reasoning, a depth control appears next to it: the model's default, Low, Medium, or High.
+- When the model supports extended reasoning, the menu's search row shows a depth control: Auto (the model's default), Low, Med, or High. A level other than Auto shows next to the model name.
 - To return to the agent's or organization's default model, choose **Reset to default model** in the menu.
 - The circle next to the attach button shows how much of the model's context the conversation uses. Click it for a breakdown.
 

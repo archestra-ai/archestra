@@ -274,8 +274,9 @@ vi.mock("@/components/chat/chat-tools-display", () => ({
   ChatToolsDisplay: () => <div data-testid="chat-tools-display" />,
 }));
 
-vi.mock("@/components/chat/model-selector", () => ({
-  ModelSelector: () => <div data-testid="model-selector" />,
+// The model button has its own hooks and menu; here it only needs to show up.
+vi.mock("@/components/chat/chat-model-button", () => ({
+  ChatModelButton: () => <div data-testid="chat-model-button" />,
 }));
 
 vi.mock("@/components/chat/initial-agent-selector", () => ({
@@ -519,7 +520,7 @@ describe("ArchestraPromptInput", () => {
     expect(
       screen.queryByTestId(E2eTestId.ChatDisabledFileUploadButton),
     ).not.toBeInTheDocument();
-    expect(screen.queryByTestId("model-selector")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("chat-model-button")).not.toBeInTheDocument();
     expect(screen.queryByText("Speech")).not.toBeInTheDocument();
   });
 
@@ -538,7 +539,7 @@ describe("ArchestraPromptInput", () => {
     );
 
     expect(screen.getByTestId("prompt-submit")).toBeDisabled();
-    expect(screen.queryByTestId("model-selector")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("chat-model-button")).not.toBeInTheDocument();
     expect(screen.queryByText("agent")).not.toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", { name: "Sign in with ChatGPT" }),
@@ -865,7 +866,7 @@ describe("ArchestraPromptInput", () => {
         <ArchestraPromptInput {...defaultProps} allowFileUploads={true} />,
       );
 
-      expect(screen.getByTestId("model-selector")).toBeInTheDocument();
+      expect(screen.getByTestId("chat-model-button")).toBeInTheDocument();
     });
 
     it("should keep a single organization placeholder static", () => {

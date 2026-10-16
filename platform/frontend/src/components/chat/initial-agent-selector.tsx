@@ -604,7 +604,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                     setSearch(e.target.value);
                     if (listRef.current) listRef.current.scrollTop = 0;
                   }}
-                  className="h-8 pl-8 text-sm rounded-lg bg-muted/50"
+                  className="h-8 rounded-lg border-transparent bg-muted/50 pl-8 text-sm shadow-none focus-visible:border-transparent focus-visible:ring-0"
                   autoFocus
                 />
               </div>
@@ -968,7 +968,9 @@ function AgentPickerRow({
       className={cn(
         "rounded-lg px-2 py-1.5 transition-colors",
         !isBlocked && "hover:bg-accent",
-        isHighlighted && "bg-accent ring-2 ring-inset ring-primary",
+        // The highlight is a fill, like the setup menu; a ring here reads as a
+        // second selection state.
+        isHighlighted && "bg-accent",
       )}
     >
       <div className="flex w-full items-center gap-2">

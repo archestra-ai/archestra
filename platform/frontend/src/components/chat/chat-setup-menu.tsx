@@ -1,8 +1,12 @@
 "use client";
 
-import type {
-  SupportedProvider,
-  ThinkingEffortSetting,
+import {
+  E2eTestId,
+  getChatApiKeySelectorOptionTestId,
+  getChatApiKeySelectorProviderGroupTestId,
+  getChatModelOptionTestId,
+  type SupportedProvider,
+  type ThinkingEffortSetting,
 } from "@archestra/shared";
 import { Command as CommandPrimitive, defaultFilter } from "cmdk";
 import {
@@ -328,6 +332,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
 
   return (
     <Command
+      data-testid={E2eTestId.ChatSetupMenu}
       label="Chat options"
       loop
       value={active}
@@ -555,7 +560,12 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
         {/* ---------------- Key scope ---------------- */}
         {scope === "key" &&
           data.keySections.map((s) => (
-            <CommandGroup key={s.provider} heading={s.label} className={GROUP}>
+            <CommandGroup
+              key={s.provider}
+              heading={s.label}
+              className={GROUP}
+              data-testid={getChatApiKeySelectorProviderGroupTestId(s.provider)}
+            >
               {s.keys.map((k) => (
                 <KeyRow
                   key={k.id}
@@ -631,6 +641,7 @@ function ModelRow({
   return (
     <CommandItem
       value={modelValue(model.dbId)}
+      data-testid={getChatModelOptionTestId(model.id)}
       keywords={keywords}
       onSelect={onSelect}
       // Two lines: the logo drops 2px to center on the name line.
@@ -783,6 +794,7 @@ function KeyRow({
   return (
     <CommandItem
       value={keyValue(apiKey.id)}
+      data-testid={getChatApiKeySelectorOptionTestId(apiKey.id)}
       keywords={keywords}
       onSelect={onSelect}
       className={ITEM}

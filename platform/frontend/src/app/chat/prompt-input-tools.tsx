@@ -19,16 +19,14 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { AppRecordingControls } from "@/components/app-session-recording/app-recording-controls";
 import { NotRecommendedForAgentsNoticeBadge } from "@/components/chat/agent-recommendation-notice";
+import { ChatModelButton } from "@/components/chat/chat-model-button";
 import { ChatSetupMenu } from "@/components/chat/chat-setup-menu";
 import { ContextIndicator } from "@/components/chat/context-indicator";
 import { ContextWindowDialog } from "@/components/chat/context-window-panel";
 import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { LlmProviderApiKeySelector } from "@/components/chat/llm-provider-api-key-selector";
-import { ModelSelector } from "@/components/chat/model-selector";
-import { ModelSourceIndicator } from "@/components/chat/model-source-indicator";
 import { NoToolsModelBadge } from "@/components/chat/no-tools-model-notice";
-import { ThinkingEffortSelector } from "@/components/chat/thinking-effort-selector";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
@@ -329,7 +327,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
           connect flow. */}
       {!runtimeMode &&
         (conversationId || onApiKeyChange) &&
-        ((canShowProviderSettings && showOptionsMenu) ||
+        (canShowProviderSettings ||
           (canSeeFullView === false && subscriptionConnectRequired)) && (
           <div className="hidden">
             <LlmProviderApiKeySelector
@@ -593,79 +591,32 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
               </Button>
             )}
           {canShowProviderSettings && (
-            /* Same radius as the controls it clips: they are full-height and
-               sit flush against the group's end caps, so a wider group radius
-               rounds their outer corners while the inner ones keep the button
-               radius — a lopsided hover shape (T-1088). Let keyboard focus
-               escape that clipping and stack above adjacent controls so its
-               ring stays intact. */
-            <div className="flex items-center h-8 rounded-md bg-muted/50 overflow-hidden has-[:focus-visible]:overflow-visible [&_button:focus-visible]:relative [&_button:focus-visible]:z-10">
-              {(conversationId || onApiKeyChange) && (
-                <LlmProviderApiKeySelector
-                  conversationId={conversationId}
-                  currentProvider={currentProvider}
-                  currentConversationChatApiKeyId={
-                    conversationId
-                      ? (currentConversationChatApiKeyId ?? null)
-                      : (initialApiKeyId ?? null)
-                  }
-                  onApiKeyChange={onApiKeyChange}
-                  onProviderChange={onProviderChange}
-                  isModelsLoading={isModelsLoading}
-                  agentLlmApiKeyId={agentLlmApiKeyId}
-                  suppressAutoSelect={agentRequiresPerUserConnect}
-                  connectRequestToken={subscriptionConnectRequest}
-                  onOpenChange={handleSelectorOpenChange}
-                />
-              )}
-              {subscriptionConnectRequired && onSubscriptionConnect && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1 text-primary hover:text-primary"
-                  onClick={onSubscriptionConnect}
-                >
-                  {subscriptionSignInTitle}
-                </Button>
-              )}
-              {!subscriptionConnectRequired && (
-                <ModelSelector
-                  selectedModel={selectedModel}
-                  onModelChange={onModelChange}
-                  onOpenChange={handleSelectorOpenChange}
-                  apiKeyId={
-                    conversationId
-                      ? currentConversationChatApiKeyId
-                      : initialApiKeyId
-                  }
-                  suppressAutoSelect={agentRequiresPerUserConnect}
-                  fallbackModelName={agentModelDisplayName}
-                />
-              )}
-              {!subscriptionConnectRequired && onThinkingEffortChange && (
-                <ThinkingEffortSelector
-                  selectedModel={selectedModel}
-                  apiKeyId={
-                    conversationId
-                      ? currentConversationChatApiKeyId
-                      : initialApiKeyId
-                  }
-                  value={thinkingEffort}
-                  onChange={onThinkingEffortChange}
-                  className="mr-1"
-                />
-              )}
-              {/* Only a model the user picked earns a glyph (it doubles as the
-                  reset); the agent's or organization's default needs none. */}
-              {modelSource === "user" && !subscriptionConnectRequired && (
-                <ModelSourceIndicator
-                  source={modelSource}
-                  inConversation={!!conversationId}
-                  onReset={onResetModelOverride}
-                />
-              )}
-            </div>
+            <ChatModelButton
+              onOpenChange={handleSelectorOpenChange}
+              conversationId={conversationId}
+              agentId={selectorAgentId}
+              canShowProviderSettings={canShowProviderSettings}
+              selectedModel={selectedModel}
+              onModelChange={onModelChange}
+              fallbackModelName={agentModelDisplayName}
+              modelSource={modelSource}
+              onResetModelOverride={onResetModelOverride}
+              suppressAutoSelect={agentRequiresPerUserConnect}
+              apiKeyId={selectedApiKeyId}
+              currentProvider={currentProvider}
+              canChangeCredential={
+                canShowProviderSettings && !!(conversationId || onApiKeyChange)
+              }
+              onApiKeyChange={onApiKeyChange}
+              onProviderChange={onProviderChange}
+              subscriptionConnectRequired={subscriptionConnectRequired}
+              onSubscriptionConnect={onSubscriptionConnect}
+              subscriptionSignInTitle={subscriptionSignInTitle}
+              thinkingEffort={thinkingEffort}
+              onThinkingEffortChange={onThinkingEffortChange}
+              toolsUnavailable={toolsUnavailable}
+              notRecommendedForAgents={notRecommendedForAgents}
+            />
           )}
           {!runtimeMode && toolsUnavailable && <NoToolsModelBadge />}
           {!runtimeMode && notRecommendedForAgents && (

@@ -1,6 +1,6 @@
 import { archestraApiClient, BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { UIMessage } from "ai";
 import { HttpResponse, http } from "msw";
@@ -196,6 +196,13 @@ afterAll(() => {
 
 test("a configuration agent launch uses ordinary creation and chat controls", async () => {
   const user = userEvent.setup();
+  // The picker hides the configuration agent itself, so the agent switcher
+  // only appears once there is another agent to switch to.
+  server.use(
+    http.get("/api/agents/chat-roster", () =>
+      HttpResponse.json([agent, otherAgent]),
+    ),
+  );
   renderChat();
 
   // The opening prompt sends only after the session, agent, model, and
@@ -226,11 +233,12 @@ test("a configuration agent launch uses ordinary creation and chat controls", as
       { timeout: 5000 },
     ),
   ).toBeInTheDocument();
+  // A started chat keeps its agent switcher in the composer's setup menu.
+  await user.click(await composerSetupMenuButton());
   expect(
-    screen.getByRole("combobox", {
-      name: "APPA Keeper",
-    }),
+    await screen.findByRole("tab", { name: "Agent: APPA Keeper" }),
   ).toBeEnabled();
+  await user.keyboard("{Escape}");
 
   await user.type(
     await screen.findByPlaceholderText(
@@ -389,7 +397,10 @@ test("a saved configuration-agent conversation accepts a normal follow-up withou
   expect(sent[0]).toMatchObject({
     parts: [{ type: "text", text: "Now tighten it" }],
   });
-  await user.click(screen.getByRole("combobox", { name: "APPA Keeper" }));
+  await user.click(await composerSetupMenuButton());
+  await user.click(
+    await screen.findByRole("tab", { name: "Agent: APPA Keeper" }),
+  );
   await user.click(
     await screen.findByRole("option", { name: /Research Agent/ }),
   );
@@ -399,6 +410,15 @@ test("a saved configuration-agent conversation accepts a normal follow-up withou
     ]),
   );
 });
+
+/** The composer's own "More options" (a message can have one too). */
+async function composerSetupMenuButton() {
+  const composer = (
+    await screen.findByPlaceholderText("Ask a follow-up...")
+  ).closest("form");
+  if (!composer) throw new Error("composer form not found");
+  return within(composer).getByRole("button", { name: "More options" });
+}
 
 function renderChat(routeConversationId?: string) {
   return render(

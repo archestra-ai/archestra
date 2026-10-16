@@ -152,7 +152,8 @@ export const E2eTestId = {
   ChatApiKeySelectorSearchInput: "chat-api-key-selector-search-input",
   // Chat Model Selector
   ChatModelSelectorTrigger: "chat-model-selector-trigger",
-  ChatThinkingEffortSelector: "chat-thinking-effort-selector",
+  /** The composer's setup menu (model, agent, and key tabs). */
+  ChatSetupMenu: "chat-setup-menu",
   ChatPromptTextarea: "chat-prompt-textarea",
   // Queue of messages composed while a response was in-flight
   ChatMessageQueue: "chat-message-queue",
@@ -215,6 +216,10 @@ export function getChatItemUnreadIndicatorTestId(
   conversationId: string,
 ): string {
   return `${E2eTestId.ChatItemUnreadIndicator}-${conversationId}`;
+}
+
+export function getChatModelOptionTestId(modelId: string): string {
+  return `chat-model-option-${modelId}`;
 }
 
 export function getChatApiKeySelectorOptionTestId(keyId: string): string {

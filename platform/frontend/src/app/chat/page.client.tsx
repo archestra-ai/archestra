@@ -1904,7 +1904,13 @@ export function ChatPageContent({
       (!!browserToolsAgentId && isLoadingBrowserTools));
 
   // Stream usage and compaction results both update this live context estimate.
-  const tokensUsed = contextTokensUsed ?? tokenUsage?.totalTokens;
+  // Until this tab sees one, fall back to the saved size of the latest turn so
+  // an opened chat shows its context usage right away.
+  const tokensUsed =
+    contextTokensUsed ??
+    tokenUsage?.totalTokens ??
+    conversation?.contextTokensUsed ??
+    undefined;
   const isContextCompacting =
     !!contextCompaction?.isCompacting || compactConversationMutation.isPending;
 
@@ -2443,6 +2449,11 @@ export function ChatPageContent({
       }
     },
     [conversationId],
+  );
+
+  const openFilesPanel = useCallback(
+    () => openRightPanelTab("files"),
+    [openRightPanelTab],
   );
 
   const closeRightPanel = useCallback(() => {
@@ -3495,6 +3506,9 @@ export function ChatPageContent({
                                 conversationPerUserConnect.provider
                               }
                               isContextCompacting={isContextCompacting}
+                              onOpenFiles={
+                                conversationId ? openFilesPanel : undefined
+                              }
                               onCompactConversation={
                                 isActionAvailableForConversation(
                                   conversation,

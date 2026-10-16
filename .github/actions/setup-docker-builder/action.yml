@@ -8,4 +8,4 @@ runs:
   using: composite
   steps:
     - name: Setup Docker builder
-      uses: archestra-ai/.github/actions/setup-docker-builder@49f7467c09064f44fc4ab1cf6b78e8855aacccb1 # zizmor: ignore[stale-action-refs]
+      uses: archestra-ai/.github/actions/setup-docker-builder@13f35fa7ee72120bcebe2ad663da42260e629818 # zizmor: ignore[stale-action-refs]

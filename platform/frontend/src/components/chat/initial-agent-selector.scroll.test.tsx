@@ -135,6 +135,9 @@ it("loads one bounded page per bottom scroll, appends without duplicate selectio
   expect(requests).toHaveLength(1);
   expect(screen.getAllByRole("option")).toHaveLength(20);
   expect(
+    screen.queryByRole("button", { name: "Load more agents" }),
+  ).not.toBeInTheDocument();
+  expect(
     screen.queryByRole("button", { name: "Next" }),
   ).not.toBeInTheDocument();
   expect(

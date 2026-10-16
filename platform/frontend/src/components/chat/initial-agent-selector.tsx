@@ -694,7 +694,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                 ))
               )}
             </div>
-            {(page.hasNextPage || page.isError) && (
+            {page.isError && (
               <div className="flex justify-center border-t px-2 py-1.5">
                 <Button
                   variant="ghost"
@@ -708,11 +708,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                     }
                   }}
                 >
-                  {page.isFetching
-                    ? "Loading agents…"
-                    : page.isError
-                      ? "Retry loading agents"
-                      : "Load more agents"}
+                  {page.isFetching ? "Loading agents…" : "Retry loading agents"}
                 </Button>
               </div>
             )}

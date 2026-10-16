@@ -794,21 +794,22 @@ export function discardUnadmittedResponsesOutput(
 }
 
 /**
- * The client copy of a buffered generation that failed before admission:
- * no message text, but the failure status, details, ids and usage remain.
+ * The client copy of a buffered generation that failed before admission.
+ * Every output item type (message, reasoning, tool call) can carry model text,
+ * so none is released; the failure status, details, ids and usage remain.
  */
-export function withoutResponsesMessages(
+export function withoutResponsesModelOutput(
   response: OpenAiResponsesResponse,
 ): OpenAiResponsesResponse {
   return {
     ...response,
-    output: response.output.filter((item) => item.type !== "message"),
+    output: [],
     ...("output_text" in response ? { output_text: "" } : {}),
   } as OpenAiResponsesResponse;
 }
 
-/** Applies `withoutResponsesMessages` to every response envelope in SSE frames. */
-export function withoutResponsesMessagesSSE(
+/** Applies `withoutResponsesModelOutput` to every response envelope in SSE frames. */
+export function withoutResponsesModelOutputSSE(
   frames: readonly (string | Uint8Array)[],
 ): string[] {
   return frames.map((frame) =>
@@ -823,7 +824,7 @@ export function withoutResponsesMessagesSSE(
         }
         return `data: ${JSON.stringify({
           ...payload,
-          response: withoutResponsesMessages(
+          response: withoutResponsesModelOutput(
             response as unknown as OpenAiResponsesResponse,
           ),
         })}`;

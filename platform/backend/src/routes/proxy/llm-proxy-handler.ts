@@ -123,8 +123,8 @@ import { CodexResponsesGenerationError } from "./adapters/openai-codex-translato
 import {
   discardUnadmittedResponsesOutput,
   ResponsesStreamIncompleteError,
-  withoutResponsesMessages,
-  withoutResponsesMessagesSSE,
+  withoutResponsesModelOutput,
+  withoutResponsesModelOutputSSE,
 } from "./adapters/openai-responses";
 import {
   assertAuthenticatedForKeylessProvider,
@@ -2134,7 +2134,7 @@ async function handleStreaming<
       const failureEvents = streamAdapter.formatToolCallsSSE([]);
       childStream.dropModel();
       for (const event of bufferModelResponse
-        ? withoutResponsesMessagesSSE(failureEvents)
+        ? withoutResponsesModelOutputSSE(failureEvents)
         : failureEvents)
         writeToClient(event);
       writeToClient(streamAdapter.formatEndSSE());
@@ -3266,7 +3266,7 @@ async function handleNonStreaming<
     }
     return sendResponse(
       bufferModelResponse
-        ? withoutUnadmittedText(clientResponse)
+        ? withoutUnadmittedModelOutput(clientResponse)
         : clientResponse,
     );
   }
@@ -3290,12 +3290,14 @@ class RecordedCodexGenerationFailure extends ApiError {
 }
 
 /** The client copy of a buffered generation that failed before admission. */
-function withoutUnadmittedText<TResponse>(response: TResponse): TResponse {
+function withoutUnadmittedModelOutput<TResponse>(
+  response: TResponse,
+): TResponse {
   const record = asRecord(response);
   switch (record?.object) {
     case "response":
-      return withoutResponsesMessages(
-        response as Parameters<typeof withoutResponsesMessages>[0],
+      return withoutResponsesModelOutput(
+        response as Parameters<typeof withoutResponsesModelOutput>[0],
       ) as TResponse;
     case "chat.completion":
       return {
@@ -3303,9 +3305,13 @@ function withoutUnadmittedText<TResponse>(response: TResponse): TResponse {
         choices: (Array.isArray(record.choices) ? record.choices : []).map(
           (choice) => {
             const entry = asRecord(choice);
+            // Keeps only the role: content, refusal and reasoning all carry model text.
             return {
               ...entry,
-              message: { ...asRecord(entry?.message), content: "" },
+              message: {
+                role: asRecord(entry?.message)?.role ?? "assistant",
+                content: "",
+              },
             };
           },
         ),

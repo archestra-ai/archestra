@@ -13703,7 +13703,11 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       onError: error,
       onCleanup: cleanup,
     });
-    const reasoning = { id: "rs_partial", type: "reasoning", summary: [] };
+    const reasoning = {
+      id: "rs_partial",
+      type: "reasoning",
+      summary: [{ type: "summary_text", text: "PARTIAL_REASONING_MARKER" }],
+    };
     const message = {
       id: "msg_partial",
       type: "message",
@@ -13924,9 +13928,12 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       // stays off the wire while the provider's partial is still recorded.
       const withheld = stream && child;
       expect(released).toMatchObject(
-        withheld ? { ...persisted, output: [reasoning] } : persisted,
+        withheld ? { ...persisted, output: [] } : persisted,
       );
-      if (child) expect(response.body).not.toContain("Partial answer");
+      if (child) {
+        expect(response.body).not.toContain("Partial answer");
+        expect(response.body).not.toContain("PARTIAL_REASONING_MARKER");
+      }
       expect(response.body).not.toContain("UNADMITTED_RAW_SEARCH_MARKER");
       expect(response.body).not.toContain("UNADMITTED_SEARCH_DERIVED_MARKER");
       expect(response.body).not.toContain("finished subagent");
@@ -14049,7 +14056,11 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       onError: error,
       onCleanup: cleanup,
     });
-    const reasoning = { id: "rs_text_only", type: "reasoning", summary: [] };
+    const reasoning = {
+      id: "rs_text_only",
+      type: "reasoning",
+      summary: [{ type: "summary_text", text: "PARTIAL_REASONING_MARKER" }],
+    };
     const message = {
       id: "msg_text_only",
       type: "message",
@@ -14112,10 +14123,11 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
       expect(response.statusCode, response.body).toBe(200);
       expect(response.json()).toMatchObject({
         ...terminal,
-        output: child ? [reasoning] : [reasoning, message],
+        output: child ? [] : [reasoning, message],
       });
       if (child) {
         expect(response.body).not.toContain("PARTIAL_TEXT_ONLY_MARKER");
+        expect(response.body).not.toContain("PARTIAL_REASONING_MARKER");
       }
       expect(error).toHaveBeenCalledOnce();
       expect(cleanup).toHaveBeenCalledOnce();

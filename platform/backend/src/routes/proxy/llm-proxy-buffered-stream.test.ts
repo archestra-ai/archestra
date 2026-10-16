@@ -261,6 +261,7 @@ describe("LLM proxy buffered model response streaming", () => {
       expect(response.statusCode).toBe(200);
       expect(hooks).toEqual(["error", "cleanup"]);
       expect(response.body).not.toContain("PARTIAL RESPONSES TEXT");
+      expect(response.body).not.toContain("PARTIAL RESPONSES REASONING");
       const terminal = sseFrames(response.body).find(
         (frame) => frame.type === "response.incomplete",
       );
@@ -488,8 +489,20 @@ function responsesIncompleteTurn() {
       },
     },
     {
-      type: "response.incomplete",
+      type: "response.output_item.done",
+      output_index: 2,
       sequence_number: 5,
+      item: {
+        id: "rs-buffered",
+        type: "reasoning",
+        summary: [
+          { type: "summary_text", text: "PARTIAL RESPONSES REASONING" },
+        ],
+      },
+    },
+    {
+      type: "response.incomplete",
+      sequence_number: 6,
       response: {
         ...envelope,
         status: "incomplete",

@@ -277,7 +277,10 @@ describe("summarizeHitlReview", () => {
     expect(call).not.toHaveProperty("tools");
     expect(call.abortSignal).toBeInstanceOf(AbortSignal);
     expect(call.maxOutputTokens).toBeGreaterThan(0);
-    const system = String(call.system);
+    const system =
+      typeof call.system === "string"
+        ? call.system
+        : JSON.stringify(call.system);
     expect(system).toContain("untrusted data");
     expect(system).toContain("never recommend");
     const prompt = String(call.prompt);

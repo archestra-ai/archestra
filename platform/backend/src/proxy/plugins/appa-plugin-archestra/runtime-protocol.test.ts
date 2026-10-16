@@ -12,6 +12,7 @@ import * as service from "@/openappa/service";
 import * as unenforced from "@/openappa/unenforced";
 import { LlmProxyPluginRegistry } from "@/proxy/plugins/registry";
 import { resolveGatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
+import { pendingExports } from "@/services/agent-runtime/pending-exports";
 import { expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { AgentRuntimeSchema } from "@/types/agent-runtime";
@@ -621,6 +622,29 @@ describe("protected runtime protocol", () => {
       value: "Unapproved report",
     });
     expect(ended).not.toHaveBeenCalled();
+  });
+
+  test("releases files pinned for a runtime on the runtime's own request, and only there", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    vi.spyOn(service, "startRuntimeChild").mockResolvedValue({});
+    const drain = vi.spyOn(pendingExports, "drain").mockResolvedValue();
+    const plugin = new AppaPluginArchestra([]);
+    const body = { messages: [{ role: "user", content: "continue" }] };
+
+    const runtime = request(org.id, true);
+    await plugin.onSessionInit(runtime);
+    await plugin.onBeforeModel({ ...runtime, request: body });
+    const { session } = runtime.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    expect(drain).toHaveBeenCalledExactlyOnceWith(session);
+
+    const root = request(org.id);
+    await plugin.onSessionInit(root);
+    await plugin.onBeforeModel({ ...root, request: body });
+    expect(drain).toHaveBeenCalledOnce();
   });
 });
 

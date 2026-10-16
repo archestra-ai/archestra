@@ -38,6 +38,8 @@ With [Guardrails](/docs/agents/guardrails) on, a run keeps the restrictions of t
 - **A client Guardrails check:** the run starts under your session's restrictions. Its answer passes the guardrail check before your agent reads it. Another session cannot steer the run or read its files.
 - **Any other client:** the [Unrecognized clients](/docs/agents/guardrails/clients#unrecognized-clients) setting decides. When it is **Allowed**, the run starts without your session's restrictions, and Guardrails still check each tool call inside it. When it is **Blocked**, the run does not start.
 
+A file you read or download while the run is in the middle of a tool call comes back as `pending`. Guardrails pin that version and release it once the tool call finishes, so call the same tool again a little later.
+
 If a request is refused:
 
 - **"Guardrails do not recognize this client":** unrecognized clients are blocked. [Connect the client](/docs/agents/guardrails/clients#connect-a-client) so that Guardrails check it. Or allow unrecognized clients, which needs [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).

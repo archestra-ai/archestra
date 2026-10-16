@@ -1,3 +1,5 @@
+import type { Resource } from "@archestra/shared";
+import { memberPermissions } from "@archestra/shared/access-control";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -10,16 +12,9 @@ vi.mock("@/lib/auth/auth.server", () => ({
 }));
 
 vi.mock("@/components/agent-pages/agent-create-page", () => ({
-  AgentCreatePage: ({
-    canAddExternalAgent,
-    canCreateAgent,
-  }: {
-    canAddExternalAgent: boolean;
-    canCreateAgent: boolean;
-  }) => (
+  AgentCreatePage: ({ canCreateAgent }: { canCreateAgent: boolean }) => (
     <div
       data-testid="agent-create-page"
-      data-can-add-external-agent={String(canAddExternalAgent)}
       data-can-create-agent={String(canCreateAgent)}
     />
   ),
@@ -33,71 +28,37 @@ vi.mock("@/components/error-fallback", () => ({
 
 import NewAgentPageServer from "./page";
 
-function mockCapabilities({
-  canAddExternalAgent,
-  canCreateAgent,
-}: {
-  canAddExternalAgent: boolean;
-  canCreateAgent: boolean;
-}) {
-  serverHasPermissionsMock.mockImplementation(
-    (permissions: Record<string, readonly string[]>) => {
-      if (permissions.agent?.includes("create")) {
-        return Promise.resolve(canCreateAgent);
-      }
-      return Promise.resolve(canAddExternalAgent);
-    },
-  );
-}
-
 describe("NewAgentPageServer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it.each([
-    {
-      persona: "a regular Agent creator",
-      canCreateAgent: true,
-      canAddExternalAgent: false,
-    },
-    {
-      persona: "an external-agent manager",
-      canCreateAgent: false,
-      canAddExternalAgent: true,
-    },
-    {
-      persona: "a user with both capability bundles",
-      canCreateAgent: true,
-      canAddExternalAgent: true,
-    },
-  ])("opens the chooser for $persona", async (capabilities) => {
-    mockCapabilities(capabilities);
+  it("opens the chooser with every choice enabled for a default member", async () => {
+    // A member creates agents and connects external ones, but does not manage
+    // organization settings.
+    serverHasPermissionsMock.mockImplementation(
+      (permissions: Record<string, readonly string[]>) =>
+        Promise.resolve(
+          Object.entries(permissions).every(([resource, actions]) =>
+            actions.every((action) =>
+              (
+                memberPermissions[resource as Resource] as readonly string[]
+              ).includes(action),
+            ),
+          ),
+        ),
+    );
 
     render(await NewAgentPageServer());
 
     expect(screen.getByTestId("agent-create-page")).toHaveAttribute(
       "data-can-create-agent",
-      String(capabilities.canCreateAgent),
+      "true",
     );
-    expect(screen.getByTestId("agent-create-page")).toHaveAttribute(
-      "data-can-add-external-agent",
-      String(capabilities.canAddExternalAgent),
-    );
-    expect(serverHasPermissionsMock).toHaveBeenCalledWith({
-      agent: ["create"],
-    });
-    expect(serverHasPermissionsMock).toHaveBeenCalledWith({
-      agent: ["read"],
-      organizationSettings: ["update"],
-    });
   });
 
-  it("refuses the page when neither capability bundle is available", async () => {
-    mockCapabilities({
-      canCreateAgent: false,
-      canAddExternalAgent: false,
-    });
+  it("refuses the page without Agent create permission", async () => {
+    serverHasPermissionsMock.mockResolvedValue(false);
 
     render(await NewAgentPageServer());
 

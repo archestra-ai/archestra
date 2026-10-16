@@ -485,18 +485,17 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetGuardrailsPolicy]: { openappaPolicy: ["read"] },
   [RouteId.ValidateGuardrailsPolicy]: { openappaPolicy: ["read"] },
   [RouteId.UpdateGuardrailsPolicy]: { openappaPolicy: ["update"] },
-  // Inspecting or mutating arbitrary outbound destinations can configure
-  // credential-bearing egress, so those operations remain settings-manager
-  // only. Credential-redacted registry summaries require Agent read and are
-  // visibility-filtered unless the caller can update Agent settings. Run
-  // history includes caller and conversation identifiers, so it requires
-  // Agent-settings read and intentionally permits organization-wide access.
+  // Connecting an external agent, and inspecting a URL before connecting it,
+  // needs Agent create, like building any other agent. The list and detail
+  // reads need Agent read and return only the external agents the caller can
+  // see. Run history needs the same: the caller must see that external agent,
+  // and then gets its recent runs from everyone in the organization.
+  // Each external agent's own permission policy decides who may change it.
   [RouteId.InspectA2aRemoteAgent]: { agent: ["create"] },
   [RouteId.ListA2aRemoteAgents]: { agent: ["read"] },
   [RouteId.GetA2aRemoteAgent]: { agent: ["read"] },
   [RouteId.ListA2aRemoteAgentRuns]: { agent: ["read"] },
   [RouteId.CreateA2aRemoteAgent]: { agent: ["create"] },
-  // Each external agent's own permission policy decides who may change it.
   [RouteId.UpdateA2aRemoteAgent]: { agent: ["read"] },
   [RouteId.DeleteA2aRemoteAgent]: { agent: ["read"] },
 

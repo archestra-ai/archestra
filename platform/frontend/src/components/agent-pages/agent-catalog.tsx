@@ -137,7 +137,6 @@ export function useAvailableAgentCatalogTemplates() {
 }
 
 export function AgentCatalog({
-  canAddExternalAgent,
   canCreateAgent,
   onStartFromScratch,
   onStartFromImage,
@@ -145,7 +144,7 @@ export function AgentCatalog({
   onSelect,
   runtimeAvailable,
 }: {
-  canAddExternalAgent: boolean;
+  /** Building an agent and connecting an external one both need Agent create. */
   canCreateAgent: boolean;
   onStartFromScratch: () => void;
   /** Starts a container agent from the reader's own image. */
@@ -248,8 +247,8 @@ export function AgentCatalog({
             title="Connect via A2A"
             description="Connect an A2A-compatible agent by its URL."
             onClick={onAddExternalAgent}
-            disabled={!canAddExternalAgent}
-            disabledReason="Requires permission to view agents and update agent settings."
+            disabled={!canCreateAgent}
+            disabledReason="Requires permission to create agents."
           />
         </div>
       </CatalogSection>

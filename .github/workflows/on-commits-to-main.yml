@@ -105,7 +105,7 @@ jobs:
   # See backend-test-dependencies in on-pull-requests.yml for the consumer.
   warm-backend-build-cache:
     name: Warm Backend Build Cache
-    runs-on: ubuntu-24.04
+    runs-on: ubicloud-standard-8-ubuntu-2404
     timeout-minutes: 20
     concurrency:
       group: on-commits-to-main-warm-backend-cache

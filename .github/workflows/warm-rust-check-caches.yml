@@ -19,7 +19,7 @@ permissions: {}
 jobs:
   warm-rust-check-caches:
     name: Warm ${{ matrix.cache-key }}
-    runs-on: ubuntu-latest
+    runs-on: ubicloud-standard-8-ubuntu-2404
     timeout-minutes: 25
     permissions:
       contents: read

@@ -30,6 +30,50 @@ process.stdout.write(JSON.stringify(vm.runInNewContext(input.expression, input.c
 
 
 class CachePolicyTests(unittest.TestCase):
+    def test_persistent_builder_is_opt_in_and_untrusted_events_use_local_builder(self):
+        action = (ROOT / ".github/actions/setup-docker-builder/action.yml").read_text()
+        expression = action.split("    - name: Setup persistent Docker builder\n", 1)[1]
+        expression = re.search(r"^      if: (.*)$", expression, re.M).group(1)
+        trusted = ("push", "merge_group", "schedule", "workflow_dispatch")
+        for event in (*trusted, "pull_request", "pull_request_target", "workflow_run"):
+            for key in ("", "platform-e2e-linux-amd64"):
+                with self.subTest(event=event, key=key):
+                    selected = evaluate(expression, {
+                        "inputs": {"cache-key": key},
+                        "github": {"event_name": event},
+                    })
+                    self.assertEqual(selected, bool(key) and event in trusted)
+
+    def test_missing_or_local_persistent_builder_uses_standard_fallback(self):
+        action = (ROOT / ".github/actions/setup-docker-builder/action.yml").read_text()
+        inspect = action.split("    - name: Inspect persistent Docker builder\n", 1)[1]
+        inspect, fallback = inspect.split("    - name: Setup Docker builder\n", 1)
+        script = "\n".join(line[8:] for line in inspect.split("      run: |\n", 1)[1].splitlines())
+        expression = re.search(r"^      if: (.*)$", fallback, re.M).group(1)
+        for driver in ("remote", "docker-container", "docker", "unavailable"):
+            with self.subTest(driver=driver), tempfile.TemporaryDirectory() as directory:
+                directory = Path(directory)
+                output = directory / "output"
+                output.touch()
+                docker = directory / "docker"
+                docker.write_text(
+                    '#!/bin/bash\n[ "$ARCHESTRA_TEST_DOCKER_DRIVER" != unavailable ] || exit 1\n'
+                    'echo "$ARCHESTRA_TEST_DOCKER_DRIVER"\n'
+                )
+                docker.chmod(0o755)
+                result = subprocess.run(
+                    ["bash", "-e", "-c", script], text=True, capture_output=True,
+                    env=os.environ | {
+                        "PATH": f"{directory}:{os.environ['PATH']}",
+                        "GITHUB_OUTPUT": str(output), "ARCHESTRA_TEST_DOCKER_DRIVER": driver,
+                    },
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                persistent = "true" if "persistent=true" in output.read_text() else ""
+                self.assertEqual(evaluate(expression, {
+                    "steps": {"builder": {"outputs": {"persistent": persistent}}},
+                }), driver != "remote")
+
     def test_only_trusted_default_branch_publishers_can_save_rust_caches(self):
         action = (ROOT / ".github/actions/setup-rust-build/action.yml").read_text()
         expression = re.search(r"^        save-if: \$\{\{ (.*) \}\}$", action, re.M).group(1)

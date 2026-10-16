@@ -500,7 +500,7 @@ jobs:
     name: Platform Rust Checks
     needs: dagger-sdk-integration
     if: always() && github.event_name == 'merge_group'
-    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubuntu-latest' }}
+    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubicloud-standard-8-ubuntu-2404' }}
     timeout-minutes: 15
     permissions:
       contents: read
@@ -655,7 +655,7 @@ jobs:
     needs: supply-chain-policy
     if: github.event_name == 'merge_group'
     # mac-mini routing (see comment above platform-rust-checks)
-    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubuntu-latest' }}
+    runs-on: ${{ github.event_name == 'merge_group' && vars.MAC_MINI_CI == 'on' && fromJSON('["self-hosted", "mac-mini-1"]') || 'ubicloud-standard-8-ubuntu-2404' }}
     timeout-minutes: 15
     permissions:
       contents: read
@@ -763,15 +763,15 @@ jobs:
           fi
           echo "run=${run}" >> "${GITHUB_OUTPUT}"
 
-  # Restore/build native dependencies once before allocating paid test runners.
-  # Standard GitHub-hosted runners are free for this public repository; a cold
-  # native cache must not compile the same four addons on every paid shard.
+  # Restore/build native dependencies once before allocating test shards.
+  # Use the same Ubicloud image as the main-branch native cache publisher;
+  # a cold cache must not compile the same four addons on every shard.
   # Keep this on Ubuntu 24.04 x64, matching the consumers' glibc/architecture.
   backend-test-dependencies:
     name: Prepare Backend Test Dependencies
     needs: [backend-test-inputs]
     if: github.event_name == 'merge_group' && needs.backend-test-inputs.outputs.run == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubicloud-standard-8-ubuntu-2404
     timeout-minutes: 30
     permissions:
       contents: read

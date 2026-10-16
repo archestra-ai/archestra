@@ -210,7 +210,6 @@ describe("guardrails batteries", () => {
       rootRevision: root.revision,
       lastError: null,
       managedInGithub: false,
-      heldPull: null,
       batteries: [{ name: "github", status: "missing_credentials" }],
     });
     const inactive = await OpenAppaEffectivePolicyModel.find(organizationId);

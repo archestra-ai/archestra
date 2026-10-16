@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { ADMIN_ROLE_NAME, ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
@@ -8,6 +9,7 @@ import {
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
@@ -293,17 +295,20 @@ describe("binding a battery credential", () => {
     });
   });
 
-  test("a variable the policy text binds is the text's to change", async ({
+  test("a variable a stored policy text binds is the text's to change", async ({
     makeInternalMcpCatalog,
     makeTool,
   }) => {
     await includeGithub(makeInternalMcpCatalog, makeTool);
     await connectGithubToken();
     const latest = await guardrailsPolicyService.get(organizationId);
-    await guardrailsPolicyService.update({
+    // A revision saved before validation refused `[credentials]` lines.
+    const content = `${latest.content}\n[credentials]\n${GITHUB_TOKEN} = "github-token"\n`;
+    await GuardrailsPolicyModel.save({
       organizationId,
-      userId: admin.id,
-      content: `${latest.content}\n[credentials]\n${GITHUB_TOKEN} = "github-token"\n`,
+      updatedBy: admin.id,
+      content,
+      contentHash: createHash("sha256").update(content).digest("hex"),
       expectedRevision: latest.revision,
     });
 

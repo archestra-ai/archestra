@@ -49,7 +49,7 @@ Without enforcement, the proxy and the MCP gateway apply no tool-call guardrails
 
 The HTTP API and policy tools share validation and revision checks. Edits compile without calling external services. The next dispatch loads the latest saved revision under the runtime lock. New conversations use it, while existing conversations keep their recorded policy snapshot.
 
-The editor accepts `[policy]`, `[server_aliases]`, `[credentials]`, and URL bindings in `[externals]`. It only permits battery declarations in `include` entries. Any other include, local command, or runtime setting causes a validation failure. Reference tokens through `token_env`. Policy documents must not contain raw secrets.
+The editor accepts `[policy]`, `[server_aliases]`, and URL bindings in `[externals]`. It only permits battery declarations in `include` entries. Any other include, local command, or runtime setting causes a validation failure. For now the text names no credentials: validation refuses a `[credentials]` table and a root `token_env`, and every save path (UI, agent tools, GitHub sync) runs that check. Battery credentials are stored bindings (`openappa_credential_bindings`), set from the Batteries page or `bind_guardrails_credential`. This is a temporary rule until credentials and Git sync are designed together.
 
 Revision `0` is an unsaved starter template (`initialPolicy()` in [`guardrails-policy.ts`](../platform/backend/src/services/guardrails-policy.ts)). It includes the bundled Archestra battery, an Archestra server alias, `internal = ["archestra:members"]`, `context_control = true`, and a local wildcard annotator (`noop`). The wildcard annotator adds no restrictions to uncovered tools. Explicit tool rules always take precedence over the wildcard.
 
@@ -69,7 +69,7 @@ While connected, the policy editor and Batteries panel are read-only, and direct
 
 Stopping sync keeps the active policy and re-enables local editing. Existing conversations keep their original policy snapshot.
 
-The system *holds* a pull instead of publishing it if the file drops a declared battery (while `declarations_pending_publish` is set) or modifies a `[credentials]` grant. The database stores the held text, its hash, the commit, and the hold reasons (`drops_batteries` or `changes_credentials`). To accept held text, call `POST /api/openappa/github-sync/accept-held`. This call requires `openappaPolicy:update`, plus `credential:update` if credentials changed.
+A pulled file is refused, and the active policy stays, if it names a credential or would hand a stored binding to an uploaded battery. Bindings reach bundled batteries without review. The refusal is the sync error.
 
 An invalid download preserves the current revision. If composition fails on a new revision, the runtime continues serving the previous effective policy.
 

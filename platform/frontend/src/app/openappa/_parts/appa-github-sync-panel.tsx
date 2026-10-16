@@ -49,7 +49,6 @@ import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { appaGitHost } from "./appa-git-host";
 import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
-import { HeldPullNotice } from "./held-pull-notice";
 
 type Source = NonNullable<
   archestraApiTypes.GetAppaGithubSyncResponses["200"]["source"]
@@ -101,21 +100,17 @@ export function AppaGithubSyncPanel() {
       ? "Waiting for the first sync"
       : "Automatic updates stopped";
   const connected = !!source?.interval;
-  // A held pull is not a failure: it waits for someone here to approve it.
-  const held = !!source?.heldReasons?.length;
   const status = !enabled
     ? "Disabled"
-    : held
-      ? "Needs approval"
-      : source?.lastSyncError
-        ? "Sync failed"
-        : connected && source?.setupPullRequestNumber
-          ? `Waiting for setup ${git.changeRequestShort}`
-          : connected
-            ? "Connected"
-            : hasPolicy
-              ? "Sync stopped"
-              : null;
+    : source?.lastSyncError
+      ? "Sync failed"
+      : connected && source?.setupPullRequestNumber
+        ? `Waiting for setup ${git.changeRequestShort}`
+        : connected
+          ? "Connected"
+          : hasPolicy
+            ? "Sync stopped"
+            : null;
   return (
     <>
       <SettingsBlock
@@ -125,9 +120,7 @@ export function AppaGithubSyncPanel() {
             {/* No badge until sync is set up: there is no state to report. */}
             {status && (
               <Badge
-                variant={
-                  source?.lastSyncError && !held ? "destructive" : "outline"
-                }
+                variant={source?.lastSyncError ? "destructive" : "outline"}
               >
                 {status}
               </Badge>
@@ -254,17 +247,7 @@ export function AppaGithubSyncPanel() {
                     </InlineNotice>
                   </GitSourceNotice>
                 )}
-                {held ? (
-                  <GitSourceNotice>
-                    <HeldPullNotice
-                      batteriesLink
-                      held={{
-                        reasons: source.heldReasons,
-                        message: source.lastSyncError,
-                      }}
-                    />
-                  </GitSourceNotice>
-                ) : source.lastSyncError ? (
+                {source.lastSyncError ? (
                   <GitSourceError
                     title="Could not sync policy"
                     message={source.lastSyncError}

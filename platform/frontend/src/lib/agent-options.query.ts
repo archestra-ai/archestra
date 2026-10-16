@@ -61,21 +61,24 @@ export function useAgentOptionsPage({
 /** Names for explicit references, without fetching unrelated agents. */
 export function useAgentOptionsByIds({
   ids,
+  filters,
   enabled = true,
 }: {
   ids: readonly string[];
+  filters?: archestraApiTypes.GetAgentOptionsData["query"];
   enabled?: boolean;
 }) {
   const uniqueIds = [...new Set(ids)].sort();
   return useQuery({
-    queryKey: ["agents", "options", "ids", uniqueIds],
+    queryKey: ["agents", "options", "ids", uniqueIds, filters],
     queryFn: async () => {
       const options: archestraApiTypes.GetAgentOptionsResponses["200"] = [];
       for (let offset = 0; offset < uniqueIds.length; offset += 100) {
         const { data, error } = await archestraApiSdk.getAgentOptions({
           query: {
-            ids: uniqueIds.slice(offset, offset + 100),
             excludeBuiltIn: false,
+            ...filters,
+            ids: uniqueIds.slice(offset, offset + 100),
           },
         });
         throwOnApiError(error, { toastOnError: false });

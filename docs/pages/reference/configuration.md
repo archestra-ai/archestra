@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 2
-lastUpdated: 2026-10-16
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -117,7 +117,6 @@ Archestra reads its configuration from environment variables. Pass them with `-e
 - **`ARCHESTRA_ANALYTICS`** - Sends product analytics to Archestra, and forwards [Guardrails](#guardrails) diagnostic reports to the shared OpenAPPA reporting service.
   - Default: on in production builds, including the released Docker images; off in development
   - Values: `disabled` turns it off. Any other value turns it on.
-  - Session replays mask text and inputs, block sensitive screens and media, and exclude network headers, bodies, and console output. Replay and event URLs omit query strings and fragments. Automatic DOM capture is disabled.
 
 - **`ARCHESTRA_ANALYTICS_POSTHOG_KEY`** - PostHog project key for analytics.
   - Default: Archestra's PostHog project

@@ -65,6 +65,7 @@ import { verifyContentEncryptionKey } from "@/content-encryption/guard.ee";
 import { assertRetentionConfigLicensed } from "@/data-retention/license-gate.ee";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
 import {
+  createAgentToolsIndexes,
   dropContentTrgmIndexesUnderEncryption,
   dropLegacyPayloadTrgmIndexes,
 } from "@/database/index-maintenance";
@@ -1023,11 +1024,13 @@ const startWebServer = async () => {
       registerTaskHandlers(taskQueueService);
       await taskQueueService.seedPeriodicTasks();
       taskQueueService.startWorker();
-      // Fire-and-forget: concurrent (non-write-blocking) drop of legacy
-      // interactions payload indexes on deployments upgrading from before
-      // migration 0116 stopped creating them. Idempotent; errors are logged
-      // inside and retried next boot.
+      // Fire-and-forget index maintenance, all concurrent (non-write-blocking):
+      // drop the legacy interactions payload indexes on deployments upgrading
+      // from before migration 0116 stopped creating them, and build the
+      // agent_tools lookup indexes. Idempotent; errors are logged inside and
+      // retried next boot.
       void dropLegacyPayloadTrgmIndexes();
+      void createAgentToolsIndexes();
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -1493,9 +1496,10 @@ const startWorker = async () => {
     // reconcile/sweep remain web-side.
     McpServerRuntimeManager.startStateWatchersOnly();
     // SPDX-SnippetEnd
-    // See the shouldRunWorker branch in `start` — same legacy-index cleanup,
+    // See the shouldRunWorker branch in `start` — same index maintenance,
     // for the dedicated worker Deployment.
     void dropLegacyPayloadTrgmIndexes();
+    void createAgentToolsIndexes();
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise

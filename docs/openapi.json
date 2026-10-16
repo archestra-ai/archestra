@@ -212197,7 +212197,41 @@
         "tags": [
           "Interaction"
         ],
-        "description": "Get user IDs represented in visible logs in the active organization. `log:read` returns the caller's identity; `log:admin` returns every represented user in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization\n\n`log:read` returns the caller's identity. `log:admin` includes every represented user in the active organization.",
+        "description": "Get users represented in visible logs in the active organization, at most `limit` of them. Without `search` or `ids`, the most active users come first. `search` matches user names; `ids` resolves specific users. `log:read` returns only the caller; `log:admin` returns users from every log in the organization.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:read`: View your own LLM proxy and MCP tool call logs in the active organization\n\n`log:read` returns the caller's identity. `log:admin` includes every represented user in the active organization.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "search",
+            "required": false
+          },
+          {
+            "schema": {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "in": "query",
+            "name": "ids",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",

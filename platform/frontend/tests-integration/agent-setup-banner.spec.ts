@@ -181,15 +181,27 @@ async function setAccountState({
 }
 
 /**
- * Opens sign-in from the checklist row's own action. Once the account
- * connects the agent is ready, and the dialog it opened goes away.
+ * Opens sign-in from the checklist row's own action, which starts Claude's
+ * flow at once. Once the account connects the agent is ready, and the dialog
+ * it opened goes away.
  */
 async function connectClaudeAccount(page: Page, mswControl: MswControl) {
+  await mswControl.use({
+    method: "post",
+    url: `/api/agents/${AGENT.id}/runtime/claude-code/account`,
+    body: {
+      state: "awaiting_code",
+      flowId: "00000000-0000-4000-8000-000000000001",
+      authorizationUrl: "https://claude.example.test/oauth/authorize",
+    },
+  });
   await page
     .getByRole("status")
     .getByRole("button", { name: "Sign in with Claude" })
     .click();
-  await expect(page.getByRole("dialog")).toBeVisible();
+  // One click starts Claude's sign-in: the dialog opens on its steps.
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("link", { name: "Open Claude" })).toBeVisible();
   await setAccountState({
     mswControl,
     account: { state: "connected" },

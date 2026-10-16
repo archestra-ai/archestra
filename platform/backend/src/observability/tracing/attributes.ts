@@ -109,6 +109,10 @@ export const ATTR_ARCHESTRA_AGENT_LABEL_PREFIX = "archestra.agent.label.";
 // principal can belong to multiple teams, so ids/names are array-valued and team
 // label values are merged per key across all of the principal's teams.
 
+// --- MCP ---
+// The JSON-RPC method of an MCP request, per the MCP semantic conventions.
+export const ATTR_MCP_METHOD_NAME = "mcp.method.name";
+
 // --- MCP custom ---
 export const ATTR_MCP_SERVER_NAME = "mcp.server.name";
 export const ATTR_MCP_BLOCKED = "mcp.blocked";

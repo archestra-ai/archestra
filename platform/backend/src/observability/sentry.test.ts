@@ -1,8 +1,16 @@
 import { ArchestraInternalErrorCode } from "@archestra/shared";
-import type { ErrorEvent, EventHint } from "@sentry/core";
+import { SpanKind } from "@opentelemetry/api";
+import { BasicTracerProvider } from "@opentelemetry/sdk-trace-base";
+import type { ErrorEvent, EventHint, TransactionEvent } from "@sentry/core";
+import * as Sentry from "@sentry/node";
+import { SentrySampler, SentrySpanProcessor } from "@sentry/opentelemetry";
 import { describe, expect, test } from "vitest";
 import { ApiError, SECRETS_MANAGER_UNAVAILABLE_INTERNAL_CODE } from "@/types";
-import { buildRawProviderError, filterErrorEvent } from "./sentry";
+import {
+  buildRawProviderError,
+  filterErrorEvent,
+  filterTransactionEvent,
+} from "./sentry";
 
 function makeEvent(): ErrorEvent {
   return {} as ErrorEvent;
@@ -152,5 +160,96 @@ describe("filterErrorEvent", () => {
         hintFor(new Error("undefined is not a function")),
       ),
     ).toBe(event);
+  });
+});
+
+describe("filterTransactionEvent", () => {
+  function mcpGatewayTransaction(method?: string): TransactionEvent {
+    return {
+      type: "transaction",
+      transaction: "POST /v1/mcp/:profileId",
+      contexts: {
+        trace: {
+          trace_id: "0".repeat(32),
+          span_id: "0".repeat(16),
+          data: method ? { "mcp.method.name": method } : {},
+        },
+      },
+    };
+  }
+
+  test("drops a long-lived MCP stream", () => {
+    expect(
+      filterTransactionEvent(mcpGatewayTransaction("subscriptions/listen")),
+    ).toBeNull();
+  });
+
+  test("keeps ordinary MCP gateway requests on the same route", () => {
+    for (const event of [
+      mcpGatewayTransaction("tools/call"),
+      mcpGatewayTransaction("tools/list"),
+      mcpGatewayTransaction(),
+    ]) {
+      expect(filterTransactionEvent(event)).toBe(event);
+    }
+  });
+
+  // Runs server spans through the SDK's own span-to-transaction export. An SDK
+  // upgrade that moves span attributes out of `contexts.trace.data` fails here
+  // instead of silently sending the streams again.
+  test("reads the method from the transaction the SDK builds for a server span", async () => {
+    const decisions: Array<[unknown, boolean]> = [];
+    const client = new Sentry.NodeClient({
+      dsn: "http://public@127.0.0.1:9/1",
+      integrations: [],
+      tracesSampleRate: 1,
+      stackParser: Sentry.defaultStackParser,
+      transport: (options) =>
+        Sentry.createTransport(options, async () => ({ statusCode: 200 })),
+      beforeSendTransaction: (event) => {
+        decisions.push([
+          event.contexts?.trace?.data?.["mcp.method.name"],
+          filterTransactionEvent(event) === null,
+        ]);
+        return null;
+      },
+    });
+    const provider = new BasicTracerProvider({
+      sampler: new SentrySampler(client),
+      spanProcessors: [new SentrySpanProcessor()],
+    });
+    Sentry.setCurrentClient(client);
+    client.init();
+    try {
+      const tracer = provider.getTracer("test");
+      for (const method of ["subscriptions/listen", "tools/call"]) {
+        const span = tracer.startSpan("POST /v1/mcp/:profileId", {
+          kind: SpanKind.SERVER,
+          attributes: { "sentry.op": "http.server" },
+        });
+        span.setAttribute("mcp.method.name", method);
+        span.end();
+      }
+      await provider.forceFlush();
+      await client.flush(2_000);
+    } finally {
+      Sentry.getCurrentScope().setClient(undefined);
+      await client.close();
+      await provider.shutdown();
+    }
+
+    expect(decisions).toEqual([
+      ["subscriptions/listen", true],
+      ["tools/call", false],
+    ]);
+  });
+
+  test("still drops noisy transactions by name", () => {
+    expect(
+      filterTransactionEvent({
+        type: "transaction",
+        transaction: "GET /v1/mcp/:profileId",
+      }),
+    ).toBeNull();
   });
 });

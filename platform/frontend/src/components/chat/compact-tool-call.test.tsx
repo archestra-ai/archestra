@@ -42,6 +42,7 @@ vi.mock("@/components/mcp-catalog-icon", () => ({
 }));
 
 import { CompactToolGroup } from "./compact-tool-call";
+import { identifyRemedyChains } from "./openappa-remedy-chains";
 
 const LOAD_SKILL_TOOL_NAME = "archestra__load_skill";
 
@@ -337,6 +338,85 @@ describe("CompactToolGroup", () => {
 
     expect(screen.getByText(header)).toBeInTheDocument();
     expect(screen.queryByText("Completed")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { humanRuling: undefined, label: "Blocked" },
+    { humanRuling: "deny", label: "Denied by you" },
+  ])("names a guarded call by its target until it is released ($label)", ({
+    humanRuling,
+    label,
+  }) => {
+    mockGetToolShortName.mockImplementation((name: string) =>
+      name.startsWith("archestra__") ? name.replace("archestra__", "") : null,
+    );
+    const ruling =
+      '[appa] Blocked.\n  - archestra__execute_remedy_plan(offer_id: "0b0b0b0b0b0b0b0b", plan: "Accept")';
+    const notice = {
+      type: "tool-archestra__get_remedy_plans",
+      state: "output-available",
+      toolCallId: "call-notice",
+      input: {
+        tool: "fs__read_file",
+        arguments: { path: "/notes.md" },
+        ruling,
+        notice: { v: 1, call_id: "call-notice" },
+      },
+      output: ruling,
+    };
+    const [chain] = identifyRemedyChains(
+      [
+        notice,
+        {
+          type: "tool-archestra__execute_remedy_plan",
+          state: "output-available",
+          toolCallId: "call-remedy",
+          input: { offer_id: "0b0b0b0b0b0b0b0b", plan: "Accept" },
+          output: {
+            content: [{ type: "text", text: "[appa] Not authorized." }],
+            ...(humanRuling
+              ? { _meta: { archestraHumanRuling: humanRuling } }
+              : {}),
+          },
+        },
+      ],
+      { getToolShortName: mockGetToolShortName },
+    );
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CompactToolGroup
+          tools={[
+            {
+              kind: "tool",
+              key: "chain-1",
+              toolName: "archestra__get_remedy_plans",
+              part: notice as never,
+              toolResultPart: null,
+              errorText: undefined,
+              remedyChain: chain,
+            },
+          ]}
+        />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: `read file (${label.toLowerCase()})`,
+      }),
+    );
+
+    expect(screen.getByText("fs__read_file")).toBeInTheDocument();
+    expect(screen.getAllByText(label).length).toBeGreaterThan(0);
+    expect(screen.getByText("Guardrails")).toBeInTheDocument();
+    expect(
+      screen
+        .getAllByText(/^archestra__(get_remedy_plans|execute_remedy_plan)$/)
+        .map((node) => node.textContent),
+    ).toEqual([
+      "archestra__get_remedy_plans",
+      "archestra__execute_remedy_plan",
+    ]);
   });
 
   it("renders a compact Skill marker for a load_skill activation (no path)", () => {

@@ -62,6 +62,14 @@ import {
   OpenAppaPolicyCompletion,
   OpenAppaValidationCompletion,
 } from "./openappa-policy-change";
+import {
+  RemedyChainCard,
+  withParsedArguments,
+} from "./openappa-remedy-chain-card";
+import {
+  getRemedyChainStatus,
+  type RemedyChain,
+} from "./openappa-remedy-chains";
 import { withoutProxyTransportArguments } from "./proxy-transport-arguments";
 import { RuntimeCredentialSetupTool } from "./runtime-credential-setup-tool";
 import { getSkillPillDisplay, SkillPill } from "./skill-pill";
@@ -79,6 +87,8 @@ type CompactToolEntry = {
   /** A delegation call's surfaced subagent tool calls, rendered between its
    * Request and Result once the circle is expanded. */
   nestedToolCalls?: React.ReactNode;
+  /** The whole guarded call this circle stands for. */
+  remedyChain?: RemedyChain;
 };
 
 type CompactAppEntry = {
@@ -91,6 +101,8 @@ type CompactAppEntry = {
   errorText: string | undefined;
   /** Never set for app entries; present so ExpandedToolCard can take either. */
   nestedToolCalls?: React.ReactNode;
+  /** Set when the app call is the released attempt of a guarded call. */
+  remedyChain?: RemedyChain;
 };
 
 type CompactHookEntry = {
@@ -473,6 +485,27 @@ export function CompactToolGroup({
               />
             );
           }
+          // A guarded call reads as one call of its target tool; the
+          // Guardrails negotiation shows only once it is expanded.
+          if (
+            entry.remedyChain &&
+            !(entry.kind === "app" && appRenders.has(entry.key))
+          ) {
+            const status = getRemedyChainStatus(entry.remedyChain);
+            return (
+              <CompactCircle
+                key={entry.key}
+                toolName={entry.remedyChain.targetToolName}
+                toolCallId={entry.remedyChain.finalAttempt?.part.toolCallId}
+                state={status.state}
+                stateLabel={status.label}
+                isExpanded={expandedKey === entry.key}
+                isExpandable={canExpandToolCalls}
+                onClick={() => handleToggle(entry.key)}
+                {...circleIconProps(entry.remedyChain.targetToolName)}
+              />
+            );
+          }
           const state = getCompactToolState({
             part: entry.part,
             toolResultPart: entry.toolResultPart,
@@ -625,6 +658,11 @@ export function CompactToolGroup({
         <div className="mt-2">
           {expandedEntry.kind === "hook" ? (
             <HookRunChip data={expandedEntry.data} defaultOpen />
+          ) : expandedEntry.remedyChain ? (
+            <RemedyChainCard
+              chain={expandedEntry.remedyChain}
+              onToolApprovalResponse={onToolApprovalResponse}
+            />
           ) : (
             <ExpandedToolCard
               tool={expandedEntry}
@@ -666,10 +704,17 @@ export function CompactToolGroup({
                 // Surfaced only when the app renders nothing to display, so the
                 // call stays inspectable instead of the section going blank.
                 toolDetails={
-                  <ExpandedToolCard
-                    tool={entry}
-                    onToolApprovalResponse={onToolApprovalResponse}
-                  />
+                  entry.remedyChain ? (
+                    <RemedyChainCard
+                      chain={entry.remedyChain}
+                      onToolApprovalResponse={onToolApprovalResponse}
+                    />
+                  ) : (
+                    <ExpandedToolCard
+                      tool={entry}
+                      onToolApprovalResponse={onToolApprovalResponse}
+                    />
+                  )
                 }
                 onSendMessage={appContext.onSendMessage}
               />
@@ -853,22 +898,4 @@ function ExpandedToolCard({
       </ToolContent>
     </Tool>
   );
-}
-
-/**
- * A denial notice carries the blocked call's arguments in their wire form.
- * When that form is a JSON string, show the object it holds.
- */
-function withParsedArguments(input: ToolUIPart["input"]): ToolUIPart["input"] {
-  if (typeof input !== "object" || input === null) return input;
-  const { arguments: args } = input as { arguments?: unknown };
-  if (typeof args !== "string") return input;
-  try {
-    return {
-      ...(input as Record<string, unknown>),
-      arguments: JSON.parse(args),
-    };
-  } catch {
-    return input;
-  }
 }

@@ -97,6 +97,9 @@ vi.mock("@/components/ai-elements/tool", () => ({
   ToolErrorDetails: ({ errorText }: { errorText: string }) => (
     <div>{errorText}</div>
   ),
+  SectionLabel: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
 }));
 
 vi.mock("@/components/chat/editable-assistant-message", () => ({
@@ -1540,6 +1543,116 @@ describe("ChatMessages", () => {
     }
   });
 
+  it("renders a guarded call as one circle whose card shows the negotiation in order", () => {
+    const blocked = remedyChainParts({
+      prefix: "a",
+      tool: "workspace__show_board",
+      args: { board: "roadmap" },
+    });
+    const other = remedyChainParts({
+      prefix: "b",
+      tool: "sparky__list_skills",
+      args: {},
+      viaRunTool: true,
+    });
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          blocked.notice,
+          other.notice,
+          {
+            type: "tool-workspace__clock",
+            toolCallId: "call-clock",
+            state: "output-available",
+            input: {},
+            output: "noon",
+          },
+          other.remedy,
+          blocked.remedy,
+          other.retry,
+          blocked.retry,
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(
+      screen
+        .getAllByRole("button", { expanded: false })
+        .map((button) => button.getAttribute("aria-label")),
+    ).toEqual(["show board", "list skills", "clock"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "show board" }));
+
+    const card = screen.getByText("tool-workspace__show_board").parentElement;
+    expect(card).not.toBeNull();
+    const text = card?.textContent ?? "";
+    const order = [
+      '{"board":"roadmap"}',
+      "Guardrails",
+      "tool-sparky__get_remedy_plans",
+      "tool-sparky__execute_remedy_plan",
+      '"a: board shown"',
+    ].map((needle) => text.indexOf(needle));
+    expect(order.every((index) => index >= 0)).toBe(true);
+    expect(order).toEqual([...order].sort((x, y) => x - y));
+    // The other guarded call's negotiation stays in its own card.
+    expect(text).not.toContain("b: skills listed");
+  });
+
+  it("keeps a guarded call's approval prompt visible in one full card", () => {
+    const onToolApprovalResponse = vi.fn();
+    const chain = remedyChainParts({
+      prefix: "a",
+      tool: "workspace__export_records",
+      args: { destination: "external" },
+    });
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [
+          chain.notice,
+          chain.remedy,
+          {
+            ...chain.retry,
+            state: "approval-requested",
+            output: undefined,
+            approval: { id: "approval-1" },
+          },
+        ],
+      },
+    ] as unknown as UIMessage[];
+
+    render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+        onToolApprovalResponse={onToolApprovalResponse}
+      />,
+    );
+
+    expect(screen.getAllByText("tool-workspace__export_records")).toHaveLength(
+      1,
+    );
+    expect(screen.getByText("Guardrails")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    expect(onToolApprovalResponse).toHaveBeenCalledWith({
+      id: "approval-1",
+      approved: true,
+    });
+  });
+
   it("renders approval controls for a direct tool call that requires approval", () => {
     const onToolApprovalResponse = vi.fn();
     const messages = [
@@ -2230,3 +2343,51 @@ describe("owned-app inline rendering", () => {
     );
   });
 });
+
+/** One guarded call as Chat receives it: notice, remedy, released retry. */
+function remedyChainParts(params: {
+  prefix: string;
+  tool: string;
+  args: Record<string, unknown>;
+  viaRunTool?: boolean;
+}) {
+  const { prefix, tool, args } = params;
+  const offerId = `${prefix.charCodeAt(0).toString(16)}0000000000000a`;
+  const ruling = `[appa] Blocked: ${tool} cannot run yet.\n  - sparky__execute_remedy_plan(offer_id: "${offerId}", plan: "Accept")`;
+  return {
+    notice: {
+      type: "tool-sparky__get_remedy_plans",
+      toolCallId: `${prefix}-notice`,
+      state: "output-available",
+      input: {
+        tool,
+        arguments: JSON.stringify(args),
+        ruling,
+        notice: { v: 1, call_id: `${prefix}-notice` },
+      },
+      output: ruling,
+    },
+    remedy: {
+      type: "tool-sparky__execute_remedy_plan",
+      toolCallId: `${prefix}-remedy`,
+      state: "output-available",
+      input: { offer_id: offerId, plan: "Accept" },
+      output: "[appa] Authorized.",
+    },
+    retry: params.viaRunTool
+      ? {
+          type: "tool-sparky__run_tool",
+          toolCallId: `${prefix}-retry`,
+          state: "output-available",
+          input: { tool_name: tool, tool_args: args },
+          output: `${prefix}: skills listed`,
+        }
+      : {
+          type: `tool-${tool}`,
+          toolCallId: `${prefix}-retry`,
+          state: "output-available",
+          input: args,
+          output: `${prefix}: board shown`,
+        },
+  };
+}

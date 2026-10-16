@@ -280,6 +280,86 @@ describe("identifyRemedyChains", () => {
   });
 });
 
+describe("getRemedyChainStatus while the turn is active", () => {
+  const blockedOnly = [notice({ id: "c1", tool: "fs__read", args: {} })];
+  const remedied = [
+    ...blockedOnly,
+    remedy({ id: "c2", offerId: offerFor("c1") }),
+  ];
+  const denied = [
+    ...blockedOnly,
+    remedy({ id: "c2", offerId: offerFor("c1"), humanRuling: "deny" }),
+  ];
+  const chainOf = (parts: unknown[]) =>
+    identifyRemedyChains(parts, { getToolShortName })[0];
+
+  it.each([
+    {
+      name: "a blocked call",
+      parts: blockedOnly,
+      after: { state: "denied", label: "Blocked" },
+    },
+    {
+      name: "a remedied call not yet retried",
+      parts: remedied,
+      after: { state: "denied", label: "Blocked" },
+    },
+    {
+      name: "a remedy the user denied",
+      parts: denied,
+      after: { state: "denied", label: "Denied by you" },
+    },
+  ])("reads $name as running until the turn ends", ({ parts, after }) => {
+    const chain = chainOf(parts);
+    expect(getRemedyChainStatus(chain, { turnActive: true })).toEqual({
+      state: "running",
+    });
+    expect(getRemedyChainStatus(chain)).toEqual(after);
+  });
+
+  it("follows the released attempt: running until its result, then settled", () => {
+    const inProgress = chainOf([
+      ...remedied,
+      {
+        type: "tool-fs__read",
+        toolCallId: "c3",
+        state: "input-available",
+        input: {},
+      },
+    ]);
+    const completed = chainOf([
+      ...remedied,
+      call({ id: "c3", toolName: "fs__read", input: {} }),
+    ]);
+
+    expect(getRemedyChainStatus(inProgress, { turnActive: true }).state).toBe(
+      "running",
+    );
+    expect(getRemedyChainStatus(completed, { turnActive: true }).state).toBe(
+      "completed",
+    );
+  });
+
+  it("names the target of a notice still streaming its input", () => {
+    const [chain] = identifyRemedyChains(
+      [
+        {
+          type: `tool-${NOTICE}`,
+          toolCallId: "c1",
+          state: "input-streaming",
+          input: { tool: "fs__read" },
+        },
+      ],
+      { getToolShortName },
+    );
+
+    expect(chain.targetToolName).toBe("fs__read");
+    expect(getRemedyChainStatus(chain, { turnActive: true }).state).toBe(
+      "running",
+    );
+  });
+});
+
 // === Fixtures ===
 
 /** The offer id a test ruling for `callId` names. */

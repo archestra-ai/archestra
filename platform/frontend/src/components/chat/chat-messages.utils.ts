@@ -12,6 +12,7 @@ import {
   SUBAGENT_TOOL_CALL_PART_TYPE,
   type SubagentToolCallPartData,
   TOOL_COPY_FILE_SHORT_NAME,
+  TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
@@ -773,6 +774,19 @@ export function identifyCompactToolGroups(
     // Chain members render inside their chain's entry, so they neither join
     // nor break the row.
     if (consumedIndices.has(idx)) continue;
+
+    // A denial notice whose input has not named its target yet renders
+    // nothing, so the row never flashes a separate notice circle before the
+    // notice joins its chain.
+    if (
+      rawPart.state === "input-streaming" &&
+      options?.getToolShortName?.(toolName) ===
+        TOOL_GET_REMEDY_PLANS_SHORT_NAME &&
+      !remedyChainByAnchor.has(idx)
+    ) {
+      consumedIndices.add(idx);
+      continue;
+    }
 
     const remedyChain = remedyChainByAnchor.get(idx);
     if (remedyChain) {

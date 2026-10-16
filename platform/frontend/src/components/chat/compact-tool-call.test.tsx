@@ -239,6 +239,60 @@ describe("CompactToolGroup", () => {
   });
 
   it.each([
+    { turnActive: true, name: "read file (running)", dot: "bg-blue-500" },
+    { turnActive: false, name: "read file (blocked)", dot: "bg-orange-500" },
+  ])("shows a negotiating guarded call as running while its turn is active ($turnActive)", ({
+    turnActive,
+    name,
+    dot,
+  }) => {
+    mockGetToolShortName.mockImplementation((toolName: string) =>
+      toolName.startsWith("archestra__")
+        ? toolName.replace("archestra__", "")
+        : null,
+    );
+    const ruling =
+      '[appa] Blocked.\n  - archestra__execute_remedy_plan(offer_id: "0d0d0d0d0d0d0d0d")';
+    const notice = {
+      type: "tool-archestra__get_remedy_plans",
+      state: "output-available",
+      toolCallId: "call-notice",
+      input: {
+        tool: "fs__read_file",
+        arguments: {},
+        ruling,
+        notice: { v: 1, call_id: "call-notice" },
+      },
+      output: ruling,
+    };
+    const [chain] = identifyRemedyChains([notice], {
+      getToolShortName: mockGetToolShortName,
+    });
+
+    render(
+      <CompactToolGroup
+        turnActive={turnActive}
+        tools={[
+          {
+            kind: "tool",
+            key: "chain-1",
+            toolName: "archestra__get_remedy_plans",
+            part: notice as never,
+            toolResultPart: null,
+            errorText: undefined,
+            remedyChain: chain,
+          },
+        ]}
+      />,
+    );
+
+    const circle = screen.getByRole("button", { name });
+    const statusDot = circle.querySelector("span.absolute");
+    expect(statusDot?.className).toContain(dot);
+    expect(statusDot?.className.includes("animate-pulse")).toBe(turnActive);
+  });
+
+  it.each([
     { released: false, dialogs: 0 },
     { released: true, dialogs: 1 },
   ])("opens a guarded credential setup's dialog only once it is released (released: $released)", ({

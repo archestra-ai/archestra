@@ -464,12 +464,13 @@ describe("AgentDetailPage", () => {
         name: "Audience: Personal, Owner: Ada Lovelace",
       }),
     ).toBeVisible();
-    expect(screen.getByTestId("audience-chip")).toHaveTextContent("");
+    // Only the owner's avatar sits in the header; the words wait for focus.
+    expect(screen.getByTestId("audience-chip")).not.toHaveTextContent(
+      /Personal|Ada Lovelace/,
+    );
     screen.getByTestId("audience-chip").focus();
     expect(await screen.findByRole("tooltip")).toHaveTextContent("Personal");
-    expect(screen.getByRole("tooltip")).toHaveTextContent(
-      "Owner: Ada Lovelace",
-    );
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Ada Lovelace");
   });
 
   it("keeps stating the owner on every section, being a fact of the record", () => {

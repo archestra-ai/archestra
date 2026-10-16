@@ -23,6 +23,9 @@ import { cn } from "@/lib/utils/tailwind";
  * (a built-in record, or no owner recorded) shows the audience alone. On
  * phones the owner shrinks to their avatar; the full name stays in the
  * accessible label and the tooltip.
+ *
+ * `compact` is the icon beside a record's title: the owner's avatar with a
+ * small audience badge, naming both on hover.
  */
 export function AudienceChip({
   audience,
@@ -47,6 +50,52 @@ export function AudienceChip({
           : ownerName
       : null;
 
+  if (compact) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <UnstyledButton
+            aria-label={
+              ownerName
+                ? `Audience: ${audienceLabel}, Owner: ${ownerName}`
+                : `Audience: ${audienceLabel}`
+            }
+            data-testid="audience-chip"
+            className={cn(
+              "inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50",
+              className,
+            )}
+          >
+            {owner ? (
+              <span className="relative inline-flex">
+                <CreatorAvatar
+                  createdBy={owner}
+                  className="size-5"
+                  fallbackClassName="text-[9px] font-medium"
+                />
+                <span className="absolute -right-1 -bottom-1 inline-flex size-3 items-center justify-center rounded-full bg-background ring-1 ring-border">
+                  <Icon className="size-2" strokeWidth={2.5} aria-hidden />
+                </span>
+              </span>
+            ) : (
+              <Icon className="size-4" aria-hidden />
+            )}
+          </UnstyledButton>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="px-2.5 py-1">
+          {ownerName ? (
+            <span className="flex flex-col leading-snug">
+              <span className="font-medium">{ownerName}</span>
+              <span className="text-muted-foreground">{audienceLabel}</span>
+            </span>
+          ) : (
+            <span>{audienceLabel}</span>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -59,22 +108,14 @@ export function AudienceChip({
           aria-description={AUDIENCE_TOOLTIP}
           data-testid="audience-chip"
           className={cn(
-            compact
-              ? "inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-              : [
-                  "inline-flex w-fit min-w-0 shrink-0 cursor-default items-center gap-1.5 rounded-full border px-2.5 py-px text-xs font-medium whitespace-nowrap outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                  owner && "max-w-72 pr-1",
-                  AUDIENCE_STYLES[audience],
-                ],
+            "inline-flex w-fit min-w-0 shrink-0 cursor-default items-center gap-1.5 rounded-full border px-2.5 py-px text-xs font-medium whitespace-nowrap outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+            owner && "max-w-72 pr-1",
+            AUDIENCE_STYLES[audience],
             className,
           )}
         >
-          {compact ? (
-            <Icon className="size-4" aria-hidden />
-          ) : (
-            <span>{audienceLabel}</span>
-          )}
-          {!compact && owner && ownerName && (
+          <span>{audienceLabel}</span>
+          {owner && ownerName && (
             <span
               data-testid="audience-chip-owner"
               className="flex min-w-0 items-center gap-1.5 font-normal"
@@ -98,7 +139,6 @@ export function AudienceChip({
         </UnstyledButton>
       </TooltipTrigger>
       <TooltipContent>
-        {compact && <p>{audienceLabel}</p>}
         {ownerDetail ? (
           <div className="flex flex-col gap-0.5">
             <span>{`Owner: ${ownerDetail}`}</span>

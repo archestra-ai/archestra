@@ -22,7 +22,7 @@ describe("AgentSetupBanner", () => {
     await userEvent.click(screen.getByRole("button", { name: "Show" }));
     expect(show).toHaveBeenCalledOnce();
     rerender(<AgentSetupBanner items={[]} resetKey="agent-1" />);
-    expect(screen.getByText("Ready to run.")).toBeVisible();
+    expect(screen.getByText("Ready to run")).toBeVisible();
     expect(
       within(screen.getByRole("listitem")).getByText("Done"),
     ).toBeVisible();
@@ -44,7 +44,22 @@ describe("AgentSetupBanner", () => {
         showReady
       />,
     );
-    expect(screen.getByText("Connect to start")).toBeVisible();
+    expect(screen.getByText("Before it runs")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Dismiss" })).toBeNull();
+  });
+
+  it("keeps many requirements to two rows until asked for the rest", async () => {
+    const items = Array.from({ length: 10 }, (_, index) => ({
+      id: `key-${index}`,
+      label: `Credential ${index + 1}`,
+      status: "now" as const,
+      action: <button type="button">{`Set up ${index + 1}`}</button>,
+    }));
+    render(<AgentSetupBanner items={items} />);
+
+    expect(screen.getByText("Credential 5")).toBeVisible();
+    expect(screen.queryByText("Credential 6")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Show 5 more" }));
+    expect(screen.getByRole("button", { name: "Set up 10" })).toBeVisible();
   });
 });

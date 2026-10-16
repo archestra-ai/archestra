@@ -49,18 +49,29 @@ export function RuntimeCapableIndicator({
               templateName ? `Runtime: ${templateName}` : "Dedicated runtime"
             }
             className={cn(
-              "inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50",
+              "group inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50",
               className,
             )}
           >
-            {templateId ? (
-              <CatalogAgentIcon id={templateId} size={16} />
-            ) : (
-              <TerminalSquare className="size-4" aria-hidden />
-            )}
+            {/* Muted until hovered, so the mark reads as metadata beside the
+                name rather than a second agent icon. */}
+            <span className="inline-flex opacity-70 grayscale transition group-hover:opacity-100 group-hover:grayscale-0 group-focus-visible:opacity-100 group-focus-visible:grayscale-0">
+              {templateId ? (
+                <CatalogAgentIcon id={templateId} size={14} />
+              ) : (
+                <TerminalSquare className="size-3.5" aria-hidden />
+              )}
+            </span>
           </UnstyledButton>
         </TooltipTrigger>
-        <TooltipContent>{tooltip}</TooltipContent>
+        <TooltipContent side="bottom" className="px-2.5 py-1">
+          <span className="flex flex-col leading-snug">
+            <span className="font-medium">
+              {templateName ?? "Agent Runtime"}
+            </span>
+            <span className="text-muted-foreground">Opens a live terminal</span>
+          </span>
+        </TooltipContent>
       </Tooltip>
     );
   }

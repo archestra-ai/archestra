@@ -48,7 +48,7 @@ const READY: Preflight = {
   incompatible: null,
 };
 
-test("spaces the setup checklist like the rest of the agent overview, and clears it once the account is connected", async ({
+test("spaces the setup track like the rest of the agent overview, and clears it once the account is connected", async ({
   page,
   mswControl,
   request,
@@ -56,10 +56,8 @@ test("spaces the setup checklist like the rest of the agent overview, and clears
   await mockAgentPage({ mswControl, request });
   await page.goto(`/agents/${AGENT.id}?section=general`);
 
-  // A missing Claude account is a row of the setup checklist.
-  const notice = page
-    .getByRole("status")
-    .filter({ hasText: "Connect to start" });
+  // A missing Claude account is one requirement of the setup track.
+  const notice = page.getByRole("status").filter({ hasText: "Before it runs" });
   await expect(notice).toBeVisible();
   await expect(notice).toContainText("Claude subscription");
 

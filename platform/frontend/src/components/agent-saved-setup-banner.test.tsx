@@ -45,7 +45,7 @@ describe("saved agent setup notices", () => {
     expect(
       screen.getAllByRole("button", { name: "Sign in with Claude" }),
     ).toHaveLength(1);
-    expect(screen.getByText("Connect to start")).toBeVisible();
+    expect(screen.getByText("Before it runs")).toBeVisible();
     expect(screen.getByText("Claude subscription")).toBeVisible();
     expect(screen.getByText("API token")).toBeVisible();
     await act(async () => {
@@ -77,7 +77,7 @@ describe("saved agent setup notices", () => {
         screen.queryByRole("button", { name: "Sign in with Claude" }),
       ).not.toBeInTheDocument(),
     );
-    expect(screen.queryByText("Connect to start")).not.toBeInTheDocument();
+    expect(screen.queryByText("Before it runs")).not.toBeInTheDocument();
     client.clear();
   });
 

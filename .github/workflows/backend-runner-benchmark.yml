@@ -1,0 +1,188 @@
+name: Backend Runner Benchmark
+
+# Temporary, same-source comparison; never a required check or merge-group job.
+on:
+  pull_request:
+    branches: [main]
+    paths: ['.github/workflows/backend-runner-benchmark.yml']
+
+permissions: {}
+
+concurrency:
+  group: backend-runner-benchmark-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  backend-test-dependencies:
+    name: Prepare Backend Test Dependencies
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      artifact-name: ${{ steps.bundle.outputs.artifact-name }}
+    defaults:
+      run:
+        working-directory: ./platform
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: e00d31e0774a2eebf8af3ff6b67314092d041da9
+          fetch-depth: 1
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./platform
+
+      - name: Restore backend NAPI binaries
+        id: native-cache
+        uses: ./.github/actions/cache-backend-napi
+
+      - name: Cache cargo registry and target on native cache miss
+        if: steps.native-cache.outputs.usable != 'true'
+        uses: ./.github/actions/setup-rust-build
+        with:
+          workspaces: platform/archestra-rs
+          shared-key: backend-unit-tests
+
+      - name: Build backend workspace dependencies
+        if: steps.native-cache.outputs.usable != 'true'
+        run: |
+          pnpm exec turbo build --filter="@backend^..." || {
+            echo "Build failed — syncing pinned Rust toolchain and retrying once..."
+            rustup show
+            pnpm exec turbo build --filter="@backend^..."
+          }
+
+      - name: Verify native addons and pack shard dependencies
+        id: bundle
+        env:
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          node ../.github/scripts/verify-backend-napi.cjs
+          tar -czf /tmp/backend-test-napi.tar.gz \
+            archestra-rs/{app-runtime-rs,sandbox-rs,image-rs,openappa-rs}/index.linux-x64-gnu.node
+          echo "artifact-name=backend-test-napi-${RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+
+      # A same-run artifact works even on a cold cache. Merge-group cache
+      # entries are scoped to their queue ref and cannot warm the next group.
+      - name: Share native addons with all shards
+        uses: ./.github/actions/github-upload-artifact
+        with:
+          name: ${{ steps.bundle.outputs.artifact-name }}
+          path: /tmp/backend-test-napi.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  backend-unit-tests:
+    name: Benchmark ${{ matrix.provider }} backend (shard ${{ matrix.shard }}/2)
+    needs: [backend-test-dependencies]
+    runs-on: ${{ matrix.runner }}
+    # A merge-queue shard can take about 15 minutes, including setup and
+    # cleanup. Leave room for cold caches while bounding hung test workers.
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ./platform
+    strategy:
+      # A failing shard must not cancel its siblings; we want the full
+      # failure picture in one pass.
+      fail-fast: false
+      matrix:
+        include:
+          - provider: Blacksmith
+            runner: blacksmith-16vcpu-ubuntu-2404
+            shard: 1
+          - provider: Blacksmith
+            runner: blacksmith-16vcpu-ubuntu-2404
+            shard: 2
+          - provider: Ubicloud
+            runner: ubicloud-standard-16-ubuntu-2404
+            shard: 1
+          - provider: Ubicloud
+            runner: ubicloud-standard-16-ubuntu-2404
+            shard: 2
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: e00d31e0774a2eebf8af3ff6b67314092d041da9
+          fetch-depth: 1
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./platform
+
+      - name: Ensure Zsh and PowerShell for shell runtime tests
+        run: |
+          if ! command -v zsh >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y zsh
+          fi
+          if ! command -v pwsh >/dev/null 2>&1; then
+            echo "::error::PowerShell is required so shell runtime tests cannot skip."
+            exit 1
+          fi
+          pwsh -NoProfile -Command 'Write-Output $PSVersionTable.PSVersion'
+
+      - name: Download prepared native addons
+        uses: ./.github/actions/github-download-artifact
+        with:
+          # Use the producer's attempt, including a partial rerun that keeps
+          # successful preparation from the previous attempt.
+          name: ${{ needs.backend-test-dependencies.outputs.artifact-name }}
+          path: /tmp
+
+      - name: Load and verify prepared native addons
+        run: |
+          tar -xzf /tmp/backend-test-napi.tar.gz
+          node ../.github/scripts/verify-backend-napi.cjs
+
+      # Vitest uses its results cache to schedule historically slow files
+      # first. Persist one cache per shard so fresh runners keep that balancing
+      # data without mixing partial result sets across the matrix.
+      - name: Cache Vitest timing data
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: platform/backend/node_modules/.vite/vitest
+          key: backend-vitest-${{ runner.os }}-node24-shard-${{ matrix.shard }}-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/backend/vitest.config.ts', 'platform/backend/src/**/*.test.ts') }}
+          restore-keys: |
+            backend-vitest-${{ runner.os }}-node24-shard-${{ matrix.shard }}-
+
+      # Node's compile cache persists V8 bytecode for the large module graph
+      # that every Vitest fork imports. A same-host 2,616-test shard improved
+      # from 312.95s cold to 278.36s warm (-11%). Node validates cached code by
+      # content; the source hash bounds stale entries and the restore prefix
+      # lets the next commit reuse bytecode for unchanged modules.
+      - name: Cache Node compile data
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/node-compile-cache
+          key: backend-node-compile-${{ runner.os }}-${{ runner.arch }}-node24-shard-${{ matrix.shard }}-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/backend/vitest.config.ts', 'platform/backend/src/**/*.ts') }}
+          restore-keys: |
+            backend-node-compile-${{ runner.os }}-${{ runner.arch }}-node24-shard-${{ matrix.shard }}-
+
+      - name: Record runner and source identity
+        run: |
+          git rev-parse HEAD
+          node -e 'const os = require("node:os"); console.log(JSON.stringify({available_cpus: os.availableParallelism(), cpu_model: os.cpus()[0].model, memory_bytes: os.totalmem(), node: process.version, architecture: process.arch}))'
+          sha256sum backend/vitest.config.ts backend/src/test/vitest-resource-limits.ts
+
+      - name: Run backend unit tests (shard ${{ matrix.shard }} of 2)
+        working-directory: ./platform/backend
+        env:
+          NODE_COMPILE_CACHE: ${{ runner.temp }}/node-compile-cache
+          SHARD: ${{ matrix.shard }}
+        run: pnpm exec vitest run --shard="${SHARD}/2"
+

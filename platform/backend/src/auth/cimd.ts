@@ -1,10 +1,12 @@
 import crypto from "node:crypto";
 import { OAUTH_SCOPES } from "@archestra/shared";
 import ipaddr from "ipaddr.js";
+import type { Agent as UndiciAgent } from "undici";
 import { LRUCacheManager } from "@/cache-manager";
 import logger from "@/logging";
 import { OAuthClientModel } from "@/models";
 import type { CimdMetadata } from "@/types";
+import { createPinnedOutboundDispatcher } from "@/utils/outbound-url";
 
 /**
  * Client ID Metadata Documents (CIMD) support for MCP OAuth 2.1.
@@ -60,20 +62,26 @@ export async function fetchAndValidateCimdDocument(
     );
   }
 
-  const response = await fetch(clientIdUrl, {
-    headers: { Accept: "application/json" },
-    signal: AbortSignal.timeout(10_000),
-    redirect: "error", // Don't follow redirects (prevents redirect-based SSRF)
+  // Hostnames that resolve to private addresses are the other half of SSRF.
+  // The dispatcher pins the dial to the address that passed the check. Loopback
+  // is refused here even outside production, matching the literal check above.
+  const pinned = await createPinnedOutboundDispatcher({
+    hostname: url.hostname,
+    allowLoopback: false,
   });
-
-  if (!response.ok) {
+  if (!pinned.ok) {
     throw new CimdError(
-      `Failed to fetch CIMD document from ${clientIdUrl}: HTTP ${response.status}`,
+      pinned.reason === "private_or_loopback_host"
+        ? `CIMD client_id URL must not resolve to a private or loopback address: ${url.hostname}`
+        : `CIMD client_id URL host did not resolve: ${url.hostname}`,
     );
   }
 
   // Limit response size to 1 MB to prevent memory exhaustion
-  const body = await response.text();
+  const body = await fetchCimdBody({
+    clientIdUrl,
+    dispatcher: pinned.dispatcher,
+  });
   if (body.length > MAX_CIMD_BODY_SIZE) {
     throw new CimdError(
       `CIMD document exceeds maximum size of ${MAX_CIMD_BODY_SIZE} bytes`,
@@ -240,6 +248,34 @@ function asOptionalStringArray(value: unknown): string[] | undefined {
     return value as string[];
   }
   return undefined;
+}
+
+/**
+ * GET the CIMD document. Redirects are refused, and the dispatcher is closed
+ * once the body is read so the pinned socket does not outlive the request.
+ */
+async function fetchCimdBody(params: {
+  clientIdUrl: string;
+  dispatcher: UndiciAgent;
+}): Promise<string> {
+  try {
+    const response = await fetch(params.clientIdUrl, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(10_000),
+      redirect: "error", // Don't follow redirects (prevents redirect-based SSRF)
+      dispatcher: params.dispatcher,
+    } as RequestInit);
+
+    if (!response.ok) {
+      throw new CimdError(
+        `Failed to fetch CIMD document from ${params.clientIdUrl}: HTTP ${response.status}`,
+      );
+    }
+
+    return await response.text();
+  } finally {
+    await params.dispatcher.close();
+  }
 }
 
 /** Ranges from ipaddr.js that should be blocked for SSRF mitigation. */

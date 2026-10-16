@@ -95,7 +95,8 @@ const server = createServer(async (request, response) => {
     }
     sendJson(response, 404, { error: "not found" });
   } catch (error) {
-    sendJson(response, 500, { error: String(error?.message ?? error) });
+    logInternalError("request handler failed", error);
+    sendJson(response, 500, { error: "internal error" });
   }
 });
 
@@ -156,7 +157,8 @@ async function handleProvision(request, response) {
     try {
       unlinkSync(tempPath);
     } catch {}
-    sendJson(response, 500, { error: String(error?.message ?? error) });
+    logInternalError("binary provisioning failed", error);
+    sendJson(response, 500, { error: "internal error" });
   }
 }
 
@@ -392,6 +394,11 @@ function readJsonBody(request, maxBytes) {
     });
     request.on("error", reject);
   });
+}
+
+// Stack traces stay in the pod log; clients only ever see a generic message.
+function logInternalError(context, error) {
+  console.error(`p4 shim ${context}:`, error?.stack ?? error);
 }
 
 function sendJson(response, status, payload) {

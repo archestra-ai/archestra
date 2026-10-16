@@ -8,6 +8,7 @@ import {
   fetchBedrockModels,
   fetchBedrockModelsViaIam,
 } from "@/routes/chat/model-fetchers/bedrock";
+import { enforceLlmModelsListRateLimit } from "@/services/route-rate-limit";
 import {
   ApiError,
   Bedrock,
@@ -273,6 +274,7 @@ const bedrockOpenaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers: ModelsHeadersSchema,
         response: constructResponseSchema(ModelsListResponseSchema),
       },
+      onRequest: enforceLlmModelsListRateLimit,
     },
     async (request) => {
       logger.debug(
@@ -295,6 +297,7 @@ const bedrockOpenaiProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers: ModelsHeadersSchema,
         response: constructResponseSchema(ModelsListResponseSchema),
       },
+      onRequest: enforceLlmModelsListRateLimit,
     },
     async (request) => {
       logger.debug(

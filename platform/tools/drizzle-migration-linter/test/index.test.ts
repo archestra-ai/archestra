@@ -215,6 +215,21 @@ describe("lintMigrationSql", () => {
     ]);
   });
 
+  test("allow-breaking reason check finishes quickly on a long blank run", () => {
+    const started = performance.now();
+    const result = lintMigrationSql(
+      `-- drizzle-migration-linter: allow-breaking\n-- drizzle-migration-linter: reason=${" ".repeat(50_000)}\nALTER TABLE "agents" DROP COLUMN "legacy_name";`,
+    );
+
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(result.issues).toMatchObject([
+      {
+        code: "allow-breaking-missing-reason",
+        severity: "error",
+      },
+    ]);
+  });
+
   test("strips malformed block comments without regex backtracking", () => {
     const result = lintMigrationSql(
       `/*${"*".repeat(20_000)}\nALTER TABLE "agents" DROP COLUMN "legacy_name";`,
@@ -303,5 +318,22 @@ describe("migration file discovery", () => {
       path.join(migrationsDir, "0001_initial.sql"),
       path.join(migrationsDir, "0002_new.sql"),
     ]);
+  });
+
+  test.for([
+    ["an option-looking ref", "--output=../pwned"],
+    ["a ref with whitespace", "origin/main --upload-pack=x"],
+    ["a ref with a range operator", "main..HEAD"],
+    ["a remote-looking option", "--upload-pack=sh/main"],
+  ])("findChangedMigrationFiles rejects %s before running git", ([
+    ,
+    baseRef,
+  ]) => {
+    const migrationsDir = path.join(tempDir, "migrations");
+    fs.mkdirSync(migrationsDir, { recursive: true });
+
+    expect(() => findChangedMigrationFiles({ migrationsDir, baseRef })).toThrow(
+      /Invalid base ref/,
+    );
   });
 });

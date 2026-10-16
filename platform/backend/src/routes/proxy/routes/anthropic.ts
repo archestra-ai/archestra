@@ -8,6 +8,7 @@ import config from "@/config";
 import logger from "@/logging";
 import { fetchAnthropicModels } from "@/routes/chat/model-fetchers/anthropic";
 import { claudeCodeToolTokenCountObserver } from "@/services/claude-code-tool-token-count";
+import { enforceLlmModelsListRateLimit } from "@/services/route-rate-limit";
 import { Anthropic, constructResponseSchema, UuidIdSchema } from "@/types";
 import { anthropicAdapterFactory } from "../adapters";
 import { PROXY_API_PREFIX, PROXY_BODY_LIMIT } from "../common";
@@ -191,6 +192,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers: AnthropicModelsHeadersSchema,
         response: constructResponseSchema(AnthropicModelsListResponseSchema),
       },
+      onRequest: enforceLlmModelsListRateLimit,
     },
     async (request) => handleListModels(request, undefined),
   );
@@ -206,6 +208,7 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers: AnthropicModelsHeadersSchema,
         response: constructResponseSchema(AnthropicModelsListResponseSchema),
       },
+      onRequest: enforceLlmModelsListRateLimit,
     },
     async (request) => handleListModels(request, request.params.agentId),
   );

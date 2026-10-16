@@ -796,6 +796,11 @@ export const AUDIT_DECISIONS = {
     reason:
       "derived BM25 corpus statistics; rebuilt from kb_chunks by a periodic task, never edited by a user",
   },
+  kbConnectorDocumentCountsTable: {
+    audited: false,
+    reason:
+      "derived per-connector document counts; maintained by kb_documents triggers, never edited by a user",
+  },
   kbContainerAclsTable: {
     audited: false,
     reason:

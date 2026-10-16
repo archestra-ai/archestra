@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { betterAuth } from "@/auth";
 import { cacheManager } from "@/cache-manager";
 import config from "@/config";
@@ -7,7 +7,6 @@ import {
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
 import authRoutes from "@/routes/auth";
-import { test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 
 setupTestCacheManager();

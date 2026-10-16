@@ -25,8 +25,8 @@ describe("initialPolicy", () => {
     const authorities = externals.authorities as ReturnType<typeof parse>;
     expect(authorities.hitl).toEqual({ builtin: "hitl" });
 
-    // Replay cannot ask a human. Substitute only the reviewer implementation;
-    // the shipped authority's permissions are enforced by the real engine.
+    // Replay asks no person; it answers every authority in process. The
+    // shipped authority's permissions are enforced by the real engine.
     const content = stringify({
       policy: {
         version: 2,
@@ -114,8 +114,9 @@ describe("initialPolicy", () => {
       humanResult.files[1],
       JSON.stringify(humanResult.files[1]),
     ).toMatchObject({
-      status: "cannot_run",
-      steps: [{ status: "cannot_run" }],
+      // The shipped hitl binding is answered in process too, as appa replay does.
+      status: "passed",
+      steps: [{ status: "passed", actual: "authority hitl" }],
     });
   });
 

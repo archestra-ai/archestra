@@ -129,7 +129,7 @@ Each file describes ordered tool calls and expected decisions. Calls in one file
 
 What to know:
 
-- **Results:** the table shows **Passed** or **Failed** and the last run time. A file that cannot run appears as **Failed**, with its reason: replay stops at the first call whose answer did not come, such as human review, a model whose key is not set, or a helper that cannot be reached. Open a history run for details; results apply to the policy and files captured by that run.
+- **Results:** the table shows **Passed** or **Failed** and the last run time. A file that cannot run appears as **Failed**, with its reason: replay stops at the first call whose answer did not come, such as a model whose key is not set or a helper that cannot be reached. Replay asks no person: a step that expects `authority hitl` passes when the call offers human review. Open a history run for details; results apply to the policy and files captured by that run.
 - **Drafts:** **Run file** checks only the current editor text. Its temporary result does not change saved suite results or history. Search filters and unsaved drafts do not change **Run all**.
 - **Policy changes:** accepted changes from local saves or Git sync automatically queue the full suite. Unchanged syncs and validation-only edits do not trigger runs. Validation failures do not block or roll back a policy; configure repository CI if failures should block merges.
 

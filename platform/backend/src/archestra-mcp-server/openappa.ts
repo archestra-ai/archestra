@@ -951,16 +951,16 @@ const registry = defineArchestraTools([
       );
       return result({
         ...(await getOpenAppaPolicyTests(organizationId, userId)),
-        offlineReplay: {
+        replay: {
           scope:
             "Ordered tool-call policy decisions in a fresh session per file",
           inputSchemas:
             "Effective policy contracts; no installed MCP schema lookup",
           toolExecution: false,
           toolResults: "Empty results only",
-          modelExecution: false,
-          remoteHelpers: false,
-          hostNoopAnnotator: true,
+          annotators:
+            "Asked live with the organization's credentials, models and battery helpers included",
+          externalRemedyParties: "A policy naming one cannot run",
           subagentLifecycleEvents: false,
           missingDependency: "cannot_run, not an allow or deny decision",
         },
@@ -971,7 +971,7 @@ const registry = defineArchestraTools([
     shortName: "run_openappa_policy_tests",
     title: "Run saved OpenAPPA validations",
     description:
-      "Replay saved validations offline against the current policy and record the result in validation run history. Use it to run what is saved and keep the result; preview_guardrails_validation_change already replays a draft before it is saved. Pass `path` to run one saved validation file; omit it to run the whole suite. Loads the authoritative saved files itself; no draft files or policy changes are accepted. This records a run only: it does not edit validations, change or enable the policy, execute business tools, or contact models or remote helpers. Report the returned run ID and pass/fail/cannot-run outcomes.",
+      "Replay saved validations against the current policy and record the result in validation run history. Use it to run what is saved and keep the result; preview_guardrails_validation_change already replays a draft before it is saved. Pass `path` to run one saved validation file; omit it to run the whole suite. Loads the authoritative saved files itself; no draft files or policy changes are accepted. This records a run only: it does not edit validations, change or enable the policy, or execute business tools; the policy's annotators, models included, are asked live. Report the returned run ID and pass/fail/cannot-run outcomes.",
     schema: z.strictObject({
       path: z
         .string()
@@ -1025,7 +1025,7 @@ const registry = defineArchestraTools([
     title: "Preview OpenAPPA validations",
     annotations: { readOnlyHint: true },
     description:
-      "Validate a proposed change to the .appa validation files and replay it. This saves nothing and records no run. Read the policy and the suite first and pass their revision as expectedRevision and version as expectedVersion. Send `changes`: `upsert` files to add or replace, and explicit `delete` paths; unrelated files are kept. Checks each upserted file's syntax, then replays those files offline against the saved policy; `tests` holds pass/fail/cannot-run per file, or null when a syntax check failed or nothing was upserted. Fix syntax errors in the files only. Explain the case, its expected decision and the replay result to the user, then save with update_guardrails_validation. A failed check does not authorize a policy change or weakening an expectation. This tool never changes the policy; change it with preview_guardrails_policy_change and update_guardrails_policy.",
+      "Validate a proposed change to the .appa validation files and replay it. This saves nothing and records no run. Read the policy and the suite first and pass their revision as expectedRevision and version as expectedVersion. Send `changes`: `upsert` files to add or replace, and explicit `delete` paths; unrelated files are kept. Checks each upserted file's syntax, then replays those files against the saved policy, asking its annotators live; `tests` holds pass/fail/cannot-run per file, or null when a syntax check failed or nothing was upserted. Fix syntax errors in the files only. Explain the case, its expected decision and the replay result to the user, then save with update_guardrails_validation. A failed check does not authorize a policy change or weakening an expectation. This tool never changes the policy; change it with preview_guardrails_policy_change and update_guardrails_policy.",
     schema: PreviewOpenAppaValidationChangeSchema,
     async handler({ args, context }) {
       const { organizationId, userId } = organizationUser(

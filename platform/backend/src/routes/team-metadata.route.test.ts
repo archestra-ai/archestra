@@ -16,6 +16,35 @@ describe("team metadata lists", () => {
   afterEach(() => vi.restoreAllMocks());
 
   for (const role of ["admin", "member"] as const) {
+    test(`matches % and _ in a ${role}'s name filter literally`, async ({
+      makeMember,
+      makeTeam,
+      makeTeamMember,
+    }) => {
+      await makeMember(ctx.user.id, ctx.organizationId, { role });
+      for (const name of ["Sales 100%", "Ops_Team", "OpsXTeam", "Design"]) {
+        const team = await makeTeam(ctx.organizationId, ctx.user.id, { name });
+        await makeTeamMember(team.id, ctx.user.id);
+      }
+
+      const names = async (filter: string) => {
+        const response = await ctx.app.inject({
+          method: "GET",
+          url: `/api/teams?includeMembers=false&name=${encodeURIComponent(filter)}`,
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        return response
+          .json()
+          .data.map((team: { name: string }) => team.name)
+          .sort();
+      };
+
+      expect(await names("%")).toEqual(["Sales 100%"]);
+      expect(await names("ops_")).toEqual(["Ops_Team"]);
+    });
+  }
+
+  for (const role of ["admin", "member"] as const) {
     test(`preserves ${role} visibility, filters, pagination and membership role`, async ({
       makeMember,
       makeUser,

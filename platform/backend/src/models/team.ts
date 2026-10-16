@@ -26,6 +26,7 @@ import type {
 } from "@/types";
 import { ApiError } from "@/types";
 import type { TeamMemberRole } from "@/types/team-role";
+import { escapeLikePattern } from "@/utils/sql-search";
 import AgentLabelModel from "./agent-label";
 import CreatedByModel from "./created-by";
 import TeamLabelModel from "./team-label";
@@ -201,7 +202,9 @@ class TeamModel {
 
     const filters = [
       eq(schema.teamsTable.organizationId, organizationId),
-      ...(name ? [ilike(schema.teamsTable.name, `%${name}%`)] : []),
+      ...(name
+        ? [ilike(schema.teamsTable.name, `%${escapeLikePattern(name)}%`)]
+        : []),
       ...(labelFilteredIds
         ? [inArray(schema.teamsTable.id, labelFilteredIds)]
         : []),
@@ -748,7 +751,9 @@ class TeamModel {
 
     const filters = [
       eq(schema.teamMembersTable.userId, userId),
-      ...(name ? [ilike(schema.teamsTable.name, `%${name}%`)] : []),
+      ...(name
+        ? [ilike(schema.teamsTable.name, `%${escapeLikePattern(name)}%`)]
+        : []),
       ...(labelFilteredIds
         ? [inArray(schema.teamsTable.id, labelFilteredIds)]
         : []),

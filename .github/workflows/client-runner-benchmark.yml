@@ -1,4 +1,4 @@
-# Temporary paired benchmark. Wave 3: default lint; frontend 8 BS vs 16 Ubi without compiler archive; native tests.
+# Temporary paired benchmark. Wave 4: repeat default lint; frontend 8 BS vs 16 Ubi without compiler archive; native tests.
 name: Lint and Frontend Runner Benchmark
 'on':
   pull_request:

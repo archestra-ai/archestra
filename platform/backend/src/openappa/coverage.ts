@@ -10,6 +10,7 @@ import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import ToolModel from "@/models/tool";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
+import { UNDECLARED_TOOL_ANNOTATOR } from "@/services/guardrails-policy";
 import type { CompositionView } from "@/types/openappa-batteries";
 import type {
   CoverageBatteryFit,
@@ -46,7 +47,7 @@ import {
  * The root text and every resolved battery's policy text are parsed here and
  * joined against the stored tool names: a tool matches a rule whose name,
  * without its argument selector, equals the tool's full name, battery rules
- * reaching it through `[server_aliases]`. Selectors, provider-run rules and
+ * reaching it through `aliases.mcp`. Selectors, provider-run rules and
  * canonical `mcp/…` spellings in the root are not evaluated, so a named rule
  * is not proof that the runtime judges a given call by it.
  *
@@ -739,13 +740,16 @@ async function buildReport(
     };
     const specific = matched.find((entry) => entry.rule.selector === null);
     const primary = specific ?? fallback;
-    // The default noop wildcard deliberately adds no coverage. Origin and
-    // revision do not change this classification.
+    // The default wildcards deliberately add no coverage: noop adds nothing,
+    // and the default model catch-all is what judges a tool no rule names.
+    // Origin and revision do not change this classification.
     const covered =
       primary !== null &&
       primary !== undefined &&
       !(
-        primary.rule.source === "catchall" && primary.rule.annotator === "noop"
+        primary.rule.source === "catchall" &&
+        primary.rule.annotator !== null &&
+        DEFAULT_CATCH_ALL_ANNOTATORS.has(primary.rule.annotator)
       );
     const own: CoverageTool = primary
       ? {
@@ -1003,3 +1007,9 @@ function page<T>(
 
 /** A battery rule's name: `mcp/<namespace>/<tool>`. */
 const CANONICAL_RULE_NAME = /^mcp\/([^/]+)\/(.+)$/;
+
+/** The catch-all annotators a default policy routes `*` to. */
+const DEFAULT_CATCH_ALL_ANNOTATORS = new Set([
+  "noop",
+  UNDECLARED_TOOL_ANNOTATOR,
+]);

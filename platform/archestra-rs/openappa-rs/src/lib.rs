@@ -828,7 +828,7 @@ pub async fn parse_openappa_declarations(content: String) -> napi::Result<Policy
                     })
                     .collect(),
                 server_aliases: parsed
-                    .server_aliases
+                    .mcp_aliases
                     .into_iter()
                     .map(|alias| ServerAliasDeclaration {
                         namespace: alias.namespace,
@@ -1050,7 +1050,7 @@ pub async fn inspect_openappa_battery(
                 text: file.text,
             })
             .collect();
-        std::panic::catch_unwind(|| batteries::inspect(&files))
+        std::panic::catch_unwind(|| batteries::inspect(&files, batteries::PackageOrigin::Uploaded))
             .map_err(|_| error("OpenAPPA battery inspection failed"))?
             .map(|info| BatteryPackage::from(&info))
             .map_err(error)

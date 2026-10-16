@@ -116,6 +116,7 @@ import {
   type ToolCallBlock,
 } from "@/types";
 import { asRecord } from "@/utils/as-record";
+import { clientDisconnectSignal } from "@/utils/client-disconnect-signal";
 import { repairLoneSurrogates } from "@/utils/lone-surrogates";
 import { isLoopbackRequest } from "@/utils/network";
 import { isUuid } from "@/utils/uuid";
@@ -1450,7 +1451,7 @@ export async function handleLLMProxy<
     // Create client with observability (each provider handles metrics internally)
     const abortSignal =
       providerName === "microsoft-365-copilot"
-        ? createDownstreamAbortSignal({ request, reply })
+        ? clientDisconnectSignal({ request, reply })
         : undefined;
     const client = provider.createClient(apiKey, {
       baseUrl: effectiveBaseUrl,
@@ -3537,44 +3538,6 @@ function normalizeVirtualKeyCandidate(
   }
 
   return apiKey.replace(/^Bearer[:\s]+/i, "");
-}
-
-/**
- * Turns a premature proxy-client disconnect into an AbortSignal that the
- * Microsoft Graph adapter forwards to conversation and chat requests. Normal
- * response closure does not abort, and listeners remove each other on either
- * terminal path.
- */
-function createDownstreamAbortSignal(params: {
-  request: FastifyRequest;
-  reply: FastifyReply;
-}): AbortSignal {
-  const { request, reply } = params;
-  const controller = new AbortController();
-
-  const cleanup = () => {
-    request.raw.removeListener("aborted", onRequestAborted);
-    reply.raw.removeListener("close", onReplyClosed);
-  };
-  const onRequestAborted = () => {
-    cleanup();
-    controller.abort();
-  };
-  const onReplyClosed = () => {
-    cleanup();
-    if (!reply.raw.writableEnded) {
-      controller.abort();
-    }
-  };
-
-  if (request.raw.aborted || reply.raw.destroyed) {
-    controller.abort();
-  } else {
-    request.raw.once("aborted", onRequestAborted);
-    reply.raw.once("close", onReplyClosed);
-  }
-
-  return controller.signal;
 }
 
 /**

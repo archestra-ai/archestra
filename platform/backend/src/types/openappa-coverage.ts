@@ -257,7 +257,7 @@ export type CoverageSummary = z.infer<typeof CoverageSummarySchema>;
 export const CoverageBatteryFitSchema = z.object({
   mcpServerId: z.string(),
   mcpServerName: z.string(),
-  /** The server's tool prefixes, which `[server_aliases]` points the battery's namespaces at. */
+  /** The server's tool prefixes, which `aliases.mcp` points the battery's namespaces at. */
   toolPrefixes: z.array(z.string()),
   battery: z.string(),
   description: z.string(),

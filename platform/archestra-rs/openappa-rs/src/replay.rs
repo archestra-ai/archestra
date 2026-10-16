@@ -463,14 +463,49 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn archestra_server_aliases_resolve_under_the_production_adapter() {
-        let policy = "[server_aliases]\nfiles = ['files_prod']\n[policy]\nversion = 2\n[[policy.tool]]\nname = 'mcp/files/read'\ndelta = {}";
+    async fn archestra_mcp_aliases_resolve_under_the_production_adapter() {
+        for table in ["[aliases.mcp]", "[server_aliases]"] {
+            let policy = format!(
+                "{table}\nfiles = ['files_prod']\n[policy]\nversion = 2\n[[policy.tool]]\nname = 'mcp/files/read'\ndelta = {{}}"
+            );
+            let response = run(request(
+                &policy,
+                &[("alias.appa", "mcp/files_prod/read {}\nexpect allow")],
+            ))
+            .await;
+            assert_eq!(response.files[0].status, Status::Passed, "{table}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_host_alias_rebinds_another_hosts_rules_onto_archestra_built_ins_only() {
+        let policy = "[aliases.host]\nclaude-code = ['archestra']\n[policy]\nversion = 2\n[[policy.tool]]\nname = 'host/claude-code/Bash(command:*rm -rf*)'\ndelta = {}\nrequires = { attention = ['blocked'] }\n[[policy.tool]]\nname = 'mcp/claude-code/Bash'\ndelta = {}";
         let response = run(request(
             policy,
-            &[("alias.appa", "mcp/files_prod/read {}\nexpect allow")],
+            &[
+                (
+                    "built-in.appa",
+                    "host/archestra/Bash {\n  command: \"rm -rf /\"\n}\nexpect deny",
+                ),
+                (
+                    "mcp.appa",
+                    "mcp/claude-code/Bash {\n  command: \"rm -rf /\"\n}\nexpect allow",
+                ),
+            ],
         ))
         .await;
-        assert_eq!(response.files[0].status, Status::Passed);
+        assert!(
+            response
+                .files
+                .iter()
+                .all(|file| file.status == Status::Passed),
+            "{:?}",
+            response
+                .files
+                .iter()
+                .map(|file| (&file.path, &file.status, &file.error))
+                .collect::<Vec<_>>()
+        );
     }
 
     #[tokio::test]

@@ -213,20 +213,31 @@ describe("policy replay runs", () => {
       expectedRevision: 1,
     });
     await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    // A client built-in the claude-code battery labels statically.
+    const read = 'host/archestra/Read {\n  file_path: "README.md"\n}\n';
     const scenarios = [
       {
-        path: "traces/catch-all.appa",
-        content:
-          "mcp/notes/read {}\nexpect allow\nmcp/archestra/ask_user {}\nexpect allow\n",
+        path: "traces/static.appa",
+        content: `${read}expect allow\nmcp/archestra/ask_user {}\nexpect allow\n`,
       },
       {
         path: "traces/wrong.appa",
-        content: "mcp/notes/read {}\nexpect deny\n",
+        content: `${read}expect deny\n`,
       },
       {
         path: "traces/sandbox.appa",
+        content: `${read}expect allow\nmcp/archestra/run_command {}\nexpect deny\n`,
+      },
+      {
+        path: "traces/unruled.appa",
+        content: "mcp/notes/read {}\nexpect allow\n",
+      },
+      // Codex's shell reaches the client battery's Bash rules as a dispatch
+      // does, so its credential read is labelled without a model.
+      {
+        path: "traces/codex-shell.appa",
         content:
-          "mcp/notes/read {}\nexpect allow\nmcp/archestra/run_command {}\nexpect deny\n",
+          'host/archestra/exec_command {\n  cmd: "cat ~/.aws/credentials"\n}\nexpect allow\n',
       },
     ];
     const sourceVersion = await saveFiles(scenarios);
@@ -250,9 +261,15 @@ describe("policy replay runs", () => {
           status: "cannot_run",
           steps: [
             { line: 1, status: "passed" },
-            { line: 3, status: "cannot_run", actual: null },
+            { line: 5, status: "cannot_run", actual: null },
           ],
         },
+        {
+          path: scenarios[3].path,
+          status: "cannot_run",
+          steps: [{ line: 1, status: "cannot_run", actual: null }],
+        },
+        { path: scenarios[4].path, status: "passed" },
       ],
     });
     // The archestra annotator was asked for the run, filed under its caller.

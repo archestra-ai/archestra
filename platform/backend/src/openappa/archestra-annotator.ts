@@ -77,11 +77,14 @@ type ArchestraAnnotationOutcome =
  * built-in OpenAPPA configuration agent, so limits, logs and cost apply.
  */
 class OpenAppaArchestraAnnotator {
-  async annotate(
-    request: ArchestraAnnotationRequest,
-    encryptedChat: OpenappaEncryptedChat | null = null,
-    replay: OpenappaReplayOwner | null = null,
-  ): Promise<ArchestraAnnotationOutcome> {
+  async annotate(params: {
+    request: ArchestraAnnotationRequest;
+    encryptedChat: OpenappaEncryptedChat | null;
+    replay: OpenappaReplayOwner | null;
+    /** Aborts the model work once the runtime stops waiting for the answer. */
+    abortSignal: AbortSignal;
+  }): Promise<ArchestraAnnotationOutcome> {
+    const { request, encryptedChat, replay, abortSignal } = params;
     const owner: CallOwner = encryptedChat
       ? { kind: "encrypted-chat", chat: encryptedChat }
       : replay
@@ -159,7 +162,7 @@ class OpenAppaArchestraAnnotator {
       budget === undefined
         ? undefined
         : Math.floor(budget / TRUNCATION_RETRY_FACTOR);
-    const call = { model, system, request, maxOutputTokens };
+    const call = { model, system, request, maxOutputTokens, abortSignal };
     const formatKey = JSON.stringify([
       selection.provider,
       selection.modelName,
@@ -196,6 +199,11 @@ class OpenAppaArchestraAnnotator {
       }
       return { kind: "answered", answer };
     } catch (error) {
+      if (abortSignal.aborted)
+        return {
+          kind: "failed",
+          reason: "The runtime stopped waiting for the annotation.",
+        };
       const apiError = APICallError.isInstance(error) ? error : null;
       const status = apiError?.statusCode;
       // 429 is the provider's rate limit; 402 is Archestra's token-cost limit.
@@ -289,6 +297,7 @@ type AnnotationCall = {
   system: SystemModelMessage;
   request: ArchestraAnnotationRequest;
   maxOutputTokens: number | undefined;
+  abortSignal: AbortSignal;
 };
 
 /**
@@ -329,6 +338,7 @@ async function structuredAnswer(
       prompt: call.request.input,
       output: Output.object({ schema: jsonSchema(call.request.schema) }),
       maxOutputTokens: call.maxOutputTokens,
+      abortSignal: call.abortSignal,
     });
     if (!isPlainObject(output)) return { kind: "unparsed" };
     formatStrikes.delete(call.formatKey);
@@ -355,6 +365,7 @@ async function taggedAnswer(
     system: call.system,
     prompt: call.request.input,
     maxOutputTokens: call.maxOutputTokens,
+    abortSignal: call.abortSignal,
   });
   return text === null ? null : parseObject(text);
 }

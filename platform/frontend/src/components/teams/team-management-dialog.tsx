@@ -8,7 +8,12 @@ import {
   getDocsUrl,
   MEMBER_ROLE_NAME,
 } from "@archestra/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   Check,
   ChevronDown,
@@ -46,6 +51,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { Textarea } from "@/components/ui/textarea";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { UserSearchableSelect } from "@/components/user-searchable-select";
@@ -53,8 +59,8 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useMemberSearch } from "@/lib/member.query";
-import { useActiveOrganization } from "@/lib/organization.query";
 import {
   parseRoleAssignmentBlocked,
   RoleAssignmentBlockedError,
@@ -65,12 +71,14 @@ import {
   getTeamDescendantIds,
 } from "@/lib/teams/team-hierarchy";
 import { type TeamToken, useTokens } from "@/lib/teams/team-token.query";
+import { throwOnApiError } from "@/lib/utils/api";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { formatRoleName } from "@/lib/utils/role";
 import { cn } from "@/lib/utils/tailwind";
 import { EnterpriseLicenseRequired } from "../enterprise-license-required";
 
-type Team = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
+type Team = archestraApiTypes.GetTeamResponses["200"];
+type TeamListItem = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
 type TeamDialogSection =
   | "team"
   | "members"
@@ -78,6 +86,8 @@ type TeamDialogSection =
   | "vault-folder"
   | "external-groups";
 type TeamMemberRole = typeof ADMIN_ROLE_NAME | typeof MEMBER_ROLE_NAME;
+
+const MEMBERS_PAGE_SIZE = 20;
 
 /**
  * Member edits staged in the dialog, keyed by userId. Nothing is sent to the
@@ -177,6 +187,7 @@ export function TeamManagementDialog(props: TeamManagementDialogProps) {
     team: ["update"],
   });
   const { data: organizationTeams = [] } = useTeams({
+    includeRelations: false,
     enabled: open && (mode === "create" || canUpdateTeams),
   });
   const { data: tokensData } = useTokens({
@@ -526,7 +537,7 @@ function TeamSection(props: {
   roles: string;
   onRolesChange: (roles: string) => void;
   parentId: string | null;
-  organizationTeams: Team[];
+  organizationTeams: TeamListItem[];
   canManageAllTeams: boolean;
   labels: ProfileLabel[];
   labelsRef: React.Ref<ProfileLabelsRef>;
@@ -736,7 +747,6 @@ function MembersSection({
   changes: StagedMemberChanges;
   onChangesChange: (changes: StagedMemberChanges) => void;
 }) {
-  const { data: activeOrg } = useActiveOrganization();
   const {
     users: userOptions,
     isSearching: isMembersPending,
@@ -744,18 +754,59 @@ function MembersSection({
     emptyMessage: membersEmptyMessage,
   } = useMemberSearch({ limit: 20, enabled: open });
 
-  const { data: teamMembers = [] } = useQuery({
-    queryKey: ["teamMembers", team.id],
+  // A team can have thousands of members, so they are searched and paged on
+  // the server; staged changes are kept per user across pages.
+  const [memberSearch, setMemberListSearch] = useState("");
+  const debouncedMemberSearch = useDebouncedValue(memberSearch.trim(), 300);
+  const [pageIndex, setPageIndex] = useState(0);
+  const {
+    data: memberPage,
+    isPending: isMemberPagePending,
+    isPlaceholderData: isMemberPageStale,
+  } = useQuery({
+    queryKey: [
+      "teamMembers",
+      team.id,
+      "page",
+      { search: debouncedMemberSearch, pageIndex },
+    ],
     queryFn: async () => {
-      const { data } = await archestraApiSdk.getTeamMembers({
+      const { data, error } = await archestraApiSdk.getTeamMembersPage({
         path: { id: team.id },
+        query: {
+          limit: MEMBERS_PAGE_SIZE,
+          offset: pageIndex * MEMBERS_PAGE_SIZE,
+          ...(debouncedMemberSearch ? { search: debouncedMemberSearch } : {}),
+        },
       });
-      return data ?? [];
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
     },
     enabled: open,
+    placeholderData: keepPreviousData,
   });
+  const pageMembers = memberPage?.data ?? [];
+  const pageTotal = memberPage?.pagination.total ?? 0;
 
-  const orgMembers = activeOrg?.members ?? [];
+  // Which of the users offered for adding are already members, wherever they
+  // sit in the paged list.
+  const optionUserIds = useMemo(
+    () => userOptions.map((option) => option.userId).sort(),
+    [userOptions],
+  );
+  const { data: membersAmongOptions = [] } = useQuery({
+    queryKey: ["teamMembers", team.id, "among", optionUserIds],
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getTeamMembersPage({
+        path: { id: team.id },
+        query: { userIds: optionUserIds, limit: optionUserIds.length },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data?.data ?? [];
+    },
+    enabled: open && optionUserIds.length > 0,
+    placeholderData: keepPreviousData,
+  });
 
   const setChange = (userId: string, change: StagedMemberChange | null) => {
     const next = new Map(changes);
@@ -768,10 +819,12 @@ function MembersSection({
   };
 
   const stageAdd = (userId: string) => {
-    if (teamMembers.some((member) => member.userId === userId)) {
+    if (changes.get(userId)?.type === "remove") {
       // Re-adding an existing member just cancels a staged removal.
       setChange(userId, null);
-    } else {
+    } else if (
+      !membersAmongOptions.some((member) => member.userId === userId)
+    ) {
       const user = userOptions.find((option) => option.userId === userId);
       setChange(userId, {
         type: "add",
@@ -791,62 +844,70 @@ function MembersSection({
     }
   };
 
-  const stageRole = (userId: string, role: TeamMemberRole) => {
-    const change = changes.get(userId);
+  const stageRole = (params: {
+    userId: string;
+    role: TeamMemberRole;
+    originalRole: string | null;
+  }) => {
+    const change = changes.get(params.userId);
     if (change?.type === "add") {
-      setChange(userId, { ...change, role });
+      setChange(params.userId, { ...change, role: params.role });
       return;
     }
-    const original = teamMembers.find(
-      (member) => member.userId === userId,
-    )?.role;
-    setChange(userId, original === role ? null : { type: "role", role });
+    setChange(
+      params.userId,
+      params.originalRole === params.role
+        ? null
+        : { type: "role", role: params.role },
+    );
   };
 
-  // Server members with staged removals hidden and staged role changes
-  // applied, followed by staged additions.
+  const stagedAdds = [...changes.entries()].filter(
+    (entry): entry is [string, Extract<StagedMemberChange, { type: "add" }>] =>
+      entry[1].type === "add",
+  );
+  const stagedRemovalCount = [...changes.values()].filter(
+    (change) => change.type === "remove",
+  ).length;
+
+  // Staged additions first, then this page of server members with staged
+  // removals hidden and staged role changes applied.
   const memberRows = [
-    ...teamMembers
+    ...stagedAdds.map(([userId, change]) => ({
+      userId,
+      displayName: change.name || change.email || userId,
+      displayEmail: change.email || userId,
+      role: change.role as string,
+      originalRole: null,
+      pending: true,
+    })),
+    ...pageMembers
       .filter((member) => changes.get(member.userId)?.type !== "remove")
       .map((member) => {
         const change = changes.get(member.userId);
-        const orgMember = orgMembers.find(
-          (candidate) => candidate.userId === member.userId,
-        );
         return {
           userId: member.userId,
-          displayName:
-            member.name ||
-            orgMember?.user.name ||
-            member.email ||
-            orgMember?.user.email ||
-            member.userId,
-          displayEmail: member.email || orgMember?.user.email || member.userId,
+          displayName: member.name || member.email || member.userId,
+          displayEmail: member.email || member.userId,
           role: change?.type === "role" ? change.role : member.role,
+          originalRole: member.role,
           pending: !!change,
         };
       }),
-    ...[...changes.entries()]
-      .filter(
-        (
-          entry,
-        ): entry is [string, Extract<StagedMemberChange, { type: "add" }>] =>
-          entry[1].type === "add",
-      )
-      .map(([userId, change]) => ({
-        userId,
-        displayName: change.name || change.email || userId,
-        displayEmail: change.email || userId,
-        role: change.role as string,
-        pending: true,
-      })),
   ];
 
-  const listedUserIds = new Set(memberRows.map((row) => row.userId));
+  const disabledUserIds = new Set([
+    ...stagedAdds.map(([userId]) => userId),
+    ...membersAmongOptions
+      .map((member) => member.userId)
+      .filter((userId) => changes.get(userId)?.type !== "remove"),
+  ]);
   const canAddAnyMember = userOptions.some(
-    (user) => !listedUserIds.has(user.userId),
+    (user) => !disabledUserIds.has(user.userId),
   );
   const hasStagedChanges = changes.size > 0;
+  const isSearchingMembers = debouncedMemberSearch !== "";
+  const showMemberSearch = memberSearch !== "" || pageTotal > MEMBERS_PAGE_SIZE;
 
   return (
     <div className="space-y-6">
@@ -856,7 +917,7 @@ function MembersSection({
           value=""
           onValueChange={stageAdd}
           users={userOptions}
-          disabledUserIds={listedUserIds}
+          disabledUserIds={disabledUserIds}
           placeholder={
             canAddAnyMember ? "Select a user" : "All listed users already added"
           }
@@ -873,15 +934,40 @@ function MembersSection({
       </div>
 
       <div className="space-y-2">
-        <Label>Current Members ({memberRows.length})</Label>
-        {memberRows.length === 0 ? (
+        <Label>
+          {isSearchingMembers
+            ? `Current Members (${pageTotal} matching)`
+            : `Current Members (${Math.max(0, pageTotal - stagedRemovalCount) + stagedAdds.length})`}
+        </Label>
+        {showMemberSearch && (
+          <Input
+            value={memberSearch}
+            onChange={(event) => {
+              setMemberListSearch(event.target.value);
+              setPageIndex(0);
+            }}
+            placeholder="Search members by name or email"
+            aria-label="Search members"
+            className="max-w-3xl"
+          />
+        )}
+        {isMemberPagePending ? (
+          <p className="text-sm text-muted-foreground">Loading members…</p>
+        ) : memberRows.length === 0 && pageTotal === 0 ? (
           <div className="rounded-lg border border-dashed p-4 text-center">
             <p className="text-sm text-muted-foreground">
-              No members in this team yet
+              {isSearchingMembers
+                ? "No members match this search"
+                : "No members in this team yet"}
             </p>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div
+            className={cn(
+              "space-y-2",
+              isMemberPageStale && "opacity-60 transition-opacity",
+            )}
+          >
             {memberRows.map((row) => (
               <div
                 key={row.userId}
@@ -905,7 +991,11 @@ function MembersSection({
                 <Select
                   value={row.role}
                   onValueChange={(role: TeamMemberRole) =>
-                    stageRole(row.userId, role)
+                    stageRole({
+                      userId: row.userId,
+                      role,
+                      originalRole: row.originalRole,
+                    })
                   }
                 >
                   <SelectTrigger className="w-full">
@@ -932,6 +1022,15 @@ function MembersSection({
               </div>
             ))}
           </div>
+        )}
+        {pageTotal > MEMBERS_PAGE_SIZE && (
+          <TablePagination
+            pageIndex={pageIndex}
+            pageSize={MEMBERS_PAGE_SIZE}
+            total={pageTotal}
+            onPaginationChange={({ pageIndex: next }) => setPageIndex(next)}
+            compact
+          />
         )}
         {hasStagedChanges && (
           <FieldDescription>

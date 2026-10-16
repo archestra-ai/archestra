@@ -356,6 +356,6 @@ function AccountName({ id }: { id: string }) {
   );
 }
 function BillingTeamName({ id }: { id: string }) {
-  const { data: teams = [] } = useTeams();
+  const { data: teams = [] } = useTeams({ includeRelations: false });
   return teams.find((team) => team.id === id)?.name ?? "Selected billing team";
 }

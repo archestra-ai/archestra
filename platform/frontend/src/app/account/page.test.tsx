@@ -94,7 +94,7 @@ describe("AccountProfilePage", () => {
       isPending: false,
     } as unknown as ReturnType<typeof useActiveMemberRole>);
     vi.mocked(useMyTeams).mockReturnValue({
-      data: [{ id: "t1", name: "Platform", myRole: "member", members: [] }],
+      data: [{ id: "t1", name: "Platform", myRole: "member", memberCount: 1 }],
       isPending: false,
       isLoadingError: false,
       refetch: vi.fn(),

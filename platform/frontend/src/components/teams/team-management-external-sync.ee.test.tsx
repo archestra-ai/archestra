@@ -6,7 +6,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { TeamManagementExternalSyncSection } from "./team-management-external-sync.ee";
 
-type Team = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
+type Team = archestraApiTypes.GetTeamResponses["200"];
 
 const { useTeamSyncIdentityProviderOptionsMock } = vi.hoisted(() => ({
   useTeamSyncIdentityProviderOptionsMock: vi.fn(),

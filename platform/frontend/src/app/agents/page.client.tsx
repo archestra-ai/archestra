@@ -132,7 +132,6 @@ import { AgentPinnedTiles } from "./agent-pinned-tiles";
 type AgentsInitialData = {
   agents: archestraApiTypes.GetAgentCatalogResponses["200"] | null;
   pinnedAgents: archestraApiTypes.GetAgentCatalogResponses["200"] | null;
-  teams: archestraApiTypes.GetTeamsResponses["200"]["data"];
 };
 
 type AgentListRow =

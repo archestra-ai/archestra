@@ -8,7 +8,6 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import { useMcpToolCalls } from "@/lib/mcp/mcp-tool-call.query";
-import { useOrganizationMembers } from "@/lib/organization.query";
 import McpGatewayLogsPage from "./page.client";
 
 // The cmdk-backed picker reaches for pointer-capture / scrollIntoView /
@@ -124,11 +123,6 @@ describe("McpGatewayLogsPage filters", () => {
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
     } as ReturnType<typeof useHasPermissions>);
-    vi.mocked(useOrganizationMembers).mockReturnValue({
-      data: [
-        { id: "user-alex", name: "Alex Reader", email: "alex@example.com" },
-      ],
-    } as unknown as ReturnType<typeof useOrganizationMembers>);
     vi.mocked(useInternalMcpCatalog).mockReturnValue({
       data: [],
     } as unknown as ReturnType<typeof useInternalMcpCatalog>);

@@ -238,12 +238,7 @@ export function ManageUsersContent({
   const isCurrentUserTeamAdmin = (teamId: string | null | undefined) => {
     if (!teamId || !currentUserId) return false;
     const team = userTeams?.find((team) => team.id === teamId);
-    return (
-      team?.members?.some(
-        (member) =>
-          member.userId === currentUserId && member.role === ADMIN_ROLE_NAME,
-      ) ?? false
-    );
+    return team?.myRole === ADMIN_ROLE_NAME;
   };
 
   // Get tooltip message for disabled revoke button

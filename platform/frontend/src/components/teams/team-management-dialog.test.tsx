@@ -6,7 +6,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { TeamManagementDialog } from "./team-management-dialog";
 
-type Team = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
+type Team = archestraApiTypes.GetTeamResponses["200"];
 
 const { useTokensMock } = vi.hoisted(() => ({
   useTokensMock: vi.fn(),

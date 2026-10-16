@@ -738,7 +738,7 @@ export async function handleLLMProxy<
   const providerBaseUrlHeaderValue =
     headersForExtraction[PROVIDER_BASE_URL_HEADER.toLowerCase()];
   const isInternalChatForward =
-    isLoopbackRequest(request) &&
+    internalCall &&
     typeof chatApiKeyIdHeader === "string" &&
     chatApiKeyIdHeader.length > 0 &&
     typeof providerBaseUrlHeaderValue === "string" &&
@@ -889,7 +889,7 @@ export async function handleLLMProxy<
       headersForExtraction[CHAT_API_KEY_ID_HEADER.toLowerCase()];
     const headerPresent =
       typeof headerValue === "string" && headerValue.length > 0;
-    if (isLoopbackRequest(request)) {
+    if (internalCall) {
       if (headerPresent) {
         perKeyChatApiKeyId = headerValue;
         perKeyChatApiKeyIdFromLoopbackHeader = true;
@@ -901,7 +901,7 @@ export async function handleLLMProxy<
     } else if (headerPresent) {
       logger.warn(
         { ip: request.socket.remoteAddress },
-        `[${providerName}Proxy] ignoring provider-api-key-id header from non-loopback request`,
+        `[${providerName}Proxy] ignoring provider-api-key-id header without internal proof`,
       );
     }
   }
@@ -958,7 +958,7 @@ export async function handleLLMProxy<
     apiKey,
     wasVirtualKeyResolved: wasVirtualKeyResolved || wasOAuthAuthenticated,
     wasJwksAuthenticated,
-    isLoopbackCaller: isLoopbackRequest(request),
+    isInternalCall: internalCall,
     providerSuppliesServerCredential:
       providerSuppliesServerCredential(providerName),
   });
@@ -1415,7 +1415,7 @@ export async function handleLLMProxy<
     // External clients must NOT be able to set this header — it would be an SSRF vector
     // (attacker could redirect the proxy to arbitrary URLs like cloud metadata endpoints).
     const providerBaseUrlHeader =
-      isLoopbackRequest(request) &&
+      internalCall &&
       typeof headersForExtraction["x-archestra-provider-base-url"] === "string"
         ? headersForExtraction["x-archestra-provider-base-url"]
         : undefined;

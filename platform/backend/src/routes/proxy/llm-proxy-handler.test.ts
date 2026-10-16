@@ -1,3 +1,4 @@
+import { internalCallHeader } from "@/clients/internal-call";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 
 /**
@@ -2101,6 +2102,7 @@ describe("LLM Proxy Handler — CHAT_API_KEY_ID_HEADER fallback", () => {
       url: `/v1/openai/${testAgent.id}/chat/completions`,
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         "content-type": "application/json",
         authorization: "Bearer test-key",
         [CHAT_API_KEY_ID_HEADER]: apiKey.id,
@@ -2203,6 +2205,7 @@ describe("LLM Proxy Handler — CHAT_API_KEY_ID_HEADER fallback", () => {
       url: `/v1/azure/${testAgent.id}/chat/completions`,
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         "content-type": "application/json",
         authorization: "Bearer synthetic-internal-key",
         [CHAT_API_KEY_ID_HEADER]: apiKey.id,
@@ -2243,6 +2246,7 @@ describe("LLM Proxy Handler — CHAT_API_KEY_ID_HEADER fallback", () => {
       url: `/v1/openai/${testAgent.id}/chat/completions`,
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         "content-type": "application/json",
         authorization: `Bearer ${foreignVirtualKey}`,
         [CHAT_API_KEY_ID_HEADER]: apiKey.id,
@@ -2318,6 +2322,7 @@ describe("LLM Proxy Handler — CHAT_API_KEY_ID_HEADER fallback", () => {
       url: `/v1/openai/${testAgent.id}/chat/completions`,
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         "content-type": "application/json",
         authorization: `Bearer arch_${"f".repeat(64)}`,
         [CHAT_API_KEY_ID_HEADER]: apiKey.id,
@@ -2361,6 +2366,7 @@ describe("LLM Proxy Handler — CHAT_API_KEY_ID_HEADER fallback", () => {
       url: `/v1/openai/${testAgent.id}/chat/completions`,
       remoteAddress: "127.0.0.1",
       headers: {
+        ...internalCallHeader(),
         "content-type": "application/json",
         authorization: `Bearer ${localVirtualKey}`,
         [CHAT_API_KEY_ID_HEADER]: providerKey.id,

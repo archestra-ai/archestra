@@ -474,6 +474,24 @@ class ServiceAccountModel {
     return updated ? normalizeToken(updated) : null;
   }
 
+  /** The account row alone, without the keys {@link findById} lists. */
+  static async findAccount(
+    id: string,
+    organizationId: string,
+  ): Promise<SelectServiceAccount | null> {
+    const [row] = await db
+      .select()
+      .from(schema.serviceAccountsTable)
+      .where(
+        and(
+          eq(schema.serviceAccountsTable.id, id),
+          eq(schema.serviceAccountsTable.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
+  }
+
   static async verifyToken(token: string): Promise<{
     serviceAccount: SelectServiceAccount;
     token: SelectServiceAccountToken;

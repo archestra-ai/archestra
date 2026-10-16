@@ -1,6 +1,14 @@
-import { generateText } from "ai";
+import { generateText, type SystemModelMessage } from "ai";
 import type { LLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
+
+/**
+ * How much more room the truncation retry gets. One doubling is enough for a
+ * caller whose ceiling merely failed to account for hidden reasoning; a caller
+ * that needs more than that has a cap set wrong, and the `length`-on-both-
+ * attempts warning says so rather than escalating spend silently.
+ */
+export const TRUNCATION_RETRY_FACTOR = 2;
 
 /**
  * Generate a single piece of text the model must wrap in one `<tag>…</tag>`
@@ -22,7 +30,8 @@ export async function generateTaggedText(params: {
   model: LLMModel;
   /** Tag the answer must be wrapped in, e.g. `description`. */
   tag: string;
-  system: string;
+  /** A message form carries provider options such as a cache breakpoint. */
+  system: string | SystemModelMessage;
   prompt: string;
   maxOutputTokens?: number;
   temperature?: number;
@@ -32,7 +41,7 @@ export async function generateTaggedText(params: {
 }): Promise<string | null> {
   const { model, tag, prompt } = params;
   const sanitize = params.sanitize ?? ((text) => text.trim());
-  const system = `${params.system}\n\n${outputContract(tag)}`;
+  const system = withOutputContract(params.system, tag);
   const options = {
     maxOutputTokens: params.maxOutputTokens,
     temperature: params.temperature,
@@ -128,13 +137,17 @@ export function extractTaggedText(text: string, tag: string): string | null {
   return inner.length > 0 ? inner : null;
 }
 
-/**
- * How much more room the truncation retry gets. One doubling is enough for a
- * caller whose ceiling merely failed to account for hidden reasoning; a caller
- * that needs more than that has a cap set wrong, and the `length`-on-both-
- * attempts warning says so rather than escalating spend silently.
- */
-const TRUNCATION_RETRY_FACTOR = 2;
+function withOutputContract(
+  system: string | SystemModelMessage,
+  tag: string,
+): SystemModelMessage {
+  const message: SystemModelMessage =
+    typeof system === "string" ? { role: "system", content: system } : system;
+  return {
+    ...message,
+    content: `${message.content}\n\n${outputContract(tag)}`,
+  };
+}
 
 function outputContract(tag: string): string {
   return `Output contract: reply with EXACTLY ONE <${tag}>...</${tag}> block — your answer inside the tags, no text outside them.`;

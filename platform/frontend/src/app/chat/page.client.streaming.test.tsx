@@ -115,7 +115,10 @@ const server = setupServer(
       },
     ]),
   ),
-  http.get("/api/agents/all", () => HttpResponse.json([agent])),
+  http.get("/api/members/default-agent", () =>
+    HttpResponse.json({ defaultAgentId: null, personalChatAgentId: null }),
+  ),
+  http.get("/api/agents/chat-roster", () => HttpResponse.json([agent])),
   http.get(`/api/agents/${agent.id}`, () => HttpResponse.json(agent)),
   http.get("/api/agents/:id/tools", () => HttpResponse.json([])),
   http.get("/api/chat/conversations/:id", () =>

@@ -113,7 +113,6 @@ import {
   setupModeFor,
   useManualSteps,
 } from "./manual-setup";
-import { detectPlatform } from "./platform.utils";
 import { useUpdateUrlParams } from "./use-update-url-params";
 
 // The approval panel is large; the page only needs it for Claude Desktop's
@@ -647,8 +646,8 @@ function ConnectArea({
   const { copied, copy: copyText } = useCopy();
   const [origin, setOrigin] = useState("");
   useEffect(() => setOrigin(window.location.origin), []);
-  const [windows, setWindows] = useState(false);
-  useEffect(() => setWindows(detectPlatform() === "windows"), []);
+  // The page's OS, so the plugins it shows are the ones this command installs.
+  const { windows, setWindows } = data;
   const manual = setup === "manual";
   const script = setup === "script";
   const download = setup === "download";
@@ -1267,7 +1266,7 @@ function ProfileCard({
     });
 
   const included =
-    (skillsOn && !skillsOff ? skills.length : 0) +
+    (skillsOn && !skillsOff ? data.totalSkills : 0) +
     (pluginsOff ? 0 : plugins.length);
 
   return (
@@ -1391,7 +1390,7 @@ function ProfileCard({
                 title={
                   skillsOff
                     ? "Skills off"
-                    : `+${fmt(skills.length)} ${plural(skills.length, "skill")}`
+                    : `+${fmt(data.totalSkills)} ${plural(data.totalSkills, "skill")}`
                 }
                 sub={
                   skillsOff
@@ -1400,7 +1399,7 @@ function ProfileCard({
                 }
                 muted={skillsOff}
                 onTitle={() => onOpen("skills")}
-                seeAll={seeAllLabel(skills.length, "skill")}
+                seeAll={seeAllLabel(data.totalSkills, "skill")}
               >
                 {skills.slice(0, SKILL_ROWS).map((s) => (
                   <ListRow

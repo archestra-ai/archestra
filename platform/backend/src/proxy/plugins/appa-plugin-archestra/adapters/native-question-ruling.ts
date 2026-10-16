@@ -1,7 +1,7 @@
 import type {
+  NativeQuestionNoAnswer,
   NativeQuestionReading,
   NativeQuestionResult,
-  NativeQuestionRuling,
 } from "../types";
 
 /**
@@ -12,17 +12,11 @@ export function structuredQuestionRuling(
   result: NativeQuestionResult,
   question: string,
 ): NativeQuestionReading {
-  if (result.isError) return "unavailable";
-  try {
-    const parsed = JSON.parse(result.content) as { answers?: unknown };
-    if (typeof parsed === "string") return textQuestionRuling(parsed, question);
-    const structured = rulingFromValues(stringValues(parsed.answers));
-    return structured !== "none"
-      ? structured
-      : textQuestionRuling(result.content, question);
-  } catch {
-    return textQuestionRuling(result.content, question);
+  const reading = labeledQuestionRuling(result, question, RULING_LABELS);
+  if (typeof reading === "object") {
+    return reading.label === "Approve" ? "approve" : "deny";
   }
+  return reading;
 }
 
 export function openCodeQuestionRuling(
@@ -30,7 +24,43 @@ export function openCodeQuestionRuling(
   question: string,
 ): NativeQuestionReading {
   if (result.isError) return "unavailable";
-  return textQuestionRuling(result.content, question);
+  const reading = textQuestionSelection(
+    result.content,
+    question,
+    RULING_LABELS,
+  );
+  if (typeof reading === "object") {
+    return reading.label === "Approve" ? "approve" : "deny";
+  }
+  return reading;
+}
+
+/**
+ * Reads which of the given option labels the answer selects, for a question
+ * the platform wrote. Returns the selected label, a known terminal no-answer,
+ * or "unrecognized" for a wording the adapter does not know. An unrecognized
+ * answer is never read as a choice.
+ */
+export function labeledQuestionRuling(
+  result: NativeQuestionResult,
+  question: string,
+  labels: readonly string[],
+): { label: string } | NativeQuestionNoAnswer | "unrecognized" {
+  if (result.isError) return "unavailable";
+  try {
+    const parsed = JSON.parse(result.content) as { answers?: unknown };
+    if (typeof parsed === "string")
+      return textQuestionSelection(parsed, question, labels);
+    const structured = selectionFromValues(
+      stringValues(parsed.answers),
+      labels,
+    );
+    return (
+      structured ?? textQuestionSelection(result.content, question, labels)
+    );
+  } catch {
+    return textQuestionSelection(result.content, question, labels);
+  }
 }
 
 /**
@@ -44,34 +74,36 @@ export function openCodeQuestionRuling(
  * repeats a selection: Claude Code also writes `"<question>"="Approve"` when
  * the user went idle before submitting, asked a follow-up, or added a note.
  * So only the wordings below count. A known text that says the user gave no
- * answer is "none". Any other text is "unrecognized", never a guess.
+ * answer is a no-answer. Any other text is "unrecognized", never a guess.
  */
-function textQuestionRuling(
+function textQuestionSelection(
   content: string,
   question: string,
-): NativeQuestionReading {
+  labels: readonly string[],
+): { label: string } | NativeQuestionNoAnswer | "unrecognized" {
   for (const opening of ANSWER_OPENINGS) {
     const asked = `${opening}"${question}"="`;
     if (!content.startsWith(asked)) continue;
     const answer = content.slice(asked.length);
-    for (const label of ["Approve", "Deny"]) {
+    // Longest first: a label that prefixes another cannot shadow it.
+    for (const label of [...labels].sort((a, b) => b.length - a.length)) {
       if (
         SELECTED_OPTION_ENDINGS.some((ending) =>
           answer.startsWith(`${label}"${ending}`),
         )
       )
-        return rulingFromValues([label]);
+        return { label };
     }
   }
   return NO_ANSWER.get(content.trim()) ?? "unrecognized";
 }
 
-function rulingFromValues(values: readonly string[]): NativeQuestionRuling {
-  const selected = values.filter(
-    (value) => value === "Approve" || value === "Deny",
-  );
-  if (selected.length !== 1) return "none";
-  return selected[0] === "Approve" ? "approve" : "deny";
+function selectionFromValues(
+  values: readonly string[],
+  labels: readonly string[],
+): { label: string } | undefined {
+  const selected = values.filter((value) => labels.includes(value));
+  return selected.length === 1 ? { label: selected[0] } : undefined;
 }
 
 function stringValues(value: unknown): string[] {
@@ -81,6 +113,8 @@ function stringValues(value: unknown): string[] {
     return Object.values(value).flatMap(stringValues);
   return [];
 }
+
+const RULING_LABELS = ["Approve", "Deny"];
 
 // The openings of a submitted answer. Claude Code writes the first, OpenCode
 // and earlier Claude Code versions the second.

@@ -1,11 +1,16 @@
 "use client";
 
-import { Check, TriangleAlert } from "lucide-react";
+import { Check, Loader2, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 import { LoadingState } from "@/components/loading";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   useClientConnection,
   useDecideClientConnection,
@@ -14,10 +19,12 @@ import { postConnected } from "@/lib/connect-signal";
 import { ClaudeDesktopGatewaySteps } from "./claude-desktop-gateway-steps";
 import { ClientIcon } from "./client-icon";
 import { CONNECT_CLIENTS } from "./clients";
+import { platformLabels, toPlatformOption } from "./platform.utils";
 
 export function ClientConnectionApproval({
   requestId,
   setupId,
+  setupProblem,
   clientId,
   platform,
   gatewaySelected,
@@ -27,6 +34,11 @@ export function ClientConnectionApproval({
 }: {
   requestId: string;
   setupId?: string;
+  /**
+   * Why the setup cannot be prepared and how to fix it (a selection over a
+   * limit, or a refused request); null while it can still arrive.
+   */
+  setupProblem: string | null;
   clientId: string;
   platform: string;
   gatewaySelected: boolean;
@@ -126,6 +138,27 @@ export function ClientConnectionApproval({
     );
   const matches =
     request.data.clientId === clientId && request.data.platform === platform;
+  const requestedClientId = request.data.clientId;
+  const requestedClientLabel =
+    CONNECT_CLIENTS.find((c) => c.id === requestedClientId)?.label ??
+    "another app";
+  // Approve stays off until every check passes; the tooltip names the first
+  // one that does not, and what to do about it.
+  const approveBlockedReason = !matches
+    ? `Your terminal asked to connect ${requestedClientLabel} on ${platformLabels[toPlatformOption(request.data.platform)]}. Select the same app and operating system on this page, then approve.`
+    : setupProblem
+      ? setupProblem
+      : !confirmed
+        ? "Check that the code above matches the code in your terminal, then select the checkbox to confirm it."
+        : !setupId
+          ? "Preparing the setup for your terminal. Approve turns on as soon as it is ready."
+          : null;
+  // Something is still on its way (the setup, or the decision being sent):
+  // show it moving, so a disabled button does not read as stuck.
+  const working = (!setupId && !setupProblem) || decision.isPending;
+  const approveDisabledReason =
+    approveBlockedReason ??
+    (decision.isPending ? "Sending your decision…" : null);
   return (
     <div>
       <div className="space-y-3 p-4 sm:p-5">
@@ -175,23 +208,47 @@ export function ClientConnectionApproval({
         )}
       </div>
       <div className="flex flex-wrap gap-2 border-t bg-muted/20 px-4 py-3 sm:px-5">
-        <Button
-          size="sm"
-          disabled={!confirmed || !matches || !setupId || decision.isPending}
-          onClick={() =>
-            decision.mutate(
-              { decision: "approve", setupId: setupId as string },
-              {
-                // Tell the Connect page in another tab to show what's next.
-                onSuccess: (result) => {
-                  if (result?.status === "approved") postConnected();
-                },
-              },
-            )
-          }
-        >
-          <span>Approve connection</span>
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {/* A disabled button gets no pointer or focus events, so this
+                wrapper carries the reason. It stays mounted either way, so
+                Approve keeps its identity and focus when it turns on. */}
+            <span
+              className="inline-flex"
+              tabIndex={approveDisabledReason ? 0 : undefined}
+            >
+              <Button
+                size="sm"
+                disabled={approveDisabledReason !== null}
+                onClick={() =>
+                  decision.mutate(
+                    { decision: "approve", setupId: setupId as string },
+                    {
+                      // Tell the Connect page in another tab to show what's next.
+                      onSuccess: (result) => {
+                        if (result?.status === "approved") postConnected();
+                      },
+                    },
+                  )
+                }
+              >
+                {working && (
+                  <Loader2
+                    aria-hidden
+                    data-testid="approve-connection-progress"
+                    className="animate-spin"
+                  />
+                )}
+                <span>Approve connection</span>
+              </Button>
+            </span>
+          </TooltipTrigger>
+          {approveDisabledReason && (
+            <TooltipContent className="max-w-xs">
+              {approveDisabledReason}
+            </TooltipContent>
+          )}
+        </Tooltip>
         <Button
           size="sm"
           variant="outline"

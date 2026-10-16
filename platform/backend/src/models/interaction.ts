@@ -102,6 +102,12 @@ const SESSION_SCAN_BATCH_ROWS = 500;
 const SESSION_SCAN_MAX_ROWS = 20_000;
 
 /**
+ * How many of a session's newest rows a preview lookup reads past guardrail
+ * calls; a longer run keeps the turn the sample found.
+ */
+const GUARDRAIL_SKIP_SCAN_ROWS = 200;
+
+/**
  * Session totals keyed by filter set (see getSessions). Per-pod and in-process
  * on purpose: the value is cheap to recompute on a miss, so it is not worth a
  * round-trip to the distributed cache to share it between pods. Bounded well
@@ -143,6 +149,11 @@ function getMessageText(
   return "";
 }
 
+/** A guardrail's own model call (e.g. an annotator consult) inside the session it judges. */
+function isGuardrailSource(source: string | null): boolean {
+  return source?.startsWith("guardrail:") ?? false;
+}
+
 /**
  * Detects if a request is a "main" request or "subagent" request.
  *
@@ -173,7 +184,7 @@ function computeRequestType(
   // the session detail view must badge them as "subagent". A chat session's
   // session_source is not a Claude source, so without this the heuristics below
   // would fall through to "main" and mislabel every auxiliary chat call.
-  if (source?.startsWith("chat:")) {
+  if (source?.startsWith("chat:") || isGuardrailSource(source)) {
     return "subagent";
   }
 
@@ -783,6 +794,7 @@ class InteractionModel {
               WHEN ${schema.interactionsTable.source} IN ('opencode:main', 'kilo:main')
               THEN 'main'
               WHEN ${schema.interactionsTable.source} IN ('opencode:subagent', 'opencode:title', 'opencode:compaction', 'kilo:subagent', 'kilo:title', 'kilo:compaction')
+                OR ${schema.interactionsTable.source} LIKE 'guardrail:%'
               THEN 'subagent'
               WHEN ${schema.interactionsTable.sessionSource} IN ('opencode_session', 'kilo_session')
                 AND LOWER(CONCAT_WS('\n',
@@ -1478,17 +1490,27 @@ class InteractionModel {
     const access = await InteractionModel.buildSessionConditions(
       requestingUserId,
       isAgentAdmin,
-      filters,
+      filters ? { ...filters, organizationId: undefined } : undefined,
     );
     if (access === SESSION_ACCESS_DENIED) {
       return emptyPage();
     }
-    const whereClause = access;
+    const whereClause = filters?.organizationId
+      ? and(access, interactionBelongsToOrganization(filters.organizationId))
+      : access;
+    const headWhereClause = filters?.organizationId
+      ? and(
+          access,
+          InteractionModel.sessionHeadOrganizationCondition(
+            filters.organizationId,
+          ),
+        )
+      : access;
 
     // One row past the page is fetched so its presence can answer "is there
     // another page" — the job the total count used to do.
     const heads = await InteractionModel.findSessionHeadsForCursor(
-      whereClause,
+      headWhereClause,
       cursorQuery,
     );
     const hasNext = heads.length > cursorQuery.limit;
@@ -1641,6 +1663,28 @@ class InteractionModel {
     }
 
     return conditions.length > 0 ? and(...conditions) : undefined;
+  }
+
+  /**
+   * A bounded head scan should probe owner primary keys, rather than build the
+   * organization's complete owner sets before it can return its first page.
+   * Scalar subqueries prevent PostgreSQL from rewriting EXISTS into hashed
+   * full-roster scans. Missing owners fail closed, as in the shared predicate.
+   */
+  private static sessionHeadOrganizationCondition(organizationId: string): SQL {
+    const t = schema.interactionsTable;
+    const agent = schema.agentsTable;
+    const connector = schema.knowledgeBaseConnectorsTable;
+    const app = schema.appsTable;
+    const agentBelongs = sql`COALESCE((SELECT ${agent.organizationId} = ${organizationId} FROM ${agent} WHERE ${agent.id} = ${t.profileId}), false)`;
+    const connectorBelongs = sql`COALESCE((SELECT ${connector.organizationId} = ${organizationId} FROM ${connector} WHERE ${connector.id} = ${t.connectorId}), false)`;
+    const appBelongs = sql`COALESCE((SELECT ${app.organizationId} = ${organizationId} FROM ${app} WHERE ${app.id} = ${t.appId}), false)`;
+    return and(
+      or(agentBelongs, connectorBelongs, appBelongs),
+      or(sql`${t.profileId} IS NULL`, agentBelongs),
+      or(sql`${t.connectorId} IS NULL`, connectorBelongs),
+      or(sql`${t.appId} IS NULL`, appBelongs),
+    ) as SQL;
   }
 
   /**
@@ -2127,6 +2171,7 @@ class InteractionModel {
       string,
       {
         lastMainInteraction: (typeof interactions)[0] | null;
+        guardrailTip: (typeof interactions)[0] | null;
         claudeCodeTitle: string | null | undefined;
       }
     >();
@@ -2136,13 +2181,17 @@ class InteractionModel {
       windowRows: SessionWindowRow[],
     ): {
       lastMainInteraction: SessionWindowRow | null;
+      guardrailTip: SessionWindowRow | null;
       claudeCodeTitle: string | null | undefined;
     } => {
       let lastMainInteraction: SessionWindowRow | null = null;
+      // A guardrail's call previews only a session that has nothing else.
+      let guardrailTip: SessionWindowRow | null = null;
       // undefined = not yet found, null = found but no text, string = found with text
       let claudeCodeTitle: string | null | undefined;
 
       for (const interaction of windowRows) {
+        const isGuardrail = isGuardrailSource(interaction.source);
         const isOpenCodeSideTurn =
           isOpenCodeFamilySessionSource(interaction.sessionSource) &&
           computeRequestType(
@@ -2164,9 +2213,10 @@ class InteractionModel {
         // Skip if this is not a "main" interaction
         if (
           !lastMainInteraction &&
-          !isOpenCodeSideTurn &&
-          !interaction.isPromptSuggestion &&
-          !interaction.isTitleGeneration
+          (isGuardrail ||
+            (!isOpenCodeSideTurn &&
+              !interaction.isPromptSuggestion &&
+              !interaction.isTitleGeneration))
         ) {
           // Check if request has valid content - support both OpenAI/Anthropic and Gemini formats
           // We accept any interaction that has a valid request structure, not just text content.
@@ -2200,7 +2250,8 @@ class InteractionModel {
             hasGeminiContent ||
             isLogContentNotStored(interaction.request)
           ) {
-            lastMainInteraction = interaction;
+            if (isGuardrail) guardrailTip ??= interaction;
+            else lastMainInteraction = interaction;
           }
         }
 
@@ -2210,12 +2261,16 @@ class InteractionModel {
         }
       }
 
-      return { lastMainInteraction, claudeCodeTitle };
+      return { lastMainInteraction, guardrailTip, claudeCodeTitle };
     };
 
     for (const [sessionKey, windowRows] of groupedBySession) {
       const selection = selectTip(windowRows);
-      if (selection.lastMainInteraction || selection.claudeCodeTitle) {
+      if (
+        selection.lastMainInteraction ||
+        selection.guardrailTip ||
+        selection.claudeCodeTitle
+      ) {
         selectedPerSession.set(sessionKey, selection);
       }
     }
@@ -2224,20 +2279,39 @@ class InteractionModel {
     // prompt suggestions — yields no main interaction, and would lose the
     // preview the old deep window used to find. Re-read just those sessions at
     // the old depth so the preview cannot regress; in the common case the list
-    // is empty and this costs nothing.
-    const unresolvedKeys = [...groupedBySession.keys()].filter(
-      (key) => !selectedPerSession.get(key)?.lastMainInteraction,
-    );
+    // is empty and this costs nothing. A tip found only past the newest rows
+    // may skip newer turns between the two windows (behind a run of guardrail
+    // calls, say), so such a session is re-read too.
+    const unresolvedKeys = [...groupedBySession]
+      .filter(([key, rows]) => {
+        const tip = selectedPerSession.get(key)?.lastMainInteraction;
+        return !tip || rows.indexOf(tip) >= NEWEST_PER_SESSION;
+      })
+      .map(([key]) => key);
     if (unresolvedKeys.length > 0) {
       const deepRows = await InteractionModel.fetchSessionWindowRows({
         sessionKeys: unresolvedKeys,
         uuidKeys: [],
         newest: DEEP_PER_SESSION,
         oldest: 0,
+        // However many guardrail calls follow the last turn; a session of
+        // nothing but them keeps the guardrail tip its sample found.
+        skipGuardrails: true,
       });
       for (const [sessionKey, windowRows] of groupRowsBySession(deepRows)) {
-        const selection = selectTip(windowRows);
-        if (selection.lastMainInteraction || selection.claudeCodeTitle) {
+        const deep = selectTip(windowRows);
+        const sampled = selectedPerSession.get(sessionKey);
+        const selection = {
+          lastMainInteraction:
+            deep.lastMainInteraction ?? sampled?.lastMainInteraction ?? null,
+          guardrailTip: sampled?.guardrailTip ?? null,
+          claudeCodeTitle: deep.claudeCodeTitle ?? sampled?.claudeCodeTitle,
+        };
+        if (
+          selection.lastMainInteraction ||
+          selection.guardrailTip ||
+          selection.claudeCodeTitle
+        ) {
           selectedPerSession.set(sessionKey, selection);
         }
       }
@@ -2248,7 +2322,10 @@ class InteractionModel {
     // Still at most one tip per session, now in a single ancestor query.
     const reconstructed = await InteractionDeltaManager.reconstructMany(
       [...selectedPerSession.values()]
-        .map(({ lastMainInteraction }) => lastMainInteraction)
+        .map(
+          ({ lastMainInteraction, guardrailTip }) =>
+            lastMainInteraction ?? guardrailTip,
+        )
         .filter((tip): tip is (typeof interactions)[0] => tip !== null)
         .map((tip) => ({
           id: tip.id,
@@ -2260,8 +2337,9 @@ class InteractionModel {
 
     for (const [
       sessionKey,
-      { lastMainInteraction, claudeCodeTitle },
+      { lastMainInteraction: mainTip, guardrailTip, claudeCodeTitle },
     ] of selectedPerSession) {
+      const lastMainInteraction = mainTip ?? guardrailTip;
       const tipRequest = lastMainInteraction
         ? (reconstructed.get(lastMainInteraction.id)?.request ??
           lastMainInteraction.request)
@@ -2297,11 +2375,13 @@ class InteractionModel {
     uuidKeys,
     newest,
     oldest,
+    skipGuardrails = false,
   }: {
     sessionKeys: string[];
     uuidKeys: string[];
     newest: number;
     oldest: number;
+    skipGuardrails?: boolean;
   }): Promise<SessionWindowRow[]> {
     if (sessionKeys.length === 0) {
       return [];
@@ -2336,6 +2416,13 @@ class InteractionModel {
          ORDER BY created_at ASC NULLS FIRST, id ASC
          LIMIT ${oldest})`
         : sql``;
+    const newestFrom = skipGuardrails
+      ? sql`(SELECT * FROM interactions
+             WHERE session_id = keys.key
+             ORDER BY created_at DESC NULLS LAST, id DESC
+             LIMIT ${GUARDRAIL_SKIP_SCAN_ROWS}) recent
+           WHERE source IS NULL OR source NOT LIKE 'guardrail:%'`
+      : sql`interactions WHERE session_id = keys.key`;
     const sessionlessBranch =
       uuidKeys.length > 0
         ? sql`
@@ -2380,8 +2467,7 @@ class InteractionModel {
       CROSS JOIN LATERAL (
         (SELECT id, session_id, session_source, source, thread_id, request, type, created_at,
                 encrypted_chat_conversation_id
-         FROM interactions
-         WHERE session_id = keys.key
+         FROM ${newestFrom}
          ORDER BY created_at DESC NULLS LAST, id DESC
          LIMIT ${newest})
         ${oldestBranch}
@@ -2403,7 +2489,11 @@ class InteractionModel {
     // overlap, and the caller's scan must not see the same row twice.
     const byId = new Map<string, SessionWindowRow>();
     for (const row of interactionsResult.rows) {
-      const requestText = JSON.stringify(row.request);
+      // A guardrail consult quotes the call it judges, so its text marks
+      // nothing about the consult itself.
+      const requestText = isGuardrailSource(row.source)
+        ? ""
+        : JSON.stringify(row.request);
       byId.set(row.id, {
         id: row.id,
         sessionId: row.session_id,

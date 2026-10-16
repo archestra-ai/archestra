@@ -1,5 +1,5 @@
 {
-  "id": "12e11c41-3801-44aa-a74a-65d661b47444",
+  "id": "de87642e-7234-411c-9c03-64708230a983",
   "prevId": "462fc456-a7ef-4e58-8c69-e9f07653be3d",
   "version": "7",
   "dialect": "postgresql",
@@ -24633,6 +24633,32 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.startup_migrations": {
+      "name": "startup_migrations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.tasks": {
       "name": "tasks",
       "schema": "",
@@ -28973,6 +28999,38 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "declarations_pending_publish": {
+          "name": "declarations_pending_publish",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "held_content": {
+          "name": "held_content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "held_content_hash": {
+          "name": "held_content_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "held_source_commit": {
+          "name": "held_source_commit",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "held_reasons": {
+          "name": "held_reasons",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
         }
       },
       "indexes": {},

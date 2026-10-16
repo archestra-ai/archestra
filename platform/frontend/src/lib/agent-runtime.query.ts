@@ -1,6 +1,12 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type { FileUIPart } from "ai";
+import { useMemo } from "react";
 import { toast } from "sonner";
 import {
   hasRecentlyEnded,
@@ -54,11 +60,18 @@ export function useAgentRuntimePreflight(agentId: string, enabled = true) {
 /** Why a runtime agent's Send is blocked by its preflight, if it is. */
 export function runtimePreflightDisabledReason(preflight: {
   isPending: boolean;
-  data?: { ready: boolean } | null;
+  isError?: boolean;
+  data?: {
+    ready: boolean;
+    missing?: Array<{ adminOnly?: boolean }>;
+  } | null;
 }): string | undefined {
   if (preflight.isPending) return "Checking the agent's credentials…";
+  if (preflight.isError) return "Can't check this agent's setup";
   if (preflight.data?.ready !== true) {
-    return "Connect the credentials this agent needs";
+    return preflight.data?.missing?.some((entry) => entry.adminOnly)
+      ? "Only admins can run this agent"
+      : "Connect the credentials this agent needs";
   }
   return undefined;
 }
@@ -78,14 +91,38 @@ export function useAgentRuns(agentId: string, enabled = true) {
   });
 }
 
-export function useMyAgentRuns(enabled = true) {
-  return useQuery({
-    queryKey: ["agent-runs", "mine"],
-    queryFn: loadMyAgentRuns,
+export function useMyAgentRuns(
+  enabled = true,
+  options: {
+    pinned?: boolean;
+    search?: string;
+  } = {},
+) {
+  const query = useInfiniteQuery({
+    queryKey: ["agent-runs", "mine", options],
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
+      const { data, error } = await getMyAgentRuns({
+        query: {
+          limit: MY_RUNS_PAGE_SIZE,
+          offset: pageParam,
+          sort: options.pinned ? "pinned" : "recent",
+          ...options,
+        },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data;
+    },
+    getNextPageParam: (lastPage, pages) =>
+      lastPage?.pagination.hasNext
+        ? pages.length * MY_RUNS_PAGE_SIZE
+        : undefined,
     enabled,
     refetchInterval: (query) => {
       if (!enabled) return false;
-      const runs = query.state.data ?? [];
+      // Only pages explicitly loaded into the visible list are refreshed.
+      const runs =
+        query.state.data?.pages.flatMap((page) => page?.data ?? []) ?? [];
       const now = Date.now();
       if (
         runs.some((run) => !run.endedAt || hasRetainedSessionActivity(run, now))
@@ -95,6 +132,17 @@ export function useMyAgentRuns(enabled = true) {
       return runs.some((run) => hasRecentlyEnded(run, now)) ? 10_000 : false;
     },
   });
+  const data = useMemo(() => {
+    if (!query.data) return undefined;
+    const runs = new Map<string, AgentRunSession>();
+    for (const page of query.data.pages) {
+      for (const run of page?.data ?? []) {
+        if (!runs.has(run.taskId)) runs.set(run.taskId, run);
+      }
+    }
+    return [...runs.values()];
+  }, [query.data]);
+  return { ...query, data };
 }
 
 export function useMyAgentRun(taskId: string, enabled = true) {
@@ -462,24 +510,6 @@ export function useSetMissingAgentRuntimeCredentials(agentId: string) {
       ]);
     },
   });
-}
-
-async function loadMyAgentRuns(): Promise<AgentRunSession[]> {
-  const runs: AgentRunSession[] = [];
-  let offset = 0;
-
-  while (true) {
-    const { data, error } = await getMyAgentRuns({
-      query: { limit: MY_RUNS_PAGE_SIZE, offset },
-    });
-    throwOnApiError(error, { toastOnError: false });
-    runs.push(...(data?.data ?? []));
-
-    if (!data?.pagination.hasNext) {
-      return runs;
-    }
-    offset += MY_RUNS_PAGE_SIZE;
-  }
 }
 
 const MY_RUNS_PAGE_SIZE = 100;

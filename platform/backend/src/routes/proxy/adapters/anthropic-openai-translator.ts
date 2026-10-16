@@ -115,7 +115,10 @@ export function openaiToAnthropic(req: OpenAiRequest): {
 
   const anthropicBody: AnthropicRequest = {
     model: req.model,
-    max_tokens: req.max_tokens ?? DEFAULT_ANTHROPIC_MAX_TOKENS,
+    max_tokens:
+      req.max_tokens ??
+      req.max_completion_tokens ??
+      DEFAULT_ANTHROPIC_MAX_TOKENS,
     messages,
     stream: req.stream === true ? true : undefined,
   };

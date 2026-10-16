@@ -28,10 +28,62 @@ import {
   sql,
 } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
+import { idArrayCondition } from "./id-array-condition";
 import type { GrantPrincipal } from "./resource-permission-subject";
 import RoleCompositionModel from "./role-composition";
 
+export type ObjectPolicy = Pick<
+  typeof schema.resourcePermissionPoliciesTable.$inferSelect,
+  "organizationId" | "resource" | "scope" | "grants"
+>;
+
 export default class ResourcePermissionPolicyModel {
+  /** Bound application memory while upgrading a large legacy policy catalog. */
+  static async listForPresetUpgrade(params: {
+    tx: Transaction;
+    after?: { organizationId: string; resource: string; scope: string };
+  }) {
+    const table = schema.resourcePermissionPoliciesTable;
+    return params.tx
+      .select({
+        organizationId: table.organizationId,
+        resource: table.resource,
+        scope: table.scope,
+        grants: table.grants,
+      })
+      .from(table)
+      .where(
+        params.after
+          ? sql`(${table.organizationId}, ${table.resource}, ${table.scope}) >
+        (${params.after.organizationId}, ${params.after.resource}, ${params.after.scope})`
+          : undefined,
+      )
+      .orderBy(table.organizationId, table.resource, table.scope)
+      .limit(100);
+  }
+
+  static async updatePresetUpgradePolicy(params: {
+    tx: Transaction;
+    policy: { organizationId: string; resource: ScopedResource; scope: string };
+    grants: ResourcePermissionGrant[];
+  }): Promise<void> {
+    const table = schema.resourcePermissionPoliciesTable;
+    await params.tx
+      .update(table)
+      .set({
+        grants: params.grants,
+        revision: sql`${table.revision} + 1`,
+        updatedAt: sql`now()`,
+      })
+      .where(
+        and(
+          eq(table.organizationId, params.policy.organizationId),
+          eq(table.resource, params.policy.resource),
+          eq(table.scope, params.policy.scope),
+        ),
+      );
+  }
+
   /**
    * Whether a policy puts an object within reach of the organization at large,
    * for a principal that carries no role of its own — a shared credential, an
@@ -722,24 +774,58 @@ export default class ResourcePermissionPolicyModel {
     );
   }
 
+  /** Load object-local policy presentation once for a roster's audience and recipients. */
+  static async findObjectPolicies(params: {
+    resources: ScopedResource[];
+    scopes: string[];
+  }): Promise<ObjectPolicy[]> {
+    if (params.scopes.length === 0 || params.resources.length === 0) return [];
+    const table = schema.resourcePermissionPoliciesTable;
+    return db
+      .select({
+        organizationId: table.organizationId,
+        resource: table.resource,
+        scope: table.scope,
+        grants: table.grants,
+      })
+      .from(table)
+      .where(
+        and(
+          inArray(table.resource, params.resources),
+          idArrayCondition(table.scope, params.scopes),
+        ),
+      );
+  }
+
   /** {@link findAudience} for several objects of one resource at once. */
   static async findAudiences(params: {
     organizationId: string;
     resource: ScopedResource;
     scopes: string[];
+    /** Undefined loads policies; an empty array deliberately represents none. */
+    policies?: ObjectPolicy[];
   }): Promise<Map<string, ObjectAudience>> {
     if (params.scopes.length === 0) return new Map();
     const table = schema.resourcePermissionPoliciesTable;
-    const policies = await db
-      .select()
-      .from(table)
-      .where(
-        and(
-          eq(table.organizationId, params.organizationId),
-          eq(table.resource, params.resource),
-          inArray(table.scope, params.scopes),
-        ),
-      );
+    const scopes = new Set(params.scopes);
+    const policies =
+      params.policies === undefined
+        ? await db
+            .select()
+            .from(table)
+            .where(
+              and(
+                eq(table.organizationId, params.organizationId),
+                eq(table.resource, params.resource),
+                idArrayCondition(table.scope, params.scopes),
+              ),
+            )
+        : params.policies.filter(
+            (policy) =>
+              policy.organizationId === params.organizationId &&
+              policy.resource === params.resource &&
+              scopes.has(policy.scope),
+          );
     const byScope = new Map(policies.map((policy) => [policy.scope, policy]));
     return new Map(
       params.scopes.map((scope) => [scope, audienceOf(byScope.get(scope))]),
@@ -755,6 +841,8 @@ export default class ResourcePermissionPolicyModel {
   static async findReadRecipients(params: {
     resources: ScopedResource[];
     scopes: string[];
+    /** Undefined loads policies; an empty array deliberately represents none. */
+    policies?: ObjectPolicy[];
   }): Promise<Map<string, ReadRecipients>> {
     const recipients = new Map<string, ReadRecipients>(
       params.scopes.map((scope) => [
@@ -765,15 +853,23 @@ export default class ResourcePermissionPolicyModel {
     if (params.scopes.length === 0 || params.resources.length === 0)
       return recipients;
     const table = schema.resourcePermissionPoliciesTable;
-    const policies = await db
-      .select({ scope: table.scope, grants: table.grants })
-      .from(table)
-      .where(
-        and(
-          inArray(table.resource, params.resources),
-          inArray(table.scope, params.scopes),
-        ),
-      );
+    const scopes = new Set(params.scopes);
+    const policies =
+      params.policies === undefined
+        ? await db
+            .select({ scope: table.scope, grants: table.grants })
+            .from(table)
+            .where(
+              and(
+                inArray(table.resource, params.resources),
+                idArrayCondition(table.scope, params.scopes),
+              ),
+            )
+        : params.policies.filter(
+            (policy) =>
+              params.resources.includes(policy.resource) &&
+              scopes.has(policy.scope),
+          );
     for (const policy of policies) {
       const entry = recipients.get(policy.scope);
       if (!entry) continue;
@@ -809,6 +905,8 @@ export default class ResourcePermissionPolicyModel {
     resources: ScopedResource[];
     scopes: string[];
     excludeUserIds?: Map<string, string | null>;
+    /** Undefined loads policies; an empty array deliberately represents none. */
+    policies?: ObjectPolicy[];
   }): Promise<Map<string, ReadRecipientDetails>> {
     const recipients =
       await ResourcePermissionPolicyModel.findReadRecipients(params);
@@ -824,7 +922,7 @@ export default class ResourcePermissionPolicyModel {
         : db
             .select({ id: schema.teamsTable.id, name: schema.teamsTable.name })
             .from(schema.teamsTable)
-            .where(inArray(schema.teamsTable.id, teamIds)),
+            .where(idArrayCondition(schema.teamsTable.id, teamIds)),
       userIds.length === 0
         ? []
         : db
@@ -834,7 +932,7 @@ export default class ResourcePermissionPolicyModel {
               email: schema.usersTable.email,
             })
             .from(schema.usersTable)
-            .where(inArray(schema.usersTable.id, userIds)),
+            .where(idArrayCondition(schema.usersTable.id, userIds)),
     ]);
     const teamById = new Map(teams.map((team) => [team.id, team]));
     const userById = new Map(users.map((user) => [user.id, user]));
@@ -888,27 +986,9 @@ export default class ResourcePermissionPolicyModel {
     return rows.map((row) => row.scope).filter((scope) => scope !== "*");
   }
 
-  /**
-   * Whether the object in `scopeColumn` has a policy that grants read to the
-   * team in `teamColumn`. The join condition that replaces joining through a
-   * retired team assignment table.
-   */
-  static grantsReadToTeamColumn(params: {
-    organizationId: SQLWrapper;
-    resource: ScopedResource | SQLWrapper;
-    scopeColumn: SQLWrapper;
-    teamColumn: SQLWrapper;
-  }) {
-    return sql<boolean>`EXISTS (
-      SELECT 1 FROM resource_permission_policies team_policy,
-        jsonb_array_elements(team_policy.grants) team_entry
-      WHERE team_policy.organization_id = ${params.organizationId}
-        AND team_policy.resource = ${params.resource}
-        AND team_policy.scope = ${params.scopeColumn}::text
-        AND (team_entry->'actions') ? 'read'
-        AND team_entry->'subject'->>'type' = 'team'
-        AND team_entry->'subject'->>'id' = ${params.teamColumn}::text
-    )`;
+  /** The direct team-read grant predicate shared by team attribution queries. */
+  static teamReadGrantCondition(entry: SQLWrapper) {
+    return sql`(${entry}->'actions') ? 'read' AND ${entry}->'subject'->>'type' = 'team'`;
   }
 
   /**

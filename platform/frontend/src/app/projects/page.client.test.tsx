@@ -1,13 +1,25 @@
+import { archestraApiClient } from "@archestra/shared";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   fireEvent,
-  render,
+  render as renderUI,
   screen,
   waitFor,
   within,
 } from "@testing-library/react";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useInternalAgents } from "@/lib/agent.query";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
@@ -306,9 +318,48 @@ vi.mock("@/lib/projects/projects.query", () => ({
   useProject: () => ({ data: mockEditingProject }),
 }));
 
-vi.mock("@/lib/agent.query", () => ({
-  useInternalAgents: vi.fn(() => ({ data: [] })),
-}));
+let agentReferenceState: {
+  data: Array<{ id: string; name: string; scope: string }> | undefined;
+  isPending: boolean;
+} = { data: [], isPending: false };
+const agentRequests: URL[] = [];
+let pendingReads: (() => void)[] = [];
+const agentServer = setupServer(
+  http.get("http://localhost:9000/api/agents/options", async ({ request }) => {
+    const url = new URL(request.url);
+    agentRequests.push(url);
+    const state = agentReferenceState;
+    if (state.isPending)
+      await new Promise<void>((resolve) => pendingReads.push(resolve));
+    return HttpResponse.json(state.data ?? []);
+  }),
+  http.get("http://localhost:9000/api/agents/options/page", ({ request }) => {
+    agentRequests.push(new URL(request.url));
+    return HttpResponse.json({
+      data: agentReferenceState.data ?? [],
+      pagination: { hasNext: false, nextCursor: null },
+    });
+  }),
+);
+beforeAll(() => agentServer.listen({ onUnhandledRequest: "error" }));
+afterEach(() => {
+  for (const resolve of pendingReads) resolve();
+  pendingReads = [];
+  agentServer.resetHandlers();
+  agentRequests.length = 0;
+});
+afterAll(() => {
+  agentServer.close();
+  archestraApiClient.setConfig({ baseUrl: "" });
+});
+function render(children: React.ReactNode) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return renderUI(
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>,
+  );
+}
 
 vi.mock("@/lib/teams/team.query");
 
@@ -320,6 +371,8 @@ import ProjectsPageClient from "./page.client";
 
 describe("ProjectsPageClient", () => {
   beforeEach(() => {
+    archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+    agentReferenceState = { data: [], isPending: false };
     vi.mocked(useSession).mockReturnValue({
       data: { user: { id: "user-1" } },
     } as ReturnType<typeof useSession>);
@@ -505,7 +558,7 @@ describe("ProjectsPageClient", () => {
     // An empty picker would read as "this org has no agents" rather than
     // "not yours to set".
     expect(screen.queryByText("Default agent")).not.toBeInTheDocument();
-    expect(useInternalAgents).toHaveBeenCalledWith({ enabled: false });
+    expect(agentRequests).toHaveLength(0);
   });
 
   it("shows the default-agent field to an editor with agent:read", () => {
@@ -523,7 +576,7 @@ describe("ProjectsPageClient", () => {
     );
 
     expect(screen.getByText("Default agent")).toBeInTheDocument();
-    expect(useInternalAgents).toHaveBeenCalledWith({ enabled: true });
+    expect(screen.getByText("Default agent")).toBeVisible();
   });
 
   describe("default agent, with agent:read granted", () => {
@@ -543,27 +596,32 @@ describe("ProjectsPageClient", () => {
       };
     });
 
-    it("keeps the saved pin selected once the agent list arrives", () => {
-      vi.mocked(useInternalAgents).mockReturnValue({
+    it("keeps the saved pin selected once its explicit reference arrives", async () => {
+      agentReferenceState = {
         data: [PINNED],
         isPending: false,
-      } as unknown as ReturnType<typeof useInternalAgents>);
+      };
 
       render(<ProjectsPageClient />);
       fireEvent.click(
         screen.getByRole("button", { name: "Edit details Owner project" }),
       );
 
-      expect(screen.getByText("Pinned Agent")).toBeInTheDocument();
+      expect(await screen.findByText("Pinned Agent")).toBeInTheDocument();
+      expect(
+        agentRequests.every(
+          (url) => url.searchParams.has("ids[]") || url.searchParams.has("ids"),
+        ),
+      ).toBe(true);
     });
 
     it("does not clear the saved pin while the agent list is still loading", () => {
       // Every agent looks unreachable against an empty list, so an unguarded
       // reset wipes the project's pin the moment the dialog opens.
-      vi.mocked(useInternalAgents).mockReturnValue({
+      agentReferenceState = {
         data: undefined,
         isPending: true,
-      } as unknown as ReturnType<typeof useInternalAgents>);
+      };
 
       render(<ProjectsPageClient />);
       fireEvent.click(
@@ -574,15 +632,16 @@ describe("ProjectsPageClient", () => {
     });
 
     it("saves the project without a sharing payload", async () => {
-      vi.mocked(useInternalAgents).mockReturnValue({
+      agentReferenceState = {
         data: [PINNED],
         isPending: false,
-      } as unknown as ReturnType<typeof useInternalAgents>);
+      };
 
       render(<ProjectsPageClient />);
       fireEvent.click(
         screen.getByRole("button", { name: "Edit details Owner project" }),
       );
+      await screen.findByText("Pinned Agent");
       fireEvent.change(screen.getByLabelText("Name *"), {
         target: { value: "Renamed project" },
       });

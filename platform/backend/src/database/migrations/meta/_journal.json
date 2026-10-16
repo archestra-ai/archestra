@@ -3883,8 +3883,15 @@
     {
       "idx": 554,
       "version": "7",
-      "when": 1792095464174,
-      "tag": "0554_drop_openappa_held_pull",
+      "when": 1792093389496,
+      "tag": "0554_curvy_reaper",
+      "breakpoints": true
+    },
+    {
+      "idx": 555,
+      "version": "7",
+      "when": 1792147502647,
+      "tag": "0555_drop_openappa_held_pull",
       "breakpoints": true
     }
   ]

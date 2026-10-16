@@ -59,11 +59,14 @@ export function breakTheGlassActiveIn(deployment: {
  * So the switch turns on only while every organization's latest policy passes
  * the same check a save runs. Turning it off is never refused.
  */
-export async function setGuardrailsDeployment(update: {
-  enabled?: boolean;
-  unsupportedClientAction?: UnsupportedAppaClientAction;
-  breakTheGlassEnabled?: boolean;
-}) {
+export async function setGuardrailsDeployment(
+  update: {
+    enabled?: boolean;
+    unsupportedClientAction?: UnsupportedAppaClientAction;
+    breakTheGlassEnabled?: boolean;
+  },
+  actor?: { userId: string },
+) {
   if (update.enabled && enterpriseTier.isOpenappaActive()) {
     const refusals = await refusedPolicies();
     if (refusals.length > 0)
@@ -72,8 +75,34 @@ export async function setGuardrailsDeployment(update: {
         `Guardrails v2 was not enabled: the guardrails policy is refused, so every proxied request would fail. Fix the policy on the OpenAPPA page first. ${refusals.join(" ")}`,
       );
   }
+  const before = await getGuardrailsDeployment();
   await GuardrailsDeploymentModel.set(update);
-  return getGuardrailsDeployment();
+  const after = await getGuardrailsDeployment();
+  // A switch changes what every running session and runtime may do, so the
+  // moment it happened must be findable in the backend log, not only in the
+  // audit log.
+  logger.info(
+    {
+      userId: actor?.userId,
+      before: deploymentSettings(before),
+      after: deploymentSettings(after),
+    },
+    after.enabled === before.enabled
+      ? "Guardrails deployment settings changed"
+      : `Guardrails enforcement switched ${after.enabled ? "on" : "off"}`,
+  );
+  return after;
+}
+
+function deploymentSettings(
+  deployment: Awaited<ReturnType<typeof getGuardrailsDeployment>>,
+) {
+  return {
+    enabled: deployment.enabled,
+    active: deployment.active,
+    unsupportedClientAction: deployment.unsupportedClientAction,
+    breakTheGlassEnabled: deployment.breakTheGlassEnabled,
+  };
 }
 
 type FirstPolicyEnforcement = {
@@ -135,7 +164,7 @@ export async function turnOnForFirstPolicy(params: {
   if (refusal) return refusal;
   const before = await GuardrailsDeploymentModel.findByIdForAudit();
   try {
-    await setGuardrailsDeployment({ enabled: true });
+    await setGuardrailsDeployment({ enabled: true }, { userId });
   } catch (error) {
     if (error instanceof ApiError)
       return { enabled: false, turnedOn: false, reason: error.message };

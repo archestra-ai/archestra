@@ -158,6 +158,8 @@ export interface AccumulatedToolCall {
    * stays on `id`; only what is written to the client changes.
    */
   wireId?: string;
+  /** Server-generated review to emit as text immediately before this call. */
+  reviewDetails?: string;
 }
 
 /**

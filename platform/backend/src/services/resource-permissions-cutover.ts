@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { setTimeout as sleep } from "node:timers/promises";
 import {
   isResourcePermissionPreset,
-  type ResourcePermissionGrant,
   ScopedResourceSchema,
   widenToPreset,
 } from "@archestra/shared";
@@ -9,15 +9,38 @@ import { sql } from "drizzle-orm";
 import db, { type Transaction } from "@/database";
 import logger from "@/logging";
 import OAuthClientUpgradeModel from "@/models/oauth-client-upgrade";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import StartupMigrationModel from "@/models/startup-migration";
+
+/** Run once per database, including when multiple web replicas start together. */
+export async function ensureScopedResourcePermissionCutover(): Promise<void> {
+  let waiting = false;
+  while (
+    !(await StartupMigrationModel.tryRun({
+      id: "scoped-resource-permissions-v1",
+      migrate: runScopedResourcePermissionCutover,
+    }))
+  ) {
+    if (!waiting) {
+      logger.info(
+        "[ResourcePermissions] Waiting for the permission upgrade on another replica",
+      );
+      waiting = true;
+    }
+    await sleep(1000);
+  }
+}
 
 /**
  * Convert the retired visibility fields into grants, and retire the role
  * actions the grants replace.
  *
- * This runs at startup after schema migrations so existing resources and role
+ * The startup coordinator runs this after schema migrations so resources and role
  * authority convert together in one transaction. Each policy imports legacy
  * authority only once, merges any existing grants, and then becomes the source
  * of truth. Later permission edits, including revocations, survive restarts.
+ *
+ * @public — exercised directly by cutover compatibility tests, including replay
  */
 export async function runScopedResourcePermissionCutover(
   /** Join a caller's transaction, so a test can roll the whole thing back. */
@@ -456,9 +479,14 @@ WITH RECURSIVE effective_teams(organization_id, user_id, team_id) AS (
     AND g->'subject'->>'type' = 'team' AND et.team_id = g->'subject'->>'id'
 ), materialized AS (
   SELECT DISTINCT a.organization_id, a.resource, a.scope, a.user_id, r.action
-  FROM anchored a JOIN subjects s ON s.organization_id = a.organization_id AND s.user_id = a.user_id
-  JOIN relative_entries r ON r.organization_id = a.organization_id AND r.resource = a.resource
-    AND r.subject_type = s.subject_type AND r.subject_id = s.subject_id
+  -- Keep each complete match as one key. Separate equalities let PostgreSQL
+  -- choose an organization-only merge join and filter billions of unrelated
+  -- user/resource pairs in a large, single-organization deployment.
+  FROM anchored a JOIN subjects s
+    ON ARRAY[s.organization_id, s.user_id] = ARRAY[a.organization_id, a.user_id]
+  JOIN relative_entries r
+    ON ARRAY[r.organization_id, r.resource, r.subject_type, r.subject_id]
+      = ARRAY[a.organization_id, a.resource, s.subject_type, s.subject_id]
 ), affected AS (
   SELECT DISTINCT organization_id, resource, scope FROM materialized
 ), entries AS (
@@ -1159,42 +1187,43 @@ WHERE NOT resource_permission_policies.legacy_sharing_migrated
  * @public — read by the cutover tests
  */
 export async function widenGrantsToPresets(tx: Transaction): Promise<void> {
-  const result = await tx.execute<{
-    organization_id: string;
-    resource: string;
-    scope: string;
-    grants: ResourcePermissionGrant[];
-  }>(
-    sql`SELECT organization_id, resource, scope, grants FROM resource_permission_policies`,
-  );
+  let after:
+    | { organizationId: string; resource: string; scope: string }
+    | undefined;
   let widened = 0;
-  for (const policy of result.rows) {
-    const resource = ScopedResourceSchema.safeParse(policy.resource);
-    if (!resource.success) continue;
-    if (
-      policy.grants.every((grant) =>
-        isResourcePermissionPreset(grant.actions, resource.data),
+  while (true) {
+    const policies = await ResourcePermissionPolicyModel.listForPresetUpgrade({
+      tx,
+      after,
+    });
+    if (!policies.length) break;
+    after = policies[policies.length - 1];
+    for (const policy of policies) {
+      const resource = ScopedResourceSchema.safeParse(policy.resource);
+      if (!resource.success) continue;
+      if (
+        policy.grants.every((grant) =>
+          isResourcePermissionPreset(grant.actions, resource.data),
+        )
       )
-    )
-      continue;
-    const grants = policy.grants
-      .map((grant) =>
-        isResourcePermissionPreset(grant.actions, resource.data)
-          ? grant
-          : {
-              ...grant,
-              actions: widenToPreset(grant.actions, resource.data).sort(),
-            },
-      )
-      .filter((grant) => grant.actions.length);
-    await tx.execute(sql`
-      UPDATE resource_permission_policies
-      SET grants = ${JSON.stringify(grants)}::jsonb,
-        revision = revision + 1, updated_at = now()
-      WHERE organization_id = ${policy.organization_id}
-        AND resource = ${policy.resource} AND scope = ${policy.scope}
-    `);
-    widened++;
+        continue;
+      const grants = policy.grants
+        .map((grant) =>
+          isResourcePermissionPreset(grant.actions, resource.data)
+            ? grant
+            : {
+                ...grant,
+                actions: widenToPreset(grant.actions, resource.data).sort(),
+              },
+        )
+        .filter((grant) => grant.actions.length);
+      await ResourcePermissionPolicyModel.updatePresetUpgradePolicy({
+        tx,
+        policy,
+        grants,
+      });
+      widened++;
+    }
   }
   if (widened)
     logger.info(

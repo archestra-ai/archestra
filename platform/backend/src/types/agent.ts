@@ -364,6 +364,91 @@ export const SelectAgentSchema = AgentRowSchema.extend({
   lastUsedAt: z.date().nullable().optional(),
 });
 
+/** Bootstrap identity and model references; selected-agent details load separately. */
+export const ChatAgentRosterSchema = SelectAgentSchema.pick({
+  id: true,
+  organizationId: true,
+  name: true,
+  description: true,
+  icon: true,
+  scope: true,
+  authorId: true,
+  agentType: true,
+  builtIn: true,
+  builtInAgentConfig: true,
+  runtime: true,
+  modelId: true,
+  llmApiKeyId: true,
+});
+export type ChatAgentRoster = z.infer<typeof ChatAgentRosterSchema>;
+
+/** Fields rendered by resource pickers; editing loads the individual resource. */
+export const AgentOptionSchema = SelectAgentSchema.pick({
+  id: true,
+  name: true,
+  slug: true,
+  agentType: true,
+  icon: true,
+  scope: true,
+  authorId: true,
+  authorName: true,
+  authorEmail: true,
+  isPersonalGateway: true,
+  runtime: true,
+  description: true,
+  teams: true,
+}).extend({
+  users: z.array(
+    SelectAgentSchema.shape.users.unwrap().element.pick({ id: true }),
+  ),
+});
+
+export type AgentOption = z.infer<typeof AgentOptionSchema>;
+
+/** Filters applied before a bounded selector page is fetched. */
+export const AgentOptionFiltersSchema = z.object({
+  search: z.string().max(512).optional(),
+  searchMode: z.enum(["name", "selector", "name_or_description"]).optional(),
+  sortBy: z.enum(["createdAt", "name"]).optional(),
+  exactName: z.string().optional(),
+  authorId: z.string().optional(),
+  excludeIds: z
+    .preprocess(
+      (value) =>
+        typeof value === "string" ? value.split(",").filter(Boolean) : value,
+      z.array(z.uuid()),
+    )
+    .optional(),
+  runtimeCommand: z.string().optional(),
+  onlyOwnPersonalAgents: z
+    .preprocess((value) => value === "true" || value === true, z.boolean())
+    .optional(),
+  excludePersonalGateways: z
+    .preprocess((value) => value === "true" || value === true, z.boolean())
+    .optional(),
+  audienceVisibility: z
+    .enum(["none", "organization", "team", "user"])
+    .optional(),
+  audienceTeamIds: z
+    .preprocess(
+      (value) =>
+        typeof value === "string" ? value.split(",").filter(Boolean) : value,
+      z.array(z.string()),
+    )
+    .optional(),
+  audienceUserIds: z
+    .preprocess(
+      (value) =>
+        typeof value === "string" ? value.split(",").filter(Boolean) : value,
+      z.array(z.string()),
+    )
+    .optional(),
+  audienceEditorIsOwner: z
+    .preprocess((value) => value === "true" || value === true, z.boolean())
+    .optional(),
+});
+export type AgentOptionFilters = z.infer<typeof AgentOptionFiltersSchema>;
+
 /** Paginated Agents-surface row with the current user's pin marker. */
 export const AgentListItemSchema = SelectAgentSchema.extend({
   pinnedAt: z.date().nullable(),

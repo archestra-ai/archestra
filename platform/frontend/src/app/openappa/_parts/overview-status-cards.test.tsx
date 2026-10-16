@@ -28,7 +28,7 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("sonner");
 const api = "http://localhost:9000/api";
 const server = setupServer(
-  http.get("http://localhost:9000/api/agents/all", () =>
+  http.get("http://localhost:9000/api/agents/chat-roster", () =>
     HttpResponse.json([
       {
         id: "appa-agent",

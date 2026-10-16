@@ -32,6 +32,10 @@ class ImageInputHashTests(unittest.TestCase):
         destination = self.repo / ".github/scripts/e2e-image-input-hash.sh"
         destination.parent.mkdir(parents=True)
         shutil.copyfile(SCRIPT, destination)
+        self.write(
+            "platform/.dockerignore",
+            "e2e-tests\ntools/docs-screenshots\n**/*.test.ts\n**/*.test.tsx\n",
+        )
         self.commit()
 
     def test_capture_and_e2e_changes_do_not_invalidate_platform_image(self):

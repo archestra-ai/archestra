@@ -2381,3 +2381,71 @@ describe("scoped provider key grants", () => {
   });
 });
 // SPDX-SnippetEnd
+
+describe("LLM provider key label responses", () => {
+  test("returns persisted labels after create, unrelated update, replacement and clearing", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    vi.clearAllMocks();
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, organization.id, { role: "admin" });
+    setupAdminApp();
+    const app = await createApp(organization.id, user);
+    try {
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/llm-provider-api-keys",
+        payload: {
+          name: "Label fixture",
+          provider: "ollama",
+          apiKey: "synthetic-label-test-key",
+          labels: [{ key: "stage", value: "initial" }],
+        },
+      });
+      expect(created.statusCode, created.body).toBe(200);
+      const id = created.json().id;
+      expect(created.json().labels).toEqual([
+        expect.objectContaining({ key: "stage", value: "initial" }),
+      ]);
+      const read = await app.inject({
+        method: "GET",
+        url: `/api/llm-provider-api-keys/${id}`,
+      });
+      expect(read.statusCode, read.body).toBe(200);
+      expect(read.json().labels).toEqual(created.json().labels);
+      const preserved = await app.inject({
+        method: "PATCH",
+        url: `/api/llm-provider-api-keys/${id}`,
+        payload: { name: "Renamed fixture" },
+      });
+      expect(preserved.statusCode, preserved.body).toBe(200);
+      expect(preserved.json().labels).toEqual(created.json().labels);
+      const changed = await app.inject({
+        method: "PATCH",
+        url: `/api/llm-provider-api-keys/${id}`,
+        payload: { labels: [{ key: "stage", value: "changed" }] },
+      });
+      expect(changed.statusCode, changed.body).toBe(200);
+      expect(changed.json().labels).toEqual([
+        expect.objectContaining({ key: "stage", value: "changed" }),
+      ]);
+      const cleared = await app.inject({
+        method: "PATCH",
+        url: `/api/llm-provider-api-keys/${id}`,
+        payload: { labels: [] },
+      });
+      expect(cleared.statusCode, cleared.body).toBe(200);
+      expect(cleared.json().labels).toEqual([]);
+      const refreshed = await app.inject({
+        method: "GET",
+        url: `/api/llm-provider-api-keys/${id}`,
+      });
+      expect(refreshed.json().labels).toEqual([]);
+    } finally {
+      await app.close();
+    }
+  });
+});

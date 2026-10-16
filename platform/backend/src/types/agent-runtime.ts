@@ -155,6 +155,12 @@ export const MissingAgentRuntimeCredentialSchema = z.object({
    * add their value and an admin has to share it with them first.
    */
   canConnect: z.boolean().optional(),
+  /**
+   * True when the credential is an organization one and only people who
+   * manage organization settings may run with it, so the caller cannot fix
+   * this by connecting anything; an admin has to run the Agent or change it.
+   */
+  adminOnly: z.boolean().optional(),
 });
 export type MissingAgentRuntimeCredential = z.infer<
   typeof MissingAgentRuntimeCredentialSchema

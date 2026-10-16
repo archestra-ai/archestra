@@ -2,6 +2,8 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   AUTO_PROVISIONED_INVITATION_STATUS,
+  CursorQuerySchema,
+  createCursorPaginatedResponseSchema,
   getAgentRuntimeModelCompatibility,
   getArchestraMcpServerName,
   isModelSelectionComplete,
@@ -1300,6 +1302,61 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       await openappaBatteriesService.recompileOrganizations([organizationId]);
 
       return reply.send({ success: true });
+    },
+  );
+
+  fastify.get(
+    "/api/organization/member-options",
+    {
+      schema: {
+        operationId: RouteId.GetOrganizationMemberOptions,
+        description:
+          "Search visible organization member identities in bounded pages. The same directory visibility applies: member:read sees all members; other authenticated callers see only teammates.",
+        tags: ["Organization"],
+        querystring: CursorQuerySchema.extend({
+          search: z.string().optional(),
+          searchMode: z
+            .enum(["name", "name_or_email"])
+            .default("name_or_email"),
+          ids: z
+            .preprocess(
+              (value) => (typeof value === "string" ? value.split(",") : value),
+              z.array(z.string().min(1)).max(100),
+            )
+            .optional(),
+          emails: z
+            .preprocess(
+              (value) => (typeof value === "string" ? value.split(",") : value),
+              z.array(z.string().min(1)).max(100),
+            )
+            .optional(),
+        }),
+        response: constructResponseSchema(
+          createCursorPaginatedResponseSchema(
+            z.object({ id: z.string(), name: z.string(), email: z.string() }),
+          ),
+        ),
+      },
+    },
+    async ({ organizationId, user, headers, serviceAccount, query }, reply) => {
+      const { success: canSeeAllMembers } = await hasPermission(
+        { member: ["read"] },
+        headers,
+        serviceAccount,
+        { userId: user.id, organizationId },
+      );
+      return reply.send(
+        await MemberModel.findOptions({
+          organizationId,
+          viewerId: user.id,
+          canSeeAllMembers,
+          pagination: { limit: query.limit, cursor: query.cursor },
+          search: query.search,
+          searchMode: query.searchMode,
+          ids: query.ids,
+          emails: query.emails,
+        }),
+      );
     },
   );
 

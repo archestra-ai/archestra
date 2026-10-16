@@ -26,6 +26,7 @@ export const InteractionSourceSchema = z.enum([
   // Retained for historical logs after the legacy feature was removed.
   "guardrail:dual_llm",
   "guardrail:annotator",
+  "guardrail:hitl_summary",
   "chatops:slack",
   "chatops:ms-teams",
   "chatops:telegram",
@@ -89,6 +90,7 @@ export const INTERACTION_SOURCE_DISPLAY: Record<
   "skill:description_generation": { label: "Skill Description Generation" },
   "guardrail:dual_llm": { label: "Dual LLM Sanitization (legacy)" },
   "guardrail:annotator": { label: "Guardrails Annotator" },
+  "guardrail:hitl_summary": { label: "Guardrails Review Summary" },
   "chatops:slack": { label: "Slack" },
   "chatops:ms-teams": { label: "MS Teams" },
   "chatops:telegram": { label: "Telegram" },

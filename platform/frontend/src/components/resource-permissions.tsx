@@ -152,6 +152,7 @@ export function ResourcePermissions({
       <QueryLoadError
         title="Could not load permissions"
         description="Your access may have changed. Retry to check your current permissions."
+        error={policy.error}
         onRetry={() => void policy.refetch()}
       />
     );

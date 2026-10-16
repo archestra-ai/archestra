@@ -11,8 +11,10 @@ import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 
 vi.mock("next/navigation");
+vi.mock("sonner");
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
@@ -25,27 +27,38 @@ import { ConnectCommandPanel } from "./connect-command-panel";
 
 const {
   createSetupMock,
-  allSkillsMock,
+  setupHookOptions,
+  skillNamesMock,
   pluginsMock,
   skillsMarketplaceVisibleMock,
 } = vi.hoisted(() => ({
   createSetupMock: vi.fn(),
-  allSkillsMock: vi.fn(),
+  setupHookOptions: {} as { onRefused?: (message: string) => void },
+  skillNamesMock: vi.fn(),
   pluginsMock: vi.fn(),
   skillsMarketplaceVisibleMock: vi.fn(() => true),
 }));
 
 vi.mock("@/lib/connection-setup.query", () => ({
-  useCreateConnectionSetup: () => ({
-    mutateAsync: createSetupMock,
-    isPending: false,
-  }),
+  useCreateConnectionSetup: (options?: {
+    onRefused?: (message: string) => void;
+  }) => {
+    setupHookOptions.onRefused = options?.onRefused;
+    return { mutateAsync: createSetupMock, isPending: false };
+  },
 }));
 
 vi.mock("@/lib/skills/skill.query", () => ({
-  useAllSkills: (params?: { enabled?: boolean; forAgentId?: string | null }) =>
-    allSkillsMock(params),
+  useSkillNames: (params: { enabled: boolean }) => skillNamesMock(params),
 }));
+
+/** What the names endpoint answers: at most the setup cap, plus the total. */
+function skillNames(
+  skills: { id: string; name: string }[],
+  total = skills.length,
+) {
+  return { data: { data: skills, total }, isPending: false };
+}
 
 vi.mock("./skills-marketplace-step", () => ({
   // The marketplace step has its own test file; here it only matters whether
@@ -223,21 +236,12 @@ beforeEach(() => {
   });
   createKeyMock.mockResolvedValue({ id: "key-1" });
   modelsByProviderMock.mockReturnValue({});
-  allSkillsMock.mockReturnValue({
-    data: [
-      { id: "s1", name: "warehouse-postgres", scope: "org", teams: [] },
-      // A colleague's personal skill: the picker lists these for skill admins
-      // and preselects them, so the row must name whose it is.
-      {
-        id: "s2",
-        name: "billing-pipeline",
-        scope: "personal",
-        authorId: "user-2",
-        authorName: "Dana",
-        teams: [],
-      },
-    ],
-  });
+  skillNamesMock.mockReturnValue(
+    skillNames([
+      { id: "s1", name: "warehouse-postgres" },
+      { id: "s2", name: "billing-pipeline" },
+    ]),
+  );
   pluginsMock.mockImplementation((enabled: boolean | undefined) => ({
     data: enabled
       ? [
@@ -276,18 +280,15 @@ beforeEach(() => {
 
 describe("ConnectCommandPanel", () => {
   it("waits for shared skills before generating an approvable setup", async () => {
-    allSkillsMock.mockReturnValue({ data: undefined, isPending: true });
+    skillNamesMock.mockReturnValue({ data: undefined, isPending: true });
     const view = renderPanel({ client: findClient("cursor") });
 
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(createSetupMock).not.toHaveBeenCalled();
 
-    allSkillsMock.mockReturnValue({
-      data: [
-        { id: "shared-skill", name: "Shared skill", scope: "org", teams: [] },
-      ],
-      isPending: false,
-    });
+    skillNamesMock.mockReturnValue(
+      skillNames([{ id: "shared-skill", name: "Shared skill" }]),
+    );
     view.rerender(
       <ConnectCommandPanel
         {...renderPanelProps({ client: findClient("cursor") })}
@@ -343,6 +344,17 @@ describe("ConnectCommandPanel", () => {
     expect(createKeyMock).not.toHaveBeenCalled();
   });
 
+  it("prepares a command after switching from download mode without remounting", async () => {
+    const view = renderPanel({ variant: "download" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(createSetupMock).not.toHaveBeenCalled();
+    view.rerender(
+      <ConnectCommandPanel {...renderPanelProps({ variant: "full" })} />,
+    );
+    await waitFor(() => expect(createSetupMock).toHaveBeenCalled());
+    expect(await screen.findByText(COMMAND)).toBeVisible();
+  });
+
   it("keeps the gateway in Desktop downloads while honoring optional exclusions", async () => {
     availableKeysMock.mockReturnValue({ data: [] });
     createSetupMock.mockResolvedValue({
@@ -358,6 +370,14 @@ describe("ConnectCommandPanel", () => {
       variant: "download",
       exclude: ["tools", "skills", "proxy", "plugins"],
     });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(createSetupMock).not.toHaveBeenCalled();
+    expect(skillNamesMock.mock.calls.every(([params]) => !params.enabled)).toBe(
+      true,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Prepare installer" }),
+    );
     const link = await screen.findByRole("link", {
       name: "Download installer",
     });
@@ -900,7 +920,7 @@ describe("ConnectCommandPanel", () => {
   });
 
   it("generates a plugin-only setup when no gateway, proxy, or skill exists", async () => {
-    allSkillsMock.mockReturnValue({ data: [] });
+    skillNamesMock.mockReturnValue(skillNames([]));
     renderPanel({
       mcpGateways: [],
       mcpGatewayId: null,
@@ -930,7 +950,7 @@ describe("ConnectCommandPanel", () => {
 
   it("changes the exact plugin snapshot from the review row", async () => {
     const user = userEvent.setup();
-    allSkillsMock.mockReturnValue({ data: [] });
+    skillNamesMock.mockReturnValue(skillNames([]));
     pluginsMock.mockImplementation((enabled: boolean | undefined) => ({
       data: enabled
         ? [
@@ -992,7 +1012,7 @@ describe("ConnectCommandPanel", () => {
 
   it("preserves an explicit plugin selection when switching clients", async () => {
     const user = userEvent.setup();
-    allSkillsMock.mockReturnValue({ data: [] });
+    skillNamesMock.mockReturnValue(skillNames([]));
     pluginsMock.mockImplementation((enabled: boolean | undefined) => ({
       data: enabled
         ? [
@@ -1080,7 +1100,7 @@ describe("ConnectCommandPanel", () => {
 
   it("retains plugins hidden by the current platform when editing a selection", async () => {
     const user = userEvent.setup();
-    allSkillsMock.mockReturnValue({ data: [] });
+    skillNamesMock.mockReturnValue(skillNames([]));
     pluginsMock.mockImplementation((enabled: boolean | undefined) => ({
       data: enabled
         ? [
@@ -1301,7 +1321,7 @@ describe("ConnectCommandPanel", () => {
         : undefined,
       isPending: false,
     }));
-    allSkillsMock.mockReturnValue({ data: [] });
+    skillNamesMock.mockReturnValue(skillNames([]));
     const platformSpy = vi
       .spyOn(window.navigator, "platform", "get")
       .mockReturnValue("Win32");
@@ -1430,13 +1450,13 @@ describe("ConnectCommandPanel", () => {
     );
 
     // a refetch surfaces a brand-new skill the admin never saw
-    allSkillsMock.mockReturnValue({
-      data: [
+    skillNamesMock.mockReturnValue(
+      skillNames([
         { id: "s1", name: "warehouse-postgres" },
         { id: "s2", name: "billing-pipeline" },
         { id: "s3", name: "freshly-added" },
-      ],
-    });
+      ]),
+    );
     rerender(<ConnectCommandPanel {...renderPanelProps()} />);
 
     // still opted out — no skills ride along
@@ -1474,12 +1494,14 @@ describe("ConnectCommandPanel", () => {
   });
 
   it("truncates the skill names line past six skills", async () => {
-    allSkillsMock.mockReturnValue({
-      data: Array.from({ length: 8 }, (_, i) => ({
-        id: `s${i}`,
-        name: `skill-${i}`,
-      })),
-    });
+    skillNamesMock.mockReturnValue(
+      skillNames(
+        Array.from({ length: 8 }, (_, i) => ({
+          id: `s${i}`,
+          name: `skill-${i}`,
+        })),
+      ),
+    );
     renderPanel();
     await screen.findByText(COMMAND);
 
@@ -1688,11 +1710,7 @@ describe("ConnectCommandPanel", () => {
     );
     // the skill list isn't even fetched for callers who can't install skills,
     // and the wizard grows no extra step: the script is the whole flow
-    expect(allSkillsMock).toHaveBeenLastCalledWith(
-      // objectContaining, so the deferral this list is fetched under stays an
-      // implementation detail: what matters is that it is switched off.
-      expect.objectContaining({ enabled: false }),
-    );
+    expect(skillNamesMock).toHaveBeenLastCalledWith({ enabled: false });
     expect(
       screen.queryByTestId("skills-marketplace-step"),
     ).not.toBeInTheDocument();
@@ -1968,4 +1986,183 @@ describe("ConnectCommandPanel", () => {
       ).not.toBeInTheDocument();
     });
   });
+});
+
+describe("a setup over a delivery limit on the approval page", () => {
+  const PLUGIN_LIMIT_MESSAGE =
+    "556 plugins are selected, but one setup can install at most 555. Choose 555 or fewer in Setup options, or turn plugins off.";
+
+  it("explains too many plugins instead of sending a setup the backend refuses", async () => {
+    pluginsMock.mockImplementation((enabled: boolean | undefined) => ({
+      data: enabled ? manyPlugins(556) : undefined,
+      isPending: false,
+    }));
+    const user = userEvent.setup();
+    const { finish } = renderApproval();
+    try {
+      await screen.findByText("ABCD-1234");
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        PLUGIN_LIMIT_MESSAGE,
+      );
+      expect(toast.error).toHaveBeenCalledWith(PLUGIN_LIMIT_MESSAGE, {
+        id: "connect-setup-limit",
+      });
+      await confirmCode(user);
+      expect(
+        screen.getByRole("button", { name: "Approve connection" }),
+      ).toBeDisabled();
+      expect(await approveTooltip(user)).toHaveTextContent(
+        PLUGIN_LIMIT_MESSAGE,
+      );
+      expect(createSetupMock).not.toHaveBeenCalled();
+
+      await user.click(screen.getByRole("button", { name: /Setup options/ }));
+      await user.click(screen.getByRole("switch", { name: "Plugins" }));
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ pluginIds: [] }),
+        ),
+      );
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Approve connection" }),
+        ).toBeEnabled(),
+      );
+      expect(screen.queryByText(PLUGIN_LIMIT_MESSAGE)).toBeNull();
+    } finally {
+      finish();
+    }
+  });
+
+  it("explains too many shared skills and connects once skills are off", async () => {
+    // The endpoint stops at the cap; the total says how many there are.
+    skillNamesMock.mockReturnValue(
+      skillNames(
+        Array.from({ length: 1111 }, (_, index) => ({
+          id: `skill-${index}`,
+          name: `skill-${index}`,
+        })),
+        1112,
+      ),
+    );
+    const message =
+      "1,112 skills are shared with you, but one setup can include at most 1,111. Turn skills off in Setup options to connect without them.";
+    const user = userEvent.setup();
+    const { finish } = renderApproval();
+    try {
+      expect(await screen.findByRole("alert")).toHaveTextContent(message);
+      expect(toast.error).toHaveBeenCalledWith(message, {
+        id: "connect-setup-limit",
+      });
+      expect(createSetupMock).not.toHaveBeenCalled();
+
+      await user.click(screen.getByRole("button", { name: /Setup options/ }));
+      await user.click(screen.getByRole("switch", { name: "Skills" }));
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({ skills: undefined, pluginIds: ["b1"] }),
+        ),
+      );
+    } finally {
+      finish();
+    }
+  });
+
+  it("shows the backend's reason when it refuses the setup", async () => {
+    createSetupMock.mockImplementationOnce(async () => {
+      setupHookOptions.onRefused?.(
+        "Plugin delivery is limited to 1110 MiB of plugin files",
+      );
+      return null;
+    });
+    const user = userEvent.setup();
+    const { finish } = renderApproval();
+    try {
+      await screen.findByText("ABCD-1234");
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent(
+        "Could not prepare the setup: Plugin delivery is limited to 1110 MiB of plugin files.",
+      );
+      await confirmCode(user);
+      expect(await approveTooltip(user)).toHaveTextContent(
+        "Could not prepare the setup: Plugin delivery is limited to 1110 MiB of plugin files. Adjust Setup options, then select Retry setup.",
+      );
+
+      await user.click(
+        within(alert).getByRole("button", { name: "Retry setup" }),
+      );
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Approve connection" }),
+        ).toBeEnabled(),
+      );
+      expect(screen.queryByRole("alert")).toBeNull();
+    } finally {
+      finish();
+    }
+  });
+
+  function renderApproval() {
+    const server = setupServer(
+      http.get("http://localhost:9000/api/client-connections/demo", () =>
+        HttpResponse.json({
+          clientId: "claude-code",
+          platform: "macos",
+          userCode: "ABCD-1234",
+          expiresAt: "2099-01-01T00:00:00Z",
+        }),
+      ),
+    );
+    server.listen({ onUnhandledRequest: "error" });
+    archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("connectRequest=demo&platform=macos") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <ConnectCommandPanel {...renderPanelProps()} />
+      </QueryClientProvider>,
+    );
+    return {
+      finish: () => {
+        view.unmount();
+        queryClient.clear();
+        server.close();
+        archestraApiClient.setConfig({ baseUrl: "" });
+      },
+    };
+  }
+
+  async function confirmCode(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: "This code matches the code in my terminal.",
+      }),
+    );
+  }
+
+  async function approveTooltip(user: ReturnType<typeof userEvent.setup>) {
+    const approve = screen.getByRole("button", { name: "Approve connection" });
+    // A disabled button gets no pointer events; its wrapper carries the tooltip.
+    await user.hover(approve.parentElement as HTMLElement);
+    return screen.findByRole("tooltip");
+  }
+
+  function manyPlugins(count: number) {
+    return Array.from({ length: count }, (_, index) => ({
+      id: `plugin-${index}`,
+      displayName: `Plugin ${index}`,
+      description: "",
+      clientType: "claude-code",
+      enabled: true,
+      contentHash: `hash-${index}`,
+      approvedContentHash: `hash-${index}`,
+      supportedPlatforms: ["posix"],
+    }));
+  }
 });

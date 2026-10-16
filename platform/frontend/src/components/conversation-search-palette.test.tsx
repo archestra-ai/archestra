@@ -1,4 +1,12 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { archestraApiSdk } from "@archestra/shared";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock ResizeObserver which is used by Radix UI components
@@ -13,17 +21,71 @@ const {
   mockDeleteMutate,
   mockUseConversations,
   mockUseMyAgentRuns,
-  mockUseProfiles,
+  mockUseAgentOptions,
   mockUseInternalMcpCatalog,
   mockUseSkillsList,
+  mockUseApps,
+  mockUseProjects,
+  mockUseKnowledgeBases,
+  mockUsePlugins,
+  mockUseEnvironments,
+  mockUseTeams,
 } = vi.hoisted(() => ({
   mockRouterPush: vi.fn(),
   mockDeleteMutate: vi.fn(),
   mockUseConversations: vi.fn(),
   mockUseMyAgentRuns: vi.fn(),
-  mockUseProfiles: vi.fn(),
+  mockUseAgentOptions: vi.fn(),
   mockUseInternalMcpCatalog: vi.fn(),
   mockUseSkillsList: vi.fn(),
+  mockUseApps: vi.fn(),
+  mockUseProjects: vi.fn(),
+  mockUseKnowledgeBases: vi.fn(),
+  mockUsePlugins: vi.fn(),
+  mockUseEnvironments: vi.fn(),
+  mockUseTeams: vi.fn(),
+}));
+
+// Legacy behavior fixtures remain local; real HTTP paging is covered by the
+// remote-selector integration suite.
+vi.mock("@/lib/agent-options.query", () => ({
+  useAgentOptionsByIds: (params: unknown) => mockUseAgentOptions(params),
+  useAgentOptionIds: () => ({
+    data: (mockUseAgentOptions({}).data ?? []).map(
+      (row: { id: string }) => row.id,
+    ),
+    isSuccess: true,
+  }),
+  useAgentOptionsPage: (params: { search?: string }) => {
+    const result = mockUseAgentOptions(params);
+    const search = params.search?.trim().toLowerCase() ?? "";
+    const rows = (result.data ?? []).filter(
+      (row: {
+        name?: string;
+        description?: string | null;
+        authorEmail?: string | null;
+      }) =>
+        !search ||
+        [row.name, row.description, row.authorEmail].some((value) =>
+          value?.toLowerCase().includes(search),
+        ),
+    );
+    return {
+      data: {
+        pages: [
+          { data: rows, pagination: { hasNext: false, nextCursor: null } },
+        ],
+      },
+      isSuccess: true,
+      isLoading: false,
+      isPending: false,
+      isError: false,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+      refetch: vi.fn(),
+    };
+  },
 }));
 
 vi.mock("next/navigation");
@@ -63,12 +125,28 @@ vi.mock("@/lib/chat/chat.query", () => ({
   }),
 }));
 
-vi.mock("@/lib/agent-runtime.query", () => ({
-  useMyAgentRuns: mockUseMyAgentRuns,
-}));
+let useRealRunsQuery = false;
+vi.mock("@archestra/shared", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@archestra/shared")>();
+  return {
+    ...actual,
+    archestraApiSdk: { ...actual.archestraApiSdk, getMyAgentRuns: vi.fn() },
+  };
+});
+vi.mock("@/lib/agent-runtime.query", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/agent-runtime.query")>();
+  return {
+    useMyAgentRuns: (...args: Parameters<typeof actual.useMyAgentRuns>) =>
+      useRealRunsQuery
+        ? // biome-ignore lint/correctness/useHookAtTopLevel: Test implementation is selected before mounting.
+          actual.useMyAgentRuns(...args)
+        : mockUseMyAgentRuns(...args),
+  };
+});
 
 vi.mock("@/lib/agent.query", () => ({
-  useProfiles: mockUseProfiles,
+  useAgentOptions: mockUseAgentOptions,
 }));
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
@@ -77,6 +155,31 @@ vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
 
 vi.mock("@/lib/skills/skill.query", () => ({
   useSkillsList: mockUseSkillsList,
+}));
+
+vi.mock("@/lib/app.query", () => ({
+  APPS_FIRST_PAGE: { limit: 100, offset: 0 },
+  useApps: mockUseApps,
+}));
+
+vi.mock("@/lib/projects/projects.query", () => ({
+  useProjects: mockUseProjects,
+}));
+
+vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
+  useKnowledgeBases: mockUseKnowledgeBases,
+}));
+
+vi.mock("@/lib/plugins/plugin.query", () => ({
+  usePlugins: mockUsePlugins,
+}));
+
+vi.mock("@/lib/environment.query", () => ({
+  useEnvironments: mockUseEnvironments,
+}));
+
+vi.mock("@/lib/teams/team.query", () => ({
+  useTeams: mockUseTeams,
 }));
 
 vi.mock("@/lib/secrets.query", () => ({
@@ -222,13 +325,20 @@ describe("ConversationSearchPalette", () => {
       isLoading: false,
       isFetching: false,
     });
+    useRealRunsQuery = false;
     mockUseMyAgentRuns.mockReturnValue({
       data: [],
       isLoading: false,
     });
-    mockUseProfiles.mockReturnValue({ data: [] });
+    mockUseAgentOptions.mockReturnValue({ data: [] });
     mockUseInternalMcpCatalog.mockReturnValue({ data: [] });
     mockUseSkillsList.mockReturnValue({ data: [] });
+    mockUseApps.mockReturnValue({ data: { data: [] } });
+    mockUseProjects.mockReturnValue({ data: [] });
+    mockUseKnowledgeBases.mockReturnValue({ data: [] });
+    mockUsePlugins.mockReturnValue({ data: [] });
+    mockUseEnvironments.mockReturnValue({ data: { environments: [] } });
+    mockUseTeams.mockReturnValue({ data: [] });
     capturedOnValueChange = null;
   });
 
@@ -375,6 +485,63 @@ describe("ConversationSearchPalette", () => {
     expect(row.querySelector(".lucide-message-circle")).toBeNull();
   });
 
+  it("loads more matching runs during search without a misleading browse paging action", async () => {
+    useRealRunsQuery = true;
+    vi.mocked(useFeature).mockImplementation(
+      (feature) => feature === "agentRuntime",
+    );
+    const makeRun = (taskId: string, title: string) => ({
+      taskId,
+      title,
+      state: "TASK_STATE_COMPLETED",
+      startedAt: "2020-01-01T00:00:00Z",
+      stateChangedAt: "2020-01-01T00:00:00Z",
+      endedAt: "2020-01-01T00:00:00Z",
+    });
+    vi.mocked(archestraApiSdk.getMyAgentRuns).mockImplementation(
+      async ({ query } = {}) =>
+        ({
+          data: {
+            data: query?.pinned
+              ? []
+              : [
+                  query?.offset
+                    ? makeRun("older", "Report older")
+                    : makeRun("current", "Report current"),
+                ],
+            pagination: { hasNext: !query?.pinned && !query?.offset },
+          },
+          error: undefined,
+        }) as never,
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConversationSearchPalette {...defaultProps} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByText("Report current")).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("More runs")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByTestId("command-input"), {
+      target: { value: "Report" },
+    });
+    await waitFor(() =>
+      expect(screen.getByText("More runs")).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("Report older")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("More runs"));
+    await waitFor(() =>
+      expect(screen.getByText("Report older")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByText("Report older"));
+    expect(mockRouterPush).toHaveBeenCalledWith("/chat/runs/older");
+    queryClient.clear();
+  });
+
   it("lists Agent Runtime sessions in the browse view and opens one", () => {
     mockUseMyAgentRuns.mockReturnValue({
       data: [
@@ -477,7 +644,7 @@ describe("ConversationSearchPalette", () => {
 
   describe("searching by name", () => {
     it("finds an agent by its name and opens it", () => {
-      mockUseProfiles.mockReturnValue({
+      mockUseAgentOptions.mockReturnValue({
         data: [{ id: "agent-1", name: "Support Triage" }],
       });
       render(<ConversationSearchPalette {...defaultProps} />);
@@ -524,6 +691,64 @@ describe("ConversationSearchPalette", () => {
       expect(mockRouterPush).toHaveBeenCalledWith("/skills/skill-1");
     });
 
+    it("finds an app through the server search and opens it on the Apps page", () => {
+      mockUseApps.mockReturnValue({
+        data: {
+          data: [
+            {
+              source: "owned",
+              id: "app-1",
+              name: "Expense Tracker",
+            },
+          ],
+        },
+      });
+      render(<ConversationSearchPalette {...defaultProps} />);
+
+      fireEvent.change(screen.getByTestId("command-input"), {
+        target: { value: "expense" },
+      });
+
+      expect(mockUseApps).toHaveBeenLastCalledWith(
+        expect.objectContaining({ search: "expense" }),
+        expect.objectContaining({ enabled: true }),
+      );
+      expect(screen.getByText("Apps")).toBeInTheDocument();
+      fireEvent.click(screen.getByText("Expense Tracker"));
+      expect(mockRouterPush).toHaveBeenCalledWith(
+        "/apps?search=Expense%20Tracker",
+      );
+    });
+
+    it("finds a project by its name and opens it", () => {
+      mockUseProjects.mockReturnValue({
+        data: [{ id: "proj-1", name: "Quarterly Review" }],
+      });
+      render(<ConversationSearchPalette {...defaultProps} />);
+
+      fireEvent.change(screen.getByTestId("command-input"), {
+        target: { value: "quarterly" },
+      });
+
+      expect(screen.getByText("Projects")).toBeInTheDocument();
+      fireEvent.click(screen.getByText("Quarterly Review"));
+      expect(mockRouterPush).toHaveBeenCalledWith("/projects/proj-1");
+    });
+
+    it("finds a plugin by its display name and opens it", () => {
+      mockUsePlugins.mockReturnValue({
+        data: [{ id: "plug-1", displayName: "Jira Helper" }],
+      });
+      render(<ConversationSearchPalette {...defaultProps} />);
+
+      fireEvent.change(screen.getByTestId("command-input"), {
+        target: { value: "jira" },
+      });
+
+      fireEvent.click(screen.getByText("Jira Helper"));
+      expect(mockRouterPush).toHaveBeenCalledWith("/plugins/plug-1");
+    });
+
     it("finds a settings tab by its label and by its path", () => {
       render(<ConversationSearchPalette {...defaultProps} />);
 
@@ -545,18 +770,18 @@ describe("ConversationSearchPalette", () => {
             isLoading: false,
           }) as ReturnType<typeof useHasPermissions>,
       );
-      mockUseProfiles.mockReturnValue({
+      mockUseAgentOptions.mockReturnValue({
         data: [{ id: "agent-1", name: "Support Triage" }],
       });
       render(<ConversationSearchPalette {...defaultProps} />);
 
-      expect(mockUseProfiles).toHaveBeenLastCalledWith(
+      expect(mockUseAgentOptions).toHaveBeenLastCalledWith(
         expect.objectContaining({ enabled: false }),
       );
     });
 
     it("does not report nothing found when an agent matches", () => {
-      mockUseProfiles.mockReturnValue({
+      mockUseAgentOptions.mockReturnValue({
         data: [{ id: "agent-1", name: "Support Triage" }],
       });
       render(<ConversationSearchPalette {...defaultProps} />);

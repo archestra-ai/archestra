@@ -2592,6 +2592,146 @@ describe("AgentModel", () => {
     });
   });
 
+  describe("findMembersMissingPersonalChatAgents", () => {
+    test("skips a live personal agent with any name while preserving the null default", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeAgent,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+      const agent = await makeAgent({
+        organizationId: org.id,
+        authorId: user.id,
+        agentType: "agent",
+        name: "Renamed assistant",
+        access: "personal",
+        legacy: { scope: "org" },
+      });
+      expect(await AgentModel.findMembersMissingPersonalChatAgents()).toEqual(
+        [],
+      );
+      expect(
+        await AgentModel.ensurePersonalChatAgent({
+          userId: user.id,
+          organizationId: org.id,
+        }),
+      ).toBe(agent.id);
+      expect(await MemberModel.getDefaultAgentId(user.id, org.id)).toBeNull();
+    });
+
+    test("creates only a missing assistant without claiming a deliberate default", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeAgent,
+    }) => {
+      const org = await makeOrganization();
+      const missing = await makeUser();
+      const chosen = await makeUser();
+      await makeMember(missing.id, org.id);
+      await makeMember(chosen.id, org.id);
+      const shared = await makeAgent({
+        organizationId: org.id,
+        agentType: "agent",
+        access: "org",
+      });
+      await MemberModel.setDefaultAgent(chosen.id, org.id, shared.id);
+      const candidates =
+        await AgentModel.findMembersMissingPersonalChatAgents();
+      expect(candidates).toEqual([
+        { userId: missing.id, organizationId: org.id },
+      ]);
+      for (const candidate of candidates)
+        expect(
+          await AgentModel.ensurePersonalChatAgent(candidate),
+        ).not.toBeNull();
+      expect(await AgentModel.findMembersMissingPersonalChatAgents()).toEqual(
+        [],
+      );
+      expect(
+        await MemberModel.getDefaultAgentId(missing.id, org.id),
+      ).toBeNull();
+      expect(await MemberModel.getDefaultAgentId(chosen.id, org.id)).toBe(
+        shared.id,
+      );
+    });
+
+    test("keeps deleted history eligible for the guard and skips it after restore", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+    }) => {
+      const user = await makeUser();
+      const org = await makeOrganization();
+      await makeMember(user.id, org.id);
+      const params = { userId: user.id, organizationId: org.id };
+      const id = await AgentModel.ensurePersonalChatAgent(params);
+      if (!id) throw new Error("expected personal agent");
+      await AgentModel.delete(id);
+      expect(await AgentModel.findMembersMissingPersonalChatAgents()).toEqual([
+        params,
+      ]);
+      expect(await AgentModel.ensurePersonalChatAgent(params)).toBeNull();
+      await AgentModel.restore(id);
+      expect(await AgentModel.findMembersMissingPersonalChatAgents()).toEqual(
+        [],
+      );
+      expect(await AgentModel.ensurePersonalChatAgent(params)).toBe(id);
+      expect(await MemberModel.getDefaultAgentId(user.id, org.id)).toBeNull();
+    });
+
+    test("does not substitute another organization, owner, agent type, audience or built-in", async ({
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeAgent,
+    }) => {
+      const org = await makeOrganization();
+      const otherOrg = await makeOrganization();
+      const owner = await makeUser();
+      const expected: string[] = [];
+      for (const kind of [
+        "organization",
+        "owner",
+        "type",
+        "audience",
+        "built-in",
+      ] as const) {
+        const user = await makeUser();
+        await makeMember(user.id, org.id);
+        expected.push(user.id);
+        await makeAgent({
+          organizationId: kind === "organization" ? otherOrg.id : org.id,
+          authorId: kind === "owner" ? owner.id : user.id,
+          agentType: kind === "type" ? "mcp_gateway" : "agent",
+          access: kind === "audience" ? "org" : "personal",
+          ...(kind === "built-in"
+            ? {
+                builtInAgentConfig: {
+                  name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
+                },
+              }
+            : {}),
+        });
+      }
+      const candidates =
+        await AgentModel.findMembersMissingPersonalChatAgents();
+      expect(candidates.map((member) => member.userId).sort()).toEqual(
+        expected.sort(),
+      );
+      for (const candidate of candidates)
+        expect(
+          await AgentModel.ensurePersonalChatAgent(candidate),
+        ).not.toBeNull();
+      expect(await AgentModel.findMembersMissingPersonalChatAgents()).toEqual(
+        [],
+      );
+    });
+  });
+
   describe("ensurePersonalChatAgent", () => {
     test("creates the personal agent and returns it, without claiming the member's default", async ({
       makeUser,

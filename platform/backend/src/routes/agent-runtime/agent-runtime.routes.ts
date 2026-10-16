@@ -213,6 +213,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         runtime,
         organizationId: request.organizationId,
         userId: request.user.id,
+        reportAdminOnlyCredentials: true,
       });
       const modelCompatibility =
         await getResolvedAgentRuntimeModelCompatibility({
@@ -665,7 +666,17 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         operationId: RouteId.GetMyAgentRuns,
         description: "List Agent Runtime runs started by this user",
         tags: ["Agents"],
-        querystring: PaginationQuerySchema,
+        querystring: PaginationQuerySchema.extend({
+          search: z.string().max(200).optional(),
+          pinned: z
+            .preprocess(
+              (value) =>
+                value === "true" ? true : value === "false" ? false : value,
+              z.boolean(),
+            )
+            .optional(),
+          sort: z.enum(["started", "recent", "pinned"]).optional(),
+        }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(AgentRunSessionResponseSchema),
         ),
@@ -676,6 +687,9 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         actorUserId: request.user.id,
         organizationId: request.organizationId,
         pagination: request.query,
+        search: request.query.search,
+        pinned: request.query.pinned,
+        sort: request.query.sort,
       });
       return reply.send({
         ...runs,

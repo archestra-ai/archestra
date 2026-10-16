@@ -34,17 +34,23 @@ import { RouteCategory } from "@/observability/tracing";
 import { AGENT_WORKSPACE_TRANSFER_PREFIX } from "@/routes/route-paths";
 import { resolveAgentRuntimeBackendDriver } from "@/services/agent-runtime/backends";
 import { preflightAgentRuntimeCredentials } from "@/services/agent-runtime/credentials";
+import {
+  pendingExports,
+  pendingFileNotice,
+} from "@/services/agent-runtime/pending-exports";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import {
   admitRuntimeSteer,
   classifyRuntimeCaller,
   crossingRefusal,
-  crossRuntimeFile,
   crossRuntimeOutput,
   guardRuntimeCrossing,
+  NOT_A_SPAWN,
   type RuntimeCrossing,
   refuseUnrecognizedCaller,
+  reportCrossingRefusal,
   SPAWN_TARGET_MISMATCH,
+  UNVERIFIED_RUNTIME_SESSION,
 } from "@/services/agent-runtime/runtime-crossing";
 import {
   cancelDetachedAgentTask,
@@ -429,7 +435,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_READ_WORKSPACE_FILE_SHORT_NAME,
     title: "Read Workspace File",
     description:
-      "Read a file from your Agent Runtime's retained workspace using a run ID. Use this when you need the contents yourself — to quote, review or edit them. To hand a file to the user or save it locally, prefer transfer_workspace_file: its bytes move directly and never enter the conversation, so a large file costs no tokens and is not truncated. Paths are relative to /home/node/workspace, not the conversation's skill sandbox. Returns UTF-8 text by default or base64 for binary downloads; maximum 4 MiB. A suspended workspace wakes automatically. Shared transcript access does not grant file access.",
+      "Read a file from your Agent Runtime's retained workspace using a run ID. Use this when you need the contents yourself — to quote, review or edit them. To hand a file to the user or save it locally, prefer transfer_workspace_file: its bytes move directly and never enter the conversation, so a large file costs no tokens and is not truncated. Paths are relative to /home/node/workspace, not the conversation's skill sandbox. Returns UTF-8 text by default or base64 for binary downloads; maximum 4 MiB. A suspended workspace wakes automatically. Shared transcript access does not grant file access. A read made while the runtime is in the middle of a tool call can return status \"pending\" with no content: call again with the same arguments after that tool call finishes.",
     schema: z.object({
       task_id: z.string().uuid(),
       path: z.string().min(1).max(4096),
@@ -444,30 +450,50 @@ const registry = defineArchestraTools([
           taskId: args.task_id,
         });
         if (access.kind === "error") return access.result;
-        const result = await accessAgentWorkspaceFile({
+        const read = async () => {
+          const result = await accessAgentWorkspaceFile({
+            actor,
+            taskId: args.task_id,
+            request: { operation: "read", path: args.path },
+          });
+          const { content_base64, ...metadata } = result;
+          const content =
+            args.encoding === "base64"
+              ? (content_base64 ?? "")
+              : new TextDecoder("utf-8", { fatal: true }).decode(
+                  Buffer.from(content_base64 ?? "", "base64"),
+                );
+          return { metadata, content };
+        };
+        if (access.kind !== "parent") {
+          const { metadata, content } = await read();
+          return structuredSuccessResult({
+            ...metadata,
+            encoding: args.encoding,
+            content,
+          });
+        }
+        const crossed = await pendingExports.crossRead({
+          child: access.child,
           actor,
           taskId: args.task_id,
-          request: { operation: "read", path: args.path },
-        });
-        const { content_base64, ...metadata } = result;
-        const decoded =
-          args.encoding === "base64"
-            ? (content_base64 ?? "")
-            : new TextDecoder("utf-8", { fatal: true }).decode(
-                Buffer.from(content_base64 ?? "", "base64"),
-              );
-        const content =
-          access.kind === "parent"
-            ? await crossRuntimeFile({
-                child: access.child,
-                operationId: access.crossing.callId,
-                value: decoded,
-              })
-            : decoded;
-        return structuredSuccessResult({
-          ...metadata,
+          path: args.path,
           encoding: args.encoding,
-          content,
+          operationId: access.crossing.callId,
+          read,
+        });
+        if (crossed.kind === "pending") {
+          // Nothing about the file has crossed yet, not even its size.
+          return structuredSuccessResult({
+            path: args.path,
+            status: "pending",
+            message: pendingFileNotice(TOOL_READ_WORKSPACE_FILE_SHORT_NAME),
+          });
+        }
+        return structuredSuccessResult({
+          ...crossed.metadata,
+          encoding: args.encoding,
+          content: crossed.content,
         });
       } catch (error) {
         const refused = crossingRefusal(error);
@@ -492,6 +518,7 @@ const registry = defineArchestraTools([
       "The runtime copy is pinned when you authorize a download, so a still-running agent cannot corrupt it. " +
       "An upload refuses rather than overwrite a destination that changed since you authorized it. " +
       "Use read_workspace_file instead only when you need to read a file's contents. " +
+      'A download made while the runtime is in the middle of a tool call can return status "pending" and no command: call again with the same arguments after that tool call finishes. ' +
       "Without a shell, fall back to read_workspace_file and write_workspace_file, which are capped at 4 MiB.",
     schema: z.object({
       task_id: z.string().uuid().describe("From start_run or list_runs."),
@@ -537,20 +564,33 @@ const registry = defineArchestraTools([
             "An upload needs the local file's size and sha256. Compute them first, for example with shasum -a 256.",
           );
         }
+        if (args.direction === "download" && access.kind === "parent") {
+          const crossed = await pendingExports.crossDownload({
+            child: access.child,
+            actor,
+            taskId: args.task_id,
+            path: args.path,
+            operationId: access.crossing.callId,
+          });
+          if (crossed.kind === "pending") {
+            // Nothing about the file has crossed yet, not even its size.
+            return structuredSuccessResult({
+              direction: args.direction,
+              path: args.path,
+              status: "pending",
+              message: pendingFileNotice(
+                TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
+              ),
+            });
+          }
+          return transferResult({ args, minted: crossed.minted });
+        }
         const minted =
           args.direction === "download"
             ? await workspaceTransferTickets.mintDownload({
                 actor,
                 taskId: args.task_id,
                 path: args.path,
-                ...(access.kind === "parent"
-                  ? {
-                      crossing: {
-                        child: access.child,
-                        operationId: access.crossing.callId,
-                      },
-                    }
-                  : {}),
               })
             : await workspaceTransferTickets.mintUpload({
                 actor,
@@ -568,26 +608,7 @@ const registry = defineArchestraTools([
                     }
                   : {}),
               });
-        const url = `${getAppAssetBaseOrigin()}${AGENT_WORKSPACE_TRANSFER_PREFIX}/${minted.ticket.id}/content`;
-        // Only metadata and a command cross this boundary. The file itself
-        // moves over HTTP, so its bytes never reach a model context.
-        return structuredSuccessResult({
-          direction: args.direction,
-          path: minted.ticket.path,
-          size: minted.ticket.size,
-          sha256: minted.ticket.sha256,
-          expires_in_seconds: Math.floor(
-            WORKSPACE_TRANSFER_TICKET_TTL_MS / 1000,
-          ),
-          command:
-            args.direction === "download"
-              ? `curl --fail-with-body --location --continue-at - --output ${shellQuoteArgument(args.local_path)} --header ${shellQuoteArgument(`Authorization: Bearer ${minted.token}`)} ${shellQuoteArgument(url)}`
-              : `curl --fail-with-body --upload-file ${shellQuoteArgument(args.local_path)} --header ${shellQuoteArgument("Content-Type: application/octet-stream")} --header ${shellQuoteArgument(`Authorization: Bearer ${minted.token}`)} ${shellQuoteArgument(url)}`,
-          next_step:
-            args.direction === "download"
-              ? "Run the command. Re-run the same command to resume an interrupted download."
-              : "Run the command. It reports the stored path, size and checksum on success.",
-        });
+        return transferResult({ args, minted });
       } catch (error) {
         const refused = crossingRefusal(error);
         if (refused) return errorResult(refused);
@@ -1472,9 +1493,40 @@ async function runtimeCrossingForStart(
     return undefined;
   }
   if (!gate.crossing.spawn) {
-    return "This start was not classified as a protected spawn. No runtime was started.";
+    return reportCrossingRefusal({
+      reason: "not_a_spawn",
+      message: NOT_A_SPAWN,
+      parentSessionId: gate.crossing.source.session_id,
+    });
   }
   return gate.crossing;
+}
+
+/**
+ * Only metadata and a command cross this boundary. The file itself moves over
+ * HTTP, so its bytes never reach a model context.
+ */
+function transferResult(params: {
+  args: { direction: "download" | "upload"; local_path: string };
+  minted: Awaited<ReturnType<typeof workspaceTransferTickets.mintUpload>>;
+}): ReturnType<typeof structuredSuccessResult> {
+  const { args, minted } = params;
+  const url = `${getAppAssetBaseOrigin()}${AGENT_WORKSPACE_TRANSFER_PREFIX}/${minted.ticket.id}/content`;
+  return structuredSuccessResult({
+    direction: args.direction,
+    path: minted.ticket.path,
+    size: minted.ticket.size,
+    sha256: minted.ticket.sha256,
+    expires_in_seconds: Math.floor(WORKSPACE_TRANSFER_TICKET_TTL_MS / 1000),
+    command:
+      args.direction === "download"
+        ? `curl --fail-with-body --location --continue-at - --output ${shellQuoteArgument(args.local_path)} --header ${shellQuoteArgument(`Authorization: Bearer ${minted.token}`)} ${shellQuoteArgument(url)}`
+        : `curl --fail-with-body --upload-file ${shellQuoteArgument(args.local_path)} --header ${shellQuoteArgument("Content-Type: application/octet-stream")} --header ${shellQuoteArgument(`Authorization: Bearer ${minted.token}`)} ${shellQuoteArgument(url)}`,
+    next_step:
+      args.direction === "download"
+        ? "Run the command. Re-run the same command to resume an interrupted download."
+        : "Run the command. It reports the stored path, size and checksum on success.",
+  });
 }
 
 async function parentCrossing(params: {
@@ -1493,7 +1545,11 @@ async function parentCrossing(params: {
   }
   if (gate.kind === "inactive") return undefined;
   if (!workspaceId) {
-    return "This runtime session could not be verified. The request was refused.";
+    return reportCrossingRefusal({
+      reason: "unverified_session",
+      message: UNVERIFIED_RUNTIME_SESSION,
+      parentSessionId: gate.crossing.source.session_id,
+    });
   }
   return gate.crossing;
 }

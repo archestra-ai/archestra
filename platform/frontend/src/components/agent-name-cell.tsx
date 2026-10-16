@@ -9,8 +9,10 @@ import { LabelTags } from "@/components/label-tags";
 import { PersonalResourceOwner } from "@/components/personal-resource-owner";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 
-type AgentLabels =
-  archestraApiTypes.GetAgentsResponses["200"]["data"][number]["labels"];
+type AgentLabels = Omit<
+  archestraApiTypes.GetAgentsResponses["200"]["data"][number],
+  "pinnedAt"
+>["labels"];
 
 export function AgentNameCell({
   name,

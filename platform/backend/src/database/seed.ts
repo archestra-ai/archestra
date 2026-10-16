@@ -20,7 +20,7 @@ import {
   SupportedProviders,
   testMcpServerCommand,
 } from "@archestra/shared";
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { verifyJwksSigningKey } from "@/auth/jwks-signing-key-guard";
 import config, {
@@ -44,7 +44,6 @@ import {
   PlaywrightRuntimeModel,
   SkillFileModel,
   SkillModel,
-  TeamModel,
   TeamTokenModel,
   ToolModel,
   UserModel,
@@ -743,15 +742,10 @@ async function seedTeamTokens(): Promise<void> {
     "Ensured organization token exists",
   );
 
-  // Get all teams for this organization and ensure they have tokens
-  const teams = await TeamModel.findByOrganization(org.id);
-  for (const team of teams) {
-    const teamToken = await TeamTokenModel.ensureTeamToken(team.id, team.name);
-    logger.info(
-      { teamId: team.id, teamName: team.name, tokenId: teamToken.id },
-      "Ensured team token exists",
-    );
-  }
+  const ensuredTeamCount = await TeamTokenModel.ensureTeamTokensForOrganization(
+    org.id,
+  );
+  logger.info({ ensuredTeamCount }, "Ensured missing team tokens exist");
 }
 
 /**
@@ -1025,13 +1019,8 @@ async function migrateSecretsToEncrypted(): Promise<void> {
  * Runs on startup to backfill members created before this feature.
  */
 async function ensureExistingUsersHavePersonalChatAgents(): Promise<void> {
-  const membersWithoutDefault = await db
-    .select({
-      userId: schema.membersTable.userId,
-      organizationId: schema.membersTable.organizationId,
-    })
-    .from(schema.membersTable)
-    .where(isNull(schema.membersTable.defaultAgentId));
+  const membersWithoutDefault =
+    await AgentModel.findMembersMissingPersonalChatAgents();
 
   if (membersWithoutDefault.length === 0) return;
 

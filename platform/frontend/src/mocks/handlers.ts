@@ -401,6 +401,12 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/mcp_server", installedServersSeed),
   // Org-wide auto-mode roster; per-test seeds override when a test needs
   // auto-mode agents in the usage surfaces.
+  ...getJson("/api/mcp_server/auto_mode_agents/page", {
+    data: [],
+    totalAutoCount: 0,
+    organizationId: organizationSeed.id,
+    pagination: { limit: 20, hasNext: false, nextCursor: null },
+  }),
   ...getJson("/api/mcp_server/auto_mode_agents", []),
   ...getJson("/api/secrets/type", { type: "DB", meta: {} }),
   ...getJson("/api/k8s/image-pull-secrets", []),
@@ -465,7 +471,14 @@ export const handlers: HttpHandler[] = [
       return HttpResponse.json(makeAgentCatalog({ agents }));
     }),
   ),
-  ...getJson("/api/agents/all", []),
+  ...getJson("/api/agents/chat-roster", []),
+  ...getJson("/api/agents/credential-readiness", []),
+  ...getJson("/api/agents/options/page", {
+    data: [],
+    pagination: { limit: 20, nextCursor: null, hasNext: false },
+  }),
+  ...getJson("/api/agents/options/ids", []),
+  ...getJson("/api/agents/options", []),
   // Keep literal agent routes before `:id`, or MSW treats the literal segment
   // as an id and returns an agent-shaped response to the activation editor.
   ...getJson("/api/agents/activation-skills", {

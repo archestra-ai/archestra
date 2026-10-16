@@ -30,6 +30,40 @@ export function openappaFailure(error: unknown): ApiError {
   return apiError;
 }
 
+/**
+ * The notice that replaces one tool call whose annotator gave no answer, or
+ * null for any other failure.
+ *
+ * The runtime cannot rule on that call, so it does not run and nothing is
+ * recorded for it. The failure belongs to that call alone: the other calls of
+ * the response were ruled on their own and still stand, including one that
+ * spent an approval. Failing the whole response would cancel them after the
+ * approval was spent. The notice names the annotator and a plain reason, never
+ * the runtime's detail, which can quote the helper's own error.
+ */
+export function unansweredAnnotationNotice(error: unknown): string | null {
+  const message =
+    error instanceof ApiError && error.cause instanceof Error
+      ? error.cause.message
+      : error instanceof Error
+        ? error.message
+        : "";
+  const match = UNANSWERED_ANNOTATION.exec(message);
+  if (!match) return null;
+  const [, annotator, reason, status] = match;
+  const name = JSON.stringify(summarize(annotator, MAX_NAME));
+  // A helper error without a status may pass; one more attempt costs little,
+  // and the notice stops the model after it fails the same way.
+  const transient =
+    TRANSIENT_NO_ANSWER.has(reason) ||
+    (reason === "non_success" &&
+      (status === undefined || status === "429" || status.startsWith("5")));
+  const head = `[appa] Not checked: OpenAPPA could not rule on this call because its annotator ${name} ${NO_ANSWER_REASON[reason] ?? "gave no answer"}. The call did not run.`;
+  return transient
+    ? `${head} Make the same call again to retry. If it fails the same way again, stop and tell the user that Guardrails could not check this call.`
+    : `${head} Retrying it will not help. Tell the user that Guardrails could not check this call. An administrator can check the annotator on the ${POLICY_PAGE} page.`;
+}
+
 /** A conversation whose opening policy names an annotator the served policy does not answer. */
 export class OpenappaRetiredAnnotatorError extends Error {
   constructor(readonly annotator: string) {
@@ -169,6 +203,27 @@ const HELD_ELSEWHERE =
 
 /** The runtime's refusal of a root whose opening policy it cannot load or verify. */
 const OPENING_POLICY_UNAVAILABLE = "the opening policy is unavailable: ";
+
+/**
+ * The runtime's refusal of a call whose annotator gave no answer:
+ * `annotator=<name> error=<reason>`, where a non-success reason carries the
+ * HTTP status the helper answered with.
+ */
+const UNANSWERED_ANNOTATION =
+  /^OpenAPPA processing interrupted: annotator=(\S+) error=([a-z_]+)(?: status=(\d+))?/;
+
+/** No-answer reasons a second attempt can get past. */
+const TRANSIENT_NO_ANSWER = new Set(["timeout", "unreachable", "transport"]);
+
+const NO_ANSWER_REASON: Record<string, string> = {
+  timeout: "did not answer in time",
+  unreachable: "could not be reached",
+  transport: "could not be reached",
+  non_success: "returned an error",
+  unregistered: "is not set up in this deployment",
+  malformed: "returned an answer OpenAPPA could not read",
+  oversized: "returned an answer that was too large",
+};
 
 /** The runtime's refusal of a child that no approved spawn prepared. */
 const UNFORKED_CHILD = "no prepared fork to open this child";

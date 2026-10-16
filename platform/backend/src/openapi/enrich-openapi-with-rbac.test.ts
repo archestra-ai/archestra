@@ -39,6 +39,25 @@ describe("enrichOpenApiWithRbac", () => {
     );
   });
 
+  it.each([
+    RouteId.GetAgentOptions,
+    RouteId.GetChatAgentRoster,
+  ])("documents %s as dynamically authorized", (operationId) => {
+    const spec = { paths: { "/api/agents/roster": { get: { operationId } } } };
+    const operation = enrichOpenApiWithRbac(spec).paths["/api/agents/roster"]
+      .get as {
+      description?: string;
+      "x-required-permissions"?: { kind: string; note: string };
+    };
+    expect(operation["x-required-permissions"]).toMatchObject({
+      kind: "dynamic",
+      note: expect.stringContaining("agent:read"),
+    });
+    expect(operation.description).not.toContain(
+      "None (no additional RBAC permission required)",
+    );
+  });
+
   it("documents auth-only routes as requiring no additional RBAC permission", () => {
     const spec = {
       paths: {

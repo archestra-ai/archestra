@@ -31,7 +31,7 @@ import {
 import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { useProfiles } from "@/lib/agent.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import {
   useOauthClientLabelKeys,
   useOauthClientLabelValues,
@@ -91,8 +91,8 @@ function OauthClientsTable() {
     owner,
     toastOnError: false,
   });
-  const { data: gateways = [] } = useProfiles({
-    filters: { agentTypes: ["mcp_gateway", "agent"] },
+  const { data: gateways = [] } = useAgentOptionsByIds({
+    ids: query.data?.data.flatMap((client) => client.allowedGatewayIds) ?? [],
   });
   const { data: providerApiKeys = [] } = useLlmProviderApiKeys();
   const create = useCreateOauthClient();
@@ -151,6 +151,7 @@ function OauthClientsTable() {
     return (
       <QueryLoadError
         title="Couldn't load OAuth clients"
+        error={query.error}
         onRetry={() => query.refetch()}
       />
     );
@@ -263,7 +264,6 @@ function OauthClientsTable() {
       <CreateManagedOAuthClientDialog
         open={creating}
         onOpenChange={setCreating}
-        gateways={gateways}
         providerApiKeys={providerApiKeys}
         isSubmitting={create.isPending}
         onSubmit={async (body) => {
@@ -279,7 +279,6 @@ function OauthClientsTable() {
         onOpenChange={(open) => {
           if (!open) setEditing(null);
         }}
-        gateways={gateways}
         providerApiKeys={providerApiKeys}
         isSubmitting={update.isPending}
         onSubmit={async (id, body) => {

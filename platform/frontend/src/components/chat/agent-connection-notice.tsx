@@ -23,7 +23,7 @@ import { McpInstallDialogs } from "./mcp-install-dialogs";
  * case; it is only the author's opt-in that makes this visible.
  */
 export function AgentConnectionNotice({ agentId }: { agentId: string }) {
-  const { data: readiness } = useAgentCredentialReadiness();
+  const { data: readiness } = useAgentCredentialReadiness({ ids: [agentId] });
   const entry = indexReadinessByAgent(readiness).get(agentId);
   const gate = resolveAgentConnectionGate(entry);
 

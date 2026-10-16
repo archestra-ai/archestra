@@ -57,16 +57,6 @@ describe.each([
     expect(list.data).toHaveLength(1);
     expect(typeof list.data[0]?.pinnedAt).toBe("string");
 
-    const unpaginated = await app.inject({
-      method: "GET",
-      url: `/api/agents/all?agentType=${agentType}&excludeBuiltIn=true`,
-    });
-    expect(unpaginated.statusCode).toBe(200);
-    const allItem = unpaginated
-      .json()
-      .find((item: { id: string }) => item.id === agent.id);
-    expect(allItem).not.toHaveProperty("pinnedAt");
-
     const unpin = await app.inject({
       method: "DELETE",
       url: `/api/agents/${agent.id}/pin`,

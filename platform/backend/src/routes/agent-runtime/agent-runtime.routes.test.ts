@@ -811,6 +811,119 @@ describe("Agent Runtime routes", () => {
     });
   });
 
+  test("keeps legacy ordering and pages sidebar runs by their latest state change", async () => {
+    const oldTask = await createTask(agent.id, new Date("2026-01-03"));
+    const newTask = await createTask(agent.id, new Date("2026-01-02"));
+    await createRun({
+      taskId: oldTask.id,
+      actorUserId: user.id,
+    });
+    await createRun({
+      taskId: newTask.id,
+      actorUserId: user.id,
+    });
+    const legacy = await app.inject({
+      method: "GET",
+      url: "/api/agent-runs?limit=1",
+    });
+    expect(legacy.statusCode).toBe(200);
+    expect(legacy.json().data[0].taskId).toBe(newTask.id);
+    const recent = await app.inject({
+      method: "GET",
+      url: "/api/agent-runs?sort=recent&limit=1",
+    });
+    expect(recent.statusCode).toBe(200);
+    expect(recent.json().data[0].taskId).toBe(oldTask.id);
+    expect(recent.json().pagination.hasNext).toBe(true);
+    const next = await app.inject({
+      method: "GET",
+      url: "/api/agent-runs?sort=recent&limit=1&offset=1",
+    });
+    expect(next.json().data[0].taskId).toBe(newTask.id);
+  });
+
+  test("pages pinned runs by pin time rather than activity time", async () => {
+    const recentlyPinned = await createTask(agent.id, new Date("2020-01-01"));
+    const recentlyActive = await createTask(agent.id, new Date("2026-01-01"));
+    await createRun({
+      taskId: recentlyPinned.id,
+      actorUserId: user.id,
+      pinnedAt: new Date("2026-01-02"),
+    });
+    await createRun({
+      taskId: recentlyActive.id,
+      actorUserId: user.id,
+      pinnedAt: new Date("2020-01-02"),
+    });
+    const first = await app.inject({
+      method: "GET",
+      url: "/api/agent-runs?pinned=true&sort=pinned&limit=1",
+    });
+    expect(first.statusCode).toBe(200);
+    expect(first.json().data[0].taskId).toBe(recentlyPinned.id);
+    expect(first.json().pagination.hasNext).toBe(true);
+    const next = await app.inject({
+      method: "GET",
+      url: "/api/agent-runs?pinned=true&sort=pinned&limit=1&offset=1",
+    });
+    expect(next.json().data[0].taskId).toBe(recentlyActive.id);
+  });
+
+  test("finds older pinned and searched runs without exposing another actor's sessions", async ({
+    makeUser,
+  }) => {
+    const oldTask = await createTask(agent.id);
+    const ordinaryTask = await createTask(agent.id);
+    const foreignTask = await createTask(agent.id);
+    const foreignUser = await makeUser();
+    await createRun({
+      taskId: oldTask.id,
+      actorUserId: user.id,
+      title: "Old 100% report",
+      pinnedAt: new Date("2020-01-02"),
+    });
+    await createRun({
+      taskId: ordinaryTask.id,
+      actorUserId: user.id,
+      title: "Ordinary report",
+    });
+    await createRun({
+      taskId: foreignTask.id,
+      actorUserId: foreignUser.id,
+      title: "Foreign 100% report",
+      pinnedAt: new Date(),
+    });
+    const pinned = await app.inject({
+      method: "GET",
+      url: "/api/agent-runs?pinned=true&sort=recent&limit=1",
+    });
+    expect(pinned.statusCode).toBe(200);
+    expect(
+      pinned.json().data.map((run: { taskId: string }) => run.taskId),
+    ).toEqual([oldTask.id]);
+    expect(pinned.json().pagination.total).toBe(1);
+    const unpinned = await app.inject({
+      method: "GET",
+      url: "/api/agent-runs?pinned=false",
+    });
+    expect(
+      unpinned.json().data.map((run: { taskId: string }) => run.taskId),
+    ).toEqual([ordinaryTask.id]);
+    const searched = await app.inject({
+      method: "GET",
+      url: "/api/agent-runs?search=%25",
+    });
+    expect(searched.statusCode).toBe(200);
+    expect(
+      searched.json().data.map((run: { taskId: string }) => run.taskId),
+    ).toEqual([oldTask.id]);
+    const invalid = await app.inject({
+      method: "GET",
+      url: "/api/agent-runs?pinned=invalid",
+    });
+    expect(invalid.statusCode).toBe(400);
+  });
+
   test("lets only the initiating user cancel an active run and audits the transition", async ({
     makeAdmin,
     makeMember,
@@ -1052,7 +1165,7 @@ describe("Agent Runtime routes", () => {
     });
   });
 
-  test("requires organization settings access to use a shared credential", async ({
+  test("tells a member who may not run with an organization credential, and still refuses the run", async ({
     makeMember,
     makeUser,
   }) => {
@@ -1072,8 +1185,26 @@ describe("Agent Runtime routes", () => {
       url: `/api/agents/${agent.id}/runtime/preflight`,
     });
 
-    expect(response.statusCode).toBe(403);
+    // The setup check answers instead of failing, so the member's pages can
+    // say what is wrong rather than reporting a load error.
+    expect(response.statusCode).toBe(200);
     expect(response.body).not.toContain("shared-value");
+    expect(response.json()).toEqual({
+      ready: false,
+      configured: [],
+      missing: [
+        expect.objectContaining({
+          key: "SHARED_TOKEN",
+          label: "Shared token",
+          canConnect: false,
+          adminOnly: true,
+        }),
+        expect.objectContaining({ key: "PERSONAL_TOKEN" }),
+      ],
+      misconfigured: [],
+      incompatible: null,
+    });
+    // Running with it is still refused.
     const runtime = resolveAgentRuntime(agent);
     assert(runtime);
     await expect(
@@ -1153,7 +1284,12 @@ describe("Agent Runtime routes", () => {
       method: "GET",
       url: `/api/agents/${agent.id}/runtime/preflight`,
     });
-    expect(preflight.statusCode).toBe(403);
+    expect(preflight.statusCode).toBe(200);
+    expect(preflight.json()).toMatchObject({
+      ready: false,
+      configured: ["PERSONAL_TOKEN"],
+      missing: [{ key: "SHARED_TOKEN", adminOnly: true, canConnect: false }],
+    });
   });
 
   test("refuses a personal value for a credential the caller may not use", async ({
@@ -2253,7 +2389,7 @@ describe("Agent Runtime routes", () => {
       "retained transcript",
     );
   });
-  async function createTask(agentId: string) {
+  async function createTask(agentId: string, stateChangedAt?: Date) {
     const context = await A2AContextModel.create({
       actorKind: "user",
       actorId: user.id,
@@ -2262,6 +2398,7 @@ describe("Agent Runtime routes", () => {
       contextId: context.id,
       agentId,
       state: "TASK_STATE_SUBMITTED",
+      stateChangedAt,
     });
   }
 
@@ -2269,6 +2406,8 @@ describe("Agent Runtime routes", () => {
     taskId: string;
     actorUserId: string;
     projectId?: string;
+    title?: string;
+    pinnedAt?: Date;
   }) {
     return await AgentRunModel.create({
       organizationId,
@@ -2278,6 +2417,8 @@ describe("Agent Runtime routes", () => {
       actorId: params.actorUserId,
       actorUserId: params.actorUserId,
       projectId: params.projectId,
+      title: params.title,
+      pinnedAt: params.pinnedAt,
       workloadName: `agent-run-${params.taskId}`,
       backend: "kubernetes",
       runtimeScope: "archestra-dev",

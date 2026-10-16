@@ -86,6 +86,7 @@ export function AppaGithubSyncPanel() {
     return (
       <QueryLoadError
         title="Could not load APPA sync"
+        error={query.error}
         onRetry={() => query.refetch()}
         className="mb-6 h-auto"
       />

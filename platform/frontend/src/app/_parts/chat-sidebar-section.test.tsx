@@ -1,8 +1,10 @@
 import {
+  archestraApiSdk,
   getChatItemGeneratingIndicatorTestId,
   getChatItemUnreadIndicatorTestId,
 } from "@archestra/shared";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { format, subDays } from "date-fns";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -99,24 +101,46 @@ let mockApps: Array<{
 
 let mockRuns: Array<Record<string, unknown>> = [];
 
-vi.mock("@/lib/agent-runtime.query", () => ({
-  useMyAgentRuns: () => ({
-    data: mockRuns,
-    isLoading: false,
-  }),
-  useUpdateAgentRun: () => ({
-    mutate: mockUpdateRunMutate,
-    mutateAsync: mockUpdateRunMutateAsync,
-  }),
-  useCancelAgentRun: () => ({
-    mutateAsync: vi.fn(),
-    isPending: false,
-  }),
-  useDeleteAgentRun: () => ({
-    mutateAsync: vi.fn(),
-    isPending: false,
-  }),
-}));
+let useRealRunsQuery = false;
+vi.mock("@archestra/shared", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@archestra/shared")>();
+  return {
+    ...actual,
+    archestraApiSdk: {
+      ...actual.archestraApiSdk,
+      getMyAgentRuns: vi.fn(),
+      getMyAgentRun: vi.fn(),
+    },
+  };
+});
+vi.mock("@/lib/agent-runtime.query", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/agent-runtime.query")>();
+  return {
+    useMyAgentRun: (taskId: string, enabled: boolean) =>
+      useRealRunsQuery
+        ? // biome-ignore lint/correctness/useHookAtTopLevel: Test mode is fixed before mounting.
+          actual.useMyAgentRun(taskId, enabled)
+        : { data: undefined },
+    useMyAgentRuns: (enabled: boolean, options: { pinned?: boolean }) =>
+      useRealRunsQuery
+        ? // biome-ignore lint/correctness/useHookAtTopLevel: Test mode is selected before mounting and never changes during a render.
+          actual.useMyAgentRuns(enabled, options)
+        : { data: mockRuns, isLoading: false },
+    useUpdateAgentRun: () => ({
+      mutate: mockUpdateRunMutate,
+      mutateAsync: mockUpdateRunMutateAsync,
+    }),
+    useCancelAgentRun: () => ({
+      mutateAsync: vi.fn(),
+      isPending: false,
+    }),
+    useDeleteAgentRun: () => ({
+      mutateAsync: vi.fn(),
+      isPending: false,
+    }),
+  };
+});
 
 vi.mock("@/lib/chat/chat.query", () => ({
   useConversations: () => ({
@@ -248,15 +272,20 @@ vi.mock("@/components/ui/sidebar", () => ({
   SidebarMenuSubButton: ({
     children,
     onClick,
+    asChild,
   }: {
     children: React.ReactNode;
     onClick?: () => void;
     className?: string;
-  }) => (
-    <button type="button" onClick={onClick}>
-      {children}
-    </button>
-  ),
+    asChild?: boolean;
+  }) =>
+    asChild ? (
+      children
+    ) : (
+      <button type="button" onClick={onClick}>
+        {children}
+      </button>
+    ),
 }));
 
 vi.mock("@/components/ui/tooltip", () => ({
@@ -412,6 +441,7 @@ describe("ChatSidebarSection", () => {
     mockProjects = [];
     mockApps = [];
     mockRuns = [];
+    useRealRunsQuery = false;
     mockChatState.pathname = "/chat";
     mockChatState.sessionStatusById = {};
   });
@@ -427,6 +457,103 @@ describe("ChatSidebarSection", () => {
     expect(
       screen.queryByRole("button", { name: "Create project" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows current runs and old pins immediately, then reaches older runs on demand", async () => {
+    useRealRunsQuery = true;
+    const makeRun = (
+      taskId: string,
+      title: string,
+      pinnedAt: string | null = null,
+    ) => ({
+      taskId,
+      title,
+      pinnedAt,
+      startedAt: daysAgo(2),
+      endedAt: daysAgo(1),
+      stateChangedAt: daysAgo(1),
+      state: "TASK_STATE_COMPLETED",
+      agent: { id: "agent-1", name: "Runtime", icon: null },
+    });
+    vi.mocked(archestraApiSdk.getMyAgentRuns).mockImplementation(
+      async ({ query } = {}) =>
+        ({
+          data: {
+            data: query?.pinned
+              ? [makeRun("old-pin", "Old pinned run", daysAgo(200))]
+              : query?.offset
+                ? [makeRun("older", "Older run")]
+                : [makeRun("current", "Current run")],
+            pagination: { hasNext: query?.pinned ? false : !query?.offset },
+          },
+          error: undefined,
+        }) as never,
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ChatSidebarSection fadeIn={fadeIn} />
+      </QueryClientProvider>,
+    );
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(screen.getByText("Current run")).toBeInTheDocument();
+    expect(screen.getByText("Old pinned run")).toBeInTheDocument();
+    expect(screen.queryByText("Older run")).not.toBeInTheDocument();
+    expect(archestraApiSdk.getMyAgentRuns).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole("button", { name: "More runs" }));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(screen.getByText("Older run")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Older run"));
+    expect(mockRouterPush).toHaveBeenCalledWith("/chat/runs/older");
+    queryClient.clear();
+  });
+
+  it("keeps the selected older session reachable and preserves chat unread state", async () => {
+    useRealRunsQuery = true;
+    mockChatState.pathname = "/chat/runs/selected-session";
+    mockConversations = [
+      { ...makeConv("unread-chat", "Unread chat"), unread: true },
+      makeConv("extra-chat-1", "Another recent chat"),
+      makeConv("extra-chat-2", "Third recent chat"),
+    ];
+    vi.mocked(archestraApiSdk.getMyAgentRuns).mockResolvedValue({
+      data: { data: [], pagination: { hasNext: false } },
+      error: undefined,
+    } as never);
+    vi.mocked(archestraApiSdk.getMyAgentRun).mockResolvedValue({
+      data: {
+        taskId: "selected-turn",
+        viewerRole: "owner",
+        sessionId: "selected-session",
+        title: "Selected retained run",
+        pinnedAt: null,
+        startedAt: daysAgo(200),
+        endedAt: daysAgo(200),
+        stateChangedAt: daysAgo(200),
+        state: "TASK_STATE_COMPLETED",
+        workspace: null,
+        agent: { id: "agent-1", name: "Runtime", icon: null },
+      },
+      error: undefined,
+    } as never);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ChatSidebarSection fadeIn={fadeIn} slots={1} />
+      </QueryClientProvider>,
+    );
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(screen.getByText("Selected retained run")).toBeInTheDocument();
+    expect(
+      screen.getByTestId(getChatItemUnreadIndicatorTestId("unread-chat")),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Selected retained run"));
+    expect(mockRouterPush).toHaveBeenCalledWith("/chat/runs/selected-session");
+    queryClient.clear();
   });
 
   it("does not render when no conversations exist", () => {

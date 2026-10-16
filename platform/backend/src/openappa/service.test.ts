@@ -16,6 +16,7 @@ import { anthropicAdapterFactory } from "@/routes/proxy/adapters/anthropic";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { recordQueries } from "@/test/query-counter";
 import { ApiError } from "@/types/api";
+import { toolEntries } from "./policy-text";
 import {
   addressRuntimeChild,
   admitPeerMessage,
@@ -106,6 +107,7 @@ const native = vi.hoisted(() => ({
     runtimeCredentials: [],
     errors: [],
   })),
+  validateHostedOpenappaPolicy: vi.fn(async () => []),
   composeOpenappaPolicy: vi.fn(async (input: { root: string }) => ({
     content: input.root,
     errors: [],
@@ -2168,6 +2170,49 @@ describe("APPA feature boundary", () => {
     });
   }
 
+  test("marks a runtime value held as busy only when the binding says so", async () => {
+    const child = {
+      ...session,
+      session_id: "runtime",
+      parent_id: session.session_id,
+    };
+    native.dispatchHook.mockResolvedValueOnce(
+      JSON.stringify({
+        decision: "block",
+        reason:
+          "the child has a call still open; report its outcome before the child ends",
+        busy: true,
+      }),
+    );
+    await expect(
+      returnRuntimeValue({
+        session: child,
+        operationId: "file-read:busy",
+        value: "progress",
+      }),
+    ).resolves.toEqual({
+      kind: "held",
+      reason:
+        "the child has a call still open; report its outcome before the child ends",
+      busy: true,
+    });
+    // The text alone does not make a hold busy: the binding decides.
+    native.dispatchHook.mockResolvedValueOnce(
+      JSON.stringify({
+        decision: "block",
+        reason:
+          "the child has a call still open; report its outcome before the child ends",
+      }),
+    );
+    await expect(
+      returnRuntimeValue({
+        session: child,
+        operationId: "file-read:ruled",
+        value: "progress",
+      }),
+    ).resolves.not.toHaveProperty("busy");
+  });
+
   test("withholds a runtime value with an open call instead of ending the child", async () => {
     native.dispatchHook.mockResolvedValue(
       JSON.stringify({
@@ -3216,17 +3261,23 @@ test("dispatch loads the latest saved policy text from the organization database
     contentHash: "first",
     expectedRevision: 0,
   });
+  // The served text is the saved one as composed: the platform adds its rule
+  // for yell, so the dispatch is read by the rules it carries.
+  const servedTools = () => {
+    const served = vi.mocked(native.dispatchHook).mock.lastCall?.[1] as {
+      content: string;
+      credentials: Record<string, string>;
+    };
+    expect(served.credentials).toEqual({});
+    return toolEntries(served.content).map((tool) => tool.name);
+  };
   await processProxyResults({
     session: scoped,
     results: [],
     canonicalize: (name) => name,
   });
-  expect(native.dispatchHook).toHaveBeenLastCalledWith(
-    expect.any(String),
-    { content, credentials: {} },
-    undefined,
-  );
-  const updated = `${content}# updated`;
+  expect(servedTools()).toEqual(["mcp/appa/yell"]);
+  const updated = `${content}\n[[policy.tool]]\nname = "probe"\ndelta = {}\n`;
   await GuardrailsPolicyModel.save({
     organizationId: organization.id,
     updatedBy: user.id,
@@ -3239,11 +3290,7 @@ test("dispatch loads the latest saved policy text from the organization database
     results: [],
     canonicalize: (name) => name,
   });
-  expect(native.dispatchHook).toHaveBeenLastCalledWith(
-    expect.any(String),
-    { content: updated, credentials: {} },
-    undefined,
-  );
+  expect(servedTools()).toEqual(["mcp/appa/yell", "probe"]);
 });
 
 describe("remedy by offer", () => {

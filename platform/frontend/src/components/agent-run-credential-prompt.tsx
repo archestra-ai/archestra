@@ -1,12 +1,13 @@
 "use client";
 
-import { InfoIcon, KeyRound, Lock } from "lucide-react";
+import { AlertTriangle, InfoIcon, KeyRound, Lock } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { AgentRuntimeCredentialsDialog } from "@/components/agent-runtime-credentials-dialog";
 import { ClaudeCodeAccount } from "@/components/claude-code-account";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import { getApiRefusal } from "@/lib/utils/api";
 
 type MissingCredential = {
   key: string;
@@ -14,6 +15,7 @@ type MissingCredential = {
   label: string;
   description?: string;
   canConnect?: boolean;
+  adminOnly?: boolean;
 };
 
 type CredentialDeclaration = MissingCredential & {
@@ -37,12 +39,29 @@ export function AgentRuntimeCredentialPrompt({
   const [connecting, setConnecting] = useState(false);
   // Credentials the person may not use: no value of theirs can fix these, so
   // they get a plain "ask an admin" notice rather than a Connect button.
-  const blocked = missing.filter((entry) => entry.canConnect === false);
+  const adminOnly = missing.filter((entry) => entry.adminOnly);
+  const blocked = missing.filter(
+    (entry) => entry.canConnect === false && !entry.adminOnly,
+  );
   const connectable = missing.filter((entry) => entry.canConnect !== false);
   const helperText =
     connectable.length > 1
       ? "Set up the missing credentials to continue."
       : "Connect it once to use it with every compatible Agent.";
+
+  // Nothing this person connects lets them run it, so the other prompts
+  // would only send them on an errand.
+  if (adminOnly.length > 0) {
+    return (
+      <InlineNotice className="mt-2">
+        <Lock />
+        <span className="font-medium">Only admins can run this agent</span>
+        <InlineNoticeText>
+          {adminOnlyDescription(adminOnly.map(({ label }) => label))}
+        </InlineNoticeText>
+      </InlineNotice>
+    );
+  }
 
   if (incompatible) {
     return (
@@ -122,4 +141,54 @@ export function AgentRuntimeCredentialPrompt({
       )}
     </>
   );
+}
+
+/** What to tell someone an organization credential keeps from running an agent. */
+export function adminOnlyDescription(labels: string[]): string {
+  return `It uses ${formatList(labels)} from your organization. Ask an admin to run it for you or change its setup.`;
+}
+
+/**
+ * The agent's setup check failed, so Send stays off. Says so where the reader
+ * is looking instead of only in the disabled button's tooltip.
+ */
+export function AgentRuntimePreflightError({
+  error,
+  onRetry,
+}: {
+  error: unknown;
+  onRetry: () => void;
+}) {
+  const refusal = getApiRefusal(error);
+  return (
+    <InlineNotice variant="error" className="mt-2">
+      <AlertTriangle />
+      <span className="font-medium">
+        Can&apos;t check this agent&apos;s setup
+      </span>
+      <InlineNoticeText>
+        {refusal === "forbidden"
+          ? "You don't have access to it. Ask an admin if you need it."
+          : refusal === "signed-out"
+            ? "Your session ended. Sign in again to continue."
+            : "Check your internet connection and try again."}
+      </InlineNoticeText>
+      {refusal !== "forbidden" && (
+        <Button
+          type="button"
+          size="xs"
+          variant="outline"
+          className="ml-auto shrink-0 bg-background"
+          onClick={onRetry}
+        >
+          Retry
+        </Button>
+      )}
+    </InlineNotice>
+  );
+}
+
+function formatList(items: string[]): string {
+  if (items.length <= 1) return items.join("");
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }

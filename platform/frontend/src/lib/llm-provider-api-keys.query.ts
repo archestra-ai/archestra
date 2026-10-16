@@ -113,11 +113,13 @@ export function useLlmProviderApiKey(id: string | undefined) {
 }
 
 /**
- * Whether the user has any usable LLM provider key — the same check the new
- * chat screen uses to choose between the composer and the "Add an LLM Provider
- * Key" prompt. System keys for keyless providers (Vertex AI Gemini, vLLM,
- * Ollama) count, since they surface as keys here. Gated on the read permissions
- * the underlying query needs, so a user lacking them doesn't trigger a 403.
+ * Whether the user can see any LLM provider key, which decides between the
+ * projects list and the "Add an LLM Provider Key" prompt. A key shared
+ * read-only counts: a project's agent may bring its own key, which works
+ * through that agent, and a project composer with no usable key says so
+ * itself. System keys for keyless providers (Vertex AI Gemini, vLLM, Ollama)
+ * count, since they surface as keys here. Gated on the read permissions the
+ * underlying query needs, so a user lacking them doesn't trigger a 403.
  */
 export function useHasAnyApiKey(): {
   hasAnyApiKey: boolean;

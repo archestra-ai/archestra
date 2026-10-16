@@ -144,11 +144,6 @@ vi.mock("@/lib/organization.query", () => ({
 vi.mock("@/lib/auth/identity-provider-read.query", () => ({
   useIdentityProviders: () => ({ data: [] }),
 }));
-vi.mock("../_parts/mcp-server-agent-usage", () => ({
-  deriveAgentUsage: () => ({ agents: [], count: 0 }),
-  agentOwnerLabel: () => null,
-  McpServerAgentUsage: () => null,
-}));
 
 const localItem = {
   id: "cat-1",

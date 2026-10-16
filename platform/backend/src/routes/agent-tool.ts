@@ -23,6 +23,7 @@ import {
   McpServerModel,
   ToolModel,
 } from "@/models";
+import { createAgentDelegation } from "@/services/agent-delegation";
 import {
   assignToolToAgent,
   type PrefetchedMcpServer,
@@ -845,6 +846,32 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.post(
+    "/api/agents/:agentId/delegations/:targetAgentId",
+    {
+      schema: {
+        operationId: RouteId.CreateAgentDelegation,
+        description:
+          "Create one delegation edge without replacing other targets; repeated creation reports created=false.",
+        tags: ["Agent Delegations"],
+        params: z.object({
+          agentId: UuidIdSchema,
+          targetAgentId: UuidIdSchema,
+        }),
+        response: constructResponseSchema(z.object({ created: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      const created = await createAgentDelegation({
+        ...request.params,
+        organizationId: request.organizationId,
+        userId: request.user.id,
+      });
+      if (!created) request.auditSkip = true;
+      return reply.send({ created });
+    },
+  );
+
   /**
    * Remove a specific delegation from an agent
    */
@@ -967,16 +994,12 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const [connections, agents] = await Promise.all([
         AgentToolModel.getAllDelegationConnections(organizationId),
-        AgentModel.findByOrganizationId(organizationId, { agentType: "agent" }),
+        AgentModel.findDelegationGraphNodes(organizationId),
       ]);
 
       return reply.send({
         connections,
-        agents: agents.map((a) => ({
-          id: a.id,
-          name: a.name,
-          agentType: a.agentType,
-        })),
+        agents,
       });
     },
   );

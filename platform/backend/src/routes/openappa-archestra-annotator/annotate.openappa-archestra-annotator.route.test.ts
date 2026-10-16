@@ -16,6 +16,8 @@ import {
 import { LlmProviderApiKeyModelLinkModel, ModelModel } from "@/models";
 import { openappaActor } from "@/openappa/actor";
 import { openappaDeclarations } from "@/openappa/declarations";
+import { OPENAPPA_CONTEXT_HEADER } from "@/openappa/encrypted-chat";
+import { withOpenappaReplayOwner } from "@/openappa/replay-owner";
 import { OPENAPPA_ARCHESTRA_ANNOTATOR_PATH } from "@/routes/route-paths";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
@@ -382,6 +384,63 @@ describe("archestra annotator", () => {
       // A service account has no users row; its session still names the call.
       { user: null, session: "batch" },
     ]);
+  });
+
+  test("files a validation replay's consult under the organization and user running it, only while it runs", async ({
+    makeOrganization,
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    // Not the first organization, which an unattributed consult would use.
+    const owner = (await makeOrganization()).id;
+    const ownerAgent = await makeAgent({
+      organizationId: owner,
+      agentType: "agent",
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+    });
+    await useDefaultModel({
+      provider: "openai",
+      modelId: "gpt-4o-mini",
+      organizationId: owner,
+    });
+    const user = await makeUser();
+    await makeMember(user.id, owner);
+    const sent = answerAt(`/v1/openai/${ownerAgent.id}/chat/completions`, () =>
+      completion('{"rank":"trusted"}'),
+    );
+    // Replay trajectories live in memory: no session row matches them.
+    const replayed = {
+      root: "archestra:replay",
+      trajectory: "archestra:replay",
+    };
+    const ask = (context: string) =>
+      app.inject({
+        method: "POST",
+        url: OPENAPPA_ARCHESTRA_ANNOTATOR_PATH,
+        headers: {
+          authorization: bearer(),
+          [OPENAPPA_CONTEXT_HEADER]: context,
+        },
+        remoteAddress: "127.0.0.1",
+        payload: { ...request, attribution: replayed },
+      });
+
+    let capability = "";
+    const answered = await withOpenappaReplayOwner(
+      { organizationId: owner, userId: user.id },
+      (context) => {
+        capability = context;
+        return ask(context);
+      },
+    );
+
+    expect(answered.json()).toEqual({ rank: "trusted" });
+    expect(sent.map(({ user, session }) => ({ user, session }))).toEqual([
+      { user: user.id, session: null },
+    ]);
+    // A settled replay's capability names no one.
+    expect((await ask(capability)).statusCode).toBe(401);
   });
 
   test("answers unattributed when the attribution names no single session, and without a user who left the organization", async ({

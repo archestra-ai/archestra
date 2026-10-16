@@ -33,6 +33,7 @@ import {
 } from "@/utils/llm-resolution";
 import { clientSessionId } from "./actor";
 import type { OpenappaEncryptedChat } from "./encrypted-chat";
+import type { OpenappaReplayOwner } from "./replay-owner";
 import { callerUserId } from "./service";
 
 /** The trajectory a consult is made for, absent for one made off a session. */
@@ -59,6 +60,7 @@ type CallOwner =
       sessionId: string;
       userId: string | undefined;
     }
+  | { kind: "replay"; organizationId: string; userId: string | undefined }
   | { kind: "unattributed" };
 
 type ArchestraAnnotationOutcome =
@@ -78,13 +80,20 @@ class OpenAppaArchestraAnnotator {
   async annotate(params: {
     request: ArchestraAnnotationRequest;
     encryptedChat: OpenappaEncryptedChat | null;
+    replay: OpenappaReplayOwner | null;
     /** Aborts the model work once the runtime stops waiting for the answer. */
     abortSignal: AbortSignal;
   }): Promise<ArchestraAnnotationOutcome> {
-    const { request, encryptedChat, abortSignal } = params;
+    const { request, encryptedChat, replay, abortSignal } = params;
     const owner: CallOwner = encryptedChat
       ? { kind: "encrypted-chat", chat: encryptedChat }
-      : await sessionOwner(request.attribution);
+      : replay
+        ? {
+            kind: "replay",
+            organizationId: replay.organizationId,
+            userId: replay.userId ?? undefined,
+          }
+        : await sessionOwner(request.attribution);
     const organization = await ownerOrganization(owner);
     if (!organization)
       return { kind: "unconfigured", reason: "No organization exists yet." };
@@ -259,6 +268,7 @@ function ownerOrganization(owner: CallOwner) {
     case "encrypted-chat":
       return OrganizationModel.getById(owner.chat.organizationId);
     case "session":
+    case "replay":
       return OrganizationModel.getById(owner.organizationId);
     case "unattributed":
       return OrganizationModel.getFirst();
@@ -275,6 +285,8 @@ function ownerIdentity(owner: CallOwner) {
       };
     case "session":
       return { sessionId: owner.sessionId, userId: owner.userId };
+    case "replay":
+      return { userId: owner.userId };
     case "unattributed":
       return {};
   }

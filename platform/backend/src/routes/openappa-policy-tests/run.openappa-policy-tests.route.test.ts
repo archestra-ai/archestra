@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import { vi } from "vitest";
 import config from "@/config";
@@ -6,8 +8,19 @@ import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import ToolModel from "@/models/tool";
-import { initialPolicy } from "@/services/guardrails-policy";
-import { beforeEach, describe, expect, test } from "@/test";
+import {
+  type OpenappaReplayOwner,
+  openappaReplayOwner,
+} from "@/openappa/replay-owner";
+import {
+  GUARDRAILS_NOOP_ANNOTATOR_PATH,
+  OPENAPPA_ARCHESTRA_ANNOTATOR_PATH,
+} from "@/routes/route-paths";
+import {
+  guardrailsPolicyService,
+  initialPolicy,
+} from "@/services/guardrails-policy";
+import { beforeEach, describe, expect, onTestFinished, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
 import routes from "./openappa-policy-tests.routes";
 
@@ -154,7 +167,43 @@ describe("policy replay runs", () => {
       [],
     );
   });
-  test("the shipped default replays through its annotators, stopping only at a step no offline answer covers", async () => {
+  /**
+   * This process's own loopback endpoints, which no test server listens on:
+   * the no-op annotator answers, the archestra annotator answers 503 after
+   * noting whose replay its capability names.
+   */
+  async function serveHostAnnotators() {
+    const asked: (OpenappaReplayOwner | null)[] = [];
+    const server = createServer((request, reply) => {
+      request.resume();
+      request.on("end", () => {
+        if (request.url === GUARDRAILS_NOOP_ANNOTATOR_PATH) {
+          reply.writeHead(200, { "content-type": "application/json" });
+          reply.end(JSON.stringify(guardrailsPolicyService.annotate()));
+          return;
+        }
+        if (request.url === OPENAPPA_ARCHESTRA_ANNOTATOR_PATH)
+          asked.push(
+            openappaReplayOwner(
+              request.headers["x-archestra-openappa-context"] as string,
+            ),
+          );
+        reply.writeHead(503).end();
+      });
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", () => resolve()),
+    );
+    const port = config.api.port;
+    config.api.port = (server.address() as AddressInfo).port;
+    onTestFinished(async () => {
+      config.api.port = port;
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    });
+    return asked;
+  }
+  test("the shipped default replays through its annotators live, stopping only at a step no answer covers", async () => {
+    const asked = await serveHostAnnotators();
     const shipped = initialPolicy();
     await GuardrailsPolicyModel.save({
       organizationId: ctx.organizationId,
@@ -223,6 +272,14 @@ describe("policy replay runs", () => {
         { path: scenarios[4].path, status: "passed" },
       ],
     });
+    // The archestra annotator was asked for the run, filed under its caller.
+    expect(asked.length).toBeGreaterThan(0);
+    expect(asked).toEqual(
+      asked.map(() => ({
+        organizationId: ctx.organizationId,
+        userId: ctx.user.id,
+      })),
+    );
   });
   test("uses real replay state and file isolation, stores outcomes and marks policy changes stale", async () => {
     const sourceVersion = await saveFiles();

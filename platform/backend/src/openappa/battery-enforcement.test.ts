@@ -3,10 +3,13 @@
  * through `getEffectivePolicy`, which reuses the stored composition while the
  * root revision holds, and hands it to the native runtime. That runtime needs
  * a Postgres event log and the battery helpers a sandbox, so these tests read
- * the same policy and decide with the runtime's offline replay: the production
- * engine over an in-memory log, where every helper consult goes unanswered and
- * only the root's no-op annotator answers.
+ * the same policy and decide with the runtime's replay: the production engine
+ * over an in-memory log. Replay consults live; no helper bridge listens here,
+ * so every helper consult goes unanswered, and only the root's no-op
+ * annotator, served below, answers.
  */
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { ADMIN_ROLE_NAME, ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import config from "@/config";
 import {
@@ -26,7 +29,7 @@ import {
   initialPolicy,
   UNDECLARED_TOOL_ANNOTATOR,
 } from "@/services/guardrails-policy";
-import { afterEach, describe, expect, test } from "@/test";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "@/test";
 import { bindOrganizationCredential } from "@/test/openappa-credentials";
 import {
   deployGithubWithRoster,
@@ -38,6 +41,33 @@ import { expandCommandExecutionPolicyRules } from "./command-normalization";
 import { bundledEntry, openappaDeclarations } from "./declarations";
 import { parsePolicyToml, toolEntries } from "./policy-text";
 import { recompileAllOnStart } from "./service";
+
+/** The root's no-op annotator, answering with a review requirement. */
+let noop: Server;
+let noopUrl: string;
+beforeAll(async () => {
+  noop = createServer((request, reply) => {
+    request.resume();
+    request.on("end", () => {
+      reply.writeHead(200, { "content-type": "application/json" });
+      reply.end(
+        JSON.stringify({
+          version: 1,
+          answer: {
+            delta: {},
+            requires: { history: [], attention: ["catch-all"] },
+            emits: [],
+          },
+        }),
+      );
+    });
+  });
+  await new Promise<void>((resolve) =>
+    noop.listen(0, "127.0.0.1", () => resolve()),
+  );
+  noopUrl = `http://127.0.0.1:${(noop.address() as AddressInfo).port}/noop`;
+});
+afterAll(() => new Promise<void>((resolve) => noop.close(() => resolve())));
 
 describe("a deployed battery's composition reaches enforcement", () => {
   const openappa = { ...config.openappa };
@@ -103,7 +133,7 @@ ${[...servers].map(([namespace, server]) => `"${namespace}" = ["${server}"]`).jo
 
 [policy]
 version = 2
-${CATCH_ALL_RULES}`,
+${catchAllRules()}`,
       });
       for (const variable of new Set([
         ...battery.credentials,
@@ -167,7 +197,9 @@ ${CATCH_ALL_RULES}`,
         catchAllMismatches: calls
           .filter(
             ({ rule }, index) =>
-              (governed[index].actual === CATCH_ALL_MARK) !== (rule === null),
+              (governed[index].actual === CATCH_ALL_MARK &&
+                !asksApproval(policies, rule)) !==
+              (rule === null),
           )
           .map(({ label }) => label),
         misdecided: calls.flatMap(({ label, rule, arguments: args }, index) => {
@@ -191,19 +223,16 @@ ${CATCH_ALL_RULES}`,
       Object.fromEntries(
         deployments.map(({ battery, mode }) => {
           const governs = toolEntries(battery.base).length > 0;
-          // Offline replay refuses a policy that asks a model to annotate.
-          const builtins = [
-            ...new Set(deployedPolicies(battery, mode).flatMap(modelBuiltins)),
-          ];
-          const refused = governs && builtins.length > 0;
+          // Replay consults a model annotator as a dispatch does: none
+          // keeps the policy from opening.
           return [
             `${battery.name} ${mode}`,
             {
               governed: governs,
               offServer: [],
-              refusedBy: refused ? builtins : [],
+              refusedBy: [],
               unopened: [],
-              control: governs ? (refused ? UNOPENED : CATCH_ALL) : null,
+              control: governs ? CATCH_ALL : null,
               targets: [mode === "multi-user" ? "multi-user" : null],
               catchAllMismatches: [],
               misdecided: [],
@@ -466,14 +495,16 @@ async function replay(params: {
   );
   const native = await import("@archestra/openappa-rs");
   const response = JSON.parse(
-    await native.replayOpenappaPolicy(
-      JSON.stringify({
-        content: params.content(content),
-        files: Object.entries(params.scenarios).map(([path, scenario]) => ({
-          path: `${path}.appa`,
-          content: scenario,
-        })),
-      }),
+    await withoutModelCli(() =>
+      native.replayOpenappaPolicy(
+        JSON.stringify({
+          content: params.content(content),
+          files: Object.entries(params.scenarios).map(([path, scenario]) => ({
+            path: `${path}.appa`,
+            content: scenario,
+          })),
+        }),
+      ),
     ),
   ) as { files: ReplayFile[] };
   return Object.fromEntries(
@@ -539,23 +570,17 @@ const CATCH_ALL: Decision = {
   actual: CATCH_ALL_MARK,
   error: expect.any(String),
 };
-/** A rule that asks a battery helper, which offline replay leaves unanswered. */
+/** A rule that asks a battery helper, which no helper bridge answers here. */
 const UNANSWERED_HELPER = {
   status: "cannot_run",
   actual: null,
   error: expect.stringMatching(/annotator=github\.repository-visibility /),
 };
-/** A call the replay ran no step for. */
-const UNOPENED = {
-  status: "cannot_run",
-  actual: null,
-  refusal: expect.any(String),
-};
 /** A base read's static label lets a fresh trajectory's call run. */
 const BASE_READ: Decision = { status: "passed", actual: "allow" };
 
 /** A catch-all through the no-op annotator, and the review its answer requires. */
-const CATCH_ALL_RULES = `
+const catchAllRules = () => `
 [[policy.annotator]]
 name = "noop"
 
@@ -584,7 +609,7 @@ builtin = "hitl"
 builtin = "hitl"
 
 [externals.annotators.noop]
-url = "${guardrailsPolicyService.noopAnnotator().url}"
+url = "${noopUrl}"
 `;
 
 async function declareRoot(params: {
@@ -628,7 +653,7 @@ async function setUp(fixtures: Omit<Fixtures, "organizationId" | "userId">) {
   await declareRoot({
     organizationId,
     userId: admin.id,
-    content: `${GITHUB_ROSTER_ROOT}${CATCH_ALL_RULES}`,
+    content: `${GITHUB_ROSTER_ROOT}${catchAllRules()}`,
   });
   /** A member connected to GitHub as `githubId`. */
   const connected = async (email: string, githubId: number) => {
@@ -673,8 +698,8 @@ function modelBuiltins(policy: string): string[] {
 }
 
 /**
- * The battery helper a rule's annotator runs, which offline replay leaves
- * unanswered, and the call arguments its audience templates read; null for a
+ * The battery helper or model a rule's annotator asks, which nothing answers
+ * here, and the call arguments its audience templates read; null for a
  * rule decided without one.
  */
 function ruleHelper(
@@ -688,13 +713,25 @@ function ruleHelper(
   const declarations = policies.map(
     (policy) =>
       parsePolicyToml(policy) as {
-        policy?: { annotator?: { name?: unknown; audiences?: unknown }[] };
+        policy?: {
+          annotator?: {
+            name?: unknown;
+            builtin?: unknown;
+            audiences?: unknown;
+          }[];
+        };
         externals?: { annotators?: Record<string, { command?: unknown }> };
       } | null,
   );
   if (
-    !declarations.some((declaration) =>
-      Array.isArray(declaration?.externals?.annotators?.[annotator]?.command),
+    !declarations.some(
+      (declaration) =>
+        Array.isArray(
+          declaration?.externals?.annotators?.[annotator]?.command,
+        ) ||
+        declaration?.policy?.annotator?.some(
+          ({ name, builtin }) => name === annotator && builtin !== undefined,
+        ),
     )
   )
     return null;
@@ -718,8 +755,39 @@ function ruleHelper(
   };
 }
 
+/**
+ * Whether a rule itself requires the attention mark the root's `hitl` authority
+ * permits: its call then gets the same decision as the catch-all.
+ */
+function asksApproval(policies: string[], rule: string | null): boolean {
+  if (rule === null) return false;
+  const requires = policies
+    .flatMap(toolEntries)
+    .find(({ name }) => name === rule)?.requires as
+    | { attention?: unknown }
+    | undefined;
+  return (
+    Array.isArray(requires?.attention) &&
+    requires.attention.includes("human-approval")
+  );
+}
+
 /** The annotator a step's error names when its consult went unanswered. */
 const UNANSWERED_ANNOTATOR = /annotator=(\S+) error=/;
+
+/**
+ * Runs `replay` with no `claude` CLI on PATH. A `claude-code` annotator spawns
+ * it, as a dispatch would; here its consults go unanswered instead.
+ */
+async function withoutModelCli<T>(replay: () => Promise<T>): Promise<T> {
+  const path = process.env.PATH;
+  process.env.PATH = "";
+  try {
+    return await replay();
+  } finally {
+    process.env.PATH = path;
+  }
+}
 
 /**
  * Each call alone on a fresh trajectory, decided by the runtime's replay over
@@ -736,27 +804,18 @@ async function decide(
   for (let start = 0; start < calls.length; start += REPLAY_FILES) {
     const chunk = calls.slice(start, start + REPLAY_FILES);
     const response = JSON.parse(
-      await native.replayOpenappaPolicy(
-        JSON.stringify({
-          content: expandCommandExecutionPolicyRules(content),
-          files: chunk.map((call, index) => ({
-            path: `${String(index).padStart(2, "0")}.appa`,
-            content: `${call.tool} {\n${Object.entries(call.arguments)
-              .map(([key, value]) => `  ${key}: ${JSON.stringify(value)}\n`)
-              .join("")}}\nexpect allow\n`,
-          })),
-          noopAnnotator: {
-            url: guardrailsPolicyService.noopAnnotator().url,
-            response: {
-              version: 1,
-              answer: {
-                delta: {},
-                requires: { history: [], attention: ["catch-all"] },
-                emits: [],
-              },
-            },
-          },
-        }),
+      await withoutModelCli(() =>
+        native.replayOpenappaPolicy(
+          JSON.stringify({
+            content: expandCommandExecutionPolicyRules(content),
+            files: chunk.map((call, index) => ({
+              path: `${String(index).padStart(2, "0")}.appa`,
+              content: `${call.tool} {\n${Object.entries(call.arguments)
+                .map(([key, value]) => `  ${key}: ${JSON.stringify(value)}\n`)
+                .join("")}}\nexpect allow\n`,
+            })),
+          }),
+        ),
       ),
     ) as {
       files: {

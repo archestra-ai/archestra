@@ -286,6 +286,40 @@ describe("APPA Guide feature availability", () => {
     });
   });
 
+  test("the appa/do_something example checks a read restriction without naming a tool", async () => {
+    const reference = APPA_GUIDE_SKILL.files.find(
+      (file) => file.path === "references/validation-read-restriction.md",
+    )?.content;
+    if (!reference) throw new Error("Validation-writing reference is missing");
+    const scenario = [...reference.matchAll(/```appa\n([\s\S]*?)```/g)]
+      .map((match) => match[1])
+      .find((block) => block.includes("appa/do_something"));
+    if (!scenario) throw new Error("appa/do_something example is missing");
+    const { replayOpenappaPolicy } = await import("@archestra/openappa-rs");
+    const replay = async (delta: string) =>
+      JSON.parse(
+        await replayOpenappaPolicy(
+          JSON.stringify({
+            content: `[policy]\nversion = 2\n\n[[policy.tool]]\nname = "slack__read_channel"\ndelta = ${delta}\n`,
+            files: [{ path: "traces/stays-private.appa", content: scenario }],
+          }),
+        ),
+      ).files[0];
+
+    const restricted = await replay('{ audience = ["internal"] }');
+    expect(restricted.status).toBe("passed");
+    expect(
+      restricted.steps.map((step: { actual: string }) => step.actual),
+    ).toEqual(["allow", "allow", "deny"]);
+
+    const unrestricted = await replay("{}");
+    expect(unrestricted.status).toBe("failed");
+    expect(unrestricted.steps.at(-1)).toMatchObject({
+      expected: "deny",
+      actual: "allow",
+    });
+  });
+
   test("the shipped body carries no frontmatter of its own, so SKILL.md shows one block", () => {
     expect(APPA_GUIDE_SKILL.content.startsWith("---")).toBe(false);
   });

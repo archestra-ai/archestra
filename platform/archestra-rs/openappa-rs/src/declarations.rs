@@ -522,6 +522,26 @@ version = 2
     }
 
     #[test]
+    fn aliases_mcp_bindings_read_like_the_legacy_table() {
+        let declarations = parse("[aliases.mcp]\ngithub = [\"github_prod\"]\n");
+        assert!(declarations.errors.is_empty());
+        assert_eq!(
+            declarations
+                .mcp_aliases
+                .iter()
+                .map(|alias| (alias.namespace.as_str(), alias.servers.clone(), alias.line))
+                .collect::<Vec<_>>(),
+            [("github", vec!["github_prod".to_string()], 2)]
+        );
+        let broken = parse("[aliases.mcp]\ngithub = \"github_prod\"\n");
+        assert!(
+            broken.errors[0].contains("aliases.mcp.github"),
+            "{:?}",
+            broken.errors
+        );
+    }
+
+    #[test]
     fn a_sequence_of_edits_keeps_the_authored_text_around_the_lines_it_changes() {
         let edited = edit(
             AUTHORED,

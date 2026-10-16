@@ -63,8 +63,8 @@ import {
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
-  useAgentCredentialReadiness,
-  useChatAgentPage,
+  useAgentCredentialReadinessPages,
+  useChatAgentPages,
   useChatAgentReferences,
   useChatAgents,
   useCreateProfile,
@@ -138,17 +138,16 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 250);
-  const [paging, setPaging] = useState<{
-    search: string;
-    cursors: (string | undefined)[];
-  }>({ search: "", cursors: [undefined] });
-  const pageCursors =
-    paging.search === debouncedSearch ? paging.cursors : [undefined];
-  const page = useChatAgentPage({
-    cursor: pageCursors.at(-1),
+  const listRef = useRef<HTMLDivElement>(null);
+  const page = useChatAgentPages({
     search: debouncedSearch,
     enabled: open,
   });
+  const loadMore = () => {
+    if (search === debouncedSearch && page.hasNextPage && !page.isFetching) {
+      void page.fetchNextPage({ cancelRefetch: false });
+    }
+  };
   const { data: bootstrapAgents = [] } = useChatAgents({
     ids: [currentAgentId],
   });
@@ -184,12 +183,16 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const allAgents = useMemo(
     () => [
       ...new Map(
-        [...bootstrapAgents, ...pinnedAgents, ...(page.data?.data ?? [])].map(
-          (agent) => [agent.id, agent],
-        ),
+        [
+          ...bootstrapAgents,
+          ...pinnedAgents,
+          ...(search === debouncedSearch
+            ? (page.data?.pages.flatMap((result) => result?.data ?? []) ?? [])
+            : []),
+        ].map((agent) => [agent.id, agent]),
       ).values(),
     ],
-    [bootstrapAgents, pinnedAgents, page.data],
+    [bootstrapAgents, pinnedAgents, page.data, search, debouncedSearch],
   );
   const filteredAgents = useMemo(
     () =>
@@ -201,11 +204,16 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
       }),
     [allAgents, search, currentAgentId, userId],
   );
-  const { data: credentialReadiness } = useAgentCredentialReadiness({
+  const { data: credentialReadiness } = useAgentCredentialReadinessPages({
     enabled: open || summaryOpen,
-    ids: open
-      ? filteredAgents.map((agent) => agent.id)
-      : [currentAgentId].filter((id): id is string => !!id),
+    batches: open
+      ? [
+          [...bootstrapAgents, ...pinnedAgents].map((agent) => agent.id),
+          ...(page.data?.pages.map(
+            (result) => result?.data.map((agent) => agent.id) ?? [],
+          ) ?? []),
+        ]
+      : [[currentAgentId].filter((id): id is string => !!id)],
   });
   const readinessByAgent = useMemo(
     () => indexReadinessByAgent(credentialReadiness),
@@ -592,7 +600,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                   value={search}
                   onChange={(e) => {
                     setSearch(e.target.value);
-                    setPaging({ search: e.target.value, cursors: [undefined] });
+                    if (listRef.current) listRef.current.scrollTop = 0;
                   }}
                   className="h-8 pl-8 text-sm rounded-lg bg-muted/50"
                   autoFocus
@@ -601,6 +609,18 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
             </div>
             <div
               {...navigation.listboxProps}
+              ref={listRef}
+              onScroll={(event) => {
+                const { scrollTop, scrollHeight, clientHeight } =
+                  event.currentTarget;
+                if (
+                  scrollHeight - scrollTop - clientHeight < 48 &&
+                  !page.isError
+                ) {
+                  loadMore();
+                }
+              }}
+              aria-busy={page.isFetching}
               role="listbox"
               aria-label="Agents"
               className="max-h-[320px] overflow-y-auto px-1.5 pb-1.5"
@@ -608,7 +628,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
               {filteredAgents.length === 0 ? (
                 <div className="flex flex-col items-center gap-2.5 px-4 py-6 text-center">
                   <p className="text-sm text-muted-foreground">
-                    {page.isPending
+                    {page.isPending || search !== debouncedSearch
                       ? "Loading agents…"
                       : page.isError
                         ? "Could not load agents"
@@ -620,7 +640,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                       size="xs"
                       onClick={() => {
                         setSearch("");
-                        setPaging({ search: "", cursors: [undefined] });
+                        if (listRef.current) listRef.current.scrollTop = 0;
                       }}
                     >
                       Clear search
@@ -674,45 +694,24 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                 ))
               )}
             </div>
-            <div className="flex items-center justify-between border-t px-2 py-1.5">
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={pageCursors.length === 1 || page.isFetching}
-                onClick={() =>
-                  setPaging({
-                    search: debouncedSearch,
-                    cursors: pageCursors.slice(0, -1),
-                  })
-                }
-              >
-                Previous
-              </Button>
-              {page.isError && (
+            {page.isError && (
+              <div className="flex justify-center border-t px-2 py-1.5">
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => void page.refetch()}
+                  disabled={page.isFetching || search !== debouncedSearch}
+                  onClick={() => {
+                    if (page.isError && !page.isFetchNextPageError) {
+                      void page.refetch();
+                    } else {
+                      loadMore();
+                    }
+                  }}
                 >
-                  Retry
+                  {page.isFetching ? "Loading agents…" : "Retry loading agents"}
                 </Button>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={!page.data?.pagination.hasNext || page.isFetching}
-                onClick={() => {
-                  const next = page.data?.pagination.nextCursor;
-                  if (next)
-                    setPaging({
-                      search: debouncedSearch,
-                      cursors: [...pageCursors, next],
-                    });
-                }}
-              >
-                Next
-              </Button>
-            </div>
+              </div>
+            )}
             <div className="flex items-center justify-between border-t px-1.5 py-1.5">
               <Button asChild variant="ghost" size="sm">
                 <Link href={agentNewHref("agent")}>

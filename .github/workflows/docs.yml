@@ -93,9 +93,10 @@ jobs:
 
   # Standalone manual validation retains the local build fallback. Queue/PR
   # validation is owned by platform-e2e-tests.yml, where capture can depend
-  # directly on the exact image build. These event conditions are disjoint.
+  # directly on the exact image build. Manual check names stay distinct so a
+  # skipped job here cannot mask a failed required queue check.
   docs-screenshot-validation:
-    name: Docs Screenshot Validation
+    name: Manual Docs Screenshot Validation
     needs: [docs-screenshot-capture]
     # Merge-queue validation lives beside its image producer in platform-e2e-tests.yml.
     if: always() && github.event_name == 'workflow_dispatch'
@@ -115,9 +116,9 @@ jobs:
         run: python3 .github/scripts/check-docs-screenshot-result.py
 
   docs-screenshot-capture:
-    name: Capture Docs Screenshots (validation)
+    name: Capture Docs Screenshots (manual validation)
     if: github.event_name == 'workflow_dispatch' && inputs.validation_only
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubicloud-standard-8-ubuntu-2404
     timeout-minutes: 25
     permissions:
       contents: read
@@ -140,7 +141,7 @@ jobs:
        github.event.pull_request.user.login == 'archestra-ci[bot]' &&
        github.event.pull_request.head.repo.full_name == github.repository &&
        startsWith(github.event.pull_request.head.ref, 'release-please--'))
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubicloud-standard-8-ubuntu-2404
     timeout-minutes: 60
     permissions:
       contents: write # Required to push updated screenshots.

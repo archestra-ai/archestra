@@ -501,7 +501,7 @@ function ToolsSection({
 
   const totalToolQueries = useQueries({
     queries: assignedCatalogs.map((catalog) => ({
-      queryKey: ["mcp-catalog", catalog.id, "tools"],
+      queryKey: ["mcp-catalog", catalog.id, "tools", "picker"],
       queryFn: () => fetchCatalogTools(catalog.id),
       staleTime: 60_000,
     })),

@@ -123,6 +123,8 @@ test("a missing prepared setup blocks approval while denial remains available", 
   expect(await approveTooltip()).toHaveTextContent(
     "Preparing the setup for your terminal. Approve turns on as soon as it is ready.",
   );
+  // A disabled button alone reads as stuck: the spinner shows it is coming.
+  expect(screen.getByTestId("approve-connection-progress")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Deny" })).toBeEnabled();
   expect(requests).toEqual([]);
 });
@@ -136,6 +138,10 @@ test("an unconfirmed code explains how to enable approval", async () => {
   expect(await approveTooltip()).toHaveTextContent(
     "Check that the code above matches the code in your terminal, then select the checkbox to confirm it.",
   );
+  // The setup is ready; only the person is left to act.
+  expect(
+    screen.queryByTestId("approve-connection-progress"),
+  ).not.toBeInTheDocument();
 });
 
 test("a setup that cannot be prepared keeps approval off and says how to fix it", async () => {
@@ -148,6 +154,10 @@ test("a setup that cannot be prepared keeps approval off and says how to fix it"
     screen.getByRole("button", { name: "Approve connection" }),
   ).toBeDisabled();
   expect(await approveTooltip()).toHaveTextContent(problem);
+  // Nothing is on its way, so nothing spins.
+  expect(
+    screen.queryByTestId("approve-connection-progress"),
+  ).not.toBeInTheDocument();
   expect(requests).toEqual([]);
 });
 
@@ -181,6 +191,7 @@ test("a pending decision disables both actions and waits for the result", async 
   expect(
     screen.getByRole("button", { name: "Approve connection" }),
   ).toBeDisabled();
+  expect(screen.getByTestId("approve-connection-progress")).toBeInTheDocument();
   completeDecision(
     HttpResponse.json({
       status: "approved",

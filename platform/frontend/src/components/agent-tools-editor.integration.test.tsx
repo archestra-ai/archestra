@@ -1,6 +1,11 @@
-import { archestraApiClient, type archestraApiTypes } from "@archestra/shared";
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  archestraApiClient,
+  type archestraApiTypes,
+  TOOL_TODO_WRITE_FULL_NAME,
+} from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -97,6 +102,61 @@ function renderEditor() {
 }
 
 describe("AgentToolsEditor", () => {
+  it("preselects creation defaults using only compact catalog metadata", async () => {
+    const selected: string[][] = [];
+    const views: (string | null)[] = [];
+    server.use(
+      http.get(`${API_ORIGIN}/api/internal_mcp_catalog`, () =>
+        HttpResponse.json([
+          {
+            ...catalogItem,
+            id: ARCHESTRA_MCP_CATALOG_ID,
+            name: "Platform tools",
+            toolCount: 2,
+          },
+        ]),
+      ),
+      http.get(`${API_ORIGIN}/api/mcp_server`, () => HttpResponse.json([])),
+      http.get(
+        `${API_ORIGIN}/api/internal_mcp_catalog/:id/tools`,
+        ({ request }) => {
+          const view = new URL(request.url).searchParams.get("view");
+          views.push(view);
+          if (view !== "picker") return new Promise<never>(() => {});
+          return HttpResponse.json([
+            {
+              id: "default-tool",
+              name: TOOL_TODO_WRITE_FULL_NAME,
+              description: "Plan work",
+              createdAt: new Date().toISOString(),
+              group: null,
+            },
+            {
+              id: "optional-tool",
+              name: "archestra__optional_example",
+              description: "Optional tool",
+              createdAt: new Date().toISOString(),
+              group: null,
+            },
+          ]);
+        },
+      ),
+    );
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <AgentToolsEditor
+          onSelectedToolIdsChange={(ids) => selected.push([...ids])}
+        />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(selected.at(-1)).toEqual(["default-tool"]));
+    expect(views).toEqual(["picker"]);
+    client.clear();
+  });
+
   it("surfaces a failed catalog list instead of reporting an empty registry", async () => {
     // The catalog list is the only thing this picker cannot render without,
     // and a failed one leaves it empty — which the emptiness gate reports as
@@ -164,6 +224,7 @@ describe("AgentToolsEditor", () => {
   });
 
   it("counts a server's assigned tools against the count from the catalog list", async () => {
+    let toolRequests = 0;
     server.use(
       http.get(`${API_ORIGIN}/api/agents/${AGENT_ID}/tools`, () =>
         HttpResponse.json([
@@ -183,10 +244,10 @@ describe("AgentToolsEditor", () => {
           },
         ]),
       ),
-      http.get(
-        `${API_ORIGIN}/api/internal_mcp_catalog/:id/tools`,
-        () => new Promise<never>(() => {}),
-      ),
+      http.get(`${API_ORIGIN}/api/internal_mcp_catalog/:id/tools`, () => {
+        toolRequests += 1;
+        return new Promise<never>(() => {});
+      }),
     );
 
     const user = userEvent.setup();
@@ -197,5 +258,6 @@ describe("AgentToolsEditor", () => {
     expect(
       await screen.findByRole("menuitemcheckbox", { name: /example-server/ }),
     ).toHaveTextContent("2/150");
+    expect(toolRequests).toBe(0);
   });
 });

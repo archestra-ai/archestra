@@ -12,7 +12,6 @@ import {
 import { toast } from "sonner";
 import { trackEvent } from "@/lib/analytics";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
-import { useDeferredEnabled } from "@/lib/hooks/use-deferred-enabled";
 import { composeManifest } from "@/lib/skills/manifest-compose";
 import {
   getApiErrorInternalCode,
@@ -31,6 +30,7 @@ const {
   getPluginSkill,
   getPluginSkills,
   getPluginSkillUsageStatistics,
+  getSkillNames,
   getSkillSourceRepos,
   getSkillUsageStatistics,
   getSkillVersion,
@@ -893,44 +893,25 @@ export type ConnectSkill = Pick<
   | "users"
 >;
 
-/**
- * Query over the org's full skill set, for the connect-command step's
- * per-skill picker. Callers that prepare an artifact containing an explicit
- * skill snapshot can opt into a loud error, rather than silently producing an
- * artifact without the selected skills.
- *
- * `forAgentId` narrows the set to skills visible from a supported skill agent's
- * environment. LLM proxies do not expose skills and must not be passed here.
- */
-export function useAllSkills(params?: {
-  enabled?: boolean;
-  forAgentId?: string | null;
-  /** Surface a catalog failure to the caller instead of returning an empty list. */
-  throwOnError?: boolean;
-  /**
-   * Hold the fetch back until the page has settled.
-   *
-   * This walks the whole skill catalogue a page at a time. Even without
-   * manifest bodies, its attribution metadata can be large. Defer the review
-   * step's fetch so the setup command can render first.
-   */
-  deferMs?: number;
-}) {
-  const forAgentId = params?.forAgentId ?? null;
-  const enabled = useDeferredEnabled(
-    params?.enabled ?? true,
-    params?.deferMs ?? 0,
-  );
+/** The id and name of a skill the caller can read. */
+export type SkillName =
+  archestraApiTypes.GetSkillNamesResponses["200"]["data"][number];
 
+/**
+ * Every skill the caller can read, named, with the total: one request in
+ * place of paging the full list, for the connection setup that names and
+ * sends them. The names stop at the setup cap; the total does not, so a
+ * caller can tell when there are more than one setup can carry.
+ */
+export function useSkillNames(params: { enabled: boolean }) {
   return useQuery({
-    queryKey: [
-      "skills",
-      "connect-all",
-      forAgentId,
-      { throwOnError: params?.throwOnError ?? false },
-    ],
-    queryFn: () => fetchAllSkills(forAgentId, params?.throwOnError ?? false),
-    enabled,
+    queryKey: ["skills", "names"],
+    queryFn: async () => {
+      const { data, error } = await getSkillNames();
+      if (error) throwOnApiError(error);
+      return data ?? { data: [], total: 0 };
+    },
+    enabled: params.enabled,
   });
 }
 

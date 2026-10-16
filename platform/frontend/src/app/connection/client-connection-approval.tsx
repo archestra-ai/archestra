@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, TriangleAlert } from "lucide-react";
+import { Check, Loader2, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 import { LoadingState } from "@/components/loading";
 import { Button } from "@/components/ui/button";
@@ -153,6 +153,9 @@ export function ClientConnectionApproval({
         : !setupId
           ? "Preparing the setup for your terminal. Approve turns on as soon as it is ready."
           : null;
+  // Something is still on its way (the setup, or the decision being sent):
+  // show it moving, so a disabled button does not read as stuck.
+  const working = (!setupId && !setupProblem) || decision.isPending;
   const approveDisabledReason =
     approveBlockedReason ??
     (decision.isPending ? "Sending your decision…" : null);
@@ -229,6 +232,13 @@ export function ClientConnectionApproval({
                   )
                 }
               >
+                {working && (
+                  <Loader2
+                    aria-hidden
+                    data-testid="approve-connection-progress"
+                    className="animate-spin"
+                  />
+                )}
                 <span>Approve connection</span>
               </Button>
             </span>

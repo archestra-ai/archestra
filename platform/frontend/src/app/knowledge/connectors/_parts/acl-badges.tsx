@@ -45,7 +45,7 @@ export function AclBadges({
   groupNamesByToken?: Map<string, string>;
   noun?: RosterNoun;
 }) {
-  const { data: teams } = useTeams();
+  const { data: teams } = useTeams({ includeRelations: false });
   const { data: orgMembers } = useOrganizationMembers();
 
   if (acl.length === 0) {

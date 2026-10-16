@@ -320,13 +320,6 @@ else:
     }
   )
 
-# App-recording video rendering runs in-process in local dev — the single `all`
-# backend renders in its own memory (InProcessRenderJobClient), the same path the
-# OSS single container uses. The dedicated single-replica render service is a
-# multi-replica staging/prod concern wired via Helm (archestra-renderer.yaml), not
-# a Tilt resource here: nothing local has to rerun the backend's own dist bundle
-# out-of-band to stand one up.
-
 # Port-forward for MCP servers using streamable-http transport
 # Docker Desktop / kind K8s don't expose NodePorts on localhost, so we use
 # kubectl port-forward (which goes through the K8s API server) to make them accessible.

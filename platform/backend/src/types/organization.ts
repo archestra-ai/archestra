@@ -394,6 +394,7 @@ export const SelectOrganizationSchema = InternalSelectOrganizationSchema.omit({
   presetEntityDefaultValidationRegex: true,
   // Superseded by connectionClientProviderKeys; retained in DB only.
   connectionDefaultProviderKeys: true,
+  appsHackathonRecorderEnabled: true,
 });
 export const InsertOrganizationSchema = createInsertSchema(
   schema.organizationsTable,
@@ -406,6 +407,7 @@ export const InsertOrganizationSchema = createInsertSchema(
   presetEntityDefaultLabel: true,
   presetEntityDefaultValidationRegex: true,
   connectionDefaultProviderKeys: true,
+  appsHackathonRecorderEnabled: true,
 });
 /**
  * The white-label app name is not only shown in the UI: it is substituted into
@@ -449,7 +451,6 @@ export const UpdateAppearanceSettingsSchema = z.object({
 
 export const UpdateSecuritySettingsSchema = z.object({
   allowChatFileUploads: z.boolean().optional(),
-  appsHackathonRecorderEnabled: z.boolean().optional(),
   newAppsDisabledByDefault: z.boolean().optional(),
   newAppsLockedByDefault: z.boolean().optional(),
   /** @deprecated No longer gates anything; accepted for backwards-compat and ignored. */

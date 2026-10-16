@@ -246,11 +246,6 @@ patchedDependencies:
   # before text in non-streaming results too. Upstream master (v4, needs ai@^7)
   # has the same bug; drop the patch when moving to ai v7 after verifying a fix.
   ollama-ai-provider-v2@3.6.0: patches/ollama-ai-provider-v2@3.6.0.patch
-  # The package root eagerly re-exports its optional worker implementation. That
-  # pulls @eshaz/web-worker's Node shim into Next's Client Component SSR graph and
-  # Turbopack cannot resolve the shim's intentionally dynamic import. We use only
-  # the main-thread decoder, so keep that worker branch out of the package entry.
-  opus-decoder@0.7.11: patches/opus-decoder@0.7.11.patch
 
 # Enforce Node.js version requirements from package.json engines field.
 engineStrict: true

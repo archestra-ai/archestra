@@ -17,7 +17,6 @@ import {
   PromptInputTools,
   usePromptInputAttachments,
 } from "@/components/ai-elements/prompt-input";
-import { AppRecordingControls } from "@/components/app-session-recording/app-recording-controls";
 import { NotRecommendedForAgentsNoticeBadge } from "@/components/chat/agent-recommendation-notice";
 import { ContextIndicator } from "@/components/chat/context-indicator";
 import { ContextWindowDialog } from "@/components/chat/context-window-panel";
@@ -758,11 +757,6 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
           )}
         </>
       )}
-
-      {/* Apps Hackathon session recorder — a distinct cluster in the composer.
-          It records the whole chat (from scratch, even before the first message)
-          and opens the replay. Renders nothing when the feature is disabled. */}
-      <AppRecordingControls />
     </PromptInputTools>
   );
 });

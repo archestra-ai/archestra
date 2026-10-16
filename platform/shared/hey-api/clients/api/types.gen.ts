@@ -25652,651 +25652,6 @@ export type BulkDeleteApiKeysResponses = {
 
 export type BulkDeleteApiKeysResponse = BulkDeleteApiKeysResponses[keyof BulkDeleteApiKeysResponses];
 
-export type AppGalleryDeviceAuthStartData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/app-gallery/device/start';
-};
-
-export type AppGalleryDeviceAuthStartErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type AppGalleryDeviceAuthStartError = AppGalleryDeviceAuthStartErrors[keyof AppGalleryDeviceAuthStartErrors];
-
-export type AppGalleryDeviceAuthStartResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        deviceCode: string;
-        userCode: string;
-        verificationUri: string;
-        interval: number;
-        expiresIn: number;
-    };
-};
-
-export type AppGalleryDeviceAuthStartResponse = AppGalleryDeviceAuthStartResponses[keyof AppGalleryDeviceAuthStartResponses];
-
-export type AppGalleryDeviceAuthPollData = {
-    body: {
-        deviceCode: string;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/app-gallery/device/poll';
-};
-
-export type AppGalleryDeviceAuthPollErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type AppGalleryDeviceAuthPollError = AppGalleryDeviceAuthPollErrors[keyof AppGalleryDeviceAuthPollErrors];
-
-export type AppGalleryDeviceAuthPollResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        status: 'pending';
-    } | {
-        status: 'slow_down';
-    } | {
-        status: 'complete';
-        accessToken: string;
-    };
-};
-
-export type AppGalleryDeviceAuthPollResponse = AppGalleryDeviceAuthPollResponses[keyof AppGalleryDeviceAuthPollResponses];
-
-export type EnhanceAppRecordingData = {
-    body: {
-        conversationId: string;
-        appName: string;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/app-recordings/enhance';
-};
-
-export type EnhanceAppRecordingErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type EnhanceAppRecordingError = EnhanceAppRecordingErrors[keyof EnhanceAppRecordingErrors];
-
-export type EnhanceAppRecordingResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        description: string | null;
-        prompt: string | null;
-        response: string | null;
-        category: string | null;
-        reason: 'empty_transcript' | 'generation_failed';
-    };
-};
-
-export type EnhanceAppRecordingResponse = EnhanceAppRecordingResponses[keyof EnhanceAppRecordingResponses];
-
-export type RenderAppRecordingVideoData = {
-    body: {
-        bundle: unknown;
-        title: string;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/app-recordings/render';
-};
-
-export type RenderAppRecordingVideoErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type RenderAppRecordingVideoError = RenderAppRecordingVideoErrors[keyof RenderAppRecordingVideoErrors];
-
-export type RenderAppRecordingVideoResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        jobId: string;
-    };
-};
-
-export type RenderAppRecordingVideoResponse = RenderAppRecordingVideoResponses[keyof RenderAppRecordingVideoResponses];
-
-export type CancelAppRecordingRenderData = {
-    body?: never;
-    path: {
-        jobId: string;
-    };
-    query?: never;
-    url: '/api/app-recordings/render/{jobId}';
-};
-
-export type CancelAppRecordingRenderErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type CancelAppRecordingRenderError = CancelAppRecordingRenderErrors[keyof CancelAppRecordingRenderErrors];
-
-export type CancelAppRecordingRenderResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        cancelled: true;
-    };
-};
-
-export type CancelAppRecordingRenderResponse = CancelAppRecordingRenderResponses[keyof CancelAppRecordingRenderResponses];
-
-export type GetAppRecordingRenderStatusData = {
-    body?: never;
-    path: {
-        jobId: string;
-    };
-    query?: never;
-    url: '/api/app-recordings/render/{jobId}';
-};
-
-export type GetAppRecordingRenderStatusErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetAppRecordingRenderStatusError = GetAppRecordingRenderStatusErrors[keyof GetAppRecordingRenderStatusErrors];
-
-export type GetAppRecordingRenderStatusResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        status: 'running' | 'done' | 'failed' | 'cancelled';
-        error?: string;
-    };
-};
-
-export type GetAppRecordingRenderStatusResponse = GetAppRecordingRenderStatusResponses[keyof GetAppRecordingRenderStatusResponses];
-
-export type DownloadAppRecordingVideoData = {
-    body?: never;
-    path: {
-        jobId: string;
-    };
-    query?: never;
-    url: '/api/app-recordings/render/{jobId}/video';
-};
-
-export type DownloadAppRecordingVideoResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
-export type ReviewAppRecordingData = {
-    body?: never;
-    path?: never;
-    query: {
-        /**
-         * Absolute https://raw.githubusercontent.com/... URL of the submission's recording.json.
-         */
-        src: string;
-    };
-    url: '/api/app-recording/review';
-};
-
-export type ReviewAppRecordingErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type ReviewAppRecordingError = ReviewAppRecordingErrors[keyof ReviewAppRecordingErrors];
-
-export type ReviewAppRecordingResponses = {
-    /**
-     * Default Response
-     */
-    200: unknown;
-};
-
 export type TransferAppOwnershipData = {
     body: {
         ownerId: string;
@@ -34876,7 +34231,6 @@ export type GetBootstrapResponses = {
             defaultEnvironmentTrustedImageRegistries: Array<string> | null;
             skillToolsEnabled: boolean;
             mcpIdleHibernationEnabled: boolean;
-            appsHackathonRecorderEnabled: boolean;
             newAppsDisabledByDefault: boolean;
             newAppsLockedByDefault: boolean;
         } | null;
@@ -34955,13 +34309,6 @@ export type GetBootstrapResponses = {
                     redirectUri: string;
                 };
                 mcpGatewaySkillsEnabled: boolean;
-                hackathonRecorderEnabled: boolean;
-                hackathonVideoDownloadEnabled: boolean;
-                hackathonMaxFinalCutMs: number;
-                hackathonGalleryRepo: {
-                    owner: string;
-                    name: string;
-                } | null;
             };
             providerBaseUrls: {
                 [key: string]: string | null;
@@ -42343,7 +41690,6 @@ export type GetPublicConfigResponses = {
         maintenanceMode: string | null;
         siteNotificationMessage: string | null;
         enterpriseCoreActive: boolean;
-        mcpSandboxDomain: string | null;
         analytics: {
             enabled: boolean;
             instanceId: string | null;
@@ -42447,13 +41793,6 @@ export type GetConfigResponses = {
                 redirectUri: string;
             };
             mcpGatewaySkillsEnabled: boolean;
-            hackathonRecorderEnabled: boolean;
-            hackathonVideoDownloadEnabled: boolean;
-            hackathonMaxFinalCutMs: number;
-            hackathonGalleryRepo: {
-                owner: string;
-                name: string;
-            } | null;
         };
         providerBaseUrls: {
             [key: string]: string | null;
@@ -95450,7 +94789,6 @@ export type GetOrganizationResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         mcpIdleHibernationEnabled: boolean;
-        appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
     };
@@ -95787,7 +95125,6 @@ export type UpdateAppearanceSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         mcpIdleHibernationEnabled: boolean;
-        appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
     };
@@ -95798,7 +95135,6 @@ export type UpdateAppearanceSettingsResponse = UpdateAppearanceSettingsResponses
 export type UpdateSecuritySettingsData = {
     body: {
         allowChatFileUploads?: boolean;
-        appsHackathonRecorderEnabled?: boolean;
         newAppsDisabledByDefault?: boolean;
         newAppsLockedByDefault?: boolean;
         allowToolAutoAssignment?: boolean;
@@ -96002,7 +95338,6 @@ export type UpdateSecuritySettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         mcpIdleHibernationEnabled: boolean;
-        appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
     };
@@ -96214,7 +95549,6 @@ export type UpdateMcpSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         mcpIdleHibernationEnabled: boolean;
-        appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
     };
@@ -96426,7 +95760,6 @@ export type UpdateSkillsSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         mcpIdleHibernationEnabled: boolean;
-        appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
     };
@@ -96639,7 +95972,6 @@ export type UpdateAgentSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         mcpIdleHibernationEnabled: boolean;
-        appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
     };
@@ -96874,7 +96206,6 @@ export type UpdateConnectionSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         mcpIdleHibernationEnabled: boolean;
-        appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
     };
@@ -97122,7 +96453,6 @@ export type UpdateIntegrationSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         mcpIdleHibernationEnabled: boolean;
-        appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
     };
@@ -97344,7 +96674,6 @@ export type UpdateDefaultEnvironmentResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         mcpIdleHibernationEnabled: boolean;
-        appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
     };
@@ -97561,7 +96890,6 @@ export type UpdateAuthSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         mcpIdleHibernationEnabled: boolean;
-        appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
     };
@@ -97780,7 +97108,6 @@ export type UpdateKnowledgeSettingsResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         mcpIdleHibernationEnabled: boolean;
-        appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
     };
@@ -97989,7 +97316,6 @@ export type DropEmbeddingConfigResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         mcpIdleHibernationEnabled: boolean;
-        appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
     };
@@ -98560,7 +97886,6 @@ export type CompleteOnboardingResponses = {
         defaultEnvironmentTrustedImageRegistries: Array<string> | null;
         skillToolsEnabled: boolean;
         mcpIdleHibernationEnabled: boolean;
-        appsHackathonRecorderEnabled: boolean;
         newAppsDisabledByDefault: boolean;
         newAppsLockedByDefault: boolean;
     };

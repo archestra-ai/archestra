@@ -28,7 +28,7 @@ import type { Model } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 
 /** A fully dereferenced selection ready for an LLM call. */
-export interface ResolvedLlmSelection {
+interface ResolvedLlmSelection {
   provider: SupportedProvider;
   apiKey: string | undefined;
   modelName: string;

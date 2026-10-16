@@ -1609,6 +1609,61 @@ describe("ChatMessages", () => {
     expect(text).not.toContain("b: skills listed");
   });
 
+  it("keeps a guarded call running until its turn ends, only in the active turn", () => {
+    const earlier = remedyChainParts({
+      prefix: "a",
+      tool: "workspace__show_board",
+      args: {},
+    });
+    const current = remedyChainParts({
+      prefix: "b",
+      tool: "workspace__close_task",
+      args: { id: 7 },
+    });
+    // Both calls were blocked and remedied, and neither was retried yet.
+    const messages = [
+      {
+        id: "assistant-1",
+        role: "assistant",
+        parts: [earlier.notice, earlier.remedy],
+      },
+      { id: "user-2", role: "user", parts: [{ type: "text", text: "Go on" }] },
+      {
+        id: "assistant-2",
+        role: "assistant",
+        parts: [current.notice, current.remedy],
+      },
+    ] as unknown as UIMessage[];
+
+    const { rerender } = render(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="streaming"
+      />,
+    );
+
+    // The finished turn shows its final state; the active one stays running.
+    expect(
+      screen.getByRole("button", { name: "show board (blocked)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "close task (running)" }),
+    ).toBeInTheDocument();
+
+    rerender(
+      <ChatMessages
+        conversationId="conv-1"
+        messages={messages}
+        status="ready"
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "close task (blocked)" }),
+    ).toBeInTheDocument();
+  });
+
   it("keeps a guarded call's approval prompt visible in one full card", () => {
     const onToolApprovalResponse = vi.fn();
     const chain = remedyChainParts({

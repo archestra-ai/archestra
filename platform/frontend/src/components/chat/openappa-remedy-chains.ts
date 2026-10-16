@@ -98,8 +98,10 @@ export function identifyRemedyChains(
     invocations.push({ index, step, part, toolName });
   });
 
-  const chains: (RemedyChain & { rulingText: string; noticeStep: number })[] =
-    [];
+  const chains: (RemedyChain & {
+    offerIds: Set<string>;
+    noticeStep: number;
+  })[] = [];
   const isOpen = (chain: RemedyChain) => chain.finalAttempt === null;
 
   for (const { index, step, part, toolName } of invocations) {
@@ -123,7 +125,9 @@ export function identifyRemedyChains(
     if (shortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME) {
       const notice = parseNotice(part.input, part.state === "input-streaming");
       if (!notice) continue;
-      const rulingText = `${notice.ruling}\n${outputText(resultPart?.output ?? part.output)}`;
+      const offerIds = offeredRemedyIds(
+        `${notice.ruling}\n${outputText(resultPart?.output ?? part.output)}`,
+      );
       const continued = chains.findLast(
         (chain) =>
           isOpen(chain) &&
@@ -133,7 +137,7 @@ export function identifyRemedyChains(
       );
       if (continued) {
         continued.steps.push(member("notice"));
-        continued.rulingText += `\n${rulingText}`;
+        for (const offerId of offerIds) continued.offerIds.add(offerId);
         continued.noticeStep = step;
         continue;
       }
@@ -143,7 +147,7 @@ export function identifyRemedyChains(
         targetArguments: notice.arguments,
         steps: [member("notice")],
         finalAttempt: null,
-        rulingText,
+        offerIds,
         noticeStep: step,
       });
       continue;
@@ -153,13 +157,10 @@ export function identifyRemedyChains(
       const offerId = (part.input as { offer_id?: unknown } | undefined)
         ?.offer_id;
       if (typeof offerId !== "string" || offerId.length === 0) continue;
-      // The ruling text is the only place a remedy's offer is tied to its
-      // blocked call. A plain search is enough because the runtime mints each
-      // offer id as a unique 16-character hex string.
+      // A remedy is tied to its blocked call only by the offers that call's
+      // rulings list, so it joins the chain whose rulings offered this id.
       chains
-        .findLast(
-          (chain) => isOpen(chain) && chain.rulingText.includes(offerId),
-        )
+        .findLast((chain) => isOpen(chain) && chain.offerIds.has(offerId))
         ?.steps.push(member("remedy"));
       continue;
     }
@@ -184,7 +185,7 @@ export function identifyRemedyChains(
   }
 
   return chains.map(
-    ({ rulingText: _rulingText, noticeStep: _noticeStep, ...chain }) => chain,
+    ({ offerIds: _offerIds, noticeStep: _noticeStep, ...chain }) => chain,
   );
 }
 
@@ -328,6 +329,20 @@ function parseArguments(args: unknown): unknown {
   } catch {
     return args;
   }
+}
+
+/**
+ * The offer ids a ruling presents as remedies, from its
+ * `execute_remedy_plan(offer_id: "…", plan: "…")` lines. Only these belong to
+ * the blocked call; an id the ruling merely mentions elsewhere does not.
+ */
+function offeredRemedyIds(rulingText: string): Set<string> {
+  return new Set(
+    Array.from(
+      rulingText.matchAll(/execute_remedy_plan\(offer_id:\s*\\*"([^"\\]+)/g),
+      (match) => match[1],
+    ),
+  );
 }
 
 function outputText(output: unknown): string {

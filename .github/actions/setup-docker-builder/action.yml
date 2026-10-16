@@ -25,8 +25,11 @@ runs:
       run: |
         # The upstream action can succeed with its own local fallback. Use our
         # standard builder in that case so --network host remains supported.
-        if [ "$(docker buildx inspect --format '{{.Driver}}')" = remote ]; then
+        if [ "$(docker buildx inspect | awk '$1 == "Driver:" { print $2 }')" = remote ]; then
+          echo "Using persistent Blacksmith Docker builder"
           echo "persistent=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "::notice::Persistent builder unavailable; using the standard Docker builder"
         fi
 
     - name: Setup Docker builder

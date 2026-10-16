@@ -57,8 +57,10 @@ class CachePolicyTests(unittest.TestCase):
                 output.touch()
                 docker = directory / "docker"
                 docker.write_text(
-                    '#!/bin/bash\n[ "$ARCHESTRA_TEST_DOCKER_DRIVER" != unavailable ] || exit 1\n'
-                    'echo "$ARCHESTRA_TEST_DOCKER_DRIVER"\n'
+                    '#!/bin/bash\n'
+                    '[ "$*" = "buildx inspect" ] || { echo "unsupported arguments" >&2; exit 64; }\n'
+                    '[ "$ARCHESTRA_TEST_DOCKER_DRIVER" != unavailable ] || exit 1\n'
+                    'printf "Name: blacksmith-test\\nDriver:        %s\\n\\nNodes:\\n" "$ARCHESTRA_TEST_DOCKER_DRIVER"\n'
                 )
                 docker.chmod(0o755)
                 result = subprocess.run(

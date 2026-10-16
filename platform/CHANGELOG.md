@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0-rc.47](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.46...platform-v1.4.0-rc.47) (2026-10-16)
+
+
+### Bug Fixes
+
+* **credentials:** preserve GitLab host in list and updates ([#9033](https://github.com/archestra-ai/archestra/issues/9033)) ([46dc3a8](https://github.com/archestra-ai/archestra/commit/46dc3a8954d404404172bb7a2af2a2547bd6a584))
+
 ## [1.4.0-rc.46](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.45...platform-v1.4.0-rc.46) (2026-10-16)
 
 

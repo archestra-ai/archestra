@@ -105,11 +105,10 @@ describe("bounded chat roster", () => {
       const bootstrap = await get("/api/agents/chat-roster?bootstrap=true");
       expect(bootstrap.map((agent: { id: string }) => agent.id)).toEqual([
         own.id,
-        organization.id,
         system.id,
       ]);
       expect(bootstrap).toEqual(
-        [own, organization, system].map((agent) =>
+        [own, system].map((agent) =>
           legacy.find((row: { id: string }) => row.id === agent.id),
         ),
       );
@@ -188,5 +187,37 @@ describe("bounded chat roster", () => {
         )
       ).map((row: { id: string }) => row.id),
     ).toEqual([own.id]);
+  });
+  test("falls back to the newest visible nonbuiltin when no own personal agent exists", async ({
+    makeMember,
+    makeUser,
+    makeAgent,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
+    const other = await makeUser();
+    const organization = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      access: "org",
+    });
+    const personal = await makeAgent({
+      organizationId: ctx.organizationId,
+      authorId: other.id,
+      agentType: "agent",
+      access: "personal",
+    });
+    await db
+      .update(schema.agentsTable)
+      .set({ createdAt: new Date("2000-01-01T00:00:00Z") })
+      .where(eq(schema.agentsTable.id, organization.id));
+    await db
+      .update(schema.agentsTable)
+      .set({ createdAt: new Date("2001-01-01T00:00:00Z") })
+      .where(eq(schema.agentsTable.id, personal.id));
+    const legacy = await get("/api/agents/chat-roster");
+    expect(legacy.map((row: { id: string }) => row.id)).toContain(personal.id);
+    expect(await get("/api/agents/chat-roster?bootstrap=true")).toEqual([
+      legacy.find((row: { id: string }) => row.id === organization.id),
+    ]);
   });
 });

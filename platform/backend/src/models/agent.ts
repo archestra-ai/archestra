@@ -1013,15 +1013,20 @@ class AgentModel {
         .where(condition)
         .orderBy(desc(table.createdAt), desc(table.id))
         .limit(1);
-    const groups = await Promise.all([
-      first(
-        and(
-          fallbackWhere,
-          eq(table.builtIn, false),
-          agentAudienceIs("personal"),
-        ),
-      ),
-      first(and(fallbackWhere, eq(table.builtIn, false))),
+    const [fallback, system] = await Promise.all([
+      (async () => {
+        const personal = await first(
+          and(
+            fallbackWhere,
+            eq(table.builtIn, false),
+            eq(table.authorId, params.userId),
+            agentAudienceIs("personal"),
+          ),
+        );
+        return personal.length > 0
+          ? personal
+          : first(and(fallbackWhere, eq(table.builtIn, false)));
+      })(),
       first(
         and(
           where,
@@ -1030,9 +1035,7 @@ class AgentModel {
         ),
       ),
     ]);
-    const ids = [
-      ...new Set(groups.flatMap((rows) => rows.map((row) => row.id))),
-    ];
+    const ids = [...new Set([...fallback, ...system].map((row) => row.id))];
     const rows = await AgentModel.findChatRosterRows(
       and(where, idArrayCondition(table.id, ids)),
     );

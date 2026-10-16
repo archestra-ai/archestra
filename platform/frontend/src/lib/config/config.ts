@@ -3,6 +3,7 @@ import { env } from "next-runtime-env";
 import type { PostHogConfig } from "posthog-js";
 import {
   REPLAY_BLOCK_SELECTOR,
+  sanitizeReplaySnapshots,
   stripTelemetryUrlContent,
 } from "@/lib/telemetry-privacy";
 
@@ -256,6 +257,12 @@ export default {
       enable_recording_console_log: false,
       before_send: (event) => {
         if (!event) return event;
+        if (
+          event.event === "$snapshot" &&
+          !sanitizeReplaySnapshots(event.properties.$snapshot_data)
+        ) {
+          return null;
+        }
         for (const properties of [
           event.properties,
           event.properties.$set,
@@ -277,6 +284,8 @@ export default {
         return event;
       },
       session_recording: {
+        // Sanitize raw events in before_send; transport compression still applies.
+        compress_events: false,
         maskAllInputs: true,
         maskTextSelector: "*",
         blockSelector: REPLAY_BLOCK_SELECTOR,

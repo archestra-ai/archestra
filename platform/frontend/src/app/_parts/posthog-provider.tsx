@@ -7,7 +7,6 @@ import { trackEvent } from "@/lib/analytics";
 import { useSession } from "@/lib/auth/auth.query";
 import config, { getTracingHeaderHosts } from "@/lib/config/config";
 import { usePublicConfig } from "@/lib/config/config.query";
-import { SessionReplayPrivacy } from "./session-replay-privacy";
 
 export function PostHogProviderWrapper({
   children,
@@ -116,9 +115,5 @@ export function PostHogProviderWrapper({
     userName,
   ]);
 
-  return (
-    <PostHogProvider client={posthog}>
-      <SessionReplayPrivacy>{children}</SessionReplayPrivacy>
-    </PostHogProvider>
-  );
+  return <PostHogProvider client={posthog}>{children}</PostHogProvider>;
 }

@@ -1,0 +1,70 @@
+"use client";
+
+import { Clock } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+
+export function LogTime({
+  timestamp,
+  durationMs,
+  span,
+}: {
+  timestamp: string | Date;
+  durationMs?: number | null;
+  span?: string | null;
+}) {
+  const date =
+    typeof timestamp === "string" ? timestamp : timestamp.toISOString();
+  const age = formatRelativeTimeFromNow(timestamp, { strict: true }).replace(
+    /(\d+) (seconds?|minutes?|hours?|days?|weeks?|months?|years?)/g,
+    (_, count: string, unit: string) =>
+      `${count}${unit.startsWith("month") ? "mo" : unit[0]}`,
+  );
+  const duration =
+    durationMs == null
+      ? (span ?? null)
+      : durationMs < 1000
+        ? `${durationMs}ms`
+        : `${(durationMs / 1000).toFixed(2).replace(/0$/, "").replace(/\.0$/, "")}s`;
+  const label = durationMs == null ? "Session span" : "Request duration";
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <UnstyledButton
+          onClick={(event) => event.stopPropagation()}
+          className="w-fit max-w-[154px] cursor-default whitespace-nowrap text-left text-xs leading-4 tabular-nums"
+        >
+          <span className="flex items-center gap-1.5">
+            <span>{age}</span>
+            {duration !== null && (
+              <span
+                className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground"
+                role="img"
+                aria-label={`${label}: ${duration}`}
+              >
+                <Clock className="size-2.5" aria-hidden="true" />
+                <span>{duration}</span>
+              </span>
+            )}
+          </span>
+          <span className="block text-[11px] text-muted-foreground">
+            {formatDate({ date, dateFormat: "MMM d · HH:mm" })}
+          </span>
+        </UnstyledButton>
+      </TooltipTrigger>
+      <TooltipContent className="px-2 py-1 text-xs">
+        <div>{formatDate({ date })}</div>
+        {duration !== null && (
+          <div className="text-muted-foreground">
+            {label}: {duration}
+          </div>
+        )}
+      </TooltipContent>
+    </Tooltip>
+  );
+}

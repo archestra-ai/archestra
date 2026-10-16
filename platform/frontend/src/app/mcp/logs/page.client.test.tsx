@@ -347,7 +347,7 @@ describe("McpGatewayLogsPage filters", () => {
 
     render(<McpGatewayLogsPage />);
 
-    for (const header of ["Call", "Gateway", "Identity", "Result", "Time"]) {
+    for (const header of ["Call", "Gateway", "Identity", "Time"]) {
       expect(
         screen.getByRole("columnheader", { name: header }),
       ).toBeInTheDocument();
@@ -357,13 +357,14 @@ describe("McpGatewayLogsPage filters", () => {
     expect(screen.getByText("Document Search")).toBeVisible();
     expect(screen.getByText("📚")).toBeInTheDocument();
     expect(screen.getByText("Demo Admin")).toBeVisible();
-    expect(screen.getByText("Success")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Success" })).toBeVisible();
+    expect(screen.queryByRole("columnheader", { name: "Result" })).toBeNull();
     expect(screen.queryByRole("columnheader", { name: "Method" })).toBeNull();
     expect(
       screen.queryByRole("columnheader", { name: "Arguments" }),
     ).toBeNull();
     expect(screen.queryByText(/raw argument only belongs/)).toBeNull();
-    expect(screen.getByLabelText("Total request latency: 386ms")).toBeVisible();
+    expect(screen.getByLabelText("Request duration: 386ms")).toBeVisible();
   });
 });
 

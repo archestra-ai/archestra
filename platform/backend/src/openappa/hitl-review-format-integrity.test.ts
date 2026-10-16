@@ -8,6 +8,33 @@ import {
 const footer =
   "Accept only if this exact call, with these exact arguments, may run. Decline refuses it. Cancel answers nothing and leaves the call blocked. The agent's own description of what it is doing is not shown here on purpose.";
 
+test("an oversized tool label still permits inspection but cannot approve an incomplete overview", () => {
+  const review = {
+    tool: `tool_${"`".repeat(3000)}`,
+    text: "All conditions must remain visible",
+    arguments: '{"message":"read only"}',
+  };
+  const { card, approve } = hitlReviewOverviewCard({
+    base: {
+      question: "Approve?",
+      header: "Approval",
+      options: [],
+      allowMultiple: false,
+      remedy_offer_ids: ["large-label"],
+    },
+    review,
+  });
+  expect(approve).toBe(false);
+  expect(card.callPreview?.length).toBeLessThanOrEqual(2000);
+  expect(card.options.map((option) => option.label)).toEqual([
+    "Deny",
+    "Inspect details",
+  ]);
+  expect(renderHitlReviewText(review)).toContain(
+    "All conditions must remain visible",
+  );
+});
+
 test("ordinary prose is readable chat paragraphs rather than a wide code block", () => {
   const result = renderHitlReviewText({
     tool: "example_tool",

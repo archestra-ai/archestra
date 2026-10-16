@@ -153,12 +153,18 @@ export function hitlReviewOverviewCard(params: {
       ),
     ].join("\n");
   }
-  const preview = fence(body);
+  let preview = fence(body);
   if (
     preview.length > NATIVE_PREVIEW_LIMIT ||
     UNSAFE.test(preview.replace(/[\n\t]/g, ""))
-  )
-    throw new Error("Unsafe native review preview");
+  ) {
+    // Even a malformed or unusually large tool label must not turn inspection
+    // into a proxy error or make an incomplete overview approvable.
+    approve = false;
+    preview = fence(
+      "This request cannot fit safely in a native overview. Inspect details to read the complete review, or Deny to keep it blocked.",
+    );
+  }
   const question =
     base.shortQuestion &&
     base.shortQuestion.length <= 120 &&

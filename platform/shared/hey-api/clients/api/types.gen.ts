@@ -108823,6 +108823,7 @@ export type CreateSiteNotificationData = {
     body: {
         content: string;
         expiresAt?: string;
+        isActive?: boolean;
     };
     path?: never;
     query?: never;

@@ -1,6 +1,7 @@
 name: Backend Runner Benchmark
 
 # Temporary, same-source comparison; never a required check or merge-group job.
+# Repeat unchanged source after the initial wave warmed both provider caches.
 on:
   pull_request:
     branches: [main]

@@ -67,11 +67,35 @@ describe("IntentPrefetchLink", () => {
   });
 
   it.each([
+    {
+      href: { pathname: "/agents", search: "?tab=runs" },
+      url: "/agents?tab=runs",
+    },
+    {
+      href: { pathname: "/agents", search: "tab=runs", query: { tab: "x" } },
+      url: "/agents?tab=runs",
+    },
+    { href: { pathname: "/agents", hash: "top" }, url: "/agents#top" },
+  ])("prefetches a UrlObject href with search and hash as Next formats them ($url)", ({
+    href,
+    url,
+  }) => {
+    render(<IntentPrefetchLink href={href}>Agents</IntentPrefetchLink>);
+
+    fireEvent.mouseEnter(screen.getByRole("link", { name: "Agents" }));
+
+    expect(prefetch).toHaveBeenCalledWith(url);
+  });
+
+  it.each([
     "https://docs.example.com/guide",
     "mailto:team@example.com",
     "//cdn.example.com/file",
     { protocol: "https:", host: "docs.example.com", pathname: "/guide" },
-  ])("does not prefetch a link to another site (%o)", (href) => {
+    "#section",
+    "settings",
+    { pathname: "settings" },
+  ])("does not prefetch a link that is not an app path (%o)", (href) => {
     const onPrefetch = vi.fn();
     render(
       <IntentPrefetchLink href={href} onPrefetch={onPrefetch}>

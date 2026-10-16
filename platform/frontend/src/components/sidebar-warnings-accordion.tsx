@@ -2,6 +2,7 @@
 
 import { DEFAULT_ADMIN_EMAIL, DocsPage } from "@archestra/shared";
 import { AlertTriangle } from "lucide-react";
+import Link from "next/link";
 import { GuardrailsDisabledWarning } from "@/app/openappa/_parts/guardrails-deployment-toggle";
 import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
 import {
@@ -132,12 +133,14 @@ export function SidebarWarningsAccordion({
                       key={w.label}
                       className="cursor-pointer"
                     >
-                      <IntentPrefetchLink
+                      {/* A plain Link: menu items exist only once the menu is
+                          opened, which is already intent. */}
+                      <Link
                         href={w.href}
                         {...externalLinkProps(w.label, w.external)}
                       >
                         <span>{w.label}</span>
-                      </IntentPrefetchLink>
+                      </Link>
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>

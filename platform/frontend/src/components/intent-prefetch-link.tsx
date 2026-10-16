@@ -56,30 +56,39 @@ export function IntentPrefetchLink({
 
 /**
  * Converts a Next.js Link href into the string URL required by router.prefetch,
- * including the query and hash of a UrlObject. Returns null for a link to
- * another site, which has no route to prefetch.
+ * including the search or query and the hash of a UrlObject. Returns null for
+ * anything but an app path: a link to another site (`https:`, `mailto:`,
+ * `//host`), a hash-only or a relative href.
  */
 function getPrefetchHref(href: LinkHref) {
-  if (typeof href === "string") {
-    return EXTERNAL_HREF.test(href) ? null : href;
-  }
+  if (typeof href === "string") return isAppPath(href) ? href : null;
   if (href.protocol || href.host || href.hostname) return null;
-  if (!href.pathname) return null;
+  if (!href.pathname || !isAppPath(href.pathname)) return null;
 
-  const searchParams = new URLSearchParams();
-  for (const [key, value] of Object.entries(href.query ?? {})) {
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        if (item != null) searchParams.append(key, String(item));
+  // As in Next's own URL formatting, `search` wins over `query`.
+  let search = href.search ?? "";
+  if (!search) {
+    const searchParams = new URLSearchParams();
+    for (const [key, value] of Object.entries(href.query ?? {})) {
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          if (item != null) searchParams.append(key, String(item));
+        }
+        continue;
       }
-      continue;
+      if (value != null) searchParams.set(key, String(value));
     }
-    if (value != null) searchParams.set(key, String(value));
+    search = searchParams.toString();
   }
+  const hash = href.hash ?? "";
 
-  const query = searchParams.toString();
-  return `${href.pathname}${query ? `?${query}` : ""}${href.hash ?? ""}`;
+  return [
+    href.pathname,
+    search && !search.startsWith("?") ? `?${search}` : search,
+    hash && !hash.startsWith("#") ? `#${hash}` : hash,
+  ].join("");
 }
 
-/** A URL with a scheme (`https:`, `mailto:`) or a protocol-relative one (`//host`). */
-const EXTERNAL_HREF = /^([a-z][a-z\d+.-]*:|\/\/)/i;
+function isAppPath(path: string) {
+  return path.startsWith("/") && !path.startsWith("//");
+}

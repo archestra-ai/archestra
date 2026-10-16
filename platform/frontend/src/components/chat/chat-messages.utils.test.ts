@@ -844,6 +844,33 @@ describe("extractOwnedAppRender", () => {
 });
 
 describe("identifyCompactToolGroups", () => {
+  it("hides a denial notice until its streaming input names the target", () => {
+    const streaming = (input: unknown) =>
+      [
+        {
+          type: "tool-archestra__get_remedy_plans",
+          toolCallId: "notice",
+          state: "input-streaming",
+          input,
+        },
+      ] as UIMessage["parts"];
+
+    const nameless = identifyCompactToolGroups(streaming(undefined), {
+      getToolShortName,
+    });
+    expect(nameless.groupMap.size).toBe(0);
+    expect([...nameless.consumedIndices]).toEqual([0]);
+
+    const named = identifyCompactToolGroups(
+      streaming({ tool: "google__search" }),
+      { getToolShortName },
+    );
+    const [entry] = named.groupMap.get(0)?.entries ?? [];
+    expect(entry?.kind === "tool" && entry.remedyChain?.targetToolName).toBe(
+      "google__search",
+    );
+  });
+
   it("folds a guarded call into one entry at its first notice", () => {
     const ruling =
       '[appa] Blocked.\n  - archestra__execute_remedy_plan(offer_id: "00aa00aa00aa00aa", plan: "Accept")';

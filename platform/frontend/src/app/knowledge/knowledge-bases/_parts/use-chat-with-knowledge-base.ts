@@ -4,12 +4,8 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
-
-import {
-  fetchInternalAgentOptions,
-  useCreateProfile,
-  useUpdateProfile,
-} from "@/lib/agent.query";
+import { useCreateProfile, useUpdateProfile } from "@/lib/agent.query";
+import { fetchInternalAgentOptionByName } from "@/lib/agent-options.query";
 import { useSession } from "@/lib/auth/auth.query";
 import { throwOnApiError } from "@/lib/utils/api";
 
@@ -39,10 +35,10 @@ export function useChatWithKnowledgeBase() {
     try {
       // Get or create: check if a personal agent with this name already exists
       // for the current user.
-      const existingAgents = await fetchInternalAgentOptions();
-      const existing = existingAgents?.find(
-        (a) => a.name === agentName && a.authorId === currentUserId,
-      );
+      const existing = await fetchInternalAgentOptionByName({
+        name: agentName,
+        authorId: currentUserId,
+      });
 
       let agent: { id: string } | undefined = existing;
       if (existing) {

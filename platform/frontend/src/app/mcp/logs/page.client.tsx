@@ -27,7 +27,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { UserFilterSelect } from "@/components/user-client-filter-selects";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
-import { useAgentOptions } from "@/lib/agent.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { resourceOwnerLabel } from "@/lib/agent-owner-label";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
@@ -214,10 +214,6 @@ function McpToolCallsTable({
     initialData: initialData?.mcpToolCalls,
   });
 
-  const { data: agents } = useAgentOptions({
-    filters: { agentTypes: ["agent", "mcp_gateway"] },
-  });
-
   const { data: mcpServers } = useMcpServers({ includeAssignedAgents: false });
   // Without log:admin the server scopes every listing to the caller's own
   // rows, so a user picker would have nothing to choose between.
@@ -255,6 +251,9 @@ function McpToolCallsTable({
   }, [catalogItems, mcpServers]);
 
   const mcpToolCalls = mcpToolCallsResponse?.data ?? [];
+  const { data: agents } = useAgentOptionsByIds({
+    ids: mcpToolCalls.flatMap((call) => (call.agentId ? [call.agentId] : [])),
+  });
   const paginationMeta = mcpToolCallsResponse?.pagination;
 
   const mcpServerOptions = useMemo(() => {
@@ -574,7 +573,7 @@ function McpToolCallsTable({
             mode="single"
             flat
             compactTrigger
-            agents={agents ?? []}
+            remote={{ filters: { agentTypes: ["agent", "mcp_gateway"] } }}
             value={profileFilter}
             onValueChange={handleProfileFilterChange}
             sentinelOption={{

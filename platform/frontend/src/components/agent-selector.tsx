@@ -5,6 +5,7 @@ import type * as React from "react";
 import { useMemo, useRef, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
+import { QueryLoadError } from "@/components/query-load-error";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +22,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  type AgentOptionFilters,
+  useAgentOptionIds,
+  useAgentOptionsByIds,
+  useAgentOptionsPage,
+} from "@/lib/agent-options.query";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { cn } from "@/lib/utils/tailwind";
 
 /**
@@ -50,10 +58,12 @@ export type AgentSelectorAgent = {
   runtime?: unknown | null;
 };
 
-type AgentSelectorProps =
+type AgentSelectorProps = {
+  remote?: { filters?: AgentOptionFilters; enabled?: boolean };
+} & (
   | {
       mode: "single";
-      agents: AgentSelectorAgent[];
+      agents?: AgentSelectorAgent[];
       value: string;
       onValueChange: (value: string) => void;
       placeholder?: string;
@@ -95,7 +105,7 @@ type AgentSelectorProps =
     }
   | {
       mode: "multiple";
-      agents: AgentSelectorAgent[];
+      agents?: AgentSelectorAgent[];
       value: string[];
       onValueChange: (value: string[]) => void;
       placeholder?: string;
@@ -126,9 +136,11 @@ type AgentSelectorProps =
       allOption?: {
         label: string;
       };
-    };
+    }
+);
 
 export function AgentSelector(props: AgentSelectorProps) {
+  if (props.remote) return <RemoteAgentSelector {...props} />;
   return props.mode === "single" ? (
     <SingleAgentSelector {...props} />
   ) : (
@@ -137,7 +149,8 @@ export function AgentSelector(props: AgentSelectorProps) {
 }
 
 function SingleAgentSelector({
-  agents,
+  agents = [],
+  remoteState,
   value,
   onValueChange,
   placeholder = "Select agent...",
@@ -150,14 +163,26 @@ function SingleAgentSelector({
   compactTrigger,
   triggerLabel,
   sentinelOption,
-}: Extract<AgentSelectorProps, { mode: "single" }>) {
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
+}: Extract<AgentSelectorProps, { mode: "single" }> & {
+  remoteState?: RemoteAgentChoices;
+}) {
+  const [localOpen, setLocalOpen] = useState(false);
+  const [localSearch, setLocalSearch] = useState("");
+  const open = remoteState?.open ?? localOpen;
+  const setOpen = remoteState?.setOpen ?? setLocalOpen;
+  const search = remoteState?.search ?? localSearch;
+  const setSearch = remoteState?.setSearch ?? setLocalSearch;
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const selectedAgent = agents.find((agent) => agent.id === value);
+  const selectedAgent = (remoteState?.selectedAgents ?? agents).find(
+    (agent) => agent.id === value,
+  );
   const isSentinelSelected = sentinelOption?.value === value;
   const { groupedAgents, visibleAgents, page, total, setPage } =
-    usePagedAgentChoices({ agents, search, flat: flat === true });
+    usePagedAgentChoices({
+      agents,
+      search: remoteState ? "" : search,
+      flat: flat === true,
+    });
 
   const handleSelect = (agentId: string) => {
     onValueChange(agentId);
@@ -242,7 +267,15 @@ function SingleAgentSelector({
             </div>
           )}
           <CommandList className="min-h-0 flex-1" {...keepScrollInList}>
-            <CommandEmpty>{emptyMessage}</CommandEmpty>
+            <CommandEmpty>
+              {remoteState?.isLoading ? (
+                <span>Loading agents...</span>
+              ) : remoteState?.isError ? (
+                <span>Could not load agents.</span>
+              ) : (
+                <span>{emptyMessage}</span>
+              )}
+            </CommandEmpty>
             {sentinelOption && matchesSearch(sentinelOption.label, search) && (
               <CommandGroup>
                 <CommandItem
@@ -280,18 +313,23 @@ function SingleAgentSelector({
             )}
           </CommandList>
         </Command>
-        <AgentSelectorPagination
-          page={page}
-          total={total}
-          onPageChange={setPage}
-        />
+        {remoteState ? (
+          <RemoteAgentPagination state={remoteState} />
+        ) : (
+          <AgentSelectorPagination
+            page={page}
+            total={total}
+            onPageChange={setPage}
+          />
+        )}
       </PopoverContent>
     </Popover>
   );
 }
 
 function MultiAgentSelector({
-  agents,
+  agents = [],
+  remoteState,
   value,
   onValueChange,
   placeholder = "Search agents and MCP gateways...",
@@ -304,21 +342,35 @@ function MultiAgentSelector({
   createAction,
   flat,
   allOption,
-}: Extract<AgentSelectorProps, { mode: "multiple" }>) {
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
+}: Extract<AgentSelectorProps, { mode: "multiple" }> & {
+  remoteState?: RemoteAgentChoices;
+}) {
+  const [localOpen, setLocalOpen] = useState(false);
+  const [localSearch, setLocalSearch] = useState("");
+  const open = remoteState?.open ?? localOpen;
+  const setOpen = remoteState?.setOpen ?? setLocalOpen;
+  const search = remoteState?.search ?? localSearch;
+  const setSearch = remoteState?.setSearch ?? setLocalSearch;
   const anchorRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef(false);
-  const selectedAgents = agents.filter((agent) => value.includes(agent.id));
+  const selectedIdSet = useMemo(() => new Set(value), [value]);
+  const selectedAgents = (remoteState?.selectedAgents ?? agents).filter(
+    (agent) => selectedIdSet.has(agent.id),
+  );
   const { groupedAgents, visibleAgents, page, total, setPage } =
-    usePagedAgentChoices({ agents, search, flat: flat === true });
-  const allAgentIds = agents.map((agent) => agent.id);
+    usePagedAgentChoices({
+      agents,
+      search: remoteState ? "" : search,
+      flat: flat === true,
+    });
+  const allAgentIds = remoteState?.allIds ?? agents.map((agent) => agent.id);
   const allSelected =
     !!allOption &&
     allAgentIds.length > 0 &&
-    allAgentIds.every((agentId) => value.includes(agentId));
+    allAgentIds.every((agentId) => selectedIdSet.has(agentId));
 
   const handleSelect = (agentId: string) => {
+    if (remoteState?.selectionPending) return;
     if (allSelected) {
       onValueChange([agentId]);
       setSearch("");
@@ -334,6 +386,7 @@ function MultiAgentSelector({
   };
 
   const handleSelectAll = () => {
+    if (remoteState?.selectionPending) return;
     onValueChange(allSelected ? [] : allAgentIds);
     setSearch("");
   };
@@ -403,6 +456,11 @@ function MultiAgentSelector({
                   </Button>
                 </Badge>
               ))}
+              {remoteState && value.length > selectedAgents.length && (
+                <span className="text-sm text-muted-foreground">
+                  +{value.length - selectedAgents.length} selected
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -441,7 +499,15 @@ function MultiAgentSelector({
             className="max-h-[260px] min-h-0 flex-1 overflow-y-auto"
             {...keepScrollInList}
           >
-            <CommandEmpty>{emptyMessage}</CommandEmpty>
+            <CommandEmpty>
+              {remoteState?.isLoading ? (
+                <span>Loading agents...</span>
+              ) : remoteState?.isError ? (
+                <span>Could not load agents.</span>
+              ) : (
+                <span>{emptyMessage}</span>
+              )}
+            </CommandEmpty>
             {flat ? (
               <>
                 {allOption &&
@@ -468,7 +534,9 @@ function MultiAgentSelector({
                     <AgentSelectorItem
                       key={agent.id}
                       agent={agent}
-                      selected={allSelected ? false : value.includes(agent.id)}
+                      selected={
+                        allSelected ? false : selectedIdSet.has(agent.id)
+                      }
                       onSelect={handleSelect}
                     />
                   ))}
@@ -494,11 +562,15 @@ function MultiAgentSelector({
             )}
           </CommandList>
         </Command>
-        <AgentSelectorPagination
-          page={page}
-          total={total}
-          onPageChange={setPage}
-        />
+        {remoteState ? (
+          <RemoteAgentPagination state={remoteState} />
+        ) : (
+          <AgentSelectorPagination
+            page={page}
+            total={total}
+            onPageChange={setPage}
+          />
+        )}
         {createAction && (
           <div className="border-t p-1">
             <Button
@@ -783,4 +855,134 @@ function getOwnerLabel(agent: AgentSelectorAgent) {
 
 function matchesSearch(value: string, search: string) {
   return !search || value.toLowerCase().includes(search.toLowerCase());
+}
+
+// Server-backed choices are separate so static selectors need no query provider.
+function RemoteAgentSelector(props: AgentSelectorProps) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 200);
+  const filters = props.remote?.filters;
+  const enabled = props.remote?.enabled !== false && !props.disabled;
+  const pageQuery = useAgentOptionsPage({
+    filters,
+    search: debouncedSearch,
+    enabled: enabled && open,
+  });
+  const selectedIds =
+    props.mode === "single"
+      ? props.value && props.value !== props.sentinelOption?.value
+        ? [props.value]
+        : []
+      : props.value;
+  const selected = useAgentOptionsByIds({
+    ids: selectedIds.slice(0, 20),
+    enabled,
+  });
+  const needsAllIds = props.mode === "multiple" && !!props.allOption;
+  const allIds = useAgentOptionIds({
+    filters,
+    enabled: enabled && open && needsAllIds,
+  });
+  const queryKey = JSON.stringify([filters, debouncedSearch]);
+  const [requested, setRequested] = useState({ key: queryKey, page: 0 });
+  const pages = pageQuery.data?.pages ?? [];
+  const page =
+    requested.key === queryKey
+      ? Math.min(requested.page, Math.max(0, pages.length - 1))
+      : 0;
+  const changePage = async (next: number) => {
+    if (next < pages.length) {
+      setRequested({ key: queryKey, page: next });
+      return;
+    }
+    const result = await pageQuery.fetchNextPage();
+    if (result.data && result.data.pages.length > next)
+      setRequested({ key: queryKey, page: next });
+  };
+  const state: RemoteAgentChoices = {
+    open,
+    setOpen,
+    search,
+    setSearch,
+    selectedAgents: selected.data ?? props.agents ?? [],
+    allIds: needsAllIds ? (allIds.data ?? []) : undefined,
+    selectionPending:
+      needsAllIds && selectedIds.length > 0 && !allIds.isSuccess,
+    page,
+    hasNext: page + 1 < pages.length || pageQuery.hasNextPage,
+    isLoading:
+      pageQuery.isLoading ||
+      pageQuery.isFetchingNextPage ||
+      (needsAllIds && selectedIds.length > 0 && !allIds.isSuccess) ||
+      debouncedSearch !== search,
+    isError: pageQuery.isError || (needsAllIds && allIds.isError),
+    retry: () => {
+      void pageQuery.refetch();
+      if (needsAllIds) void allIds.refetch();
+    },
+    changePage,
+  };
+  const agents =
+    debouncedSearch === search && !state.selectionPending
+      ? (pages[page]?.data ?? [])
+      : [];
+  return props.mode === "single" ? (
+    <SingleAgentSelector {...props} agents={agents} remoteState={state} />
+  ) : (
+    <MultiAgentSelector {...props} agents={agents} remoteState={state} />
+  );
+}
+
+type RemoteAgentChoices = {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  search: string;
+  setSearch: (search: string) => void;
+  selectedAgents: AgentSelectorAgent[];
+  allIds?: string[];
+  selectionPending: boolean;
+  page: number;
+  hasNext: boolean;
+  isLoading: boolean;
+  isError: boolean;
+  retry: () => void;
+  changePage: (page: number) => void;
+};
+
+function RemoteAgentPagination({ state }: { state: RemoteAgentChoices }) {
+  if (state.isError)
+    return (
+      <QueryLoadError
+        title="Could not load agents"
+        onRetry={state.retry}
+        className="h-auto"
+      />
+    );
+  if (state.page === 0 && !state.hasNext) return null;
+  return (
+    <div className="flex items-center justify-between gap-2 border-t p-2">
+      <Button
+        size="sm"
+        variant="outline"
+        aria-label="Previous agents"
+        disabled={state.page === 0 || state.isLoading}
+        onClick={() => state.changePage(state.page - 1)}
+      >
+        Previous
+      </Button>
+      <span className="text-xs text-muted-foreground">
+        Page {state.page + 1}
+      </span>
+      <Button
+        size="sm"
+        variant="outline"
+        aria-label="Next agents"
+        disabled={!state.hasNext || state.isLoading}
+        onClick={() => state.changePage(state.page + 1)}
+      >
+        Next
+      </Button>
+    </div>
+  );
 }

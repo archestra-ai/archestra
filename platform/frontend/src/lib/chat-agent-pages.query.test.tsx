@@ -289,3 +289,33 @@ it("exposes a failed default lookup and retries it without silently choosing a f
   await waitFor(() => expect(result.current.isSuccess).toBe(true));
   expect(result.current.data?.map((row) => row.id)).toContain("member-default");
 });
+
+it("keeps later readiness entries when more than one API batch is needed", async () => {
+  const ids = Array.from({ length: 205 }, (_, index) => `visible-${index}`);
+  const sizes: number[] = [];
+  server.use(
+    http.get(`${origin}/api/agents/credential-readiness`, ({ request }) => {
+      const requested =
+        new URL(request.url).searchParams.get("ids")?.split(",") ?? [];
+      if (requested.length > 200)
+        return new HttpResponse(null, { status: 400 });
+      sizes.push(requested.length);
+      return HttpResponse.json(
+        requested.map((agentId) => ({
+          agentId,
+          missingConnections: [],
+          behavior: "warn",
+        })),
+      );
+    }),
+  );
+  const { wrapper } = setup();
+  const { result } = renderHook(() => useAgentCredentialReadiness({ ids }), {
+    wrapper,
+  });
+  await waitFor(() => expect(result.current.isSuccess).toBe(true));
+  expect(sizes).toEqual([200, 5]);
+  expect(new Set(result.current.data?.map((row) => row.agentId))).toEqual(
+    new Set(ids),
+  );
+});

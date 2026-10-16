@@ -820,20 +820,20 @@ export function useUpdateDefaultAgentId() {
  * they are missing. Only agents whose author moved them off the default
  * "allow" behavior appear here, so an empty result is the common case.
  */
-export function useAgentCredentialReadiness(params?: {
+export function useAgentCredentialReadiness(params: {
   enabled?: boolean;
-  ids?: string[];
+  ids: string[];
 }) {
-  const ids = params?.ids ? [...new Set(params.ids)].sort() : undefined;
+  const ids = [...new Set(params.ids)].sort();
   return useQuery({
     queryKey: ["agents", "credential-readiness", ids],
     queryFn: async () => {
-      if (ids?.length === 0) return [];
+      if (ids.length === 0) return [];
       const rows: archestraApiTypes.GetAgentCredentialReadinessResponses["200"] =
         [];
-      for (let offset = 0; offset < (ids?.length ?? 1); offset += 200) {
+      for (let offset = 0; offset < ids.length; offset += 200) {
         const { data, error } = await getAgentCredentialReadiness({
-          query: { ids: ids?.slice(offset, offset + 200) },
+          query: { ids: ids.slice(offset, offset + 200) },
         });
         throwOnApiError(error, { toastOnError: false });
         rows.push(...(data ?? []));

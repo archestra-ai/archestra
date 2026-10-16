@@ -143,6 +143,7 @@ import {
   isOpenAppaPolicyChange,
   OpenAppaPolicyChange,
 } from "./openappa-policy-change";
+import { RemedyChainCard } from "./openappa-remedy-chain-card";
 import { withoutProxyTransportArguments } from "./proxy-transport-arguments";
 import { TodoWriteTool } from "./todo-write-tool";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
@@ -664,7 +665,7 @@ export function ChatMessages({
                   className={cn(isDimmed && "opacity-40 transition-opacity")}
                 >
                   {(() => {
-                    const { groupMap, consumedIndices } =
+                    const { groupMap, consumedIndices, remedyChainCards } =
                       identifyCompactToolGroups(message.parts, {
                         nonCompactToolNames,
                         getToolShortName,
@@ -722,6 +723,7 @@ export function ChatMessages({
                                       part: entry.part,
                                       toolResultPart: entry.toolResultPart,
                                       errorText: entry.errorText,
+                                      remedyChain: entry.remedyChain,
                                     }
                                   : {
                                       kind: "tool" as const,
@@ -730,6 +732,7 @@ export function ChatMessages({
                                       part: entry.part,
                                       toolResultPart: entry.toolResultPart,
                                       errorText: entry.errorText,
+                                      remedyChain: entry.remedyChain,
                                       nestedToolCalls:
                                         subagentParentToolCallIds.has(
                                           entry.part.toolCallId ?? "",
@@ -768,6 +771,21 @@ export function ChatMessages({
                                   },
                                 }),
                             }}
+                          />
+                        );
+                      }
+
+                      // A guarded call that needs the full card (e.g. an
+                      // approval) still renders as one card of its target.
+                      const remedyChain = remedyChainCards.get(i);
+                      if (remedyChain) {
+                        return (
+                          <RemedyChainCard
+                            key={partKey}
+                            chain={remedyChain}
+                            collapsible
+                            canExpandToolCalls={canExpandToolCalls}
+                            onToolApprovalResponse={onToolApprovalResponse}
                           />
                         );
                       }

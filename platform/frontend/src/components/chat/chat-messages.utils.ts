@@ -24,6 +24,11 @@ import type { PanelApp } from "./apps-context";
 import type { FileAttachment } from "./editable-user-message";
 import type { HookRunChipData } from "./hook-run-chip";
 import type { McpToolOutput } from "./mcp-app-container";
+import {
+  identifyRemedyChains,
+  type RemedyChain,
+  remedyChainPartIndices,
+} from "./openappa-remedy-chains";
 
 export type OptimisticToolCall = {
   toolCallId: string;
@@ -47,6 +52,8 @@ export type CompactToolGroupEntry =
       part: DynamicToolUIPart | ToolUIPart;
       toolResultPart: DynamicToolUIPart | ToolUIPart | null;
       errorText: string | undefined;
+      /** Set when this entry stands for a whole guarded call (see `RemedyChain`). */
+      remedyChain?: RemedyChain;
     }
   | {
       /**
@@ -60,6 +67,8 @@ export type CompactToolGroupEntry =
       part: DynamicToolUIPart | ToolUIPart;
       toolResultPart: DynamicToolUIPart | ToolUIPart | null;
       errorText: string | undefined;
+      /** Set when the app call is the released attempt of a guarded call. */
+      remedyChain?: RemedyChain;
     }
   | {
       /** An inline `data-hook-run` debug entry rendered as a circle in the row. */
@@ -667,11 +676,29 @@ export function identifyCompactToolGroups(
     getToolShortName?: (toolName: string) => ArchestraToolShortName | null;
     mcpAppToolCallIds?: Set<string>;
   },
-): { groupMap: Map<number, CompactToolGroup>; consumedIndices: Set<number> } {
+): {
+  groupMap: Map<number, CompactToolGroup>;
+  consumedIndices: Set<number>;
+  /** Guarded calls that render as one full tool card at their anchor index. */
+  remedyChainCards: Map<number, RemedyChain>;
+} {
   const groupMap = new Map<number, CompactToolGroup>();
   const consumedIndices = new Set<number>();
+  const remedyChainCards = new Map<number, RemedyChain>();
 
-  if (!parts) return { groupMap, consumedIndices };
+  if (!parts) return { groupMap, consumedIndices, remedyChainCards };
+
+  // A guarded call's notices, remedies, and retries render as one entry at its
+  // first notice; every other member renders nothing on its own.
+  const remedyChainByAnchor = new Map<number, RemedyChain>();
+  for (const chain of identifyRemedyChains(parts, {
+    getToolShortName: options?.getToolShortName,
+  })) {
+    remedyChainByAnchor.set(chain.anchorIndex, chain);
+    for (const index of remedyChainPartIndices(chain)) {
+      if (index !== chain.anchorIndex) consumedIndices.add(index);
+    }
+  }
 
   // Collect toolCallIds from data-tool-ui-start parts (MCP Apps known before output arrives)
   const mcpAppCallIds = new Set(options?.mcpAppToolCallIds);
@@ -740,6 +767,31 @@ export function identifyCompactToolGroups(
     if (!toolName) {
       finalizeCurrentGroup({ currentGroup, groupMap });
       currentGroup = null;
+      continue;
+    }
+
+    // Chain members render inside their chain's entry, so they neither join
+    // nor break the row.
+    if (consumedIndices.has(idx)) continue;
+
+    const remedyChain = remedyChainByAnchor.get(idx);
+    if (remedyChain) {
+      const entry = remedyChainEntry({
+        chain: remedyChain,
+        mcpAppCallIds,
+        options,
+      });
+      if (entry) {
+        if (!currentGroup) {
+          currentGroup = { startIndex: idx, entries: [] };
+        }
+        currentGroup.entries.push(entry);
+        consumedIndices.add(idx);
+      } else {
+        remedyChainCards.set(idx, remedyChain);
+        finalizeCurrentGroup({ currentGroup, groupMap });
+        currentGroup = null;
+      }
       continue;
     }
 
@@ -826,7 +878,7 @@ export function identifyCompactToolGroups(
   }
 
   finalizeCurrentGroup({ currentGroup, groupMap });
-  return { groupMap, consumedIndices };
+  return { groupMap, consumedIndices, remedyChainCards };
 }
 
 /**
@@ -1029,6 +1081,74 @@ function parseToolAppRender(
   const mcpServerId = ui?.mcpServerId ?? null;
   const fullToolName = getToolName(part) ?? early?.toolName ?? "";
   return { outputUri, mcpServerId, fullToolName };
+}
+
+/**
+ * The compact entry for a guarded call, or null when any member needs the full
+ * card (an approval, an auth error, a non-compact tool). A released attempt
+ * that renders an MCP App keeps its app pill, with the chain in its details.
+ */
+function remedyChainEntry(params: {
+  chain: RemedyChain;
+  mcpAppCallIds: Set<string>;
+  options:
+    | {
+        nonCompactToolNames?: Set<string>;
+        getToolShortName?: (toolName: string) => ArchestraToolShortName | null;
+      }
+    | undefined;
+}): CompactToolGroupEntry | null {
+  const { chain, mcpAppCallIds, options } = params;
+  const { finalAttempt } = chain;
+  const members = finalAttempt ? [...chain.steps, finalAttempt] : chain.steps;
+  const finalIsApp =
+    finalAttempt !== null &&
+    isAppRenderPart({
+      part: finalAttempt.part,
+      toolResultPart: finalAttempt.toolResultPart,
+      mcpAppCallIds,
+      getToolShortName: options?.getToolShortName,
+    });
+  const eligible = members.every((member) => {
+    if (member === finalAttempt && finalIsApp) {
+      const state = (member.toolResultPart ?? member.part).state;
+      return (
+        !getToolErrorText({
+          part: member.part as never,
+          toolResultPart: member.toolResultPart as never,
+        }) &&
+        state !== "approval-requested" &&
+        state !== "output-denied"
+      );
+    }
+    return (
+      !options?.nonCompactToolNames?.has(member.toolName) &&
+      isCompactEligible({
+        part: member.part as never,
+        toolResultPart: member.toolResultPart as never,
+        toolName: member.toolName,
+        getToolShortName: options?.getToolShortName,
+      })
+    );
+  });
+  if (!eligible) return null;
+
+  const [anchor] = chain.steps;
+  const shown = finalIsApp && finalAttempt ? finalAttempt : anchor;
+  return {
+    kind: finalIsApp ? "app" : "tool",
+    partIndex: chain.anchorIndex,
+    toolName: shown.toolName,
+    part: shown.part,
+    toolResultPart: shown.toolResultPart,
+    errorText: finalAttempt
+      ? getToolErrorText({
+          part: finalAttempt.part as never,
+          toolResultPart: finalAttempt.toolResultPart as never,
+        })
+      : undefined,
+    remedyChain: chain,
+  };
 }
 
 function finalizeCurrentGroup(params: {

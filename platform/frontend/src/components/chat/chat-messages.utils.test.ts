@@ -844,6 +844,67 @@ describe("extractOwnedAppRender", () => {
 });
 
 describe("identifyCompactToolGroups", () => {
+  it("folds a guarded call into one entry at its first notice", () => {
+    const ruling =
+      '[appa] Blocked.\n  - archestra__execute_remedy_plan(offer_id: "00aa00aa00aa00aa", plan: "Accept")';
+    const parts = [
+      {
+        type: "tool-archestra__get_remedy_plans",
+        toolCallId: "notice",
+        state: "output-available",
+        input: {
+          tool: "google__search",
+          arguments: { q: "weather" },
+          ruling,
+          notice: { v: 1, call_id: "notice" },
+        },
+        output: ruling,
+      },
+      { type: "text", text: "Executing the offered plan." },
+      {
+        type: "tool-archestra__execute_remedy_plan",
+        toolCallId: "remedy",
+        state: "output-available",
+        input: { offer_id: "00aa00aa00aa00aa", plan: "Accept" },
+        output: "[appa] Authorized.",
+      },
+      {
+        type: "tool-google__search",
+        toolCallId: "retry",
+        state: "input-available",
+        input: { q: "weather" },
+      },
+      {
+        type: "tool-google__search",
+        toolCallId: "retry",
+        state: "approval-requested",
+        input: { q: "weather" },
+      },
+    ] as UIMessage["parts"];
+
+    const compact = identifyCompactToolGroups(parts.slice(0, 4), {
+      getToolShortName,
+    });
+    const entry = compact.groupMap.get(0)?.entries[0];
+    expect(compact.groupMap.size).toBe(1);
+    expect(compact.groupMap.get(0)?.entries).toHaveLength(1);
+    expect(entry?.kind === "tool" && entry.remedyChain?.targetToolName).toBe(
+      "google__search",
+    );
+    expect([...compact.consumedIndices].sort()).toEqual([0, 2, 3]);
+
+    // A member that needs the user turns the whole chain into one full card.
+    const full = identifyCompactToolGroups(
+      [...parts.slice(0, 3), parts[4]] as UIMessage["parts"],
+      { getToolShortName },
+    );
+    expect(full.groupMap.size).toBe(0);
+    expect(full.remedyChainCards.get(0)?.finalAttempt?.part.toolCallId).toBe(
+      "retry",
+    );
+    expect([...full.consumedIndices].sort()).toEqual([2, 3]);
+  });
+
   it("groups adjacent compact-eligible tool calls together", () => {
     const parts = [
       {

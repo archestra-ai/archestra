@@ -53,6 +53,7 @@ export default async function AgentsPageServer() {
             sortDirection: DEFAULT_SORT_DIRECTION,
             pinned: false,
             access: DEFAULT_RESOURCE_ACCESS_RELATIONS,
+            includeTools: false,
           },
         }),
         archestraApiSdk.getAgentCatalog({
@@ -65,6 +66,7 @@ export default async function AgentsPageServer() {
             pinned: true,
             access: DEFAULT_RESOURCE_ACCESS_RELATIONS,
             includeBuiltIn: true,
+            includeTools: false,
           },
         }),
         canReadTeams

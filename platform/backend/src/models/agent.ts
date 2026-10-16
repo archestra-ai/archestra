@@ -4,6 +4,7 @@ import {
   type CursorQuery,
   DEFAULT_LLM_PROXY_NAME,
   getCreationDefaultArchestraToolShortNames,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
   type PaginationQuery,
   PERSONAL_MCP_GATEWAY_NAME,
   PLAYWRIGHT_MCP_CATALOG_ID,
@@ -2241,6 +2242,67 @@ class AgentModel {
    * Build the regular-agent list predicate shared by the standard endpoint and
    * the Agents-page catalog candidate query.
    */
+  /**
+   * Each listed agent's tool and subagent counts, as its `tools` would give
+   * them, without loading the tools: subagents are delegation tools, and the
+   * knowledge search tool counts only for an agent with knowledge sources, as
+   * in filterUnavailableKnowledgeTools.
+   */
+  static async getListToolCounts(
+    agents: Array<Pick<Agent, "id" | "knowledgeBaseIds" | "connectorIds">>,
+  ): Promise<Map<string, { toolsCount: number; subagentsCount: number }>> {
+    if (agents.length === 0) return new Map();
+    const name = schema.toolsTable.name;
+    const delegate = schema.toolsTable.delegateToAgentId;
+    // Bare, or after a server prefix of at least one character.
+    const prefixedKnowledgeTool = `_%${escapeLikePattern(
+      `${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME}`,
+    )}`;
+    const isKnowledgeTool = sql`(${name} = ${TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME} or ${name} like ${prefixedKnowledgeTool})`;
+    const rows = await db
+      .select({
+        agentId: schema.agentToolsTable.agentId,
+        tools: sql<number>`count(*) filter (where ${delegate} is null)`.mapWith(
+          Number,
+        ),
+        subagents:
+          sql<number>`count(*) filter (where ${delegate} is not null)`.mapWith(
+            Number,
+          ),
+        knowledgeTools:
+          sql<number>`count(*) filter (where ${delegate} is null and ${isKnowledgeTool})`.mapWith(
+            Number,
+          ),
+      })
+      .from(schema.agentToolsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+      )
+      .where(
+        inArray(
+          schema.agentToolsTable.agentId,
+          agents.map((agent) => agent.id),
+        ),
+      )
+      .groupBy(schema.agentToolsTable.agentId);
+    const countsByAgent = new Map(rows.map((row) => [row.agentId, row]));
+    return new Map(
+      agents.map((agent) => {
+        const counts = countsByAgent.get(agent.id);
+        return [
+          agent.id,
+          {
+            toolsCount:
+              (counts?.tools ?? 0) -
+              (hasKnowledgeSources(agent) ? 0 : (counts?.knowledgeTools ?? 0)),
+            subagentsCount: counts?.subagents ?? 0,
+          },
+        ];
+      }),
+    );
+  }
+
   private static async buildListWhereClause(params: {
     filters?: AgentListFilters;
     userId?: string;
@@ -2490,10 +2552,7 @@ class AgentModel {
 
   private static filterUnavailableKnowledgeTools(agents: Agent[]): void {
     for (const agent of agents) {
-      const hasKnowledgeSources =
-        agent.knowledgeBaseIds.length > 0 || agent.connectorIds.length > 0;
-
-      if (hasKnowledgeSources) {
+      if (hasKnowledgeSources(agent)) {
         continue;
       }
 
@@ -5406,6 +5465,12 @@ function isQueryKnowledgeSourcesTool(toolName: string): boolean {
     parseFullToolName(toolName).toolName ===
     TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME
   );
+}
+
+function hasKnowledgeSources(
+  agent: Pick<Agent, "knowledgeBaseIds" | "connectorIds">,
+): boolean {
+  return agent.knowledgeBaseIds.length > 0 || agent.connectorIds.length > 0;
 }
 
 /**

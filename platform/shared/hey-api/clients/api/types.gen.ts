@@ -14376,6 +14376,10 @@ export type GetAgentCatalogData = {
          * Filter internal agents by the current user's pins. Pinned results exclude external A2A agents and are ordered by newest pin first.
          */
         pinned?: boolean;
+        /**
+         * Attach each internal agent's assigned tools. Defaults to true. The Agents page passes false: it shows only `toolsCount` and `subagentsCount`, which are present either way, while the tool refs carry every assigned tool's name and description. Agents come back with an empty `tools` array when it is off, meaning 'not requested' rather than 'none assigned'.
+         */
+        includeTools?: boolean;
         limit?: number;
         offset?: number;
         sortBy?: 'name' | 'createdAt' | 'team' | 'toolsCount' | 'subagentsCount' | 'lastUsedAt';
@@ -14587,6 +14591,14 @@ export type GetAgentCatalogResponses = {
                 activationSkillsCount?: number;
                 lastUsedAt?: string | null;
                 pinnedAt: string | null;
+                /**
+                 * Assigned tools other than subagent delegations, as the Agents page shows them. Present whether or not `tools` was requested.
+                 */
+                toolsCount: number;
+                /**
+                 * Agents this agent delegates to.
+                 */
+                subagentsCount: number;
             };
         } | {
             type: 'external';

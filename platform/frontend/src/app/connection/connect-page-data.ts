@@ -122,7 +122,13 @@ export interface ConnectPageData {
   shownProviders: SupportedProvider[];
   skillsEnabled: boolean;
   pluginsEnabled: boolean;
-  /** Approved plugins the setup bundles for this client. */
+  /**
+   * The setup command is for Windows: the browser's OS until the user picks
+   * the other command. The plugins on offer follow it.
+   */
+  windows: boolean;
+  setWindows: (windows: boolean) => void;
+  /** Approved plugins the setup bundles for this client on that OS. */
   pluginsFor: (client: ConnectClient) => ConnectPlugin[];
   /** The plugins on offer that the user kept. */
   keptPlugins: (
@@ -292,21 +298,20 @@ export function useConnectPageData({
   const { data: allPlugins } = usePlugins(
     pluginsEnabled && canDeliverPlugins === true,
   );
-  // The setup only bundles plugins built for the computer's OS.
-  const [pluginPlatform, setPluginPlatform] = useState<"posix" | "windows">(
-    "posix",
-  );
-  useEffect(
-    () =>
-      setPluginPlatform(detectPlatform() === "windows" ? "windows" : "posix"),
-    [],
-  );
-  const pluginsFor = (client: ConnectClient): ConnectPlugin[] =>
+  // The OS the setup command is for: the browser's, until the user picks the
+  // other command.
+  const [windows, setWindows] = useState(false);
+  useEffect(() => setWindows(detectPlatform() === "windows"), []);
+  // The setup only bundles plugins built for the computer it runs on.
+  const offeredPlugins = (
+    client: ConnectClient,
+    onWindows: boolean,
+  ): ConnectPlugin[] =>
     (allPlugins ?? [])
       .filter(
         (p) =>
           isDeliverablePlugin(p, client.id) &&
-          p.supportedPlatforms.includes(pluginPlatform),
+          p.supportedPlatforms.includes(onWindows ? "windows" : "posix"),
       )
       .map((p) => ({
         id: p.id,
@@ -315,16 +320,12 @@ export function useConnectPageData({
         description: p.description,
         source: p.sourceRepo,
       }));
+  const pluginsFor = (client: ConnectClient) => offeredPlugins(client, windows);
 
   const keptPlugins = (
     client: ConnectClient,
     pluginIds: ConnectPicks["pluginIds"],
-  ) => {
-    const offered = pluginsFor(client);
-    if (pluginIds === null) return offered;
-    const kept = new Set(pluginIds);
-    return offered.filter((p) => kept.has(p.id));
-  };
+  ) => keptOf(pluginsFor(client), pluginIds);
 
   const baseUrl = useConnectionBaseUrl(org?.connectionBaseUrls);
 
@@ -463,6 +464,8 @@ export function useConnectPageData({
     shownProviders: getConnectableProviders(org),
     skillsEnabled,
     pluginsEnabled,
+    windows,
+    setWindows,
     pluginsFor,
     keptPlugins,
     partsFor,
@@ -495,8 +498,10 @@ export function useConnectPageData({
       return `Read ${origin}/connect.md?${decodeURIComponent(params.toString())} and connect ${client.label}.`;
     },
     installerCommand: (client, choices, windows, picks) => {
-      const offered = pluginsFor(client);
-      const kept = keptPlugins(client, picks?.pluginIds ?? null);
+      // The plugins for the OS this command runs on, which the installer
+      // reports and bundles for.
+      const offered = offeredPlugins(client, windows);
+      const kept = keptOf(offered, picks?.pluginIds ?? null);
       // Keeping none of the plugins is leaving plugins out.
       const exclude = CONNECT_SETUP_PARTS.filter(
         (part) =>
@@ -524,4 +529,14 @@ export function useConnectPageData({
       return `${fetch} ${origin}/api/client-connections/installer ${next}\n  | node - ${flags.join(" ")}`;
     },
   };
+}
+
+/** The plugins on offer that the picks keep; null picks keep them all. */
+function keptOf(
+  offered: ConnectPlugin[],
+  pluginIds: ConnectPicks["pluginIds"],
+): ConnectPlugin[] {
+  if (pluginIds === null) return offered;
+  const kept = new Set(pluginIds);
+  return offered.filter((p) => kept.has(p.id));
 }

@@ -1114,8 +1114,8 @@ function remedyChainEntry(params: {
       const state = (member.toolResultPart ?? member.part).state;
       return (
         !getToolErrorText({
-          part: member.part as never,
-          toolResultPart: member.toolResultPart as never,
+          part: member.part,
+          toolResultPart: member.toolResultPart,
         }) &&
         state !== "approval-requested" &&
         state !== "output-denied"
@@ -1124,8 +1124,8 @@ function remedyChainEntry(params: {
     return (
       !options?.nonCompactToolNames?.has(member.toolName) &&
       isCompactEligible({
-        part: member.part as never,
-        toolResultPart: member.toolResultPart as never,
+        part: member.part,
+        toolResultPart: member.toolResultPart,
         toolName: member.toolName,
         getToolShortName: options?.getToolShortName,
       })
@@ -1143,8 +1143,8 @@ function remedyChainEntry(params: {
     toolResultPart: shown.toolResultPart,
     errorText: finalAttempt
       ? getToolErrorText({
-          part: finalAttempt.part as never,
-          toolResultPart: finalAttempt.toolResultPart as never,
+          part: finalAttempt.part,
+          toolResultPart: finalAttempt.toolResultPart,
         })
       : undefined,
     remedyChain: chain,

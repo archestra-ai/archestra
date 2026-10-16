@@ -238,6 +238,75 @@ describe("CompactToolGroup", () => {
     );
   });
 
+  it.each([
+    { released: false, dialogs: 0 },
+    { released: true, dialogs: 1 },
+  ])("opens a guarded credential setup's dialog only once it is released (released: $released)", ({
+    released,
+    dialogs,
+  }) => {
+    mockGetToolShortName.mockImplementation((name: string) =>
+      name.startsWith("archestra__") ? name.replace("archestra__", "") : null,
+    );
+    const target = "archestra__request_runtime_credential_setup";
+    const ruling =
+      '[appa] Blocked.\n  - archestra__execute_remedy_plan(offer_id: "0c0c0c0c0c0c0c0c")';
+    const notice = {
+      type: "tool-archestra__get_remedy_plans",
+      state: "output-available",
+      toolCallId: "call-notice",
+      input: {
+        tool: target,
+        arguments: { kind: "github_app" },
+        ruling,
+        notice: { v: 1, call_id: "call-notice" },
+      },
+      output: ruling,
+    };
+    const parts: unknown[] = [
+      notice,
+      {
+        type: "tool-archestra__execute_remedy_plan",
+        state: "output-available",
+        toolCallId: "call-remedy",
+        input: { offer_id: "0c0c0c0c0c0c0c0c" },
+        output: "[appa] Authorized.",
+      },
+    ];
+    if (released) {
+      parts.push({
+        type: `tool-${target}`,
+        state: "output-available",
+        toolCallId: "call-retry",
+        input: { kind: "github_app" },
+        output: { action: "open_credential_dialog", kind: "github_app" },
+      });
+    }
+    const [chain] = identifyRemedyChains(parts, {
+      getToolShortName: mockGetToolShortName,
+    });
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CompactToolGroup
+          tools={[
+            {
+              kind: "tool",
+              key: "chain-1",
+              toolName: "archestra__get_remedy_plans",
+              part: notice as never,
+              toolResultPart: null,
+              errorText: undefined,
+              remedyChain: chain,
+            },
+          ]}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.queryAllByRole("dialog", { name: "" })).toHaveLength(dialogs);
+  });
+
   it("shows a denial notice's arguments as the object they hold", async () => {
     const noticeToolName = "archestra__get_remedy_plans";
     mockGetToolShortName.mockImplementation((name: string) =>

@@ -32,6 +32,7 @@ import { useSession } from "@/lib/auth/auth.query";
 import {
   getCompactToolState,
   getHumanRulingDisplay,
+  getToolErrorText,
   getToolHeaderState,
 } from "@/lib/chat/chat-tools-display.utils";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
@@ -64,6 +65,7 @@ import {
 } from "./openappa-policy-change";
 import {
   RemedyChainCard,
+  RemedyGuardrailsSteps,
   withParsedArguments,
 } from "./openappa-remedy-chain-card";
 import {
@@ -397,20 +399,23 @@ export function CompactToolGroup({
   const userToggledRef = useRef(false);
   const autoOpenedRef = useRef(new Set<string>());
   const savedChangeKey = canExpandToolCalls
-    ? tools.findLast(
-        (entry) =>
-          entry.kind !== "hook" &&
-          !entry.errorText &&
+    ? tools.findLast((entry) => {
+        if (entry.kind === "hook") return false;
+        const call = releasedCall(entry);
+        return (
+          call !== null &&
+          !call.errorText &&
           !autoOpenedRef.current.has(entry.key) &&
           getOpenAppaSaveResult({
             shortName: getToolShortName(
-              resolveRunToolTargetName(entry.part, entry.toolName, {
+              resolveRunToolTargetName(call.part, call.toolName, {
                 getToolShortName,
               }),
             ),
-            output: entry.toolResultPart?.output ?? entry.part.output,
-          }) !== null,
-      )?.key
+            output: call.toolResultPart?.output ?? call.part.output,
+          }) !== null
+        );
+      })?.key
     : undefined;
   useEffect(() => {
     if (!savedChangeKey) return;
@@ -615,33 +620,37 @@ export function CompactToolGroup({
         })}
       </div>
       {tools.map((entry) => {
-        if (entry.kind === "hook" || entry.errorText) return null;
-        const name = resolveRunToolTargetName(entry.part, entry.toolName, {
+        if (entry.kind === "hook") return null;
+        const call = releasedCall(entry);
+        if (!call || call.errorText) return null;
+        const name = resolveRunToolTargetName(call.part, call.toolName, {
           getToolShortName,
         });
         if (
           getToolShortName(name) !== "request_runtime_credential_setup" ||
-          (entry.part.state !== "output-available" && !entry.toolResultPart)
+          (call.part.state !== "output-available" && !call.toolResultPart)
         )
           return null;
         return (
           <RuntimeCredentialSetupTool
             key={entry.key}
             ready
-            toolCallId={entry.part.toolCallId}
+            toolCallId={call.part.toolCallId}
             onSendMessage={appContext?.onSendMessage}
           />
         );
       })}
       {tools.map((entry) => {
-        if (entry.kind === "hook" || entry.errorText) return null;
-        const name = resolveRunToolTargetName(entry.part, entry.toolName, {
+        if (entry.kind === "hook") return null;
+        const call = releasedCall(entry);
+        if (!call || call.errorText) return null;
+        const name = resolveRunToolTargetName(call.part, call.toolName, {
           getToolShortName,
         });
         const request =
           getToolShortName(name) === TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME
             ? parseBatteryCredentialRequest(
-                entry.toolResultPart?.output ?? entry.part.output,
+                call.toolResultPart?.output ?? call.part.output,
               )
             : null;
         if (!request) return null;
@@ -649,7 +658,7 @@ export function CompactToolGroup({
           <BatteryCredentialsTool
             key={entry.key}
             request={request}
-            toolCallId={entry.part.toolCallId}
+            toolCallId={call.part.toolCallId}
             onSendMessage={appContext?.onSendMessage}
           />
         );
@@ -658,14 +667,9 @@ export function CompactToolGroup({
         <div className="mt-2">
           {expandedEntry.kind === "hook" ? (
             <HookRunChip data={expandedEntry.data} defaultOpen />
-          ) : expandedEntry.remedyChain ? (
-            <RemedyChainCard
-              chain={expandedEntry.remedyChain}
-              onToolApprovalResponse={onToolApprovalResponse}
-            />
           ) : (
-            <ExpandedToolCard
-              tool={expandedEntry}
+            <EntryToolCard
+              entry={expandedEntry}
               onToolApprovalResponse={onToolApprovalResponse}
             />
           )}
@@ -704,17 +708,10 @@ export function CompactToolGroup({
                 // Surfaced only when the app renders nothing to display, so the
                 // call stays inspectable instead of the section going blank.
                 toolDetails={
-                  entry.remedyChain ? (
-                    <RemedyChainCard
-                      chain={entry.remedyChain}
-                      onToolApprovalResponse={onToolApprovalResponse}
-                    />
-                  ) : (
-                    <ExpandedToolCard
-                      tool={entry}
-                      onToolApprovalResponse={onToolApprovalResponse}
-                    />
-                  )
+                  <EntryToolCard
+                    entry={entry}
+                    onToolApprovalResponse={onToolApprovalResponse}
+                  />
                 }
                 onSendMessage={appContext.onSendMessage}
               />
@@ -722,6 +719,83 @@ export function CompactToolGroup({
           })
         : null}
     </div>
+  );
+}
+
+/**
+ * The call a tool entry stands for: the entry itself, or for a guarded call
+ * its released attempt (null until the model released it).
+ */
+function releasedCall(
+  entry: CompactToolEntry | CompactAppEntry,
+): Pick<
+  CompactToolEntry,
+  "toolName" | "part" | "toolResultPart" | "errorText"
+> | null {
+  if (!entry.remedyChain) return entry;
+  const { finalAttempt } = entry.remedyChain;
+  if (!finalAttempt) return null;
+  return {
+    toolName: finalAttempt.toolName,
+    part: finalAttempt.part,
+    toolResultPart: finalAttempt.toolResultPart,
+    errorText: getToolErrorText(finalAttempt),
+  };
+}
+
+/**
+ * The expanded card for a tool entry. A released guarded call is its
+ * attempt's own card, with the Guardrails negotiation (and the attempt's
+ * subagent calls) between Request and Result; an unreleased one is the
+ * chain card.
+ */
+function EntryToolCard({
+  entry,
+  onToolApprovalResponse,
+}: {
+  entry: CompactToolEntry | CompactAppEntry;
+  onToolApprovalResponse?: (params: {
+    id: string;
+    approved: boolean;
+    reason?: string;
+  }) => void;
+}) {
+  const chain = entry.remedyChain;
+  const call = releasedCall(entry);
+  if (!chain) {
+    return (
+      <ExpandedToolCard
+        tool={entry}
+        onToolApprovalResponse={onToolApprovalResponse}
+      />
+    );
+  }
+  if (!call) {
+    return (
+      <RemedyChainCard
+        chain={chain}
+        onToolApprovalResponse={onToolApprovalResponse}
+      />
+    );
+  }
+  return (
+    <ExpandedToolCard
+      tool={{
+        kind: "tool",
+        key: entry.key,
+        ...call,
+        nestedToolCalls: (
+          <>
+            <RemedyGuardrailsSteps
+              steps={chain.steps}
+              onToolApprovalResponse={onToolApprovalResponse}
+            />
+            {entry.nestedToolCalls}
+          </>
+        ),
+      }}
+      onToolApprovalResponse={onToolApprovalResponse}
+    />
   );
 }
 

@@ -2,7 +2,6 @@
 
 import {
   type ArchestraToolShortName,
-  extractMcpExecutedAs,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
@@ -16,8 +15,6 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
-import { ExecutedAsBadge } from "@/components/executed-as-badge";
-import { useSession } from "@/lib/auth/auth.query";
 import {
   getHumanRulingDisplay,
   getToolErrorText,
@@ -29,10 +26,8 @@ import {
   getRemedyChainStatus,
   type RemedyChain,
   type RemedyChainMember,
-  type RemedyChainStatus,
 } from "./openappa-remedy-chains";
 import { withoutProxyTransportArguments } from "./proxy-transport-arguments";
-import { ToolErrorLogsButton } from "./tool-error-logs-button";
 import { ToolStatusRow } from "./tool-status-row";
 
 type ToolApprovalResponse = (params: {
@@ -42,10 +37,12 @@ type ToolApprovalResponse = (params: {
 }) => void;
 
 /**
- * One guarded call as a single tool card: the target's Request, the
- * Guardrails negotiation as nested steps in order, then the released
- * attempt's Result. `collapsible` renders it as a standalone message card;
- * otherwise it is the always-open card under a compact circle.
+ * A guarded call the model has not (yet) released, as one card of its
+ * target tool: the Request, then the Guardrails negotiation so far. A
+ * released call renders as its attempt's own tool card instead, with
+ * `RemedyGuardrailsSteps` in its nested slot. `collapsible` renders it as a
+ * standalone message card; otherwise it is the always-open card under a
+ * compact circle.
  */
 export function RemedyChainCard({
   chain,
@@ -58,23 +55,15 @@ export function RemedyChainCard({
   canExpandToolCalls?: boolean;
   onToolApprovalResponse?: ToolApprovalResponse;
 }) {
-  const { data: session } = useSession();
-  const { getToolShortName } = useArchestraMcpIdentity();
-  const { finalAttempt } = chain;
   const status = getRemedyChainStatus(chain);
-  const errorText = finalAttempt ? getToolErrorText(finalAttempt) : undefined;
-  const finalOutput = finalAttempt
-    ? (finalAttempt.toolResultPart?.output ?? finalAttempt.part.output)
-    : undefined;
-  const executedAs = extractMcpExecutedAs(finalOutput);
   const input = chain.targetArguments;
   const hasInput =
     typeof input === "object" &&
     input !== null &&
     Object.keys(input).length > 0;
-  const needsAction = [...chain.steps, ...(finalAttempt ? [finalAttempt] : [])]
-    .map((member) => member.part.state)
-    .includes("approval-requested");
+  const needsAction = chain.steps.some(
+    (step) => step.part.state === "approval-requested",
+  );
 
   return (
     <Tool
@@ -85,59 +74,57 @@ export function RemedyChainCard({
       <ToolHeader
         type={`tool-${chain.targetToolName}`}
         title={getToolCardTitle(chain.targetToolName)}
-        state={chainHeaderState({ status, finalAttempt, errorText })}
+        state={
+          status.state === "running"
+            ? "input-available"
+            : status.state === "error"
+              ? "output-error"
+              : status.state === "completed"
+                ? "output-available"
+                : "output-denied"
+        }
         statusLabel={status.label}
         isCollapsible={collapsible && (canExpandToolCalls || needsAction)}
-        actionButton={
-          errorText && finalAttempt ? (
-            <ToolErrorLogsButton toolName={finalAttempt.toolName} />
-          ) : null
-        }
-        identityBadge={
-          executedAs ? (
-            <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-              Called as
-              <ExecutedAsBadge
-                executedAs={executedAs}
-                meUserId={session?.user?.id}
-              />
-            </span>
-          ) : undefined
-        }
       />
       <ToolContent>
         {hasInput ? <ToolInput input={input} /> : null}
-        <div className="pt-2 space-y-1.5">
-          <div className="px-3">
-            <SectionLabel accent="bg-orange-400">Guardrails</SectionLabel>
-          </div>
-          <div className="px-3 space-y-1">
-            {chain.steps.map((step) => (
-              <RemedyStepCard
-                key={step.part.toolCallId ?? step.partIndex}
-                step={step}
-                getToolShortName={getToolShortName}
-                onToolApprovalResponse={onToolApprovalResponse}
-              />
-            ))}
-          </div>
-        </div>
-        {finalAttempt ? (
-          <ApprovalRow
-            part={finalAttempt.part}
-            onToolApprovalResponse={onToolApprovalResponse}
-          />
-        ) : null}
-        {errorText ? <ToolErrorDetails errorText={errorText} /> : null}
-        {finalAttempt && finalOutput !== undefined ? (
-          <ToolOutput
-            label={errorText ? "Error" : "Result"}
-            output={finalOutput}
-            errorText={errorText}
-          />
-        ) : null}
+        <RemedyGuardrailsSteps
+          steps={chain.steps}
+          onToolApprovalResponse={onToolApprovalResponse}
+        />
       </ToolContent>
     </Tool>
+  );
+}
+
+/**
+ * The Guardrails negotiation of one guarded call — notices and remedies in
+ * order, each a collapsed, display-only tool card like subagent calls.
+ */
+export function RemedyGuardrailsSteps({
+  steps,
+  onToolApprovalResponse,
+}: {
+  steps: RemedyChainMember[];
+  onToolApprovalResponse?: ToolApprovalResponse;
+}) {
+  const { getToolShortName } = useArchestraMcpIdentity();
+  return (
+    <div className="pt-2 space-y-1.5">
+      <div className="px-3">
+        <SectionLabel accent="bg-orange-400">Guardrails</SectionLabel>
+      </div>
+      <div className="px-3 space-y-1">
+        {steps.map((step) => (
+          <RemedyStepCard
+            key={step.part.toolCallId ?? step.partIndex}
+            step={step}
+            getToolShortName={getToolShortName}
+            onToolApprovalResponse={onToolApprovalResponse}
+          />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -271,21 +258,4 @@ function ApprovalRow({
       ]}
     />
   );
-}
-
-function chainHeaderState(params: {
-  status: RemedyChainStatus;
-  finalAttempt: RemedyChainMember | null;
-  errorText: string | undefined;
-}) {
-  const { status, finalAttempt, errorText } = params;
-  if (status.state === "denied") return "output-denied" as const;
-  if (finalAttempt) {
-    return getToolHeaderState({
-      state: finalAttempt.part.state || "input-available",
-      toolResultPart: finalAttempt.toolResultPart,
-      errorText,
-    });
-  }
-  return "input-available" as const;
 }

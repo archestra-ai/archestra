@@ -377,6 +377,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
           <PopoverContent
             side="top"
             align="start"
+            collisionPadding={12}
             className="w-auto overflow-hidden p-0"
           >
             <ChatSetupMenu
@@ -548,7 +549,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
           <PopoverContent
             side="top"
             align="start"
-            className="w-96 space-y-2 text-sm"
+            collisionPadding={12}
+            className="w-96 max-w-[calc(100vw-1.5rem)] space-y-2 text-sm"
           >
             <p className="font-medium">Encrypted chats</p>
             <p className="text-muted-foreground">

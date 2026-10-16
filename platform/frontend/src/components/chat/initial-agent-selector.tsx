@@ -590,7 +590,8 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
             side="bottom"
             align="start"
             sideOffset={8}
-            className="w-[360px] p-0 rounded-xl"
+            collisionPadding={12}
+            className="w-[calc(100vw-1.5rem)] rounded-xl p-0 sm:w-[360px]"
           >
             <div className="px-2.5 pt-2.5 pb-1">
               <div className="relative">

@@ -88,6 +88,7 @@ export function ChatModelButton({
         side="bottom"
         align="start"
         sideOffset={8}
+        collisionPadding={12}
         className="w-auto overflow-hidden p-0"
       >
         <ChatSetupMenu {...menuProps} close={() => setOpen(false)} />

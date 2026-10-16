@@ -330,7 +330,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
 
   if (!scope) {
     return (
-      <div className="flex h-10 w-[350px] max-w-[calc(100vw-2rem)] items-center px-3 text-xs text-muted-foreground">
+      <div className="flex h-10 w-[calc(100vw-1.5rem)] sm:w-[350px] items-center px-3 text-xs text-muted-foreground">
         Nothing to change in this chat
       </div>
     );
@@ -346,7 +346,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
       filter={(value, search, keywords) =>
         defaultFilter(keywords?.length ? keywords.join(" ") : value, search)
       }
-      className="w-[350px] max-w-[calc(100vw-2rem)] rounded-none bg-transparent"
+      className="w-[calc(100vw-1.5rem)] sm:w-[350px] rounded-none bg-transparent"
     >
       <div className="flex h-10 items-center gap-2.5 border-b pr-2 pl-3">
         <SearchIcon className="size-4 shrink-0 text-muted-foreground" />

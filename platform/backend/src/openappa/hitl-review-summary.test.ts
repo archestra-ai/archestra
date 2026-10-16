@@ -185,6 +185,38 @@ describe("summarizeHitlReview", () => {
     }
   });
 
+  test("summary cache is private to the deployment signing key and skips unsigned deployments", async () => {
+    provisionSummaryModel();
+    const secret = config.openappa.offerSigningSecret;
+    answer(SUMMARY);
+    try {
+      expect(
+        await summarizeHitlReview({
+          session: session(),
+          review: proseReview(),
+        }),
+      ).toBe(SUMMARY);
+      config.openappa.offerSigningSecret = `${secret}-rotated`;
+      expect(
+        await summarizeHitlReview({
+          session: session(),
+          review: proseReview(),
+        }),
+      ).toBe(SUMMARY);
+      expect(mockGenerateText).toHaveBeenCalledTimes(2);
+      config.openappa.offerSigningSecret = "";
+      expect(
+        await summarizeHitlReview({
+          session: session(),
+          review: proseReview(),
+        }),
+      ).toBeUndefined();
+      expect(mockGenerateText).toHaveBeenCalledTimes(2);
+    } finally {
+      config.openappa.offerSigningSecret = secret;
+    }
+  });
+
   test("summarizes long prose arguments through one no-tools model call", async () => {
     provisionSummaryModel();
     answer(SUMMARY);

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import { createHash } from "node:crypto";
+import { createHmac } from "node:crypto";
 import {
   BUILT_IN_AGENT_IDS,
   providerRequiresPerUserCredential,
@@ -32,7 +32,12 @@ export async function summarizeHitlReview(params: {
   const { session, review } = params;
   // An unscoped session shares one cache scope across callers; never mint a
   // summary into it.
-  if (!session.caller_id || !config.openappa.reviewSummary) return undefined;
+  if (
+    !session.caller_id ||
+    !config.openappa.reviewSummary ||
+    !config.openappa.offerSigningSecret
+  )
+    return undefined;
   const prose = collectProse(review.arguments);
   if (!prose) return undefined;
   const key = summaryCacheKey(session, review);
@@ -90,13 +95,9 @@ async function reserveSummaryBudget(
   session: OpenAppaSession,
 ): Promise<boolean> {
   const window = Math.floor(Date.now() / TimeInMs.Minute);
-  const scope = createHash("sha256")
-    .update(session.organization_id)
-    .digest("base64url");
+  const scope = summaryFingerprint(["budget-org", session.organization_id]);
   const orgKey: AllowedCacheKey = `${CacheKey.OpenAppaHitlSummary}-budget-${scope}-${window}`;
-  const caller = createHash("sha256")
-    .update(session.caller_id ?? "")
-    .digest("base64url");
+  const caller = summaryFingerprint(["budget-caller", session.caller_id ?? ""]);
   const callerKey: AllowedCacheKey = `${orgKey}-${caller}`;
   return cacheManager.withLock(orgKey, async (cache) => {
     const orgCount = (await cache.get<number>(orgKey)) ?? 0;
@@ -243,18 +244,23 @@ function summaryCacheKey(
   session: OpenAppaSession,
   review: { tool?: string; arguments?: string; text: string },
 ): AllowedCacheKey {
-  const digest = createHash("sha256")
-    .update(
-      JSON.stringify([
-        SUMMARY_PROMPT_VERSION,
-        config.openappa.reviewSummary,
-        session.organization_id,
-        session.caller_id ?? "",
-        review.tool ?? "",
-        review.arguments ?? "",
-        review.text,
-      ]),
-    )
-    .digest("base64url");
+  const digest = summaryFingerprint([
+    SUMMARY_PROMPT_VERSION,
+    config.openappa.reviewSummary,
+    session.organization_id,
+    session.caller_id ?? "",
+    review.tool ?? "",
+    review.arguments ?? "",
+    review.text,
+  ]);
   return `${CacheKey.OpenAppaHitlSummary}-${digest}`;
+}
+
+/** Cache fingerprints are not password storage. HMAC also hides low-entropy
+ * identities and argument values from anyone able to inspect cache key names. */
+function summaryFingerprint(value: unknown): string {
+  return createHmac("sha256", config.openappa.offerSigningSecret)
+    .update("openappa:review-summary-cache:v1\0")
+    .update(JSON.stringify(value))
+    .digest("base64url");
 }

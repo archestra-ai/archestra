@@ -1,11 +1,12 @@
 "use client";
 
 import { CLIENT_FILTER_OPTIONS, type ClientFilter } from "@archestra/shared";
-import { FilterSelect } from "@/components/filter-bar";
+import { FilterSelect, filterControlClass } from "@/components/filter-bar";
 import {
   ClientFilterOption,
   UserFilterOption,
 } from "@/components/log-filter-option";
+import { RemoteUserSelect } from "@/components/remote-user-select";
 import { DEFAULT_FILTER_ALL } from "@/consts";
 
 /**
@@ -16,11 +17,24 @@ export function UserFilterSelect({
   value,
   onValueChange,
   users,
+  remote = false,
 }: {
   value: string;
   onValueChange: (value: string) => void;
-  users: Array<{ id: string; name: string }> | undefined;
+  users?: Array<{ id: string; name: string }>;
+  remote?: boolean;
 }) {
+  if (remote)
+    return (
+      <RemoteUserSelect
+        value={value}
+        onValueChange={onValueChange}
+        placeholder="Filter by User"
+        className={filterControlClass({ active: value !== DEFAULT_FILTER_ALL })}
+        searchMode="name"
+        pinnedOption={{ value: DEFAULT_FILTER_ALL, label: "All Users" }}
+      />
+    );
   return (
     <FilterSelect
       value={value}

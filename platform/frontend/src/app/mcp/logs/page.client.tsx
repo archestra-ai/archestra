@@ -43,7 +43,6 @@ import {
   canShowMcpToolCallStatus,
   resolveMcpToolCallStatus,
 } from "@/lib/mcp-logs/tool-call-status";
-import { useOrganizationMembers } from "@/lib/organization.query";
 import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { ErrorBoundary } from "../../_parts/error-boundary";
 
@@ -218,7 +217,6 @@ function McpToolCallsTable({
   // Without log:admin the server scopes every listing to the caller's own
   // rows, so a user picker would have nothing to choose between.
   const { data: canSeeAllLogs } = useHasPermissions({ log: ["admin"] });
-  const { data: members } = useOrganizationMembers(canSeeAllLogs === true);
   const { data: canReadMcpRegistry } = useHasPermissions({
     mcpRegistry: ["read"],
   });
@@ -605,10 +603,7 @@ function McpToolCallsTable({
             <UserFilterSelect
               value={userIdFromUrl}
               onValueChange={handleUserFilterChange}
-              users={members?.map((member) => ({
-                id: member.id,
-                name: member.name,
-              }))}
+              remote
             />
           ) : null}
         </FilterBar>

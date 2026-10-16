@@ -1380,6 +1380,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // everyone else only the users they share a team with (the chat share
   // recipient picker), so the route itself is open to any authenticated user.
   [RouteId.GetOrganizationMembers]: {},
+  [RouteId.GetOrganizationMemberOptions]: {},
   [RouteId.GetOrganizationMember]: { member: ["read"] }, // Get organization member by ID or email
   [RouteId.DeletePendingSignupMember]: { member: ["delete"] }, // Delete auto-provisioned member who hasn't signed up
   [RouteId.GetUserPermissionSources]: {},

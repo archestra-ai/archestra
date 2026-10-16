@@ -477,13 +477,7 @@ export const handlers: HttpHandler[] = [
     },
   }),
 
-  // Gateway tokens, read by the agent detail page's connect panel. No tokens
-  // issued and no org/team token access, which is the quiet default: the panel
-  // renders its empty state instead of a roster.
-  ...getJson("/api/tokens", {
-    tokens: [],
-    permissions: { canAccessOrgToken: false, canAccessTeamTokens: false },
-  }),
+  // The caller's personal gateway token, read by the connect panels.
   ...getJson("/api/user-tokens/me", {
     id: "test-user-token",
     name: "Test Admin's token",
@@ -559,14 +553,6 @@ export const handlers: HttpHandler[] = [
   // sidebar. Default empty so dialog open doesn't blow up the leak guard.
   ...getJson("/api/chat/conversations", []),
   ...getJson("/api/chat/conversations/:id/openappa-status", null),
-  ...getJson("/api/agent-runs/:taskId/openappa-review", {
-    status: "none",
-    canDecide: false,
-    offerId: null,
-    text: null,
-    tool: null,
-    arguments: null,
-  }),
   ...getJson("/api/roles", {
     data: [],
     pagination: {

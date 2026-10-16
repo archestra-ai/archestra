@@ -18,7 +18,6 @@ import {
   recordHitlRuling,
   stageHitlReview,
 } from "@/openappa/hitl-review";
-import * as runtimeReview from "@/openappa/runtime-hitl-review";
 import type { OpenAppaSession } from "@/openappa/service";
 import { workloadPrincipal } from "@/services/agent-runtime/runtime-identity";
 import { beforeEach, describe, expect, test } from "@/test";
@@ -524,128 +523,6 @@ describe("chat tool execution", () => {
       selected: ["Deny"],
     });
     expect(await consumeHitlRuling({ session, offerId })).toBe("deny");
-  });
-
-  for (const [outcome, message] of [
-    ["no-reviewer", "no eligible human reviewer"],
-    ["review-unavailable", "fresh exact-offer review"],
-  ] as const) {
-    test(`runtime review ${outcome} is an error, not an approval or native form`, async () => {
-      const offerId = `runtime-${outcome}`;
-      const session = reviewSession({
-        sessionId: scopedSessionId(`user:${mockContext.userId}`, sessionId),
-      });
-      await stageHitlReview({
-        session,
-        review: { offerId, text: "Exact action", tool: "mcp/example/write" },
-      });
-      const nativeForm = vi.fn();
-      const wait = vi
-        .spyOn(runtimeReview, "awaitRuntimeHitlReview")
-        .mockResolvedValue(outcome);
-      try {
-        const result = await executeArchestraTool(
-          TOOL_ASK_USER_FULL_NAME,
-          {
-            question: "Approve?",
-            options: [{ label: "Approve" }, { label: "Deny" }],
-            remedy_offer_ids: [offerId],
-            trajectory: trajectory(),
-          },
-          { ...mockContext, elicitation: { elicit: nativeForm } },
-        );
-        expect(result.isError).toBe(true);
-        expect(JSON.stringify(result.content)).toContain(message);
-        expect(result.structuredContent).toBeUndefined();
-        expect(nativeForm).not.toHaveBeenCalled();
-        expect(await consumeHitlRuling({ session, offerId })).toBeUndefined();
-      } finally {
-        wait.mockRestore();
-      }
-    });
-  }
-
-  test("runtime none is not a ruling and does not seal a fresh review", async () => {
-    const offerId = "runtime-none";
-    const session = reviewSession({
-      sessionId: scopedSessionId(`user:${mockContext.userId}`, sessionId),
-    });
-    await stageHitlReview({
-      session,
-      review: { offerId, text: "Exact action", tool: "mcp/example/write" },
-    });
-    const nativeForm = vi.fn();
-    const wait = vi
-      .spyOn(runtimeReview, "awaitRuntimeHitlReview")
-      .mockResolvedValue("none");
-    try {
-      const result = await executeArchestraTool(
-        TOOL_ASK_USER_FULL_NAME,
-        {
-          question: "Approve?",
-          options: [{ label: "Approve" }, { label: "Deny" }],
-          remedy_offer_ids: [offerId],
-          trajectory: trajectory(),
-        },
-        { ...mockContext, elicitation: { elicit: nativeForm } },
-      );
-      expect(result.isError).toBe(true);
-      expect(result.structuredContent).toBeUndefined();
-      expect(nativeForm).not.toHaveBeenCalled();
-      expect(await peekHitlRuling({ session, offerId })).toBeUndefined();
-      expect(
-        await recordHitlRuling({ session, offerId, ruling: "approve" }),
-      ).toBe(true);
-      expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
-    } finally {
-      wait.mockRestore();
-    }
-  });
-
-  test("a runtime review waits on the platform instead of an auto-declining native form", async () => {
-    const offerId = "runtime-review";
-    const session = reviewSession({
-      sessionId: scopedSessionId(`user:${mockContext.userId}`, sessionId),
-    });
-    await stageHitlReview({
-      session,
-      review: {
-        offerId,
-        text: "Exact runtime action",
-        tool: "mcp/example/write",
-        arguments: '{"value":1}',
-      },
-    });
-    const nativeForm = vi.fn(async () => ({
-      status: "answered" as const,
-      result: { action: "decline" as const },
-    }));
-    const wait = vi
-      .spyOn(runtimeReview, "awaitRuntimeHitlReview")
-      .mockResolvedValue("approve");
-    try {
-      const answer = await executeArchestraTool(
-        TOOL_ASK_USER_FULL_NAME,
-        {
-          question: "Approve?",
-          options: [{ label: "Approve" }, { label: "Deny" }],
-          remedy_offer_ids: [offerId],
-          trajectory: trajectory(),
-        },
-        { ...mockContext, elicitation: { elicit: nativeForm } },
-      );
-      expect(answer.structuredContent).toEqual({
-        action: "accept",
-        selected: ["Approve"],
-      });
-      expect(nativeForm).not.toHaveBeenCalled();
-      expect(wait).toHaveBeenCalledWith(
-        expect.objectContaining({ offerId, userId: mockContext.userId }),
-      );
-      expect(await consumeHitlRuling({ session, offerId })).toBeUndefined();
-    } finally {
-      wait.mockRestore();
-    }
   });
 
   test.each([

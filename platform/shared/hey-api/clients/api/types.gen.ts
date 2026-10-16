@@ -23126,192 +23126,6 @@ export type UpdateAgentRunResponses = {
 
 export type UpdateAgentRunResponse = UpdateAgentRunResponses[keyof UpdateAgentRunResponses];
 
-export type GetAgentRunOpenappaReviewData = {
-    body?: never;
-    path: {
-        taskId: string;
-    };
-    query?: never;
-    url: '/api/agent-runs/{taskId}/openappa-review';
-};
-
-export type GetAgentRunOpenappaReviewErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetAgentRunOpenappaReviewError = GetAgentRunOpenappaReviewErrors[keyof GetAgentRunOpenappaReviewErrors];
-
-export type GetAgentRunOpenappaReviewResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        status: 'none' | 'pending' | 'no_reviewer';
-        canDecide: boolean;
-        offerId: string | null;
-        text: string | null;
-        tool: string | null;
-        arguments: string | null;
-    };
-};
-
-export type GetAgentRunOpenappaReviewResponse = GetAgentRunOpenappaReviewResponses[keyof GetAgentRunOpenappaReviewResponses];
-
-export type DecideAgentRunOpenappaReviewData = {
-    body: {
-        decision: 'approve' | 'deny';
-        offerId: string;
-    };
-    path: {
-        taskId: string;
-    };
-    query?: never;
-    url: '/api/agent-runs/{taskId}/openappa-review';
-};
-
-export type DecideAgentRunOpenappaReviewErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type DecideAgentRunOpenappaReviewError = DecideAgentRunOpenappaReviewErrors[keyof DecideAgentRunOpenappaReviewErrors];
-
-export type DecideAgentRunOpenappaReviewResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        decision: 'approve' | 'deny';
-        offerId: string;
-        steered: boolean;
-    };
-};
-
-export type DecideAgentRunOpenappaReviewResponse = DecideAgentRunOpenappaReviewResponses[keyof DecideAgentRunOpenappaReviewResponses];
-
 export type ContinueAgentRunData = {
     body: {
         message?: string;
@@ -93578,6 +93392,7 @@ export type RunOpenAppaPolicyTestsData = {
         }>;
         sourceVersion: string;
         directory?: string;
+        partial?: boolean;
     };
     path?: never;
     query?: never;
@@ -93661,6 +93476,7 @@ export type RunOpenAppaPolicyTestsResponses = {
         createdBy: string | null;
         createdAt: string;
         trigger?: 'manual' | 'github_sync' | 'policy_change';
+        partial?: boolean;
         executionError?: string;
         source: 'local' | 'github';
         sourceVersion: string;
@@ -93691,7 +93507,6 @@ export type RunOpenAppaPolicyTestsResponses = {
             errors: Array<string>;
             warnings: Array<string>;
         };
-        stale: boolean;
     };
 };
 
@@ -93781,6 +93596,7 @@ export type GetOpenAppaPolicyTestRunsResponses = {
         createdBy: string | null;
         createdAt: string;
         trigger?: 'manual' | 'github_sync' | 'policy_change';
+        partial?: boolean;
         executionError?: string;
         source: 'local' | 'github';
         sourceVersion: string;
@@ -93811,7 +93627,6 @@ export type GetOpenAppaPolicyTestRunsResponses = {
             errors: Array<string>;
             warnings: Array<string>;
         };
-        stale: boolean;
     }>;
 };
 
@@ -93905,6 +93720,7 @@ export type PreviewOpenAppaPolicyTestResponses = {
      */
     200: {
         trigger?: 'manual' | 'github_sync' | 'policy_change';
+        partial?: boolean;
         executionError?: string;
         source: 'local' | 'github';
         sourceVersion: string;
@@ -93935,7 +93751,6 @@ export type PreviewOpenAppaPolicyTestResponses = {
             errors: Array<string>;
             warnings: Array<string>;
         };
-        stale: boolean;
     };
 };
 
@@ -116300,306 +116115,6 @@ export type RemoveTeamExternalGroupResponses = {
 };
 
 export type RemoveTeamExternalGroupResponse = RemoveTeamExternalGroupResponses[keyof RemoveTeamExternalGroupResponses];
-
-export type GetTokensData = {
-    body?: never;
-    path?: never;
-    query?: {
-        /**
-         * Annotate each token with worksWithProfile: whether it can authenticate against this profile
-         */
-        profileId?: string;
-    };
-    url: '/api/tokens';
-};
-
-export type GetTokensErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetTokensError = GetTokensErrors[keyof GetTokensErrors];
-
-export type GetTokensResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        tokens: Array<{
-            id: string;
-            name: string;
-            tokenStart: string;
-            isOrganizationToken: boolean;
-            team: {
-                id: string;
-                name: string;
-            } | null;
-            createdAt: string;
-            lastUsedAt: string | null;
-            /**
-             * Only set when the profileId query param is provided: whether this token can authenticate against that profile (org-scoped agents accept any team token; team-scoped agents only their teams'; personal agents none)
-             */
-            worksWithProfile?: boolean;
-        }>;
-        permissions: {
-            canAccessOrgToken: boolean;
-            canAccessTeamTokens: boolean;
-        };
-    };
-};
-
-export type GetTokensResponse = GetTokensResponses[keyof GetTokensResponses];
-
-export type GetTokenValueData = {
-    body?: never;
-    path: {
-        tokenId: string;
-    };
-    query?: never;
-    url: '/api/tokens/{tokenId}/value';
-};
-
-export type GetTokenValueErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetTokenValueError = GetTokenValueErrors[keyof GetTokenValueErrors];
-
-export type GetTokenValueResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        value: string;
-    };
-};
-
-export type GetTokenValueResponse = GetTokenValueResponses[keyof GetTokenValueResponses];
-
-export type RotateTokenData = {
-    body?: never;
-    path: {
-        tokenId: string;
-    };
-    query?: never;
-    url: '/api/tokens/{tokenId}/rotate';
-};
-
-export type RotateTokenErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-            details?: {
-                [key: string]: unknown;
-            };
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type RotateTokenError = RotateTokenErrors[keyof RotateTokenErrors];
-
-export type RotateTokenResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        id: string;
-        name: string;
-        tokenStart: string;
-        isOrganizationToken: boolean;
-        team: {
-            id: string;
-            name: string;
-        } | null;
-        createdAt: string;
-        lastUsedAt: string | null;
-        /**
-         * Only set when the profileId query param is provided: whether this token can authenticate against that profile (org-scoped agents accept any team token; team-scoped agents only their teams'; personal agents none)
-         */
-        worksWithProfile?: boolean;
-        value: string;
-    };
-};
-
-export type RotateTokenResponse = RotateTokenResponses[keyof RotateTokenResponses];
 
 export type GetToolsData = {
     body?: never;

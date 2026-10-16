@@ -533,8 +533,6 @@ export const RouteId = {
   DownloadAgentWorkspaceTransfer: "downloadAgentWorkspaceTransfer",
   UploadAgentWorkspaceTransfer: "uploadAgentWorkspaceTransfer",
   DeleteAgentRun: "deleteAgentRun",
-  GetAgentRunOpenappaReview: "getAgentRunOpenappaReview",
-  DecideAgentRunOpenappaReview: "decideAgentRunOpenappaReview",
 
   // Saved browser login routes (Playwright)
   GetBrowserStorageStates: "getBrowserStorageStates",
@@ -706,9 +704,6 @@ export const RouteId = {
   GetImpersonableUsers: "getImpersonableUsers",
 
   // Team Token Routes
-  GetTokens: "getTokens",
-  GetTokenValue: "getTokenValue",
-  RotateToken: "rotateToken",
 
   // User Token Routes (Personal Tokens)
   GetUserToken: "getUserToken",

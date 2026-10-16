@@ -1,5 +1,40 @@
 # Changelog
 
+## [1.4.0-rc.49](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.48...platform-v1.4.0-rc.49) (2026-10-16)
+
+
+### Features
+
+* **api:** reconnect Git skills and create inactive notifications ([#9065](https://github.com/archestra-ai/archestra/issues/9065)) ([f5e85f4](https://github.com/archestra-ai/archestra/commit/f5e85f4debe40c215a79a25b3c55a4fb3051c7b8))
+* **openappa:** add compact approval cards with in-chat inspection ([#9023](https://github.com/archestra-ai/archestra/issues/9023)) ([8666a95](https://github.com/archestra-ai/archestra/commit/8666a95ec19f8ba852aa483d7250012f9938b5e3))
+* **openappa:** check restrictions with appa/do_something in validations ([#9046](https://github.com/archestra-ai/archestra/issues/9046)) ([aed871b](https://github.com/archestra-ai/archestra/commit/aed871b42e40385d17ca40c1b250d07664e617da))
+* **openappa:** Claude Code battery through the proxy and wider default human review ([#8737](https://github.com/archestra-ai/archestra/issues/8737)) ([240bd81](https://github.com/archestra-ai/archestra/commit/240bd814bc3a3c27564b3e0ae58acb6e20162fc7))
+* **openappa:** run policy validations against live annotators ([#9052](https://github.com/archestra-ai/archestra/issues/9052)) ([5664eab](https://github.com/archestra-ai/archestra/commit/5664eab6d66f2525c108b95b2795fd0c6ede0d08))
+* **service-accounts:** let a service account act for a team ([#8919](https://github.com/archestra-ai/archestra/issues/8919)) ([ccb8234](https://github.com/archestra-ai/archestra/commit/ccb823453c15d96989f06e725768cf8ee27e7087))
+* **service-accounts:** run service-account work as the account, not the org token ([#8927](https://github.com/archestra-ai/archestra/issues/8927)) ([bd01a1d](https://github.com/archestra-ai/archestra/commit/bd01a1d8b49dfe7c656bc4500054fb9a88b22734))
+
+
+### Bug Fixes
+
+* **agents:** explain blocked actions to members instead of failing ([#9040](https://github.com/archestra-ai/archestra/issues/9040)) ([d42d861](https://github.com/archestra-ai/archestra/commit/d42d8619d7c5555880b06ec49f024e811552acd1))
+* **agents:** offer only Mine and Shared with me in the access filter ([#9060](https://github.com/archestra-ai/archestra/issues/9060)) ([a554dd1](https://github.com/archestra-ai/archestra/commit/a554dd1dcbddcb60ae022436f8d276c06b3406dd))
+* **agents:** show pinned built-in agents without the Built-in filter ([#9047](https://github.com/archestra-ai/archestra/issues/9047)) ([841b6ec](https://github.com/archestra-ai/archestra/commit/841b6ec54467fac261ae16b89da7a01a1b5c67a7))
+* **chat:** load agent picker choices on scroll ([#9048](https://github.com/archestra-ai/archestra/issues/9048)) ([19ec145](https://github.com/archestra-ai/archestra/commit/19ec145c1b9121d5e2e27cf3e89a0e0e9154c7b4))
+* **chat:** show the selected model in the composer by default ([#9045](https://github.com/archestra-ai/archestra/issues/9045)) ([8d63236](https://github.com/archestra-ai/archestra/commit/8d63236fb7c15ae2cc1db9ce3c07eedf1a19f76f))
+* **observability:** leave MCP listen streams out of Sentry request latency ([#9054](https://github.com/archestra-ai/archestra/issues/9054)) ([e3e72fe](https://github.com/archestra-ai/archestra/commit/e3e72fe3ffcb6b41a2c7a35169e42779cc42135a))
+* **openappa:** keep credentials out of policy text and drop the GitHub pull approval ([#9044](https://github.com/archestra-ai/archestra/issues/9044)) ([06f84f5](https://github.com/archestra-ai/archestra/commit/06f84f5d0ff1cd9925e33987d163d6c84eac416b))
+* **openappa:** keep platform guardrail calls out of the chat's OpenAPPA session ([#9053](https://github.com/archestra-ai/archestra/issues/9053)) ([e0451af](https://github.com/archestra-ai/archestra/commit/e0451af9c7a5ecc4f811262c53828f53eb1636a7))
+* **openappa:** let validation replay take an expected hitl offer ([#9057](https://github.com/archestra-ai/archestra/issues/9057)) ([e6c1f80](https://github.com/archestra-ai/archestra/commit/e6c1f8037882cc128cc3512bd0eb0f1b6bb9f4aa))
+* **openappa:** remove agent coverage that overflows on large organizations ([#9063](https://github.com/archestra-ai/archestra/issues/9063)) ([f7da13d](https://github.com/archestra-ai/archestra/commit/f7da13d52ecac65eba269cdf911e1648ffd7138b))
+* **openappa:** withhold a buffered child's output on failed generations ([#9055](https://github.com/archestra-ai/archestra/issues/9055)) ([52e58e2](https://github.com/archestra-ai/archestra/commit/52e58e213bd2e3e49e77f5afe5288b82b7d9008e))
+* **projects:** polish file previews and fit dialogs to content ([#9056](https://github.com/archestra-ai/archestra/issues/9056)) ([6a7335c](https://github.com/archestra-ai/archestra/commit/6a7335c5d96cf00f6c4002b1de7bf809948e8695))
+* **slack:** keep thread mute distinct from stopping a reply ([#9064](https://github.com/archestra-ai/archestra/issues/9064)) ([5aa51f0](https://github.com/archestra-ai/archestra/commit/5aa51f06f43421b8638ebfcd3e55695ee0bdbbec))
+
+
+### Code Refactoring
+
+* **proxy:** move OpenAPPA logic out of the LLM proxy handler ([#9043](https://github.com/archestra-ai/archestra/issues/9043)) ([e00d31e](https://github.com/archestra-ai/archestra/commit/e00d31e0774a2eebf8af3ff6b67314092d041da9))
+
 ## [1.4.0-rc.48](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.47...platform-v1.4.0-rc.48) (2026-10-16)
 
 

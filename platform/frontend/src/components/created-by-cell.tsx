@@ -38,10 +38,13 @@ export function CreatedByCell({
   createdBy,
   className,
   showServiceAccountBadge = true,
+  secondaryText,
 }: {
   createdBy: CreatedBy | null | undefined;
   className?: string;
   showServiceAccountBadge?: boolean;
+  /** Optional second line; the avatar stays centered beside both lines. */
+  secondaryText?: string | null;
 }) {
   if (!createdBy) {
     return null;
@@ -61,7 +64,14 @@ export function CreatedByCell({
           title={detail}
         >
           <CreatorAvatar createdBy={createdBy} />
-          <span className="min-w-0 truncate">{label}</span>
+          <span className="min-w-0">
+            <span className="block truncate">{label}</span>
+            {secondaryText && secondaryText !== label && (
+              <span className="block truncate text-[11px] leading-4 text-muted-foreground">
+                {secondaryText}
+              </span>
+            )}
+          </span>
           {isServiceAccount && showServiceAccountBadge && (
             <Badge
               variant="outline"

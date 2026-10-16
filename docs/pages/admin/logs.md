@@ -23,9 +23,12 @@ Open **Logs** in the sidebar to answer questions such as:
 | **LLM Proxy** | Session: agent, model, tokens, spend | The whole conversation. **Export JSON** saves it. |
 | **MCP Gateway** | Tool call: tool, gateway, account used, result | The arguments and the full result |
 | **Audit** | Change: who, what, when, and if it succeeded | The values before and after, the source IP, and any admin acting as someone else |
-| **Guardrail consults** | [Guardrails](/docs/agents/guardrails) decision: tool, outcome | Why the call was allowed or blocked |
+| **Guardrails consult** | Request to a service used by [Guardrails](/docs/agents/guardrails): service, tool, outcome | The service request and reply |
+| **Agent connections** | Calls grouped by user, agent, or gateway; setup and disconnect events under **Recent activity** | Drill into a group to see which agents and gateways it used |
 
 Open an **LLM Proxy** session or the **MCP Gateway** tab to see request latency; open a request for its **Latency** fact. This measures request processing time before saving the log, including the full stream for LLM requests. Older records may have no timing.
+
+In **Agent connections**, choose a view or group calls with **Show** and **by**, then select a bar or row to drill down. Call counts follow the selected date range; **Active users** always reflects the last 30 days. **User connections** includes users with no calls and lets you expand their configured agents.
 
 ## Keep Prompts Out of the Logs
 

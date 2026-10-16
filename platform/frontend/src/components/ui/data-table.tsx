@@ -235,6 +235,7 @@ export function DataTable<TData, TValue>({
     ...(renderSubComponent
       ? {
           getExpandedRowModel: getExpandedRowModel(),
+          getRowCanExpand: () => true,
           onExpandedChange: setExpanded,
         }
       : {}),

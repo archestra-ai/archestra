@@ -4,11 +4,13 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Plug, PlugZap, Unplug } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo } from "react";
+import { CreatedByCell } from "@/components/created-by-cell";
 import {
   CollectionFilters,
   FilterBar,
   FilterSelect,
 } from "@/components/filter-bar";
+import { LogTime } from "@/components/log-time";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
@@ -25,7 +27,6 @@ import {
 } from "@/lib/connected-client.query";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 import { useMemberSearch } from "@/lib/member.query";
-import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { AgentIcon, agentLabel } from "./agent-icon";
 import type { ConnectionsWindow } from "./connections-window";
 
@@ -35,8 +36,8 @@ const USER_FILTER_LIMIT = 100;
 // The action taken, not the agent's state: a connect is logged when the
 // installer fetches its setup, before the install on the machine finishes.
 const ACTION_LABEL: Record<ConnectionEventAction, string> = {
-  connected: "Connect",
-  disconnected: "Disconnect",
+  connected: "Setup downloaded",
+  disconnected: "Disconnected",
 };
 
 const ACTION_OPTIONS = [
@@ -178,6 +179,8 @@ export function ConnectionLogTable({ window }: { window: ConnectionsWindow }) {
         data={data?.data ?? []}
         getRowId={(row) => row.id}
         hideSelectedCount
+        fixedWidthColumnIds={["agent", "added", "time"]}
+        flexibleColumnIds={["event"]}
         cursorPagination={
           paginationMeta
             ? {
@@ -207,53 +210,44 @@ export function ConnectionLogTable({ window }: { window: ConnectionsWindow }) {
 const columns: ColumnDef<ConnectionEvent>[] = [
   {
     id: "event",
-    header: "Event",
-    size: 190,
-    minSize: 160,
+    header: "Activity",
+    size: 280,
+    minSize: 180,
     cell: ({ row }) => {
-      const { action, disconnectedBy, occurredAt } = row.original;
-      const Icon = action === "connected" ? Plug : Unplug;
+      const event = row.original;
+      const Icon = event.action === "connected" ? Plug : Unplug;
+      const label =
+        event.action === "connected" && event.via === "oauthSignIn"
+          ? "Signed in"
+          : ACTION_LABEL[event.action];
       return (
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-sm">
+        <div className="space-y-1">
+          <span className="flex items-center gap-1.5 text-xs font-medium">
             <Icon className="size-3.5 shrink-0 text-muted-foreground" />
-            <span className="font-medium">{ACTION_LABEL[action]}</span>
-            <span className="truncate text-muted-foreground">
-              {formatRelativeTimeFromNow(occurredAt)}
+            <span>{label}</span>
+          </span>
+          <CreatedByCell
+            createdBy={{
+              id: event.userId,
+              name: event.userName,
+              email: event.userEmail,
+            }}
+            className="text-[11px] text-muted-foreground"
+          />
+          {event.disconnectedBy && (
+            <span className="block pl-7 text-[11px] text-muted-foreground">
+              by {event.disconnectedBy.name}
             </span>
-          </div>
-          <div className="truncate font-mono text-[11px] text-muted-foreground">
-            {formatDate({
-              date: occurredAt,
-              dateFormat: "MMM d, yyyy · HH:mm",
-            })}
-            {disconnectedBy ? ` · by ${disconnectedBy.name}` : ""}
-          </div>
+          )}
         </div>
       );
     },
   },
   {
-    id: "user",
-    header: "User",
-    size: 220,
-    minSize: 170,
-    cell: ({ row }) => (
-      <div className="min-w-0">
-        <div className="truncate text-sm font-medium">
-          {row.original.userName || row.original.userEmail}
-        </div>
-        <div className="truncate text-xs text-muted-foreground">
-          {row.original.userEmail}
-        </div>
-      </div>
-    ),
-  },
-  {
     id: "agent",
     header: "Agent",
-    size: 200,
-    minSize: 160,
+    size: 220,
+    minSize: 220,
     cell: ({ row }) => {
       const { clientId, agentName, deviceName, platform } = row.original;
       const agent = { clientId, name: agentName };
@@ -264,9 +258,9 @@ const columns: ColumnDef<ConnectionEvent>[] = [
         <div className="flex min-w-0 items-center gap-2">
           <AgentIcon agent={agent} />
           <div className="min-w-0">
-            <div className="truncate text-sm">{agentLabel(agent)}</div>
+            <div className="truncate text-xs">{agentLabel(agent)}</div>
             {machine ? (
-              <div className="truncate text-xs text-muted-foreground">
+              <div className="truncate text-[11px] text-muted-foreground">
                 {machine}
               </div>
             ) : null}
@@ -278,8 +272,8 @@ const columns: ColumnDef<ConnectionEvent>[] = [
   {
     id: "added",
     header: "Added",
-    size: 240,
-    minSize: 160,
+    size: 220,
+    minSize: 220,
     cell: ({ row }) => {
       const added = addedTo(row.original);
       return added.length === 0 ? (
@@ -302,6 +296,13 @@ const columns: ColumnDef<ConnectionEvent>[] = [
         </div>
       );
     },
+  },
+  {
+    id: "time",
+    header: "Time",
+    size: 154,
+    minSize: 154,
+    cell: ({ row }) => <LogTime timestamp={row.original.occurredAt} />,
   },
 ];
 

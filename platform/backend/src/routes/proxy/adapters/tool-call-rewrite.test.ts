@@ -386,6 +386,34 @@ describe("Anthropic formatToolCallsSSE", () => {
   // A server-held review rides immediately before its card as plain
   // assistant text: one short-lived text block with its own content-block
   // index in the stream, and a text entry before the tool_use otherwise.
+  test("large review deltas stay bounded, preserve Unicode, and finish before the card", () => {
+    const reviewDetails = `${"x".repeat(4095)}😀${"payload\n".repeat(3000)}`;
+    const adapter = anthropicAdapterFactory.createStreamAdapter();
+    adapter.state.toolCalls.push({ ...REWRITTEN[0], reviewDetails });
+    const events = sseData<
+      AnthropicFrame & { delta?: { type?: string; text?: string } }
+    >(adapter.formatToolCallsSSE?.(adapter.state.toolCalls) ?? []);
+    const deltas = events.filter((event) => event.delta?.type === "text_delta");
+    expect(deltas.map((event) => event.delta?.text).join("")).toBe(
+      reviewDetails,
+    );
+    expect(deltas.length).toBeGreaterThan(1);
+    for (const delta of deltas) {
+      const text = delta.delta?.text ?? "";
+      expect(text.length).toBeLessThanOrEqual(4096);
+      expect(text).not.toMatch(/[\uD800-\uDBFF]$/);
+      expect(text).not.toMatch(/^[\uDC00-\uDFFF]/);
+    }
+    const cardIndex = events.findIndex(
+      (event) => event.content_block?.type === "tool_use",
+    );
+    expect(events.slice(0, cardIndex).at(-1)?.type).toBe("content_block_stop");
+    expect(adapter.toProviderResponse().content[0]).toMatchObject({
+      type: "text",
+      text: reviewDetails,
+    });
+  });
+
   test("emits a call's review details as text before the call, streaming", () => {
     const reviewDetails = `## Approval review\n\n${"exact payload\n".repeat(100)}`;
     const adapter = anthropicAdapterFactory.createStreamAdapter();

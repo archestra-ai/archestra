@@ -1478,9 +1478,9 @@ Retention is an Enterprise feature: the backend does not start when a window is 
 
 - **`ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER`** - Chat provider that writes review summaries. Explicit opt-in: the provider must be one of the chat-capable model providers, and its API key must already be configured (for Kimi, [`ARCHESTRA_CHAT_KIMI_API_KEY`](/docs/reference/configuration#ARCHESTRA_CHAT_KIMI_API_KEY)). Never inferred from the organization's default provider.
   - Default: unset (summaries disabled)
-  - Must be set together with `ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_MODEL`; a partial value stops startup.
+  - Must be set together with [`ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_MODEL`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_MODEL); a partial value stops startup.
   - Uncached summary attempts are limited to five per caller and twenty per organization per minute. At the limit, the complete review remains available without a generated summary.
 
-- **`ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_MODEL`** - Model name for review summaries, served by `ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER`.
+- **`ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_MODEL`** - Model name for review summaries, served by [`ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER).
   - Default: unset (summaries disabled)
-  - Must be set together with `ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER`; a partial value stops startup.
+  - Must be set together with [`ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER); a partial value stops startup.

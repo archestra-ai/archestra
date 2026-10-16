@@ -574,7 +574,7 @@ function fence(text: string, language = "text"): string {
 
 /** JSON quoting distinguishes actual controls from literal backslashes. */
 function escapedLiteral(text: string): string {
-  // The flagless regex keeps surrogate pairs intact for the per-unit escape.
+  // Unicode mode identifies full code points; astral matches emit both UTF-16 units.
   return JSON.stringify(text).replace(
     /[\p{Cf}\u2026]|\p{Default_Ignorable_Code_Point}/gu,
     (character) =>

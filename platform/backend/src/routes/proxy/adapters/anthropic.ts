@@ -1051,19 +1051,36 @@ class AnthropicStreamAdapter
       // with its own output index, so every later block keeps its index.
       if (toolCall.reviewDetails) {
         const reviewIndex = this.nextOutIndex++;
-        for (const event of [
+        const reviewEvents: Array<Record<string, unknown>> = [
           {
             type: "content_block_start",
             index: reviewIndex,
             content_block: { type: "text", text: "" },
           },
-          {
+        ];
+        // Bound individual SSE frames without splitting a UTF-16 surrogate pair.
+        let offset = 0;
+        while (offset < toolCall.reviewDetails.length) {
+          let end = Math.min(offset + 4096, toolCall.reviewDetails.length);
+          const lastUnit = toolCall.reviewDetails.charCodeAt(end - 1);
+          if (
+            end < toolCall.reviewDetails.length &&
+            lastUnit >= 0xd800 &&
+            lastUnit <= 0xdbff
+          )
+            end--;
+          reviewEvents.push({
             type: "content_block_delta",
             index: reviewIndex,
-            delta: { type: "text_delta", text: toolCall.reviewDetails },
-          },
-          { type: "content_block_stop", index: reviewIndex },
-        ]) {
+            delta: {
+              type: "text_delta",
+              text: toolCall.reviewDetails.slice(offset, end),
+            },
+          });
+          offset = end;
+        }
+        reviewEvents.push({ type: "content_block_stop", index: reviewIndex });
+        for (const event of reviewEvents) {
           events.push(
             `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
           );

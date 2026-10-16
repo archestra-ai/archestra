@@ -291,7 +291,9 @@ export function retiredAnnotators(params: {
       reasons.push(reason);
     }
     if (!chosen) {
-      // Why the most recently active binding cannot be kept.
+      // A name enters `found` with its first binding, so a name none of its
+      // bindings can answer has a reason for each: report the most recently
+      // active one's.
       dropped.push({ name, reason: reasons[0] });
       continue;
     }

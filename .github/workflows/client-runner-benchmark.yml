@@ -1,4 +1,4 @@
-# Temporary paired, same-source benchmark. Wave 1.
+# Temporary paired, same-source benchmark. Wave 2: force lint tasks, warm frontend caches.
 name: Lint and Frontend Runner Benchmark
 'on':
   pull_request:
@@ -23,6 +23,8 @@ jobs:
     env:
       TURBO_TOKEN: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+      TURBO_FORCE: 'true'
+      TURBO_REMOTE_CACHE_READ_ONLY: 'true'
     steps:
     - name: Check if this is a release-please PR
       id: check-release-please
@@ -39,13 +41,6 @@ jobs:
         persist-credentials: false
         fetch-depth: 1
         ref: aed871b42e40385d17ca40c1b250d07664e617da
-    - name: Record runner identity
-      working-directory: .
-      run: 'node -e ''const os=require("os"); console.log(JSON.stringify({cpuCount:os.cpus().length,cpuModel:os.cpus()[0].model,memoryBytes:os.totalmem(),node:process.version}))''
-
-        git rev-parse HEAD
-
-        '
     - name: Generate token for release-please PR
       if: ${{ steps.check-release-please.outputs.is-release-please == 'true' }}
       id: generate-token
@@ -65,6 +60,13 @@ jobs:
       uses: ./.github/actions/setup-env
       with:
         working-directory: ./platform
+    - name: Record runner identity
+      working-directory: .
+      run: 'node -e ''const os=require("os"); console.log(JSON.stringify({cpuCount:os.cpus().length,cpuModel:os.cpus()[0].model,memoryBytes:os.totalmem(),node:process.version}))''
+
+        git rev-parse HEAD
+
+        '
     - name: Verify no immature dependencies
       run: pnpm install --fix-lockfile --lockfile-only --ignore-scripts
     - name: Restore Rust build cache
@@ -157,6 +159,10 @@ jobs:
         persist-credentials: false
         fetch-depth: 1
         ref: aed871b42e40385d17ca40c1b250d07664e617da
+    - name: Setup environment
+      uses: ./.github/actions/setup-env
+      with:
+        working-directory: ./platform
     - name: Record runner identity
       working-directory: .
       run: 'node -e ''const os=require("os"); console.log(JSON.stringify({cpuCount:os.cpus().length,cpuModel:os.cpus()[0].model,memoryBytes:os.totalmem(),node:process.version}))''
@@ -164,10 +170,6 @@ jobs:
         git rev-parse HEAD
 
         '
-    - name: Setup environment
-      uses: ./.github/actions/setup-env
-      with:
-        working-directory: ./platform
     - name: Resolve Playwright version
       id: pw-version
       run: 'version=$(pnpm --filter @frontend exec playwright --version | awk ''{print $2}'')

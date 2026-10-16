@@ -1,11 +1,37 @@
 name: Setup Docker Builder
-description: |
-  Wrapper around docker/setup-buildx-action pinned to a vetted version.
-  Creates a docker-container driver builder (the default docker driver cannot
-  export registry build caches). The action's default buildkitd flags allow
-  the network.host entitlement our builds use.
+description: Persistent BuildKit storage for trusted Blacksmith E2E builds, with a local fallback.
+inputs:
+  cache-key:
+    description: Blacksmith sticky-disk key; empty selects the standard builder
+    required: false
+    default: ""
 runs:
   using: composite
   steps:
+    - name: Setup persistent Docker builder
+      id: persistent
+      if: inputs.cache-key != '' && (github.event_name == 'merge_group' || github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+      continue-on-error: true
+      uses: useblacksmith/setup-docker-builder@19215110ab936351210feebdfa5b440b4493e184 # v2.2.0
+      with:
+        cache-key: ${{ inputs.cache-key }}
+        buildx-version: v0.38.0
+        nofallback: "false"
+
+    - name: Inspect persistent Docker builder
+      id: builder
+      if: steps.persistent.outcome == 'success'
+      shell: bash
+      run: |
+        # The upstream action can succeed with its own local fallback. Use our
+        # standard builder in that case so --network host remains supported.
+        if [ "$(docker buildx inspect | awk '$1 == "Driver:" { print $2 }')" = remote ]; then
+          echo "Using persistent Blacksmith Docker builder"
+          echo "persistent=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "::notice::Persistent builder unavailable; using the standard Docker builder"
+        fi
+
     - name: Setup Docker builder
+      if: steps.builder.outputs.persistent != 'true'
       uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0

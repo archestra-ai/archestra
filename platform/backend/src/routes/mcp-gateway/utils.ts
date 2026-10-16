@@ -765,6 +765,7 @@ export async function createAgentServer(params: {
       : [];
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
+    const startedAt = Date.now();
     const { tools, unattestedTools } = await buildAgentMcpToolList({
       agent,
       tokenAuth,
@@ -776,6 +777,7 @@ export async function createAgentServer(params: {
         agentId,
         mcpServerName: "mcp-gateway",
         method: "tools/list",
+        durationMs: Math.max(0, Date.now() - startedAt),
         toolCall: null,
         // biome-ignore lint/suspicious/noExplicitAny: toolResult structure varies by method type
         toolResult: { tools: unattestedTools } as any,
@@ -1048,6 +1050,7 @@ export async function createAgentServer(params: {
               agentId,
               mcpServerName,
               method: "tools/call",
+              durationMs: Math.max(0, Math.round(durationSeconds * 1000)),
               toolCall: {
                 id: `blocked-${Date.now()}`,
                 name,
@@ -1181,6 +1184,7 @@ export async function createAgentServer(params: {
               agentId,
               mcpServerName: archestraMcpBranding.serverName,
               method: "tools/call",
+              durationMs: Math.max(0, Math.round(durationSeconds * 1000)),
               toolCall: {
                 id: `archestra-${Date.now()}`,
                 name,

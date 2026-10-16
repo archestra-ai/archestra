@@ -1786,6 +1786,22 @@ test("inventory rows open files while selection and compact actions stay indepen
     },
   });
   const files = [scenario, { ...scenario, path: "other.appa" }];
+  const waitForInspection = () =>
+    waitFor(
+      () =>
+        expect(
+          client
+            .getMutationCache()
+            .getAll()
+            .some(
+              (mutation) =>
+                mutation.state.status === "success" &&
+                JSON.stringify(mutation.state.variables) ===
+                  JSON.stringify({ files }),
+            ),
+        ).toBe(true),
+      { timeout: 5000 },
+    );
   const submissions: unknown[] = [];
   let finishRun: () => void = () => undefined;
   server.use(
@@ -1818,7 +1834,8 @@ test("inventory rows open files while selection and compact actions stay indepen
       name: "Policy validation scenario.appa",
     }),
   ).toBeVisible();
-  const mutationsBeforeBack = new Set(client.getMutationCache().getAll());
+  // Exercise the case where inspection finishes while the editor is open.
+  await waitForInspection();
   fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
   await screen.findByRole("link", { name: scenario.path });
   await waitFor(() =>
@@ -1850,25 +1867,9 @@ test("inventory rows open files while selection and compact actions stay indepen
       screen.getByRole("link", { name: scenario.path }).closest("tr"),
     ).not.toHaveTextContent("Running"),
   );
-  // Inspection replaces the row actions, so wait for the inspection the
-  // reopened list started before opening the menu, rather than clicking a menu
-  // item that can be unmounted mid-click. The run succeeds too, so tell the
-  // inspection apart by its variables: it sends only the files.
-  await waitFor(
-    () =>
-      expect(
-        client
-          .getMutationCache()
-          .getAll()
-          .some(
-            (mutation) =>
-              !mutationsBeforeBack.has(mutation) &&
-              mutation.state.status === "success" &&
-              Object.keys(mutation.state.variables ?? {}).join() === "files",
-          ),
-      ).toBe(true),
-    { timeout: 5000 },
-  );
+  // Navigation keeps the suite provider mounted, so reuse its completed
+  // inspection instead of expecting a new mutation after returning to the list.
+  await waitForInspection();
   // A late re-render can still swap the row's actions and close the menu
   // under load, so open it until Delete is there to click.
   await waitFor(

@@ -19,6 +19,7 @@ import { LoadingWrapper } from "@/components/loading";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
+import { RequestLatency } from "@/components/request-latency";
 import {
   Accordion,
   AccordionContent,
@@ -224,6 +225,14 @@ function McpToolCallDetail({
                 caller={formatCallerIdentity(mcpToolCall)}
               />
             ),
+          },
+        ]
+      : []),
+    ...(mcpToolCall.durationMs != null
+      ? [
+          {
+            label: "Latency",
+            value: <RequestLatency durationMs={mcpToolCall.durationMs} />,
           },
         ]
       : []),

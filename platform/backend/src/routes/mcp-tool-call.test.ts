@@ -28,6 +28,7 @@ describe("mcp-tool-call routes", () => {
     userId: string | null,
     overrides: {
       method?: string;
+      durationMs?: number;
       createdAt?: Date;
       mcpServerName?: string;
       agentId?: string;
@@ -41,6 +42,7 @@ describe("mcp-tool-call routes", () => {
       toolCall: { id: "call-1", name: "test_tool", arguments: {} },
       toolResult: { content: [{ type: "text", text: "ok" }] },
       createdAt: overrides.createdAt,
+      durationMs: overrides.durationMs,
     });
 
   beforeEach(
@@ -91,6 +93,28 @@ describe("mcp-tool-call routes", () => {
 
   afterEach(async () => {
     await app.close();
+  });
+
+  test("returns recorded latency in list and detail while preserving untimed historical rows", async () => {
+    currentUser = limitedUser;
+    const timed = await seedCall(limitedUser.id, { durationMs: 0 });
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/mcp-tool-calls?limit=10",
+    });
+    expect(list.statusCode).toBe(200);
+    expect(list.json().data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: timed.id, durationMs: 0 }),
+        expect.objectContaining({ id: ownRowId, durationMs: null }),
+      ]),
+    );
+    const detail = await app.inject({
+      method: "GET",
+      url: `/api/mcp-tool-calls/${timed.id}`,
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().durationMs).toBe(0);
   });
 
   test("log:read lists only the caller's own tool calls", async () => {

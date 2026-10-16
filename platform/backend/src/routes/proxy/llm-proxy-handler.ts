@@ -1662,7 +1662,7 @@ export async function handleLLMProxy<
         inputTokens: 0,
         outputTokens: 0,
       };
-      await persistProxyInteraction(record, encryptedChat);
+      await persistProxyInteraction({ record, encryptedChat, streamTiming });
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: resolvedAgent.id },
@@ -1901,7 +1901,7 @@ async function handleStreaming<
         outputTokens: 0,
         toolCallBlock,
       };
-      await persistProxyInteraction(record, encryptedChat);
+      await persistProxyInteraction({ record, encryptedChat, streamTiming });
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: agent.id },
@@ -2635,7 +2635,7 @@ async function handleStreaming<
           costs,
           toolCallBlock,
         });
-        await persistProxyInteraction(record, encryptedChat);
+        await persistProxyInteraction({ record, encryptedChat, streamTiming });
       } catch (interactionError) {
         logger.error(
           { err: interactionError, profileId: agent.id },
@@ -2701,6 +2701,7 @@ async function handleNonStreaming<
     parentContext,
     teams,
     userTeams,
+    streamTiming,
     pluginRegistry,
     pluginContext,
     appaReceipts,
@@ -3093,7 +3094,11 @@ async function handleNonStreaming<
         costs,
         toolCallBlock: toToolCallBlock(toolInvocationRefusal, []),
       });
-      await persistProxyInteraction(refusalRecord, encryptedChat);
+      await persistProxyInteraction({
+        record: refusalRecord,
+        encryptedChat,
+        streamTiming,
+      });
 
       if (pluginRegistry && pluginContext) {
         // A refusal is a terminal answer: the turn ends here, as it does on
@@ -3250,7 +3255,7 @@ async function handleNonStreaming<
       costs,
       toolCallBlock: toToolCallBlock(null, blockedToolCalls),
     });
-    await persistProxyInteraction(record, encryptedChat);
+    await persistProxyInteraction({ record, encryptedChat, streamTiming });
     responsePersisted = true;
   } catch (interactionError) {
     logger.error(
@@ -3625,10 +3630,21 @@ function extractDurationStatusCode(error: unknown): string {
  *   rather than risking a plaintext write or an unrecoverable one.
  * - `none`: ordinary write; at-rest rules apply.
  */
-async function persistProxyInteraction(
-  record: InsertInteraction,
-  encryptedChat: EncryptedChatAuditDisposition,
-): Promise<void> {
+async function persistProxyInteraction({
+  record,
+  encryptedChat,
+  streamTiming,
+}: {
+  record: InsertInteraction;
+  encryptedChat: EncryptedChatAuditDisposition;
+  streamTiming: StreamTiming;
+}): Promise<void> {
+  // Snapshot before database work; streaming calls reach here after consumption,
+  // so this includes the full stream rather than just time to its first byte.
+  record = {
+    ...record,
+    durationMs: Math.max(0, Date.now() - streamTiming.requestReceivedAt),
+  };
   await InteractionModel.create(
     encryptedChat.kind === "redact"
       ? redactEncryptedChatInteraction(record)

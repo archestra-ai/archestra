@@ -1,5 +1,5 @@
 {
-  "id": "04cab13f-acf7-4fef-9f9b-2606bbd3378e",
+  "id": "d5c6177d-ec03-422f-ab08-f57129a147d4",
   "prevId": "cc078a88-fe9f-43b4-8f54-151e989bd12e",
   "version": "7",
   "dialect": "postgresql",
@@ -10784,6 +10784,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "duration_ms": {
+          "name": "duration_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "input_tokens": {
           "name": "input_tokens",
           "type": "integer",
@@ -12051,45 +12057,6 @@
           "tableTo": "kb_documents",
           "columnsFrom": [
             "document_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.kb_connector_document_counts": {
-      "name": "kb_connector_document_counts",
-      "schema": "",
-      "columns": {
-        "connector_id": {
-          "name": "connector_id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "document_count": {
-          "name": "document_count",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "kb_connector_document_counts_connector_id_knowledge_base_connectors_id_fk": {
-          "name": "kb_connector_document_counts_connector_id_knowledge_base_connectors_id_fk",
-          "tableFrom": "kb_connector_document_counts",
-          "tableTo": "knowledge_base_connectors",
-          "columnsFrom": [
-            "connector_id"
           ],
           "columnsTo": [
             "id"

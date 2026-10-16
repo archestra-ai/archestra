@@ -16,6 +16,7 @@ import MessageThread from "@/components/message-thread";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
+import { RequestLatency } from "@/components/request-latency";
 import { SourceBadge } from "@/components/source-badge";
 import {
   Accordion,
@@ -171,6 +172,16 @@ function LogDetail({
         <span className="font-mono tabular-nums">-</span>
       ),
     },
+    ...(dynamicInteraction.durationMs != null
+      ? [
+          {
+            label: "Latency",
+            value: (
+              <RequestLatency durationMs={dynamicInteraction.durationMs} />
+            ),
+          },
+        ]
+      : []),
     { label: "Provider", value: interaction.provider },
     ...(failed
       ? [

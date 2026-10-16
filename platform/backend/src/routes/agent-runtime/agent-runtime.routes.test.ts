@@ -2220,7 +2220,7 @@ describe("Agent Runtime routes", () => {
     const failedDeletion = await app.inject({ method: "DELETE", url });
     expect(failedDeletion.statusCode).toBe(500);
     expect(failedDeletion.json().error.message).toContain(
-      "retrying this request is safe",
+      "you can also retry this request",
     );
     expect(
       (await AgentWorkspaceModel.findByWorkloadName(run.workloadName))?.state,

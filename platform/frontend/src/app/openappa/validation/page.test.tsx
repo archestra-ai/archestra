@@ -1861,12 +1861,21 @@ test("inventory rows open files while selection and compact actions stay indepen
       ).toBe(true),
     { timeout: 5000 },
   );
-  await userEvent.click(
-    screen.getByRole("button", { name: `More actions ${scenario.path}` }),
+  // A late re-render can still swap the row's actions and close the menu
+  // under load, so open it until Delete is there to click.
+  await waitFor(
+    async () => {
+      if (!screen.queryByRole("menu"))
+        await userEvent.click(
+          screen.getByRole("button", {
+            name: `More actions ${scenario.path}`,
+          }),
+        );
+      expect(screen.getByRole("menuitem", { name: "Delete" })).toBeVisible();
+    },
+    { timeout: 5000 },
   );
-  await userEvent.click(
-    await screen.findByRole("menuitem", { name: "Delete" }),
-  );
+  await userEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
   const dialog = await screen.findByRole("dialog", {
     name: "Delete 1 validation file?",
   });

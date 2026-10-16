@@ -17,11 +17,11 @@ export async function deleteAgentWorkspace(params: {
     run.actorKind !== params.actor.kind ||
     run.actorId !== params.actor.id
   )
-    throw new ApiError(404, "Workspace not found");
+    throw new ApiError(404, "Saved run not found");
   const workspace = await AgentWorkspaceModel.findByWorkloadName(
     run.workloadName,
   );
-  if (!workspace) throw new ApiError(404, "Workspace not found");
+  if (!workspace) throw new ApiError(404, "Saved run not found");
   if (workspace.state === "deleted")
     return { previousState: workspace.state, state: "deleted" as const };
   // An old task ID must not tear down a newer turn in the same workspace.
@@ -31,7 +31,7 @@ export async function deleteAgentWorkspace(params: {
   ) {
     throw new ApiError(
       409,
-      "Stop the active run and wait for its transcript to be saved before deleting the workspace",
+      "Stop the active run and wait for its history to be saved before deleting its files",
     );
   }
   if (
@@ -42,7 +42,10 @@ export async function deleteAgentWorkspace(params: {
       to: "deleting",
     }))
   )
-    throw new ApiError(409, "Workspace lifecycle changed; retry deletion");
+    throw new ApiError(
+      409,
+      "The Agent changed state; retry deleting its files",
+    );
   // Persist intent first. A control-plane restart or API failure is retried by
   // the reconciler; claiming a continuation can no longer race this deletion.
   try {
@@ -66,7 +69,7 @@ export async function deleteAgentWorkspace(params: {
     );
     throw new ApiError(
       500,
-      "Workspace deletion is pending automatic retry; retrying this request is safe",
+      "Saved file deletion will retry automatically; you can also retry this request",
     );
   }
   return { previousState: workspace.state, state: "deleted" as const };

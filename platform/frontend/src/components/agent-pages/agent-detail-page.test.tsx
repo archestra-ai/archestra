@@ -202,7 +202,9 @@ describe("AgentDetailPage", () => {
     // The legacy field says organization; the grants say only the owner.
     mockAgent({ ...baseAgent, scope: "org" });
     const { unmount } = render(<AgentDetailPage kind="agent" id="a1" />);
-    expect(screen.getByTestId("audience-chip")).toHaveTextContent("Personal");
+    expect(screen.getByTestId("audience-chip")).toHaveAccessibleName(
+      "Audience: Personal",
+    );
     unmount();
     savedGrants = [
       {
@@ -450,7 +452,7 @@ describe("AgentDetailPage", () => {
     expect(screen.queryByText("connect content")).toBeNull();
   });
 
-  it("states the owner inside the header's audience chip", () => {
+  it("reveals audience and owner on keyboard focus without crowding the header", async () => {
     mockAgent({
       ...baseAgent,
       createdBy: { id: "u1", name: "Ada Lovelace", email: "ada@example.com" },
@@ -462,11 +464,13 @@ describe("AgentDetailPage", () => {
         name: "Audience: Personal, Owner: Ada Lovelace",
       }),
     ).toBeVisible();
-    expect(screen.getByTestId("audience-chip")).toHaveTextContent(
-      "Personal·Ada Lovelace",
+    // Only the owner's avatar sits in the header; the words wait for focus.
+    expect(screen.getByTestId("audience-chip")).not.toHaveTextContent(
+      /Personal|Ada Lovelace/,
     );
-    // No second owner line beside the actions.
-    expect(screen.getAllByText("Ada Lovelace")).toHaveLength(1);
+    screen.getByTestId("audience-chip").focus();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Personal");
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Ada Lovelace");
   });
 
   it("keeps stating the owner on every section, being a fact of the record", () => {
@@ -480,8 +484,8 @@ describe("AgentDetailPage", () => {
     });
     render(<AgentDetailPage kind="agent" id="a1" />);
 
-    expect(screen.getByTestId("audience-chip")).toHaveTextContent(
-      "Ada Lovelace",
+    expect(screen.getByTestId("audience-chip")).toHaveAccessibleName(
+      "Audience: Personal, Owner: Ada Lovelace",
     );
   });
 
@@ -513,7 +517,9 @@ describe("AgentDetailPage", () => {
     expect(
       screen.getByRole("button", { name: "Audience: Personal" }),
     ).toBeVisible();
-    expect(screen.getByTestId("audience-chip")).toHaveTextContent(/^Personal$/);
+    expect(screen.getByTestId("audience-chip")).toHaveAccessibleName(
+      "Audience: Personal",
+    );
     expect(screen.queryByText("—")).toBeNull();
   });
 

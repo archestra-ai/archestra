@@ -247,6 +247,10 @@ export function useCancelAgentRun() {
     onSuccess: async ({ taskId }) => {
       await Promise.all([
         queryClient.invalidateQueries({
+          queryKey: ["agents"],
+          predicate: ({ queryKey }) => queryKey[2] === "runs",
+        }),
+        queryClient.invalidateQueries({
           queryKey: ["agent-runs", taskId],
         }),
         queryClient.invalidateQueries({

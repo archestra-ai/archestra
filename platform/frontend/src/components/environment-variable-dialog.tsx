@@ -75,7 +75,6 @@ interface EnvironmentVariableDialogProps {
   staticLabel?: string;
   installationDescription?: string;
   staticDescription?: string;
-  installationCalloutTitle?: string;
   requiredDescription?: string;
   deferStaticSecretValue?: boolean;
   installationOnlyForSecrets?: boolean;
@@ -134,7 +133,6 @@ export function EnvironmentVariableDialog({
   staticLabel = "Static",
   installationDescription,
   staticDescription,
-  installationCalloutTitle = "The user enters this when installing",
   requiredDescription = "Block installation until the user supplies a value.",
   deferStaticSecretValue = false,
   installationOnlyForSecrets = false,
@@ -294,8 +292,8 @@ export function EnvironmentVariableDialog({
         </>
       }
     >
-      <div className="space-y-5">
-        <div className="space-y-2">
+      <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-2">
           <Label htmlFor="env-var-key">Key</Label>
           <FieldDescription id="env-var-key-hint">
             The environment variable name your application expects, such as
@@ -318,7 +316,7 @@ export function EnvironmentVariableDialog({
           {keyError && <p className="text-xs text-destructive">{keyError}</p>}
         </div>
 
-        <div className="space-y-2">
+        <div className="flex flex-col gap-2">
           <Label htmlFor="env-var-description">Description</Label>
           {(draft.scope === "installation" ||
             (allowRequiredStaticSecret &&
@@ -339,7 +337,7 @@ export function EnvironmentVariableDialog({
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <Label htmlFor="env-var-type">Type</Label>
             <Select
               value={draft.type}
@@ -360,7 +358,7 @@ export function EnvironmentVariableDialog({
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <Label htmlFor="env-var-scope">Availability</Label>
             <FieldScopeSelect
               id="env-var-scope"
@@ -374,9 +372,6 @@ export function EnvironmentVariableDialog({
               installationDescription={installationDescription}
               staticDescription={staticDescription}
             />
-            {draft.scope === "installation" && (
-              <FieldDescription>{installationCalloutTitle}.</FieldDescription>
-            )}
           </div>
         </div>
 
@@ -449,7 +444,6 @@ function credentialBindingPatch(
   return {
     credentialId: option.id,
     key: draft.key || option.defaultKey,
-    description: draft.description || option.description,
     scope,
     value: "",
   };
@@ -472,8 +466,8 @@ function CredentialBindingEditor({
   const credentialsHref = useCredentialsPageHref();
   const selection = reserved?.id ?? "one-off";
   return (
-    <div className="space-y-2">
-      <div className="space-y-1">
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2">
         <Label htmlFor="env-var-credential-binding">Secret source</Label>
         <FieldDescription>
           {reserved
@@ -640,7 +634,7 @@ function StaticValueEditor({
 
   if (useExternalSecretsManager && draft.type === "secret") {
     return (
-      <div className="space-y-2">
+      <div className="flex flex-col gap-2">
         <Label>Vault secret</Label>
         {isVaultRef ? (
           <div className="flex items-center gap-2">
@@ -697,7 +691,7 @@ function StaticValueEditor({
   }
 
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-2">
       <Label htmlFor="env-var-value">Value</Label>
       {hasStoredSecret && (
         <FieldDescription>

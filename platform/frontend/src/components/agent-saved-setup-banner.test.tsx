@@ -45,10 +45,9 @@ describe("saved agent setup notices", () => {
     expect(
       screen.getAllByRole("button", { name: "Sign in with Claude" }),
     ).toHaveLength(1);
-    expect(screen.getByText("Before this agent can run")).toBeVisible();
-    expect(screen.getByText("Connect your Claude subscription")).toBeVisible();
-    expect(screen.getByText("Provide API token")).toBeVisible();
-    expect(screen.getByText("0 of 2 done")).toBeVisible();
+    expect(screen.getByText("Before it runs")).toBeVisible();
+    expect(screen.getByText("Claude subscription")).toBeVisible();
+    expect(screen.getByText("API token")).toBeVisible();
     await act(async () => {
       client.setQueryData(["agents", "agent-1", "runtime", "preflight"], {
         ...preflight,
@@ -56,12 +55,13 @@ describe("saved agent setup notices", () => {
       });
     });
     // A row resolved while the page is open stays, ticked.
-    expect(await screen.findByText("1 of 2 done")).toBeVisible();
-    expect(
-      within(
-        screen.getByText("Provide API token").closest("li") as HTMLElement,
-      ).getByText("Done"),
-    ).toBeVisible();
+    await waitFor(() =>
+      expect(
+        within(
+          screen.getByText("API token").closest("li") as HTMLElement,
+        ).getByText("Done"),
+      ).toBeVisible(),
+    );
     expect(
       screen.getByRole("button", { name: "Sign in with Claude" }),
     ).toBeVisible();
@@ -77,9 +77,7 @@ describe("saved agent setup notices", () => {
         screen.queryByRole("button", { name: "Sign in with Claude" }),
       ).not.toBeInTheDocument(),
     );
-    expect(
-      screen.queryByText("Before this agent can run"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Before it runs")).not.toBeInTheDocument();
     client.clear();
   });
 

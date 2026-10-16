@@ -46,31 +46,17 @@ test("keeps the session title, status, and actions readable in narrow panels", a
   const heading = page.getByRole("heading", { name: title });
   const running = page.getByText("Running", { exact: true });
   const attention = page.getByText("Needs your input", { exact: true });
-  const history = page.getByRole("button", { name: "Session history" });
   const stop = page.getByRole("button", { name: "Stop", exact: true });
   const more = page.getByRole("button", { name: "More run actions" });
   for (const width of [320, 390, 768, 1280]) {
     await page.setViewportSize({ width, height: 844 });
     await expect(heading).toBeVisible();
-    const compact = width < 1280;
-    if (compact) {
-      await expect(history).toBeHidden();
-      await expect(stop).toBeHidden();
-    } else {
-      await expect(history).toBeVisible();
-      await expect(stop).toBeVisible();
-    }
+    await expect(stop).toBeVisible();
     // Real browser geometry catches shrinking the title to a letter or
     // allowing the non-shrinking status to paint over adjacent controls.
     await expect(async () => {
       const boxes = [];
-      for (const element of [
-        heading,
-        running,
-        attention,
-        more,
-        ...(compact ? [] : [history, stop]),
-      ]) {
+      for (const element of [heading, running, attention, more, stop]) {
         await expect(element).toBeVisible();
         const box = await element.boundingBox();
         if (!box) throw new Error("Session header element is not rendered");
@@ -91,17 +77,16 @@ test("keeps the session title, status, and actions readable in narrow panels", a
         }
       }
     }).toPass();
-    if (compact) {
-      await more.click();
-      await expect(
-        page.getByRole("menuitem", { name: "Session history" }),
-      ).toBeVisible();
-      await page.getByRole("menuitem", { name: "Stop", exact: true }).click();
-      await expect(
-        page.getByRole("dialog", { name: "Stop this run?" }),
-      ).toBeVisible();
-      await page.getByRole("button", { name: "Cancel", exact: true }).click();
-    }
+    await more.click();
+    await expect(
+      page.getByRole("menuitem", { name: "Run history" }),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+    await stop.click();
+    await expect(
+      page.getByRole("dialog", { name: "Stop this run?" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
   }
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -141,19 +126,15 @@ test("keeps the session title, status, and actions readable in narrow panels", a
   await page.reload();
   await expect(
     page.getByRole("button", { name: "Resume", exact: true }),
-  ).toBeHidden();
-  await more.click();
+  ).toBeVisible();
   const resumed = page.waitForRequest(
     (request) =>
       request.method() === "POST" &&
       request.url().endsWith(`/api/agent-runs/${taskId}/continue`),
   );
-  await page.getByRole("menuitem", { name: "Resume", exact: true }).click();
+  await page.getByRole("button", { name: "Resume", exact: true }).click();
   expect((await resumed).postDataJSON()).toEqual({});
-  await more.click();
-  await expect(
-    page.getByRole("menuitem", { name: "Resuming…" }),
-  ).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Resuming…" })).toBeDisabled();
   await page.keyboard.press("Escape");
   await expect(
     page.getByRole("heading", { name: "Live terminal" }),

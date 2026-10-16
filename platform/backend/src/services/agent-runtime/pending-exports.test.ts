@@ -266,7 +266,7 @@ describe("files pinned while their runtime is mid-call", () => {
     vi.spyOn(workspaceFiles, "accessAgentWorkspaceFile").mockImplementation(
       async ({ actor }) => {
         if (actor.id !== seeded.context.userId)
-          throw new Error("Workspace not found");
+          throw new Error("Saved run not found");
         return fileResult("owner's notes");
       },
     );

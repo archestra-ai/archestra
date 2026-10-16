@@ -55,6 +55,11 @@ export type RemedyChainStatus = {
  * names its `offer_id`. A later call to the same target with the same
  * arguments joins too: a blocked one arrives as another notice and continues
  * the chain, a released one is the final attempt and closes it.
+ *
+ * Notices in the same step are parallel calls, so each opens its own chain,
+ * and parallel retries close the matching chains oldest first. A retry still
+ * streaming its arguments joins the latest chain for its target that already
+ * has a remedy, until its arguments are complete enough to compare.
  */
 export function identifyRemedyChains(
   parts: readonly unknown[] | undefined,
@@ -65,10 +70,22 @@ export function identifyRemedyChains(
   const getToolShortName = options.getToolShortName;
   if (!parts || !getToolShortName) return [];
 
-  const invocations: { index: number; part: ToolPart; toolName: string }[] = [];
+  const invocations: {
+    index: number;
+    step: number;
+    part: ToolPart;
+    toolName: string;
+  }[] = [];
   const resultIndexByCallId = new Map<string, number>();
   const seenCallIds = new Set<string>();
+  // Without step markers every notice may continue an earlier chain.
+  const hasSteps = parts.some(isStepStartPart);
+  let step = 0;
   parts.forEach((part, index) => {
+    if (isStepStartPart(part)) {
+      step++;
+      return;
+    }
     if (!isToolPart(part)) return;
     const toolName = getToolNameFromPart(part);
     if (!toolName) return;
@@ -78,13 +95,14 @@ export function identifyRemedyChains(
       return;
     }
     if (callId) seenCallIds.add(callId);
-    invocations.push({ index, part, toolName });
+    invocations.push({ index, step, part, toolName });
   });
 
-  const chains: (RemedyChain & { rulingText: string })[] = [];
+  const chains: (RemedyChain & { rulingText: string; noticeStep: number })[] =
+    [];
   const isOpen = (chain: RemedyChain) => chain.finalAttempt === null;
 
-  for (const { index, part, toolName } of invocations) {
+  for (const { index, step, part, toolName } of invocations) {
     const resultIndex = part.toolCallId
       ? resultIndexByCallId.get(part.toolCallId)
       : undefined;
@@ -109,12 +127,14 @@ export function identifyRemedyChains(
       const continued = chains.findLast(
         (chain) =>
           isOpen(chain) &&
+          (!hasSteps || chain.noticeStep < step) &&
           chain.targetToolName === notice.tool &&
           isEqual(chain.targetArguments, notice.arguments),
       );
       if (continued) {
         continued.steps.push(member("notice"));
         continued.rulingText += `\n${rulingText}`;
+        continued.noticeStep = step;
         continue;
       }
       chains.push({
@@ -124,6 +144,7 @@ export function identifyRemedyChains(
         steps: [member("notice")],
         finalAttempt: null,
         rulingText,
+        noticeStep: step,
       });
       continue;
     }
@@ -141,16 +162,27 @@ export function identifyRemedyChains(
     }
 
     const attempt = resolveAttempt({ part, toolName, getToolShortName });
-    const chain = chains.findLast(
-      (candidate) =>
-        isOpen(candidate) &&
-        candidate.targetToolName === attempt.toolName &&
-        isEqual(candidate.targetArguments, attempt.arguments),
-    );
+    const chain =
+      part.state === "input-streaming"
+        ? // Provisional: its arguments are not complete enough to compare.
+          chains.findLast(
+            (candidate) =>
+              isOpen(candidate) &&
+              candidate.targetToolName === attempt.toolName &&
+              candidate.steps.some((member) => member.role === "remedy"),
+          )
+        : chains.find(
+            (candidate) =>
+              isOpen(candidate) &&
+              candidate.targetToolName === attempt.toolName &&
+              isEqual(candidate.targetArguments, attempt.arguments),
+          );
     if (chain) chain.finalAttempt = member("attempt");
   }
 
-  return chains.map(({ rulingText: _rulingText, ...chain }) => chain);
+  return chains.map(
+    ({ rulingText: _rulingText, noticeStep: _noticeStep, ...chain }) => chain,
+  );
 }
 
 /** The chain's state as one call of its target tool. */
@@ -194,6 +226,15 @@ function isToolPart(part: unknown): part is ToolPart {
     "type" in part &&
     typeof part.type === "string" &&
     (part.type.startsWith("tool-") || part.type === "dynamic-tool")
+  );
+}
+
+function isStepStartPart(part: unknown): boolean {
+  return (
+    typeof part === "object" &&
+    part !== null &&
+    "type" in part &&
+    part.type === "step-start"
   );
 }
 

@@ -196,6 +196,63 @@ describe("LLM Proxy Handler Prometheus Metrics", () => {
       });
     });
 
+    test.each([
+      { stream: false, fail: false },
+      { stream: true, fail: false },
+      { stream: false, fail: true },
+      { stream: true, fail: true },
+    ])("persists total latency (stream=$stream, fail=$fail)", async ({
+      stream,
+      fail,
+    }) => {
+      let now = Date.now();
+      vi.spyOn(Date, "now").mockImplementation(() => now);
+      const client = createOpenAiTestClient();
+      const create = client.chat.completions.create;
+      client.chat.completions.create = async (params) => {
+        now += 250;
+        if (!params.stream) {
+          if (fail) throw new Error("Upstream request failed");
+          return create(params);
+        }
+        const result = await create(params);
+        const chunks = result as AsyncIterable<unknown>;
+        return {
+          async *[Symbol.asyncIterator]() {
+            for await (const chunk of chunks) {
+              yield chunk;
+              now += 100;
+              if (fail) throw new Error("Upstream stream failed");
+            }
+          },
+        } as typeof result;
+      };
+      vi.mocked(openaiAdapterFactory.createClient).mockReturnValue(
+        client as never,
+      );
+
+      await app.inject({
+        method: "POST",
+        url: `/v1/openai/${testAgent.id}/chat/completions`,
+        headers: {
+          authorization: "Bearer test-key",
+          "content-type": "application/json",
+        },
+        payload: {
+          model: "gpt-4o",
+          messages: [{ role: "user", content: "Hello" }],
+          stream,
+        },
+      });
+
+      const rows = await InteractionModel.getAllInteractionsForProfile(
+        testAgent.id,
+      );
+      expect(rows).toHaveLength(1);
+      // A streaming response keeps accruing time after its first chunk.
+      expect(rows[0].durationMs).toBe(stream ? (fail ? 350 : 550) : 250);
+    });
+
     test("streaming request increments token and cost metrics", async () => {
       const response = await app.inject({
         method: "POST",

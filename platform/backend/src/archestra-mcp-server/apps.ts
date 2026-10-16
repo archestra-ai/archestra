@@ -1798,6 +1798,7 @@ const registry = defineArchestraTools([
         // so preview exercises the same per-(app, viewer) namespace the running
         // app sees, and no agentId so the authoring agent's own assignments
         // don't gate it. Imported lazily: index.ts imports this module.
+        const startedAt = Date.now();
         const { executeArchestraTool } = await import("./index");
         const response = await executeArchestraTool(
           resolvedToolName,
@@ -1818,6 +1819,7 @@ const registry = defineArchestraTools([
             agentId: null,
             mcpServerName: archestraMcpBranding.serverName,
             method: "tools/call",
+            durationMs: Math.max(0, Date.now() - startedAt),
             toolCall: {
               id: `preview-${userId}-${app.id}-${Date.now()}`,
               name: resolvedToolName,

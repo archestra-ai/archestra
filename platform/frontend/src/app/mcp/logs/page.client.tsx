@@ -21,6 +21,7 @@ import {
 } from "@/components/filter-bar";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { QueryLoadError } from "@/components/query-load-error";
+import { RequestLatency } from "@/components/request-latency";
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
@@ -503,12 +504,15 @@ function McpToolCallsTable({
     {
       id: "createdAt",
       header: "Time",
-      size: 175,
-      minSize: 160,
+      size: 220,
+      minSize: 210,
       cell: ({ row }) => (
         <div className="min-w-0">
-          <div className="text-sm">
-            {formatRelativeTimeFromNow(row.original.createdAt)}
+          <div className="flex items-center gap-2 text-sm">
+            <span className="whitespace-nowrap">
+              {formatRelativeTimeFromNow(row.original.createdAt)}
+            </span>
+            <RequestLatency durationMs={row.original.durationMs} />
           </div>
           <div className="truncate font-mono text-[11px] text-muted-foreground">
             {formatDate({

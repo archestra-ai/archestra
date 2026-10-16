@@ -321,6 +321,7 @@ describe("McpGatewayLogsPage filters", () => {
         data: [
           {
             id: "call-1",
+            durationMs: 386,
             ownerType: "agent",
             agentId: orgGateway.id,
             appId: null,
@@ -362,6 +363,7 @@ describe("McpGatewayLogsPage filters", () => {
       screen.queryByRole("columnheader", { name: "Arguments" }),
     ).toBeNull();
     expect(screen.queryByText(/raw argument only belongs/)).toBeNull();
+    expect(screen.getByLabelText("Total request latency: 386ms")).toBeVisible();
   });
 });
 

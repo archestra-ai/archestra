@@ -668,12 +668,13 @@ class McpClient {
         : undefined;
 
     // Validate and get tool metadata
-    const validationResult = await this.validateAndGetTool(
+    const validationResult = await this.validateAndGetTool({
       toolCall,
       owner,
-      options?.availableTool,
+      availableTool: options?.availableTool,
       encryptedChatContent,
-    );
+      startedAt,
+    });
     if ("error" in validationResult) {
       return validationResult.error;
     }
@@ -712,6 +713,7 @@ class McpClient {
           toolName: toolCall.name,
         },
         encryptedChatContent,
+        startedAt,
       });
     }
 
@@ -727,6 +729,7 @@ class McpClient {
         mcpServerName: catalogItem.name,
         authInfo,
         encryptedChatContent,
+        startedAt,
       });
     }
 
@@ -786,6 +789,7 @@ class McpClient {
         ...(resourceUri ? { _meta: { ui: { resourceUri } } } : {}),
         authInfo,
         encryptedChatContent,
+        startedAt,
       });
     }
 
@@ -798,6 +802,7 @@ class McpClient {
         catalogItem,
         authInfo,
         encryptedChatContent,
+        startedAt,
       });
     if ("error" in targetMcpServerIdResult) {
       return targetMcpServerIdResult.error;
@@ -827,6 +832,7 @@ class McpClient {
               toolResult: this.buildCancelledResult(toolCall, authInfo),
               authInfo,
               encryptedChatContent,
+              startedAt,
             });
             throw error;
           }
@@ -846,6 +852,7 @@ class McpClient {
             mcpServerName,
             authInfo,
             encryptedChatContent,
+            startedAt,
           });
         }
       }
@@ -865,6 +872,7 @@ class McpClient {
           mcpServerName,
           authInfo,
           encryptedChatContent,
+          startedAt,
         });
       }
       // A catalog-level enterprise-managed config is authoritative: assignments
@@ -900,6 +908,7 @@ class McpClient {
           authInfo,
           structuredError: authError,
           encryptedChatContent,
+          startedAt,
         });
       }
 
@@ -908,6 +917,7 @@ class McpClient {
         toolCall,
         owner,
         encryptedChatContent,
+        startedAt,
       });
       if ("error" in secretsResult) {
         return secretsResult.error;
@@ -1030,6 +1040,7 @@ class McpClient {
               targetMcpServerId,
               tokenAuth,
               encryptedChatContent,
+              startedAt,
               enterpriseTransportCredential,
               toolCatalogId: tool.catalogId,
               toolCatalogName: tool.catalogName,
@@ -1142,6 +1153,7 @@ class McpClient {
               _meta: { resourceUri },
               authInfo,
               encryptedChatContent,
+              startedAt,
               structuredContent: {
                 contents: result.contents as unknown,
               },
@@ -1200,6 +1212,7 @@ class McpClient {
               targetMcpServerId,
               tokenAuth,
               encryptedChatContent,
+              startedAt,
               enterpriseTransportCredential,
               toolCatalogId: tool.catalogId,
               toolCatalogName: tool.catalogName,
@@ -1228,6 +1241,7 @@ class McpClient {
               authInfo,
               structuredError: authError,
               encryptedChatContent,
+              startedAt,
             });
           }
 
@@ -1246,6 +1260,7 @@ class McpClient {
             _meta: result._meta,
             authInfo,
             encryptedChatContent,
+            startedAt,
             structuredContent: result.structuredContent as
               | Record<string, unknown>
               | undefined,
@@ -1275,6 +1290,7 @@ class McpClient {
               toolResult: this.buildCancelledResult(toolCall, authInfo),
               authInfo,
               encryptedChatContent,
+              startedAt,
             });
             throw error;
           }
@@ -1299,6 +1315,7 @@ class McpClient {
               mcpServerName,
               authInfo,
               encryptedChatContent,
+              startedAt,
             });
             // A detachable call that has run past the synchronous timeout is
             // a background task by now (it detaches well before that bound);
@@ -1446,6 +1463,7 @@ class McpClient {
               targetMcpServerId,
               tokenAuth,
               encryptedChatContent,
+              startedAt,
               enterpriseTransportCredential,
               toolCatalogId: tool.catalogId,
               toolCatalogName: tool.catalogName,
@@ -1515,6 +1533,7 @@ class McpClient {
                   authInfo,
                   structuredError: assignmentError,
                   encryptedChatContent,
+                  startedAt,
                 });
               }
               const authError = await this.buildExpiredAuthMessage({
@@ -1532,6 +1551,7 @@ class McpClient {
                 authInfo,
                 structuredError: authError,
                 encryptedChatContent,
+                startedAt,
               });
             }
             // No server resolved → "auth required" message with install link
@@ -1548,6 +1568,7 @@ class McpClient {
               authInfo,
               structuredError: authError,
               encryptedChatContent,
+              startedAt,
             });
           }
 
@@ -1558,6 +1579,7 @@ class McpClient {
             mcpServerName,
             authInfo,
             encryptedChatContent,
+            startedAt,
           });
         } finally {
           if (attemptClient) this.releaseClient(attemptClient);
@@ -1996,12 +2018,19 @@ class McpClient {
   /**
    * Validate tool and get metadata
    */
-  private async validateAndGetTool(
-    toolCall: CommonToolCall,
-    owner: ToolOwner,
-    availableTool?: CatalogTool,
-    encryptedChatContent?: ToolCallContentDisposition,
-  ): Promise<
+  private async validateAndGetTool({
+    toolCall,
+    owner,
+    availableTool,
+    encryptedChatContent,
+    startedAt,
+  }: {
+    toolCall: CommonToolCall;
+    owner: ToolOwner;
+    availableTool?: CatalogTool;
+    encryptedChatContent?: ToolCallContentDisposition;
+    startedAt?: number;
+  }): Promise<
     | {
         tool: McpToolAssignment;
         catalogItem: InternalMcpCatalog;
@@ -2112,6 +2141,7 @@ class McpClient {
             toolName: toolCall.name,
           },
           encryptedChatContent,
+          startedAt,
         }),
       };
     }
@@ -2143,6 +2173,7 @@ class McpClient {
             toolName: toolCall.name,
           },
           encryptedChatContent,
+          startedAt,
         }),
       };
     }
@@ -2179,6 +2210,7 @@ class McpClient {
           error: "Tool is missing catalogId",
           mcpServerName: tool.catalogName || "unknown",
           encryptedChatContent,
+          startedAt,
         }),
       };
     }
@@ -2193,6 +2225,7 @@ class McpClient {
           error: `No catalog item found for tool catalog ID ${tool.catalogId}`,
           mcpServerName: tool.catalogName || "unknown",
           encryptedChatContent,
+          startedAt,
         }),
       };
     }
@@ -2207,12 +2240,14 @@ class McpClient {
     toolCall,
     owner,
     encryptedChatContent,
+    startedAt,
     serverLookup,
   }: {
     targetMcpServerId: string;
     toolCall: CommonToolCall;
     owner: ToolOwner;
     encryptedChatContent?: ToolCallContentDisposition;
+    startedAt?: number;
     serverLookup?: ListingServerLookup;
   }): Promise<
     | {
@@ -2239,6 +2274,7 @@ class McpClient {
           error: `MCP server not found when getting secrets for MCP server ${targetMcpServerId}`,
           mcpServerName: "unknown",
           encryptedChatContent,
+          startedAt,
         }),
       };
     }
@@ -2307,6 +2343,7 @@ class McpClient {
     catalogItem,
     authInfo,
     encryptedChatContent,
+    startedAt,
     serverLookup,
   }: {
     tool: McpToolAssignment;
@@ -2315,6 +2352,7 @@ class McpClient {
     tokenAuth?: TokenAuthContext;
     catalogItem: InternalMcpCatalog;
     encryptedChatContent?: ToolCallContentDisposition;
+    startedAt?: number;
     // Identity of the caller, so a refusal here is recorded and rendered like
     // any other result rather than as an anonymous error.
     authInfo?: ToolCallAuthInfo;
@@ -2371,6 +2409,7 @@ class McpClient {
           mcpServerName: fallbackName,
           authInfo,
           encryptedChatContent,
+          startedAt,
         }),
       };
     }
@@ -2407,6 +2446,7 @@ class McpClient {
             authInfo,
             structuredError: reconnectError,
             encryptedChatContent,
+            startedAt,
           }),
         };
       }
@@ -2461,6 +2501,7 @@ class McpClient {
             mcpServerName: fallbackName,
             authInfo,
             encryptedChatContent,
+            startedAt,
           }),
         };
       }
@@ -2484,6 +2525,7 @@ class McpClient {
           mcpServerName: fallbackName,
           authInfo,
           encryptedChatContent,
+          startedAt,
         }),
       };
     }
@@ -2497,6 +2539,7 @@ class McpClient {
           mcpServerName: fallbackName,
           authInfo,
           encryptedChatContent,
+          startedAt,
         }),
       };
     }
@@ -2577,6 +2620,7 @@ class McpClient {
           mcpServerName: fallbackName,
           authInfo,
           encryptedChatContent,
+          startedAt,
         }),
       };
     }
@@ -2639,6 +2683,7 @@ class McpClient {
         authInfo,
         structuredError: authError,
         encryptedChatContent,
+        startedAt,
       }),
     };
   }
@@ -3208,6 +3253,7 @@ class McpClient {
     authInfo?: ToolCallAuthInfo;
     structuredError?: McpToolError;
     encryptedChatContent?: ToolCallContentDisposition;
+    startedAt?: number;
   }): Promise<CommonToolResult> {
     const {
       toolCall,
@@ -3217,6 +3263,7 @@ class McpClient {
       authInfo,
       structuredError,
       encryptedChatContent,
+      startedAt,
     } = opts;
     const normalizedError: McpToolError = structuredError ?? {
       type: "generic",
@@ -3245,6 +3292,7 @@ class McpClient {
       toolResult: errorResult,
       authInfo,
       encryptedChatContent,
+      startedAt,
     });
     return errorResult;
   }
@@ -3262,6 +3310,7 @@ class McpClient {
     authInfo?: ToolCallAuthInfo;
     structuredContent?: Record<string, unknown>;
     encryptedChatContent?: ToolCallContentDisposition;
+    startedAt?: number;
   }): Promise<CommonToolResult> {
     const {
       toolCall,
@@ -3273,6 +3322,7 @@ class McpClient {
       authInfo,
       structuredContent,
       encryptedChatContent,
+      startedAt,
     } = opts;
 
     // `archestraError`, the seeded-app-render marker and the executed-as
@@ -3304,6 +3354,7 @@ class McpClient {
       toolResult,
       authInfo,
       encryptedChatContent,
+      startedAt,
     });
     return toolResult;
   }
@@ -3330,6 +3381,7 @@ class McpClient {
     toolCatalogId: string | null;
     toolCatalogName: string | null;
     encryptedChatContent?: ToolCallContentDisposition;
+    startedAt?: number;
     executeRetry: (
       getTransport: () => Promise<Transport>,
       secrets: Record<string, unknown>,
@@ -3351,6 +3403,7 @@ class McpClient {
       toolCatalogName,
       executeRetry,
       encryptedChatContent,
+      startedAt,
     } = params;
 
     logger.info(
@@ -3465,6 +3518,7 @@ class McpClient {
           mcpServerName,
           structuredError: authError,
           encryptedChatContent,
+          startedAt,
         });
       }
 
@@ -3474,6 +3528,7 @@ class McpClient {
         error: retryErrorMsg,
         mcpServerName,
         encryptedChatContent,
+        startedAt,
       });
     }
   }
@@ -3987,6 +4042,7 @@ class McpClient {
     toolResult: CommonToolResult;
     authInfo?: ToolCallAuthInfo;
     encryptedChatContent?: ToolCallContentDisposition;
+    startedAt?: number;
   }): Promise<void> {
     const { owner, mcpServerName, toolCall, toolResult, authInfo } = params;
     // Skip high-frequency browser tool logging to prevent DB bloat
@@ -4026,6 +4082,10 @@ class McpClient {
           appId: owner.type === "app" ? owner.id : null,
           mcpServerName,
           method: "tools/call",
+          durationMs:
+            params.startedAt === undefined
+              ? null
+              : Math.max(0, Math.round(performance.now() - params.startedAt)),
           toolCall: storedToolCall,
           toolResult: storedToolResult,
           userId: authInfo?.userId ?? null,

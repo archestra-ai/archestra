@@ -178315,6 +178315,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -178598,6 +178604,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -179469,6 +179476,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -179752,6 +179765,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -180150,6 +180164,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -180422,6 +180442,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -180820,6 +180841,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -181092,6 +181119,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -181490,6 +181518,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -181762,6 +181796,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -182160,6 +182195,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -182432,6 +182473,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -182699,6 +182741,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -182982,6 +183030,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -183249,6 +183298,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -183532,6 +183587,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -185853,6 +185909,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -186136,6 +186198,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -189193,6 +189256,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -189476,6 +189545,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -189743,6 +189813,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -190026,6 +190102,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -190293,6 +190370,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -190576,6 +190659,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -190843,6 +190927,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -191126,6 +191216,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -191393,6 +191484,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -191676,6 +191773,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -191943,6 +192041,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -192226,6 +192330,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -192493,6 +192598,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -192776,6 +192887,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -193043,6 +193155,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -193326,6 +193444,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -193593,6 +193712,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -193876,6 +194001,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -194143,6 +194269,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -194426,6 +194558,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -194693,6 +194826,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -194976,6 +195115,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -195243,6 +195383,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -195526,6 +195672,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -195793,6 +195940,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -196076,6 +196229,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -198745,6 +198899,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -199028,6 +199188,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -201692,6 +201853,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -201975,6 +202142,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -204644,6 +204812,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -204927,6 +205101,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -205194,6 +205369,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -205477,6 +205658,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -205980,6 +206162,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -206263,6 +206451,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -206952,6 +207141,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -207235,6 +207430,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -207924,6 +208120,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -208207,6 +208409,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -208887,6 +209090,12 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
                               "inputTokens": {
                                 "nullable": true,
                                 "type": "integer",
@@ -209170,6 +209379,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -209436,6 +209646,12 @@
                               "baselineModel": {
                                 "nullable": true,
                                 "type": "string"
+                              },
+                              "durationMs": {
+                                "nullable": true,
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
                               },
                               "inputTokens": {
                                 "nullable": true,
@@ -209713,6 +209929,7 @@
                               "type",
                               "model",
                               "baselineModel",
+                              "durationMs",
                               "inputTokens",
                               "inputTokensEstimated",
                               "outputTokens",
@@ -210214,6 +210431,12 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "durationMs": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -210320,6 +210543,7 @@
                           "cacheWriteTokens",
                           "cost",
                           "baselineCost",
+                          "durationMs",
                           "createdAt",
                           "type",
                           "externalAgentIdLabel",
@@ -212462,6 +212686,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -212745,6 +212975,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -213616,6 +213847,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -213899,6 +214136,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -214297,6 +214535,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -214569,6 +214813,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -214967,6 +215212,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -215239,6 +215490,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -215637,6 +215889,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -215909,6 +216167,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -216307,6 +216566,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -216579,6 +216844,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -216846,6 +217112,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -217129,6 +217401,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -217396,6 +217669,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -217679,6 +217958,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -220000,6 +220280,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -220283,6 +220569,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -223340,6 +223627,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -223623,6 +223916,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -223890,6 +224184,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -224173,6 +224473,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -224440,6 +224741,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -224723,6 +225030,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -224990,6 +225298,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -225273,6 +225587,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -225540,6 +225855,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -225823,6 +226144,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -226090,6 +226412,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -226373,6 +226701,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -226640,6 +226969,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -226923,6 +227258,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -227190,6 +227526,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -227473,6 +227815,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -227740,6 +228083,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -228023,6 +228372,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -228290,6 +228640,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -228573,6 +228929,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -228840,6 +229197,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -229123,6 +229486,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -229390,6 +229754,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -229673,6 +230043,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -229940,6 +230311,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -230223,6 +230600,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -232892,6 +233270,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -233175,6 +233559,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -235839,6 +236224,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -236122,6 +236513,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -238791,6 +239183,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -239074,6 +239472,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -239341,6 +239740,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -239624,6 +240029,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -240127,6 +240533,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -240410,6 +240822,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -241099,6 +241512,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -241382,6 +241801,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -242071,6 +242491,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -242354,6 +242780,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -243034,6 +243461,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "inputTokens": {
                           "nullable": true,
                           "type": "integer",
@@ -243317,6 +243750,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -243583,6 +244017,12 @@
                         "baselineModel": {
                           "nullable": true,
                           "type": "string"
+                        },
+                        "durationMs": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
                         },
                         "inputTokens": {
                           "nullable": true,
@@ -243860,6 +244300,7 @@
                         "type",
                         "model",
                         "baselineModel",
+                        "durationMs",
                         "inputTokens",
                         "inputTokensEstimated",
                         "outputTokens",
@@ -314388,6 +314829,12 @@
                               "chat"
                             ]
                           },
+                          "durationMs": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -314415,6 +314862,7 @@
                           "authMethod",
                           "oauthClientId",
                           "source",
+                          "durationMs",
                           "createdAt",
                           "userName",
                           "appName"
@@ -314860,6 +315308,12 @@
                         "chat"
                       ]
                     },
+                    "durationMs": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -314887,6 +315341,7 @@
                     "authMethod",
                     "oauthClientId",
                     "source",
+                    "durationMs",
                     "createdAt",
                     "userName",
                     "appName"

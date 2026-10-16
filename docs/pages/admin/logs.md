@@ -2,7 +2,7 @@
 title: Logs and Auditing
 description: See every model request, tool call, and admin change, and choose who can read them and how long they stay
 order: 5
-lastUpdated: 2026-10-08
+lastUpdated: 2026-10-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -24,6 +24,8 @@ Open **Logs** in the sidebar to answer questions such as:
 | **MCP Gateway** | Tool call: tool, gateway, account used, result | The arguments and the full result |
 | **Audit** | Change: who, what, when, and if it succeeded | The values before and after, the source IP, and any admin acting as someone else |
 | **Guardrail consults** | [Guardrails](/docs/agents/guardrails) decision: tool, outcome | Why the call was allowed or blocked |
+
+Open an **LLM Proxy** session or the **MCP Gateway** tab to see latency beside each request’s time. The request detail shows **Latency** with its other facts. This is request processing time before saving the log, including the full stream for LLM requests. Older records may have no timing.
 
 ## Keep Prompts Out of the Logs
 

@@ -787,6 +787,7 @@ class InteractionModel {
           cacheWriteTokens: schema.interactionsTable.cacheWriteTokens,
           cost: schema.interactionsTable.cost,
           baselineCost: schema.interactionsTable.baselineCost,
+          durationMs: schema.interactionsTable.durationMs,
           createdAt: schema.interactionsTable.createdAt,
           source: schema.interactionsTable.source,
           requestType: sql<"main" | "subagent">`

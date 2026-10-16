@@ -4352,6 +4352,8 @@ describe("createAgentServer tools/list", () => {
       throw new Error("Expected tools/call handler to be registered");
     }
 
+    const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now());
+    onTestFinished(() => clock.mockRestore());
     const response = await callToolHandler({
       method: "tools/call",
       params: {
@@ -4360,6 +4362,8 @@ describe("createAgentServer tools/list", () => {
       },
     });
 
+    const rows = await McpToolCallModel.getAllMcpToolCallsForAgent(agent.id);
+    expect(rows.find((row) => row.method === "tools/call")?.durationMs).toBe(0);
     expect(response.isError).not.toBe(true);
     expect(response.structuredContent?.items).toEqual(expect.any(Array));
     expect(response.content[0]?.text).not.toContain("requires an acting user");

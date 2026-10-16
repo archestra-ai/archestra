@@ -25,7 +25,7 @@ Open **Logs** in the sidebar to answer questions such as:
 | **Audit** | Change: who, what, when, and if it succeeded | The values before and after, the source IP, and any admin acting as someone else |
 | **Guardrail consults** | [Guardrails](/docs/agents/guardrails) decision: tool, outcome | Why the call was allowed or blocked |
 
-Open an **LLM Proxy** session or the **MCP Gateway** tab to see latency beside each request’s time. The request detail shows **Latency** with its other facts. This is request processing time before saving the log, including the full stream for LLM requests. Older records may have no timing.
+Open an **LLM Proxy** session or the **MCP Gateway** tab to see request latency; open a request for its **Latency** fact. This measures request processing time before saving the log, including the full stream for LLM requests. Older records may have no timing.
 
 ## Keep Prompts Out of the Logs
 

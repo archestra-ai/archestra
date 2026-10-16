@@ -123,6 +123,8 @@ import { CodexResponsesGenerationError } from "./adapters/openai-codex-translato
 import {
   discardUnadmittedResponsesOutput,
   ResponsesStreamIncompleteError,
+  withoutResponsesModelOutput,
+  withoutResponsesModelOutputSSE,
 } from "./adapters/openai-responses";
 import {
   assertAuthenticatedForKeylessProvider,
@@ -2130,8 +2132,11 @@ async function handleStreaming<
         );
       }
       const failureEvents = streamAdapter.formatToolCallsSSE([]);
-      childStream.flushModel();
-      for (const event of failureEvents) writeToClient(event);
+      childStream.dropModel();
+      for (const event of bufferModelResponse
+        ? withoutResponsesModelOutputSSE(failureEvents)
+        : failureEvents)
+        writeToClient(event);
       writeToClient(streamAdapter.formatEndSSE());
       reply.raw.end();
       streamCompleted = true;
@@ -2446,7 +2451,7 @@ async function handleStreaming<
     }
     if (codexError?.isIncompleteTerminal) {
       // Preserve Chat's legal partial terminal only after failure cleanup.
-      childStream.flushModel();
+      childStream.dropModel();
       const terminal = streamAdapter.processChunk({
         id: codexError.completion.id,
         object: "chat.completion.chunk",
@@ -2877,6 +2882,10 @@ async function handleNonStreaming<
     },
   });
 
+  // Asked before failure cleanup ends the plugin session.
+  const bufferModelResponse =
+    pluginContext !== undefined &&
+    pluginRegistry?.buffersModelResponse(pluginContext) === true;
   const generationFailed = await failResponsesGeneration({
     response: responseAdapter.getOriginalResponse(),
     ctx,
@@ -3255,7 +3264,11 @@ async function handleNonStreaming<
         ? new RecordedCodexGenerationFailure(codexGenerationError)
         : codexGenerationError;
     }
-    return sendResponse(clientResponse);
+    return sendResponse(
+      bufferModelResponse
+        ? withoutUnadmittedModelOutput(clientResponse)
+        : clientResponse,
+    );
   }
   if (pluginRegistry && pluginContext) {
     await pluginRegistry.complete({
@@ -3273,6 +3286,41 @@ async function handleNonStreaming<
 class RecordedCodexGenerationFailure extends ApiError {
   constructor(error: CodexResponsesGenerationError) {
     super(502, error.message);
+  }
+}
+
+/** The client copy of a buffered generation that failed before admission. */
+function withoutUnadmittedModelOutput<TResponse>(
+  response: TResponse,
+): TResponse {
+  const record = asRecord(response);
+  switch (record?.object) {
+    case "response":
+      return withoutResponsesModelOutput(
+        response as Parameters<typeof withoutResponsesModelOutput>[0],
+      ) as TResponse;
+    case "chat.completion":
+      return {
+        ...record,
+        choices: (Array.isArray(record.choices) ? record.choices : []).map(
+          (choice) => {
+            const entry = asRecord(choice);
+            // Keeps only the role: content, refusal and reasoning all carry model text.
+            return {
+              ...entry,
+              message: {
+                role: asRecord(entry?.message)?.role ?? "assistant",
+                content: "",
+              },
+            };
+          },
+        ),
+      } as TResponse;
+    default:
+      throw new ApiError(
+        503,
+        "LLM provider cannot safely withhold a failed governed child response",
+      );
   }
 }
 

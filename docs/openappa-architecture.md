@@ -366,7 +366,7 @@ A child `SessionStart` can return contract instructions rather than a refusal. T
 
 OpenCode's generated handoff plugin adds onboarding guidance only to a verified native root session. Child sessions do not inherit that root-only system instruction. The proxy also removes root-only handoff guidance from child requests. Missing native identity omits the optional guidance rather than modifying returned model text.
 
-Incomplete and failed Responses generations retain their original terminal status, errors, details, usage, and safe output. Partial executable calls and unadmitted hosted-tool content are withheld. Streaming retains text captured before the hosted boundary. A failed final snapshot cannot establish when its message text was generated. The proxy drops ambiguous hosted-derived output, including `output_text`.
+Incomplete and failed Responses generations retain their original terminal status, errors, details, usage, and safe output. Partial executable calls and unadmitted hosted-tool content are withheld. Streaming retains text captured before the hosted boundary. A failed final snapshot cannot establish when its message text was generated. The proxy drops ambiguous hosted-derived output, including `output_text`. A buffered child's or compaction session's failed generation releases no model text to the client, because `ChildEnd` admission never ran; its status, details, usage, and the recorded partial remain.
 
 Translated subscription failures skip successful lifecycle hooks, including `RootEnd` and `ChildEnd`. The failure lifecycle still releases request resources and records the interaction once.
 

@@ -6,6 +6,7 @@ import {
 import type { AppaSessionIdentity } from "@/openappa/wire";
 import { ApiError } from "@/types";
 import type { CommonToolResult } from "@/types/common-llm-format";
+import { asRecord } from "@/utils/as-record";
 import type {
   AppaClientAdapter,
   AppaMatchContext,
@@ -16,7 +17,6 @@ import type {
 import { questionHeader, readHeader } from "../utils";
 import { structuredQuestionRuling } from "./native-question-ruling";
 import {
-  asRecord,
   bindMintedChildTrajectory,
   localToolName,
   namesChildrenFromArguments,

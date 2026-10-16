@@ -334,8 +334,10 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     initialDataAccess: DEFAULT_RESOURCE_ACCESS_RELATIONS,
     initialDataLimit: 100,
     enabled: !isDeletedView,
-    ...catalogFilters,
-    status: undefined,
+    // Pins ignore the table's filters: a pinned agent always shows,
+    // built-in or not.
+    access: DEFAULT_RESOURCE_ACCESS_RELATIONS,
+    includeBuiltIn: true,
     pinned: true,
   });
   const scopedCapabilities = useScopedCapabilities();

@@ -317,8 +317,9 @@ function McpGateways({
     initialDataAccess: DEFAULT_RESOURCE_ACCESS_RELATIONS,
     initialDataLimit: 100,
     enabled: !isDeletedView,
-    ...listFilters,
-    status: undefined,
+    // Pins ignore the table's filters: a pinned gateway always shows.
+    agentTypes: gatewayAgentTypes,
+    access: DEFAULT_RESOURCE_ACCESS_RELATIONS,
     pinned: true,
   });
   const pinGateway = usePinAgent();

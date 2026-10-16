@@ -949,22 +949,7 @@ const registry = defineArchestraTools([
         context,
         AUTHENTICATED_CONTEXT_REQUIRED,
       );
-      return result({
-        ...(await getOpenAppaPolicyTests(organizationId, userId)),
-        replay: {
-          scope:
-            "Ordered tool-call policy decisions in a fresh session per file",
-          inputSchemas:
-            "Effective policy contracts; no installed MCP schema lookup",
-          toolExecution: false,
-          toolResults: "Empty results only",
-          annotators:
-            "Asked live with the organization's credentials, models and battery helpers included",
-          externalRemedyParties: "A policy naming one cannot run",
-          subagentLifecycleEvents: false,
-          missingDependency: "cannot_run, not an allow or deny decision",
-        },
-      });
+      return result(await getOpenAppaPolicyTests(organizationId, userId));
     },
   }),
   defineArchestraTool({

@@ -768,9 +768,9 @@ describe("ArchestraPromptInput", () => {
       expect(
         screen.getByTestId(E2eTestId.ChatFileUploadButton),
       ).toBeInTheDocument();
-      // Enabled state shows the supported-types tooltip rather than the
+      // Enabled state shows the attach hint rather than the
       // disabled "does not support file uploads" message.
-      expect(getFileUploadTooltip("Supports:")).toHaveTextContent("Supports:");
+      expect(getFileUploadTooltip("Attach any file")).toBeInTheDocument();
     });
 
     it("should show settings link in tooltip for admins when file uploads disabled", () => {

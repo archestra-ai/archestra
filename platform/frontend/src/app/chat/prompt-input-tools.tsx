@@ -228,11 +228,11 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   // and surfaced in the conversation's Files panel (and staged into the
   // sandbox when one is available), so the only gate is the org-level toggle.
   const showFileUploadButton = allowFileUploads;
-  const supportedTypesDescription = runtimeMode
-    ? "files are staged into the dedicated runtime before the Agent starts"
+  const attachHint = runtimeMode
+    ? "Attach files for the Agent's runtime"
     : sandboxAvailable
-      ? "any file type"
-      : "any file type (files this model can't read are saved to the chat's Files panel)";
+      ? "Attach any file"
+      : "Attach any file. Unreadable ones go to Files.";
 
   // Check if user can update agent settings (to show settings link in tooltip)
   const { data: canUpdateAgentSettings } = useHasPermissions({
@@ -422,11 +422,9 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
               <span className="sr-only">Attach files</span>
             </Button>
           </TooltipTrigger>
-          {supportedTypesDescription && (
-            <TooltipContent side="top" sideOffset={4}>
-              Supports: {supportedTypesDescription}
-            </TooltipContent>
-          )}
+          <TooltipContent side="top" sideOffset={4}>
+            {attachHint}
+          </TooltipContent>
         </Tooltip>
       ) : (
         <Tooltip>
@@ -475,7 +473,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             type="button"
             aria-label="Context usage"
             data-testid={E2eTestId.ChatContextUsageTrigger}
-            className="inline-flex cursor-pointer items-center justify-center rounded-full outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex size-8 cursor-pointer items-center justify-center rounded-md outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
           >
             <ContextIndicator
               tokensUsed={tokensUsed}
@@ -658,7 +656,9 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                   className="mr-1"
                 />
               )}
-              {modelSource && !subscriptionConnectRequired && (
+              {/* Only a model the user picked earns a glyph (it doubles as the
+                  reset); the agent's or organization's default needs none. */}
+              {modelSource === "user" && !subscriptionConnectRequired && (
                 <ModelSourceIndicator
                   source={modelSource}
                   inConversation={!!conversationId}

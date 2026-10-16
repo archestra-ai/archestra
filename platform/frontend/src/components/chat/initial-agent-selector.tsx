@@ -34,7 +34,6 @@ import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { McpInstallDialogs } from "@/components/chat/mcp-install-dialogs";
 import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -551,9 +550,9 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                   the icons are part of the agent's own button rather than a
                   second control. */}
               {currentAgent?.accessAllTools ? (
-                <Badge variant="secondary" className="shrink-0">
+                <span className="shrink-0 text-xs text-muted-foreground">
                   All tools
-                </Badge>
+                </span>
               ) : !triggerIconsLoaded ? (
                 <span
                   className="flex min-w-14 shrink-0 items-center"

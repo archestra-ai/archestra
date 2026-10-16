@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.0-rc.46](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.45...platform-v1.4.0-rc.46) (2026-10-16)
+
+
+### Bug Fixes
+
+* **api:** expose persisted labels on declarative resource reads ([#9032](https://github.com/archestra-ai/archestra/issues/9032)) ([636733d](https://github.com/archestra-ai/archestra/commit/636733dcd5fbfdb55e93cbd55c7b41eca93e3691))
+
+
+### Performance Improvements
+
+* avoid catalog hydration in metadata reads ([#9030](https://github.com/archestra-ai/archestra/issues/9030)) ([232aab7](https://github.com/archestra-ai/archestra/commit/232aab75a9ec98473e27565949f65c17e633a35f))
+
 ## [1.4.0-rc.45](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.44...platform-v1.4.0-rc.45) (2026-10-16)
 
 

@@ -9,10 +9,8 @@ import { isCommandExecutionTool } from "./command-normalization";
 import {
   type HitlReviewCard,
   hitlInspectionDigest,
-  hitlReviewOverviewCard,
-  needsHitlReviewInspection,
+  hitlReviewCard,
   renderHitlReviewText,
-  withInspectDetailsOption,
 } from "./hitl-review-overview";
 import { summarizeHitlReview } from "./hitl-review-summary";
 import {
@@ -477,9 +475,8 @@ function buildHitlAskUserCard(review: PendingHitlReview): HitlAskUserArguments {
 }
 
 /**
- * The inspectable card for a review: the ordinary card with an "Inspect
- * details" option, or — when the plain card cannot show the review — the
- * compact overview card. When a signed Inspect answer is still pending, the
+ * The inspectable card for a review: the call in the preview pane, with
+ * Allow, Deny and Inspect. When a signed Inspect answer is still pending, the
  * card carries the complete review text for the transport to place above
  * it; the pending state is not consumed here, only when an answer to that
  * very card comes back. Returns undefined when the review is already ruled
@@ -496,6 +493,11 @@ export async function getHitlInspectableAskUserArguments(params: {
       /** The staged payload this card is issued from; rides its claim. */
       digest: string;
       reviewText?: string;
+      /**
+       * The questions the previous card layout asked for this review, so an
+       * answer to a card issued before a deploy can still be read.
+       */
+      previousQuestions: string[];
     }
   | undefined
 > {
@@ -534,14 +536,21 @@ export async function getHitlInspectableAskUserArguments(params: {
     },
   );
   if ("closed" in outcome) return undefined;
-  const card = needsHitlReviewInspection(base)
-    ? hitlReviewOverviewCard({ base, review }).card
-    : withInspectDetailsOption(base);
+  const { card } = hitlReviewCard({ base, review });
   const reviewText =
     params.emit !== false && outcome.inspection?.status === "pending"
       ? renderHitlReviewText(review)
       : undefined;
-  return { card, digest, ...(reviewText ? { reviewText } : {}) };
+  return {
+    card,
+    digest,
+    ...(reviewText ? { reviewText } : {}),
+    // The previous layout asked the plain card's short question, or this
+    // fixed one when that question did not fit its compact card.
+    previousQuestions: [
+      ...new Set([base.shortQuestion ?? base.question, "Approve this call?"]),
+    ],
+  };
 }
 
 /**
@@ -627,12 +636,13 @@ export async function resolveHitlInspectableAnswer(params: {
       if (params.answer === "approve" && inspection?.status === "pending") {
         return { status: "stale" as const };
       }
-      if (params.answer === "approve") {
-        const base = buildHitlAskUserCard(staged);
-        const approvable =
-          !needsHitlReviewInspection(base) ||
-          hitlReviewOverviewCard({ base, review: staged }).approve;
-        if (!approvable) return { status: "stale" as const };
+      // Only a card that showed everything an approval accepts offers Allow.
+      if (
+        params.answer === "approve" &&
+        !hitlReviewCard({ base: buildHitlAskUserCard(staged), review: staged })
+          .approve
+      ) {
+        return { status: "stale" as const };
       }
       const pending = await cache.getAndDelete<PendingHitlReview>(
         reviewKey(session, offerId),

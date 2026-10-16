@@ -66,7 +66,12 @@ import {
   resolveHitlInspectableAnswer,
   sealHitlClosure,
 } from "@/openappa/hitl-review";
-import { HITL_INSPECT_LABEL } from "@/openappa/hitl-review-overview";
+import {
+  HITL_INSPECT_LABEL,
+  hitlReviewCardAnswer,
+  PREVIOUS_HITL_CARD_LABELS,
+  previousHitlCardAnswer,
+} from "@/openappa/hitl-review-overview";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
 import {
   PEER_PROOF_ARGUMENT,
@@ -235,7 +240,7 @@ type AppaPluginObserver = {
 
 type NativeQuestionClaim = {
   offerIds?: string[];
-  /** The card offered Inspect details; its answers resolve inspection state. */
+  /** The card offered Inspect; its answers resolve inspection state. */
   inspectable?: boolean;
   /** The card was issued with the complete review text above it. */
   reviewText?: boolean;
@@ -1990,7 +1995,14 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       shortQuestion: _shortQuestion,
       ...asked
     } = parsed;
-    const args = review ? parsed : asked;
+    const args = review
+      ? parsed
+      : {
+          ...asked,
+          options: asked.options.map(
+            ({ preview: _preview, ...option }) => option,
+          ),
+        };
     return {
       id: call.id,
       name: native.toolName,
@@ -4694,14 +4706,14 @@ async function canonicalizeHitlAskUserCall(params: {
   binding: AppaPluginBinding;
   call: LlmProxyToolCallsContext["toolCalls"][number];
   offerIds: readonly string[];
-  /** Offer the review on the client's native card with Inspect details. */
+  /** Offer the review on the client's native card with Inspect. */
   inspectable?: boolean;
 }): Promise<{
   call: LlmProxyToolCallsContext["toolCalls"][number];
   invalidOfferCount: boolean;
   reviewUnavailable?: boolean;
   offerIds: string[];
-  /** The card offers Inspect details; its answers resolve inspection state. */
+  /** The card offers Inspect; its answers resolve inspection state. */
   inspectable?: boolean;
   /** The exact staged payload the issued card is bound to. */
   digest?: string;
@@ -5271,11 +5283,13 @@ type InspectableHitlAnswerOutcome =
   | { kind: "drop" };
 
 /**
- * Reads the answer to a card that offered Inspect details. Approve and Deny
- * record the ruling; Inspect asks for the complete review as conversation
- * text. A known no-answer seals the review as before; an unreadable answer
- * fails closed without the form. A stale answer — a card superseded before
- * its inspection text was delivered, a forged marker — changes nothing. An
+ * Reads the answer to a card that offered Inspect. Allow and Deny record the
+ * ruling; Inspect asks for the complete review as conversation text. An
+ * answer to a previous-layout card counts the same, except that its Approve
+ * shows the current card again. A known no-answer seals the review as
+ * before; an unreadable answer fails closed without the form. A stale
+ * answer — a card superseded before its inspection text was delivered, a
+ * forged marker — changes nothing. An
  * answer without its own string id is dropped: it rules nothing, and no
  * placeholder id may stand in for it.
  */
@@ -5320,28 +5334,47 @@ async function recordInspectableHitlAnswer(params: {
     );
     return stale;
   }
-  const reading = labeledQuestionRuling(
-    {
-      content:
-        typeof params.answer.content === "string"
-          ? params.answer.content
-          : JSON.stringify(params.answer.content ?? null),
-      ...(typeof params.answer.isError === "boolean"
-        ? { isError: params.answer.isError }
-        : {}),
-    },
+  const result = {
+    content:
+      typeof params.answer.content === "string"
+        ? params.answer.content
+        : JSON.stringify(params.answer.content ?? null),
+    ...(typeof params.answer.isError === "boolean"
+      ? { isError: params.answer.isError }
+      : {}),
+  };
+  let reading = labeledQuestionRuling(
+    result,
     asked.card.shortQuestion ?? asked.card.question,
     asked.card.options.map((option) => option.label),
   );
+  let answer =
+    typeof reading === "object"
+      ? hitlReviewCardAnswer(reading.label)
+      : undefined;
+  if (reading === "unrecognized") {
+    // A card of the previous layout, issued before a deploy, can still be open.
+    for (const question of asked.previousQuestions) {
+      const previous = labeledQuestionRuling(
+        result,
+        question,
+        PREVIOUS_HITL_CARD_LABELS,
+      );
+      if (typeof previous !== "object") continue;
+      const choice = previousHitlCardAnswer(previous.label);
+      if (choice === "ask-again") {
+        logger.warn(
+          { client: binding.adapter?.id, offerId },
+          "OpenAPPA asked again for an approval given on a previous card layout",
+        );
+        return stale;
+      }
+      reading = previous;
+      answer = choice;
+      break;
+    }
+  }
   if (typeof reading === "object") {
-    const answer =
-      reading.label === "Approve"
-        ? ("approve" as const)
-        : reading.label === "Deny"
-          ? ("deny" as const)
-          : reading.label === HITL_INSPECT_LABEL
-            ? ("inspect" as const)
-            : undefined;
     if (answer) {
       const resolved = await resolveHitlInspectableAnswer({
         session,

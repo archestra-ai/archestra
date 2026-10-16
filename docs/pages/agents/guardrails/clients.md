@@ -40,11 +40,11 @@ Read the complete call and policy scope before approving. Long text arguments ca
 
 Archestra prepares the summary with a separate model request, without tools or your conversation history. This uses inference tokens and requires an [explicitly configured summary model](/docs/reference/configuration#ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER); it does not use the organization's default model automatically. If no summary model is configured or summarization fails, the complete review still appears.
 
-Claude Code keeps short approvals on one card. Larger requests start with an overview showing the tool, target, policy scope, and a generated summary when available. Choose **Approve**, **Deny**, or **Inspect details**; opening the details is optional.
+Claude Code asks "Run *tool*?" and offers **Allow**, **Deny**, and **Inspect**. The preview beside the choices shows the call's arguments, and under **Allow** also what an approval accepts. A value too long for the card shows its size and points to **Inspect**.
 
-**Inspect details** prints the complete platform review in the chat transcript, then shows the same approval card again. Prose keeps its paragraphs, commands use literal code blocks, and structured values use formatted JSON. There are no detail-page questions, and inspection never grants permission.
+**Inspect** prints the complete platform review in the chat transcript, then shows the same card again. Prose keeps its paragraphs, commands use literal code blocks, and structured values use formatted JSON. Inspection never grants permission.
 
-Inspecting adds the full review to the conversation history and therefore to subsequent model requests. It does not rewrite earlier messages or change the tool arguments. Stale or mismatched answers cannot authorize a changed call; if the complete policy scope cannot fit safely in the overview, that card does not offer **Approve**.
+Inspecting adds the full review to the conversation history and therefore to subsequent model requests. It does not rewrite earlier messages or change the tool arguments. Stale or mismatched answers cannot authorize a changed call; if the card cannot show everything an approval accepts, it does not offer **Allow**.
 
 Use the chat transcript's selection and copy controls for the full review. Claude Code controls selection inside its native preview pane; Archestra cannot enable it through the question tool.
 

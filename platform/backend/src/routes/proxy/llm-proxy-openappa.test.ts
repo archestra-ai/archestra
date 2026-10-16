@@ -2669,21 +2669,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       questions: [
         {
           question: questionText,
-          header: "Approval",
+          header: "Tool call",
           options: [
-            {
-              label: "Approve",
-              description: "Allow this exact tool call.",
-            },
-            {
-              label: "Deny",
-              description: "Keep this tool call blocked.",
-            },
-            {
-              label: "Inspect details",
-              description:
-                "Show the complete, unchanged review as text in the conversation before deciding.",
-            },
+            { label: "Allow", description: "This exact call." },
+            { label: "Deny", description: "Keep it blocked." },
+            { label: "Inspect", description: "Show the full review in chat." },
           ],
           multiSelect: false,
         },
@@ -3566,7 +3556,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       return next as Record<string, unknown>;
     };
     const approval =
-      'Your questions have been answered: "Canonical HITL review."="Approve". You can now continue with the user\'s answers in mind.';
+      'Your questions have been answered: "Canonical HITL review."="Allow". You can now continue with the user\'s answers in mind.';
     const answeredHistory = [
       { role: "user", content: "Check the weather" },
       {

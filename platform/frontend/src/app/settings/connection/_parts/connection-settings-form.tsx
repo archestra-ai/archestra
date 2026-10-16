@@ -63,11 +63,14 @@ export function ConnectionSettingsForm() {
   const { data: organization } = useOrganization();
   const appName = useAppName();
   const defaultInstructions = defaultRuntimeHandoffInstructions(appName);
-  const { data: mcpGateways } = useAgentOptions({
-    filters: { agentTypes: ["profile", "mcp_gateway"] },
-  });
 
   const [gatewayId, setGatewayId] = useState<string | null>(null);
+  const { data: mcpGateways } = useAgentOptions({
+    filters: {
+      agentTypes: ["profile", "mcp_gateway"],
+      ids: gatewayId ? [gatewayId] : [],
+    },
+  });
   const [defaultClientId, setDefaultClientId] = useState<string | null>(null);
   // UI stores the set of visible clients/providers; null in DB = show all.
   const [shownClientIds, setShownClientIds] =
@@ -331,6 +334,12 @@ export function ConnectionSettingsForm() {
                   flat
                   className="w-60"
                   agents={gatewayItems}
+                  remote={{
+                    filters: {
+                      agentTypes: ["profile", "mcp_gateway"],
+                      excludePersonalGateways: true,
+                    },
+                  }}
                   value={gatewayId ?? DEFAULT_VALUE}
                   onValueChange={(value) =>
                     setGatewayId(value === DEFAULT_VALUE ? null : value)

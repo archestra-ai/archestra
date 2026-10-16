@@ -42,7 +42,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useOrgScopedAgents } from "@/lib/agent.query";
 import {
   APPS_HACKATHON_DATE_RANGE_LABEL,
   APPS_HACKATHON_REGISTER_URL,
@@ -81,7 +80,6 @@ export default function AgentSettingsPage() {
     isLoadingError: isApiKeysLoadError,
     refetch: refetchApiKeys,
   } = useAvailableLlmProviderApiKeys({ toastOnError: false });
-  const { data: orgAgents } = useOrgScopedAgents();
 
   const [selectedApiKeyId, setSelectedApiKeyId] = useState<string>("");
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
@@ -357,7 +355,13 @@ export default function AgentSettingsPage() {
                 mode="single"
                 value={defaultAgentId || "__personal__"}
                 onValueChange={handleAgentChange}
-                agents={orgAgents ?? []}
+                remote={{
+                  filters: {
+                    agentType: "agent",
+                    excludeBuiltIn: true,
+                    scope: "org",
+                  },
+                }}
                 placeholder="Select agent..."
                 searchPlaceholder="Search agents..."
                 className="w-full sm:w-80"

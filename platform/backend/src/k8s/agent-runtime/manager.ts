@@ -1450,7 +1450,7 @@ class AgentRuntimeManager {
     session: Pick<AgentRunRecord, "runtimeScope" | "workloadName">,
   ): Promise<void> {
     const clients = this.requireClients();
-    const deadline = Date.now() + AGENT_RUNTIME_INPUT_STAGING_TIMEOUT_MS;
+    const deadline = Date.now() + AGENT_RUNTIME_POD_REMOVAL_TIMEOUT_MS;
     while (Date.now() < deadline) {
       const pods = await clients.coreApi.listNamespacedPod({
         namespace: session.runtimeScope,
@@ -1814,7 +1814,10 @@ done`
     timeoutMessage: string;
     onProgress?: AgentRuntimeStartupProgressReporter;
   }): Promise<string | null> {
-    const deadline = Date.now() + AGENT_RUNTIME_INPUT_STAGING_TIMEOUT_MS;
+    // A claimed warm workspace can still need scheduling and an image pull.
+    // Give it the same startup budget as a workspace created on demand.
+    const deadline =
+      Date.now() + config.agentRuntime.podStartTimeoutSeconds * 1000;
     let lastProgress: AgentRuntimeStartupProgress | null = null;
     while (Date.now() < deadline) {
       const pod = await this.findPod(params.session);
@@ -1941,7 +1944,7 @@ function pendingTurnSecretName(
  */
 const AGENT_RUNTIME_COMPLETION_POLL_MS = 5_000;
 const AGENT_RUNTIME_INPUT_STAGING_POLL_MS = 500;
-const AGENT_RUNTIME_INPUT_STAGING_TIMEOUT_MS = 5 * 60_000;
+const AGENT_RUNTIME_POD_REMOVAL_TIMEOUT_MS = 5 * 60_000;
 const AGENT_RUNTIME_ATTACH_TIMEOUT_MS = 60_000;
 const AGENT_SANDBOX_CONTROLLER_MISSING_MESSAGE =
   "Agent Runtime needs the Agent Sandbox controller, and this cluster does not have it installed. Ask an administrator to install it.";

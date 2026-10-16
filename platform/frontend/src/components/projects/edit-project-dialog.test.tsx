@@ -49,7 +49,10 @@ afterEach(() => {
 });
 afterAll(() => server.close());
 
-it("keeps a personal default shared with every named project member and offers other valid shared agents", async () => {
+it.each([
+  false,
+  true,
+])("keeps the named-user shared pin through pending/error lookup (fail first: %s) and offers all eligible agents", async (failFirst) => {
   const project = {
     id: "project-1",
     name: "Shared notes",
@@ -63,12 +66,67 @@ it("keeps a personal default shared with every named project member and offers o
     defaultAgent: { id: "selected-agent", name: "Saved helper" },
   };
   const saved: unknown[] = [];
+  let releaseReference!: () => void;
+  const heldReference = new Promise<void>((resolve) => {
+    releaseReference = resolve;
+  });
+  let selectedReadStarted = false;
+  let referenceAttempts = 0;
   server.use(
     http.get(`${origin}/api/projects/project-1`, () =>
       HttpResponse.json(project),
     ),
-    http.get(`${origin}/api/agents/options`, () =>
-      HttpResponse.json([
+    http.get(`${origin}/api/agents/options/page`, ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      expect(params.get("audienceVisibility")).toBe("user");
+      expect(params.get("audienceUserIds")).toBe("owner,colleague");
+      return HttpResponse.json({
+        data: [
+          {
+            id: "selected-agent",
+            name: "Saved helper",
+            agentType: "agent",
+            scope: "personal",
+            authorId: "owner",
+            users: [{ id: "colleague" }],
+          },
+          {
+            id: "alternative-agent",
+            name: "Another shared helper",
+            agentType: "agent",
+            scope: "personal",
+            authorId: "colleague",
+            users: [{ id: "owner" }],
+          },
+          {
+            id: "private-agent",
+            name: "Private helper",
+            agentType: "agent",
+            scope: "personal",
+            authorId: "owner",
+            users: [],
+          },
+        ].filter((agent) => agent.id !== "private-agent"),
+        pagination: { limit: 20, hasNext: false, nextCursor: null },
+      });
+    }),
+    http.get(`${origin}/api/agents/options`, async ({ request }) => {
+      expect(new URL(request.url).searchParams.get("ids")).toBe(
+        "selected-agent",
+      );
+      selectedReadStarted = true;
+      const isAudienceCheck =
+        new URL(request.url).searchParams.get("excludeBuiltIn") === "true";
+      if (isAudienceCheck) referenceAttempts += 1;
+      const rejectReference =
+        failFirst && isAudienceCheck && referenceAttempts === 1;
+      await heldReference;
+      if (rejectReference)
+        return HttpResponse.json(
+          { error: { message: "Temporarily unavailable" } },
+          { status: 503 },
+        );
+      return HttpResponse.json([
         {
           id: "selected-agent",
           name: "Saved helper",
@@ -77,24 +135,8 @@ it("keeps a personal default shared with every named project member and offers o
           authorId: "owner",
           users: [{ id: "colleague" }],
         },
-        {
-          id: "alternative-agent",
-          name: "Another shared helper",
-          agentType: "agent",
-          scope: "personal",
-          authorId: "colleague",
-          users: [{ id: "owner" }],
-        },
-        {
-          id: "private-agent",
-          name: "Private helper",
-          agentType: "agent",
-          scope: "personal",
-          authorId: "owner",
-          users: [],
-        },
-      ]),
-    ),
+      ]);
+    }),
     http.get(`${origin}/api/resource-permissions/project/project-1`, () =>
       HttpResponse.json({
         resource: "project",
@@ -125,8 +167,21 @@ it("keeps a personal default shared with every named project member and offers o
       <EditProjectDialog projectId="project-1" open onOpenChange={() => {}} />
     </QueryClientProvider>,
   );
-  const trigger = await screen.findByRole("combobox");
-  await waitFor(() => expect(trigger).toHaveTextContent("Saved helper"));
+  await waitFor(() => expect(selectedReadStarted).toBe(true));
+  expect(screen.getByRole("button", { name: /^Save$/ })).toBeDisabled();
+  releaseReference();
+  if (failFirst) {
+    await screen.findByRole("alert");
+    expect(screen.getByRole("button", { name: /^Save$/ })).toBeDisabled();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Retry agent lookup" }),
+    );
+  }
+  await screen.findByText("Saved helper");
+  const trigger = screen
+    .getAllByRole("combobox")
+    .find((element) => element.textContent?.includes("Saved helper"));
+  if (!trigger) throw new Error("Saved agent picker is unavailable");
   await userEvent.click(trigger);
   expect(await screen.findByText("Another shared helper")).toBeVisible();
   expect(screen.queryByText("Private helper")).not.toBeInTheDocument();

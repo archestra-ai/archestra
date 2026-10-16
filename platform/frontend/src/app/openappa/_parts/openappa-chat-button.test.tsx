@@ -82,7 +82,8 @@ function show(
 
 test("launch resolves the system agent from the chat roster rather than a user-created copy", async () => {
   server.use(
-    http.get(`${api}/api/agents/chat-roster`, () => {
+    http.get(`${api}/api/agents/chat-roster`, ({ request }) => {
+      expect(new URL(request.url).searchParams.get("bootstrap")).toBe("true");
       return HttpResponse.json([
         makeAgent({
           id: "copy",

@@ -13,7 +13,7 @@ import {
 } from "@/components/oauth-client-created-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
-import { useProfiles } from "@/lib/agent.query";
+import { useAgentOptions } from "@/lib/agent.query";
 import {
   useHasPermissions,
   useScopedCapabilities,
@@ -64,7 +64,7 @@ export function McpOauthManagement({
       id: client.id,
     });
   const query = useAllOauthClients({ enabled: canRead === true });
-  const { data: resources = [] } = useProfiles({
+  const { data: resources = [] } = useAgentOptions({
     filters: { agentTypes: ["mcp_gateway", "agent"] },
   });
   const { data: providerApiKeys = [] } = useLlmProviderApiKeys();

@@ -96,6 +96,11 @@ describe("agent selector presentation parity", () => {
     };
     await replace(shared.id, [
       { subject: { type: "user", id: ctx.user.id }, actions: ["read"] },
+      { subject: { type: "user", id: owner.id }, actions: ["read"] },
+      {
+        subject: { type: "user", id: "00000000-0000-4000-8000-000000000099" },
+        actions: ["read"],
+      },
     ]);
     await replace(teamed.id, [
       { subject: { type: "team", id: team.id }, actions: ["read"] },
@@ -131,6 +136,11 @@ describe("agent selector presentation parity", () => {
     };
     const query = "?excludeBuiltIn=true&agentTypes=agent";
     const admin = await compare(query);
+    expect(
+      admin.find((row: { id: string }) => row.id === shared.id),
+    ).toMatchObject({
+      users: [{ id: ctx.user.id }],
+    });
     expect(
       admin.find((row: { id: string }) => row.id === teamed.id),
     ).toMatchObject({

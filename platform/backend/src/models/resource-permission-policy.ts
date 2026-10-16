@@ -905,6 +905,8 @@ export default class ResourcePermissionPolicyModel {
     resources: ScopedResource[];
     scopes: string[];
     excludeUserIds?: Map<string, string | null>;
+    /** Undefined loads policies; an empty array deliberately represents none. */
+    policies?: ObjectPolicy[];
   }): Promise<Map<string, ReadRecipientDetails>> {
     const recipients =
       await ResourcePermissionPolicyModel.findReadRecipients(params);

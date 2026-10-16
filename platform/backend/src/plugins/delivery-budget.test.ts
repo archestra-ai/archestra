@@ -22,18 +22,27 @@ describe("Plugin delivery budget", () => {
     ).toEqual({ pluginCount: 1, totalBytes: 7 });
   });
 
-  it("rejects count and aggregate-byte overages", () => {
+  it("accepts a delivery at both limits", () => {
+    expect(
+      pluginDeliveryBudgetError({
+        pluginCount: 555,
+        totalBytes: 1110 * 1024 * 1024,
+      }),
+    ).toBeNull();
+  });
+
+  it("rejects count and aggregate-byte overages in readable units", () => {
     expect(
       pluginDeliveryBudgetError({
         pluginCount: PLUGIN_DELIVERY_MAX_COUNT + 1,
         totalBytes: 0,
       }),
-    ).toContain(`${PLUGIN_DELIVERY_MAX_COUNT}`);
+    ).toBe("Plugin delivery is limited to 555 plugins");
     expect(
       pluginDeliveryBudgetError({
         pluginCount: 1,
         totalBytes: PLUGIN_DELIVERY_MAX_BYTES + 1,
       }),
-    ).toContain(`${PLUGIN_DELIVERY_MAX_BYTES}`);
+    ).toBe("Plugin delivery is limited to 1110 MiB of plugin files");
   });
 });

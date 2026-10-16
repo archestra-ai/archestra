@@ -31,7 +31,7 @@ import {
 import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { useProfiles } from "@/lib/agent.query";
+import { useAgentOptions } from "@/lib/agent.query";
 import {
   useOauthClientLabelKeys,
   useOauthClientLabelValues,
@@ -91,7 +91,7 @@ function OauthClientsTable() {
     owner,
     toastOnError: false,
   });
-  const { data: gateways = [] } = useProfiles({
+  const { data: gateways = [] } = useAgentOptions({
     filters: { agentTypes: ["mcp_gateway", "agent"] },
   });
   const { data: providerApiKeys = [] } = useLlmProviderApiKeys();

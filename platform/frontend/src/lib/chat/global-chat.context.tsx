@@ -1089,7 +1089,7 @@ function ChatSessionHook({
       });
 
       // Agents created through chat tool calls bypass the normal frontend
-      // create-agent mutations, so the cached useInternalAgents() list can stay
+      // create-agent mutations, so the cached agent metadata can stay
       // stale unless we invalidate it here. Without this, the prompt input's
       // agent selector may not reflect a newly created agent yet.
       if (toolShortName === TOOL_CREATE_AGENT_SHORT_NAME) {

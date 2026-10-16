@@ -98,6 +98,7 @@ import {
   AgentToolExclusionsSchema,
   ApiError,
   BuiltInAgentConfigSchema,
+  ChatAgentRosterSchema,
   CloneAgentBodySchema,
   CreateAgentBodySchema,
   constructResponseSchema,
@@ -419,6 +420,32 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
+    "/api/agents/chat-roster",
+    {
+      schema: {
+        operationId: RouteId.GetChatAgentRoster,
+        description:
+          "Get authorized chat agent identities and model references",
+        tags: ["Agents"],
+        response: constructResponseSchema(z.array(ChatAgentRosterSchema)),
+      },
+    },
+    async ({ user, organizationId }, reply) => {
+      const params = await getPermittedAgentRosterOptions({
+        query: {
+          agentType: "agent",
+          excludeBuiltIn: true,
+          includeTools: false,
+          view: "chat",
+        },
+        userId: user.id,
+        organizationId,
+      });
+      return reply.send(await AgentModel.findChatRoster(params));
+    },
+  );
+
+  fastify.get(
     "/api/agents/options",
     {
       schema: {
@@ -442,13 +469,18 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ query, user, organizationId }, reply) =>
       reply.send(
-        await findPermittedAgentRoster({
-          query,
-          userId: user.id,
-          organizationId,
-          optionsView: true,
-          ids: query.ids,
-        }),
+        (
+          await findPermittedAgentRoster({
+            query,
+            userId: user.id,
+            organizationId,
+            optionsView: true,
+            ids: query.ids,
+          })
+        ).map((agent) => ({
+          ...agent,
+          users: (agent.users ?? []).map(({ id }) => ({ id })),
+        })),
       ),
   );
 
@@ -478,6 +510,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentTypes: ["agent"],
           excludeBuiltIn: true,
           onlyEnforcingMissingCredentials: true,
+          includeTools: false,
         },
       );
 
@@ -2965,7 +2998,7 @@ const AgentRosterQuerySchema = z.object({
     ),
 });
 
-type PermittedAgentRosterParams = {
+type AgentRosterRequest = {
   query: z.infer<typeof AgentRosterQuerySchema>;
   userId: string;
   organizationId: string;
@@ -2974,12 +3007,23 @@ type PermittedAgentRosterParams = {
 };
 
 function findPermittedAgentRoster(
-  params: PermittedAgentRosterParams & { optionsView: true },
+  params: AgentRosterRequest & { optionsView: true },
 ): Promise<AgentOption[]>;
 function findPermittedAgentRoster(
-  params: PermittedAgentRosterParams & { optionsView?: false },
+  params: AgentRosterRequest & { optionsView?: false },
 ): Promise<Agent[]>;
-async function findPermittedAgentRoster(params: PermittedAgentRosterParams) {
+async function findPermittedAgentRoster(params: AgentRosterRequest) {
+  const { userId, isAgentAdmin, options } =
+    await getPermittedAgentRosterOptions(params);
+  return params.optionsView
+    ? AgentModel.findAll(userId, isAgentAdmin, { ...options, view: "options" })
+    : AgentModel.findAll(userId, isAgentAdmin, {
+        ...options,
+        view: params.query.view,
+      });
+}
+
+async function getPermittedAgentRosterOptions(params: AgentRosterRequest) {
   const { userId, organizationId } = params;
   const {
     agentType,
@@ -3028,9 +3072,8 @@ async function findPermittedAgentRoster(params: PermittedAgentRosterParams) {
       : undefined,
     status,
     includeTools,
+    view: params.optionsView ? "options" : view,
     ids: params.ids,
-  };
-  return params.optionsView
-    ? AgentModel.findAll(userId, isAdmin, { ...options, view: "options" })
-    : AgentModel.findAll(userId, isAdmin, { ...options, view });
+  } satisfies Parameters<typeof AgentModel.findAll>[2];
+  return { userId, isAgentAdmin: isAdmin, options };
 }

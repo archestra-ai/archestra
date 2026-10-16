@@ -76,7 +76,7 @@ vi.mock("@/components/settings/settings-block", () => ({
   ),
 }));
 
-import { useProfiles } from "@/lib/agent.query";
+import { useAgentOptions } from "@/lib/agent.query";
 import { useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
@@ -113,9 +113,9 @@ beforeEach(() => {
   vi.mocked(useSession).mockReturnValue({
     data: { user: { id: "admin" } },
   } as ReturnType<typeof useSession>);
-  vi.mocked(useProfiles).mockReturnValue({
+  vi.mocked(useAgentOptions).mockReturnValue({
     data: [],
-  } as unknown as ReturnType<typeof useProfiles>);
+  } as unknown as ReturnType<typeof useAgentOptions>);
   vi.mocked(useLlmProviderApiKeys).mockReturnValue({
     data: [],
   } as unknown as ReturnType<typeof useLlmProviderApiKeys>);
@@ -436,12 +436,12 @@ describe("ConnectionSettingsForm", () => {
   });
 
   it("offers shared gateways as the default but not a member's personal one", () => {
-    vi.mocked(useProfiles).mockReturnValue({
+    vi.mocked(useAgentOptions).mockReturnValue({
       data: [
         { id: "shared", name: "Team Gateway", isPersonalGateway: false },
         { id: "personal", name: "My Gateway", isPersonalGateway: true },
       ],
-    } as unknown as ReturnType<typeof useProfiles>);
+    } as unknown as ReturnType<typeof useAgentOptions>);
     render(<ConnectionSettingsForm />);
     const options = screen.getByRole("list", {
       name: "Default MCP Gateway options",

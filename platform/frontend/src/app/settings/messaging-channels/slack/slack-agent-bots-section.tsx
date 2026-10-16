@@ -57,7 +57,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { useInternalAgents } from "@/lib/agent.query";
+import { useInternalAgentOptions } from "@/lib/agent.query";
 import { useSession } from "@/lib/auth/auth.query";
 import { useAllChatOpsBindings } from "@/lib/chatops/chatops.query";
 import {
@@ -96,7 +96,7 @@ export function SlackAgentBotsSection({
   const { data, isLoading, refetch, isFetching } = useSlackAgentBots();
   const bots = data?.bots ?? [];
   const canCreateApps = data?.canCreateApps ?? false;
-  const { data: agents = [] } = useInternalAgents();
+  const { data: agents = [] } = useInternalAgentOptions();
   const deleteMutation = useDeleteSlackAgentBot();
   const { data: session } = useSession();
   const userId = session?.user?.id;

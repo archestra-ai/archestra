@@ -24,6 +24,7 @@ const agents = [
     runtime: null,
     description: null,
     teams: [],
+    users: [],
   },
 ];
 

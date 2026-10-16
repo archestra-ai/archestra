@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.4.0-rc.42"
+    "version": "1.4.0-rc.43"
   },
   "components": {
     "schemas": {
@@ -54701,13 +54701,607 @@
         }
       }
     },
+    "/api/agents/chat-roster": {
+      "get": {
+        "operationId": "getChatAgentRoster",
+        "tags": [
+          "Agents"
+        ],
+        "description": "Get authorized chat agent identities and model references\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nRequires `agent:read`; only internal agents visible to the caller are returned.",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "organizationId": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "icon": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "scope": {
+                        "type": "string",
+                        "enum": [
+                          "personal",
+                          "team",
+                          "org"
+                        ]
+                      },
+                      "authorId": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "agentType": {
+                        "type": "string",
+                        "enum": [
+                          "profile",
+                          "mcp_gateway",
+                          "llm_proxy",
+                          "agent"
+                        ]
+                      },
+                      "builtIn": {
+                        "nullable": true,
+                        "type": "boolean"
+                      },
+                      "builtInAgentConfig": {
+                        "nullable": true,
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "enum": [
+                                  "openappa-configuration-agent"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "enum": [
+                                  "context-compaction-subagent"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "enum": [
+                                  "chat-title-generation-subagent"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "enum": [
+                                  "app-runtime-llm-agent"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      },
+                      "runtime": {
+                        "nullable": true,
+                        "type": "object",
+                        "properties": {
+                          "image": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          },
+                          "command": {
+                            "nullable": true,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "inferenceProtocol": {
+                            "type": "string",
+                            "enum": [
+                              "openai_responses",
+                              "openai_chat",
+                              "anthropic"
+                            ]
+                          },
+                          "backend": {
+                            "type": "string",
+                            "enum": [
+                              "kubernetes"
+                            ]
+                          },
+                          "steerMode": {
+                            "type": "string",
+                            "enum": [
+                              "pipe",
+                              "tmux_keys"
+                            ]
+                          },
+                          "privileged": {
+                            "type": "boolean"
+                          },
+                          "resources": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "cpuRequest": {
+                                "type": "string"
+                              },
+                              "memoryRequest": {
+                                "type": "string"
+                              },
+                              "cpuLimit": {
+                                "type": "string"
+                              },
+                              "memoryLimit": {
+                                "type": "string"
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "ports": {
+                            "maxItems": 20,
+                            "type": "array",
+                            "items": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 65535
+                            }
+                          },
+                          "environment": {
+                            "nullable": true,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "key": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "value": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "key",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "credentials": {
+                            "nullable": true,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "key": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128,
+                                  "pattern": "^[A-Z_][A-Z0-9_]*$"
+                                },
+                                "scope": {
+                                  "type": "string",
+                                  "enum": [
+                                    "shared",
+                                    "per_user"
+                                  ]
+                                },
+                                "credentialId": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128,
+                                  "pattern": "^[a-z][a-z0-9._-]*$"
+                                },
+                                "label": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "description": {
+                                  "type": "string",
+                                  "maxLength": 1000
+                                },
+                                "required": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "key",
+                                "scope",
+                                "label",
+                                "required"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "allowAgentSuppliedCredentialValues": {
+                            "type": "boolean"
+                          },
+                          "claudeCode": {
+                            "type": "object",
+                            "properties": {
+                              "authentication": {
+                                "type": "string",
+                                "enum": [
+                                  "provider",
+                                  "subscription"
+                                ]
+                              },
+                              "model": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              }
+                            },
+                            "required": [
+                              "authentication"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "ttlHours": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 720
+                          },
+                          "maxCostUsd": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100000
+                          },
+                          "idleTimeoutMinutes": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1440
+                          }
+                        },
+                        "required": [
+                          "image",
+                          "command",
+                          "inferenceProtocol",
+                          "backend",
+                          "steerMode",
+                          "privileged",
+                          "resources",
+                          "environment",
+                          "credentials",
+                          "ttlHours",
+                          "idleTimeoutMinutes"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "modelId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      "llmApiKeyId": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "organizationId",
+                      "name",
+                      "description",
+                      "icon",
+                      "scope",
+                      "authorId",
+                      "agentType",
+                      "builtIn",
+                      "builtInAgentConfig",
+                      "runtime",
+                      "modelId",
+                      "llmApiKeyId"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "dynamic",
+          "note": "Requires `agent:read`; only internal agents visible to the caller are returned.",
+          "permissions": []
+        }
+      }
+    },
     "/api/agents/options": {
       "get": {
         "operationId": "getAgentOptions",
         "tags": [
           "Agents"
         ],
-        "description": "Get authorized agent names and presentation fields for selectors\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Get authorized agent names and presentation fields for selectors\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nChecked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`. If no type filter is provided, the user must have read access to at least one agent type.",
         "parameters": [
           {
             "schema": {
@@ -55074,6 +55668,21 @@
                           ],
                           "additionalProperties": false
                         }
+                      },
+                      "users": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id"
+                          ],
+                          "additionalProperties": false
+                        }
                       }
                     },
                     "required": [
@@ -55087,7 +55696,8 @@
                       "isPersonalGateway",
                       "runtime",
                       "description",
-                      "teams"
+                      "teams",
+                      "users"
                     ],
                     "additionalProperties": false
                   }
@@ -55329,8 +55939,8 @@
           }
         },
         "x-required-permissions": {
-          "kind": "none",
-          "note": "None (no additional RBAC permission required)",
+          "kind": "dynamic",
+          "note": "Checked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`. If no type filter is provided, the user must have read access to at least one agent type.",
           "permissions": []
         }
       }
@@ -149126,7 +149736,7 @@
                     "pattern": "^[A-Za-z0-9_-]{1,128}$"
                   },
                   "plugins": {
-                    "maxItems": 50,
+                    "maxItems": 555,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -154406,7 +155016,7 @@
                     "properties": {
                       "skillIds": {
                         "minItems": 1,
-                        "maxItems": 500,
+                        "maxItems": 1111,
                         "type": "array",
                         "items": {
                           "type": "string",
@@ -154427,7 +155037,7 @@
                     ]
                   },
                   "pluginIds": {
-                    "maxItems": 50,
+                    "maxItems": 555,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -424364,7 +424974,7 @@
                 "type": "object",
                 "properties": {
                   "skillIds": {
-                    "maxItems": 500,
+                    "maxItems": 1111,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -424373,7 +424983,7 @@
                     }
                   },
                   "pluginIds": {
-                    "maxItems": 50,
+                    "maxItems": 555,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -424833,7 +425443,7 @@
                 "type": "object",
                 "properties": {
                   "skillIds": {
-                    "maxItems": 500,
+                    "maxItems": 1111,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -424842,7 +425452,7 @@
                     }
                   },
                   "pluginIds": {
-                    "maxItems": 50,
+                    "maxItems": 555,
                     "type": "array",
                     "items": {
                       "type": "string",

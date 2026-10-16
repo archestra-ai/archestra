@@ -16,7 +16,7 @@ import {
   vi,
 } from "vitest";
 import { AccountPageActionSlotContext } from "@/app/account/_components/account-page-action";
-import { useInternalAgents } from "@/lib/agent.query";
+import { useInternalAgentOptions } from "@/lib/agent.query";
 import {
   useHasPermissions,
   useScopedCapabilities,
@@ -28,7 +28,7 @@ import { RuntimeCredentialsSection } from "./runtime-credentials-section";
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
-vi.mock("@/lib/agent.query", () => ({ useInternalAgents: vi.fn() }));
+vi.mock("@/lib/agent.query", () => ({ useInternalAgentOptions: vi.fn() }));
 vi.mock("@/components/claude-code-account", () => ({
   ClaudeCodeAccount: () => <div>Claude Code sign-in</div>,
 }));
@@ -106,12 +106,12 @@ beforeEach(() => {
     typeof useHasPermissions
   >);
   vi.mocked(useFeature).mockReturnValue(false as never);
-  vi.mocked(useInternalAgents).mockReturnValue({
+  vi.mocked(useInternalAgentOptions).mockReturnValue({
     data: [],
     isError: false,
     isPending: false,
     refetch: vi.fn(),
-  } as unknown as ReturnType<typeof useInternalAgents>);
+  } as unknown as ReturnType<typeof useInternalAgentOptions>);
   vi.mocked(useScopedCapabilities).mockReturnValue({
     data: [],
   } as unknown as ReturnType<typeof useScopedCapabilities>);
@@ -255,12 +255,12 @@ it("Settings → Credentials shows the reader's Claude Code sign-in above the ta
   vi.mocked(useFeature).mockImplementation(
     (feature) => (feature === "agentRuntime") as never,
   );
-  vi.mocked(useInternalAgents).mockReturnValue({
+  vi.mocked(useInternalAgentOptions).mockReturnValue({
     data: [{ id: "agent-1", runtime: { command: ["archestra-claude-code"] } }],
     isError: false,
     isPending: false,
     refetch: vi.fn(),
-  } as unknown as ReturnType<typeof useInternalAgents>);
+  } as unknown as ReturnType<typeof useInternalAgentOptions>);
   renderTable();
   await screen.findByText("Credential 0");
   expect(screen.getByText("Claude Code sign-in")).toBeVisible();

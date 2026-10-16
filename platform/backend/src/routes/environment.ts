@@ -24,6 +24,7 @@ import {
   EnvironmentListSchema,
   EnvironmentResourceDefaultsSchema,
   type NetworkPolicy,
+  ReadEnvironmentSchema,
   SelectEnvironmentSchema,
   UpdateEnvironmentResourceDefaultsSchema,
   UpdateEnvironmentSchema,
@@ -82,7 +83,7 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Read an org-level deployment environment by ID.",
         tags: ["Organization"],
         params: z.object({ id: UuidIdSchema }),
-        response: constructResponseSchema(SelectEnvironmentSchema),
+        response: constructResponseSchema(ReadEnvironmentSchema),
       },
     },
     async ({ organizationId, params }, reply) => {
@@ -93,7 +94,13 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!environment) {
         throw new ApiError(404, "Environment not found");
       }
-      return reply.send(environment);
+      const labels = await EnvironmentLabelModel.getLabelsForMany([
+        environment.id,
+      ]);
+      return reply.send({
+        ...environment,
+        labels: labels.get(environment.id) ?? [],
+      });
     },
   );
 

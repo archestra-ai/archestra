@@ -44643,6 +44643,12 @@ export type GetEnvironmentResponses = {
         sortOrder: number;
         createdAt: string;
         updatedAt: string;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { EnvironmentLabelModel } from "@/models/entity-labels";
 import EnvironmentModel from "@/models/environment";
 import environmentRoutes from "@/routes/environment";
 import { describe, expect, test } from "@/test";
@@ -13,6 +14,9 @@ describe("GET /api/environments/:id", () => {
       name: "Provider test environment",
       description: "Initial description",
     });
+    await EnvironmentLabelModel.syncLabels(environment.id, [
+      { key: "stage", value: "test" },
+    ]);
     const read = () => ctx.app.inject(`/api/environments/${environment.id}`);
     const initial = await read();
     expect(initial.statusCode).toBe(200);
@@ -20,8 +24,12 @@ describe("GET /api/environments/:id", () => {
       id: environment.id,
       name: "Provider test environment",
       description: "Initial description",
+      labels: [expect.objectContaining({ key: "stage", value: "test" })],
     });
 
+    await EnvironmentLabelModel.syncLabels(environment.id, [
+      { key: "stage", value: "updated" },
+    ]);
     await EnvironmentModel.update({
       id: environment.id,
       organizationId: ctx.organizationId,
@@ -30,6 +38,9 @@ describe("GET /api/environments/:id", () => {
     const updated = await read();
     expect(updated.statusCode).toBe(200);
     expect(updated.json().description).toBe("Changed outside the provider");
+    expect(updated.json().labels).toEqual([
+      expect.objectContaining({ key: "stage", value: "updated" }),
+    ]);
   });
 
   test("returns the same 404 for absent and foreign environments", async ({

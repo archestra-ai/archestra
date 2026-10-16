@@ -793,6 +793,45 @@ export function discardUnadmittedResponsesOutput(
   } as OpenAiResponsesResponse;
 }
 
+/**
+ * The client copy of a buffered generation that failed before admission:
+ * no message text, but the failure status, details, ids and usage remain.
+ */
+export function withoutResponsesMessages(
+  response: OpenAiResponsesResponse,
+): OpenAiResponsesResponse {
+  return {
+    ...response,
+    output: response.output.filter((item) => item.type !== "message"),
+    ...("output_text" in response ? { output_text: "" } : {}),
+  } as OpenAiResponsesResponse;
+}
+
+/** Applies `withoutResponsesMessages` to every response envelope in SSE frames. */
+export function withoutResponsesMessagesSSE(
+  frames: readonly (string | Uint8Array)[],
+): string[] {
+  return frames.map((frame) =>
+    (typeof frame === "string" ? frame : Buffer.from(frame).toString("utf8"))
+      .split("\n")
+      .map((line) => {
+        if (!line.startsWith("data: ")) return line;
+        const payload = tryParseJsonObject(line.slice("data: ".length));
+        const response = payload.response;
+        if (!isRecord(response) || !Array.isArray(response.output)) {
+          return line;
+        }
+        return `data: ${JSON.stringify({
+          ...payload,
+          response: withoutResponsesMessages(
+            response as unknown as OpenAiResponsesResponse,
+          ),
+        })}`;
+      })
+      .join("\n"),
+  );
+}
+
 class OpenAiResponsesStreamAdapter
   implements
     LLMStreamAdapter<OpenAiResponsesStreamChunk, OpenAiResponsesResponse>

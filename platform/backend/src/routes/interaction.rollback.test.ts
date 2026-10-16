@@ -1256,6 +1256,56 @@ describe("interaction routes", () => {
       ]);
     });
 
+    test("log:read user-ids stays the caller for any search, ids, or limit", async () => {
+      currentUser = limitedUser;
+
+      for (const query of [
+        `search=${encodeURIComponent(otherUser.name)}`,
+        `ids=${otherUser.id}`,
+        "limit=100",
+      ]) {
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/interactions/user-ids?${query}`,
+        });
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toEqual([
+          { id: limitedUser.id, name: limitedUser.name },
+        ]);
+      }
+    });
+
+    test("log:admin user-ids searches, resolves ids, and caps the limit", async () => {
+      const search = await app.inject({
+        method: "GET",
+        url: `/api/interactions/user-ids?search=${encodeURIComponent(otherUser.name)}`,
+      });
+      expect(search.json()).toEqual([
+        { id: otherUser.id, name: otherUser.name },
+      ]);
+
+      const ids = await app.inject({
+        method: "GET",
+        url: `/api/interactions/user-ids?ids=${limitedUser.id},${currentUser.id}`,
+      });
+      // The caller has no logs here, so only the user with logs resolves.
+      expect(ids.json()).toEqual([
+        { id: limitedUser.id, name: limitedUser.name },
+      ]);
+
+      const one = await app.inject({
+        method: "GET",
+        url: "/api/interactions/user-ids?limit=1",
+      });
+      expect(one.json()).toHaveLength(1);
+
+      const tooMany = await app.inject({
+        method: "GET",
+        url: "/api/interactions/user-ids?limit=101",
+      });
+      expect(tooMany.statusCode).toBe(400);
+    });
+
     test("log:read plus log:admin sees every row in the active organization", async ({
       makeAgent,
       makeOrganization,

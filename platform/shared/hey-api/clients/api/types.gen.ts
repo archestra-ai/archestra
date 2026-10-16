@@ -57747,7 +57747,11 @@ export type GetUniqueExternalAgentIdsResponse = GetUniqueExternalAgentIdsRespons
 export type GetUniqueUserIdsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        search?: string;
+        ids?: Array<string>;
+        limit?: number;
+    };
     url: '/api/interactions/user-ids';
 };
 

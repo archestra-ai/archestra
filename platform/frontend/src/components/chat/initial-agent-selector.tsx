@@ -571,9 +571,8 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                   onOpenChange={setSummaryOpen}
                 />
               )}
-              {runtimeEnabled && displayAgent?.runtime && (
-                <RuntimeCapableIndicator runtime={displayAgent.runtime} />
-              )}
+              {/* No runtime mark here: the composer's runtime row below
+                  already says this agent starts a dedicated runtime. */}
             </PromptInputButton>
           </PopoverTrigger>
           <PopoverContent

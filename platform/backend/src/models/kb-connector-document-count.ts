@@ -2,6 +2,7 @@ import { and, count, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type { ConnectorType } from "@/types/knowledge-connector";
+import { chunkForBulkStatement } from "@/utils/db";
 
 /**
  * Stored per-connector document totals (`kb_connector_document_counts`).
@@ -10,7 +11,9 @@ import type { ConnectorType } from "@/types/knowledge-connector";
  * at that moment; nothing adds to or subtracts from a stored value. Writers
  * (sync runs, document deletes and uploads) replace the row. Readers count a
  * connector that has no row yet, store the result only if no writer got there
- * first, and use it.
+ * first, and use it. Statements that take a list of connectors run in batches
+ * (`chunkForBulkStatement`), so an organization-wide recount stays under the
+ * bind-parameter cap.
  */
 class KbConnectorDocumentCountModel {
   /**
@@ -65,21 +68,17 @@ class KbConnectorDocumentCountModel {
   ): Promise<Map<string, number>> {
     if (connectorIds.length === 0) return new Map();
 
-    const stored = await db
-      .select({
-        connectorId: schema.kbConnectorDocumentCountsTable.connectorId,
-        documentCount: schema.kbConnectorDocumentCountsTable.documentCount,
-      })
-      .from(schema.kbConnectorDocumentCountsTable)
-      .where(
-        inArray(
-          schema.kbConnectorDocumentCountsTable.connectorId,
-          connectorIds,
-        ),
-      );
-    const totals = new Map(
-      stored.map((row) => [row.connectorId, row.documentCount]),
-    );
+    const totals = new Map<string, number>();
+    for (const ids of chunkForBulkStatement(connectorIds)) {
+      const stored = await db
+        .select({
+          connectorId: schema.kbConnectorDocumentCountsTable.connectorId,
+          documentCount: schema.kbConnectorDocumentCountsTable.documentCount,
+        })
+        .from(schema.kbConnectorDocumentCountsTable)
+        .where(inArray(schema.kbConnectorDocumentCountsTable.connectorId, ids));
+      for (const row of stored) totals.set(row.connectorId, row.documentCount);
+    }
 
     const uncounted = connectorIds.filter((id) => !totals.has(id));
     if (uncounted.length > 0) {
@@ -136,17 +135,18 @@ class KbConnectorDocumentCountModel {
   private static async countLive(
     connectorIds: string[],
   ): Promise<Map<string, number>> {
-    const rows = await db
-      .select({
-        connectorId: schema.kbDocumentsTable.connectorId,
-        total: count(),
-      })
-      .from(schema.kbDocumentsTable)
-      .where(inArray(schema.kbDocumentsTable.connectorId, connectorIds))
-      .groupBy(schema.kbDocumentsTable.connectorId);
-
     const totals = new Map(connectorIds.map((id) => [id, 0]));
-    for (const row of rows) totals.set(row.connectorId, row.total);
+    for (const ids of chunkForBulkStatement(connectorIds)) {
+      const rows = await db
+        .select({
+          connectorId: schema.kbDocumentsTable.connectorId,
+          total: count(),
+        })
+        .from(schema.kbDocumentsTable)
+        .where(inArray(schema.kbDocumentsTable.connectorId, ids))
+        .groupBy(schema.kbDocumentsTable.connectorId);
+      for (const row of rows) totals.set(row.connectorId, row.total);
+    }
     return totals;
   }
 
@@ -154,22 +154,23 @@ class KbConnectorDocumentCountModel {
     totals: Map<string, number>,
     options: { replace: boolean },
   ): Promise<void> {
-    if (totals.size === 0) return;
-    const insert = db.insert(schema.kbConnectorDocumentCountsTable).values(
-      [...totals].map(([connectorId, documentCount]) => ({
-        connectorId,
-        documentCount,
-      })),
-    );
-    if (options.replace) {
-      await insert.onConflictDoUpdate({
-        target: schema.kbConnectorDocumentCountsTable.connectorId,
-        set: { documentCount: sql`excluded.document_count` },
-      });
-    } else {
-      await insert.onConflictDoNothing({
-        target: schema.kbConnectorDocumentCountsTable.connectorId,
-      });
+    for (const rows of chunkForBulkStatement([...totals])) {
+      const insert = db.insert(schema.kbConnectorDocumentCountsTable).values(
+        rows.map(([connectorId, documentCount]) => ({
+          connectorId,
+          documentCount,
+        })),
+      );
+      if (options.replace) {
+        await insert.onConflictDoUpdate({
+          target: schema.kbConnectorDocumentCountsTable.connectorId,
+          set: { documentCount: sql`excluded.document_count` },
+        });
+      } else {
+        await insert.onConflictDoNothing({
+          target: schema.kbConnectorDocumentCountsTable.connectorId,
+        });
+      }
     }
   }
 

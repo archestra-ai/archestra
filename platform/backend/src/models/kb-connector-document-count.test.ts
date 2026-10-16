@@ -1,3 +1,5 @@
+import { count, inArray } from "drizzle-orm";
+import db, { schema } from "@/database";
 import { describe, expect, test } from "@/test";
 import type { InsertKbDocument } from "@/types";
 import KbConnectorDocumentCountModel from "./kb-connector-document-count";
@@ -108,6 +110,56 @@ describe("KbConnectorDocumentCountModel", () => {
     expect(
       await KbConnectorDocumentCountModel.findByConnectorIds([jira.id]),
     ).toEqual(new Map([[jira.id, 0]]));
+  });
+
+  test("counts and stores more connectors than one statement batch holds", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const connectors = await db
+      .insert(schema.knowledgeBaseConnectorsTable)
+      .values(
+        Array.from({ length: 1001 }, (_, i) => ({
+          organizationId: org.id,
+          name: `Batch connector ${i}`,
+          connectorType: "jira" as const,
+          config: {
+            type: "jira" as const,
+            jiraBaseUrl: "https://test.atlassian.net",
+            isCloud: true,
+            projectKey: "TEST",
+          },
+        })),
+      )
+      .returning({ id: schema.knowledgeBaseConnectorsTable.id });
+    const ids = connectors.map((connector) => connector.id);
+    const first = ids[0];
+    const last = ids[ids.length - 1];
+    await KbDocumentModel.create(documentData(first, org.id));
+    await KbDocumentModel.create(documentData(last, org.id));
+
+    const totals = await KbConnectorDocumentCountModel.findByConnectorIds(ids);
+    expect(totals.size).toBe(1001);
+    expect(totals.get(first)).toBe(1);
+    expect(totals.get(last)).toBe(1);
+    const [stored] = await db
+      .select({ rows: count() })
+      .from(schema.kbConnectorDocumentCountsTable)
+      .where(inArray(schema.kbConnectorDocumentCountsTable.connectorId, ids));
+    expect(stored.rows).toBe(1001);
+
+    await KbDocumentModel.create(documentData(last, org.id));
+    await KbConnectorDocumentCountModel.refreshForOrganization({
+      organizationId: org.id,
+    });
+    expect(
+      await KbConnectorDocumentCountModel.findByConnectorIds([first, last]),
+    ).toEqual(
+      new Map([
+        [first, 1],
+        [last, 2],
+      ]),
+    );
   });
 });
 

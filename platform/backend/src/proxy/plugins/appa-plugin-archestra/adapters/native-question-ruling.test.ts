@@ -205,6 +205,10 @@ describe("Claude Code approval answers", () => {
   test.each([
     ["The user did not answer the questions.", "unanswered"],
     ["User has declined to answer your questions.", "declined"],
+    [
+      "No response after 600s \u2014 the user may be away from keyboard. Proceed using your best judgment based on the context so far; you can re-ask this question later if it's still relevant.",
+      "unanswered",
+    ],
   ] as const)("closes %s as %s, not a ruling or an unreadable answer", (content, expected) => {
     expect(ruling({ content }, review(APPROVAL_LIKE))).toBe(expected);
     expect(ruling({ content }, review(APPROVAL_LIKE))).not.toBe("unrecognized");

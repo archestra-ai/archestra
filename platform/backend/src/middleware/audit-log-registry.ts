@@ -41,6 +41,7 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ServiceAccountModel from "@/models/service-account";
+import SiteNotificationModel from "@/models/site-notification";
 import SkillModel from "@/models/skill";
 import SkillShareLinkModel from "@/models/skill-share-link";
 import TeamModel from "@/models/team";
@@ -947,6 +948,15 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/schedule-triggers/:id": {
     resourceType: "scheduleTrigger",
     fetchById: (id, orgId) => ScheduleTriggerModel.findByIdForAudit(id, orgId),
+  },
+
+  // The latest notification is one organization settings slot, including inactive drafts.
+  "/api/site-notification": {
+    resourceType: "organization",
+    action: "organization.updated",
+    resourceIdSource: "organizationContext",
+    fetchById: async (_id, orgId) =>
+      (await SiteNotificationModel.getLatest(orgId)) ?? null,
   },
 
   // Organization (settings, onboarding, knowledge admin actions, members)

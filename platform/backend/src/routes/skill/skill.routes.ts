@@ -1405,7 +1405,8 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "source (repository, branch, folder, credential), trigger " +
           "an immediate pull, or disconnect it from the Git source " +
           "(interval null) — a disconnected skill keeps its content and " +
-          "provenance and becomes editable in the app.",
+          "provenance and becomes editable in the app. Providing a full " +
+          "source reconnects a previously imported skill after verifying the repository.",
         tags: ["Skills"],
         params: z.object({ id: UuidIdSchema }),
         body: z
@@ -1471,11 +1472,14 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // matching the reset route and the authorizeSkillModify contract.
       await authorizeSkillModify({ skill, userId: user.id, organizationId });
 
-      if (skill.githubSyncInterval === null) {
+      if (
+        skill.githubSyncInterval === null &&
+        (skill.sourceType !== "github" || !body.source)
+      ) {
         throw new ApiError(
           400,
-          "This skill is not synced from GitHub. Sync is chosen when " +
-            "importing from a repository.",
+          "This skill is not synced from GitHub. Reconnect a previously " +
+            "imported skill by providing its full source, or import a repository.",
         );
       }
 

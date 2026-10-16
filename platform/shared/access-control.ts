@@ -535,8 +535,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.StartAgentRun]: {},
   [RouteId.GetMyAgentRuns]: {},
   [RouteId.GetMyAgentRun]: {},
-  [RouteId.GetAgentRunOpenappaReview]: {},
-  [RouteId.DecideAgentRunOpenappaReview]: {},
   [RouteId.UpdateAgentRun]: {},
   [RouteId.CancelAgentRun]: {},
   [RouteId.ContinueAgentRun]: {},

@@ -71,12 +71,12 @@ export function validationRunBars(runs: RecordedRun[]): ValidationRunBar[] {
     .reverse();
 }
 
-/** A current validation file, with the SHA-256 hex of its content as runs record it. */
-type CurrentFile = { path: string; contentHash: string };
+/** A current validation file. */
+type CurrentFile = { path: string };
 
 export type ValidationFileState = {
   status: ValidationRunStatus | "not_run";
-  /** When the run that replayed this exact content was recorded. */
+  /** When the run that last replayed this file was recorded. */
   runAt: string | null;
   /** What kind of run recorded the result, e.g. "Single file run". */
   runLabel: string | null;
@@ -93,26 +93,22 @@ export function validationRunLabel(
   return "Manual run";
 }
 
-/** The newest run that replayed this exact content, with its result for it. */
+/**
+ * The newest run that replayed this file, with its result for it. An edit
+ * does not clear it: the file keeps its last result until it runs again.
+ */
 export function latestFileResult<Run extends RecordedRun>(
   file: CurrentFile,
   runs: Run[],
 ): { run: Run; result: Run["files"][number] } | null {
   for (const run of runs) {
-    const result = run.files.find(
-      (item) =>
-        item.path === file.path && item.contentHash === file.contentHash,
-    );
+    const result = run.files.find((item) => item.path === file.path);
     if (result) return { run, result };
   }
   return null;
 }
 
-/**
- * Each file's result from the newest run that replayed its current content.
- * A run of an older version of the file, or of a file since deleted, says
- * nothing about it: such a file is not run.
- */
+/** Each file's result from the newest run that replayed it; never run, not run. */
 export function validationFileStates(
   files: CurrentFile[],
   runs: RecordedRun[],
@@ -240,15 +236,4 @@ export function validationName(file: { path: string; content: string }) {
     break;
   }
   return file.path.split("/").pop() || file.path;
-}
-
-/** The SHA-256 hex of a file's content, the hash the backend records per run file. */
-export async function validationContentHash(content: string) {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(content),
-  );
-  return Array.from(new Uint8Array(digest), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
 }

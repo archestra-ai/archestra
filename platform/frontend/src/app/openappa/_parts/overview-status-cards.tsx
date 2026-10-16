@@ -43,7 +43,6 @@ import { cn } from "@/lib/utils/tailwind";
 import { ValidationStatusBadge } from "../validation/_parts/validation-parts";
 import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
 import { OpenAppaChatButton } from "./openappa-chat-button";
-import { useValidationFileHashes } from "./use-validation-file-hashes";
 import {
   ValidationRunChart,
   ValidationRunChartPlaceholder,
@@ -222,12 +221,9 @@ function ValidationCard() {
   // Without the files (a GitHub source the viewer cannot read), the newest run
   // stands in for the current one, as before files were compared.
   const files = collection.data?.error ? undefined : collection.data?.files;
-  const hashes = useValidationFileHashes(files);
-  const known = Boolean(files && hashes.data);
+  const known = Boolean(files);
   const summary =
-    history.data && known && hashes.data
-      ? validationSuiteSummary(hashes.data, history.data)
-      : null;
+    history.data && files ? validationSuiteSummary(files, history.data) : null;
   const newest = history.data?.[0] ?? null;
   const fallback = !known && newest ? newest : null;
   const status = summary?.status ?? (fallback && validationRunStatus(fallback));
@@ -237,9 +233,7 @@ function ValidationCard() {
       ? `Last run ${formatDate({ date: fallback.createdAt })} · ${fallback.files.length ? `${fallback.files.filter((file) => file.status === "passed").length} of ${fallback.files.length} passed` : "could not run"}`
       : null;
   const pending =
-    history.isPending ||
-    (collection.isPending && !collection.isError) ||
-    (files !== undefined && hashes.isPending);
+    history.isPending || (collection.isPending && !collection.isError);
   const noFiles = known && files?.length === 0;
   return (
     <StatusCard

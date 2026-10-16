@@ -38,7 +38,6 @@ import {
   useManagedValidationsLink,
 } from "../../_parts/github-managed-policy-notice";
 import { OpenAppaChatButton } from "../../_parts/openappa-chat-button";
-import { useValidationFileHashes } from "../../_parts/use-validation-file-hashes";
 import {
   validationSuiteSummary,
   validationSummaryText,
@@ -210,11 +209,9 @@ export function ValidationLastRun({
   files: { path: string; content: string }[];
 }) {
   const { history } = useValidation();
-  const hashes = useValidationFileHashes(files);
-  const summary =
-    hashes.data && history.data
-      ? validationSuiteSummary(hashes.data, history.data)
-      : null;
+  const summary = history.data
+    ? validationSuiteSummary(files, history.data)
+    : null;
   if (!summary) return null;
   const outcome = validationSummaryText(summary);
   return (
@@ -240,11 +237,9 @@ export function ValidationLastRun({
 /** What the per-file statuses cannot say: history did not load, or the last run never started. */
 export function ValidationRunNotices() {
   const { files, history } = useValidation();
-  const hashes = useValidationFileHashes(files);
-  const summary =
-    hashes.data && history.data
-      ? validationSuiteSummary(hashes.data, history.data)
-      : null;
+  const summary = history.data
+    ? validationSuiteSummary(files, history.data)
+    : null;
   if (!history.isError && !summary?.error) return null;
   return (
     <div className="space-y-2">

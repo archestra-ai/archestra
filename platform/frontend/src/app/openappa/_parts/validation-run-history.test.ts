@@ -1,6 +1,5 @@
 import { describe, expect, test } from "vitest";
 import {
-  validationContentHash,
   validationFileStates,
   validationName,
   validationRunBars,
@@ -87,22 +86,19 @@ describe("validationRunBars", () => {
 });
 
 describe("validationFileStates", () => {
-  test("a file takes the newest run of its current content, and is not run otherwise", () => {
+  test("a file keeps its newest result after an edit, and is not run until it first runs", () => {
     const runs = [
       run("3", [["old.appa", "h-old", "passed"]]),
       run("2", [["a.appa", "h-a-v1", "failed"]]),
       run("1", [["a.appa", "h-a-v2", "passed"]]),
     ];
     const states = validationFileStates(
-      [
-        { path: "a.appa", contentHash: "h-a-v2" },
-        { path: "new.appa", contentHash: "h-new" },
-      ],
+      [{ path: "a.appa" }, { path: "new.appa" }],
       runs,
     );
     expect(states.get("a.appa")).toMatchObject({
-      status: "passed",
-      runAt: runs[2].createdAt,
+      status: "failed",
+      runAt: runs[1].createdAt,
     });
     expect(states.get("new.appa")).toEqual({
       status: "not_run",
@@ -114,10 +110,7 @@ describe("validationFileStates", () => {
 
   test("names the run that recorded the result and keeps a refused policy's reasons", () => {
     const states = validationFileStates(
-      [
-        { path: "a.appa", contentHash: "h-a" },
-        { path: "b.appa", contentHash: "h-b" },
-      ],
+      [{ path: "a.appa" }, { path: "b.appa" }],
       [
         run("2", [["a.appa", "h-a", "passed"]], { partial: true }),
         run("1", [["b.appa", "h-b", "cannot_run"]], {
@@ -139,11 +132,7 @@ describe("validationFileStates", () => {
 });
 
 describe("validationSuiteSummary", () => {
-  const files = [
-    { path: "a.appa", contentHash: "h-a" },
-    { path: "b.appa", contentHash: "h-b" },
-    { path: "c.appa", contentHash: "h-c" },
-  ];
+  const files = [{ path: "a.appa" }, { path: "b.appa" }, { path: "c.appa" }];
 
   test("adds a newer single-file result to the last run of all files", () => {
     const summary = validationSuiteSummary(files, [
@@ -188,7 +177,7 @@ describe("validationSuiteSummary", () => {
 
   test("no result for any current file means no summary", () => {
     expect(
-      validationSuiteSummary(files, [run("1", [["a.appa", "old", "passed"]])]),
+      validationSuiteSummary(files, [run("1", [["gone.appa", "h", "passed"]])]),
     ).toBeNull();
     expect(validationSuiteSummary(files, [])).toBeNull();
   });
@@ -208,10 +197,4 @@ describe("validationName", () => {
       expected,
     );
   });
-});
-
-test("content hashes match the backend's SHA-256 hex of the UTF-8 text", async () => {
-  expect(await validationContentHash("abc")).toBe(
-    "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
-  );
 });

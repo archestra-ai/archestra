@@ -34,7 +34,6 @@ import {
 } from "@/lib/openappa-policy-tests.query";
 import { formatDate } from "@/lib/utils/date-time";
 import { POLICY_EDITOR_OPTIONS } from "../../_parts/policy-editor-options";
-import { useValidationFileHashes } from "../../_parts/use-validation-file-hashes";
 import {
   latestFileResult,
   validationFileStates,
@@ -148,16 +147,13 @@ function ValidationFileEditor({ path }: { path: string }) {
     preview && JSON.stringify(preview.file) === JSON.stringify(file)
       ? preview.run
       : undefined;
-  // A saved file shows its newest recorded result until an editor test of a
-  // draft replaces it.
-  const savedHash = useValidationFileHashes(baselineFile ? [baselineFile] : []);
+  // The file shows its last recorded result, also while it is edited, until
+  // it runs again or an editor test of the draft replaces it.
   const recorded =
-    !previewRun && !fileDirty && savedHash.data?.[0] && suite.history.data
+    !previewRun && suite.history.data
       ? {
-          latest: latestFileResult(savedHash.data[0], suite.history.data),
-          state: validationFileStates(savedHash.data, suite.history.data).get(
-            path,
-          ),
+          latest: latestFileResult({ path }, suite.history.data),
+          state: validationFileStates([{ path }], suite.history.data).get(path),
         }
       : null;
   const running = suite.runningPath === path;

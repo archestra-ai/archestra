@@ -42,7 +42,6 @@ import {
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { formatDate } from "@/lib/utils/date-time";
 import { OpenAppaPageAction } from "../_parts/openappa-page-action";
-import { useValidationFileHashes } from "../_parts/use-validation-file-hashes";
 import {
   type ValidationFileState,
   validationFileStates,
@@ -93,9 +92,8 @@ export default function ValidationPage() {
   )
     ? Number(params.get("pageSize"))
     : 10;
-  const hashes = useValidationFileHashes(suite.files);
-  const states = hashes.data
-    ? validationFileStates(hashes.data, suite.history.data ?? [])
+  const states = suite.history.data
+    ? validationFileStates(suite.files, suite.history.data)
     : null;
   const query = search.toLowerCase();
   const filtered = suite.files

@@ -75,7 +75,6 @@ interface EnvironmentVariableDialogProps {
   staticLabel?: string;
   installationDescription?: string;
   staticDescription?: string;
-  installationCalloutTitle?: string;
   requiredDescription?: string;
   deferStaticSecretValue?: boolean;
   installationOnlyForSecrets?: boolean;
@@ -134,7 +133,6 @@ export function EnvironmentVariableDialog({
   staticLabel = "Static",
   installationDescription,
   staticDescription,
-  installationCalloutTitle = "The user enters this when installing",
   requiredDescription = "Block installation until the user supplies a value.",
   deferStaticSecretValue = false,
   installationOnlyForSecrets = false,
@@ -339,7 +337,7 @@ export function EnvironmentVariableDialog({
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="flex flex-col gap-2">
+          <div className="space-y-2">
             <Label htmlFor="env-var-type">Type</Label>
             <Select
               value={draft.type}
@@ -347,7 +345,7 @@ export function EnvironmentVariableDialog({
             >
               <SelectTrigger
                 id="env-var-type"
-                className="mt-auto w-full"
+                className="w-full"
                 data-testid={E2eTestId.SelectEnvironmentVariableType}
               >
                 <SelectValue />
@@ -362,9 +360,6 @@ export function EnvironmentVariableDialog({
           </div>
           <div className="space-y-2">
             <Label htmlFor="env-var-scope">Availability</Label>
-            {draft.scope === "installation" && (
-              <FieldDescription>{installationCalloutTitle}.</FieldDescription>
-            )}
             <FieldScopeSelect
               id="env-var-scope"
               value={draft.scope}

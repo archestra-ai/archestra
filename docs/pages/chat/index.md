@@ -32,7 +32,7 @@ Each model lists its context size, price per million tokens, and what it can rea
 
 What to know:
 
-- When the model supports extended reasoning, the menu's search row shows a depth control: Auto (the model's default), Low, Med, or High. A level other than Auto shows next to the model name.
+- When the model supports adjustable reasoning, the menu's search row shows a reasoning chip. Click it to step through Auto (the model's default), Low, Med, and High. A level other than Auto shows next to the model name.
 - To return to the agent's or organization's default model, choose **Reset to default model** in the menu.
 - The circle next to the attach button shows how much of the model's context the conversation uses. Click it for a breakdown.
 

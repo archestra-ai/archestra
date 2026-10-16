@@ -229,14 +229,16 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   // and surfaced in the conversation's Files panel (and staged into the
   // sandbox when one is available), so the only gate is the org-level toggle.
   const showFileUploadButton = allowFileUploads;
+  // Short on purpose; the Files link only exists once the chat does.
   const attachHint: ReactNode = runtimeMode ? (
-    "Attach files for the Agent's runtime"
-  ) : sandboxAvailable ? (
+    "Attach files for the runtime"
+  ) : sandboxAvailable || !onOpenFiles ? (
     "Attach any file"
   ) : (
     <>
-      Attach any file. Ones the model can't read are kept in{" "}
-      {onOpenFiles ? (
+      <span className="block">Attach any file</span>
+      <span className="block">
+        Unreadable ones go to{" "}
         <UnstyledButton
           type="button"
           onClick={onOpenFiles}
@@ -244,10 +246,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
         >
           Files
         </UnstyledButton>
-      ) : (
-        <span>this chat's files</span>
-      )}
-      .
+      </span>
     </>
   );
 

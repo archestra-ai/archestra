@@ -5,6 +5,7 @@ import {
   getChatApiKeySelectorOptionTestId,
   getChatApiKeySelectorProviderGroupTestId,
   getChatModelOptionTestId,
+  modelSupportsThinkingEffort,
   type SupportedProvider,
   type ThinkingEffortSetting,
 } from "@archestra/shared";
@@ -15,7 +16,6 @@ import {
   AudioLinesIcon,
   BoxIcon,
   BrainIcon,
-  CheckIcon,
   EyeIcon,
   FileTextIcon,
   KeyRoundIcon,
@@ -360,7 +360,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
           className="h-10 min-w-0 flex-1 bg-transparent text-sm outline-hidden placeholder:text-muted-foreground"
         />
         {showReasoning && (
-          <Segmented
+          <ReasoningChip
             groupRef={reasoningRef}
             value={ctx.thinkingEffort}
             onChange={(effort) => ctx.onThinkingEffortChange?.(effort)}
@@ -490,7 +490,6 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
                   <span className="min-w-0 flex-1 truncate">
                     Reset to default model
                   </span>
-                  <Selected on={false} />
                 </CommandItem>
               </CommandGroup>
             )}
@@ -623,7 +622,7 @@ const GROUP =
   "p-0 [&:not(:first-child)]:mt-1 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pt-1.5 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:text-muted-foreground";
 
 const ITEM =
-  "h-8 gap-2 rounded-md px-2 py-0 text-sm transition-colors duration-100 motion-reduce:transition-none";
+  "relative isolate h-8 gap-2 rounded-md px-2 py-0 text-sm transition-colors duration-100 motion-reduce:transition-none";
 
 function ModelRow({
   model,
@@ -646,13 +645,14 @@ function ModelRow({
       onSelect={onSelect}
       className={cn(ITEM, "h-auto min-h-11 items-start py-1")}
     >
-      {/* The check leads, so the capability icons can sit flush right. */}
-      <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
-        {selected && <CheckIcon className="size-4" aria-label="Current" />}
-      </span>
+      <Selected on={selected} />
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex h-5 min-w-0 items-center gap-2">
-          <span className="min-w-0 flex-1 truncate">{model.displayName}</span>
+          <span
+            className={cn("min-w-0 flex-1 truncate", selected && "font-medium")}
+          >
+            {model.displayName}
+          </span>
           {capabilities.length > 0 && (
             <span className="flex shrink-0 items-center gap-1 text-muted-foreground/70">
               {capabilities.map(({ key, label, Icon }) => (
@@ -755,7 +755,11 @@ function AgentRow({
       className={ITEM}
     >
       <AgentIcon icon={agent.icon} size={16} className="shrink-0" />
-      <span className="min-w-0 flex-1 truncate">{agent.name}</span>
+      <span
+        className={cn("min-w-0 flex-1 truncate", selected && "font-medium")}
+      >
+        {agent.name}
+      </span>
       <Meta>{meta}</Meta>
       <Selected on={selected} />
     </CommandItem>
@@ -781,20 +785,26 @@ function KeyRow({
       data-testid={getChatApiKeySelectorOptionTestId(apiKey.id)}
       keywords={keywords}
       onSelect={onSelect}
-      className={ITEM}
+      className={cn(ITEM, "h-auto min-h-11 py-1")}
     >
       <ModelSelectorLogo
         provider={logoNameForProvider(apiKey.provider)}
         className="size-4 shrink-0"
       />
-      <span className="min-w-0 flex-1 truncate">{apiKey.name}</span>
-      <Meta>
-        {apiKey.requiresReauthentication ? (
-          <span className="text-amber-600 dark:text-amber-400">Reconnect</span>
-        ) : (
-          scopeLabel
-        )}
-      </Meta>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <span className={cn("truncate", selected && "font-medium")}>
+          {apiKey.name}
+        </span>
+        <span className="truncate text-xs leading-4 text-muted-foreground">
+          {apiKey.requiresReauthentication ? (
+            <span className="text-amber-600 dark:text-amber-400">
+              Reconnect
+            </span>
+          ) : (
+            <span>{scopeLabel}</span>
+          )}
+        </span>
+      </div>
       <Selected on={selected} />
     </CommandItem>
   );
@@ -836,18 +846,29 @@ function Meta({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * The current choice: a bar on the row's leading edge, under its content, so
+ * trailing icons and labels keep their place.
+ */
 function Selected({ on }: { on: boolean }) {
-  return on ? (
-    <CheckIcon
-      className="size-4 shrink-0 text-foreground"
+  if (!on) return null;
+  return (
+    <span
+      role="img"
       aria-label="Current"
+      className="absolute inset-y-0 left-0 -z-10 w-[3px] rounded-l-md bg-primary/80"
     />
-  ) : (
-    <span aria-hidden className="size-4 shrink-0" />
   );
 }
 
-function Segmented({
+/**
+ * Reasoning depth as one outlined chip: a click or tap cycles Auto → Low →
+ * Med → High (shift-click goes back), ←/→ step it, Home/End jump to the ends.
+ * The word is always visible, so touch needs no hover, and the 3-bar meter
+ * reads the level at a glance. A radiogroup holding one focusable radio that
+ * is always the checked one keeps the → hand-off from the search input.
+ */
+function ReasoningChip({
   groupRef,
   value,
   onChange,
@@ -859,70 +880,113 @@ function Segmented({
   /** ↑/↓ hand focus back to the search input (and so to the list). */
   onExit: () => void;
 }) {
-  const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const index = Math.max(
     0,
     REASONING_OPTIONS.findIndex((o) => o.value === value),
   );
-  const move = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-      e.preventDefault();
-      e.stopPropagation();
-      onExit();
-      return;
-    }
-    const delta = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
-    if (delta) {
-      e.preventDefault();
-      e.stopPropagation();
-      const next =
-        (index + delta + REASONING_OPTIONS.length) % REASONING_OPTIONS.length;
-      onChange(REASONING_OPTIONS[next].value);
-      refs.current[next]?.focus();
-      return;
-    }
-    keepKeysFromCmdk(e);
+  const current = REASONING_OPTIONS[index];
+  // Direction of the last change, so the new label slides in from the side
+  // it "came from" (forward = up from below, backward = down from above).
+  // 0 = nothing changed yet, so opening the menu does not animate.
+  const [dir, setDir] = useState<0 | 1 | -1>(0);
+
+  const go = (next: number, direction: 1 | -1) => {
+    const n = REASONING_OPTIONS.length;
+    setDir(direction);
+    onChange(REASONING_OPTIONS[(next + n) % n].value);
   };
+
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const handled = (fn: () => void) => {
+      e.preventDefault();
+      e.stopPropagation();
+      fn();
+    };
+    switch (e.key) {
+      case "ArrowUp":
+      case "ArrowDown":
+        return handled(onExit);
+      case "ArrowRight":
+        return handled(() => go(index + 1, 1));
+      case "ArrowLeft":
+        return handled(() => go(index - 1, -1));
+      case "Home":
+        return handled(() => go(0, -1));
+      case "End":
+        return handled(() => go(REASONING_OPTIONS.length - 1, 1));
+      case "Enter":
+      case " ":
+        // Let the button's own click fire (it cycles), but keep cmdk from
+        // treating the key as "select the highlighted list row".
+        e.stopPropagation();
+    }
+  };
+
   return (
     <div
       ref={groupRef}
       role="radiogroup"
       aria-label="Reasoning effort"
-      title="Reasoning effort (→ from search)"
-      onKeyDown={move}
-      className="inline-flex h-6 shrink-0 items-center rounded-md bg-muted/50"
+      onKeyDown={onKeyDown}
+      className="inline-flex shrink-0"
     >
-      {/* The brain is a lighter lead-in cell of the control, not a loose glyph. */}
-      <BrainIcon
-        aria-hidden
-        className="mx-1.5 size-3.5 shrink-0 text-muted-foreground/70"
-      />
-      <span className="inline-flex h-6 items-center rounded-md bg-muted p-0.5">
-        {REASONING_OPTIONS.map((o, i) => {
-          const checked = i === index;
-          return (
-            <UnstyledButton
-              key={o.label}
-              ref={(el) => {
-                refs.current[i] = el;
-              }}
-              role="radio"
-              aria-checked={checked}
-              tabIndex={checked ? 0 : -1}
-              title={`Reasoning: ${o.label} — ${o.hint}`}
-              onClick={() => onChange(o.value)}
+      <UnstyledButton
+        role="radio"
+        aria-checked="true"
+        tabIndex={0}
+        aria-label={`Reasoning: ${current.label}`}
+        aria-description="Click or use the left and right arrow keys to change"
+        title={`Reasoning: ${current.label} — ${current.hint}. Click to change (shift-click goes back).`}
+        onClick={(e) => (e.shiftKey ? go(index - 1, -1) : go(index + 1, 1))}
+        className={cn(
+          "group inline-flex h-6 items-center gap-1.5 rounded-full border border-border px-2 text-xs outline-none",
+          "transition-colors duration-150 hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring active:bg-muted motion-reduce:transition-none",
+          "select-none touch-manipulation",
+        )}
+      >
+        <BrainIcon
+          aria-hidden
+          className={cn(
+            "size-3.5 shrink-0 transition-colors duration-150 motion-reduce:transition-none",
+            current.value === null
+              ? "text-muted-foreground/70"
+              : "text-foreground/80",
+          )}
+        />
+        {/* All labels share one grid cell so the chip keeps the width of the
+            widest word and never jitters as it cycles. */}
+        <span aria-hidden className="grid overflow-hidden text-left">
+          {REASONING_OPTIONS.map((o) => (
+            <span key={o.label} className="invisible col-start-1 row-start-1">
+              {o.label}
+            </span>
+          ))}
+          <span
+            key={`${current.label}:${dir}`}
+            className={cn(
+              "col-start-1 row-start-1 text-foreground",
+              dir !== 0 &&
+                "fade-in animate-in duration-150 ease-out motion-reduce:animate-none",
+              dir === 1 && "slide-in-from-bottom-2",
+              dir === -1 && "slide-in-from-top-2",
+            )}
+          >
+            {current.label}
+          </span>
+        </span>
+        {/* Micro meter: Auto fills none, High fills all three. */}
+        <span aria-hidden className="inline-flex shrink-0 items-end gap-px">
+          {[1, 2, 3].map((bar) => (
+            <span
+              key={bar}
               className={cn(
-                "h-5 rounded-[5px] px-2 text-xs outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",
-                checked
-                  ? "bg-background text-foreground shadow-xs"
-                  : "text-muted-foreground hover:text-foreground",
+                "h-2 w-[3px] rounded-full transition-colors duration-150 motion-reduce:transition-none",
+                bar <= index ? "bg-foreground/70" : "bg-muted-foreground/30",
               )}
-            >
-              {o.value === "medium" ? "Med" : o.label}
-            </UnstyledButton>
-          );
-        })}
-      </span>
+            />
+          ))}
+        </span>
+      </UnstyledButton>
     </div>
   );
 }
@@ -1005,9 +1069,20 @@ function modelCapabilities(model: LlmModel) {
   }
   if (caps?.supportsToolCalling === true)
     list.push({ key: "tools", label: "Uses tools", Icon: WrenchIcon });
-  // A null means no source claimed reasoning support, so only `true` counts.
-  if (caps?.supportsReasoningEffort === true)
-    list.push({ key: "reasoning", label: "Reasons", Icon: BrainIcon });
+  // The same verdict as the reasoning control, so the icon never promises a
+  // depth the menu then refuses to offer.
+  if (
+    modelSupportsThinkingEffort({
+      provider: model.provider,
+      modelId: model.id,
+      supportsReasoningEffort: caps?.supportsReasoningEffort,
+    })
+  )
+    list.push({
+      key: "reasoning",
+      label: "Adjustable reasoning",
+      Icon: BrainIcon,
+    });
   return list;
 }
 

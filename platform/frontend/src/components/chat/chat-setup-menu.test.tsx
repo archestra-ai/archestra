@@ -155,7 +155,11 @@ describe("ChatSetupMenu", () => {
 
     const thinker = screen.getByRole("option", { name: /Qwen3 32B/ });
     expect(thinker).toHaveTextContent("128K context·$3 / $15");
-    for (const capability of ["Reads images", "Uses tools", "Reasons"]) {
+    for (const capability of [
+      "Reads images",
+      "Uses tools",
+      "Adjustable reasoning",
+    ]) {
       within(thinker).getByRole("img", { name: capability });
     }
 
@@ -199,6 +203,31 @@ describe("ChatSetupMenu", () => {
     expect(props.onAgentChange).not.toHaveBeenCalled();
   });
 
+  it("marks reasoning only where the reasoning control is offered", () => {
+    // The catalog says Opus 4.8 reasons, but the composer offers no depth for
+    // it (thinking stays off by default), so the row must not promise one.
+    models.push({
+      dbId: "model-opus",
+      id: "claude-opus-4-8",
+      provider: "anthropic",
+      displayName: "Claude Opus 4.8",
+      isBest: false,
+      isFree: false,
+      requiresUserConnection: false,
+      isConnected: true,
+      capabilities: { contextLength: 1_000_000, supportsReasoningEffort: true },
+    });
+    try {
+      renderMenu();
+      const opus = screen.getByRole("option", { name: /Claude Opus 4\.8/ });
+      expect(
+        within(opus).queryByRole("img", { name: "Adjustable reasoning" }),
+      ).not.toBeInTheDocument();
+    } finally {
+      models.pop();
+    }
+  });
+
   it("offers reasoning depth only for models that support it", async () => {
     const user = userEvent.setup();
     const props = renderMenu();
@@ -206,8 +235,11 @@ describe("ChatSetupMenu", () => {
     const reasoning = screen.getByRole("radiogroup", {
       name: "Reasoning effort",
     });
-    await user.click(within(reasoning).getByRole("radio", { name: /High/ }));
-    expect(props.onThinkingEffortChange).toHaveBeenCalledWith("high");
+    // One chip: a click steps from Auto to the next level.
+    await user.click(
+      within(reasoning).getByRole("radio", { name: "Reasoning: Auto" }),
+    );
+    expect(props.onThinkingEffortChange).toHaveBeenCalledWith("low");
 
     renderMenu({ selectedModel: "model-plain" });
     expect(

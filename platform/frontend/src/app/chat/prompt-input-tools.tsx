@@ -11,7 +11,7 @@ import {
   type ThinkingEffortSetting,
 } from "@archestra/shared";
 import { MoreVerticalIcon, PaperclipIcon } from "lucide-react";
-import { memo, useCallback, useEffect } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 import {
   PromptInputButton,
   PromptInputTools,
@@ -19,6 +19,7 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { AppRecordingControls } from "@/components/app-session-recording/app-recording-controls";
 import { NotRecommendedForAgentsNoticeBadge } from "@/components/chat/agent-recommendation-notice";
+import { ChatSetupMenu } from "@/components/chat/chat-setup-menu";
 import { ContextIndicator } from "@/components/chat/context-indicator";
 import { ContextWindowDialog } from "@/components/chat/context-window-panel";
 import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
@@ -203,7 +204,14 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   toolbarRef,
 }: ChatPromptInputToolsProps) {
   const attachments = usePromptInputAttachments();
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const providerCatalog = useModelProviderCatalog();
+  // New chats expose their setup; existing conversations keep it in one menu.
+  const showOptionsMenu = !!conversationId || isNarrow;
+
+  const selectedApiKeyId = conversationId
+    ? (currentConversationChatApiKeyId ?? null)
+    : (initialApiKeyId ?? null);
   const providerToConnect = subscriptionProvider ?? currentProvider;
   const subscriptionKind = providerToConnect
     ? subscriptionKindForProvider(providerToConnect)
@@ -299,6 +307,11 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
     [focusTextarea, onAgentChange],
   );
 
+  const closeOptions = useCallback(() => {
+    setOptionsOpen(false);
+    focusTextarea();
+  }, [focusTextarea]);
+
   const handleSelectorOpenChange = useCallback(
     (open: boolean) => {
       if (!open) {
@@ -310,10 +323,14 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
 
   return (
     <PromptInputTools ref={toolbarRef} className="gap-0.5">
+      {/* Not rendered visibly: it owns the key auto-selection and the
+          subscription connect/reconnect dialogs. The setup menu lists keys
+          itself, and a viewer without provider settings still needs the
+          connect flow. */}
       {!runtimeMode &&
-        canSeeFullView === false &&
-        subscriptionConnectRequired &&
-        (conversationId || onApiKeyChange) && (
+        (conversationId || onApiKeyChange) &&
+        ((canShowProviderSettings && showOptionsMenu) ||
+          (canSeeFullView === false && subscriptionConnectRequired)) && (
           <div className="hidden">
             <LlmProviderApiKeySelector
               conversationId={conversationId}
@@ -332,165 +349,60 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             />
           </div>
         )}
-      {/* Narrow: vertical three-dots menu for collapsed toolbar items */}
-      {isNarrow && (
-        <Popover>
+      {/* Existing chats always use the menu; new chats use it only when space is tight. */}
+      {showOptionsMenu && (
+        <Popover open={optionsOpen} onOpenChange={setOptionsOpen}>
           <PopoverTrigger asChild>
             <Button type="button" variant="ghost" size="icon-sm">
               <MoreVerticalIcon className="size-4" />
               <span className="sr-only">More options</span>
             </Button>
           </PopoverTrigger>
-          <PopoverContent side="top" align="start" className="w-auto p-3">
-            <div className="flex flex-col gap-3">
-              {canSeeFullView &&
-                selectorAgentId !== undefined &&
-                onAgentChange && (
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                      Agent
-                    </p>
-                    <InitialAgentSelector
-                      currentAgentId={selectorAgentId}
-                      onAgentChange={handleAgentChange}
-                    />
-                  </div>
-                )}
-              {canShowProviderSettings && (
-                <>
-                  {modelSource && !subscriptionConnectRequired && (
-                    <div className="flex items-center gap-1.5">
-                      <ModelSourceIndicator
-                        source={modelSource}
-                        inConversation={!!conversationId}
-                        onReset={onResetModelOverride}
-                      />
-                    </div>
-                  )}
-                  {toolsUnavailable && (
-                    <div className="flex items-center gap-1.5">
-                      <NoToolsModelBadge />
-                    </div>
-                  )}
-                  {(conversationId || onApiKeyChange) && (
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                        Provider API Key
-                      </p>
-                      <LlmProviderApiKeySelector
-                        conversationId={conversationId}
-                        currentProvider={currentProvider}
-                        currentConversationChatApiKeyId={
-                          conversationId
-                            ? (currentConversationChatApiKeyId ?? null)
-                            : (initialApiKeyId ?? null)
-                        }
-                        onApiKeyChange={onApiKeyChange}
-                        onProviderChange={onProviderChange}
-                        isModelsLoading={isModelsLoading}
-                        agentLlmApiKeyId={agentLlmApiKeyId}
-                        suppressAutoSelect={agentRequiresPerUserConnect}
-                        connectRequestToken={subscriptionConnectRequest}
-                      />
-                      {subscriptionConnectRequired && onSubscriptionConnect && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="xs"
-                          className="mt-2 gap-1.5"
-                          onClick={onSubscriptionConnect}
-                        >
-                          {subscriptionSignInTitle}
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                  {!subscriptionConnectRequired && (
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                        Model
-                      </p>
-                      <ModelSelector
-                        selectedModel={selectedModel}
-                        onModelChange={onModelChange}
-                        apiKeyId={
-                          conversationId
-                            ? currentConversationChatApiKeyId
-                            : initialApiKeyId
-                        }
-                        suppressAutoSelect={agentRequiresPerUserConnect}
-                        fallbackModelName={agentModelDisplayName}
-                      />
-                      {onThinkingEffortChange && (
-                        <ThinkingEffortSelector
-                          selectedModel={selectedModel}
-                          apiKeyId={
-                            conversationId
-                              ? currentConversationChatApiKeyId
-                              : initialApiKeyId
-                          }
-                          value={thinkingEffort}
-                          onChange={onThinkingEffortChange}
-                          className="mt-2 w-fit"
-                        />
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-              {!runtimeMode &&
-                canSeeFullView === false &&
-                subscriptionConnectRequired &&
-                onSubscriptionConnect && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="xs"
-                    onClick={onSubscriptionConnect}
-                  >
-                    {subscriptionSignInTitle}
-                  </Button>
-                )}
-              {tokensUsed > 0 && maxContextLength && (
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                    Context
-                  </p>
-                  <ContextWindowDialog
-                    breakdown={contextWindow ?? null}
-                    tokensUsed={tokensUsed}
-                    cachedTokens={cachedTokens}
-                    maxTokens={maxContextLength}
-                    lastCompaction={lastCompaction}
-                    onCompact={onCompactConversation}
-                    isCompacting={isContextCompacting}
-                  >
-                    <UnstyledButton
-                      type="button"
-                      aria-label="Context usage"
-                      data-testid={E2eTestId.ChatContextUsageTrigger}
-                      className="inline-flex cursor-pointer items-center justify-center rounded-full outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <ContextIndicator
-                        tokensUsed={tokensUsed}
-                        maxTokens={maxContextLength}
-                        size="sm"
-                      />
-                    </UnstyledButton>
-                  </ContextWindowDialog>
-                </div>
-              )}
-            </div>
+          <PopoverContent
+            side="top"
+            align="start"
+            className="w-auto overflow-hidden p-0"
+          >
+            <ChatSetupMenu
+              conversationId={conversationId}
+              close={closeOptions}
+              agentId={selectorAgentId}
+              onAgentChange={
+                canSeeFullView && selectorAgentId !== undefined
+                  ? handleAgentChange
+                  : undefined
+              }
+              canShowProviderSettings={canShowProviderSettings}
+              selectedModel={selectedModel}
+              onModelChange={onModelChange}
+              fallbackModelName={agentModelDisplayName}
+              modelSource={modelSource}
+              onResetModelOverride={onResetModelOverride}
+              suppressAutoSelect={agentRequiresPerUserConnect}
+              apiKeyId={selectedApiKeyId}
+              currentProvider={currentProvider}
+              canChangeCredential={
+                canShowProviderSettings && !!(conversationId || onApiKeyChange)
+              }
+              onApiKeyChange={onApiKeyChange}
+              onProviderChange={onProviderChange}
+              subscriptionConnectRequired={subscriptionConnectRequired}
+              onSubscriptionConnect={onSubscriptionConnect}
+              subscriptionSignInTitle={subscriptionSignInTitle}
+              thinkingEffort={thinkingEffort}
+              onThinkingEffortChange={onThinkingEffortChange}
+              toolsUnavailable={toolsUnavailable}
+              notRecommendedForAgents={notRecommendedForAgents}
+            />
           </PopoverContent>
         </Popover>
       )}
 
-      {/* Rendered beside the three-dots menu the collapsed toolbar picked and
-          outside the RBAC gate: a warning that only exists inside a popover —
-          or only for users who can see provider settings — is a warning most
-          narrow-viewport users never get. The wide toolbar renders its own copy
-          below. */}
-      {!runtimeMode && isNarrow && notRecommendedForAgents && (
+      {/* Rendered beside the options menu and outside the RBAC gate: a
+          warning that only exists inside a popover — or only for users who can
+          see provider settings — is a warning most narrow-viewport users never
+          get. The wide toolbar renders its own copy below. */}
+      {!runtimeMode && showOptionsMenu && notRecommendedForAgents && (
         <NotRecommendedForAgentsNoticeBadge />
       )}
 
@@ -545,6 +457,33 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             )}
           </TooltipContent>
         </Tooltip>
+      )}
+
+      {/* Context usage sits beside the attachment button at every width, so
+          it stays one glance away once the setup moves into the menu. */}
+      {tokensUsed > 0 && maxContextLength && (
+        <ContextWindowDialog
+          breakdown={contextWindow ?? null}
+          tokensUsed={tokensUsed}
+          cachedTokens={cachedTokens}
+          maxTokens={maxContextLength}
+          lastCompaction={lastCompaction}
+          onCompact={onCompactConversation}
+          isCompacting={isContextCompacting}
+        >
+          <UnstyledButton
+            type="button"
+            aria-label="Context usage"
+            data-testid={E2eTestId.ChatContextUsageTrigger}
+            className="inline-flex cursor-pointer items-center justify-center rounded-full outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <ContextIndicator
+              tokensUsed={tokensUsed}
+              maxTokens={maxContextLength}
+              size="sm"
+            />
+          </UnstyledButton>
+        </ContextWindowDialog>
       )}
 
       {/* EncryptedChat toggle — placed with the always-visible controls (next to
@@ -633,7 +572,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
       )}
 
       {/* Wide: inline toolbar items */}
-      {!isNarrow && (
+      {!showOptionsMenu && (
         <>
           {canSeeFullView && selectorAgentId !== undefined && onAgentChange && (
             <InitialAgentSelector
@@ -731,30 +670,6 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
           {!runtimeMode && toolsUnavailable && <NoToolsModelBadge />}
           {!runtimeMode && notRecommendedForAgents && (
             <NotRecommendedForAgentsNoticeBadge />
-          )}
-          {tokensUsed > 0 && maxContextLength && (
-            <ContextWindowDialog
-              breakdown={contextWindow ?? null}
-              tokensUsed={tokensUsed}
-              cachedTokens={cachedTokens}
-              maxTokens={maxContextLength}
-              lastCompaction={lastCompaction}
-              onCompact={onCompactConversation}
-              isCompacting={isContextCompacting}
-            >
-              <UnstyledButton
-                type="button"
-                aria-label="Context usage"
-                data-testid={E2eTestId.ChatContextUsageTrigger}
-                className="inline-flex cursor-pointer items-center justify-center rounded-full outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <ContextIndicator
-                  tokensUsed={tokensUsed}
-                  maxTokens={maxContextLength}
-                  size="sm"
-                />
-              </UnstyledButton>
-            </ContextWindowDialog>
           )}
         </>
       )}

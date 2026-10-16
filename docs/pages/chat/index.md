@@ -2,7 +2,7 @@
 title: Chat & Projects
 description: Start conversations, delegate tasks, attach files, and collaborate with autonomous agents in real time
 order: 6
-lastUpdated: 2026-10-12
+lastUpdated: 2026-10-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -23,11 +23,16 @@ You can continue typing while the agent generates a response. Queued messages wa
 
 ## Choosing a Model and Reasoning Depth
 
-Override the default model and reasoning depth for an individual conversation without changing the agent definition.
+Switch the model, agent, or provider key for one conversation without changing the agent itself.
 
-The model selector displays the active model for the chat. A badge marks whether the model inherits from the agent configuration or the organization default. Choose another model to override it for this session, or select **Reset to default**. Badges like Vision, PDF, and Tools indicate each model's supported modalities.
+- **New chat:** the agent, key, and model controls sit under the prompt. On a narrow screen they move into the **More options** menu (⋮).
+- **Started chat:** open **More options** (⋮). Its tabs show the current model, agent, and key. Pick a tab, search, and choose. Picking a key switches to its models.
 
-When a selected model supports extended reasoning, **Reasoning depth** controls thinking intensity: Default, Low, Medium, or High.
+What to know:
+
+- When the model supports extended reasoning, a depth control appears next to it: the model's default, Low, Medium, or High.
+- To return to the agent's or organization's default model, choose **Reset to default model** in the menu.
+- The circle next to the attach button shows how much of the model's context the conversation uses. Click it for a breakdown.
 
 ## Attaching Files and Running Commands
 

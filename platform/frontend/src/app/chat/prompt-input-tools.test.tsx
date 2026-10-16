@@ -65,6 +65,11 @@ vi.mock("@/components/chat/llm-provider-api-key-selector", () => ({
   },
 }));
 
+// The setup menu has its own behavior tests; here it only needs to show up.
+vi.mock("@/components/chat/chat-setup-menu", () => ({
+  ChatSetupMenu: () => <div data-testid="chat-setup-menu" />,
+}));
+
 // The Apps Hackathon recorder cluster is a self-contained feature with its own
 // tests; stub it here so the composer test needs no QueryClient/config context.
 vi.mock("@/components/app-session-recording/app-recording-controls", () => ({
@@ -155,7 +160,7 @@ describe("chat composer typing performance", () => {
         selectedModel="gpt-4"
         onModelChange={vi.fn()}
         agentId="agent-1"
-        conversationId="conv-1"
+        onApiKeyChange={vi.fn()}
       />,
     );
 
@@ -178,7 +183,50 @@ describe("chat composer typing performance", () => {
     expect(renderCounts.apiKeySelector).toBe(apiKeySelectorRendersAfterMount);
   });
 
-  it("shows the selected model inline by default when the toolbar has room", () => {
+  it.each([
+    "agent",
+    "organization",
+  ] as const)("keeps new-chat controls inline when the model comes from %s defaults", (modelSource) => {
+    render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4"
+        onModelChange={vi.fn()}
+        onApiKeyChange={vi.fn()}
+        agentId="agent-1"
+        modelSource={modelSource}
+        currentProvider="anthropic"
+      />,
+    );
+    expect(screen.getByTestId("model-selector")).toBeInTheDocument();
+    expect(screen.getByTestId("api-key-selector")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "More options" })).toBeNull();
+  });
+
+  it.each([
+    "agent",
+    "organization",
+  ] as const)("puts an existing chat's %s-default controls behind More options", (modelSource) => {
+    render(
+      <ArchestraPromptInput
+        onSubmit={vi.fn()}
+        status="ready"
+        selectedModel="gpt-4"
+        onModelChange={vi.fn()}
+        agentId="agent-1"
+        modelSource={modelSource}
+        currentProvider="anthropic"
+        conversationId="conv-1"
+      />,
+    );
+    expect(screen.queryByTestId("model-selector")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "More options" }));
+    expect(screen.getByTestId("chat-setup-menu")).toBeInTheDocument();
+    expect(screen.queryByTestId("model-selector")).toBeNull();
+  });
+
+  it("keeps context usage in the toolbar once a chat moves its setup into More options", () => {
     render(
       <ArchestraPromptInput
         onSubmit={vi.fn()}
@@ -187,18 +235,17 @@ describe("chat composer typing performance", () => {
         onModelChange={vi.fn()}
         agentId="agent-1"
         conversationId="conv-1"
-        currentProvider="openai"
-        modelSource="agent"
+        tokensUsed={12_000}
+        maxContextLength={200_000}
       />,
     );
-
-    expect(screen.getByTestId("model-selector")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Change model or provider" }),
-    ).toBeNull();
+      screen.getByRole("button", { name: "Context usage" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("chat-setup-menu")).toBeNull();
   });
 
-  it("moves the model selector into the more-options menu when the toolbar is narrow", () => {
+  it("collapses controls for a narrow new chat", () => {
     layoutState.isNarrow = true;
     render(
       <ArchestraPromptInput
@@ -206,17 +253,35 @@ describe("chat composer typing performance", () => {
         status="ready"
         selectedModel="gpt-4"
         onModelChange={vi.fn()}
+        onApiKeyChange={vi.fn()}
         agentId="agent-1"
-        conversationId="conv-1"
-        currentProvider="openai"
         modelSource="agent"
+        currentProvider="anthropic"
       />,
     );
-
     expect(screen.queryByTestId("model-selector")).toBeNull();
-    expect(
-      screen.getByRole("button", { name: "More options" }),
-    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "More options" }));
+    expect(screen.getByTestId("chat-setup-menu")).toBeInTheDocument();
+    expect(screen.queryByTestId("model-selector")).toBeNull();
+  });
+
+  it("restores inline controls when navigating from an existing chat to a new chat", () => {
+    const props = {
+      onSubmit: vi.fn(),
+      status: "ready" as const,
+      selectedModel: "gpt-4",
+      onModelChange: vi.fn(),
+      onApiKeyChange: vi.fn(),
+      agentId: "agent-1",
+    };
+    const { rerender } = render(
+      <ArchestraPromptInput {...props} conversationId="conv-1" />,
+    );
+    expect(screen.queryByTestId("model-selector")).toBeNull();
+    rerender(<ArchestraPromptInput {...props} />);
+    expect(screen.getByTestId("model-selector")).toBeInTheDocument();
+    expect(screen.getByTestId("api-key-selector")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "More options" })).toBeNull();
   });
 
   it("shows trust and audience as a static session readout", () => {

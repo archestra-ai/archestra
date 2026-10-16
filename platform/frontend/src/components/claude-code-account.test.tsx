@@ -78,14 +78,21 @@ describe("ClaudeCodeAccount setup", () => {
     ).toBeDisabled();
   });
 
-  it("lets an already-connected user manage their account without asking them to sign in again", async () => {
+  it.each([
+    "card",
+    "compact",
+  ] as const)("lets an already-connected user manage their %s account without asking them to sign in again", async (variant) => {
     const user = userEvent.setup();
     server.use(
       http.get(accountUrl, () => HttpResponse.json({ state: "connected" })),
     );
-    renderAccount();
+    renderAccount(variant);
 
     expect(await screen.findByText("Signed in for you")).toBeVisible();
+    if (variant === "compact") {
+      expect(screen.getByRole("status")).toHaveTextContent("Signed in for you");
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    }
     expect(
       screen.queryByText("Sign in to use this agent."),
     ).not.toBeInTheDocument();

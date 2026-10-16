@@ -74,6 +74,47 @@ afterAll(() => {
   server.close();
   archestraApiClient.setConfig({ baseUrl: "" });
 });
+
+it.each([
+  "TASK_STATE_FAILED",
+  "TASK_STATE_COMPLETED",
+])("distinguishes suspension from the %s run outcome", async (state) => {
+  server.use(
+    http.get(`${origin}/api/agent-runs/session`, () =>
+      HttpResponse.json({
+        ...previous,
+        state,
+        statusReason:
+          state === "TASK_STATE_FAILED"
+            ? "The workspace could not be resumed"
+            : null,
+      }),
+    ),
+  );
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={client}>
+      <AgentRunChatSession taskId="session" />
+    </QueryClientProvider>,
+  );
+  await screen.findByRole("button", { name: "Resume" });
+  const notice = screen.getByRole(
+    state === "TASK_STATE_FAILED" ? "alert" : "status",
+  );
+  expect(notice).toHaveTextContent(/saved files are retained/i);
+  expect(notice).toHaveTextContent(
+    state === "TASK_STATE_FAILED" ? "The run failed" : "this is normal",
+  );
+  expect(notice).toHaveTextContent(
+    state === "TASK_STATE_FAILED"
+      ? "Resume tries to restart"
+      : "Resume restarts",
+  );
+  client.clear();
+});
+
 it("leaves the completed turn immediately after resume is accepted, even while session metadata is stale", async () => {
   const user = userEvent.setup();
   let requests = 0;

@@ -3,7 +3,7 @@ title: Agent Runtime
 description: Run coding agents and long tasks in their own Kubernetes containers
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -41,7 +41,9 @@ Removing a choice preserves existing agents and their runtime configuration.
 
 ### Update the Image
 
-A saved agent keeps its image when Archestra upgrades. To use a newer image, change **Image** on the **Agent Runtime** tab. New runs use it. A continued run keeps its original image.
+Built-in coding agent images use the deployment's current catalog image unless pinned by digest. When the image reference changes, your next follow-up restarts the saved workspace on that image and keeps its files.
+
+If you change a custom image or privileged mode, start a new run. Saved files stay in the existing workspace until its retention deadline.
 
 ## Models and Credentials
 
@@ -54,6 +56,7 @@ Each run gets a temporary virtual key. Provider keys stay in Archestra.
 What to know:
 
 - Each person connects their own subscription before their first run. Subscription usage shows in the logs, but it does not count toward cost limits.
+- Claude subscription runs use Opus unless you select another **Model**. **Claude account default** follows Claude Code's choice for your account.
 - Tools run with the permissions of the person who started the run.
 
 ### Clone a Private GitHub Repository

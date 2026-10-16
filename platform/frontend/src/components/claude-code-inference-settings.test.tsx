@@ -60,6 +60,11 @@ beforeEach(() => {
       return HttpResponse.json({
         models: [
           {
+            value: "opus",
+            displayName: "Opus",
+            description: "Runtime default",
+          },
+          {
             value: "runtime-choice",
             displayName: "Runtime model",
             description: "Discovered from this CLI",
@@ -135,9 +140,7 @@ describe("Claude Code authentication", () => {
     await screen.findByText("Signed in for you");
     await waitFor(() => expect(modelRequests).toBe(1));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("button", { name: /Select model|default/i }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /Opus/i }));
     fireEvent.click(
       await screen.findByRole("option", { name: /Runtime model/ }),
     );

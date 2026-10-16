@@ -35,6 +35,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { WorkspaceRetention } from "@/components/workspace-retention";
 import {
   useCancelAgentRun,
@@ -120,7 +121,11 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
     ["idle", "suspended"].includes(run.workspace.state) &&
     new Date(run.workspace.expiresAt).getTime() > now;
   const workspaceNotice = run?.workspace
-    ? workspaceNoticeFor(run.workspace.state, canReattach)
+    ? workspaceNoticeFor({
+        state: run.workspace.state,
+        canReattach,
+        failed: run.state === "TASK_STATE_FAILED",
+      })
     : null;
 
   const actions: {
@@ -323,22 +328,21 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
         {run ? <AgentRunOpenappaReview taskId={activeTaskId} /> : null}
         {run && live && <AgentRunLiveness run={run} />}
         {isOwner && !live && run?.workspace && (
-          <output className="flex shrink-0 flex-col gap-2 rounded-md border bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+          <InlineNotice
+            variant={run.state === "TASK_STATE_FAILED" ? "error" : "neutral"}
+            role={run.state === "TASK_STATE_FAILED" ? "alert" : "status"}
+            className="shrink-0"
+          >
             {workspaceNotice && (
-              <div className="flex min-w-0 items-start gap-2 sm:items-center">
-                <Info
-                  aria-hidden
-                  className="mt-0.5 size-3.5 shrink-0 sm:mt-0"
-                />
-                <span className="font-medium text-foreground">
-                  {workspaceNotice}
-                </span>
-              </div>
+              <>
+                <Info aria-hidden />
+                <InlineNoticeText>{workspaceNotice}</InlineNoticeText>
+              </>
             )}
             {run.workspace.state !== "deleted" && (
               <WorkspaceRetention expiresAt={run.workspace.expiresAt} />
             )}
-          </output>
+          </InlineNotice>
         )}
         {showLiveTerminal ? (
           <AgentRunTerminal
@@ -479,13 +483,20 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
   );
 }
 
-function workspaceNoticeFor(
-  state: string,
-  canReattach: boolean,
-): string | null {
+function workspaceNoticeFor({
+  state,
+  canReattach,
+  failed,
+}: {
+  state: string;
+  canReattach: boolean;
+  failed: boolean;
+}): string | null {
   switch (state) {
     case "suspended":
-      return "Workspace suspended; saved files are retained.";
+      return failed
+        ? "The run failed. Its workspace is suspended and saved files are retained. Open Failed details for the recorded reason; Resume tries to restart the workspace."
+        : "Workspace suspended to save resources; this is normal. Saved files are retained. Resume restarts the workspace.";
     case "idle":
       return canReattach
         ? null

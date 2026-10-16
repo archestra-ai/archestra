@@ -448,8 +448,15 @@ class AgentRuntimeManager {
       container?.image !== params.spec.image ||
       Boolean(container.securityContext?.privileged) !== params.spec.privileged
     ) {
+      const changed = [
+        ...(container?.image !== params.spec.image ? ["container image"] : []),
+        ...(Boolean(container?.securityContext?.privileged) !==
+        params.spec.privileged
+          ? ["privileged mode"]
+          : []),
+      ].join(" and ");
       throw new Error(
-        "The Agent image or privilege configuration changed; start a new workspace instead",
+        `This workspace cannot resume because the Agent's ${changed} changed since it was created. Start a new run from the Agent page to use the updated settings. Saved files stay in the existing workspace until its retention deadline.`,
       );
     }
     await this.refreshWorkspaceEgress({ sandbox, spec: params.spec });
@@ -1825,19 +1832,21 @@ done`
       if (phase === "Running" && pod?.metadata?.name) return pod.metadata.name;
       if (phase === "Succeeded" || phase === "Failed") return null;
 
+      const progress = describeAgentRuntimeStartupProgress(pod);
       if (params.onProgress) {
-        const progress = describeAgentRuntimeStartupProgress(pod);
         if (!isSameAgentRuntimeStartupProgress(lastProgress, progress)) {
-          lastProgress = progress;
           params.onProgress({
             ...progress,
             resourceName: pod?.metadata?.name ?? null,
           });
         }
       }
+      lastProgress = progress;
       await delay(AGENT_RUNTIME_INPUT_STAGING_POLL_MS);
     }
-    throw new Error(params.timeoutMessage);
+    throw new Error(
+      `${params.timeoutMessage} within ${config.agentRuntime.podStartTimeoutSeconds} seconds.${lastProgress ? ` Last observed startup step: ${lastProgress.message}.` : ""}`,
+    );
   }
 
   /**

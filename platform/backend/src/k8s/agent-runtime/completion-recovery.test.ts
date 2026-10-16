@@ -159,9 +159,61 @@ test("fails a pending workspace at the configured timeout without executing its 
   const exec = completeExec();
 
   await expect(manager.recoverRun(run)).rejects.toThrow(
-    "The workspace could not be resumed",
+    "The workspace could not be resumed within 60 seconds. Last observed startup step: Waiting for a node.",
   );
   expect(polls).toBe(1);
+  expect(exec).not.toHaveBeenCalled();
+});
+
+test.for([
+  ["registry.example/agent:2", false, "container image"],
+  ["registry.example/agent:1", true, "privileged mode"],
+  ["registry.example/agent:2", true, "container image and privileged mode"],
+] as const)("refuses a changed image %s with privileged=%s before modifying the saved workspace", async ([
+  image,
+  privileged,
+  changed,
+], { run }) => {
+  server.use(
+    http.get(sandboxUrl, () =>
+      HttpResponse.json({
+        metadata: { name: run.workloadName },
+        spec: {
+          podTemplate: {
+            spec: {
+              containers: [
+                { name: "agent-runtime", image: "registry.example/agent:1" },
+              ],
+            },
+          },
+        },
+      }),
+    ),
+  );
+  const spec: AgentRunLaunchSpec = {
+    taskId: run.taskId,
+    agentRuntimeId: run.agentId,
+    frozenName: run.workloadName,
+    runtimeScope: run.runtimeScope,
+    image,
+    privileged,
+    command: ["/bin/true"],
+    resources: { cpuRequest: "100m", memoryRequest: "128Mi" },
+    env: {},
+    secretEnv: {},
+    activeDeadlineSeconds: 600,
+    workspaceStorageSize: "1Gi",
+    nodeSelector: {},
+    imagePullSecrets: [],
+    inputFileCount: 0,
+    effectiveNetworkPolicy: { source: "built_in", policy: null },
+  };
+  const exec = completeExec();
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await expect(manager.continueRun({ session: run, spec })).rejects.toThrow(
+      `This workspace cannot resume because the Agent's ${changed} changed since it was created. Start a new run from the Agent page to use the updated settings. Saved files stay in the existing workspace until its retention deadline.`,
+    );
+  }
   expect(exec).not.toHaveBeenCalled();
 });
 

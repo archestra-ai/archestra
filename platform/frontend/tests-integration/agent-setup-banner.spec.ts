@@ -78,6 +78,15 @@ test("spaces the setup checklist like the rest of the agent overview, and clears
   await expect(workSources).not.toContainText(
     "Available once setup above is done.",
   );
+
+  await page.goto(`/agents/${AGENT.id}/edit`);
+  await expect(
+    page.getByRole("status").filter({ hasText: "Signed in for you" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Signed in for you" }),
+  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Opus$/ })).toBeVisible();
 });
 
 async function mockAgentPage({
@@ -105,10 +114,40 @@ async function mockAgentPage({
     url: `/api/agents/${AGENT.id}/subagent-exclusions`,
     body: { excludedSubagentIds: [] },
   });
+  await mswControl.registerMany([
+    {
+      method: "get",
+      url: `/api/agents/${AGENT.id}/tool-exclusions`,
+      body: { excludedToolIds: [] },
+    },
+    {
+      method: "get",
+      url: `/api/agents/${AGENT.id}/knowledge-source-exclusions`,
+      body: { excludedConnectorIds: [] },
+    },
+    {
+      method: "get",
+      url: `/api/agents/${AGENT.id}/activation-skill-policy`,
+      body: {
+        mode: "all",
+        revision: 0,
+        allowedReferences: [],
+        excludedReferences: [],
+        hiddenAllowedCount: 0,
+        hiddenExcludedCount: 0,
+        allowedSkills: [],
+        excludedSkills: [],
+      },
+    },
+  ]);
   await mswControl.use({
     method: "get",
     url: `/api/agents/${AGENT.id}/runtime/claude-code/models`,
-    body: { models: [] },
+    body: {
+      models: [
+        { value: "opus", displayName: "Opus", description: "Runtime default" },
+      ],
+    },
   });
   await mswControl.use({
     method: "get",

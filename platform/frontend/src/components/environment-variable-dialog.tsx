@@ -449,7 +449,6 @@ function credentialBindingPatch(
   return {
     credentialId: option.id,
     key: draft.key || option.defaultKey,
-    description: draft.description || option.description,
     scope,
     value: "",
   };

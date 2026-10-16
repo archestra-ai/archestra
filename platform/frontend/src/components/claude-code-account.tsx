@@ -1,5 +1,6 @@
 "use client";
 
+import { DEFAULT_CLAUDE_CODE_MODEL } from "@archestra/shared";
 import { CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ModelSelector } from "@/components/chat/model-selector";
@@ -115,10 +116,14 @@ export function ClaudeCodeAccount({
           <span>{connected ? "Manage" : "Sign in with Claude"}</span>
         </Button>
       ) : variant === "compact" ? (
-        <InlineNotice>
+        <InlineNotice
+          variant={connected ? "success" : "warning"}
+          role={connected ? "status" : "alert"}
+        >
           <RuntimeCredentialIcon icon="logo:anthropic" className="size-3.5" />
           <span className="font-medium">Claude Code</span>
           <InlineNoticeText>{statusText}</InlineNoticeText>
+          {connected && <CheckCircle2 aria-label="Connected" />}
           <Button
             type="button"
             variant="outline"
@@ -181,7 +186,7 @@ export function ClaudeCodeAccount({
             <div>
               <ModelSelector
                 models={models}
-                selectedModel={model ?? "default"}
+                selectedModel={model ?? DEFAULT_CLAUDE_CODE_MODEL}
                 onModelChange={(value) => {
                   if (value) onModelChange(value);
                 }}

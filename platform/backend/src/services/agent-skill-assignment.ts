@@ -71,7 +71,7 @@ class AgentSkillAssignmentService {
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     const [grants, policies] = await Promise.all([
-      ResourcePermissions.resolveAll(params),
+      ResourcePermissions.resolveAll({ ...params, resources: ["skill"] }),
       ResourcePermissionPolicyModel.findApplicableBatch({
         organizationId: params.organizationId,
         resource: "skill",

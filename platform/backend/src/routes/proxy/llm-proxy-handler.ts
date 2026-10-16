@@ -3265,6 +3265,8 @@ async function handleStreaming<
         ctx.pluginContext,
         rewrittenToolCalls ?? toolCalls,
         streamAdapter.formatToolCallsSSE !== undefined,
+        streamAdapter.supportsToolCallReview === true &&
+          typeof streamAdapter.formatToolCallsSSE === "function",
       );
       if (policyOutcome.wasRewritten)
         rewrittenToolCalls = policyOutcome.toolCalls;
@@ -4031,6 +4033,8 @@ async function handleNonStreaming<
       ctx.pluginContext,
       rewrittenToolCalls ?? emittedToolCalls,
       responseAdapter.withRewrittenToolCalls !== undefined,
+      responseAdapter.supportsToolCallReview === true &&
+        typeof responseAdapter.withRewrittenToolCalls === "function",
     );
     if (policyOutcome.wasRewritten)
       rewrittenToolCalls = policyOutcome.toolCalls;
@@ -4659,6 +4663,8 @@ async function evaluateProxyPluginToolCalls(
   toolCalls: readonly AccumulatedToolCall[],
   /** Whether this transport re-emits the calls the plugins return. */
   canRewriteToolCalls: boolean,
+  /** Whether this transport emits a call's review details before the call. */
+  canShowToolCallReview: boolean,
 ): Promise<{
   refusal: LlmProxyToolCallRefusal | null;
   toolCalls: AccumulatedToolCall[];
@@ -4684,6 +4690,7 @@ async function evaluateProxyPluginToolCalls(
     ...context,
     toolCalls,
     canRewriteToolCalls,
+    canShowToolCallReview,
   });
   if (outcome.decision === "allow") {
     const releasedCalls = outcome.toolCalls.map((toolCall) => ({
@@ -4705,7 +4712,8 @@ async function evaluateProxyPluginToolCalls(
             call.wireId !== original.wireId ||
             call.name !== original.name ||
             call.namespace !== original.namespace ||
-            call.arguments !== original.arguments
+            call.arguments !== original.arguments ||
+            call.reviewDetails !== original.reviewDetails
           );
         }),
       blocked: outcome.blocked ?? [],

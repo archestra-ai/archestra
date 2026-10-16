@@ -1,9 +1,11 @@
+import { createHash } from "node:crypto";
 import {
   parseOpenappaDeclarations,
   validateHostedOpenappaPolicy,
 } from "@archestra/openappa-rs";
 import { afterEach, vi } from "vitest";
 import config from "@/config";
+import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import OpenAppaPolicyFileModel from "@/models/openappa-policy-file";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
@@ -252,12 +254,14 @@ describe("retained annotator credential availability", () => {
     });
   }
 
+  /** Written as the stored revision: OLD_POLICY predates the `[credentials]` refusal. */
   async function savePolicy(content: string) {
     const root = await guardrailsPolicyService.get(organizationId);
-    await guardrailsPolicyService.update({
+    await GuardrailsPolicyModel.save({
       organizationId,
-      userId,
+      updatedBy: userId,
       content,
+      contentHash: createHash("sha256").update(content).digest("hex"),
       expectedRevision: root.revision,
     });
     await openappaBatteriesService.recompile(organizationId);

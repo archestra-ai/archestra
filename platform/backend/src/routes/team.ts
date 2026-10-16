@@ -49,6 +49,16 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["Teams"],
         querystring: PaginationQuerySchema.extend({
           name: z.string().optional(),
+          includeRelations: z
+            .preprocess(
+              (value) =>
+                value === "false" ? false : value === "true" ? true : value,
+              z.boolean(),
+            )
+            .describe(
+              "Include team members, labels and descendant teams (default true). Disable for metadata-only pickers.",
+            )
+            .optional(),
           // Filter teams by labels. Format: key1:val1|val2;key2:val3
           // (AND across keys, OR within a key's values).
           labels: z.string().optional(),
@@ -66,7 +76,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const { limit, offset, name, mine } = request.query;
+      const { limit, offset, name, mine, includeRelations } = request.query;
       const labels = parseLabelsParam(request.query.labels);
       const { success: canManageAllTeams } = await hasPermission(
         { team: ["update"] },
@@ -81,6 +91,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
           offset,
           name,
           labels,
+          includeRelations,
         });
         return reply.send({
           data: result.data,
@@ -94,6 +105,7 @@ const teamRoutes: FastifyPluginAsyncZod = async (fastify) => {
         offset,
         name,
         labels,
+        includeRelations,
       });
       return reply.send({
         data: result.data,

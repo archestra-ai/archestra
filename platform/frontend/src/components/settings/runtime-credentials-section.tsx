@@ -348,6 +348,7 @@ export function RuntimeCredentialsSection({
       {definitions.isError ? (
         <QueryLoadError
           title="Couldn't load credentials"
+          error={definitions.error}
           onRetry={() => definitions.refetch()}
         />
       ) : (

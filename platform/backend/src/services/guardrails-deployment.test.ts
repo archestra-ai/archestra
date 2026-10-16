@@ -1,8 +1,14 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import config from "@/config";
 import { enterpriseTier } from "@/enterprise-tier";
+import logger from "@/logging";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
-import { readGuardrailsV2Activation } from "./guardrails-deployment";
+import {
+  readGuardrailsV2Activation,
+  setGuardrailsDeployment,
+} from "./guardrails-deployment";
+
+vi.mock("@/logging");
 
 describe("readGuardrailsV2Activation", () => {
   test("a stored false is inactive, and a thrown read is not that result", async () => {
@@ -66,5 +72,25 @@ describe("readGuardrailsV2Activation", () => {
       setFlag("aiSecurity", previousFlags.aiSecurity);
       enterpriseTier.setUserCountForTesting(0);
     }
+  });
+});
+
+describe("setGuardrailsDeployment", () => {
+  test("logs who switched enforcement and what it was before and after", async () => {
+    await GuardrailsDeploymentModel.setEnabled(true);
+    const info = vi.mocked(logger.info);
+
+    await setGuardrailsDeployment({ enabled: false }, { userId: "user-1" });
+
+    expect(info).toHaveBeenCalledWith(
+      {
+        userId: "user-1",
+        before: expect.objectContaining({ enabled: true }),
+        after: expect.objectContaining({ enabled: false }),
+      },
+      expect.stringMatching(
+        /^Guardrails (enforcement switched off|deployment settings changed)$/,
+      ),
+    );
   });
 });

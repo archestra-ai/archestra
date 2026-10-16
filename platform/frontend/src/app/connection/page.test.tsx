@@ -1063,8 +1063,30 @@ describe("ConnectPage gateway pick", () => {
   afterEach(() => api.resetHandlers());
   afterAll(() => api.close());
 
-  it("connects through and counts the gateway picked over the default", async () => {
+  it("connects through a picked gateway outside the bounded preview and counts its tools", async () => {
+    archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+    let previewRequests = 0;
     api.use(
+      http.get(
+        "http://localhost:9000/api/agents/options/page",
+        ({ request }) => {
+          const query = new URL(request.url).searchParams;
+          expect(query.get("limit")).toBe("20");
+          expect(query.has("cursor")).toBe(false);
+          previewRequests++;
+          return HttpResponse.json({
+            data: [
+              {
+                id: "default-gateway",
+                name: "Default gateway",
+                slug: "default-gateway",
+                agentType: "mcp_gateway",
+              },
+            ],
+            pagination: { limit: 20, nextCursor: "later", hasNext: true },
+          });
+        },
+      ),
       http.get(
         "http://localhost:9000/api/agents/:id/mcp-tool-preview",
         ({ params, request }) => {
@@ -1107,10 +1129,15 @@ describe("ConnectPage gateway pick", () => {
     vi.mocked(useDefaultMcpGateway).mockReturnValue({
       data: gateways[0],
     } as unknown as ReturnType<typeof useDefaultMcpGateway>);
-    vi.mocked(useAgentOptions).mockReturnValue({
-      data: gateways,
-      isPending: false,
-    } as unknown as ReturnType<typeof useAgentOptions>);
+    vi.mocked(useAgentOptions).mockImplementation(
+      (params) =>
+        ({
+          data: gateways.filter((gateway) =>
+            params?.filters?.ids?.includes(gateway.id),
+          ),
+          isPending: false,
+        }) as unknown as ReturnType<typeof useAgentOptions>,
+    );
     vi.mocked(useProfile).mockImplementation(
       (id) =>
         ({
@@ -1130,6 +1157,14 @@ describe("ConnectPage gateway pick", () => {
     ).toBeVisible();
     await requestToolCounts();
     expect(await screen.findByText("~2.3K tokens")).toBeVisible();
+    expect(previewRequests).toBe(1);
+    expect(useAgentOptions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({
+          ids: ["coding-gateway", "default-gateway"],
+        }),
+      }),
+    );
   });
 });
 

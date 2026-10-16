@@ -1250,6 +1250,34 @@ describe("parseWebhookNotification", () => {
     expect(email.attachments).toBeUndefined();
   });
 
+  test("requests internet message headers and passes them through in order", async () => {
+    const mockGraphClient = createMockGraphClient();
+    const provider = new OutlookEmailProvider(validConfig);
+    // @ts-expect-error - accessing private property for testing
+    provider.graphClient = mockGraphClient;
+
+    mockGraphClient.get.mockResolvedValueOnce(
+      buildGraphMessage({
+        internetMessageHeaders: [
+          { name: "Received", value: "from exchange" },
+          { name: "Authentication-Results", value: "dmarc=pass" },
+          { name: "X-Missing-Value" },
+        ],
+      }),
+    );
+
+    const payload = buildPayload([{ resourceData: { id: "msg-1" } }]);
+    const result = await provider.parseWebhookNotification(payload, {});
+
+    expect(mockGraphClient.select).toHaveBeenCalledWith(
+      expect.stringContaining("internetMessageHeaders"),
+    );
+    expect(result?.[0].headers).toEqual([
+      { name: "Received", value: "from exchange" },
+      { name: "Authentication-Results", value: "dmarc=pass" },
+    ]);
+  });
+
   // ----------------------------------------------------------------
   // HTML body emails
   // ----------------------------------------------------------------

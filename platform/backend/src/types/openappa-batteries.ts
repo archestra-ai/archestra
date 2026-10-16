@@ -6,7 +6,6 @@ import {
   openappaCredentialBindingsTable,
   openappaEffectivePoliciesTable,
 } from "@/database/schemas/openappa-batteries";
-import { HeldPullReasonSchema } from "@/types/openappa-github-sync";
 
 export const BatteryPackageFileSchema = z.strictObject({
   path: z.string().min(1).max(512),
@@ -374,15 +373,6 @@ const UnusedAliasViewSchema = z.object({
   line: z.number(),
 });
 
-/** A pulled document the sync fetched and did not publish. */
-const HeldPullViewSchema = z.object({
-  contentHash: z.string(),
-  sourceCommit: z.string(),
-  reasons: z.array(HeldPullReasonSchema),
-  /** What the pull would change, in words: which battery gets which credential, which batteries go. */
-  message: z.string().nullable(),
-});
-
 export const PolicyDeclarationsViewSchema = z.object({
   batteries: z.array(
     PolicyBatteryViewSchema.extend({
@@ -403,7 +393,6 @@ export const PolicyDeclarationsViewSchema = z.object({
   lastError: z.string().nullable(),
   composition: CompositionViewSchema,
   managedInGithub: z.boolean(),
-  heldPull: HeldPullViewSchema.nullable(),
   /**
    * The stored bindings, including those of variables no included battery
    * reads yet; a battery's own `credentials` say which key it composes with.

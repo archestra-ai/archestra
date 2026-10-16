@@ -236,7 +236,10 @@ export const guardrailsPolicyService = {
       params.resolved ??
       (await resolveBoth({ organizationId, content, previous }));
     const resolution = resolved.submitted;
-    const errors = [...resolution.errors];
+    const errors = [
+      ...resolution.errors,
+      ...(await openappaDeclarations.credentialErrors(content)),
+    ];
     const kept = new Set(resolved.previous.entries.map((entry) => entry.entry));
     const warnings: string[] = [];
     for (const entry of resolution.entries)

@@ -30,6 +30,7 @@ export function EffectivePolicyView() {
     return (
       <QueryLoadError
         title="Could not load the effective policy"
+        error={effective.error}
         onRetry={() => effective.refetch()}
       />
     );

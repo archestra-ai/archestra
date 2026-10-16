@@ -37,6 +37,7 @@ describe("annotators kept for conversations that are still active", () => {
     config.openappa.keptAnnotatorHorizonDays = 30;
     runtime.unreadable = false;
     vi.mocked(logger.info).mockClear();
+    vi.mocked(logger.warn).mockClear();
     organizationId = (await makeOrganization()).id;
     userId = (await makeUser()).id;
     await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
@@ -115,6 +116,56 @@ describe("annotators kept for conversations that are still active", () => {
     await OpenAppaEffectivePolicyModel.invalidate(organizationId);
     await openappaBatteriesService.getEffectivePolicy(organizationId);
     expect(retiredLines()).toHaveLength(1);
+  });
+
+  test("conversations under policies that bound a removed name differently keep it at the binding of the most recently active one", async () => {
+    await declare(urlJudged("b", JUDGE_B));
+    const older = await openedUnder({
+      activeDaysAgo: 3,
+      content: urlJudged("a", JUDGE_A),
+    });
+    const newer = await openedUnder({
+      activeDaysAgo: 1,
+      content: urlJudged("a", JUDGE_A2),
+    });
+    vi.mocked(logger.warn).mockClear();
+
+    await OpenAppaEffectivePolicyModel.invalidate(organizationId);
+    const effective =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+
+    expect(effective.lastError).toBeNull();
+    expect(effective.content).toContain(JUDGE_A2);
+    expect(effective.content).not.toContain(JUDGE_A);
+    expect(effective.retainedAnnotators).toMatchObject({
+      kept: [
+        {
+          name: "a.tool-call",
+          binding: JUDGE_A2,
+          openingHashes: [newer.hash],
+          lastActivityAt: newer.activeAt.toISOString(),
+        },
+      ],
+      dropped: [],
+    });
+    expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
+      {
+        organizationId,
+        annotator: "a.tool-call",
+        current: JUDGE_A2,
+        earlier: [JUDGE_A],
+      },
+      "OpenAPPA earlier opening policies bound a kept annotator differently; sessions opened under them are answered by the binding it is kept at",
+    );
+
+    // The older conversation becomes the latest one: its binding is kept.
+    await activity({ root: older.root, at: new Date() });
+    await OpenAppaEffectivePolicyModel.invalidate(organizationId);
+    const after =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+    expect(after.retainedAnnotators?.kept).toMatchObject([
+      { name: "a.tool-call", binding: JUDGE_A, openingHashes: [older.hash] },
+    ]);
   });
 
   test("an encrypted conversation keeps its opening annotator using recorded policy metadata", async () => {
@@ -271,6 +322,7 @@ describe("annotators kept for conversations that are still active", () => {
 });
 
 const JUDGE_A = "https://judge-a.test/annotate";
+const JUDGE_A2 = "https://judge-a2.test/annotate";
 const JUDGE_B = "https://judge-b.test/annotate";
 
 /** A root whose one URL-bound annotator `<prefix>.tool-call` judges every tool. */

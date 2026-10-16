@@ -36,6 +36,7 @@ export function RulesCard() {
       {summary.isLoadingError ? (
         <QueryLoadError
           title="Could not load tool coverage"
+          error={summary.error}
           onRetry={() => summary.refetch()}
         />
       ) : !totals ? (

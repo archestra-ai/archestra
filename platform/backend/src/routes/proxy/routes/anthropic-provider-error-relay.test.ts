@@ -7,7 +7,7 @@
  * only the upstream HTTP call.
  */
 
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify from "fastify";
 import {
   serializerCompiler,
   validatorCompiler,

@@ -379,6 +379,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "agent.updated",
     fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
   },
+  "/api/agents/:agentId/delegations/:targetAgentId": {
+    resourceType: "agent",
+    resourceIdParam: "agentId",
+    action: "agent.updated",
+    fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
+  },
   "/api/agents/:agentId/a2a-delegations": {
     resourceType: "agent",
     resourceIdParam: "agentId",
@@ -837,12 +843,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "credential.created",
     fetchById: (id, orgId) =>
       RuntimeCredentialDefinitionModel.findByIdForAudit(id, orgId),
-  },
-  // A POST walk-up is discarded, so the accept action registers its own path.
-  "/api/openappa/github-sync/accept-held": {
-    resourceType: "organization",
-    action: "organization.updated",
-    resourceIdSource: "organizationContext",
   },
   "/api/openappa/battery-installs": {
     resourceType: "openappaBatteryInstall",

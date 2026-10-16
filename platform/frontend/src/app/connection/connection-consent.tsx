@@ -75,6 +75,7 @@ export function ConnectionConsent() {
       ) : organizationQuery.isError ? (
         <QueryLoadError
           title="Could not load connection settings"
+          error={organizationQuery.error}
           onRetry={() => void organizationQuery.refetch()}
         />
       ) : null}

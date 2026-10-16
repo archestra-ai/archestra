@@ -17,6 +17,13 @@ const AnnotationRequestSchema = z.object({
   system: z.string(),
   input: z.string(),
   schema: z.record(z.string(), z.unknown()),
+  attribution: z
+    .object({
+      root: z.string(),
+      trajectory: z.string(),
+      call_id: z.string().optional(),
+    })
+    .optional(),
 });
 const AnswerSchema = z.record(z.string(), z.unknown());
 

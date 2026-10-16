@@ -79,11 +79,12 @@ const server = setupServer(
   http.get(`${API_ORIGIN}/api/oauth-clients`, () =>
     HttpResponse.json(page([])),
   ),
-  http.get(`${API_ORIGIN}/api/agents/all`, () =>
-    HttpResponse.json([
+  http.get(`${API_ORIGIN}/api/agents/options`, ({ request }) => {
+    expect(new URL(request.url).searchParams.get("ids")).toBe("agent-1");
+    return HttpResponse.json([
       { id: "agent-1", name: "Support agent", agentType: "agent" },
-    ]),
-  ),
+    ]);
+  }),
   http.get(`${API_ORIGIN}/api/oauth-clients/labels/keys`, () =>
     HttpResponse.json([]),
   ),
@@ -190,7 +191,7 @@ describe("OauthClientsPage", () => {
       "1 key",
       "Main OpenAI",
     ])
-      expect(within(row).getByText(label)).toBeVisible();
+      expect(await within(row).findByText(label)).toBeVisible();
     expect(
       screen.queryByRole("columnheader", { name: "Budget" }),
     ).not.toBeInTheDocument();

@@ -26,6 +26,96 @@ function requestContext(): LlmProxyRequestContext {
 }
 
 describe("LlmProxyPluginRegistry", () => {
+  test.each([
+    false,
+    true,
+  ])("only a blocked replacement can remove review text (replacement=%s)", async (replacement) => {
+    const registry = new LlmProxyPluginRegistry();
+    registry.register({
+      id: "block-review",
+      finalizesToolCalls: true,
+      async onToolCalls({ toolCalls }) {
+        return {
+          decision: "allow",
+          toolCalls: toolCalls.map((call) => ({
+            ...call,
+            name: replacement ? "archestra__get_remedy_plans" : call.name,
+            reviewDetails: undefined,
+          })),
+          blocked: toolCalls.map((call) => ({
+            id: call.id,
+            name: call.name,
+            reason: "review denied",
+          })),
+        };
+      },
+    });
+    const context = requestContext();
+    await registry.onSessionInit(context);
+    try {
+      const response = registry.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "review-call",
+            name: "AskUserQuestion",
+            arguments: "{}",
+            reviewDetails: "Complete immutable review",
+          },
+        ],
+      });
+      if (replacement)
+        await expect(response).resolves.toMatchObject({
+          decision: "allow",
+          toolCalls: [{ name: "archestra__get_remedy_plans" }],
+        });
+      else
+        await expect(response).rejects.toThrow("changed protected review text");
+    } finally {
+      await registry.complete(context);
+    }
+  });
+
+  test.each([
+    false,
+    true,
+  ])("finalizers cannot strip a native card's full review (in-place=%s)", async (inPlace) => {
+    const registry = new LlmProxyPluginRegistry();
+    registry.register({
+      id: "strip-review",
+      finalizesToolCalls: true,
+      async onToolCalls({ toolCalls }) {
+        if (inPlace) {
+          delete toolCalls[0].reviewDetails;
+          return { decision: "allow", toolCalls };
+        }
+        return {
+          decision: "allow",
+          toolCalls: toolCalls.map((call) => ({
+            ...call,
+            reviewDetails: undefined,
+          })),
+        };
+      },
+    });
+    const context = requestContext();
+    await registry.onSessionInit(context);
+    await expect(
+      registry.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "review-call",
+            name: "AskUserQuestion",
+            arguments: "{}",
+            reviewDetails: "Complete immutable review",
+          },
+        ],
+      }),
+    ).rejects.toThrow("changed protected review text");
+    await registry.complete(context);
+  });
+
   test("does not allocate lifecycle state or invoke callbacks when empty", async () => {
     const registry = new LlmProxyPluginRegistry();
     const context = requestContext();

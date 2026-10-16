@@ -16,6 +16,7 @@ export { LRUCacheManager } from "@/in-memory-lru-cache";
  * of related entries using deleteByPrefix().
  */
 export const CacheKey = {
+  OpenAppaHitlSummary: "openappa-hitl-summary",
   ClientConnection: "client-connection",
   ClientConnectionRateLimit: "client-connection-rate-limit",
   /** models.dev sync tracking */
@@ -65,6 +66,9 @@ export const CacheKey = {
   OpenAppaHitlQuestionAsked: "openappa-hitl-question-asked",
   /** Per-call server-issued review status, for history only; never a ruling. */
   OpenAppaHitlReviewHistory: "openappa-hitl-review-history",
+  /** Canonical result text replayed on later requests. Keep the deployed preview's
+   * namespace so upgrading a live conversation does not rewrite its earlier results. */
+  OpenAppaHitlReviewContinuation: "openappa-hitl-page-continuation",
   /** Pending OpenAPPA review indexed by a verified runtime workspace */
   OpenAppaRuntimeHitlReview: "openappa-runtime-hitl-review",
   /** Sessions already told once to resend a request that lacked the gateway remedy tools */
@@ -154,6 +158,13 @@ export const CacheKey = {
   EncryptedChatSession: "encrypted-chat-session-v2",
   /** Arguments behind a Slack approval's "View arguments" button (a button value is capped at 2,000 chars) */
   SlackApprovalArguments: "chatops-slack-approval-arguments",
+  /**
+   * Protected runtime files pinned for a parent session while their runtime
+   * was mid-call, one entry per runtime session. Any replica serving the
+   * runtime's next request releases them; any replica serving the parent's
+   * next call reads them.
+   */
+  AgentRuntimePendingExports: "agent-runtime-pending-exports-v1",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];

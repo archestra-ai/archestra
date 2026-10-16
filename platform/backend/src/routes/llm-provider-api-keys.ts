@@ -848,6 +848,9 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       return reply.send({
         ...createdApiKey,
+        labels: await LlmProviderApiKeyLabelModel.getLabelsFor(
+          createdApiKey.id,
+        ),
         createdBy: await CreatedByModel.resolveOne(
           CreatedByModel.id(createdApiKey, createdApiKey.createdBy),
         ),
@@ -912,6 +915,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       return reply.send({
         ...apiKey,
+        labels: await LlmProviderApiKeyLabelModel.getLabelsFor(apiKey.id),
         createdBy: await CreatedByModel.resolveOne(
           CreatedByModel.id(apiKey, apiKey.createdBy),
         ),
@@ -1310,6 +1314,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       return reply.send({
         ...updated,
+        labels: await LlmProviderApiKeyLabelModel.getLabelsFor(updated.id),
         createdBy: await CreatedByModel.resolveOne(
           CreatedByModel.id(updated, updated.createdBy),
         ),
@@ -1440,6 +1445,7 @@ const llmProviderApiKeyRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
       return reply.send({
         ...updated,
+        labels: await LlmProviderApiKeyLabelModel.getLabelsFor(updated.id),
         createdBy: await CreatedByModel.resolveOne(
           CreatedByModel.id(updated, updated.createdBy),
         ),

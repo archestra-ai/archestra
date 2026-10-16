@@ -49,6 +49,7 @@ export async function listRuntimeCredentialDefinitions(params: {
       id: definition.id,
       kind: definition.kind,
       githubUrl: definition.githubUrl,
+      gitlabUrl: definition.gitlabUrl,
       appId: definition.appId,
       installationId: definition.installationId,
       githubClientId: definition.githubClientId,

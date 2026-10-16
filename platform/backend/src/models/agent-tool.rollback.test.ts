@@ -86,7 +86,10 @@ describe("AgentToolModel delegation queries", () => {
   test("excludes soft-deleted delegation targets", async ({ makeAgent }) => {
     const sourceAgent = await makeAgent({ agentType: "agent" });
     const targetAgent = await makeAgent({ agentType: "agent" });
-    await AgentToolModel.assignDelegation(sourceAgent.id, targetAgent.id);
+    await AgentToolModel.assignDelegation({
+      agentId: sourceAgent.id,
+      targetAgentId: targetAgent.id,
+    });
 
     await AgentModel.delete(targetAgent.id);
 
@@ -117,9 +120,18 @@ describe("AgentToolModel delegation queries", () => {
       agentType: "agent",
     });
 
-    await AgentToolModel.assignDelegation(activeSource.id, activeTarget.id);
-    await AgentToolModel.assignDelegation(deletedSource.id, activeTarget.id);
-    await AgentToolModel.assignDelegation(activeSource.id, deletedTarget.id);
+    await AgentToolModel.assignDelegation({
+      agentId: activeSource.id,
+      targetAgentId: activeTarget.id,
+    });
+    await AgentToolModel.assignDelegation({
+      agentId: deletedSource.id,
+      targetAgentId: activeTarget.id,
+    });
+    await AgentToolModel.assignDelegation({
+      agentId: activeSource.id,
+      targetAgentId: deletedTarget.id,
+    });
     await AgentModel.delete(deletedSource.id);
     await AgentModel.delete(deletedTarget.id);
 

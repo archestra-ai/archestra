@@ -47,6 +47,9 @@ vi.mock("@/lib/agent.query", () => ({
   }),
   useAgentOptions: () => ({ data: [], isPending: false }),
 }));
+vi.mock("@/lib/agent-options.query", () => ({
+  useAgentOptionsPage: () => ({ data: undefined, isPending: false }),
+}));
 vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: false }),
 }));

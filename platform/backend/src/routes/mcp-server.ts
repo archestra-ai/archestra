@@ -105,8 +105,10 @@ import {
   broadcastMcpServersChanged,
 } from "@/websocket";
 import { BulkDeleteBodySchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
+import mcpServerAgentUsageRoutes from "./mcp-server-agent-usage";
 
 const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  await fastify.register(mcpServerAgentUsageRoutes);
   fastify.get(
     "/api/mcp_server/auto_mode_agents",
     {
@@ -142,6 +144,15 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["MCP Server"],
         querystring: z.object({
           catalogId: z.string().optional(),
+          includeAssignedAgents: z
+            .preprocess(
+              (value) => value !== "false" && value !== false,
+              z.boolean(),
+            )
+            .optional()
+            .describe(
+              "Include per-install agent usage (default true). False returns empty assignedAgents for status-only lists.",
+            ),
           assignmentScope: AgentScopeSchema.optional(),
           assignmentTeamIds: z
             .preprocess(
@@ -160,7 +171,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ user, headers, query, organizationId }, reply) => {
-      const { assignmentScope, assignmentTeamIds, catalogId, status } = query;
+      const {
+        assignmentScope,
+        assignmentTeamIds,
+        catalogId,
+        status,
+        includeAssignedAgents,
+      } = query;
 
       if (status === "deleted") {
         const { success: canDelete } = await hasPermission(
@@ -238,6 +255,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // post-filtering made that request load and decorate every install
           // in the organization before discarding all but one.
           catalogId,
+          includeAssignedAgents,
           // serverType:"app" backings are managed on the Apps surface, not
           // listed as MCP servers — keep them out of the user-facing server
           // list (and its consumers like the agent tool-assignment picker).

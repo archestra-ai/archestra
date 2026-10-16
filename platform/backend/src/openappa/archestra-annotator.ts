@@ -5,8 +5,15 @@ import logger from "@/logging";
 import AgentModel from "@/models/agent";
 import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import OrganizationModel from "@/models/organization";
-import { generateTaggedText } from "@/utils/generate-tagged-text";
-import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
+import {
+  generateTaggedText,
+  TRUNCATION_RETRY_FACTOR,
+} from "@/utils/generate-tagged-text";
+import {
+  defaultMaxOutputTokens,
+  resolveAgentLlmOrDefault,
+  resolveModelOutputBudget,
+} from "@/utils/llm-resolution";
 import type { OpenappaEncryptedChat } from "./encrypted-chat";
 
 /** The prompt the runtime's `builtin = "archestra"` annotator renders. */
@@ -77,12 +84,26 @@ class OpenAppaArchestraAnnotator {
       baseUrl: selection.baseUrl,
       chatApiKeyId: selection.chatApiKeyId,
     });
+    // A fraction of the model's budget, so the truncation retry's extra room
+    // still fits under the model's real output cap.
+    const budget = defaultMaxOutputTokens(
+      selection.provider,
+      await resolveModelOutputBudget({
+        provider: selection.provider,
+        modelName: selection.modelName,
+      }),
+    );
+    const maxOutputTokens =
+      budget === undefined
+        ? undefined
+        : Math.floor(budget / TRUNCATION_RETRY_FACTOR);
     try {
       const text = await generateTaggedText({
         model,
         tag: "annotation",
         system: `${request.system}\n\nThe annotation is one JSON object that matches this JSON schema:\n${JSON.stringify(request.schema)}`,
         prompt: request.input,
+        maxOutputTokens,
       });
       const answer = text === null ? null : parseObject(text);
       if (answer === null)

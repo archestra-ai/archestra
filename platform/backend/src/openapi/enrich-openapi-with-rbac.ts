@@ -277,6 +277,10 @@ const DYNAMIC_ROUTE_PERMISSION_NOTES = {
     "Checked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`. If no type filter is provided, the user must have read access to at least one agent type.",
   [RouteId.GetAllAgents]:
     "Checked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`. If no type filter is provided, the user must have read access to at least one agent type.",
+  [RouteId.GetAgentOptions]:
+    "Checked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`. If no type filter is provided, the user must have read access to at least one agent type.",
+  [RouteId.GetChatAgentRoster]:
+    "Requires `agent:read`; only internal agents visible to the caller are returned.",
   [RouteId.GetAgent]:
     "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`.",
   [RouteId.PinAgent]:

@@ -235,7 +235,7 @@ export function getOpenAppaSaveResult({
   if (shortName === "update_guardrails_policy") {
     return getPolicySaveResult(output) ? "policy" : null;
   }
-  if (shortName === "publish_openappa_validation_change") {
+  if (shortName === "update_guardrails_validation") {
     return getValidationSaveResult(output) ? "validation" : null;
   }
   return null;
@@ -419,23 +419,14 @@ function parsePolicyChange(
   output: unknown,
   validationChange = false,
 ): PolicyChange | null {
-  let value = parseOutput(output);
+  const value = parseOutput(output);
   if (!value) return null;
-  if (validationChange) {
-    if (value.stage === "preview") {
-      const policy = value.policy;
-      if (
-        !policy ||
-        typeof policy !== "object" ||
-        !("changed" in policy) ||
-        policy.changed !== true
-      )
-        return null;
-      value = { ...value, ...policy };
-    } else if (value.before === value.after) {
-      return null;
-    }
-  }
+  // A validation preview never changes the policy, so it has no diff card.
+  if (
+    validationChange &&
+    (value.stage === "preview" || value.before === value.after)
+  )
+    return null;
   if (
     (value.delivery !== "revision" && value.delivery !== "pull_request") ||
     typeof value.before !== "string" ||

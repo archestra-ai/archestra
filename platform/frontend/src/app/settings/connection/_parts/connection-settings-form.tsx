@@ -31,7 +31,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SingleSelectCombobox } from "@/components/ui/single-select-combobox";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { useProfiles } from "@/lib/agent.query";
+import { useAgentOptions } from "@/lib/agent.query";
 import config from "@/lib/config/config";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
@@ -63,7 +63,7 @@ export function ConnectionSettingsForm() {
   const { data: organization } = useOrganization();
   const appName = useAppName();
   const defaultInstructions = defaultRuntimeHandoffInstructions(appName);
-  const { data: mcpGateways } = useProfiles({
+  const { data: mcpGateways } = useAgentOptions({
     filters: { agentTypes: ["profile", "mcp_gateway"] },
   });
 

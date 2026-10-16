@@ -28,6 +28,7 @@ import type {
 import { mapWithConcurrency } from "@/utils/concurrency";
 import { archestraAudience } from "./archestra-audience";
 import { type DeployedBattery, declaredCredentials } from "./battery-target";
+import { withReportingTool } from "./reporting-tool";
 
 /** How each resolved entry deploys here, by its `include` spelling. */
 export type DeployedEntries = ReadonlyMap<string, DeployedBattery>;
@@ -412,7 +413,7 @@ class OpenAppaDeclarations {
   }): Promise<ComposedPolicy> {
     const native = await loadNative();
     const tokenEnv = this.publishBridgeToken();
-    return native.composeOpenappaPolicy({
+    const composed = await native.composeOpenappaPolicy({
       root: params.root,
       memberRosters: params.memberRosters,
       batteries: this.composeInputs({
@@ -426,6 +427,17 @@ class OpenAppaDeclarations {
         },
       }),
     });
+    // A check answers as the served composition does, the yell rule included.
+    const content = composed.content ?? null;
+    return content === null
+      ? composed
+      : {
+          ...composed,
+          content: await withReportingTool({
+            composed: content,
+            validate: (text) => native.validateHostedOpenappaPolicy(text),
+          }),
+        };
   }
 
   /**

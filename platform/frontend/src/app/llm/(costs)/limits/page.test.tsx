@@ -89,7 +89,7 @@ vi.mock("@/lib/llm-models.query", () => ({
 }));
 
 vi.mock("@/lib/agent.query", () => ({
-  useProfiles: (params?: { filters?: { agentTypes?: string[] } }) => {
+  useAgentOptions: (params?: { filters?: { agentTypes?: string[] } }) => {
     const agentType = params?.filters?.agentTypes?.[0];
     if (agentType === "agent") {
       return { data: [{ id: "agent-1", name: "Test Agent" }] };

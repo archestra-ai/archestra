@@ -25,12 +25,15 @@ type AgentRunTerminationOutcome =
   | "expired_idle";
 type AgentRunCompletionInterface = "chatops" | "email";
 type AgentRunCompletionDeliveryOutcome = "success" | "failed";
+/** Whether a runtime read made while Guardrails enforcement was off got its proof. */
+type AgentRuntimeObservedReadOutcome = "signed" | "unsigned";
 
 let agentRunStartsTotal: client.Counter<string>;
 let agentRunTerminationsTotal: client.Counter<string>;
 let agentRuntimeProvisionDurationSeconds: client.Histogram<string>;
 let agentRuntimeSteersTotal: client.Counter<string>;
 let agentRuntimeCompletionDeliveriesTotal: client.Counter<string>;
+let agentRuntimeObservedReadsTotal: client.Counter<string>;
 
 let initialized = false;
 
@@ -69,6 +72,12 @@ export function initializeAgentRuntimeMetrics(): void {
     labelNames: ["interface", "outcome"],
   });
 
+  agentRuntimeObservedReadsTotal = new client.Counter({
+    name: "agent_runtime_observed_reads_total",
+    help: "Agent Runtime reads a governed session made while Guardrails enforcement was off, by whether the proxy signed them (signed) or could not record the call to sign it (unsigned)",
+    labelNames: ["outcome"],
+  });
+
   logger.debug("Agent Runtime metrics initialized");
 }
 
@@ -99,4 +108,11 @@ export function reportAgentRunCompletionDelivery(
     interface: completionInterface,
     outcome,
   });
+}
+
+export function reportAgentRuntimeObservedReads(
+  outcome: AgentRuntimeObservedReadOutcome,
+  count: number,
+): void {
+  if (count > 0) agentRuntimeObservedReadsTotal?.inc({ outcome }, count);
 }

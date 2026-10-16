@@ -34,7 +34,7 @@ vi.mock("@/lib/auth/auth.query");
 const origin = "http://localhost:9000";
 const serverId = "e8340e76-19fc-444d-ac4e-a817c1e78c3c";
 const server = setupServer(
-  http.get("http://localhost:9000/api/agents/all", () =>
+  http.get("http://localhost:9000/api/agents/chat-roster", () =>
     HttpResponse.json([
       {
         id: "appa-agent",

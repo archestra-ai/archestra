@@ -76,6 +76,7 @@ export function useMcpServers(params?: McpServersParams) {
       "mcp-servers",
       {
         catalogId: params?.catalogId,
+        includeAssignedAgents: params?.includeAssignedAgents,
         assignmentScope: params?.assignmentScope,
         assignmentTeamIds: params?.assignmentTeamIds,
       },
@@ -83,10 +84,14 @@ export function useMcpServers(params?: McpServersParams) {
     queryFn: async () => {
       const { data, error } = await getMcpServers({
         query:
+          params?.includeAssignedAgents !== undefined ||
           params?.catalogId ||
           params?.assignmentScope ||
           params?.assignmentTeamIds
             ? {
+                ...(params?.includeAssignedAgents !== undefined && {
+                  includeAssignedAgents: params.includeAssignedAgents,
+                }),
                 ...(params?.catalogId && { catalogId: params.catalogId }),
                 ...(params?.assignmentScope && {
                   assignmentScope: params.assignmentScope,
@@ -103,28 +108,6 @@ export function useMcpServers(params?: McpServersParams) {
     initialData: params?.initialData,
     enabled: (params?.enabled ?? true) && !!canReadInstallations,
     refetchInterval: params?.hasInstallingServers ? 2000 : false,
-  });
-}
-
-/**
- * The organization's auto-mode agents (implicit access to all tools). The set
- * is org-wide — identical for every MCP server — so it is fetched once here
- * rather than embedded on every row of the servers list.
- */
-export function useAutoModeAgents(params?: { enabled?: boolean }) {
-  const { data: canReadInstallations } = useHasPermissions({
-    mcpServerInstallation: ["read"],
-  });
-
-  return useQuery({
-    queryKey: ["mcp-servers", "auto-mode-agents"],
-    queryFn: async () => {
-      const { data, error } =
-        await archestraApiSdk.getMcpServerAutoModeAgents();
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? [];
-    },
-    enabled: (params?.enabled ?? true) && !!canReadInstallations,
   });
 }
 
@@ -151,7 +134,7 @@ export function useMcpInstallationStatusCacheSync(enabled = true) {
               .getQueriesData<archestraApiTypes.GetMcpServersResponses["200"]>({
                 queryKey: ["mcp-servers"],
               })
-              .flatMap(([, servers]) => servers ?? [])
+              .flatMap(([, servers]) => (Array.isArray(servers) ? servers : []))
               .find((candidate) => candidate.id === serverId);
             trackEvent("mcp_server_installation_failed", {
               serverId,
@@ -168,7 +151,7 @@ export function useMcpInstallationStatusCacheSync(enabled = true) {
         queryClient.setQueriesData<
           archestraApiTypes.GetMcpServersResponses["200"]
         >({ queryKey: ["mcp-servers"] }, (servers) => {
-          if (!servers) return servers;
+          if (!Array.isArray(servers)) return servers;
           let didUpdate = false;
           const nextServers = servers.map((server) => {
             if (server.id !== serverId) return server;
@@ -248,6 +231,7 @@ export function useMcpInstallationStatusCacheSync(enabled = true) {
  */
 export function useMcpServersGroupedByCatalog(params?: McpServersQuery) {
   const { data: servers } = useMcpServers({
+    includeAssignedAgents: false,
     catalogId: params?.catalogId,
     assignmentScope: params?.assignmentScope,
     assignmentTeamIds: params?.assignmentTeamIds,

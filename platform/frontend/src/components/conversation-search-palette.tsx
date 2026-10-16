@@ -1,11 +1,16 @@
 "use client";
 import { useDebounce } from "@uidotdev/usehooks";
 import {
+  AppWindow,
   Bot,
+  Boxes,
+  Database,
+  FolderKanban,
   type LucideIcon,
   MessageCircle,
   Pencil,
   Pin,
+  Puzzle,
   Route,
   Sparkles,
   UsersRound,
@@ -47,8 +52,9 @@ import {
   SHORTCUT_SEARCH,
   SHORTCUT_SIDEBAR,
 } from "@/consts";
-import { useProfiles } from "@/lib/agent.query";
+import { useAgentOptions } from "@/lib/agent.query";
 import { useMyAgentRuns } from "@/lib/agent-runtime.query";
+import { APPS_FIRST_PAGE, useApps } from "@/lib/app.query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
@@ -64,9 +70,14 @@ import { conversationHref } from "@/lib/chat/conversation-href";
 import { getDateBucketLabel } from "@/lib/chat/group-conversations-by-date";
 import { buildPinnedSidebarItems } from "@/lib/chat/pinned-sidebar-items";
 import { useFeature } from "@/lib/config/config.query";
+import { useEnvironments } from "@/lib/environment.query";
 import { usePlatform } from "@/lib/hooks/use-platform";
+import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import { usePlugins } from "@/lib/plugins/plugin.query";
+import { useProjects } from "@/lib/projects/projects.query";
 import { useSkillsList } from "@/lib/skills/skill.query";
+import { useTeams } from "@/lib/teams/team.query";
 
 /**
  * Extracts all text content from messages for preview purposes.
@@ -210,11 +221,30 @@ export function ConversationSearchPalette({
   });
 
   // Agent Runtime sessions live in the same sidebar timeline as chats,
-  // so the palette lists them too (searched client-side by title — they have
-  // no message bodies for the backend conversation search to match).
+  // so the palette lists them too. Server-side title search reaches older
+  // pages without loading the entire history.
   const runtimeEnabled = useFeature("agentRuntime") === true;
-  const { data: runs = [] } = useMyAgentRuns(
-    open && isAuthenticated && canReadConversation === true && runtimeEnabled,
+  const runsEnabled =
+    open && isAuthenticated && canReadConversation === true && runtimeEnabled;
+  const runsQuery = useMyAgentRuns(
+    runsEnabled,
+    debouncedSearch.trim()
+      ? { search: debouncedSearch.trim() }
+      : { pinned: false },
+  );
+  const pinnedRunsQuery = useMyAgentRuns(
+    runsEnabled && !debouncedSearch.trim(),
+    { pinned: true },
+  );
+  const runs = useMemo(
+    () => [
+      ...new Map(
+        [...(runsQuery.data ?? []), ...(pinnedRunsQuery.data ?? [])].map(
+          (run) => [run.taskId, run],
+        ),
+      ).values(),
+    ],
+    [runsQuery.data, pinnedRunsQuery.data],
   );
 
   const navigationDestinations = useNavigationDestinations();
@@ -230,13 +260,57 @@ export function ConversationSearchPalette({
   const { data: canReadMcpRegistry } = useHasPermissions({
     mcpRegistry: ["read"],
   });
-  const { data: agents = [] } = useProfiles({
+  const { data: agents = [] } = useAgentOptions({
     enabled: open && isAuthenticated && canReadAgents === true,
   });
   const { data: mcpCatalogItems = [] } = useInternalMcpCatalog({
     enabled: open && isAuthenticated && canReadMcpRegistry === true,
   });
   const isSearchingEntities = debouncedSearch.trim().length > 0;
+  // Apps are searched by the server like skills; useApps already withholds
+  // the request from readers without app:read.
+  const { data: appsPage } = useApps(
+    { ...APPS_FIRST_PAGE, search: debouncedSearch },
+    {
+      enabled: open && isAuthenticated && isSearchingEntities,
+      toastOnError: false,
+    },
+  );
+  const { data: canReadKnowledgeBases } = useHasPermissions({
+    knowledgeSource: ["read"],
+  });
+  const { data: canReadPlugins } = useHasPermissions({ plugin: ["read"] });
+  // The environments page is gated on update, not read, so match that.
+  const { data: canUpdateEnvironments } = useHasPermissions({
+    environment: ["update"],
+  });
+  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
+  // Projects, knowledge bases and teams are searched by the server; plugins
+  // and environments are small lists, fetched once and matched here.
+  const { data: projectsPage } = useProjects({
+    search: debouncedSearch,
+    enabled: open && isAuthenticated && isSearchingEntities,
+  });
+  const { data: knowledgeBases = [] } = useKnowledgeBases({
+    query: { search: debouncedSearch },
+    enabled:
+      open &&
+      isAuthenticated &&
+      canReadKnowledgeBases === true &&
+      isSearchingEntities,
+  });
+  const { data: teams = [] } = useTeams({
+    name: debouncedSearch,
+    enabled:
+      open && isAuthenticated && canReadTeams === true && isSearchingEntities,
+  });
+  const { data: plugins = [] } = usePlugins(
+    open && isAuthenticated && canReadPlugins === true,
+  );
+  const { data: environmentList } = useEnvironments(
+    open && isAuthenticated && canUpdateEnvironments === true,
+  );
+  const environments = environmentList?.environments ?? [];
   const { data: skills = [] } = useSkillsList(
     { search: debouncedSearch },
     {
@@ -251,7 +325,8 @@ export function ConversationSearchPalette({
   // Show skeleton during typing or initial fetch
   const isSearching = searchQuery.trim().length > 0;
   const isTyping = searchQuery !== debouncedSearch;
-  const isSearchingAndFetching = isSearching && (isTyping || isFetching);
+  const isSearchingAndFetching =
+    isSearching && (isTyping || isFetching || runsQuery.isLoading);
   // Until chats and permissions arrive, the browse view holds a skeleton in
   // place of its lists, so the palette opens at its final height and does not
   // swap rows in one at a time.
@@ -300,15 +375,41 @@ export function ConversationSearchPalette({
 
   // Skills are already filtered by the server's search, so no local pass.
   const matchingSkills = isSearchingEntities ? skills : [];
+  const matchingApps = isSearchingEntities ? (appsPage?.data ?? []) : [];
+  const matchingProjects = isSearchingEntities ? (projectsPage ?? []) : [];
+  const matchingKnowledgeBases = isSearchingEntities ? knowledgeBases : [];
+  const matchingTeams = isSearchingEntities ? teams : [];
+
+  const matchingPlugins = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
+    if (!normalizedQuery) return [];
+    return plugins.filter((plugin) =>
+      plugin.displayName.toLocaleLowerCase().includes(normalizedQuery),
+    );
+  }, [searchQuery, plugins]);
+
+  const matchingEnvironments = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
+    if (!normalizedQuery) return [];
+    return environments.filter((environment) =>
+      environment.name.toLocaleLowerCase().includes(normalizedQuery),
+    );
+  }, [searchQuery, environments]);
 
   const hasEntityMatches =
     matchingSettingsTabs.length > 0 ||
     matchingAgents.length > 0 ||
     matchingMcpCatalogItems.length > 0 ||
-    matchingSkills.length > 0;
+    matchingSkills.length > 0 ||
+    matchingApps.length > 0 ||
+    matchingProjects.length > 0 ||
+    matchingKnowledgeBases.length > 0 ||
+    matchingPlugins.length > 0 ||
+    matchingEnvironments.length > 0 ||
+    matchingTeams.length > 0;
 
-  // The conversation search runs on the backend; run sessions carry no
-  // message bodies, so their titles are matched here instead.
+  // The server searches run titles. Filter cached pins too while their
+  // independent browse feed is disabled during search.
   const matchingRuns = useMemo(() => {
     const normalizedQuery = debouncedSearch.trim().toLocaleLowerCase();
     if (!normalizedQuery) return [];
@@ -769,7 +870,7 @@ export function ConversationSearchPalette({
       open={open}
       onOpenChange={onOpenChange}
       title="Search or navigate"
-      description="Search chats, agents, skills, MCP servers and pages"
+      description="Search chats, pages, and the names of your agents, apps, projects and more"
       className="max-w-2xl"
       shouldFilter={false}
       value={selectedValue}
@@ -834,6 +935,90 @@ export function ConversationSearchPalette({
                     href: `/skills/${skill.id}`,
                     label: skill.name,
                     icon: Sparkles,
+                  }),
+                )}
+              </CommandGroup>
+            )}
+
+            {matchingApps.length > 0 && (
+              <CommandGroup heading="Apps">
+                {matchingApps.map((app) =>
+                  renderLinkItem({
+                    key:
+                      app.source === "owned"
+                        ? `app-${app.id}`
+                        : `app-${app.mcpServerId}-${app.toolName}`,
+                    // The Apps page is the one place an app opens; its search
+                    // field shows the app.
+                    href: `/apps?search=${encodeURIComponent(app.name)}`,
+                    label: app.name,
+                    icon: AppWindow,
+                  }),
+                )}
+              </CommandGroup>
+            )}
+
+            {matchingProjects.length > 0 && (
+              <CommandGroup heading="Projects">
+                {matchingProjects.map((project) =>
+                  renderLinkItem({
+                    key: `project-${project.id}`,
+                    href: `/projects/${project.id}`,
+                    label: project.name,
+                    icon: FolderKanban,
+                  }),
+                )}
+              </CommandGroup>
+            )}
+
+            {matchingKnowledgeBases.length > 0 && (
+              <CommandGroup heading="Knowledge Bases">
+                {matchingKnowledgeBases.map((knowledgeBase) =>
+                  renderLinkItem({
+                    key: `knowledge-base-${knowledgeBase.id}`,
+                    // No per-base page exists; the list is where a base opens.
+                    href: "/knowledge/knowledge-bases",
+                    label: knowledgeBase.name,
+                    icon: Database,
+                  }),
+                )}
+              </CommandGroup>
+            )}
+
+            {matchingPlugins.length > 0 && (
+              <CommandGroup heading="Plugins">
+                {matchingPlugins.map((plugin) =>
+                  renderLinkItem({
+                    key: `plugin-${plugin.id}`,
+                    href: `/plugins/${plugin.id}`,
+                    label: plugin.displayName,
+                    icon: Puzzle,
+                  }),
+                )}
+              </CommandGroup>
+            )}
+
+            {matchingEnvironments.length > 0 && (
+              <CommandGroup heading="Environments">
+                {matchingEnvironments.map((environment) =>
+                  renderLinkItem({
+                    key: `environment-${environment.id}`,
+                    href: "/settings/environments",
+                    label: environment.name,
+                    icon: Boxes,
+                  }),
+                )}
+              </CommandGroup>
+            )}
+
+            {matchingTeams.length > 0 && (
+              <CommandGroup heading="Teams">
+                {matchingTeams.map((team) =>
+                  renderLinkItem({
+                    key: `team-${team.id}`,
+                    href: "/settings/teams",
+                    label: team.name,
+                    icon: UsersRound,
                   }),
                 )}
               </CommandGroup>
@@ -957,6 +1142,28 @@ export function ConversationSearchPalette({
               </>
             )}
           </>
+        )}
+        {isSearching && runsQuery.hasNextPage && (
+          <CommandGroup heading="Runs">
+            <CommandItem
+              value="load-more-runs"
+              disabled={runsQuery.isFetchingNextPage}
+              onSelect={() => void runsQuery.fetchNextPage()}
+            >
+              More runs
+            </CommandItem>
+          </CommandGroup>
+        )}
+        {pinnedRunsQuery.hasNextPage && !isSearching && (
+          <CommandGroup heading="Pinned runs">
+            <CommandItem
+              value="load-more-pinned-runs"
+              disabled={pinnedRunsQuery.isFetchingNextPage}
+              onSelect={() => void pinnedRunsQuery.fetchNextPage()}
+            >
+              More pinned runs
+            </CommandItem>
+          </CommandGroup>
         )}
       </CommandList>
 

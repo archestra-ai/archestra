@@ -603,6 +603,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAgents]: {},
   [RouteId.GetAgentCatalog]: {},
   [RouteId.GetAllAgents]: {},
+  [RouteId.GetAgentOptions]: {},
+  [RouteId.GetChatAgentRoster]: {},
   [RouteId.GetAgentCredentialReadiness]: {},
   [RouteId.GetAgent]: {},
   // Agent read access is checked in the handler (requireReadableAgent).
@@ -767,6 +769,9 @@ export const requiredEndpointPermissionsMap: Partial<
     mcpRegistry: ["read"],
   },
   [RouteId.GetMcpServers]: {
+    mcpServerInstallation: ["read"],
+  },
+  [RouteId.GetMcpServerAutoModeAgentPage]: {
     mcpServerInstallation: ["read"],
   },
   [RouteId.GetMcpServerAutoModeAgents]: {

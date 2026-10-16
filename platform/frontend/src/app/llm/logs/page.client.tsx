@@ -37,7 +37,7 @@ import {
   UserFilterSelect,
 } from "@/components/user-client-filter-selects";
 import { VirtualKeyBadge } from "@/components/virtual-key-badge";
-import { useProfiles } from "@/lib/agent.query";
+import { useAgentOptions } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
@@ -268,7 +268,7 @@ function SessionsTable() {
     toastOnError: false,
   });
 
-  const { data: agents } = useProfiles({
+  const { data: agents } = useAgentOptions({
     filters: { agentTypes: ["agent"] },
   });
 

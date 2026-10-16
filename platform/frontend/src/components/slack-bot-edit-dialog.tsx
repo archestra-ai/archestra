@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { DialogBody } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { useInternalAgents } from "@/lib/agent.query";
+import { useInternalAgentOptions } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   useAllChatOpsBindings,
@@ -119,7 +119,7 @@ function BotChannels({
   const joinMutation = isRouter ? routerJoin : agentJoin;
   const updateBinding = useUpdateChatOpsBinding();
   const bindingsQuery = useAllChatOpsBindings();
-  const { data: agents = [] } = useInternalAgents();
+  const { data: agents = [] } = useInternalAgentOptions();
   const { data: canEdit } = useHasPermissions({
     organizationSettings: ["update"],
   });

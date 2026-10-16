@@ -28,7 +28,7 @@ You need a Kubernetes cluster, Helm 3 or later, and `kubectl` access. Self-hoste
 Pin the chart version and review its defaults:
 
 ```bash
-export ARCHESTRA_VERSION="1.4.0-rc.42" # x-release-please-version
+export ARCHESTRA_VERSION="1.4.0-rc.43" # x-release-please-version
 helm show values \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --version "$ARCHESTRA_VERSION" > values.yaml
@@ -164,6 +164,8 @@ Pin an exact chart version or image tag from [GitHub Releases](https://github.co
 2. Read release notes for migration requirements.
 3. Test the selected version in staging.
 4. Apply the Helm upgrade above and check rollout and migration Job status.
+
+On the first v1.4 startup, Archestra converts legacy sharing and role permissions before serving API traffic. One replica performs the conversion; other replicas wait, and later restarts skip it. During startup, `/health` responds successfully while `/ready` returns HTTP 503 until the API is ready, so large conversions do not exhaust the Kubernetes startup probe budget.
 
 During shutdown, Archestra stops accepting new model requests and gives active requests up to 60 seconds to finish. Requests that outlast this window can still lose their connection. The Helm chart sets `archestra.terminationGracePeriodSeconds` to 120; keep it at least this high so the container can finish shutdown.
 

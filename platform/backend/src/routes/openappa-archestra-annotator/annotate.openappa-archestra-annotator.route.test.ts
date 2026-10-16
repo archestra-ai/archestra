@@ -135,6 +135,10 @@ describe("archestra annotator", () => {
     expect(sent).toMatchObject({ model: "gpt-4o-mini" });
     expect(sent).not.toHaveProperty("temperature");
     expect(sent).not.toHaveProperty("response_format");
+    // The catalog has no output cap for this model, so the provider's default
+    // stands and a long prompt keeps whatever window it leaves.
+    expect(sent).not.toHaveProperty("max_tokens");
+    expect(sent).not.toHaveProperty("max_completion_tokens");
     const [system, user] = sent?.messages as Array<{
       role: string;
       content: string;

@@ -1,4 +1,9 @@
-import { archestraApiClient, DocsPage, getDocsUrl } from "@archestra/shared";
+import {
+  archestraApiClient,
+  archestraApiSdk,
+  DocsPage,
+  getDocsUrl,
+} from "@archestra/shared";
 import { NATIVE_SESSION_CLIENT_LABELS } from "@archestra/shared/connection-setup";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -25,9 +30,9 @@ import {
   vi,
 } from "vitest";
 import {
+  useAgentOptions,
   useDefaultMcpGateway,
   useProfile,
-  useProfiles,
 } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConfig } from "@/lib/config/config.query";
@@ -124,6 +129,14 @@ function render(ui: ReactElement) {
   });
 }
 
+/** Tool definitions and token counting start only after opening server details. */
+async function requestToolCounts() {
+  await userEvent.click(
+    screen.getByRole("button", { name: /^\d+ MCP servers?$/ }),
+  );
+  await userEvent.keyboard("{Escape}");
+}
+
 function mockOrganization(overrides: Record<string, unknown>) {
   vi.mocked(useOrganization).mockReturnValue({
     data: {},
@@ -165,9 +178,9 @@ beforeEach(() => {
   vi.mocked(useAllCatalogTools).mockReturnValue({
     data: undefined,
   } as ReturnType<typeof useAllCatalogTools>);
-  vi.mocked(useProfiles).mockReturnValue({
+  vi.mocked(useAgentOptions).mockReturnValue({
     data: [],
-  } as unknown as ReturnType<typeof useProfiles>);
+  } as unknown as ReturnType<typeof useAgentOptions>);
   vi.mocked(useConfig).mockReturnValue({
     data: undefined,
   } as ReturnType<typeof useConfig>);
@@ -251,18 +264,23 @@ describe("ConnectPage gateway footprint", () => {
   });
 
   it("counts served tools instead of catalog rows and changes the estimate with the client", async () => {
+    let requests = 0;
     api.use(
-      http.get(previewUrl, ({ request }) =>
-        HttpResponse.json(
+      http.get(previewUrl, ({ request }) => {
+        requests++;
+        return HttpResponse.json(
           listed(
             new URL(request.url).searchParams.get("client") === "claude-code"
               ? 1200
               : 550,
           ),
-        ),
-      ),
+        );
+      }),
     );
     show();
+    expect(screen.getByText("View tool counts and context cost")).toBeVisible();
+    expect(requests).toBe(0);
+    await requestToolCounts();
     const summary = screen.getByRole("complementary", {
       name: "What Claude Code gets",
     });
@@ -270,6 +288,7 @@ describe("ConnectPage gateway footprint", () => {
     expect(within(summary).getByText("~2.4K tokens")).toBeVisible();
     expect(within(summary).queryByText("3 tools")).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: /Codex$/ }));
+    await requestToolCounts();
     expect(await screen.findByText("~1.1K tokens")).toBeVisible();
   });
 
@@ -283,6 +302,7 @@ describe("ConnectPage gateway footprint", () => {
       ),
     );
     show();
+    await requestToolCounts();
     const summary = screen.getByRole("complementary", {
       name: "What Claude Code gets",
     });
@@ -310,6 +330,7 @@ describe("ConnectPage gateway footprint", () => {
       ),
     );
     show();
+    await requestToolCounts();
     const summary = screen.getByRole("complementary", {
       name: "What Claude Code gets",
     });
@@ -335,6 +356,7 @@ describe("ConnectPage gateway footprint", () => {
       ),
     );
     show();
+    await requestToolCounts();
     expect(await screen.findByText("0 tools")).toBeVisible();
     expect(screen.queryByText("3 tools")).toBeNull();
     expect(screen.queryByText("Example server")).toBeNull();
@@ -350,6 +372,7 @@ describe("ConnectPage gateway footprint", () => {
       ),
     );
     show();
+    await requestToolCounts();
     expect(await screen.findByText("Tool counts unavailable")).toBeVisible();
     expect(screen.queryByText("3 tools")).toBeNull();
   });
@@ -1084,10 +1107,10 @@ describe("ConnectPage gateway pick", () => {
     vi.mocked(useDefaultMcpGateway).mockReturnValue({
       data: gateways[0],
     } as unknown as ReturnType<typeof useDefaultMcpGateway>);
-    vi.mocked(useProfiles).mockReturnValue({
+    vi.mocked(useAgentOptions).mockReturnValue({
       data: gateways,
       isPending: false,
-    } as unknown as ReturnType<typeof useProfiles>);
+    } as unknown as ReturnType<typeof useAgentOptions>);
     vi.mocked(useProfile).mockImplementation(
       (id) =>
         ({
@@ -1105,6 +1128,7 @@ describe("ConnectPage gateway pick", () => {
     expect(
       await screen.findByText(/--client claude-code --gateway coding-gateway$/),
     ).toBeVisible();
+    await requestToolCounts();
     expect(await screen.findByText("~2.3K tokens")).toBeVisible();
   });
 });
@@ -1429,5 +1453,41 @@ describe("ConnectPage after copying the command", () => {
     expect(
       screen.queryByRole("button", { name: "Show the starter prompt" }),
     ).toBeNull();
+  });
+});
+
+describe("Connect skill catalogue preview", () => {
+  it("shows the full count while fetching only one preview page", async () => {
+    window.localStorage.clear();
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("clientId=claude-code") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
+      typeof useHasPermissions
+    >);
+    mockOrganization({ data: { connectionSkillsEnabled: true } });
+    const skills = Array.from({ length: 10 }, (_, index) => ({
+      id: `preview-${index}`,
+      name: `Preview skill ${index}`,
+      description: "Useful instructions",
+      scope: "org",
+      usageCount: 10 - index,
+    }));
+    vi.mocked(archestraApiSdk.getSkills).mockResolvedValueOnce({
+      data: {
+        data: skills,
+        pagination: { total: 10000, limit: 10, offset: 0 },
+      },
+    } as never);
+    render(<ConnectionPage />);
+    expect(await screen.findByText("+10,000 skills")).toBeVisible();
+    expect(screen.getByText("Preview skill 0")).toBeVisible();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(archestraApiSdk.getSkills).toHaveBeenCalledTimes(1);
+    expect(archestraApiSdk.getSkills).toHaveBeenCalledWith({
+      query: { limit: 10, offset: 0, includeContent: false },
+    });
   });
 });

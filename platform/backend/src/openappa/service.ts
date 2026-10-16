@@ -50,6 +50,7 @@ import {
   OpenappaRetiredAnnotatorError,
   OpenappaRootOnlyError,
   openappaFailure,
+  unansweredAnnotationNotice,
 } from "@/openappa/failure";
 import { unservedAnnotator } from "@/openappa/retired-annotators";
 import { captureYellReport } from "@/openappa/yell-receiver";
@@ -1137,6 +1138,11 @@ type AppaCallDecision =
        * that id's result with the ruling.
        */
       recorded?: true;
+      /**
+       * The call's annotator gave no answer. The runtime has no record of
+       * the call, so its result is answered by the proxy, not the runtime.
+       */
+      unanswered?: true;
     };
 
 // SPDX-SnippetBegin
@@ -1290,7 +1296,30 @@ export async function evaluateToolCalls(
         });
         if (refusal) return refusal;
       }
-      const decision = await dispatchCall(event);
+      let decision: Awaited<ReturnType<typeof dispatchCall>>;
+      try {
+        decision = await dispatchCall(event);
+      } catch (error) {
+        // An annotator that gives no answer refuses only this call. Failing the
+        // batch would cancel the calls already admitted, and an admitted call
+        // that spent an approval would lose it.
+        const notice = unansweredAnnotationNotice(error);
+        if (notice === null) throw error;
+        logger.warn(
+          {
+            err: error,
+            toolCallId: call.id,
+            sessionId: session.session_id,
+            tool,
+          },
+          "OpenAPPA could not rule on a tool call because its annotator gave no answer; the call is returned as a notice",
+        );
+        return {
+          kind: "deny" as const,
+          feedback: notice,
+          unanswered: true as const,
+        };
+      }
       if (
         spawn &&
         (decision.decision === "pass_control" ||
@@ -2245,13 +2274,31 @@ function nativePresentation(
 ): {
   control_tool: string;
   supports_delegation: boolean;
+  yell_tool?: string;
 } {
+  const controlTool =
+    controlToolName ??
+    archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME);
+  const yellTool = openappaYellEnabled()
+    ? yellSpelling(controlTool)
+    : undefined;
   return {
-    control_tool:
-      controlToolName ??
-      archestraMcpBranding.getToolName(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
+    control_tool: controlTool,
     supports_delegation: supportsDelegation,
+    ...(yellTool ? { yell_tool: yellTool } : {}),
   };
+}
+
+/**
+ * yell as the model calls it. The gateway always lists yell beside
+ * execute_remedy_plan, so a client spells both with the same prefix
+ * (`mcp__gateway__archestra__…`); a control tool spelled any other way names
+ * no yell.
+ */
+function yellSpelling(controlTool: string): string | undefined {
+  return controlTool.endsWith(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME)
+    ? `${controlTool.slice(0, -TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME.length)}yell`
+    : undefined;
 }
 
 /**

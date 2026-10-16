@@ -2,7 +2,7 @@
 
 import { ClaudeCodeAccount } from "@/components/claude-code-account";
 import { QueryLoadError } from "@/components/query-load-error";
-import { useInternalAgents } from "@/lib/agent.query";
+import { useInternalAgentOptions } from "@/lib/agent.query";
 import { useFeature } from "@/lib/config/config.query";
 
 /**
@@ -31,7 +31,7 @@ export function ClaudeCodeSubscription() {
 /** The agent that runs Claude Code, when the Agent Runtime is on. */
 export function useClaudeCodeAgent() {
   const runtimeEnabled = useFeature("agentRuntime") === true;
-  const agents = useInternalAgents({ enabled: runtimeEnabled });
+  const agents = useInternalAgentOptions({ enabled: runtimeEnabled });
   return {
     agent: runtimeEnabled
       ? agents.data?.find(

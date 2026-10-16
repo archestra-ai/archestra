@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useInternalAgents } from "@/lib/agent.query";
+import { useInternalAgentOptions } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   useAllChatOpsBindings,
@@ -20,7 +20,7 @@ import { SlackBotEditDialog } from "./slack-bot-edit-dialog";
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
-vi.mock("@/lib/agent.query", () => ({ useInternalAgents: vi.fn() }));
+vi.mock("@/lib/agent.query", () => ({ useInternalAgentOptions: vi.fn() }));
 vi.mock("@/lib/chatops/chatops.query", () => ({
   useAllChatOpsBindings: vi.fn(),
   useUpdateChatOpsBinding: vi.fn(),
@@ -114,12 +114,12 @@ beforeEach(() => {
     data: true,
     isPending: false,
   } as ReturnType<typeof useHasPermissions>);
-  vi.mocked(useInternalAgents).mockReturnValue({
+  vi.mocked(useInternalAgentOptions).mockReturnValue({
     data: [
       { id: "a1", name: "Marketing" },
       { id: "a2", name: "Coding" },
     ],
-  } as unknown as ReturnType<typeof useInternalAgents>);
+  } as unknown as ReturnType<typeof useInternalAgentOptions>);
   vi.mocked(useJoinSlackAgentBotChannel).mockReturnValue({
     mutate: join,
     isPending: false,

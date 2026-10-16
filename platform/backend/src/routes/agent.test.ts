@@ -21,6 +21,7 @@ import {
   OrganizationModel,
   ToolModel,
 } from "@/models";
+import AgentSuggestedPromptModel from "@/models/agent-suggested-prompt";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
@@ -1888,6 +1889,140 @@ describe("agent routes", () => {
       expect((await findAgent("&includeTools=true")).tools).toHaveLength(1);
     });
 
+    test("selector options preserve authorized identities without loading editing content", async ({
+      makeAgent,
+      makeTool,
+      makeAgentTool,
+      makeOrganization,
+      makeUser,
+    }) => {
+      const recipient = await makeUser();
+      const agent = await makeAgent({
+        organizationId,
+        agentType: "agent",
+        authorId: user.id,
+        name: "Selectable Agent",
+        access: { users: [recipient.id, user.id] },
+        systemPrompt: "Configuration content",
+        icon: `data:image/png;base64,${"A".repeat(2048)}`,
+      });
+      const tool = await makeTool({});
+      await makeAgentTool(agent.id, tool.id);
+      const hiddenBuiltIn = await makeAgent({
+        organizationId,
+        agentType: "agent",
+        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION },
+      });
+      const query = "?excludeBuiltIn=true&agentType=agent";
+      const full = await app.inject({
+        method: "GET",
+        url: `/api/agents/all${query}`,
+      });
+      const options = await app.inject({
+        method: "GET",
+        url: `/api/agents/options${query}`,
+      });
+      expect(options.statusCode, options.body).toBe(200);
+      expect(
+        options
+          .json()
+          .map((row: { id: string }) => row.id)
+          .sort(),
+      ).toEqual(
+        full
+          .json()
+          .map((row: { id: string }) => row.id)
+          .sort(),
+      );
+      expect(options.json().map((row: { id: string }) => row.id)).not.toContain(
+        hiddenBuiltIn.id,
+      );
+      const option = options
+        .json()
+        .find((row: { id: string }) => row.id === agent.id);
+      expect(option).toMatchObject({
+        id: agent.id,
+        name: agent.name,
+        scope: agent.scope,
+        icon: null,
+      });
+      const fullAgent = full
+        .json()
+        .find((row: { id: string }) => row.id === agent.id);
+      expect(option.users).toEqual(
+        fullAgent.users.map((recipient: { id: string }) => ({
+          id: recipient.id,
+        })),
+      );
+      expect(option.users).toEqual([{ id: recipient.id }]);
+      for (const field of [
+        "systemPrompt",
+        "tools",
+        "labels",
+        "knowledgeBaseIds",
+        "connectorIds",
+        "suggestedPrompts",
+      ])
+        expect(option).not.toHaveProperty(field);
+      expect(
+        full.json().find((row: { id: string }) => row.id === agent.id),
+      ).toMatchObject({ systemPrompt: "Configuration content" });
+      const foreignOrg = await makeOrganization();
+      const foreign = await makeAgent({
+        organizationId: foreignOrg.id,
+        agentType: "agent",
+      });
+      const selected = await app.inject({
+        method: "GET",
+        url: `/api/agents/options${query}&ids=${agent.id},${foreign.id}`,
+      });
+      expect(selected.statusCode, selected.body).toBe(200);
+      expect(selected.json().map((row: { id: string }) => row.id)).toEqual([
+        agent.id,
+      ]);
+    });
+
+    test("keeps the same authorized chat IDs for personal defaults and retained selections", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const owner = await makeUser();
+      const personal = await makeAgent({
+        organizationId,
+        authorId: owner.id,
+        agentType: "agent",
+        access: "personal",
+      });
+      const otherOrganization = await makeOrganization();
+      const outside = await makeAgent({
+        organizationId: otherOrganization.id,
+        authorId: owner.id,
+        agentType: "agent",
+      });
+      const original = await app.inject({
+        method: "GET",
+        url: "/api/agents/all?agentType=agent&excludeBuiltIn=true&includeTools=false&view=chat",
+      });
+      const roster = await app.inject({
+        method: "GET",
+        url: "/api/agents/chat-roster",
+      });
+      expect(original.statusCode).toBe(200);
+      expect(roster.statusCode).toBe(200);
+      const originalIds = original
+        .json()
+        .map((row: { id: string }) => row.id)
+        .sort();
+      const rosterIds = roster
+        .json()
+        .map((row: { id: string }) => row.id)
+        .sort();
+      expect(rosterIds).toEqual(originalIds);
+      expect(rosterIds).toContain(personal.id);
+      expect(rosterIds).not.toContain(outside.id);
+    });
+
     test("returns a compact roster for chat without changing the default response", async ({
       makeAgent,
       makeTool,
@@ -1899,11 +2034,21 @@ describe("agent routes", () => {
         name: `Compact Chat Agent ${crypto.randomUUID().slice(0, 8)}`,
         organizationId,
         authorId: user.id,
+        agentType: "agent",
         icon: embeddedIcon,
         systemPrompt,
       });
       const tool = await makeTool({});
       await makeAgentTool(agent.id, tool.id);
+      await AgentSuggestedPromptModel.syncForAgent({
+        agentId: agent.id,
+        prompts: [
+          {
+            summaryTitle: "Investigate",
+            prompt: "Investigate the latest incident.",
+          },
+        ],
+      });
 
       const chatResponse = await app.inject({
         method: "GET",
@@ -1923,6 +2068,54 @@ describe("agent routes", () => {
         teams: [],
         users: [],
         labels: [],
+      });
+
+      const rosterResponse = await app.inject({
+        method: "GET",
+        url: "/api/agents/chat-roster",
+      });
+      expect(rosterResponse.statusCode).toBe(200);
+      const rosterAgent = rosterResponse
+        .json()
+        .find((row: { id: string }) => row.id === agent.id);
+      expect(rosterAgent).toMatchObject({
+        id: agent.id,
+        name: agent.name,
+        icon: null,
+        modelId: agent.modelId,
+        llmApiKeyId: agent.llmApiKeyId,
+      });
+      expect(Object.keys(rosterAgent).sort()).toEqual(
+        [
+          "id",
+          "organizationId",
+          "name",
+          "description",
+          "icon",
+          "scope",
+          "authorId",
+          "agentType",
+          "builtIn",
+          "builtInAgentConfig",
+          "runtime",
+          "modelId",
+          "llmApiKeyId",
+        ].sort(),
+      );
+      const detail = await app.inject({
+        method: "GET",
+        url: `/api/agents/${agent.id}`,
+      });
+      expect(detail.statusCode).toBe(200);
+      expect(detail.json()).toMatchObject({
+        icon: embeddedIcon,
+        systemPrompt,
+        suggestedPrompts: [
+          {
+            summaryTitle: "Investigate",
+            prompt: "Investigate the latest incident.",
+          },
+        ],
       });
 
       const defaultResponse = await app.inject({

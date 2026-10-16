@@ -15769,6 +15769,310 @@ export type GetAllAgentsResponses = {
 
 export type GetAllAgentsResponse = GetAllAgentsResponses[keyof GetAllAgentsResponses];
 
+export type GetChatAgentRosterData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/agents/chat-roster';
+};
+
+export type GetChatAgentRosterErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetChatAgentRosterError = GetChatAgentRosterErrors[keyof GetChatAgentRosterErrors];
+
+export type GetChatAgentRosterResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        organizationId: string;
+        name: string;
+        description: string | null;
+        icon: string | null;
+        scope: 'personal' | 'team' | 'org';
+        authorId: string | null;
+        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+        builtIn: boolean | null;
+        builtInAgentConfig: {
+            name: 'openappa-configuration-agent';
+        } | {
+            name: 'context-compaction-subagent';
+        } | {
+            name: 'chat-title-generation-subagent';
+        } | {
+            name: 'app-runtime-llm-agent';
+        } | null;
+        runtime: {
+            image: string;
+            command: Array<string> | null;
+            inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
+            backend: 'kubernetes';
+            steerMode: 'pipe' | 'tmux_keys';
+            privileged: boolean;
+            resources: {
+                cpuRequest?: string;
+                memoryRequest?: string;
+                cpuLimit?: string;
+                memoryLimit?: string;
+            } | null;
+            ports?: Array<number>;
+            environment: Array<{
+                key: string;
+                value: string;
+            }> | null;
+            credentials: Array<{
+                key: string;
+                scope: 'shared' | 'per_user';
+                credentialId?: string;
+                label: string;
+                description?: string;
+                required: boolean;
+            }> | null;
+            allowAgentSuppliedCredentialValues?: boolean;
+            claudeCode?: {
+                authentication: 'provider' | 'subscription';
+                model?: string;
+            };
+            ttlHours: number | null;
+            maxCostUsd?: number | null;
+            idleTimeoutMinutes: number | null;
+        } | null;
+        modelId: string | null;
+        llmApiKeyId: string | null;
+    }>;
+};
+
+export type GetChatAgentRosterResponse = GetChatAgentRosterResponses[keyof GetChatAgentRosterResponses];
+
+export type GetAgentOptionsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter by agent type. 'profile' = external API gateway profiles, 'mcp_gateway' = MCP gateway, 'agent' = internal agents with prompts.
+         */
+        agentType?: 'profile' | 'mcp_gateway' | 'agent';
+        /**
+         * Filter by multiple agent types (comma-separated). Takes precedence over agentType if both provided.
+         */
+        agentTypes?: Array<'profile' | 'mcp_gateway' | 'agent'>;
+        /**
+         * Exclude built-in agents from the results, except the system chat assistant in chat view. Defaults to false.
+         */
+        excludeBuiltIn?: boolean;
+        /**
+         * Filter by scope: personal, team, org, or built_in.
+         */
+        scope?: 'personal' | 'team' | 'org' | 'built_in';
+        /**
+         * Hide personal agents owned by other users. Admin-only; no-op for non-admins (their access control already excludes them).
+         */
+        excludeOtherPersonalAgents?: boolean;
+        /**
+         * Filter by lifecycle status. Deleted rows require delete permission.
+         */
+        status?: 'active' | 'deleted';
+        ids?: Array<string>;
+    };
+    url: '/api/agents/options';
+};
+
+export type GetAgentOptionsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentOptionsError = GetAgentOptionsErrors[keyof GetAgentOptionsErrors];
+
+export type GetAgentOptionsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        name: string;
+        slug: string | null;
+        agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+        icon: string | null;
+        scope: 'personal' | 'team' | 'org';
+        authorId: string | null;
+        authorName?: string | null;
+        authorEmail?: string | null;
+        isPersonalGateway: boolean;
+        runtime: {
+            image: string;
+            command: Array<string> | null;
+            inferenceProtocol: 'openai_responses' | 'openai_chat' | 'anthropic';
+            backend: 'kubernetes';
+            steerMode: 'pipe' | 'tmux_keys';
+            privileged: boolean;
+            resources: {
+                cpuRequest?: string;
+                memoryRequest?: string;
+                cpuLimit?: string;
+                memoryLimit?: string;
+            } | null;
+            ports?: Array<number>;
+            environment: Array<{
+                key: string;
+                value: string;
+            }> | null;
+            credentials: Array<{
+                key: string;
+                scope: 'shared' | 'per_user';
+                credentialId?: string;
+                label: string;
+                description?: string;
+                required: boolean;
+            }> | null;
+            allowAgentSuppliedCredentialValues?: boolean;
+            claudeCode?: {
+                authentication: 'provider' | 'subscription';
+                model?: string;
+            };
+            ttlHours: number | null;
+            maxCostUsd?: number | null;
+            idleTimeoutMinutes: number | null;
+        } | null;
+        description: string | null;
+        teams: Array<{
+            id: string;
+            name: string;
+        }>;
+        users: Array<{
+            id: string;
+        }>;
+    }>;
+};
+
+export type GetAgentOptionsResponse = GetAgentOptionsResponses[keyof GetAgentOptionsResponses];
+
 export type GetAgentCredentialReadinessData = {
     body?: never;
     path?: never;
@@ -22114,6 +22418,9 @@ export type GetMyAgentRunsData = {
     query?: {
         limit?: number;
         offset?: number;
+        search?: string;
+        pinned?: boolean;
+        sort?: 'started' | 'recent' | 'pinned';
     };
     url: '/api/agent-runs';
 };
@@ -80006,6 +80313,114 @@ export type McpServerProxyPostResponses = {
     200: unknown;
 };
 
+export type GetMcpServerAutoModeAgentPageData = {
+    body?: never;
+    path?: never;
+    query?: {
+        limit?: number;
+        cursor?: string;
+        catalogId?: string;
+        afterAgentId?: string;
+        search?: string;
+        sortDirection?: 'asc' | 'desc';
+        summary?: 'true' | 'false';
+    };
+    url: '/api/mcp_server/auto_mode_agents/page';
+};
+
+export type GetMcpServerAutoModeAgentPageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetMcpServerAutoModeAgentPageError = GetMcpServerAutoModeAgentPageErrors[keyof GetMcpServerAutoModeAgentPageErrors];
+
+export type GetMcpServerAutoModeAgentPageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            name: string;
+            agentType: 'profile' | 'mcp_gateway' | 'llm_proxy' | 'agent';
+            scope: 'personal' | 'team' | 'org';
+            ownerId: string | null;
+            ownerEmail: string | null;
+        }>;
+        pagination: {
+            limit: number;
+            nextCursor: string | null;
+            hasNext: boolean;
+        };
+        totalAutoCount?: number;
+        organizationId?: string;
+    };
+};
+
+export type GetMcpServerAutoModeAgentPageResponse = GetMcpServerAutoModeAgentPageResponses[keyof GetMcpServerAutoModeAgentPageResponses];
+
 export type GetMcpServerAutoModeAgentsData = {
     body?: never;
     path?: never;
@@ -80102,6 +80517,10 @@ export type GetMcpServersData = {
     path?: never;
     query?: {
         catalogId?: string;
+        /**
+         * Include per-install agent usage (default true). False returns empty assignedAgents for status-only lists.
+         */
+        includeAssignedAgents?: boolean;
         assignmentScope?: 'personal' | 'team' | 'org';
         assignmentTeamIds?: Array<string>;
         /**
@@ -80232,6 +80651,8 @@ export type GetMcpServersResponses = {
             ownerId: string | null;
             ownerEmail: string | null;
             pinned: boolean;
+            accessAllTools?: boolean;
+            organizationId?: string;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
         alertMutes: Array<{
@@ -80399,6 +80820,8 @@ export type InstallMcpServerResponses = {
             ownerId: string | null;
             ownerEmail: string | null;
             pinned: boolean;
+            accessAllTools?: boolean;
+            organizationId?: string;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
@@ -80623,6 +81046,8 @@ export type GetMcpServerResponses = {
             ownerId: string | null;
             ownerEmail: string | null;
             pinned: boolean;
+            accessAllTools?: boolean;
+            organizationId?: string;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
@@ -80769,6 +81194,8 @@ export type ReauthenticateMcpServerResponses = {
             ownerId: string | null;
             ownerEmail: string | null;
             pinned: boolean;
+            accessAllTools?: boolean;
+            organizationId?: string;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
@@ -81005,6 +81432,8 @@ export type RestoreMcpServerResponses = {
             ownerId: string | null;
             ownerEmail: string | null;
             pinned: boolean;
+            accessAllTools?: boolean;
+            organizationId?: string;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
@@ -81621,6 +82050,8 @@ export type ReinstallMcpServerResponses = {
             ownerId: string | null;
             ownerEmail: string | null;
             pinned: boolean;
+            accessAllTools?: boolean;
+            organizationId?: string;
         }>;
         secretStorageType?: 'vault' | 'external_vault' | 'database' | 'none';
     };
@@ -108775,6 +109206,10 @@ export type GetSkillsData = {
     query?: {
         limit?: number;
         offset?: number;
+        /**
+         * Include manifest bodies (default true). False returns empty content for lightweight lists.
+         */
+        includeContent?: boolean;
         search?: string;
         sourceRepo?: string;
         /**

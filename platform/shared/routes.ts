@@ -641,6 +641,7 @@ export const RouteId = {
 
   // Org-level deployment environments
   ListEnvironments: "listEnvironments",
+  GetEnvironment: "getEnvironment",
   GetEnvironmentLabelValues: "environmentLabelValues",
   GetEnvironmentLabelKeys: "environmentLabelKeys",
   CreateEnvironment: "createEnvironment",

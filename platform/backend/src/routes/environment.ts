@@ -74,6 +74,29 @@ const environmentRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 
+  fastify.get(
+    "/api/environments/:id",
+    {
+      schema: {
+        operationId: RouteId.GetEnvironment,
+        description: "Read an org-level deployment environment by ID.",
+        tags: ["Organization"],
+        params: z.object({ id: UuidIdSchema }),
+        response: constructResponseSchema(SelectEnvironmentSchema),
+      },
+    },
+    async ({ organizationId, params }, reply) => {
+      const environment = await EnvironmentModel.findByIdForOrganization(
+        params.id,
+        organizationId,
+      );
+      if (!environment) {
+        throw new ApiError(404, "Environment not found");
+      }
+      return reply.send(environment);
+    },
+  );
+
   fastify.patch(
     "/api/environments/defaults",
     {

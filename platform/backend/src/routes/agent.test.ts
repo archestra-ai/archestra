@@ -1899,6 +1899,47 @@ describe("agent routes", () => {
       );
       expect(builtInAgents.length).toBeGreaterThan(0);
     });
+
+    test("keeps the same authorized chat IDs for personal defaults and retained selections", async ({
+      makeUser,
+      makeOrganization,
+      makeAgent,
+    }) => {
+      const owner = await makeUser();
+      const personal = await makeAgent({
+        organizationId,
+        authorId: owner.id,
+        agentType: "agent",
+        access: "personal",
+      });
+      const otherOrganization = await makeOrganization();
+      const outside = await makeAgent({
+        organizationId: otherOrganization.id,
+        authorId: owner.id,
+        agentType: "agent",
+      });
+      const original = await app.inject({
+        method: "GET",
+        url: "/api/agents?agentType=agent&excludeBuiltIn=true&includeTools=false&view=chat&limit=100",
+      });
+      const roster = await app.inject({
+        method: "GET",
+        url: "/api/agents/chat-roster",
+      });
+      expect(original.statusCode).toBe(200);
+      expect(roster.statusCode).toBe(200);
+      const originalIds = original
+        .json()
+        .data.map((row: { id: string }) => row.id)
+        .sort();
+      const rosterIds = roster
+        .json()
+        .map((row: { id: string }) => row.id)
+        .sort();
+      expect(rosterIds).toEqual(originalIds);
+      expect(rosterIds).toContain(personal.id);
+      expect(rosterIds).not.toContain(outside.id);
+    });
   });
 
   describe("GET /api/mcp-gateways/default", () => {

@@ -5,12 +5,14 @@ import { vi } from "vitest";
 import type WebSocket from "ws";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import { a2aTaskRunService } from "@/agents/a2a/a2a-task-run-service";
+import config from "@/config";
 import {
   A2AArtifactModel,
   A2AContextModel,
   A2ATaskModel,
   AgentRunModel,
 } from "@/models";
+import type { AgentRunLaunchSpec } from "@/services/agent-runtime/backends";
 import { afterEach, test as base, beforeEach, expect } from "@/test";
 import { useMswServer } from "@/test/msw";
 import type { AgentRunRecord } from "@/types";
@@ -27,6 +29,7 @@ vi.mock("@/config", async () =>
   }),
 );
 
+const podStartTimeoutSeconds = config.agentRuntime.podStartTimeoutSeconds;
 const origin = "https://kubernetes.example.test";
 const sandboxUrl = `${origin}/apis/agents.x-k8s.io/v1beta1/namespaces/test/sandboxes/:name`;
 const podsUrl = `${origin}/api/v1/namespaces/test/pods`;
@@ -90,8 +93,152 @@ beforeEach(() => {
 });
 afterEach(async () => {
   await a2aTaskRunService.failInFlightRuns();
+  config.agentRuntime.podStartTimeoutSeconds = podStartTimeoutSeconds;
   vi.restoreAllMocks();
   vi.useRealTimers();
+});
+
+test("recovers a cold workspace that starts after five minutes within the configured timeout", async ({
+  run,
+}) => {
+  config.agentRuntime.podStartTimeoutSeconds = 900;
+  vi.useFakeTimers({ toFake: ["Date"] });
+  let polls = 0;
+  server.use(
+    http.get(
+      `${origin}/api/v1/namespaces/test/secrets/:name`,
+      () => new HttpResponse(null, { status: 404 }),
+    ),
+    http.get(sandboxUrl, () =>
+      HttpResponse.json({ metadata: { name: run.workloadName }, spec: {} }),
+    ),
+    http.patch(sandboxUrl, () => HttpResponse.json({})),
+    http.get(podsUrl, () => {
+      polls++;
+      if (polls === 1) vi.setSystemTime(Date.now() + 6 * 60_000);
+      return HttpResponse.json({
+        items: [
+          {
+            metadata: { name: "worker" },
+            status: { phase: polls === 1 ? "Pending" : "Running" },
+          },
+        ],
+      });
+    }),
+  );
+  const exec = completeExec("present");
+
+  await expect(manager.recoverRun(run)).resolves.toBeUndefined();
+  expect(polls).toBeGreaterThan(1);
+  expect(exec).toHaveBeenCalledOnce();
+});
+
+test("fails a pending workspace at the configured timeout without executing its turn", async ({
+  run,
+}) => {
+  config.agentRuntime.podStartTimeoutSeconds = 60;
+  vi.useFakeTimers({ toFake: ["Date"] });
+  let polls = 0;
+  server.use(
+    http.get(
+      `${origin}/api/v1/namespaces/test/secrets/:name`,
+      () => new HttpResponse(null, { status: 404 }),
+    ),
+    http.get(sandboxUrl, () =>
+      HttpResponse.json({ metadata: { name: run.workloadName }, spec: {} }),
+    ),
+    http.patch(sandboxUrl, () => HttpResponse.json({})),
+    http.get(podsUrl, () => {
+      polls++;
+      vi.setSystemTime(Date.now() + 60_000);
+      return HttpResponse.json({
+        items: [{ metadata: { name: "worker" }, status: { phase: "Pending" } }],
+      });
+    }),
+  );
+  const exec = completeExec();
+
+  await expect(manager.recoverRun(run)).rejects.toThrow(
+    "The workspace could not be resumed",
+  );
+  expect(polls).toBe(1);
+  expect(exec).not.toHaveBeenCalled();
+});
+
+test.for([
+  60, 900,
+])("keeps image migration's five-minute pod-removal budget with a %i-second startup timeout", async (timeout, {
+  run,
+}) => {
+  config.agentRuntime.podStartTimeoutSeconds = timeout;
+  vi.useFakeTimers({ toFake: ["Date"] });
+  let polls = 0;
+  const patches: unknown[] = [];
+  const image = config.agentRuntime.catalogImages["claude-code"];
+  server.use(
+    http.get(sandboxUrl, () =>
+      HttpResponse.json({
+        metadata: { name: run.workloadName },
+        spec: {
+          podTemplate: {
+            spec: {
+              containers: [
+                {
+                  name: "agent-runtime",
+                  image: image.replace(/:[^/]+$/, ":previous"),
+                },
+              ],
+            },
+          },
+        },
+      }),
+    ),
+    http.patch(sandboxUrl, async ({ request }) => {
+      patches.push(await request.json());
+      return HttpResponse.json({});
+    }),
+    http.get(podsUrl, () => {
+      polls++;
+      vi.setSystemTime(Date.now() + 60_000);
+      return HttpResponse.json({
+        items: [
+          {
+            metadata: {
+              name: "worker",
+              deletionTimestamp: new Date().toISOString(),
+            },
+            status: { phase: "Succeeded" },
+          },
+        ],
+      });
+    }),
+  );
+  const spec: AgentRunLaunchSpec = {
+    taskId: run.taskId,
+    agentRuntimeId: run.agentId,
+    frozenName: run.workloadName,
+    runtimeScope: run.runtimeScope,
+    image,
+    command: ["/bin/true"],
+    privileged: false,
+    resources: { cpuRequest: "100m", memoryRequest: "128Mi" },
+    env: {},
+    secretEnv: {},
+    activeDeadlineSeconds: 600,
+    workspaceStorageSize: "1Gi",
+    nodeSelector: {},
+    imagePullSecrets: [],
+    inputFileCount: 0,
+    effectiveNetworkPolicy: { source: "built_in", policy: null },
+  };
+  const exec = completeExec();
+
+  await expect(manager.continueRun({ session: run, spec })).rejects.toThrow(
+    "The workspace did not stop in time to move to the current Agent image",
+  );
+  expect(polls).toBe(5);
+  expect(patches).toEqual([{ spec: { operatingMode: "Suspended" } }]);
+  expect(exec).not.toHaveBeenCalled();
 });
 
 for (const endpoint of [sandboxUrl, podsUrl]) {

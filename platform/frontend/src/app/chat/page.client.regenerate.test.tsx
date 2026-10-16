@@ -133,7 +133,7 @@ const server = setupServer(
     HttpResponse.json({ defaultAgentId: null }),
   ),
   http.get("/api/members/default-model", () => HttpResponse.json(null)),
-  http.get("/api/agents", () => HttpResponse.json({ data: [agent] })),
+  http.get("/api/agents/chat-roster", () => HttpResponse.json([agent])),
   http.get(`/api/agents/${agent.id}`, () => HttpResponse.json(agent)),
   http.get("/api/agents/credential-readiness", () => HttpResponse.json([])),
   http.get("/api/chat/conversations", () => HttpResponse.json([])),

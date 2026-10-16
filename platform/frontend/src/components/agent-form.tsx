@@ -156,7 +156,6 @@ import {
 } from "@/components/ui/tooltip";
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
 import { useLlmProviderApiKeyCreateDialog } from "@/components/use-llm-provider-api-key-create-dialog";
-
 import {
   useA2aRemoteAgents,
   useAgentA2aDelegations,
@@ -164,7 +163,6 @@ import {
 } from "@/lib/a2a-remote-agents.query";
 import {
   useCreateProfile,
-  useDelegationTargetAgents,
   useDeleteProfile,
   useProfile,
   useUpdateProfile,
@@ -173,6 +171,7 @@ import {
   useAgentKnowledgeSourceExclusions,
   useUpdateAgentKnowledgeSourceExclusions,
 } from "@/lib/agent-knowledge-source-exclusions.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { useAgentRuntimePreflight } from "@/lib/agent-runtime.query";
 import {
   useAgentSkillExclusions,
@@ -229,6 +228,7 @@ type Agent = Omit<
   archestraApiTypes.GetAgentsResponses["200"]["data"][number],
   "pinnedAt"
 >;
+type AgentOption = archestraApiTypes.GetAgentOptionsResponses["200"][number];
 type ToolExposureMode = Agent["toolExposureMode"];
 type MissingCredentialBehavior = Agent["missingCredentialBehavior"];
 type A2aRemoteAgent =
@@ -339,7 +339,7 @@ function AgentToolsList({ agentId }: { agentId: string }) {
 
 // Single subagent pill with popover
 interface SubagentPillProps {
-  agent: Agent;
+  agent: AgentOption;
   isSelected: boolean;
   onToggle: (agentId: string) => void;
   readOnly?: boolean;
@@ -442,7 +442,7 @@ interface SubagentsEditorProps {
   agentId?: string;
   readOnly: boolean;
   localMode: "all" | "selected";
-  availableAgents: Agent[];
+  canReadAgents: boolean;
   selectedAgentIds: string[];
   onSelectionChange: (ids: string[]) => void;
   disabledAgentIds: string[];
@@ -454,18 +454,21 @@ function SubagentsEditor({
   agentId,
   readOnly,
   localMode,
-  availableAgents,
+  canReadAgents,
   selectedAgentIds,
   onSelectionChange,
   disabledAgentIds,
   onDisabledSelectionChange,
   emptyDescription = "Every task is handled here, with nothing handed on.",
 }: SubagentsEditorProps) {
+  const selectedIds = localMode === "all" ? disabledAgentIds : selectedAgentIds;
+  const { data: availableAgents = [] } = useAgentOptionsByIds({
+    ids: selectedIds.slice(0, 20),
+    enabled: canReadAgents,
+  });
   const filteredAgents = availableAgents.filter(
     (agent) => agent.id !== agentId,
   );
-
-  const selectedIds = localMode === "all" ? disabledAgentIds : selectedAgentIds;
   const handleSelectionChange = (ids: string[]) => {
     const setIds =
       localMode === "all" ? onDisabledSelectionChange : onSelectionChange;
@@ -478,7 +481,7 @@ function SubagentsEditor({
   const excludedLocalAgents = filteredAgents.filter((agent) =>
     disabledAgentIds.includes(agent.id),
   );
-  const hasSelectedTargets = selectedLocalAgents.length > 0;
+  const hasSelectedTargets = selectedAgentIds.length > 0;
 
   return (
     <div className="space-y-3">
@@ -546,10 +549,24 @@ function SubagentsEditor({
         </div>
       )}
 
+      {selectedIds.length > 20 && (
+        <p className="text-xs text-muted-foreground">
+          Showing 20 of {selectedIds.length} selections. Search the picker to
+          change another selection.
+        </p>
+      )}
+
       {!readOnly && (
         <AgentSelector
           mode="multiple"
-          agents={filteredAgents}
+          remote={{
+            filters: {
+              agentType: "agent",
+              excludeBuiltIn: true,
+              excludeIds: agentId ? [agentId] : undefined,
+            },
+            enabled: canReadAgents,
+          }}
           value={selectedIds}
           onValueChange={handleSelectionChange}
           // In All mode every local agent is already a subagent, so the only
@@ -1052,9 +1069,6 @@ export function AgentForm({
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
   const { data: canReadAgentTriggers } = useHasPermissions({
     organizationSettings: ["read"],
-  });
-  const { data: allInternalAgents = [] } = useDelegationTargetAgents({
-    enabled: supportsSubagents && !!canReadAgents,
   });
   const createAgent = useCreateProfile();
   const updateAgent = useUpdateProfile();
@@ -3640,7 +3654,7 @@ export function AgentForm({
                         agentId={agent?.id}
                         readOnly={readOnly}
                         localMode={accessAllSubagents ? "all" : "selected"}
-                        availableAgents={allInternalAgents}
+                        canReadAgents={canReadAgents === true}
                         selectedAgentIds={selectedDelegationTargetIds}
                         onSelectionChange={setSelectedDelegationTargetIds}
                         disabledAgentIds={disabledSubagentIds}

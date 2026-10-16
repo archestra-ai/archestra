@@ -2420,6 +2420,31 @@ class ToolModel {
     );
   }
 
+  /** Tool-picker metadata without parameter bodies or assignment fan-out. */
+  static async findPickerToolsByCatalogId(catalogId: string) {
+    const tools = await db
+      .select({
+        id: schema.toolsTable.id,
+        name: schema.toolsTable.name,
+        description: schema.toolsTable.description,
+        createdAt: schema.toolsTable.createdAt,
+      })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          eq(schema.toolsTable.catalogId, catalogId),
+          ToolModel.listableCatalogToolPredicate(),
+        ),
+      )
+      .orderBy(desc(schema.toolsTable.createdAt));
+    return tools.map((tool) => ({
+      ...tool,
+      group: getArchestraToolGroupId(
+        archestraMcpBranding.getToolShortName(tool.name),
+      ),
+    }));
+  }
+
   static async findByCatalogId(catalogId: string): Promise<
     Array<{
       id: string;

@@ -603,6 +603,10 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAgents]: {},
   [RouteId.GetAgentCatalog]: {},
   [RouteId.GetAgentOptions]: {},
+  [RouteId.GetAgentOptionsPage]: {},
+  [RouteId.GetAgentOptionIds]: {},
+  [RouteId.GetChatAgentRoster]: {},
+  [RouteId.GetChatAgentRosterPage]: {},
   [RouteId.GetAgentCredentialReadiness]: {},
   [RouteId.GetAgent]: {},
   // Agent read access is checked in the handler (requireReadableAgent).
@@ -767,6 +771,9 @@ export const requiredEndpointPermissionsMap: Partial<
     mcpRegistry: ["read"],
   },
   [RouteId.GetMcpServers]: {
+    mcpServerInstallation: ["read"],
+  },
+  [RouteId.GetMcpServerAutoModeAgentPage]: {
     mcpServerInstallation: ["read"],
   },
   [RouteId.GetMcpServerAutoModeAgents]: {
@@ -1219,6 +1226,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ListEnvironments]: {
     environment: ["read"],
   },
+  [RouteId.GetEnvironment]: { environment: ["read"] },
   [RouteId.GetEnvironmentLabelKeys]: { environment: ["read"] },
   [RouteId.GetEnvironmentLabelValues]: { environment: ["read"] },
   [RouteId.CreateEnvironment]: {
@@ -1371,6 +1379,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // everyone else only the users they share a team with (the chat share
   // recipient picker), so the route itself is open to any authenticated user.
   [RouteId.GetOrganizationMembers]: {},
+  [RouteId.GetOrganizationMemberOptions]: {},
   [RouteId.GetOrganizationMember]: { member: ["read"] }, // Get organization member by ID or email
   [RouteId.DeletePendingSignupMember]: { member: ["delete"] }, // Delete auto-provisioned member who hasn't signed up
   [RouteId.GetUserPermissionSources]: {},
@@ -1782,6 +1791,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.PreviewGithubSkill]: { skill: ["read"] },
   [RouteId.ImportGithubSkills]: { skill: ["create"] },
   [RouteId.GetSkillSourceRepos]: { skill: ["read"] },
+  [RouteId.GetSkillNames]: { skill: ["read"] },
   [RouteId.GetSkillUsageStatistics]: {},
   [RouteId.GetSkillVersions]: {},
   [RouteId.GetSkillVersion]: {},

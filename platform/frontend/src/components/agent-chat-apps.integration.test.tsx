@@ -92,16 +92,16 @@ describe("Channel takeover agent names", () => {
     { name: "Escalation Coordinator", builtIn: false },
   ])("resolves $name in the staged row and confirmation", async (source) => {
     server.use(
-      http.get(`${API_ORIGIN}/api/agents`, ({ request }) => {
-        // Built-in agents are left out of the list unless the caller asks for them.
-        const includesBuiltIn =
-          new URL(request.url).searchParams.get("includeBuiltIn") === "true";
-        return HttpResponse.json({
-          data:
-            source.builtIn && !includesBuiltIn
-              ? []
-              : [{ id: "source-agent", ...source, icon: "🔎" }],
-        });
+      http.get(`${API_ORIGIN}/api/agents/options`, ({ request }) => {
+        const params = new URL(request.url).searchParams;
+        expect(params.get("agentType")).toBe("agent");
+        expect(params.getAll("ids")).toEqual(["source-agent"]);
+        const excludesBuiltIn = params.get("excludeBuiltIn") === "true";
+        return HttpResponse.json(
+          source.builtIn && excludesBuiltIn
+            ? []
+            : [{ id: "source-agent", ...source, icon: "🔎" }],
+        );
       }),
     );
     const user = userEvent.setup();

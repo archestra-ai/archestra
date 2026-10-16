@@ -15,20 +15,18 @@ beforeEach(() => {
   >);
 });
 const server = setupServer(
-  http.get("http://localhost:9000/api/agents", () =>
-    HttpResponse.json({
-      data: [
-        {
-          id: "appa-agent",
-          name: "OpenAPPA Configuration Agent",
-          scope: "org",
-          builtIn: true,
-          builtInAgentConfig: { name: "openappa-configuration-agent" },
-          authorId: null,
-          labels: [],
-        },
-      ],
-    }),
+  http.get("http://localhost:9000/api/agents/chat-roster", () =>
+    HttpResponse.json([
+      {
+        id: "appa-agent",
+        name: "OpenAPPA Configuration Agent",
+        scope: "org",
+        builtIn: true,
+        builtInAgentConfig: { name: "openappa-configuration-agent" },
+        authorId: null,
+        labels: [],
+      },
+    ]),
   ),
 );
 beforeAll(() => {

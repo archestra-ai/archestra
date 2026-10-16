@@ -527,10 +527,10 @@ function ExclusionPill({
   }, [autoOpen, onAutoOpened]);
 
   // The checklist groups tools and shows their descriptions, which the batched
-  // id/name list deliberately omits — so this server's full rows are fetched
-  // here, once its pill exists, rather than for every catalog up front.
+  // id/name list deliberately omits — so this server's picker metadata is fetched
+  // only while its checklist is open.
   const { data: catalogTools = [], isLoading: isLoadingTools } =
-    useCatalogTools(catalogItem.id);
+    useCatalogTools(open ? catalogItem.id : null);
   const tools = useMemo(
     () => filterExcludableTools(catalogItem.id, catalogTools),
     [catalogItem.id, catalogTools],

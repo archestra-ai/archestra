@@ -41,7 +41,7 @@ import { PermissionButton } from "@/components/ui/permission-button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { useProfiles } from "@/lib/agent.query";
+import { useAgentOptions } from "@/lib/agent.query";
 import { useSession } from "@/lib/auth/auth.query";
 import {
   useAllChatOpsBindings,
@@ -219,12 +219,12 @@ export function AgentChatAppsEditor({
     isPending: agentNamesPending,
     isLoadingError: agentNamesLoadingError,
     refetch: refetchAgentNames,
-  } = useProfiles({
-    // Resolves only the agents already assigned to this app, by id.
+  } = useAgentOptions({
+    // This resolves existing assignments, including built-in agents.
     filters: {
       agentType: "agent",
+      excludeBuiltIn: false,
       ids: foreignAgentIds,
-      includeBuiltIn: true,
     },
     enabled: foreignAgentIds.length > 0,
   });

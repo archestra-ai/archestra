@@ -32,6 +32,11 @@ import { idArrayCondition } from "./id-array-condition";
 import type { GrantPrincipal } from "./resource-permission-subject";
 import RoleCompositionModel from "./role-composition";
 
+export type ObjectPolicy = Pick<
+  typeof schema.resourcePermissionPoliciesTable.$inferSelect,
+  "organizationId" | "resource" | "scope" | "grants"
+>;
+
 export default class ResourcePermissionPolicyModel {
   /** Bound application memory while upgrading a large legacy policy catalog. */
   static async listForPresetUpgrade(params: {
@@ -769,24 +774,58 @@ export default class ResourcePermissionPolicyModel {
     );
   }
 
+  /** Load object-local policy presentation once for a roster's audience and recipients. */
+  static async findObjectPolicies(params: {
+    resources: ScopedResource[];
+    scopes: string[];
+  }): Promise<ObjectPolicy[]> {
+    if (params.scopes.length === 0 || params.resources.length === 0) return [];
+    const table = schema.resourcePermissionPoliciesTable;
+    return db
+      .select({
+        organizationId: table.organizationId,
+        resource: table.resource,
+        scope: table.scope,
+        grants: table.grants,
+      })
+      .from(table)
+      .where(
+        and(
+          inArray(table.resource, params.resources),
+          idArrayCondition(table.scope, params.scopes),
+        ),
+      );
+  }
+
   /** {@link findAudience} for several objects of one resource at once. */
   static async findAudiences(params: {
     organizationId: string;
     resource: ScopedResource;
     scopes: string[];
+    /** Undefined loads policies; an empty array deliberately represents none. */
+    policies?: ObjectPolicy[];
   }): Promise<Map<string, ObjectAudience>> {
     if (params.scopes.length === 0) return new Map();
     const table = schema.resourcePermissionPoliciesTable;
-    const policies = await db
-      .select()
-      .from(table)
-      .where(
-        and(
-          eq(table.organizationId, params.organizationId),
-          eq(table.resource, params.resource),
-          idArrayCondition(table.scope, params.scopes),
-        ),
-      );
+    const scopes = new Set(params.scopes);
+    const policies =
+      params.policies === undefined
+        ? await db
+            .select()
+            .from(table)
+            .where(
+              and(
+                eq(table.organizationId, params.organizationId),
+                eq(table.resource, params.resource),
+                idArrayCondition(table.scope, params.scopes),
+              ),
+            )
+        : params.policies.filter(
+            (policy) =>
+              policy.organizationId === params.organizationId &&
+              policy.resource === params.resource &&
+              scopes.has(policy.scope),
+          );
     const byScope = new Map(policies.map((policy) => [policy.scope, policy]));
     return new Map(
       params.scopes.map((scope) => [scope, audienceOf(byScope.get(scope))]),
@@ -802,6 +841,8 @@ export default class ResourcePermissionPolicyModel {
   static async findReadRecipients(params: {
     resources: ScopedResource[];
     scopes: string[];
+    /** Undefined loads policies; an empty array deliberately represents none. */
+    policies?: ObjectPolicy[];
   }): Promise<Map<string, ReadRecipients>> {
     const recipients = new Map<string, ReadRecipients>(
       params.scopes.map((scope) => [
@@ -812,15 +853,23 @@ export default class ResourcePermissionPolicyModel {
     if (params.scopes.length === 0 || params.resources.length === 0)
       return recipients;
     const table = schema.resourcePermissionPoliciesTable;
-    const policies = await db
-      .select({ scope: table.scope, grants: table.grants })
-      .from(table)
-      .where(
-        and(
-          inArray(table.resource, params.resources),
-          idArrayCondition(table.scope, params.scopes),
-        ),
-      );
+    const scopes = new Set(params.scopes);
+    const policies =
+      params.policies === undefined
+        ? await db
+            .select({ scope: table.scope, grants: table.grants })
+            .from(table)
+            .where(
+              and(
+                inArray(table.resource, params.resources),
+                idArrayCondition(table.scope, params.scopes),
+              ),
+            )
+        : params.policies.filter(
+            (policy) =>
+              params.resources.includes(policy.resource) &&
+              scopes.has(policy.scope),
+          );
     for (const policy of policies) {
       const entry = recipients.get(policy.scope);
       if (!entry) continue;
@@ -856,6 +905,8 @@ export default class ResourcePermissionPolicyModel {
     resources: ScopedResource[];
     scopes: string[];
     excludeUserIds?: Map<string, string | null>;
+    /** Undefined loads policies; an empty array deliberately represents none. */
+    policies?: ObjectPolicy[];
   }): Promise<Map<string, ReadRecipientDetails>> {
     const recipients =
       await ResourcePermissionPolicyModel.findReadRecipients(params);

@@ -21,7 +21,11 @@ export const RouteId = {
   // Agent Routes
   GetAgents: "getAgents",
   GetAgentCatalog: "getAgentCatalog",
+  GetChatAgentRoster: "getChatAgentRoster",
+  GetChatAgentRosterPage: "getChatAgentRosterPage",
   GetAgentOptions: "getAgentOptions",
+  GetAgentOptionsPage: "getAgentOptionsPage",
+  GetAgentOptionIds: "getAgentOptionIds",
   GetAgentCredentialReadiness: "getAgentCredentialReadiness",
   CreateAgent: "createAgent",
   CloneAgent: "cloneAgent",
@@ -135,6 +139,7 @@ export const RouteId = {
 
   // MCP Server Routes
   GetMcpServers: "getMcpServers",
+  GetMcpServerAutoModeAgentPage: "getMcpServerAutoModeAgentPage",
   GetMcpServerAutoModeAgents: "getMcpServerAutoModeAgents",
   GetMcpServer: "getMcpServer",
   GetMcpServerTools: "getMcpServerTools",
@@ -606,6 +611,7 @@ export const RouteId = {
   GetOrganization: "getOrganization",
   GetOnboardingStatus: "getOnboardingStatus",
   GetMemberSignupStatus: "getMemberSignupStatus",
+  GetOrganizationMemberOptions: "getOrganizationMemberOptions",
   GetOrganizationMembers: "getOrganizationMembers",
   GetOrganizationMember: "getOrganizationMember",
   DeletePendingSignupMember: "deletePendingSignupMember",
@@ -638,6 +644,7 @@ export const RouteId = {
 
   // Org-level deployment environments
   ListEnvironments: "listEnvironments",
+  GetEnvironment: "getEnvironment",
   GetEnvironmentLabelValues: "environmentLabelValues",
   GetEnvironmentLabelKeys: "environmentLabelKeys",
   CreateEnvironment: "createEnvironment",
@@ -909,6 +916,7 @@ export const RouteId = {
   PreviewGithubSkill: "previewGithubSkill",
   ImportGithubSkills: "importGithubSkills",
   GetSkillSourceRepos: "getSkillSourceRepos",
+  GetSkillNames: "getSkillNames",
 
   // Plugin Routes
   GetPlugins: "getPlugins",

@@ -25,6 +25,7 @@ import { useSetCostsAction } from "@/app/llm/(costs)/layout";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import { AgentIcon } from "@/components/agent-icon";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
+import { AgentSelector } from "@/components/agent-selector";
 import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
@@ -47,6 +48,7 @@ import {
 } from "@/components/limit-cleanup-interval-select";
 import { LlmModelPicker } from "@/components/llm-model-picker";
 import { QueryLoadError } from "@/components/query-load-error";
+import { RemoteUserSelect } from "@/components/remote-user-select";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -72,9 +74,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { UserSearchableSelect } from "@/components/user-searchable-select";
 import { VirtualKeySearchableSelect } from "@/components/virtual-key-searchable-select";
-import { useProfiles } from "@/lib/agent.query";
+import { useAgentOptions } from "@/lib/agent.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useDefaultUserLimits } from "@/lib/default-user-limit.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
@@ -95,10 +96,8 @@ import {
 } from "@/lib/limits.query";
 import { useModelsWithApiKeys } from "@/lib/llm-models.query";
 import { useLlmOauthClients } from "@/lib/llm-oauth-clients.query";
-import {
-  useOrganization,
-  useOrganizationMembers,
-} from "@/lib/organization.query";
+import { useMemberOptionsReferences } from "@/lib/member-options.query";
+import { useOrganization } from "@/lib/organization.query";
 import { logoNameForProvider } from "@/lib/provider-logos";
 import { useTeams } from "@/lib/teams/team.query";
 import { cn } from "@/lib/utils/tailwind";
@@ -230,7 +229,11 @@ export default function LimitsPage() {
   } = useLimits();
   const { data: teams = [] } = useTeams();
   const { data: organization } = useOrganization();
-  const { data: members = [] } = useOrganizationMembers();
+  const { data: members = [] } = useMemberOptionsReferences({
+    ids: limits
+      .filter((limit) => limit.entityType === "user")
+      .map((limit) => limit.entityId),
+  });
   const { data: defaultUserLimits = [] } = useDefaultUserLimits();
   const { data: virtualKeysData } = useAllVirtualApiKeys({
     limit: LIMITS_ENTITY_SELECTOR_PAGE_SIZE,
@@ -240,8 +243,13 @@ export default function LimitsPage() {
     limit: LIMITS_ENTITY_SELECTOR_PAGE_SIZE,
   });
   const oauthClients = oauthClientsData?.data ?? [];
-  const { data: agents = [] } = useProfiles({
-    filters: { agentTypes: ["agent"] },
+  const { data: agents = [] } = useAgentOptions({
+    filters: {
+      agentTypes: ["agent"],
+      ids: limits
+        .filter((limit) => limit.entityType === "agent")
+        .map((limit) => limit.entityId),
+    },
   });
   const { data: environmentsData } = useEnvironments();
   const environments = environmentsData?.environments ?? [];
@@ -1037,7 +1045,7 @@ export default function LimitsPage() {
                 )}
 
                 {formState.entityType === "user" && (
-                  <UserSearchableSelect
+                  <RemoteUserSelect
                     value={formState.entityId}
                     onValueChange={(value) =>
                       setFormState((current) => ({
@@ -1045,11 +1053,6 @@ export default function LimitsPage() {
                         entityId: value,
                       }))
                     }
-                    users={members.map((member) => ({
-                      userId: member.id,
-                      name: member.name,
-                      email: member.email,
-                    }))}
                     placeholder="Select user"
                     className="w-full sm:flex-1"
                   />
@@ -1071,7 +1074,15 @@ export default function LimitsPage() {
                 )}
 
                 {formState.entityType === "agent" && (
-                  <SearchableSelect
+                  <AgentSelector
+                    mode="single"
+                    flat
+                    remote={{
+                      filters: {
+                        agentType: "agent",
+                        searchMode: "name_or_description",
+                      },
+                    }}
                     value={formState.entityId}
                     onValueChange={(value) =>
                       setFormState((current) => ({
@@ -1080,11 +1091,6 @@ export default function LimitsPage() {
                       }))
                     }
                     placeholder="Select agent"
-                    items={agents.map((agent) => ({
-                      value: agent.id,
-                      label: agent.name,
-                      description: agent.description ?? undefined,
-                    }))}
                     className="w-full sm:flex-1"
                   />
                 )}

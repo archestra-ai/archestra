@@ -29,6 +29,7 @@ import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaSpawnCorrelationModel, {
   type AllowedSpawnAlias,
 } from "@/models/openappa-spawn-correlation";
+import { reportAgentRuntimeObservedReads } from "@/observability/metrics/agent-runtime";
 import { childSessionId, clientSessionId } from "@/openappa/actor";
 import {
   type AppaChildReturnCompletion,
@@ -70,6 +71,7 @@ import {
   stripPeerProofs,
 } from "@/openappa/peer-claims";
 import {
+  isObservedRead,
   RUNTIME_TOOL_PROOF_ARGUMENT,
   signRuntimeToolProof,
   stripRuntimeToolProofs,
@@ -138,6 +140,7 @@ import type {
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import { collectDeclaredToolNames } from "@/routes/proxy/utils/declared-tool-names";
 import type { ToolNameResolution } from "@/routes/proxy/utils/gateway-tool-names";
+import { pendingExports } from "@/services/agent-runtime/pending-exports";
 import { readGuardrailsV2Activation } from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
 import type {
@@ -222,6 +225,7 @@ type AppaPluginBinding = {
 type AppaPluginObserver = {
   session: OpenAppaSession;
   adapter: AppaClientAdapter | undefined;
+  identity: AppaTrustedContext["toolIdentity"];
   requestBody: unknown;
 };
 
@@ -682,6 +686,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         session: this.governedSession(binding),
         request: context.request,
       });
+      if (binding.runtimeSessionId === binding.session.session_id) {
+        // A runtime has no tool call open here: its results are in and its
+        // next calls are not out. Files its parent pinned while it was busy
+        // can cross now.
+        await pendingExports.drain(this.governedSession(binding));
+      }
     }
     if (binding?.compaction) return;
     if (binding?.adapter?.id === "codex") {
@@ -1095,8 +1105,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
     const observer = this.observers.get(context.resources);
     if (observer) {
-      await recordObservedCalls(observer, context.toolCalls);
-      return;
+      // A call is signed only once the record that this session made it
+      // exists: that record is what the gateway checks an observed proof by.
+      const recorded = await recordObservedCalls(observer, context.toolCalls);
+      return signObservedRuntimeCalls(observer, context.toolCalls, recorded);
     }
     const binding = this.bindings.get(context.resources);
     if (!binding) return;
@@ -1213,7 +1225,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // message call first, then bind the peer record to that call id.
     const policy = sharedPolicy(session.organization_id);
     const runtimeCalls = await resolveRuntimeCalls({
-      binding,
+      organizationId: binding.session.organization_id,
       calls: calls.filter((call) => !blockedTranscriptCalls.has(call.id)),
       resolution: this.resolution(binding),
     });
@@ -1437,21 +1449,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             spawn: runtime.spawn,
             wrapped: runtime.wrapper !== undefined,
           });
-          const signed = {
-            ...runtime.args,
-            [RUNTIME_TOOL_PROOF_ARGUMENT]: proof,
-          };
-          released.push({
-            ...call,
-            arguments: runtime.wrapper
-              ? {
-                  ...runtime.wrapper,
-                  tool_args: runtime.stringArgs
-                    ? JSON.stringify(signed)
-                    : signed,
-                }
-              : signed,
-          });
+          released.push(signedCall({ call, runtime, proof }));
           continue;
         }
         // The runtime ruled on the call as the model wrote it; the marker is
@@ -1830,6 +1828,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       this.observers.set(context.resources, {
         session,
         adapter,
+        identity: trustedContext.toolIdentity,
         requestBody: context.requestBody,
       });
     } catch (error) {
@@ -1941,24 +1940,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     binding: AppaPluginBinding,
     call: { name: string; namespace?: string },
   ): string {
-    if (
-      !binding.identity.attestationOf(call.name, call.namespace) &&
-      binding.adapter?.classifyToolName(call.name, call.namespace) === "local"
-    ) {
-      return binding.identity.canonicalize(
-        binding.adapter.normalizeLocalToolName(call.name),
-      );
-    }
-    return binding.identity.canonicalize(call.name, call.namespace);
+    return canonicalCallName(binding, call);
   }
 
   /** The name resolution this binding's calls are ruled under. */
   private resolution(binding: AppaPluginBinding): ToolNameResolution {
-    return {
-      canonicalize: (name: string, namespace?: string) =>
-        this.canonicalize(binding, { name, namespace }),
-      looseRunToolDispatch: binding.identity.looseRunToolDispatch,
-    };
+    return toolNameResolution(binding);
   }
 
   /**
@@ -2241,8 +2228,60 @@ type RuntimeCall = {
 
 const runtimeToolActions = new Set<string>(OPENAPPA_RUNTIME_TOOL_SHORT_NAMES);
 
+/** The canonical name a call is ruled under, by the session's tool identity. */
+function canonicalCallName(
+  params: {
+    identity: AppaTrustedContext["toolIdentity"];
+    adapter: AppaClientAdapter | undefined;
+  },
+  call: { name: string; namespace?: string },
+): string {
+  if (
+    !params.identity.attestationOf(call.name, call.namespace) &&
+    params.adapter?.classifyToolName(call.name, call.namespace) === "local"
+  ) {
+    return params.identity.canonicalize(
+      params.adapter.normalizeLocalToolName(call.name),
+    );
+  }
+  return params.identity.canonicalize(call.name, call.namespace);
+}
+
+function toolNameResolution(params: {
+  identity: AppaTrustedContext["toolIdentity"];
+  adapter: AppaClientAdapter | undefined;
+}): ToolNameResolution {
+  return {
+    canonicalize: (name: string, namespace?: string) =>
+      canonicalCallName(params, { name, namespace }),
+    looseRunToolDispatch: params.identity.looseRunToolDispatch,
+  };
+}
+
+/** The call as released: its arguments, or its `run_tool` target's, carry the proof. */
+function signedCall(params: {
+  call: ToolCall;
+  runtime: RuntimeCall;
+  proof: string;
+}): ToolCall {
+  const { call, runtime } = params;
+  const signed = {
+    ...runtime.args,
+    [RUNTIME_TOOL_PROOF_ARGUMENT]: params.proof,
+  };
+  return {
+    ...call,
+    arguments: runtime.wrapper
+      ? {
+          ...runtime.wrapper,
+          tool_args: runtime.stringArgs ? JSON.stringify(signed) : signed,
+        }
+      : signed,
+  };
+}
+
 async function resolveRuntimeCalls(params: {
-  binding: AppaPluginBinding;
+  organizationId: string;
   calls: readonly ToolCall[];
   resolution: ToolNameResolution;
 }): Promise<Map<string, RuntimeCall>> {
@@ -2279,7 +2318,7 @@ async function resolveRuntimeCalls(params: {
         call.action === TOOL_START_RUN_SHORT_NAME || isAgentTool(call.action),
     )
   ) {
-    const organizationId = params.binding.session.organization_id;
+    const { organizationId } = params;
     const [runtimeTargets, spawnTargets] = await Promise.all([
       AgentModel.findRuntimeTargets(organizationId),
       AgentModel.findSpawnTargets(organizationId),
@@ -2930,7 +2969,7 @@ async function admitRelayArrivals(params: {
 async function recordObservedCalls(
   observer: AppaPluginObserver,
   calls: readonly ToolCall[],
-): Promise<void> {
+): Promise<boolean> {
   const { session } = observer;
   try {
     const launches = observer.adapter?.teammateLaunches?.(observer.requestBody);
@@ -2958,11 +2997,88 @@ async function recordObservedCalls(
         }),
       ),
     ]);
+    return true;
   } catch (error) {
     logger.warn(
       { err: error },
       "OpenAPPA could not record tool calls made while enforcement was off",
     );
+    return false;
+  }
+}
+
+/**
+ * Signs the runtime reads of a governed session while enforcement is off.
+ * Nothing rules them now, but a read can reach the gateway after enforcement
+ * turns on, and without a proof the gateway cannot tell this session from a
+ * stranger and refuses it. With one, what it reads crosses into this session
+ * as for a ruled call. Anything else stays unsigned (see `isObservedRead`).
+ * Signing never fails the request; an unsigned call behaves as before. When
+ * the calls could not be recorded nothing is signed, and the reads are
+ * counted as unsigned.
+ */
+async function signObservedRuntimeCalls(
+  observer: AppaPluginObserver,
+  calls: readonly ToolCall[],
+  recorded: boolean,
+): Promise<LlmProxyToolCallsOutcome | undefined> {
+  const secret = config.openappa.offerSigningSecret;
+  if (!secret) return undefined;
+  try {
+    const runtimeCalls = await resolveRuntimeCalls({
+      organizationId: observer.session.organization_id,
+      calls,
+      resolution: toolNameResolution(observer),
+    });
+    const toolCalls: ToolCall[] = [];
+    const runtimeProofs: LlmProxyRuntimeToolProof[] = [];
+    let unsigned = 0;
+    for (const call of calls) {
+      const runtime = runtimeCalls.get(call.id);
+      // A proof the model wrote itself is left for the gateway to refuse.
+      const read =
+        runtime !== undefined &&
+        !runtime.spawn &&
+        isObservedRead({ action: runtime.action, args: runtime.args }) &&
+        !Object.hasOwn(runtime.args, RUNTIME_TOOL_PROOF_ARGUMENT);
+      if (read && !recorded) unsigned++;
+      const proof =
+        runtime && read && recorded
+          ? signRuntimeToolProof({
+              session: observer.session,
+              toolCallId: withoutTrajectoryStamp(call.id),
+              action: runtime.action,
+              arguments: runtime.args,
+              spawn: false,
+              observed: true,
+              secret,
+            })
+          : undefined;
+      if (!runtime || !proof) {
+        toolCalls.push(call);
+        continue;
+      }
+      runtimeProofs.push({
+        id: call.id,
+        name: call.name,
+        action: runtime.action,
+        session: observer.session,
+        spawn: false,
+        wrapped: runtime.wrapper !== undefined,
+      });
+      toolCalls.push(signedCall({ call, runtime, proof }));
+    }
+    reportAgentRuntimeObservedReads("signed", runtimeProofs.length);
+    reportAgentRuntimeObservedReads("unsigned", unsigned);
+    return runtimeProofs.length > 0
+      ? { decision: "allow", toolCalls, runtimeProofs }
+      : undefined;
+  } catch (error) {
+    logger.warn(
+      { err: error },
+      "OpenAPPA could not sign runtime calls made while enforcement was off",
+    );
+    return undefined;
   }
 }
 

@@ -16,9 +16,9 @@ import {
   type OAuthClientFormValues,
   OAuthClientScopePicker,
   oauthCapabilities,
-  oauthClientFormBody,
   oauthClientFormReady,
-  setOauthClientScopes,
+  resolveOauthClientFormBody,
+  useOauthClientScopeChange,
 } from "@/components/oauth-client/configuration-fields";
 import { OAuthClientIdentityFields } from "@/components/oauth-client/identity-fields";
 import { ResourceAccessSection } from "@/components/resource-access-section";
@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 
 type Client = archestraApiTypes.GetOauthClientsResponses["200"]["data"][number];
@@ -34,7 +35,7 @@ type Section = "general" | "access" | "budget";
 export function EditManagedOAuthClientDialog({
   oauthClient,
   onOpenChange,
-  gateways,
+  gateways: providedGateways,
   providerApiKeys,
   onSubmit,
   onRotateSecret,
@@ -42,7 +43,7 @@ export function EditManagedOAuthClientDialog({
 }: {
   oauthClient: Client | null;
   onOpenChange: (open: boolean) => void;
-  gateways: AgentSelectorAgent[];
+  gateways?: AgentSelectorAgent[];
   providerApiKeys: archestraApiTypes.GetLlmProviderApiKeysResponses["200"];
   onSubmit: (
     id: string,
@@ -89,6 +90,12 @@ export function EditManagedOAuthClientDialog({
     }
   }, [oauthClient, form]);
   const values = form.watch();
+  const selectedTargets = useAgentOptionsByIds({
+    ids: (values.allowedGatewayIds ?? []).slice(0, 20),
+    enabled: providedGateways === undefined && !!oauthClient,
+  });
+  const gateways = providedGateways ?? selectedTargets.data ?? [];
+  const scopeChange = useOauthClientScopeChange(form, providedGateways);
   if (!oauthClient || !values.scopes) return null;
   const llm = values.scopes.includes("llm:proxy");
   return (
@@ -141,20 +148,26 @@ export function EditManagedOAuthClientDialog({
           <DialogCancelButton>Cancel</DialogCancelButton>
           <Button
             type="submit"
-            disabled={!oauthClientFormReady(values) || isSubmitting}
+            disabled={
+              !oauthClientFormReady(values) ||
+              isSubmitting ||
+              form.formState.isSubmitting ||
+              scopeChange.isPending
+            }
           >
             <span>Save Changes</span>
           </Button>
         </>
       }
       onSubmit={form.handleSubmit(async () => {
-        const { initialGrants: _initial, ...body } = oauthClientFormBody(
-          {
-            ...values,
-            labels: labelsRef.current?.saveUnsavedLabel() ?? values.labels,
-          },
-          gateways,
-        );
+        const { initialGrants: _initial, ...body } =
+          await resolveOauthClientFormBody(
+            {
+              ...values,
+              labels: labelsRef.current?.saveUnsavedLabel() ?? values.labels,
+            },
+            providedGateways,
+          );
         if (!form.formState.dirtyFields.serviceAccountId)
           delete body.serviceAccountId;
         // Saving another field does not require permission to change billing.
@@ -208,11 +221,13 @@ export function EditManagedOAuthClientDialog({
       <div hidden={section !== "access"} className="space-y-5">
         <OAuthClientScopePicker
           value={values.scopes}
-          onChange={(scopes) => setOauthClientScopes(form, scopes, gateways)}
+          onChange={scopeChange.change}
+          disabled={scopeChange.isPending || form.formState.isSubmitting}
         />
         <OAuthClientAccessFields
           form={form}
           gateways={gateways}
+          remoteGateways={providedGateways === undefined}
           providerApiKeys={providerApiKeys}
         />
       </div>

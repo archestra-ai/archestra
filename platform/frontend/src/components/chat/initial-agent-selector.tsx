@@ -64,7 +64,8 @@ import {
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   useAgentCredentialReadiness,
-  useAgentSearch,
+  useChatAgentPage,
+  useChatAgentReferences,
   useChatAgents,
   useCreateProfile,
   usePinnedAgentIds,
@@ -86,6 +87,7 @@ import {
   resolveAgentConnectionGate,
 } from "@/lib/chat/agent-connection-gate";
 import { useFeature } from "@/lib/config/config.query";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useListboxNavigation } from "@/lib/hooks/use-listbox-navigation";
 import { useConnectors } from "@/lib/knowledge/connector.query";
 import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
@@ -132,27 +134,27 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   currentAgentId,
   onAgentChange,
 }: InitialAgentSelectorProps) {
-  const { data: allAgents = [] } = useChatAgents();
   const [open, setOpen] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [search, setSearch] = useState("");
-  // The roster is one page. Typing searches the whole organization on the server.
-  const trimmedSearch = search.trim();
-  const { data: searchedAgents } = useAgentSearch({
-    name: trimmedSearch,
-    agentType: "agent",
-    enabled: open && trimmedSearch.length > 0,
+  const debouncedSearch = useDebouncedValue(search, 250);
+  const [paging, setPaging] = useState<{
+    search: string;
+    cursors: (string | undefined)[];
+  }>({ search: "", cursors: [undefined] });
+  const pageCursors =
+    paging.search === debouncedSearch ? paging.cursors : [undefined];
+  const page = useChatAgentPage({
+    cursor: pageCursors.at(-1),
+    search: debouncedSearch,
+    enabled: open,
+  });
+  const { data: bootstrapAgents = [] } = useChatAgents({
+    ids: [currentAgentId],
   });
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
   const [cloningAgentId, setCloningAgentId] = useState<string | null>(null);
   const afterFirstPaint = useAfterFirstPaint();
-  const { data: credentialReadiness } = useAgentCredentialReadiness({
-    enabled: open || summaryOpen,
-  });
-  const readinessByAgent = useMemo(
-    () => indexReadinessByAgent(credentialReadiness),
-    [credentialReadiness],
-  );
   const installOrchestrator = useMcpInstallOrchestrator({ enabled: open });
   // Connecting is per server, so several missing ones are walked one at a time:
   // each install refreshes readiness, and the row re-offers whatever is left.
@@ -170,21 +172,45 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const createProfile = useCreateProfile();
   const cloningStartedForRef = useRef<string | null>(null);
 
-  const filteredAgents = useMemo(
-    () =>
-      filterAndSortInitialAgents({
-        allAgents: trimmedSearch ? (searchedAgents ?? []) : allAgents,
-        currentAgentId,
-        search,
-        userId,
-      }),
-    [allAgents, searchedAgents, trimmedSearch, search, currentAgentId, userId],
-  );
   // Loaded after first paint, not on open, so the Pinned group is there the
   // moment the picker opens instead of popping in once the request lands.
   const { data: pinnedIds } = usePinnedAgentIds({
     enabled: open || afterFirstPaint,
   });
+  const { data: pinnedAgents = [] } = useChatAgentReferences(
+    pinnedIds ?? [],
+    open || afterFirstPaint,
+  );
+  const allAgents = useMemo(
+    () => [
+      ...new Map(
+        [...bootstrapAgents, ...pinnedAgents, ...(page.data?.data ?? [])].map(
+          (agent) => [agent.id, agent],
+        ),
+      ).values(),
+    ],
+    [bootstrapAgents, pinnedAgents, page.data],
+  );
+  const filteredAgents = useMemo(
+    () =>
+      filterAndSortInitialAgents({
+        allAgents,
+        currentAgentId,
+        search,
+        userId,
+      }),
+    [allAgents, search, currentAgentId, userId],
+  );
+  const { data: credentialReadiness } = useAgentCredentialReadiness({
+    enabled: open || summaryOpen,
+    ids: open
+      ? filteredAgents.map((agent) => agent.id)
+      : [currentAgentId].filter((id): id is string => !!id),
+  });
+  const readinessByAgent = useMemo(
+    () => indexReadinessByAgent(credentialReadiness),
+    [credentialReadiness],
+  );
   const groupIdPrefix = useId();
   const toolSummaryId = useId();
   const agentGroups = useMemo(
@@ -208,9 +234,11 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   const currentAgentSummary = useMemo(
     () =>
       allAgents.find((a) => a.id === currentAgentId) ??
-      allAgents.find((a) => !a.builtIn && a.scope === "personal") ??
-      allAgents.find((a) => !a.builtIn) ??
-      null,
+      (currentAgentId
+        ? null
+        : (allAgents.find((a) => !a.builtIn && a.scope === "personal") ??
+          allAgents.find((a) => !a.builtIn) ??
+          null)),
     [allAgents, currentAgentId],
   );
   // The roster omits large embedded icons and editing-only fields. Hydrate one
@@ -220,9 +248,10 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
     currentAgentSummary?.id ?? undefined,
     { enabled: open || afterFirstPaint },
   );
-  const currentAgent = currentAgentDetail ?? currentAgentSummary;
-  const displayAgentName = currentAgent?.name ?? "Select agent";
-  const effectiveAgentId = currentAgent?.id ?? currentAgentId;
+  const currentAgent = currentAgentDetail;
+  const displayAgent = currentAgentDetail ?? currentAgentSummary;
+  const displayAgentName = displayAgent?.name ?? "Select agent";
+  const effectiveAgentId = displayAgent?.id ?? currentAgentId;
   const shouldLoadAgentManagementDetails =
     open || !!editingAgentId || afterFirstPaint;
   const installer = useMcpInstallOrchestrator({
@@ -281,10 +310,9 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
   // shows these icons from the start, and a short id list is cheap.
   const { data: triggerDelegations = [], isSuccess: delegationsLoaded } =
     useAgentDelegations(effectiveAgentId ?? undefined);
-  const triggerSubagents = useMemo(() => {
-    const targetIds = new Set(triggerDelegations.map((d) => d.id));
-    return allAgents.filter((a) => targetIds.has(a.id));
-  }, [allAgents, triggerDelegations]);
+  const { data: triggerSubagents = [] } = useChatAgentReferences(
+    triggerDelegations.map((agent) => agent.id),
+  );
 
   const { data: knowledgeBasesData, isSuccess: knowledgeBasesLoaded } =
     useKnowledgeBases({
@@ -506,7 +534,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
               onKeyDown={navigation.onTriggerKeyDown}
               className="min-w-0"
             >
-              <AgentIcon icon={currentAgent?.icon} size={16} />
+              <AgentIcon icon={displayAgent?.icon} size={16} />
               <span className="truncate flex-1 text-left">
                 {displayAgentName}
               </span>
@@ -543,8 +571,8 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                   onOpenChange={setSummaryOpen}
                 />
               )}
-              {runtimeEnabled && currentAgent?.runtime && (
-                <RuntimeCapableIndicator runtime={currentAgent.runtime} />
+              {runtimeEnabled && displayAgent?.runtime && (
+                <RuntimeCapableIndicator runtime={displayAgent.runtime} />
               )}
             </PromptInputButton>
           </PopoverTrigger>
@@ -562,7 +590,10 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                   aria-label="Search agents"
                   {...navigation.inputProps}
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setPaging({ search: e.target.value, cursors: [undefined] });
+                  }}
                   className="h-8 pl-8 text-sm rounded-lg bg-muted/50"
                   autoFocus
                 />
@@ -577,13 +608,20 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
               {filteredAgents.length === 0 ? (
                 <div className="flex flex-col items-center gap-2.5 px-4 py-6 text-center">
                   <p className="text-sm text-muted-foreground">
-                    No agents match "{search}"
+                    {page.isPending
+                      ? "Loading agents…"
+                      : page.isError
+                        ? "Could not load agents"
+                        : `No agents match "${search}"`}
                   </p>
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
                       size="xs"
-                      onClick={() => setSearch("")}
+                      onClick={() => {
+                        setSearch("");
+                        setPaging({ search: "", cursors: [undefined] });
+                      }}
                     >
                       Clear search
                     </Button>
@@ -635,6 +673,45 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                   </div>
                 ))
               )}
+            </div>
+            <div className="flex items-center justify-between border-t px-2 py-1.5">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={pageCursors.length === 1 || page.isFetching}
+                onClick={() =>
+                  setPaging({
+                    search: debouncedSearch,
+                    cursors: pageCursors.slice(0, -1),
+                  })
+                }
+              >
+                Previous
+              </Button>
+              {page.isError && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void page.refetch()}
+                >
+                  Retry
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={!page.data?.pagination.hasNext || page.isFetching}
+                onClick={() => {
+                  const next = page.data?.pagination.nextCursor;
+                  if (next)
+                    setPaging({
+                      search: debouncedSearch,
+                      cursors: [...pageCursors, next],
+                    });
+                }}
+              >
+                Next
+              </Button>
             </div>
             <div className="flex items-center justify-between border-t px-1.5 py-1.5">
               <Button asChild variant="ghost" size="sm">
@@ -846,10 +923,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
 // Internal: picker row
 // ============================================================================
 
-type PickerAgent = Omit<
-  archestraApiTypes.GetAgentsResponses["200"]["data"][number],
-  "pinnedAt"
->;
+type PickerAgent = archestraApiTypes.GetChatAgentRosterResponses["200"][number];
 
 function AgentPickerRow({
   agent,

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { DialogBody } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { useInternalAgents } from "@/lib/agent.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   useAllChatOpsBindings,
@@ -119,7 +119,11 @@ function BotChannels({
   const joinMutation = isRouter ? routerJoin : agentJoin;
   const updateBinding = useUpdateChatOpsBinding();
   const bindingsQuery = useAllChatOpsBindings();
-  const { data: agents = [] } = useInternalAgents();
+  const { data: agents = [] } = useAgentOptionsByIds({
+    ids: (bindingsQuery.data?.bindings ?? []).flatMap((binding) =>
+      binding.agentId ? [binding.agentId] : [],
+    ),
+  });
   const { data: canEdit } = useHasPermissions({
     organizationSettings: ["update"],
   });
@@ -248,7 +252,12 @@ function BotChannels({
                             mode="single"
                             flat
                             compactTrigger
-                            agents={agents}
+                            remote={{
+                              filters: {
+                                agentType: "agent",
+                                excludeBuiltIn: true,
+                              },
+                            }}
                             value={binding.agentId ?? ""}
                             onValueChange={(nextAgentId) =>
                               updateBinding.mutate({

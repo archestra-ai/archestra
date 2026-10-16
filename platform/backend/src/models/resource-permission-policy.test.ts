@@ -18,6 +18,128 @@ import OrganizationModel from "./organization";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 describe("resource permission policy persistence", () => {
+  test("preloaded object presentation policies preserve filtering and an explicitly empty set", async ({
+    makeOrganization,
+    makeAgent,
+    makeTeam,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const other = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+    });
+    const keys = [
+      {
+        organizationId: org.id,
+        resource: "agent" as const,
+        scope: agent.id,
+        grants: [
+          {
+            subject: { type: "team" as const, id: team.id },
+            actions: ["read" as const],
+          },
+        ],
+      },
+      {
+        organizationId: org.id,
+        resource: "agent" as const,
+        scope: "*",
+        grants: [
+          {
+            subject: { type: "organization" as const, id: "*" as const },
+            actions: ["read" as const],
+          },
+        ],
+      },
+      {
+        organizationId: other.id,
+        resource: "agent" as const,
+        scope: agent.id,
+        grants: [
+          {
+            subject: { type: "organization" as const, id: "*" as const },
+            actions: ["read" as const],
+          },
+        ],
+      },
+      {
+        organizationId: org.id,
+        resource: "mcpGateway" as const,
+        scope: agent.id,
+        grants: [
+          {
+            subject: { type: "user" as const, id: user.id },
+            actions: ["read" as const],
+          },
+        ],
+      },
+    ];
+    for (const key of keys) {
+      const existing = await ResourcePermissionPolicyModel.find(key);
+      await ResourcePermissionPolicyModel.replace({
+        ...key,
+        revision: existing?.revision ?? 0,
+      });
+    }
+    const policies = await ResourcePermissionPolicyModel.findObjectPolicies({
+      resources: ["agent", "mcpGateway"],
+      scopes: [agent.id, "*"],
+    });
+    const audienceParams = {
+      organizationId: org.id,
+      resource: "agent" as const,
+      scopes: [agent.id],
+    };
+    expect(
+      await ResourcePermissionPolicyModel.findAudiences({
+        ...audienceParams,
+        policies,
+      }),
+    ).toEqual(
+      await ResourcePermissionPolicyModel.findAudiences(audienceParams),
+    );
+    expect(
+      (
+        await ResourcePermissionPolicyModel.findAudiences({
+          ...audienceParams,
+          policies,
+        })
+      ).get(agent.id),
+    ).toEqual({ audience: "team", teamIds: [team.id] });
+    expect(
+      (
+        await ResourcePermissionPolicyModel.findAudiences({
+          ...audienceParams,
+          policies: [],
+        })
+      ).get(agent.id),
+    ).toEqual({ audience: "personal", teamIds: [] });
+    const recipientsParams = {
+      resources: ["agent" as const],
+      scopes: [agent.id],
+    };
+    expect(
+      await ResourcePermissionPolicyModel.findReadRecipients({
+        ...recipientsParams,
+        policies,
+      }),
+    ).toEqual(
+      await ResourcePermissionPolicyModel.findReadRecipients(recipientsParams),
+    );
+    expect(
+      (
+        await ResourcePermissionPolicyModel.findReadRecipients({
+          ...recipientsParams,
+          policies: [],
+        })
+      ).get(agent.id),
+    ).toEqual({ teamIds: [], userIds: [], teamActions: {} });
+  });
+
   test("grant SQL preserves wildcard, object, subject, action and organization boundaries", async ({
     makeOrganization,
     makeAgent,

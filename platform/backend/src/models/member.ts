@@ -1,4 +1,4 @@
-import type { AnyRoleName } from "@archestra/shared";
+import type { AnyRoleName, CursorQuery } from "@archestra/shared";
 import {
   and,
   count,
@@ -10,9 +10,14 @@ import {
   or,
   sql,
 } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { syncSystemRoleWithOrgPermissions } from "@/auth/system-role-sync";
 import db, { schema, type Transaction } from "@/database";
-import { createPaginatedResult } from "@/database/utils/pagination";
+import {
+  createCursorPaginatedResult,
+  createPaginatedResult,
+  decodeCursor,
+} from "@/database/utils/pagination";
 import { buildTokenizedSearchFilter } from "@/database/utils/text-search";
 import logger from "@/logging";
 
@@ -222,6 +227,95 @@ class MemberModel {
       await syncSystemRoleWithOrgPermissions(userId, organizationId);
     }
     return result[0];
+  }
+
+  /** Bounded identity-only picker with the same visibility as the full directory. */
+  static async findOptions(params: {
+    organizationId: string;
+    viewerId: string;
+    canSeeAllMembers: boolean;
+    pagination: CursorQuery;
+    search?: string;
+    searchMode: "name" | "name_or_email";
+    ids?: string[];
+    emails?: string[];
+  }) {
+    const viewerMembership = alias(
+      schema.teamMembersTable,
+      "viewer_membership",
+    );
+    const table = schema.usersTable;
+    const cursor = decodeCursor(params.pagination.cursor);
+    const visible = params.canSeeAllMembers
+      ? undefined
+      : and(
+          sql`${table.id} <> ${params.viewerId}`,
+          exists(
+            db
+              .select({ one: sql`1` })
+              .from(viewerMembership)
+              .innerJoin(
+                schema.teamMembersTable,
+                eq(viewerMembership.teamId, schema.teamMembersTable.teamId),
+              )
+              .innerJoin(
+                schema.teamsTable,
+                eq(schema.teamsTable.id, viewerMembership.teamId),
+              )
+              .where(
+                and(
+                  eq(viewerMembership.userId, params.viewerId),
+                  eq(schema.teamMembersTable.userId, table.id),
+                  eq(schema.teamsTable.organizationId, params.organizationId),
+                ),
+              ),
+          ),
+        );
+    const rows = await db
+      .select({ id: table.id, name: table.name, email: table.email })
+      .from(schema.membersTable)
+      .innerJoin(table, eq(schema.membersTable.userId, table.id))
+      .where(
+        and(
+          eq(schema.membersTable.organizationId, params.organizationId),
+          visible,
+          params.ids
+            ? sql`${table.id} = ANY(${sql.param(params.ids)}::text[])`
+            : undefined,
+          params.emails
+            ? sql`lower(${table.email}) = ANY(${sql.param(params.emails.map((email) => email.toLowerCase()))}::text[])`
+            : undefined,
+          params.search?.trim()
+            ? params.searchMode === "name"
+              ? or(
+                  buildTokenizedSearchFilter({
+                    query: params.search,
+                    columns: [table.name],
+                  }),
+                  and(
+                    eq(table.name, ""),
+                    buildTokenizedSearchFilter({
+                      query: params.search,
+                      columns: [table.id],
+                    }),
+                  ),
+                )
+              : buildTokenizedSearchFilter({
+                  query: params.search,
+                  columns: [table.name, table.email],
+                })
+            : undefined,
+          cursor
+            ? sql`(${table.name} COLLATE "C", ${table.id} COLLATE "C") > (${cursor.value} COLLATE "C", ${cursor.id} COLLATE "C")`
+            : undefined,
+        ),
+      )
+      .orderBy(sql`${table.name} COLLATE "C"`, sql`${table.id} COLLATE "C"`)
+      .limit(params.pagination.limit + 1);
+    return createCursorPaginatedResult(rows, params.pagination, (row) => ({
+      value: row.name,
+      id: row.id,
+    }));
   }
 
   /**

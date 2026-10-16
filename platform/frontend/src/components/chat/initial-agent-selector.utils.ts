@@ -1,9 +1,7 @@
 import type { archestraApiTypes } from "@archestra/shared";
 
-type InternalAgent = Omit<
-  archestraApiTypes.GetAgentsResponses["200"]["data"][number],
-  "pinnedAt"
->;
+type InternalAgent =
+  archestraApiTypes.GetChatAgentRosterResponses["200"][number];
 
 type InitialAgentListItem = Pick<
   InternalAgent,
@@ -13,7 +11,6 @@ type InitialAgentListItem = Pick<
   | "authorId"
   | "description"
   | "icon"
-  | "systemPrompt"
   | "runtime"
   | "builtIn"
 >;

@@ -1827,6 +1827,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (view === "eligible") {
         const candidates = await listPolicyIndependentAvailableAgentSkills({
+          includeContent: false,
           organizationId,
           userId: user.id,
           ...(agentId && environmentId === undefined

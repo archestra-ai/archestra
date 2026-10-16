@@ -1,3 +1,4 @@
+import { MEMBER_ROLE_NAME } from "@archestra/shared";
 import { ServiceAccountModel, TeamTokenModel } from "@/models";
 import { validateMCPGatewayToken } from "@/routes/mcp-gateway/utils";
 import { describe, expect, test } from "@/test";
@@ -68,6 +69,32 @@ describe("migrateTeamTokensToServiceAccounts", () => {
       teamId: team.id,
       isOrganizationToken: false,
     });
+  });
+
+  test("a token with the legacy prefix still authenticates after the move", async ({
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id, access: "org" });
+    const serviceAccount = await ServiceAccountModel.create({
+      organizationId: org.id,
+      name: "Team token: Legacy",
+      role: MEMBER_ROLE_NAME,
+      teamId: null,
+      createdBy: null,
+    });
+    const value = `archestra_${"a".repeat(32)}`;
+    await ServiceAccountModel.importToken({
+      serviceAccountId: serviceAccount.id,
+      name: "Team Token",
+      value,
+      lastUsedAt: null,
+      createdAt: new Date(),
+    });
+
+    const auth = await validateMCPGatewayToken(agent.id, value);
+    expect(auth).toMatchObject({ serviceAccountId: serviceAccount.id });
   });
 
   test("running it again creates nothing new", async ({ makeOrganization }) => {

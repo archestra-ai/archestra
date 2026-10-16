@@ -1,6 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { CreatedBy } from "@archestra/shared";
 import {
+  ALL_ARCHESTRA_TOKEN_PREFIXES,
   ARCHESTRA_TOKEN_PREFIX,
   MEMBER_ROLE_NAME,
   type Permissions,
@@ -550,7 +551,12 @@ class ServiceAccountModel {
     serviceAccount: SelectServiceAccount;
     token: SelectServiceAccountToken;
   } | null> {
-    if (!token.startsWith(ARCHESTRA_TOKEN_PREFIX)) return null;
+    // Imported team and organization tokens keep their original value, which
+    // may carry a legacy prefix.
+    if (
+      !ALL_ARCHESTRA_TOKEN_PREFIXES.some((prefix) => token.startsWith(prefix))
+    )
+      return null;
 
     const tokenHash = hashToken(token);
     const [row] = await db

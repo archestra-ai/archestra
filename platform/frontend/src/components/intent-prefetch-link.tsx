@@ -32,8 +32,10 @@ export function IntentPrefetchLink({
     onPrefetch?.(prefetchHref);
   };
 
+  // The spread comes first so that these props always win over it.
   return (
     <Link
+      {...props}
       href={href}
       prefetch={false}
       onFocus={(event) => {
@@ -48,17 +50,20 @@ export function IntentPrefetchLink({
         prefetch();
         onTouchStart?.(event);
       }}
-      {...props}
     />
   );
 }
 
 /**
  * Converts a Next.js Link href into the string URL required by router.prefetch,
- * including the query and hash of a UrlObject.
+ * including the query and hash of a UrlObject. Returns null for a link to
+ * another site, which has no route to prefetch.
  */
 function getPrefetchHref(href: LinkHref) {
-  if (typeof href === "string") return href;
+  if (typeof href === "string") {
+    return EXTERNAL_HREF.test(href) ? null : href;
+  }
+  if (href.protocol || href.host || href.hostname) return null;
   if (!href.pathname) return null;
 
   const searchParams = new URLSearchParams();
@@ -75,3 +80,6 @@ function getPrefetchHref(href: LinkHref) {
   const query = searchParams.toString();
   return `${href.pathname}${query ? `?${query}` : ""}${href.hash ?? ""}`;
 }
+
+/** A URL with a scheme (`https:`, `mailto:`) or a protocol-relative one (`//host`). */
+const EXTERNAL_HREF = /^([a-z][a-z\d+.-]*:|\/\/)/i;

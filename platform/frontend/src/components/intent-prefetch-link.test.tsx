@@ -66,6 +66,25 @@ describe("IntentPrefetchLink", () => {
     );
   });
 
+  it.each([
+    "https://docs.example.com/guide",
+    "mailto:team@example.com",
+    "//cdn.example.com/file",
+    { protocol: "https:", host: "docs.example.com", pathname: "/guide" },
+  ])("does not prefetch a link to another site (%o)", (href) => {
+    const onPrefetch = vi.fn();
+    render(
+      <IntentPrefetchLink href={href} onPrefetch={onPrefetch}>
+        Elsewhere
+      </IntentPrefetchLink>,
+    );
+
+    fireEvent.mouseEnter(screen.getByRole("link", { name: "Elsewhere" }));
+
+    expect(prefetch).not.toHaveBeenCalled();
+    expect(onPrefetch).not.toHaveBeenCalled();
+  });
+
   it("still runs the caller's hover, focus and touch handlers", () => {
     const onMouseEnter = vi.fn();
     const onFocus = vi.fn();

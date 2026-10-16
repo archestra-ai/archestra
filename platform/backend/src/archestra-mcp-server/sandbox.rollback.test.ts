@@ -14,6 +14,7 @@ import {
   TOOL_SEARCH_FILES_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
 } from "@archestra/shared";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import {
@@ -233,6 +234,38 @@ describe("sandbox tools (runtime enabled)", () => {
         timeoutSeconds: undefined,
         environment: undefined,
       });
+    });
+
+    test("refuses a service account cleanly instead of creating a sandbox", async ({
+      makeServiceAccount,
+    }) => {
+      const account = await makeServiceAccount(organizationId, {
+        role: ADMIN_ROLE_NAME,
+      });
+      const accountUserId = serviceAccountUserId(account.id);
+      const conversation = await ConversationModel.create({
+        userId: accountUserId,
+        organizationId,
+        agentId: agent.id,
+        title: "Test",
+      });
+      const runSpy = stubRunCommand("sbx-1");
+
+      const result = await executeArchestraTool(
+        TOOL_RUN_COMMAND_FULL_NAME,
+        { command: "echo hi" },
+        { ...context, userId: accountUserId, conversationId: conversation.id },
+      );
+
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain("not available to service accounts");
+      expect(runSpy).not.toHaveBeenCalled();
+      expect(
+        await SkillSandboxModel.listForConversation({
+          conversationId: conversation.id,
+          organizationId,
+        }),
+      ).toHaveLength(0);
     });
 
     test("routes an unbound agent to its organization's default engine when no BYO host is set", async () => {

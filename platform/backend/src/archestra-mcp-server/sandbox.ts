@@ -14,6 +14,7 @@ import {
   TOOL_UPLOAD_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
 import logger from "@/logging";
@@ -2091,6 +2092,11 @@ async function resolveTarget(params: {
   const conversationId = context.conversationId ?? null;
   const isolationKey = context.isolationKey ?? null;
 
+  // Sandboxes are owned by a `users` row; a service account has none.
+  if (isServiceAccountUserId(userCtx.userId)) {
+    return { error: SERVICE_ACCOUNT_SANDBOX_ERROR };
+  }
+
   if (context.appId) {
     const normalizedAppTarget = normalizeTarget(target);
     if ("error" in normalizedAppTarget) {
@@ -2215,6 +2221,9 @@ async function resolveTarget(params: {
 
 const CONVERSATION_GONE_ERROR =
   "This conversation no longer exists, so its sandbox is unavailable.";
+
+const SERVICE_ACCOUNT_SANDBOX_ERROR =
+  "The code execution sandbox is not available to service accounts.";
 
 /**
  * Conversation-scope half of the explicit `{id}` check. Conversation-bound

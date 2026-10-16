@@ -32,6 +32,7 @@ import logger from "@/logging";
 import sentryClient from "@/observability/sentry";
 import { isNoiseRoute } from "@/observability/utils";
 import { ATTR_ROUTE_CATEGORY } from "./attributes";
+import { getHttpInstrumentationConfig } from "./http-instrumentation";
 
 const {
   api: { name, version },
@@ -153,9 +154,10 @@ const sdk = new NodeSDK({
         ]
       : []),
     getNodeAutoInstrumentations({
-      "@opentelemetry/instrumentation-http": {
+      "@opentelemetry/instrumentation-http": getHttpInstrumentationConfig({
         enabled: enableAutoInstrumentations,
-      },
+        errorTrackingEnabled: sentryEnabled,
+      }),
       "@opentelemetry/instrumentation-undici": {
         enabled: enableAutoInstrumentations,
       },

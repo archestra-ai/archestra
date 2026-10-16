@@ -1,5 +1,6 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useRouter } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useProfile } from "@/lib/agent.query";
 import { useFeature } from "@/lib/config/config.query";
@@ -7,6 +8,16 @@ import { AgentPinnedTiles } from "./agent-pinned-tiles";
 
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/agent.query", () => ({ useProfile: vi.fn() }));
+vi.mock("next/navigation");
+
+const prefetch = vi.fn();
+
+beforeEach(() => {
+  prefetch.mockReset();
+  vi.mocked(useRouter).mockReturnValue({
+    prefetch,
+  } as unknown as ReturnType<typeof useRouter>);
+});
 
 const agent = (id: string, name: string) => ({
   id,
@@ -30,6 +41,30 @@ describe("AgentPinnedTiles", () => {
           data: id === "org-default" ? agent("org-default", "Helpdesk") : null,
         }) as ReturnType<typeof useProfile>,
     );
+  });
+
+  it("prefetches a tile's name link and its Chat button only on hover", () => {
+    render(
+      <AgentPinnedTiles
+        pinned={[agent("mine", "Budget Allocator")]}
+        inView={[]}
+        pinnedFor={[]}
+        onUnpin={vi.fn()}
+        isLoading={false}
+      />,
+    );
+
+    const name = screen.getByRole("link", { name: "Budget Allocator" });
+    const chat = screen.getByRole("link", { name: "Chat" });
+    expect(prefetch).not.toHaveBeenCalled();
+
+    fireEvent.mouseEnter(name);
+    expect(prefetch).toHaveBeenCalledTimes(1);
+    expect(prefetch).toHaveBeenLastCalledWith(name.getAttribute("href"));
+
+    fireEvent.mouseEnter(chat);
+    expect(prefetch).toHaveBeenCalledTimes(2);
+    expect(prefetch).toHaveBeenLastCalledWith(chat.getAttribute("href"));
   });
 
   it("pins the viewer's defaults for them, one tile per agent with every reason, and no unpin on those", () => {

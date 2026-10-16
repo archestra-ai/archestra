@@ -126490,6 +126490,12 @@
                           "additionalProperties": false
                         }
                       },
+                      "contextTokensUsed": {
+                        "nullable": true,
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
                       "scheduledRun": {
                         "nullable": true,
                         "type": "object",
@@ -127352,6 +127358,12 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "contextTokensUsed": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
@@ -128126,6 +128138,12 @@
                           ],
                           "additionalProperties": false
                         }
+                      },
+                      "contextTokensUsed": {
+                        "nullable": true,
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
                       }
                     },
                     "required": [
@@ -128911,6 +128929,12 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "contextTokensUsed": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
@@ -129751,6 +129775,12 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "contextTokensUsed": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
@@ -132621,6 +132651,12 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "contextTokensUsed": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
@@ -133703,6 +133739,12 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "contextTokensUsed": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
@@ -134854,6 +134896,12 @@
                             ],
                             "additionalProperties": false
                           }
+                        },
+                        "contextTokensUsed": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
                         }
                       },
                       "required": [
@@ -135662,6 +135710,12 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "contextTokensUsed": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
@@ -136476,6 +136530,12 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "contextTokensUsed": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
@@ -404667,6 +404727,12 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "contextTokensUsed": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [

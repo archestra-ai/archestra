@@ -1,6 +1,6 @@
 {
-  "id": "fcf114c7-e2d3-47c5-bb55-ca1376fb7161",
-  "prevId": "1522d760-4c76-4bda-af6b-a236aaec9364",
+  "id": "d5c6177d-ec03-422f-ab08-f57129a147d4",
+  "prevId": "cc078a88-fe9f-43b4-8f54-151e989bd12e",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -16389,12 +16389,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "duration_ms": {
-          "name": "duration_ms",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -20698,7 +20692,24 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "resource_permission_policies_grants_idx": {
+          "name": "resource_permission_policies_grants_idx",
+          "columns": [
+            {
+              "expression": "grants",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last",
+              "opclass": "jsonb_path_ops"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "resource_permission_policies_organization_id_organization_id_fk": {
           "name": "resource_permission_policies_organization_id_organization_id_fk",

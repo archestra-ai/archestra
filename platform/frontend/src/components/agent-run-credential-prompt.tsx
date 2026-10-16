@@ -53,7 +53,7 @@ export function AgentRuntimeCredentialPrompt({
   // would only send them on an errand.
   if (adminOnly.length > 0) {
     return (
-      <InlineNotice className="mt-2">
+      <InlineNotice>
         <Lock />
         <span className="font-medium">Only admins can run this agent</span>
         <InlineNoticeText>
@@ -67,7 +67,7 @@ export function AgentRuntimeCredentialPrompt({
     return (
       <output
         aria-live="polite"
-        className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground"
+        className="flex items-start gap-1.5 text-xs text-muted-foreground"
       >
         <InfoIcon className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
         <span>
@@ -84,17 +84,13 @@ export function AgentRuntimeCredentialPrompt({
   }
 
   if (missing.length === 1 && missing[0].key === "CLAUDE_CODE_ACCOUNT") {
-    return (
-      <div className="mt-2">
-        <ClaudeCodeAccount agentId={agentId} variant="compact" />
-      </div>
-    );
+    return <ClaudeCodeAccount agentId={agentId} variant="compact" />;
   }
 
   return (
-    <>
+    <div className="space-y-2">
       {blocked.length > 0 && (
-        <InlineNotice className="mt-2">
+        <InlineNotice>
           <Lock />
           <span className="font-medium">
             {blocked.length === 1
@@ -109,7 +105,7 @@ export function AgentRuntimeCredentialPrompt({
         </InlineNotice>
       )}
       {connectable.length > 0 && (
-        <InlineNotice className="mt-2">
+        <InlineNotice>
           <KeyRound />
           <span className="font-medium">
             {connectable.length === 1
@@ -139,7 +135,7 @@ export function AgentRuntimeCredentialPrompt({
           }}
         />
       )}
-    </>
+    </div>
   );
 }
 
@@ -161,7 +157,7 @@ export function AgentRuntimePreflightError({
 }) {
   const refusal = getApiRefusal(error);
   return (
-    <InlineNotice variant="error" className="mt-2">
+    <InlineNotice variant="error">
       <AlertTriangle />
       <span className="font-medium">
         Can&apos;t check this agent&apos;s setup

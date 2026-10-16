@@ -35299,6 +35299,7 @@ export type GetChatConversationsResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        contextTokensUsed?: number | null;
         scheduledRun?: {
             id: string;
             triggerId: string;
@@ -35478,6 +35479,7 @@ export type CreateChatConversationResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        contextTokensUsed?: number | null;
     };
 };
 
@@ -35642,6 +35644,7 @@ export type GetDeletedChatConversationsResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        contextTokensUsed?: number | null;
     }>;
 };
 
@@ -35896,6 +35899,7 @@ export type GetChatConversationResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        contextTokensUsed?: number | null;
     };
 };
 
@@ -36071,6 +36075,7 @@ export type UpdateChatConversationResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        contextTokensUsed?: number | null;
     };
 };
 
@@ -36781,6 +36786,7 @@ export type ForkChatConversationResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        contextTokensUsed?: number | null;
     };
 };
 
@@ -37040,6 +37046,7 @@ export type RestoreChatConversationResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        contextTokensUsed?: number | null;
     };
 };
 
@@ -37309,6 +37316,7 @@ export type CompactChatConversationResponses = {
                 compactedTokenEstimate: number;
                 createdAt: string;
             }>;
+            contextTokensUsed?: number | null;
         };
     };
 };
@@ -37481,6 +37489,7 @@ export type GenerateChatConversationTitleResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        contextTokensUsed?: number | null;
     };
 };
 
@@ -37652,6 +37661,7 @@ export type UpdateChatMessageResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        contextTokensUsed?: number | null;
     };
 };
 
@@ -106285,6 +106295,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
             compactedTokenEstimate: number;
             createdAt: string;
         }>;
+        contextTokensUsed?: number | null;
     };
 };
 

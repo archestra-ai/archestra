@@ -33,9 +33,8 @@ export function getActiveChatRouteCategory(): RouteCategory | undefined {
 }
 
 /**
- * Error tracking opens its own HTTP server span for each incoming request, in a
- * trace separate from the OpenTelemetry server span. The active context of the
- * request handler does not lead to it, so it is kept here by request.
+ * Keep the originating HTTP server span by request so handlers can annotate
+ * the exact span exported by the filtered request tracer.
  */
 const errorTrackingServerSpans = new WeakMap<object, ErrorTrackingSpan>();
 

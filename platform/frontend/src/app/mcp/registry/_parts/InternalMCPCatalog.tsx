@@ -177,8 +177,12 @@ export function InternalMCPCatalog({
     sharedWith: ownershipFilters.sharedWith,
     owner: ownershipFilters.owner,
   });
+  // Without per-install agents: building them for every install is what kept
+  // this page from loading. Every list on this page asks for the same compact
+  // shape, so they share this one request and its server-rendered data.
   const { data: installedServers } = useMcpServers({
     initialData: initialInstalledServers,
+    includeAssignedAgents: false,
   });
   useMcpInstallationStatusCacheSync();
 

@@ -145,7 +145,7 @@ describe("ExecTerminal", () => {
       />,
     );
     await screen.findByText("Connected");
-    const toggle = screen.getByRole("button", { name: "Focus terminal" });
+    const toggle = screen.getByRole("button", { name: "Type in terminal" });
     expect(toggle).toHaveAttribute("aria-pressed", "true");
     const terminal = terminalHarness.element;
     const target = terminalHarness.textarea;
@@ -225,7 +225,9 @@ describe("ExecTerminal", () => {
       target.addEventListener(name, xtermEvent);
     }
     target.focus();
-    fireEvent.click(screen.getByRole("button", { name: "Focus terminal" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select terminal text" }),
+    );
     expect(target).toBeDisabled();
     expect(target).not.toHaveFocus();
     expect(terminalHarness.blur).toHaveBeenCalledOnce();
@@ -271,13 +273,15 @@ describe("ExecTerminal", () => {
       />,
     );
     await screen.findByText("Connected");
-    const toggle = screen.getByRole("button", { name: "Focus terminal" });
+    const toggle = screen.getByRole("button", { name: "Type in terminal" });
     for (let i = 0; i < 3; i++) {
       const target = terminalHarness.textarea;
       if (!target) throw new Error("Terminal did not initialize");
       fireEvent.mouseDown(target);
       expect(target).toHaveFocus();
-      fireEvent.click(toggle);
+      fireEvent.click(
+        screen.getByRole("button", { name: "Select terminal text" }),
+      );
       expect(target).not.toHaveFocus();
       fireEvent.mouseDown(target);
       expect(target).not.toHaveFocus();
@@ -291,7 +295,9 @@ describe("ExecTerminal", () => {
     }
     expect(transport.open).toHaveBeenCalledOnce();
     expect(transport.sendInput).toHaveBeenCalledTimes(3);
-    fireEvent.click(toggle);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select terminal text" }),
+    );
     rerender(
       <ExecTerminal
         sessionKey="focus-transitions"
@@ -792,10 +798,12 @@ describe("ExecTerminal", () => {
       "\x1b[<35;3;18M\x1b[<0;3;18M\x1b[<32;8;18M\x1b[<0;8;18m\x1b[<64;8;18M";
     terminalHarness.emitData(reports);
     expect(transport.sendInput).toHaveBeenLastCalledWith(reports);
-    fireEvent.click(screen.getByRole("button", { name: /Focus terminal/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select terminal text" }),
+    );
     terminalHarness.emitData(reports);
     expect(transport.sendInput).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole("button", { name: /Focus terminal/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Type in terminal" }));
     terminalHarness.emitData(reports);
     expect(transport.sendInput).toHaveBeenCalledTimes(2);
     expect(transport.sendInput).toHaveBeenLastCalledWith(reports);
@@ -827,10 +835,12 @@ describe("ExecTerminal", () => {
     focused.mockReturnValue(false);
     terminalHarness.oscHandler?.(report);
     focused.mockReturnValue(true);
-    fireEvent.click(screen.getByRole("button", { name: /Focus terminal/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select terminal text" }),
+    );
     terminalHarness.oscHandler?.(report);
     expect(terminalHarness.copyToClipboard).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole("button", { name: /Focus terminal/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Type in terminal" }));
     terminalHarness.oscHandler?.(report);
     expect(terminalHarness.copyToClipboard).toHaveBeenCalledTimes(2);
     expect(transport.sendInput).not.toHaveBeenCalled();
@@ -871,7 +881,9 @@ describe("ExecTerminal", () => {
       "Selected terminal text",
     );
     expect(transport.sendInput).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: /Focus terminal/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select terminal text" }),
+    );
     terminalHarness.keyHandler?.(event());
     expect(terminalHarness.copyToClipboard).toHaveBeenCalledTimes(1);
   });

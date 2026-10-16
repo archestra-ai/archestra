@@ -98,7 +98,15 @@ export function collapseWhitespace(raw: string): string {
  * quotes inside the text are part of the text.
  */
 export function stripWrappingQuotes(value: string): string {
-  return value.replace(/^["'`]+|["'`]+$/g, "").trim();
+  let start = 0;
+  let end = value.length;
+  while (start < end && isWrappingQuote(value[start])) start++;
+  while (end > start && isWrappingQuote(value[end - 1])) end--;
+  return value.slice(start, end).trim();
+}
+
+function isWrappingQuote(char: string | undefined): boolean {
+  return char === '"' || char === "'" || char === "`";
 }
 
 /**

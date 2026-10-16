@@ -1,6 +1,15 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { useRouter } from "next/navigation";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AgentNameCell } from "./agent-name-cell";
+
+vi.mock("next/navigation");
+
+beforeEach(() => {
+  vi.mocked(useRouter).mockReturnValue({
+    prefetch: vi.fn(),
+  } as unknown as ReturnType<typeof useRouter>);
+});
 
 describe("AgentNameCell", () => {
   it("renders no visibility chip — visibility lives in the Accessible-to column", () => {

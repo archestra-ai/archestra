@@ -1904,7 +1904,13 @@ export function ChatPageContent({
       (!!browserToolsAgentId && isLoadingBrowserTools));
 
   // Stream usage and compaction results both update this live context estimate.
-  const tokensUsed = contextTokensUsed ?? tokenUsage?.totalTokens;
+  // Until this tab sees one, fall back to the saved size of the latest turn so
+  // an opened chat shows its context usage right away.
+  const tokensUsed =
+    contextTokensUsed ??
+    tokenUsage?.totalTokens ??
+    conversation?.contextTokensUsed ??
+    undefined;
   const isContextCompacting =
     !!contextCompaction?.isCompacting || compactConversationMutation.isPending;
 
@@ -2443,6 +2449,11 @@ export function ChatPageContent({
       }
     },
     [conversationId],
+  );
+
+  const openFilesPanel = useCallback(
+    () => openRightPanelTab("files"),
+    [openRightPanelTab],
   );
 
   const closeRightPanel = useCallback(() => {
@@ -3495,6 +3506,9 @@ export function ChatPageContent({
                                 conversationPerUserConnect.provider
                               }
                               isContextCompacting={isContextCompacting}
+                              onOpenFiles={
+                                conversationId ? openFilesPanel : undefined
+                              }
                               onCompactConversation={
                                 isActionAvailableForConversation(
                                   conversation,
@@ -3650,6 +3664,40 @@ export function ChatPageContent({
                                 />
                               </div>
                             )}
+                            {/* Above the composer, like the connection
+                                notice: what stops Send sits where the
+                                reader looks before typing. */}
+                            <div className="mb-3 empty:hidden">
+                              {isInitialRuntimeMode &&
+                                runtimePreflight.data?.ready === false && (
+                                  <AgentRuntimeCredentialPrompt
+                                    agentId={initialAgentId ?? ""}
+                                    missing={[
+                                      ...runtimePreflight.data.missing,
+                                      ...runtimePreflight.data.misconfigured,
+                                    ]}
+                                    declarations={
+                                      initialRuntimeAgent?.runtime
+                                        ?.credentials ?? []
+                                    }
+                                    incompatible={
+                                      runtimePreflight.data.incompatible
+                                    }
+                                    onConnected={() =>
+                                      runtimePreflight.refetch()
+                                    }
+                                  />
+                                )}
+                              {isInitialRuntimeMode &&
+                                runtimePreflight.isError && (
+                                  <AgentRuntimePreflightError
+                                    error={runtimePreflight.error}
+                                    onRetry={() =>
+                                      void runtimePreflight.refetch()
+                                    }
+                                  />
+                                )}
+                            </div>
                             <ArchestraPromptInput
                               drawerBelow
                               onSubmit={handleInitialSubmit}
@@ -3758,40 +3806,6 @@ export function ChatPageContent({
                               runtimeMode={isInitialRuntimeMode}
                               runtimeAgentName={initialRuntimeAgent?.name}
                             />
-                            {/* The runtime drawer overlays the space
-                                    under the composer, so these start below
-                                    it rather than under it. */}
-                            <div className="pt-7 empty:hidden">
-                              {isInitialRuntimeMode &&
-                                runtimePreflight.data?.ready === false && (
-                                  <AgentRuntimeCredentialPrompt
-                                    agentId={initialAgentId ?? ""}
-                                    missing={[
-                                      ...runtimePreflight.data.missing,
-                                      ...runtimePreflight.data.misconfigured,
-                                    ]}
-                                    declarations={
-                                      initialRuntimeAgent?.runtime
-                                        ?.credentials ?? []
-                                    }
-                                    incompatible={
-                                      runtimePreflight.data.incompatible
-                                    }
-                                    onConnected={() =>
-                                      runtimePreflight.refetch()
-                                    }
-                                  />
-                                )}
-                              {isInitialRuntimeMode &&
-                                runtimePreflight.isError && (
-                                  <AgentRuntimePreflightError
-                                    error={runtimePreflight.error}
-                                    onRetry={() =>
-                                      void runtimePreflight.refetch()
-                                    }
-                                  />
-                                )}
-                            </div>
                           </div>
                         </ViewTransition>
                       </div>

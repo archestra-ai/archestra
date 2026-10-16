@@ -1,5 +1,5 @@
 {
-  "id": "1522d760-4c76-4bda-af6b-a236aaec9364",
+  "id": "cc078a88-fe9f-43b4-8f54-151e989bd12e",
   "prevId": "b6160e08-1881-4a96-8d99-02ecec413fcd",
   "version": "7",
   "dialect": "postgresql",
@@ -10784,12 +10784,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "duration_ms": {
-          "name": "duration_ms",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "input_tokens": {
           "name": "input_tokens",
           "type": "integer",
@@ -20692,7 +20686,24 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "resource_permission_policies_grants_idx": {
+          "name": "resource_permission_policies_grants_idx",
+          "columns": [
+            {
+              "expression": "grants",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last",
+              "opclass": "jsonb_path_ops"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "resource_permission_policies_organization_id_organization_id_fk": {
           "name": "resource_permission_policies_organization_id_organization_id_fk",

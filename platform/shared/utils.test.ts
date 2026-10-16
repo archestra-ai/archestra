@@ -119,6 +119,20 @@ describe("stripWrappingQuotes", () => {
       'Fixing the "off by one" bug',
     );
   });
+
+  test("trims whitespace around and between the wrapping quotes", () => {
+    expect(stripWrappingQuotes('"  padded  "')).toBe("padded");
+    expect(stripWrappingQuotes('  "x"  ')).toBe('"x"');
+    expect(stripWrappingQuotes('"" ')).toBe("");
+    expect(stripWrappingQuotes("")).toBe("");
+  });
+
+  test("returns quickly on long quote runs followed by text", () => {
+    const value = `a${'"'.repeat(50_000)}b`;
+    const started = performance.now();
+    expect(stripWrappingQuotes(value)).toBe(value);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
 });
 
 describe("exceedsCharLimit", () => {

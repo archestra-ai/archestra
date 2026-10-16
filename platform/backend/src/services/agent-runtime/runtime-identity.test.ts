@@ -206,7 +206,7 @@ describe("runtime OpenAPPA identity", () => {
           workspaceId: run.workspace.id,
           taskId: randomUUID(),
         }),
-      ).rejects.toThrow("persisted workspace");
+      ).rejects.toThrow("saved run");
     } finally {
       config.openappa.offerSigningSecret = prior;
     }

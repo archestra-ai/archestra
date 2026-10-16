@@ -255,6 +255,7 @@ describe("AgentRuntimeFields", () => {
     );
     await user.click(githubOption);
     expect(within(dialog).getByLabelText("Key")).toHaveValue("GITHUB_TOKEN");
+    expect(within(dialog).getByLabelText("Description")).toHaveValue("");
     await user.click(
       within(dialog).getByRole("button", { name: "Add variable" }),
     );
@@ -276,11 +277,32 @@ describe("AgentRuntimeFields", () => {
     expect(
       within(screen.getByRole("dialog")).getByLabelText("Secret source"),
     ).toHaveTextContent("Repository access");
+    expect(
+      within(screen.getByRole("dialog")).getByLabelText("Description"),
+    ).toHaveValue("");
+    dialog = screen.getByRole("dialog");
+    await user.type(
+      within(dialog).getByLabelText("Description"),
+      "Use for repository reviews",
+    );
+    await user.click(within(dialog).getByLabelText("Secret source"));
+    await user.click(screen.getByRole("option", { name: "GitLab PAT" }));
+    expect(within(dialog).getByLabelText("Description")).toHaveValue(
+      "Use for repository reviews",
+    );
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", {
         name: "Cancel",
       }),
     );
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    await user.click(screen.getByRole("button", { name: "Edit GITHUB_TOKEN" }));
+    dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByLabelText("Secret source")).toHaveTextContent(
+      "Repository access",
+    );
+    expect(within(dialog).getByLabelText("Description")).toHaveValue("");
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
 
     await user.click(
       screen.getByRole("button", { name: /^(Add variable|Add)$/ }),
@@ -313,6 +335,7 @@ describe("AgentRuntimeFields", () => {
         scope: "shared",
       }),
     ]);
+    expect(saved.credentials[0].description).toBeUndefined();
   });
 
   it("points a reader without Settings at their own credentials", async () => {

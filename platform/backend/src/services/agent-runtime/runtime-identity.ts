@@ -356,7 +356,7 @@ export async function resolveGatewayRuntimeSession(params: {
   ) {
     return {
       kind: "reject",
-      message: "OpenAPPA runtime credential does not match this workspace",
+      message: "OpenAPPA runtime credential does not match this run",
     };
   }
   const run = await AgentRunModel.findByTaskId(claims.taskId);
@@ -427,10 +427,7 @@ export async function stampRuntimeBinding(params: {
     identity.workspaceId !== params.workspaceId ||
     identity.taskId !== params.taskId
   ) {
-    throw new ApiError(
-      409,
-      "Runtime binding does not match the persisted workspace",
-    );
+    throw new ApiError(409, "Runtime binding does not match the saved run");
   }
   const deadlineMs =
     Math.max(1, params.spec.activeDeadlineSeconds ?? 60) * 1000;

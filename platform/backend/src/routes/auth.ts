@@ -46,6 +46,11 @@ import {
   shieldRevocationRequest,
 } from "@/services/oauth-refresh-replay";
 import { oauthTokenRateLimiter } from "@/services/oauth-token-rate-limit";
+import {
+  authCredentialRateLimiter,
+  authRouteRateLimiter,
+  createIpRateLimitHook,
+} from "@/services/route-rate-limit";
 import { ApiError, constructResponseSchema } from "@/types";
 import {
   isLoopbackRedirectUri,
@@ -86,6 +91,27 @@ function hasTwoFactorChallengeCookie(cookieHeader: string | undefined) {
     return candidates.has(segment.slice(0, separatorIndex).trim());
   });
 }
+
+/**
+ * better-auth paths that verify or set credentials. Matched against the URL
+ * path so the catch-all `/api/auth/*` route can limit them without throttling
+ * session reads.
+ */
+const CREDENTIAL_AUTH_PATH =
+  /^\/api\/auth\/(sign-in|sign-up|forget-password|request-password-reset|reset-password|change-password|two-factor|verify-email|email-otp|magic-link)(?=\/|\?|$)/;
+
+const enforceAuthRouteRateLimit = createIpRateLimitHook({
+  limiter: authRouteRateLimiter,
+  message: "Too many authentication requests. Retry after the indicated delay.",
+  enabled: () => !config.authRateLimitDisabled,
+});
+
+const enforceAuthCredentialRateLimit = createIpRateLimitHook({
+  limiter: authCredentialRateLimiter,
+  message: "Too many sign-in attempts. Retry after the indicated delay.",
+  appliesTo: (request) => CREDENTIAL_AUTH_PATH.test(request.url),
+  enabled: () => !config.authRateLimitDisabled,
+});
 
 const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
@@ -128,6 +154,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
       },
     },
+    onRequest: enforceAuthRouteRateLimit,
     handler: async (_request, reply) => {
       try {
         const { adminDefaultEmail, adminDefaultPassword } = config.auth;
@@ -181,6 +208,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     schema: {
       tags: ["Auth"],
     },
+    onRequest: enforceAuthRouteRateLimit,
     async handler(request, reply) {
       const body = request.body as Record<string, unknown>;
       const memberIdOrEmail =
@@ -299,6 +327,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     schema: {
       tags: ["Auth"],
     },
+    onRequest: enforceAuthRouteRateLimit,
     async handler(request, reply) {
       const query = request.query as Record<string, string>;
       const clientId = query.client_id;
@@ -750,6 +779,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     schema: {
       tags: ["Auth"],
     },
+    onRequest: enforceAuthRouteRateLimit,
     async handler(request, reply) {
       const body = request.body as Record<string, unknown> | undefined;
 
@@ -832,6 +862,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }),
       response: constructResponseSchema(z.object({ redirectTo: z.string() })),
     },
+    onRequest: enforceAuthRouteRateLimit,
     async handler(request, reply) {
       const url = new URL(request.url, `http://${request.headers.host}`);
       const headers = buildBetterAuthForwardedHeaders(request);
@@ -902,6 +933,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
       tags: ["Auth"],
       body: z.record(z.string(), z.unknown()),
     },
+    onRequest: enforceAuthRouteRateLimit,
     async handler(request, reply) {
       const body = request.body;
 
@@ -1015,6 +1047,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     schema: {
       tags: ["Auth"],
     },
+    onRequest: enforceAuthCredentialRateLimit,
     async handler(request, reply) {
       const url = new URL(request.url, `http://${request.headers.host}`);
       const headers = buildBetterAuthForwardedHeaders(request);
@@ -1046,6 +1079,7 @@ const authRoutes: FastifyPluginAsyncZod = async (fastify) => {
     schema: {
       tags: ["Auth"],
     },
+    onRequest: enforceAuthCredentialRateLimit,
     async handler(request, reply) {
       const url = new URL(request.url, `http://${request.headers.host}`);
       const headers = buildBetterAuthForwardedHeaders(request);

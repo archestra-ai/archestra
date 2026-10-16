@@ -30,6 +30,7 @@ import type {
 import { escapeLikePattern } from "@/utils/sql-search";
 import ConversationChatErrorModel from "./conversation-chat-error";
 import ConversationCompactionModel from "./conversation-compaction";
+import InteractionModel from "./interaction";
 import ProjectModel from "./project";
 import ProjectAccessModel from "./project-access";
 import ResourcePermissionAccessModel from "./resource-permission-access";
@@ -435,9 +436,10 @@ class ConversationModel {
     }
 
     const firstRow = rows[0];
-    const [chatErrors, compactions] = await Promise.all([
+    const [chatErrors, compactions, contextUsage] = await Promise.all([
       ConversationChatErrorModel.findByConversation(id),
       ConversationCompactionModel.findByConversation(id),
+      InteractionModel.findLatestChatContextUsage(id),
     ]);
     const messages = [];
 
@@ -466,6 +468,7 @@ class ConversationModel {
       messages,
       chatErrors,
       compactions,
+      contextTokensUsed: latestContextTokens(compactions, contextUsage),
     };
   }
 
@@ -717,9 +720,10 @@ class ConversationModel {
     }
 
     const firstRow = rows[0];
-    const [chatErrors, compactions] = await Promise.all([
+    const [chatErrors, compactions, contextUsage] = await Promise.all([
       ConversationChatErrorModel.findByConversation(params.id),
       ConversationCompactionModel.findByConversation(params.id),
+      InteractionModel.findLatestChatContextUsage(params.id),
     ]);
     const messages = [];
 
@@ -747,6 +751,7 @@ class ConversationModel {
       messages,
       chatErrors,
       compactions,
+      contextTokensUsed: latestContextTokens(compactions, contextUsage),
     };
   }
 
@@ -1398,4 +1403,19 @@ function shareSummary(
   visibility: "organization" | "team" | "user" | null,
 ): Conversation["share"] {
   return visibility ? { visibility } : null;
+}
+
+/**
+ * Whichever is newer: the latest turn's prompt size, or the estimate a later
+ * compaction left behind.
+ */
+function latestContextTokens(
+  compactions: { createdAt: Date; compactedTokenEstimate: number }[],
+  usage: { tokens: number; createdAt: Date } | null,
+): number | null {
+  const compaction = compactions.at(-1);
+  if (compaction && (!usage || compaction.createdAt > usage.createdAt)) {
+    return compaction.compactedTokenEstimate;
+  }
+  return usage?.tokens ?? null;
 }

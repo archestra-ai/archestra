@@ -41,6 +41,44 @@ describe("buildRawProviderError", () => {
 });
 
 describe("filterErrorEvent", () => {
+  test("removes request content while retaining error diagnostics", () => {
+    const event: ErrorEvent = {
+      type: undefined,
+      message: "Request failed",
+      tags: { component: "api" },
+      request: {
+        method: "POST",
+        url: "https://app.example.com/api/chat?token=private-query#private-fragment",
+        headers: {
+          Authorization: "Bearer private-token",
+          authorization: "private-key",
+          Cookie: "session=private-session",
+          "X-Api-Key": "private-api-key",
+        },
+        cookies: { session: "private-session" },
+        data: { messages: [{ content: "Private conversation" }] },
+        query_string: "token=private-query",
+      },
+    };
+
+    const result = filterErrorEvent(
+      event,
+      hintFor(new Error("Request failed")),
+    );
+
+    expect(result).toMatchObject({
+      message: "Request failed",
+      tags: { component: "api" },
+      request: { method: "POST", url: "https://app.example.com/api/chat" },
+    });
+    expect(result?.request).toEqual({
+      method: "POST",
+      url: "https://app.example.com/api/chat",
+    });
+    expect(JSON.stringify(result)).not.toContain("private-");
+    expect(JSON.stringify(result)).not.toContain("Private conversation");
+  });
+
   test("drops an upstream provider client error (4xx)", () => {
     // 429 rate limit, 401 invalid credentials, 403 provider block — all
     // reflect the request/config, not a bug in our code.
@@ -164,6 +202,26 @@ describe("filterErrorEvent", () => {
 });
 
 describe("filterTransactionEvent", () => {
+  test("strips request content from retained transactions", () => {
+    const event: TransactionEvent = {
+      type: "transaction",
+      transaction: "POST /api/chat",
+      request: {
+        method: "POST",
+        url: "/api/chat?token=private-token#private-fragment",
+        headers: { Authorization: "Bearer private-token" },
+        data: { content: "Private request body" },
+        cookies: { session: "private-session" },
+        query_string: "token=private-token",
+      },
+    };
+
+    const result = filterTransactionEvent(event);
+
+    expect(result?.transaction).toBe("POST /api/chat");
+    expect(result?.request).toEqual({ method: "POST", url: "/api/chat" });
+  });
+
   function mcpGatewayTransaction(method?: string): TransactionEvent {
     return {
       type: "transaction",

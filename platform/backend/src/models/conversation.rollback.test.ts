@@ -5,6 +5,7 @@ import { describe, expect, test } from "@/test";
 import { shareForTest } from "@/test/sharing";
 import ConversationModel from "./conversation";
 import ConversationChatErrorModel from "./conversation-chat-error";
+import ConversationCompactionModel from "./conversation-compaction";
 import MessageModel from "./message";
 import ModelModel from "./model";
 import ProjectModel from "./project";
@@ -125,6 +126,67 @@ describe("ConversationModel", () => {
     expect(found?.agent?.id).toBe(agent.id);
     expect(found?.agent?.name).toBe("Find Test Agent");
     expect(Array.isArray(found?.messages)).toBe(true);
+  });
+
+  test("findById reports the latest chat turn's prompt size", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+    makeInteraction,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent();
+    const conversation = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Context usage",
+    });
+    const find = () =>
+      ConversationModel.findById({
+        id: conversation.id,
+        userId: user.id,
+        organizationId: org.id,
+      });
+
+    expect((await find())?.contextTokensUsed).toBeNull();
+
+    const at = (minutes: number) => new Date(Date.UTC(2026, 0, 1, 0, minutes));
+    await makeInteraction(agent.id, {
+      sessionId: conversation.id,
+      source: "chat",
+      inputTokens: 900,
+      createdAt: at(1),
+    });
+    await makeInteraction(agent.id, {
+      sessionId: conversation.id,
+      source: "chat",
+      inputTokens: 1_000,
+      cacheReadTokens: 40_000,
+      cacheWriteTokens: 2_000,
+      createdAt: at(2),
+    });
+    // Side calls share the session but are not the chat's own prompt.
+    await makeInteraction(agent.id, {
+      sessionId: conversation.id,
+      source: "chat:title_generation",
+      inputTokens: 50,
+      createdAt: at(3),
+    });
+    expect((await find())?.contextTokensUsed).toBe(43_000);
+
+    // Stamped now, so it is newer than the turns above.
+    await ConversationCompactionModel.create({
+      conversationId: conversation.id,
+      summary: "Earlier turns, summarized.",
+      trigger: "manual",
+      provider: "anthropic",
+      model: "claude-opus-4-8",
+      originalTokenEstimate: 43_000,
+      compactedTokenEstimate: 6_000,
+    });
+    expect((await find())?.contextTokensUsed).toBe(6_000);
   });
 
   test("findAll omits the agent's system prompt; findById keeps it", async ({

@@ -20,7 +20,7 @@ export function warmPoolTemplate(spec: KubernetesAgentRunLaunchSpec) {
     ownerReferences: undefined,
   });
   const pod = sandbox.spec.podTemplate.spec;
-  if (!pod) throw new Error("Missing workspace pod template");
+  if (!pod) throw new Error("Missing Agent pod template");
   const container = pod.containers[0];
   container.env = [
     { name: "LANG", value: "C.UTF-8" },

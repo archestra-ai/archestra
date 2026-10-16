@@ -106,7 +106,7 @@ function getSetCookieHeaders(headers: Headers) {
 
 function splitCombinedSetCookieHeader(header: string) {
   return header
-    .split(/,(?=\s*[^;,=\s]+(?:\.[^;,=\s]+)*=)/)
+    .split(/,(?=\s*[^;,=\s]+=)/)
     .map((cookie) => cookie.trim())
     .filter(Boolean);
 }

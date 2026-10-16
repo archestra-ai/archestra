@@ -109,6 +109,27 @@ describe("SalesforceConnector", () => {
       expect(r.error).toContain("Invalid field name");
     });
 
+    test("accepts custom fields and relationship paths in identifiers", async () => {
+      const c = new SalesforceConnector();
+      const r = await c.validateConfig({
+        advancedObjectConfigJson: JSON.stringify({
+          Account: { fields: ["Name", "Owner.Name", "Region__c", "A.B__c.C"] },
+        }),
+      });
+      expect(r).toEqual({ valid: true });
+    });
+
+    test("rejects a long underscore run ending in an invalid character quickly", async () => {
+      const c = new SalesforceConnector();
+      const started = performance.now();
+      const r = await c.validateConfig({
+        objects: [`a${"_".repeat(50_000)}!`],
+      });
+      expect(performance.now() - started).toBeLessThan(1000);
+      expect(r.valid).toBe(false);
+      expect(r.error).toContain("Invalid object name");
+    });
+
     test("accepts valid custom object __c names and relationship fields", async () => {
       const c = new SalesforceConnector();
       const r = await c.validateConfig({

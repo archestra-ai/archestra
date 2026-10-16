@@ -1,5 +1,6 @@
 import type {
   ErrorEvent,
+  Event,
   EventHint,
   Integration,
   TracesSamplerSamplingContext,
@@ -115,7 +116,7 @@ export function filterErrorEvent(
   if (decision.tags) {
     event.tags = { ...event.tags, ...decision.tags };
   }
-  return event;
+  return stripRequestContent(event);
 }
 
 /**
@@ -140,7 +141,7 @@ export function filterTransactionEvent(
   ) {
     return null;
   }
-  return event;
+  return stripRequestContent(event);
 }
 
 /**
@@ -200,12 +201,7 @@ const initSentry = async (): Promise<void> => {
     environment: sentryEnvironment,
     release: version,
 
-    /**
-     * Setting this option to true will send default PII data to Sentry
-     * For example, automatic IP address collection on events
-     * https://docs.sentry.io/platforms/javascript/guides/node/configuration/options/#sendDefaultPii
-     */
-    sendDefaultPii: true,
+    sendDefaultPii: false,
 
     integrations,
 
@@ -272,3 +268,17 @@ const initSentry = async (): Promise<void> => {
 await initSentry();
 
 export default sentryClient;
+
+// Request content is unnecessary for grouping errors or measuring performance.
+function stripRequestContent<T extends Event>(event: T): T {
+  if (event.request) {
+    delete event.request.headers;
+    delete event.request.cookies;
+    delete event.request.data;
+    delete event.request.query_string;
+    if (event.request.url) {
+      event.request.url = event.request.url.split(/[?#]/)[0];
+    }
+  }
+  return event;
+}

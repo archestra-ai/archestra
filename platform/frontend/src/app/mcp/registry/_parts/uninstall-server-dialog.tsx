@@ -1,5 +1,6 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +14,10 @@ import {
 } from "@/components/ui/dialog";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useDeleteMcpServer } from "@/lib/mcp/mcp-server.query";
+import {
+  useDeleteMcpServer,
+  useMcpServersAssignedAgents,
+} from "@/lib/mcp/mcp-server.query";
 import { agentOwnerLabel } from "./mcp-server-agent-usage";
 import {
   agentsLosingAccessOnUninstall,
@@ -28,15 +32,6 @@ export interface UninstallServerInstall {
     scope?: "personal" | "team" | "org";
     teamId?: string | null;
   };
-  /** Agents with tools explicitly assigned from this install. */
-  assignedAgents?: Array<{
-    id: string;
-    name: string;
-    scope: string;
-    ownerEmail: string | null;
-    /** Bound to this install rather than resolved to one at call time. */
-    pinned: boolean;
-  }>;
 }
 
 interface UninstallServerDialogProps {
@@ -78,20 +73,35 @@ export function UninstallServerDialog({
 
   const server = installs[0]?.server ?? null;
   const servers = installs.map((install) => install.server);
+  // Server lists leave out each install's agents, so the confirmation reads
+  // them for just the installs it removes. Confirm waits for them: the user
+  // should see which agents lose access before removing a connection. Once
+  // the uninstall runs they are settled, and rereading an install it just
+  // removed would only answer "not found".
+  const agentUsage = useMcpServersAssignedAgents({
+    serverIds: servers.map(({ id }) => id),
+    enabled: open && !isCancelingInstallation && !uninstallMutation.isPending,
+  });
+  const isLoadingAgents = !isCancelingInstallation && agentUsage.isPending;
   // Only the agents that route through the installs being removed: nobody
   // but its owner resolves to a personal connection, so the catalog's other
   // agents keep resolving to their own connections.
   const assignedAgents = Array.from(
     new Map(
       installs
-        .flatMap((install) => agentsLosingAccessOnUninstall(install))
+        .flatMap((install) =>
+          agentsLosingAccessOnUninstall({
+            server: install.server,
+            assignedAgents: agentUsage.agentsByServerId.get(install.server.id),
+          }),
+        )
         .map((agent) => [agent.id, agent]),
     ).values(),
   );
   const isBulk = installs.length > 1;
 
   const handleConfirm = async () => {
-    if (!server) return;
+    if (!server || isLoadingAgents) return;
 
     if (isCancelingInstallation && onCancelInstallation) {
       onCancelInstallation(server.id);
@@ -167,6 +177,21 @@ export function UninstallServerDialog({
                 ))}
               </ul>
             )}
+            {isLoadingAgents && (
+              <InlineNotice variant="neutral">
+                <Loader2 className="animate-spin" />
+                <span>Searching agents using this connection...</span>
+              </InlineNotice>
+            )}
+            {!isCancelingInstallation && agentUsage.isError && (
+              <InlineNotice variant="error">
+                <span className="font-medium">Agents could not be loaded</span>
+                <InlineNoticeText>
+                  Agents with tools assigned from this connection may lose
+                  access to them.
+                </InlineNoticeText>
+              </InlineNotice>
+            )}
             {!isCancelingInstallation && assignedAgents.length > 0 && (
               <InlineNotice>
                 <span className="font-medium">
@@ -201,7 +226,7 @@ export function UninstallServerDialog({
             <Button
               type="submit"
               variant="destructive"
-              disabled={uninstallMutation.isPending}
+              disabled={uninstallMutation.isPending || isLoadingAgents}
             >
               {uninstallMutation.isPending
                 ? confirmingButtonText

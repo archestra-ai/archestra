@@ -33,6 +33,14 @@ export const CacheKey = {
   OAuthState: "oauth-state",
   /** Token endpoint requests, before verifying client credentials. */
   OAuthTokenRateLimit: "oauth-token-rate-limit",
+  /** Per-IP budget for auth routes (OAuth flows, DCR, member removal, SSO start). */
+  AuthRouteRateLimit: "auth-route-rate-limit",
+  /** Per-IP budget for credential-verifying auth routes (sign-in, sign-up, password, 2FA, verify). */
+  AuthCredentialRateLimit: "auth-credential-rate-limit",
+  /** Per-IP budget for LLM proxy model-listing routes. */
+  LlmModelsListRateLimit: "llm-models-list-rate-limit",
+  /** Per-IP budget for MCP Gateway POST requests. */
+  McpGatewayRateLimit: "mcp-gateway-rate-limit",
   /** MCP Gateway session state */
   McpSession: "mcp-session",
   /** Legacy HTTP+SSE stream records for the MCP Gateway */

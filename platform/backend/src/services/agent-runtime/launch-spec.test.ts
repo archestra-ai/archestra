@@ -611,9 +611,15 @@ describe("buildAgentRunLaunchSpec", () => {
   });
 
   test.for([
-    false,
-    true,
-  ])("routes managed Claude subscription inference through a personal passthrough key (Vertex: %s)", async (vertexEnabled, {
+    { vertexEnabled: false, model: undefined, expectedModel: "opus" },
+    { vertexEnabled: true, model: "opus[1m]", expectedModel: "opus[1m]" },
+    { vertexEnabled: false, model: "sonnet", expectedModel: "sonnet" },
+    { vertexEnabled: false, model: "default", expectedModel: "default" },
+  ])("routes managed Claude subscription inference through a personal passthrough key (%j)", async ({
+    vertexEnabled,
+    model,
+    expectedModel,
+  }, {
     makeOrganization,
     makeAdmin,
     makeMember,
@@ -643,7 +649,7 @@ describe("buildAgentRunLaunchSpec", () => {
     ];
     configuredRuntime.claudeCode = {
       authentication: "subscription",
-      model: "opus[1m]",
+      model,
     };
     configuredRuntime.credentials = [
       {
@@ -697,7 +703,7 @@ describe("buildAgentRunLaunchSpec", () => {
     expect(spec.secretEnv.ANTHROPIC_CUSTOM_HEADERS).toContain(
       `X-Archestra-Run-Id: ${taskId}`,
     );
-    expect(spec.env.ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL).toBe("opus[1m]");
+    expect(spec.env.ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL).toBe(expectedModel);
     expect(spec.env).not.toHaveProperty("CLAUDE_CODE_OAUTH_TOKEN");
     expect(spec.env).not.toHaveProperty("CLAUDE_CONFIG_DIR");
     expect(spec.env.ARCHESTRA_AGENT_RUNTIME_RUN_ID).toBe(runId);

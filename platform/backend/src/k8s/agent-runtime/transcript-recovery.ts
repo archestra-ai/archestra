@@ -33,7 +33,7 @@ export async function withTranscriptRecoveryPod(params: {
     (container) => container.name === AGENT_RUNTIME_CONTAINER_NAME,
   )?.image;
   if (!sandbox.metadata.uid || !image)
-    throw new Error("Workspace recovery metadata is unavailable");
+    throw new Error("Run recovery metadata is unavailable");
   const claim = await clients.coreApi.readNamespacedPersistentVolumeClaim({
     namespace,
     name: `workspace-${sandbox.metadata.name}`,
@@ -44,9 +44,7 @@ export async function withTranscriptRecoveryPod(params: {
       (owner) => owner.uid === sandbox.metadata.uid,
     )
   ) {
-    throw new Error(
-      "Workspace recovery storage does not belong to this Sandbox",
-    );
+    throw new Error("Run recovery storage does not belong to this Sandbox");
   }
   const name = `agent-transcript-${randomUUID()}`;
   const labels = { "archestra.io/transcript-recovery": name };

@@ -8,8 +8,6 @@ import {
   type McpDeploymentStatusEntry,
 } from "@archestra/shared";
 import {
-  ArrowUpRight,
-  Bot,
   Copy,
   FileSearch,
   Globe,
@@ -21,7 +19,6 @@ import {
   User,
   Wrench,
 } from "lucide-react";
-import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   type MouseEventHandler,
@@ -50,11 +47,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
 import { PermissionButton } from "@/components/ui/permission-button";
 import {
   Tooltip,
@@ -69,7 +61,6 @@ import { copyToClipboard } from "@/lib/clipboard";
 import { useFeature } from "@/lib/config/config.query";
 import { useEnvironments } from "@/lib/environment.query";
 import { useReinstallInternalMcpCatalogItem } from "@/lib/mcp/internal-mcp-catalog.query";
-import { useMcpUsageSummary } from "@/lib/mcp/mcp-agent-usage.query";
 import type { McpDeploymentFeedState } from "@/lib/mcp/mcp-server.query";
 import { useMcpServers } from "@/lib/mcp/mcp-server.query";
 import {
@@ -96,11 +87,6 @@ import {
   useMcpInstallBlockers,
 } from "./mcp-credential-blockers";
 import { isMcpServerInstalledForViewer } from "./mcp-registry-visibility";
-import {
-  type AgentUsage,
-  agentOwnerLabel,
-  deriveAgentUsage,
-} from "./mcp-server-agent-usage";
 import { McpServerIssueBadge } from "./mcp-server-issue-badge";
 import { McpServerIssueNotice } from "./mcp-server-issue-notice";
 import { OAuthReauthIndicator } from "./oauth-reauth-indicator";
@@ -213,8 +199,11 @@ export function McpServerCard({
   const { canModify: canEditCatalog, isLoading: canEditCatalogLoading } =
     useCanModifyCatalogItem(variant !== "builtin" ? item : null);
 
-  // Fetch all MCP servers to get installations for logs dropdown
-  const { data: allMcpServers } = useMcpServers();
+  // Fetch all MCP servers to get installations for logs dropdown. The card
+  // reads no per-install agents, so it shares the registry's compact list.
+  const { data: allMcpServers } = useMcpServers({
+    includeAssignedAgents: false,
+  });
   // Teams the user may install a shared connection for: any team for an install
   // admin, otherwise only the teams they belong to.
   const { data: isMcpServerInstallAdmin } = useHasPermissions(
@@ -327,35 +316,6 @@ export function McpServerCard({
   const isInstalledForViewer =
     isMcpServerInstalledForViewer(allServersForCatalog);
 
-  // A member's Usage would list only their own agents, so the server page
-  // drops it for them; the card's summary of it and its link go too.
-  const { data: showsAgentUsage } = useHasPermissions({
-    mcpServerInstallation: ["update"],
-  });
-  // The distinct agents that can reach this catalog item, across every install
-  // of it — the audience affected if those installs go away. Shared with the
-  // detail page's Usage tab so both surfaces count the same way.
-  const fallback = useMemo(
-    () =>
-      deriveAgentUsage({
-        serversForCatalog: allServersForCatalog,
-        autoModeAgents: undefined,
-      }),
-    [allServersForCatalog],
-  );
-  const { data: summary } = useMcpUsageSummary({
-    catalogId: item.id,
-    assignedAgents: fallback.assigned,
-    enabled: !!showsAgentUsage,
-  });
-  const assignedAgents = summary?.assignedPreview ?? fallback.assigned;
-  const autoModeOnlyAgents = summary?.autoPreview ?? [];
-  const assignedCount = summary?.assignedCount ?? fallback.assigned.length;
-  const autoCount = summary?.autoCount ?? 0;
-  const totalAgentCount = showsAgentUsage
-    ? (summary?.pagination.total ?? fallback.total)
-    : 0;
-
   // The most recent personal install for this catalog item, if any.
   const uninstallInstalls: UninstallServerInstall[] = (() => {
     const install = personalServersForCatalog
@@ -373,7 +333,6 @@ export function McpServerCard({
               scope: install.scope,
               teamId: install.teamId,
             },
-            assignedAgents: install.assignedAgents ?? [],
           },
         ]
       : [];
@@ -654,8 +613,7 @@ export function McpServerCard({
       Boolean(oauthReauthIndicator));
 
   /** Operational details shown alongside resource metadata. */
-  const hasOperationalDetails =
-    toolsCount > 0 || totalAgentCount > 0 || hasTrailingCluster;
+  const hasOperationalDetails = toolsCount > 0 || hasTrailingCluster;
   const hasCardMetadata = Boolean(
     environmentLabel ||
       statusIssue ||
@@ -716,63 +674,6 @@ export function McpServerCard({
             {toolsCount}
           </span>
         </div>
-      )}
-      {totalAgentCount > 0 && (
-        <>
-          {/*
-            The popover is informational only, and it MUST NOT capture pointer
-            events: it opens directly on top of the card's action row (Chat /
-            Reinstall / Uninstall), so an interactive popover sits between the
-            cursor and those buttons and swallows the click — the user presses
-            Reinstall and nothing happens. `pointerEventsNone` puts the popper
-            wrapper out of the hit-test path so clicks fall through to the
-            button underneath. That leaves nothing clickable inside the card,
-            so the trigger itself carries the link to the full usage list.
-          */}
-          <HoverCard openDelay={150}>
-            <HoverCardTrigger asChild>
-              <Link
-                href={`/mcp/registry/${item.id}?tab=usage`}
-                aria-label={`${totalAgentCount} ${
-                  totalAgentCount === 1 ? "agent" : "agents"
-                } can use ${item.name}, view usage`}
-                className="flex shrink-0 items-center gap-1 hover:text-foreground transition-colors"
-              >
-                <Bot className="h-3.5 w-3.5" />
-                <span data-testid={`${E2eTestId.McpServerAgentsCount}`}>
-                  {totalAgentCount}
-                </span>
-              </Link>
-            </HoverCardTrigger>
-            <HoverCardContent pointerEventsNone className="w-72 p-3 text-sm">
-              {assignedCount > 0 && (
-                <AgentUsageSection
-                  title={`Used by ${assignedCount} ${
-                    assignedCount === 1 ? "agent" : "agents"
-                  } (assigned tools)`}
-                  agents={assignedAgents}
-                  total={assignedCount}
-                />
-              )}
-              {assignedCount > 0 && autoCount > 0 && (
-                <div className="my-2 h-px bg-border" />
-              )}
-              {autoCount > 0 && (
-                <AgentUsageSection
-                  title={`${autoCount} auto-mode ${
-                    autoCount === 1 ? "agent" : "agents"
-                  } (access all tools)`}
-                  agents={autoModeOnlyAgents}
-                  total={autoCount}
-                />
-              )}
-              <p className="mt-2.5 flex items-center gap-1 border-t pt-2 text-xs text-muted-foreground">
-                <span>View all usage</span>
-                <ArrowUpRight className="h-3 w-3" />
-              </p>
-            </HoverCardContent>
-          </HoverCard>
-        </>
       )}
       {/*
         Trailing cluster, pushed to the card's right edge by `ml-auto` so the
@@ -1143,48 +1044,3 @@ export function McpServerCard({
     </>
   );
 }
-
-/**
- * One "used by" group in the card's hover card. Personal agents are seeded per
- * member and all share a name, so each is attributed to its owner — without it
- * the list reads as several identical "My Assistant" rows.
- */
-function AgentUsageSection({
-  title,
-  agents,
-  total = agents.length,
-}: {
-  title: string;
-  agents: AgentUsage[];
-  total?: number;
-}) {
-  const shown = agents.slice(0, AGENT_USAGE_PREVIEW_LIMIT);
-  const remaining = total - shown.length;
-
-  return (
-    <>
-      <p className="font-medium">{title}</p>
-      <div className="mt-1 space-y-0.5">
-        {shown.map((agent) => {
-          const owner = agentOwnerLabel(agent);
-          return (
-            <div key={agent.id} className="flex items-baseline gap-1.5">
-              <span className="truncate">{agent.name}</span>
-              {owner && (
-                <span className="truncate text-xs text-muted-foreground">
-                  {owner}
-                </span>
-              )}
-            </div>
-          );
-        })}
-        {remaining > 0 && (
-          <div className="text-muted-foreground">+{remaining} more</div>
-        )}
-      </div>
-    </>
-  );
-}
-
-/** How many agents each hover-card group lists before collapsing to "+N more". */
-const AGENT_USAGE_PREVIEW_LIMIT = 8;

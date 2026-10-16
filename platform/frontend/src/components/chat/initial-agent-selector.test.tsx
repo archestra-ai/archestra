@@ -108,7 +108,7 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
 
 vi.mock("@/lib/agent.query", () => ({
-  useAgentCredentialReadiness: (options?: unknown) =>
+  useAgentCredentialReadinessPages: (options?: unknown) =>
     mockUseAgentCredentialReadiness(options),
   useAgentSearch: ({
     name,
@@ -125,8 +125,14 @@ vi.mock("@/lib/agent.query", () => ({
       : undefined,
   }),
   useChatAgents: () => ({ data: agents }),
-  useChatAgentPage: () => ({
-    data: { data: agents, pagination: { hasNext: false, nextCursor: null } },
+  useChatAgentPages: () => ({
+    data: {
+      pages: [
+        { data: agents, pagination: { hasNext: false, nextCursor: null } },
+      ],
+    },
+    hasNextPage: false,
+    fetchNextPage: vi.fn(),
     isPending: false,
     isFetching: false,
   }),

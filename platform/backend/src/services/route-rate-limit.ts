@@ -109,14 +109,14 @@ export const authCredentialRateLimiter = new RouteRateLimiter({
 });
 
 /** LLM proxy model listing: each call makes an upstream provider request. */
-export const llmModelsListRateLimiter = new RouteRateLimiter({
+const llmModelsListRateLimiter = new RouteRateLimiter({
   scope: CacheKey.LlmModelsListRateLimit,
   windowMs: 60_000,
   maxRequests: 120,
 });
 
 /** MCP Gateway POST requests. */
-export const mcpGatewayRateLimiter = new RouteRateLimiter({
+const mcpGatewayRateLimiter = new RouteRateLimiter({
   scope: CacheKey.McpGatewayRateLimit,
   windowMs: 60_000,
   maxRequests: 600,

@@ -134,7 +134,10 @@ export async function createPinnedOutboundDispatcher(params: {
   };
 }
 
-/** Reject DNS answers that could route an outbound request into a trusted network. */
+/**
+ * Reject DNS answers that could route an outbound request into a trusted network.
+ * @public — exported so outbound-url.test.ts can pin the address policy directly
+ */
 export function isAllowedOutboundAddress(
   address: string,
   options: { allowLoopback?: boolean } = {},

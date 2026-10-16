@@ -86,6 +86,7 @@ import {
   AgentExportPayloadSchema,
   AgentKnowledgeSourceExclusionsSchema,
   AgentListItemSchema,
+  type AgentOption,
   AgentOptionSchema,
   type AgentScope,
   AgentScopeFilterSchema,
@@ -3005,10 +3006,21 @@ type AgentRosterRequest = {
   ids?: string[];
 };
 
+function findPermittedAgentRoster(
+  params: AgentRosterRequest & { optionsView: true },
+): Promise<AgentOption[]>;
+function findPermittedAgentRoster(
+  params: AgentRosterRequest & { optionsView?: false },
+): Promise<Agent[]>;
 async function findPermittedAgentRoster(params: AgentRosterRequest) {
   const { userId, isAgentAdmin, options } =
     await getPermittedAgentRosterOptions(params);
-  return AgentModel.findAll(userId, isAgentAdmin, options);
+  return params.optionsView
+    ? AgentModel.findAll(userId, isAgentAdmin, { ...options, view: "options" })
+    : AgentModel.findAll(userId, isAgentAdmin, {
+        ...options,
+        view: params.query.view,
+      });
 }
 
 async function getPermittedAgentRosterOptions(params: AgentRosterRequest) {

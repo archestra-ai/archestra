@@ -1,5 +1,7 @@
 import {
   type AgentType,
+  CursorQuerySchema,
+  createCursorPaginatedResponseSchema,
   createPaginatedResponseSchema,
   DEFAULT_APP_NAME,
   getResourceForAgentType,
@@ -87,6 +89,7 @@ import {
   AgentKnowledgeSourceExclusionsSchema,
   AgentListItemSchema,
   type AgentOption,
+  AgentOptionFiltersSchema,
   AgentOptionSchema,
   type AgentScope,
   AgentScopeFilterSchema,
@@ -133,6 +136,21 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         querystring: z
           .object({
             name: z.string().optional().describe("Filter by agent name"),
+            includeBuiltIn: z
+              .preprocess(
+                (val) => (typeof val === "string" ? val === "true" : val),
+                z.boolean(),
+              )
+              .optional()
+              .describe(
+                "Include built-in agents, so ids assigned elsewhere still resolve. Only agent admins see them; ignored with `scope`.",
+              ),
+            view: z
+              .enum(["chat"])
+              .optional()
+              .describe(
+                "`chat` keeps the system chat assistant in the list for chat selection.",
+              ),
             agentType: z
               .enum(["profile", "mcp_gateway", "agent"])
               .optional()
@@ -269,6 +287,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       {
         query: {
           name,
+          includeBuiltIn,
+          view,
           agentType,
           agentTypes,
           scope,
@@ -328,6 +348,8 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             baseReadTypes: checker.getAgentTypesWithPermission("read"),
           },
           name,
+          includeBuiltIn,
+          view,
           // agentTypes takes precedence over agentType
           agentType: agentTypes || permittedTypes ? undefined : agentType,
           agentTypes: permittedTypes ?? agentTypes,
@@ -397,28 +419,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       return reply.send({ ok: true as const });
     },
   );
-
-  fastify.get(
-    "/api/agents/all",
-    {
-      schema: {
-        operationId: RouteId.GetAllAgents,
-        description: "Get all agents without pagination",
-        tags: ["Agents"],
-        querystring: AgentRosterQuerySchema,
-        response: constructResponseSchema(z.array(SelectAgentSchema)),
-      },
-    },
-    async ({ query, user, organizationId }, reply) =>
-      reply.send(
-        await findPermittedAgentRoster({
-          query,
-          userId: user.id,
-          organizationId,
-        }),
-      ),
-  );
-
   fastify.get(
     "/api/agents/chat-roster",
     {
@@ -427,10 +427,64 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Get authorized chat agent identities and model references",
         tags: ["Agents"],
+        querystring: z.object({
+          bootstrap: z
+            .preprocess(
+              (value) => value === "true" || value === true,
+              z.boolean(),
+            )
+            .optional(),
+          ids: z
+            .preprocess(
+              (value) =>
+                typeof value === "string"
+                  ? value.split(",").filter(Boolean)
+                  : value,
+              z.array(z.uuid()).max(100),
+            )
+            .optional(),
+        }),
         response: constructResponseSchema(z.array(ChatAgentRosterSchema)),
       },
     },
-    async ({ user, organizationId }, reply) => {
+    async ({ query, user, organizationId }, reply) => {
+      const params = await getPermittedAgentRosterOptions({
+        query: {
+          agentType: "agent",
+          excludeBuiltIn: true,
+          includeTools: false,
+          view: "chat",
+        },
+        userId: user.id,
+        organizationId,
+        ids: query.ids,
+      });
+      return reply.send(
+        query.bootstrap && query.ids === undefined
+          ? await AgentModel.findChatRosterBootstrap(params)
+          : await AgentModel.findChatRoster(params),
+      );
+    },
+  );
+
+  fastify.get(
+    "/api/agents/chat-roster/page",
+    {
+      schema: {
+        operationId: RouteId.GetChatAgentRosterPage,
+        description:
+          "Fetch bounded authorized nonbuilt-in chat choices with literal name or description search.",
+        tags: ["Agents"],
+        querystring: CursorQuerySchema.extend({
+          search: z.string().max(512).optional(),
+          sortBy: z.enum(["createdAt", "name", "chat"]).optional(),
+        }),
+        response: constructResponseSchema(
+          createCursorPaginatedResponseSchema(ChatAgentRosterSchema),
+        ),
+      },
+    },
+    async ({ query, user, organizationId }, reply) => {
       const params = await getPermittedAgentRosterOptions({
         query: {
           agentType: "agent",
@@ -441,7 +495,13 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
       });
-      return reply.send(await AgentModel.findChatRoster(params));
+      return reply.send(
+        await AgentModel.findChatRosterPage({
+          ...params,
+          filters: query,
+          pagination: query,
+        }),
+      );
     },
   );
 
@@ -453,17 +513,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "Get authorized agent names and presentation fields for selectors",
         tags: ["Agents"],
-        querystring: AgentRosterQuerySchema.omit({
-          view: true,
-          includeTools: true,
-        }).extend({
-          ids: z
-            .preprocess(
-              (value) => (typeof value === "string" ? value.split(",") : value),
-              z.array(z.uuid()),
-            )
-            .optional(),
-        }),
+        querystring: AgentOptionsQuerySchema,
         response: constructResponseSchema(z.array(AgentOptionSchema)),
       },
     },
@@ -485,6 +535,65 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   fastify.get(
+    "/api/agents/options/page",
+    {
+      schema: {
+        operationId: RouteId.GetAgentOptionsPage,
+        description:
+          "Fetch a bounded authorized agent selector page with server-side search and eligibility filters.",
+        tags: ["Agents"],
+        querystring: AgentOptionsQuerySchema.merge(
+          AgentOptionFiltersSchema,
+        ).merge(CursorQuerySchema),
+        response: constructResponseSchema(
+          createCursorPaginatedResponseSchema(AgentOptionSchema),
+        ),
+      },
+    },
+    async ({ query, user, organizationId }, reply) => {
+      const params = await getPermittedAgentRosterOptions({
+        query,
+        userId: user.id,
+        organizationId,
+        optionsView: true,
+        ids: query.ids,
+      });
+      return reply.send(
+        await AgentModel.findOptionsPage({
+          ...params,
+          filters: query,
+          pagination: query,
+        }),
+      );
+    },
+  );
+  fastify.get(
+    "/api/agents/options/ids",
+    {
+      schema: {
+        operationId: RouteId.GetAgentOptionIds,
+        description:
+          "Fetch complete authorized selector IDs for an explicit select-all action without presentation metadata.",
+        tags: ["Agents"],
+        querystring: AgentOptionsQuerySchema.merge(AgentOptionFiltersSchema),
+        response: constructResponseSchema(z.array(z.uuid())),
+      },
+    },
+    async ({ query, user, organizationId }, reply) => {
+      const params = await getPermittedAgentRosterOptions({
+        query,
+        userId: user.id,
+        organizationId,
+        optionsView: true,
+        ids: query.ids,
+      });
+      return reply.send(
+        await AgentModel.findOptionIds({ ...params, filters: query }),
+      );
+    },
+  );
+
+  fastify.get(
     "/api/agents/credential-readiness",
     {
       schema: {
@@ -492,12 +601,23 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description:
           "For each internal agent that enforces a missing-credential behavior, the MCP servers the calling user has no usable connection to",
         tags: ["Agents"],
+        querystring: z.object({
+          ids: z
+            .preprocess(
+              (value) =>
+                typeof value === "string"
+                  ? value.split(",").filter(Boolean)
+                  : value,
+              z.array(z.uuid()).max(200),
+            )
+            .optional(),
+        }),
         response: constructResponseSchema(
           z.array(AgentCredentialReadinessSchema),
         ),
       },
     },
-    async ({ user, organizationId }, reply) => {
+    async ({ query, user, organizationId }, reply) => {
       const checker = await getAgentTypePermissionChecker({
         userId: user.id,
         organizationId,
@@ -511,6 +631,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           excludeBuiltIn: true,
           onlyEnforcingMissingCredentials: true,
           includeTools: false,
+          ids: query.ids,
         },
       );
 
@@ -1703,6 +1824,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       if (view === "eligible") {
         const candidates = await listPolicyIndependentAvailableAgentSkills({
+          includeContent: false,
           organizationId,
           userId: user.id,
           ...(agentId && environmentId === undefined
@@ -2996,6 +3118,18 @@ const AgentRosterQuerySchema = z.object({
     .describe(
       "Return the lightweight agent fields needed to initialize chat. Large embedded icons, system prompts, sharing metadata, and unrelated list hydration are omitted; fetch an individual agent before editing it.",
     ),
+});
+
+const AgentOptionsQuerySchema = AgentRosterQuerySchema.omit({
+  view: true,
+  includeTools: true,
+}).extend({
+  ids: z
+    .preprocess(
+      (value) => (typeof value === "string" ? value.split(",") : value),
+      z.array(z.uuid()),
+    )
+    .optional(),
 });
 
 type AgentRosterRequest = {

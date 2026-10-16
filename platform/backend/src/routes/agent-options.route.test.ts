@@ -111,7 +111,7 @@ describe("agent selector presentation parity", () => {
     const compare = async (query: string) => {
       const full = await ctx.app.inject({
         method: "GET",
-        url: `/api/agents/all${query}`,
+        url: `/api/agents${query}&limit=100`,
       });
       const options = await ctx.app.inject({
         method: "GET",
@@ -119,7 +119,7 @@ describe("agent selector presentation parity", () => {
       });
       expect(full.statusCode, full.body).toBe(200);
       expect(options.statusCode, options.body).toBe(200);
-      const expected = full.json().map((row: Record<string, unknown>) =>
+      const expected = full.json().data.map((row: Record<string, unknown>) =>
         AgentOptionSchema.parse({
           ...row,
           icon:
@@ -128,7 +128,10 @@ describe("agent selector presentation parity", () => {
               : row.icon,
         }),
       );
-      expect(options.json()).toEqual(expected);
+      // The paginated list and the selector options sort rows differently.
+      const byId = (rows: Array<{ id: string }>) =>
+        [...rows].sort((a, b) => a.id.localeCompare(b.id));
+      expect(byId(options.json())).toEqual(byId(expected));
       expect(options.json().map((row: { id: string }) => row.id)).not.toContain(
         foreignAgent.id,
       );

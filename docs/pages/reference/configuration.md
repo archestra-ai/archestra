@@ -1475,3 +1475,12 @@ Retention is an Enterprise feature: the backend does not start when a window is 
   - Default: `4`
   - Values: `1`–`64`
   - A check holds a connection only for each database step, never while it waits on an external consult. A step that waits more than 30 seconds for a free connection fails.
+
+- **`ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER`** - Chat provider that writes review summaries. Explicit opt-in: the provider must be one of the chat-capable model providers, and its API key must already be configured (for Kimi, [`ARCHESTRA_CHAT_KIMI_API_KEY`](/docs/reference/configuration#ARCHESTRA_CHAT_KIMI_API_KEY)). Never inferred from the organization's default provider.
+  - Default: unset (summaries disabled)
+  - Must be set together with [`ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_MODEL`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_MODEL); a partial value stops startup.
+  - Uncached summary attempts are limited to five per caller and twenty per organization in a rolling 60-second window. Concurrent identical requests share a generation lease. At the limit, the complete review remains available without a generated summary.
+
+- **`ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_MODEL`** - Model name for review summaries, served by [`ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER).
+  - Default: unset (summaries disabled)
+  - Must be set together with [`ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER); a partial value stops startup.

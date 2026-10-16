@@ -48,12 +48,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  useInternalAgentOptions,
-  useSwitchAgentAccess,
-  useUpdateProfile,
-} from "@/lib/agent.query";
+import { useSwitchAgentAccess, useUpdateProfile } from "@/lib/agent.query";
 import { useAgentKnowledgeSourceExclusions } from "@/lib/agent-knowledge-source-exclusions.query";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { useAgentSubagentExclusions } from "@/lib/agent-subagent-exclusions.query";
 import { useAgentToolExclusions } from "@/lib/agent-tool-exclusions.query";
 import {
@@ -71,6 +68,7 @@ import {
   useInternalMcpCatalog,
 } from "@/lib/mcp/internal-mcp-catalog.query";
 import { cn } from "@/lib/utils/tailwind";
+import { AgentReachBrowser } from "./agent-reach-browser";
 import { summarizeAllToolAccess } from "./all-access.utils";
 import { connectorLabel as connectorTypeLabel } from "./connector-label";
 import { QuickEditFooter } from "./view-header";
@@ -501,7 +499,7 @@ function ToolsSection({
 
   const totalToolQueries = useQueries({
     queries: assignedCatalogs.map((catalog) => ({
-      queryKey: ["mcp-catalog", catalog.id, "tools"],
+      queryKey: ["mcp-catalog", catalog.id, "tools", "picker"],
       queryFn: () => fetchCatalogTools(catalog.id),
       staleTime: 60_000,
     })),
@@ -908,25 +906,25 @@ function SubagentsSection({
   const agentId = agent.id;
   const accessAll = agent.accessAllSubagents ?? false;
   const { data: delegations = [], isPending } = useAgentDelegations(agentId);
-  const { data: allAgents = [] } = useInternalAgentOptions();
+  const { data: selectedAgents = [] } = useAgentOptionsByIds({
+    ids: accessAll ? [] : delegations.slice(0, 20).map((item) => item.id),
+    enabled: !accessAll,
+  });
   const { data: subagentExclusions } = useAgentSubagentExclusions(
     accessAll ? agentId : undefined,
   );
   const removeDelegation = useRemoveAgentDelegation();
 
   const subagents = useMemo(() => {
-    const byId = new Map(allAgents.map((agent) => [agent.id, agent]));
-    return delegations.map((delegation) => ({
+    const byId = new Map(selectedAgents.map((agent) => [agent.id, agent]));
+    return delegations.slice(0, 20).map((delegation) => ({
       ...delegation,
       ...byId.get(delegation.id),
     }));
-  }, [allAgents, delegations]);
+  }, [selectedAgents, delegations]);
 
   if (accessAll) {
     const excluded = new Set(subagentExclusions?.excludedSubagentIds ?? []);
-    const reachable = allAgents.filter(
-      (candidate) => candidate.id !== agentId && !excluded.has(candidate.id),
-    );
     return (
       <section className="space-y-2">
         <SectionHeading title="Subagents" action={accessSwitch} />
@@ -934,14 +932,7 @@ function SubagentsSection({
           <p className="text-sm text-muted-foreground">
             {excludedSubagentsSummary(excluded.size)}
           </p>
-          <ReachLine
-            label="Agents"
-            items={reachable.map((candidate) => ({
-              id: candidate.id,
-              name: candidate.name,
-              icon: <AgentIcon icon={candidate.icon} size={12} />,
-            }))}
-          />
+          <AgentReachBrowser agentId={agentId} excludedIds={[...excluded]} />
         </div>
       </section>
     );
@@ -953,7 +944,7 @@ function SubagentsSection({
         title="Subagents"
         count={
           subagents.length > 0
-            ? `${subagents.length} ${subagents.length === 1 ? "subagent" : "subagents"} assigned`
+            ? `${delegations.length} ${delegations.length === 1 ? "subagent" : "subagents"} assigned`
             : undefined
         }
         action={
@@ -1002,6 +993,13 @@ function SubagentsSection({
               }
             />
           ))}
+          {delegations.length > 20 && (
+            <li>
+              <Button variant="link" onClick={onEdit}>
+                Browse all {delegations.length} assigned subagents
+              </Button>
+            </li>
+          )}
         </ul>
       )}
     </section>

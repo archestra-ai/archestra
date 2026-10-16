@@ -1244,6 +1244,9 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
         organizationId: tokenAuth.organizationId,
         ...(tokenAuth.isUserToken && { isUserToken: true }),
         ...(tokenAuth.userId && { userId: tokenAuth.userId }),
+        ...(tokenAuth.serviceAccountId && {
+          serviceAccountId: tokenAuth.serviceAccountId,
+        }),
         ...(tokenAuth.isExternalIdp && { isExternalIdp: true }),
         ...(tokenAuth.rawToken && { rawToken: tokenAuth.rawToken }),
         ...(tokenAuth.oauthClientId && {

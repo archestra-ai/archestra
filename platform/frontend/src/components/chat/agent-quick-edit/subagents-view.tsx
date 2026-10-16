@@ -12,12 +12,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OverlappedIcons } from "@/components/ui/overlapped-icons";
-import { useInternalAgentOptions } from "@/lib/agent.query";
+import { useAgentOptionsPage } from "@/lib/agent-options.query";
 import {
   useAgentDelegations,
   useAllProfileTools,
   useSyncAgentDelegations,
 } from "@/lib/agent-tools.query";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { cn } from "@/lib/utils/tailwind";
 import { QuickEditFooter, QuickEditViewHeader } from "./view-header";
@@ -34,7 +35,6 @@ export function SubagentsView({
   agentName: string;
   onBack: () => void;
 }) {
-  const { data: allAgents = [] } = useInternalAgentOptions();
   const { data: delegations = [], isSuccess: delegationsLoaded } =
     useAgentDelegations(agentId);
   const syncDelegations = useSyncAgentDelegations();
@@ -56,38 +56,33 @@ export function SubagentsView({
     setSelected(new Set(saved));
   }, [delegationsLoaded, saved]);
 
-  // Rows keep the order they opened with, so ticking one doesn't move it.
-  const initialSavedRef = useRef(saved);
-  if (initialSavedRef.current.size === 0 && saved.size > 0) {
-    initialSavedRef.current = saved;
-  }
-  const candidates = useMemo(() => {
-    const lower = search.toLowerCase();
-    return allAgents
-      .filter((agent) => agent.id !== agentId)
-      .filter(
-        (agent) =>
-          !lower ||
-          agent.name.toLowerCase().includes(lower) ||
-          agent.description?.toLowerCase().includes(lower),
-      )
-      .sort(
-        (a, b) =>
-          Number(initialSavedRef.current.has(b.id)) -
-            Number(initialSavedRef.current.has(a.id)) ||
-          a.name.localeCompare(b.name),
-      );
-  }, [allAgents, agentId, search]);
-
-  const pageCount = Math.max(
-    1,
-    Math.ceil(candidates.length / SUBAGENTS_PAGE_SIZE),
+  const debouncedSearch = useDebouncedValue(search, 200);
+  const candidates = useAgentOptionsPage({
+    filters: {
+      agentType: "agent",
+      excludeBuiltIn: true,
+      excludeIds: [agentId],
+      sortBy: "name",
+      searchMode: "name_or_description",
+    },
+    search: debouncedSearch,
+    limit: SUBAGENTS_PAGE_SIZE,
+  });
+  const page = Math.min(
+    pageIndex,
+    Math.max(0, (candidates.data?.pages.length ?? 1) - 1),
   );
-  const page = Math.min(pageIndex, pageCount - 1);
-  const visibleCandidates = candidates.slice(
-    page * SUBAGENTS_PAGE_SIZE,
-    (page + 1) * SUBAGENTS_PAGE_SIZE,
-  );
+  const visibleCandidates =
+    search === debouncedSearch
+      ? (candidates.data?.pages[page]?.data ?? [])
+      : [];
+  const hasNext =
+    page + 1 < (candidates.data?.pages.length ?? 0) || candidates.hasNextPage;
+  const nextPage = async () => {
+    setPageIndex(page + 1);
+    if (page + 1 >= (candidates.data?.pages.length ?? 0))
+      await candidates.fetchNextPage();
+  };
 
   const adding = [...selected].filter((id) => !saved.has(id));
   const removing = [...saved].filter((id) => !selected.has(id));
@@ -147,12 +142,18 @@ export function SubagentsView({
         )}
       </div>
       <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-5 pt-1 pb-4">
-        {!delegationsLoaded ? (
+        {!delegationsLoaded ||
+        candidates.isPending ||
+        search !== debouncedSearch ? (
           <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" />
             <span>Loading agents…</span>
           </div>
-        ) : candidates.length === 0 ? (
+        ) : candidates.isError ? (
+          <Button variant="outline" onClick={() => candidates.refetch()}>
+            Retry loading agents
+          </Button>
+        ) : visibleCandidates.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
             No agents match "{search}"
           </p>
@@ -203,7 +204,7 @@ export function SubagentsView({
           <ExternalLink className="size-3" />
         </a>
       </div>
-      {pageCount > 1 && (
+      {(page > 0 || hasNext) && (
         <nav
           aria-label="Subagent pages"
           className="flex items-center justify-between gap-2 px-5 py-2"
@@ -216,14 +217,16 @@ export function SubagentsView({
           >
             Previous agents
           </Button>
-          <span className="text-xs text-muted-foreground">
-            Page {page + 1} of {pageCount}
-          </span>
+          <span className="text-xs text-muted-foreground">Page {page + 1}</span>
           <Button
             variant="outline"
             size="sm"
-            disabled={page + 1 === pageCount}
-            onClick={() => setPageIndex(page + 1)}
+            disabled={
+              !hasNext ||
+              candidates.isFetchingNextPage ||
+              search !== debouncedSearch
+            }
+            onClick={nextPage}
           >
             Next agents
           </Button>

@@ -46,6 +46,48 @@ const {
   mockUseTeams: vi.fn(),
 }));
 
+// Legacy behavior fixtures remain local; real HTTP paging is covered by the
+// remote-selector integration suite.
+vi.mock("@/lib/agent-options.query", () => ({
+  useAgentOptionsByIds: (params: unknown) => mockUseAgentOptions(params),
+  useAgentOptionIds: () => ({
+    data: (mockUseAgentOptions({}).data ?? []).map(
+      (row: { id: string }) => row.id,
+    ),
+    isSuccess: true,
+  }),
+  useAgentOptionsPage: (params: { search?: string }) => {
+    const result = mockUseAgentOptions(params);
+    const search = params.search?.trim().toLowerCase() ?? "";
+    const rows = (result.data ?? []).filter(
+      (row: {
+        name?: string;
+        description?: string | null;
+        authorEmail?: string | null;
+      }) =>
+        !search ||
+        [row.name, row.description, row.authorEmail].some((value) =>
+          value?.toLowerCase().includes(search),
+        ),
+    );
+    return {
+      data: {
+        pages: [
+          { data: rows, pagination: { hasNext: false, nextCursor: null } },
+        ],
+      },
+      isSuccess: true,
+      isLoading: false,
+      isPending: false,
+      isError: false,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+      refetch: vi.fn(),
+    };
+  },
+}));
+
 vi.mock("next/navigation");
 
 vi.mock("@uidotdev/usehooks", () => ({

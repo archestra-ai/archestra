@@ -382,6 +382,158 @@ describe("Anthropic formatToolCallsSSE", () => {
       { tool_use_id: "toolu_wire", verdict: "allow" },
     ]);
   });
+
+  // A server-held review rides immediately before its card as plain
+  // assistant text: one short-lived text block with its own content-block
+  // index in the stream, and a text entry before the tool_use otherwise.
+  test("large review deltas stay bounded, preserve Unicode, and finish before the card", () => {
+    const reviewDetails = `${"x".repeat(4095)}😀${"payload\n".repeat(3000)}`;
+    const adapter = anthropicAdapterFactory.createStreamAdapter();
+    adapter.state.toolCalls.push({ ...REWRITTEN[0], reviewDetails });
+    const events = sseData<
+      AnthropicFrame & { delta?: { type?: string; text?: string } }
+    >(adapter.formatToolCallsSSE?.(adapter.state.toolCalls) ?? []);
+    const deltas = events.filter((event) => event.delta?.type === "text_delta");
+    expect(deltas.map((event) => event.delta?.text).join("")).toBe(
+      reviewDetails,
+    );
+    expect(deltas.length).toBeGreaterThan(1);
+    for (const delta of deltas) {
+      const text = delta.delta?.text ?? "";
+      expect(text.length).toBeLessThanOrEqual(4096);
+      expect(text).not.toMatch(/[\uD800-\uDBFF]$/);
+      expect(text).not.toMatch(/^[\uDC00-\uDFFF]/);
+    }
+    const cardIndex = events.findIndex(
+      (event) => event.content_block?.type === "tool_use",
+    );
+    expect(events.slice(0, cardIndex).at(-1)?.type).toBe("content_block_stop");
+    expect(adapter.toProviderResponse().content[0]).toMatchObject({
+      type: "text",
+      text: reviewDetails,
+    });
+  });
+
+  test("emits a call's review details as text before the call, streaming", () => {
+    const reviewDetails = `## Approval review\n\n${"exact payload\n".repeat(100)}`;
+    const adapter = anthropicAdapterFactory.createStreamAdapter();
+    adapter.state.toolCalls.push({
+      ...REWRITTEN[0],
+      reviewDetails,
+    });
+
+    const events = sseData<AnthropicFrame>(
+      adapter.formatToolCallsSSE?.(adapter.state.toolCalls) ?? [],
+    );
+
+    expect(events.map((e) => e.type)).toEqual([
+      "content_block_start",
+      "content_block_delta",
+      "content_block_stop",
+      "content_block_start",
+      "content_block_delta",
+      "content_block_stop",
+    ]);
+    // Monotonic indices: the text block first, then the card's block.
+    expect(events.map((e) => e.index)).toEqual([0, 0, 0, 1, 1, 1]);
+    expect(events[0].content_block).toEqual({ type: "text", text: "" });
+    expect(events[1].delta).toEqual({
+      type: "text_delta",
+      text: reviewDetails,
+    });
+    expect(events[3].content_block).toMatchObject({
+      type: "tool_use",
+      id: "call_0",
+      name: "archestra__run_tool",
+    });
+    // The logged turn matches the wire: the text precedes the card.
+    expect(adapter.toProviderResponse().content).toEqual([
+      { type: "text", text: reviewDetails, citations: null },
+      {
+        type: "tool_use",
+        id: "call_0",
+        name: "archestra__run_tool",
+        input: {
+          tool_name: "gh-developer-agent__pull_request_read",
+          tool_args: { pullNumber: 7 },
+        },
+      },
+    ]);
+  });
+
+  test("emits a call's review details as text before the call, non-streaming", () => {
+    const reviewDetails = "## Approval review\n\nexact payload";
+    const response = anthropicAdapterFactory.createResponseAdapter({
+      id: "msg_1",
+      type: "message",
+      role: "assistant",
+      model: "model",
+      stop_reason: "tool_use",
+      stop_sequence: null,
+      content: [
+        {
+          type: "text",
+          text: "Let me check with you.",
+          citations: null,
+        },
+        {
+          type: "tool_use",
+          id: "toolu_provider",
+          name: "archestra__ask_user",
+          input: {},
+        },
+      ],
+      usage: { input_tokens: 1, output_tokens: 1 },
+    } as never);
+
+    const rewritten = response.withRewrittenToolCalls?.([
+      {
+        id: "toolu_provider",
+        wireId: "toolu_aq1_signed",
+        name: "AskUserQuestion",
+        arguments: '{"questions":[]}',
+        reviewDetails,
+      },
+    ]);
+
+    expect(rewritten?.content).toEqual([
+      { type: "text", text: "Let me check with you.", citations: null },
+      { type: "text", text: reviewDetails, citations: null },
+      {
+        type: "tool_use",
+        id: "toolu_aq1_signed",
+        name: "AskUserQuestion",
+        input: { questions: [] },
+      },
+    ]);
+  });
+
+  test("declares review support, and calls without details are unchanged", () => {
+    const stream = anthropicAdapterFactory.createStreamAdapter();
+    expect(stream.supportsToolCallReview).toBe(true);
+    const events = sseData<AnthropicFrame>(
+      stream.formatToolCallsSSE?.(REWRITTEN) ?? [],
+    );
+    expect(events.map((e) => e.type)).toEqual([
+      "content_block_start",
+      "content_block_delta",
+      "content_block_stop",
+    ]);
+
+    const response = anthropicAdapterFactory.createResponseAdapter({
+      id: "msg_1",
+      type: "message",
+      role: "assistant",
+      model: "model",
+      stop_reason: "tool_use",
+      stop_sequence: null,
+      content: [{ type: "tool_use", id: "call_0", name: "Bash", input: {} }],
+      usage: { input_tokens: 1, output_tokens: 1 },
+    } as never);
+    expect(response.supportsToolCallReview).toBe(true);
+    const rewritten = response.withRewrittenToolCalls?.(REWRITTEN);
+    expect(rewritten?.content).toHaveLength(1);
+  });
 });
 
 describe("ZhipuAI formatToolCallsSSE", () => {

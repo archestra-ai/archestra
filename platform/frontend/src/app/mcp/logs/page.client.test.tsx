@@ -1,4 +1,5 @@
-import { render, screen, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render as rtlRender, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -21,6 +22,46 @@ globalThis.ResizeObserver = class {
   unobserve() {}
   disconnect() {}
 };
+
+// Legacy behavior fixtures remain local; real HTTP paging is covered by the
+// remote-selector integration suite.
+vi.mock("@/lib/agent-options.query", () => ({
+  useAgentOptionsByIds: () => useAgentOptions(),
+  useAgentOptionIds: () => ({
+    data: (useAgentOptions().data ?? []).map((row: { id: string }) => row.id),
+    isSuccess: true,
+  }),
+  useAgentOptionsPage: (params: { search?: string }) => {
+    const result = useAgentOptions();
+    const search = params.search?.trim().toLowerCase() ?? "";
+    const rows = (result.data ?? []).filter(
+      (row: {
+        name?: string;
+        description?: string | null;
+        authorEmail?: string | null;
+      }) =>
+        !search ||
+        [row.name, row.description, row.authorEmail].some((value) =>
+          value?.toLowerCase().includes(search),
+        ),
+    );
+    return {
+      data: {
+        pages: [
+          { data: rows, pagination: { hasNext: false, nextCursor: null } },
+        ],
+      },
+      isSuccess: true,
+      isLoading: false,
+      isPending: false,
+      isError: false,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+      refetch: vi.fn(),
+    };
+  },
+}));
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
@@ -323,3 +364,15 @@ describe("McpGatewayLogsPage filters", () => {
     expect(screen.queryByText(/raw argument only belongs/)).toBeNull();
   });
 });
+
+function render(element: React.ReactElement) {
+  return rtlRender(
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      {element}
+    </QueryClientProvider>,
+  );
+}

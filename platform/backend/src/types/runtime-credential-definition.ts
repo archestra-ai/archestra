@@ -66,6 +66,7 @@ export const UpdateRuntimeCredentialDefinitionSchema = createUpdateSchema(
   .pick({
     name: true,
     githubUrl: true,
+    gitlabUrl: true,
     appId: true,
     installationId: true,
     githubClientId: true,
@@ -79,6 +80,7 @@ export const RuntimeCredentialDefinitionViewSchema = z.object({
   id: z.string().uuid(),
   kind: CredentialKindSchema,
   githubUrl: z.string().nullable(),
+  gitlabUrl: z.string().nullable(),
   appId: z.string().nullable(),
   installationId: z.string().nullable(),
   githubClientId: z.string().nullable(),

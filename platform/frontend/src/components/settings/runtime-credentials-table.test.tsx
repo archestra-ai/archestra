@@ -16,7 +16,6 @@ import {
   vi,
 } from "vitest";
 import { AccountPageActionSlotContext } from "@/app/account/_components/account-page-action";
-import { useInternalAgentOptions } from "@/lib/agent.query";
 import {
   useHasPermissions,
   useScopedCapabilities,
@@ -28,7 +27,6 @@ import { RuntimeCredentialsSection } from "./runtime-credentials-section";
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
-vi.mock("@/lib/agent.query", () => ({ useInternalAgentOptions: vi.fn() }));
 vi.mock("@/components/claude-code-account", () => ({
   ClaudeCodeAccount: () => <div>Claude Code sign-in</div>,
 }));
@@ -46,6 +44,7 @@ const credentials: RuntimeCredentialDefinition[] = Array.from(
   (_, index) => ({
     id: `definition-${index}`,
     githubUrl: null,
+    gitlabUrl: null,
     appId: null,
     installationId: null,
     githubClientId: null,
@@ -106,12 +105,7 @@ beforeEach(() => {
     typeof useHasPermissions
   >);
   vi.mocked(useFeature).mockReturnValue(false as never);
-  vi.mocked(useInternalAgentOptions).mockReturnValue({
-    data: [],
-    isError: false,
-    isPending: false,
-    refetch: vi.fn(),
-  } as unknown as ReturnType<typeof useInternalAgentOptions>);
+
   vi.mocked(useScopedCapabilities).mockReturnValue({
     data: [],
   } as unknown as ReturnType<typeof useScopedCapabilities>);
@@ -255,15 +249,22 @@ it("Settings → Credentials shows the reader's Claude Code sign-in above the ta
   vi.mocked(useFeature).mockImplementation(
     (feature) => (feature === "agentRuntime") as never,
   );
-  vi.mocked(useInternalAgentOptions).mockReturnValue({
-    data: [{ id: "agent-1", runtime: { command: ["archestra-claude-code"] } }],
-    isError: false,
-    isPending: false,
-    refetch: vi.fn(),
-  } as unknown as ReturnType<typeof useInternalAgentOptions>);
+  server.use(
+    http.get(`${origin}/api/agents/options/page`, ({ request }) => {
+      const query = new URL(request.url).searchParams;
+      expect(query.get("runtimeCommand")).toBe("archestra-claude-code");
+      expect(query.get("limit")).toBe("1");
+      return HttpResponse.json({
+        data: [
+          { id: "agent-1", runtime: { command: ["archestra-claude-code"] } },
+        ],
+        pagination: { limit: 1, nextCursor: null, hasNext: false },
+      });
+    }),
+  );
   renderTable();
   await screen.findByText("Credential 0");
-  expect(screen.getByText("Claude Code sign-in")).toBeVisible();
+  expect(await screen.findByText("Claude Code sign-in")).toBeVisible();
 });
 
 it("Settings Add credential adds one just for you when you cannot create shared ones", async () => {

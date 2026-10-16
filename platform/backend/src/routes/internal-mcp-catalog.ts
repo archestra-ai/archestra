@@ -864,8 +864,25 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({
           id: UuidIdSchema,
         }),
+        querystring: z.object({
+          view: z
+            .enum(["full", "picker"])
+            .default("full")
+            .describe(
+              "Picker metadata excludes parameter bodies and assigned-agent lists.",
+            ),
+        }),
         response: constructResponseSchema(
-          z.array(ToolWithAssignedAgentCountSchema),
+          z.union([
+            z.array(ToolWithAssignedAgentCountSchema),
+            z.array(
+              ToolWithAssignedAgentCountSchema.omit({
+                parameters: true,
+                assignedAgentCount: true,
+                assignedAgents: true,
+              }),
+            ),
+          ]),
         ),
       },
     },
@@ -891,7 +908,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       await requireCatalogRead({ request, id });
-      const tools = await ToolModel.findByCatalogId(id);
+      const tools =
+        request.query.view === "picker"
+          ? await ToolModel.findPickerToolsByCatalogId(id)
+          : await ToolModel.findByCatalogId(id);
       return reply.send(tools);
     },
   );

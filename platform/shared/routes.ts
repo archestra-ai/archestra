@@ -21,9 +21,11 @@ export const RouteId = {
   // Agent Routes
   GetAgents: "getAgents",
   GetAgentCatalog: "getAgentCatalog",
-  GetAllAgents: "getAllAgents",
   GetChatAgentRoster: "getChatAgentRoster",
+  GetChatAgentRosterPage: "getChatAgentRosterPage",
   GetAgentOptions: "getAgentOptions",
+  GetAgentOptionsPage: "getAgentOptionsPage",
+  GetAgentOptionIds: "getAgentOptionIds",
   GetAgentCredentialReadiness: "getAgentCredentialReadiness",
   CreateAgent: "createAgent",
   CloneAgent: "cloneAgent",
@@ -94,6 +96,7 @@ export const RouteId = {
   // Agent Delegation Routes (internal agents only)
   GetAgentDelegations: "getAgentDelegations",
   SyncAgentDelegations: "syncAgentDelegations",
+  CreateAgentDelegation: "createAgentDelegation",
   DeleteAgentDelegation: "deleteAgentDelegation",
   GetAgentA2aDelegations: "getAgentA2aDelegations",
   SyncAgentA2aDelegations: "syncAgentA2aDelegations",
@@ -609,6 +612,7 @@ export const RouteId = {
   GetOrganization: "getOrganization",
   GetOnboardingStatus: "getOnboardingStatus",
   GetMemberSignupStatus: "getMemberSignupStatus",
+  GetOrganizationMemberOptions: "getOrganizationMemberOptions",
   GetOrganizationMembers: "getOrganizationMembers",
   GetOrganizationMember: "getOrganizationMember",
   DeletePendingSignupMember: "deletePendingSignupMember",
@@ -641,6 +645,7 @@ export const RouteId = {
 
   // Org-level deployment environments
   ListEnvironments: "listEnvironments",
+  GetEnvironment: "getEnvironment",
   GetEnvironmentLabelValues: "environmentLabelValues",
   GetEnvironmentLabelKeys: "environmentLabelKeys",
   CreateEnvironment: "createEnvironment",
@@ -912,6 +917,7 @@ export const RouteId = {
   PreviewGithubSkill: "previewGithubSkill",
   ImportGithubSkills: "importGithubSkills",
   GetSkillSourceRepos: "getSkillSourceRepos",
+  GetSkillNames: "getSkillNames",
 
   // Plugin Routes
   GetPlugins: "getPlugins",

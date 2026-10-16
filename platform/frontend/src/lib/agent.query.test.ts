@@ -5,7 +5,7 @@ import { createElement, type ReactNode } from "react";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  useChatAgents,
+  useChatAgentBootstrap,
   useCreateProfile,
   usePinAgent,
   useProfile,
@@ -30,7 +30,7 @@ vi.mock("@archestra/shared", async (importOriginal) => {
     archestraApiSdk: {
       ...actual.archestraApiSdk,
       createAgent: vi.fn(),
-      getAllAgents: vi.fn(),
+      getAgents: vi.fn(),
       getChatAgentRoster: vi.fn(),
       getAgent: vi.fn(),
       getChatAgentMcpTools: vi.fn(),
@@ -206,9 +206,9 @@ describe("agent write mutations", () => {
     };
     const oldGateway = { ...savedGateway, toolExposureMode: "full" };
     sdk.updateAgent.mockResolvedValue({ data: savedGateway } as never);
-    sdk.getAllAgents
-      .mockResolvedValueOnce({ data: [oldGateway] } as never)
-      .mockResolvedValue({ data: [savedGateway] } as never);
+    sdk.getAgents
+      .mockResolvedValueOnce({ data: { data: [oldGateway] } } as never)
+      .mockResolvedValue({ data: { data: [savedGateway] } } as never);
     sdk.getChatAgentMcpTools
       .mockResolvedValueOnce({
         data: [{ name: "tools", tokens: 13000 }],
@@ -255,7 +255,7 @@ describe("chat agent roster", () => {
       error: undefined,
     } as never);
 
-    const { result } = setup(() => useChatAgents());
+    const { result } = setup(() => useChatAgentBootstrap());
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(sdk.getChatAgentRoster).toHaveBeenCalledOnce();
@@ -284,7 +284,7 @@ describe("chat agent roster", () => {
     });
     const wrapper = ({ children }: { children: ReactNode }) =>
       createElement(QueryClientProvider, { client: queryClient }, children);
-    const { result } = renderHook(() => useChatAgents(), { wrapper });
+    const { result } = renderHook(() => useChatAgentBootstrap(), { wrapper });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual([{ id: "agent-1", name: "Agent" }]);

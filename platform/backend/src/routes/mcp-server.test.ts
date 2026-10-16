@@ -4485,6 +4485,8 @@ describe("mcp server core route coverage", () => {
           id: agent.id,
           name: "Server Consumer",
           agentType: agent.agentType,
+          accessAllTools: agent.accessAllTools,
+          organizationId,
           scope: "personal",
           ownerId: user.id,
           ownerEmail: user.email,

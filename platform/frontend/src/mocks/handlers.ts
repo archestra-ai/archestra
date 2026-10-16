@@ -401,6 +401,12 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/mcp_server", installedServersSeed),
   // Org-wide auto-mode roster; per-test seeds override when a test needs
   // auto-mode agents in the usage surfaces.
+  ...getJson("/api/mcp_server/auto_mode_agents/page", {
+    data: [],
+    totalAutoCount: 0,
+    organizationId: organizationSeed.id,
+    pagination: { limit: 20, hasNext: false, nextCursor: null },
+  }),
   ...getJson("/api/mcp_server/auto_mode_agents", []),
   ...getJson("/api/secrets/type", { type: "DB", meta: {} }),
   ...getJson("/api/k8s/image-pull-secrets", []),

@@ -143,6 +143,53 @@ describe("useMcpInstallationStatusCacheSync", () => {
     ]);
   });
 
+  it("updates discovery while preserving paginated automatic usage in the shared cache prefix", () => {
+    let statusHandler:
+      | ((message: McpInstallationStatusMessage) => void)
+      | undefined;
+    subscribeMock.mockImplementation((type, handler) => {
+      if (type === "mcp_installation_status") statusHandler = handler;
+      return vi.fn();
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const serverKey = ["mcp-servers", {}];
+    const usageKey = [
+      "mcp-servers",
+      "automatic-agent-usage",
+      { limit: 20 },
+      false,
+    ];
+    const usage = {
+      data: [{ id: "agent-1", name: "Automatic" }],
+      pagination: { hasNextPage: false, nextCursor: null },
+    };
+    queryClient.setQueryData(serverKey, [
+      {
+        id: "server-1",
+        localInstallationStatus: "pending",
+        localInstallationError: null,
+      },
+    ]);
+    queryClient.setQueryData(usageKey, usage);
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    renderHook(() => useMcpInstallationStatusCacheSync(), { wrapper });
+    act(() =>
+      statusHandler?.({
+        type: "mcp_installation_status",
+        payload: { serverId: "server-1", status: "success", error: null },
+      }),
+    );
+    expect(queryClient.getQueryData(serverKey)).toMatchObject([
+      { id: "server-1", localInstallationStatus: "success" },
+    ]);
+    expect(queryClient.getQueryData(usageKey)).toEqual(usage);
+    expect(queryClient.getQueryState(usageKey)?.isInvalidated).toBe(true);
+  });
+
   it("invalidates external Skills when installation discovery completes", () => {
     let statusHandler:
       | ((message: McpInstallationStatusMessage) => void)

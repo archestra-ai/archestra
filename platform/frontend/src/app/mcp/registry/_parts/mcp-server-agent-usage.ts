@@ -60,6 +60,18 @@ export function deriveAgentUsage(params: {
   };
 }
 
+/** Same bytewise Unicode ordering as the bounded API's C collation. */
+export function compareAgentUsage(
+  a: Pick<AgentUsage, "name" | "ownerEmail" | "id">,
+  b: Pick<AgentUsage, "name" | "ownerEmail" | "id">,
+): number {
+  return (
+    compareCodePoints(a.name, b.name) ||
+    compareCodePoints(a.ownerEmail ?? "", b.ownerEmail ?? "") ||
+    compareCodePoints(a.id, b.id)
+  );
+}
+
 /**
  * Re-exported for this route's existing callers. It moved to `@/lib` once the
  * guardrails table needed the same owner qualifier for delegation tools.
@@ -103,4 +115,17 @@ function compareByName(a: AgentUsage, b: AgentUsage): number {
     (a.ownerEmail ?? "").localeCompare(b.ownerEmail ?? "") ||
     a.id.localeCompare(b.id)
   );
+}
+
+function compareCodePoints(left: string, right: string): number {
+  let a = 0,
+    b = 0;
+  while (a < left.length && b < right.length) {
+    const l = left.codePointAt(a) ?? 0,
+      r = right.codePointAt(b) ?? 0;
+    if (l !== r) return l - r;
+    a += l > 0xffff ? 2 : 1;
+    b += r > 0xffff ? 2 : 1;
+  }
+  return a < left.length ? 1 : b < right.length ? -1 : 0;
 }

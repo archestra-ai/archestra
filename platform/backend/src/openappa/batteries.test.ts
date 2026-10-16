@@ -107,13 +107,13 @@ describe("composing an organization's declarations", () => {
 
     expect(effective.lastError).toBeNull();
     expect(
-      (await OpenAppaBatteryInstallModel.list(organizationId)).map(
-        ({ batteryName, catalogId, status }) => ({
+      (await OpenAppaBatteryInstallModel.list(organizationId))
+        .map(({ batteryName, catalogId, status }) => ({
           batteryName,
           catalogId,
           status,
-        }),
-      ),
+        }))
+        .sort((a, b) => a.batteryName.localeCompare(b.batteryName)),
     ).toEqual([
       {
         batteryName: "archestra",

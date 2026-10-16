@@ -520,8 +520,12 @@ type Decision = {
   /** Why the replay ran no step for the call; absent when it ran one. */
   refusal?: string;
 };
-/** The catch-all routes to the no-op annotator, answered here with a review requirement. */
-const CATCH_ALL_MARK = "authority hitl";
+/**
+ * The catch-all routes to the no-op annotator, answered here with a mark only
+ * the catch-all authority reviews, so a battery rule asking for
+ * `human-approval` stays distinguishable.
+ */
+const CATCH_ALL_MARK = "authority catch-all";
 const CATCH_ALL: Decision = {
   status: "failed",
   actual: CATCH_ALL_MARK,
@@ -558,7 +562,17 @@ hint = "Ask the person running this session."
 [policy.authority.permits]
 attention = ["human-approval"]
 
+[[policy.authority]]
+name = "catch-all"
+hint = "Ask the person running this session."
+
+[policy.authority.permits]
+attention = ["catch-all"]
+
 [externals.authorities.hitl]
+builtin = "hitl"
+
+[externals.authorities.catch-all]
 builtin = "hitl"
 
 [externals.annotators.noop]
@@ -729,7 +743,7 @@ async function decide(
               version: 1,
               answer: {
                 delta: {},
-                requires: { history: [], attention: ["human-approval"] },
+                requires: { history: [], attention: ["catch-all"] },
                 emits: [],
               },
             },

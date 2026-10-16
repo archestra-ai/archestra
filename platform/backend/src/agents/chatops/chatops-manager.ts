@@ -108,6 +108,7 @@ import {
   buildHistorySkippedAttachmentsNote,
   buildSkippedAttachmentsNote,
   errorMessage,
+  isAgentListCommand,
   isLlmProviderAuthError,
   isSessionResetCommand,
   isSlackDmChannel,
@@ -513,6 +514,7 @@ export class ChatOpsManager {
     for (const slack of this.getSlackProviders()) {
       slack.setSiblingBotUserIds(slackBotUserIds);
     }
+    this.slackProvider?.setAgentsWithOwnBot([...this.slackAgentBots.keys()]);
 
     // Eager channel discovery for providers that support it (fire-and-forget).
     // Providers that can determine their workspace ID without an incoming message
@@ -679,12 +681,14 @@ export class ChatOpsManager {
     // Fallback: if the DM channel ID changed (e.g., after bot reinstallation),
     // the pending lookup above misses. Try to find an existing DM binding by
     // email and update its channelId to the new one, preserving the agentId.
+    // The person's DMs with agent bots are other channels and stay theirs.
     if (!binding && isDm && message.senderEmail && !pinnedAgentId) {
       const existingDm =
         await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
           organizationId,
           provider: provider.providerId,
           dmOwnerEmail: message.senderEmail,
+          scope: this.slackDmScope(provider),
         });
       if (existingDm) {
         binding = await ChatOpsChannelBindingModel.fulfillDmBinding({
@@ -717,35 +721,41 @@ export class ChatOpsManager {
           workspaceId: binding.workspaceId,
         });
       }
-      binding ??= await ChatOpsChannelBindingModel.upsertByChannel({
-        organizationId,
-        provider: provider.providerId,
-        channelId: message.channelId,
-        workspaceId: message.workspaceId,
-        workspaceName: provider.getWorkspaceName() ?? undefined,
-        channelName: isDm
-          ? `Direct Message - ${message.senderEmail}`
-          : ((await provider.getChannelName(message.channelId)) ?? undefined),
-        isDm,
-        dmOwnerEmail: isDm ? message.senderEmail : undefined,
-        agentId: pinnedAgentId,
-      });
+      binding ??= await ChatOpsChannelBindingModel.upsertByChannel(
+        {
+          organizationId,
+          provider: provider.providerId,
+          channelId: message.channelId,
+          workspaceId: message.workspaceId,
+          workspaceName: provider.getWorkspaceName() ?? undefined,
+          channelName: isDm
+            ? `Direct Message - ${message.senderEmail}`
+            : ((await provider.getChannelName(message.channelId)) ?? undefined),
+          isDm,
+          dmOwnerEmail: isDm ? message.senderEmail : undefined,
+          agentId: pinnedAgentId,
+        },
+        { staleDms: this.slackDmScope(provider) },
+      );
     } else if (!binding || !binding.agentId) {
       // Create binding early (without agent) so the DM/channel appears in the UI
       if (!binding) {
         const channelName = isDm
           ? `Direct Message - ${message.senderEmail}`
           : await provider.getChannelName(message.channelId);
-        binding = await ChatOpsChannelBindingModel.upsertByChannel({
-          organizationId,
-          provider: provider.providerId,
-          channelId: message.channelId,
-          workspaceId: message.workspaceId,
-          workspaceName: provider.getWorkspaceName() ?? undefined,
-          channelName: channelName ?? undefined,
-          isDm,
-          dmOwnerEmail: isDm ? message.senderEmail : undefined,
-        });
+        binding = await ChatOpsChannelBindingModel.upsertByChannel(
+          {
+            organizationId,
+            provider: provider.providerId,
+            channelId: message.channelId,
+            workspaceId: message.workspaceId,
+            workspaceName: provider.getWorkspaceName() ?? undefined,
+            channelName: channelName ?? undefined,
+            isDm,
+            dmOwnerEmail: isDm ? message.senderEmail : undefined,
+          },
+          { staleDms: this.slackDmScope(provider) },
+        );
       }
 
       // Frictionless onboarding: auto-assign a clear default agent instead of
@@ -826,17 +836,20 @@ export class ChatOpsManager {
     const channelName = isDm
       ? `Direct Message - ${senderEmail}`
       : await provider.getChannelName(selection.channelId);
-    await ChatOpsChannelBindingModel.upsertByChannel({
-      organizationId,
-      provider: provider.providerId,
-      channelId: selection.channelId,
-      workspaceId: selection.workspaceId,
-      workspaceName: provider.getWorkspaceName() ?? undefined,
-      channelName: channelName ?? undefined,
-      isDm,
-      dmOwnerEmail: isDm ? senderEmail : undefined,
-      agentId: selection.agentId,
-    });
+    await ChatOpsChannelBindingModel.upsertByChannel(
+      {
+        organizationId,
+        provider: provider.providerId,
+        channelId: selection.channelId,
+        workspaceId: selection.workspaceId,
+        workspaceName: provider.getWorkspaceName() ?? undefined,
+        channelName: channelName ?? undefined,
+        isDm,
+        dmOwnerEmail: isDm ? senderEmail : undefined,
+        agentId: selection.agentId,
+      },
+      { staleDms: this.slackDmScope(provider) },
+    );
 
     // Confirm the selection in the thread
     const message: IncomingChatMessage = {
@@ -966,6 +979,20 @@ export class ChatOpsManager {
 
     if (!binding) {
       return { success: true, error: "NO_BINDING" };
+    }
+
+    // "@router list": the agents this person can reach with "Agent > message".
+    if (
+      provider.providerId === "slack" &&
+      !provider.pinnedAgentId &&
+      isAgentListCommand(message.text)
+    ) {
+      return await this.replyWithAgentList({
+        provider,
+        message,
+        isDm: binding.isDm,
+        sendReply,
+      });
     }
 
     // A pinned bot answers as its own agent, whatever the channel is bound to.
@@ -3175,6 +3202,36 @@ export class ChatOpsManager {
     return { success: true, agentResponse: CHATOPS_SESSION_RESET_REPLY };
   }
 
+  private async replyWithAgentList(params: {
+    provider: ChatOpsProvider;
+    message: IncomingChatMessage;
+    isDm: boolean;
+    sendReply: boolean;
+  }): Promise<ChatOpsProcessingResult> {
+    const { provider, message, isDm, sendReply } = params;
+    const agents = await this.getAccessibleChatopsAgents({
+      senderEmail: message.senderEmail,
+      isDm,
+    });
+    const text =
+      agents.length === 0
+        ? "No agents are available for you here."
+        : [
+            "*Agents you can use:*",
+            ...agents.map((agent) => `• ${agent.name}`),
+            "",
+            `Start a message with the agent's name to send it there, for example _${agents[0].name} > what's new?_`,
+          ].join("\n");
+    if (sendReply) {
+      await provider.sendReply({
+        originalMessage: message,
+        text,
+        conversationReference: message.metadata?.conversationReference,
+      });
+    }
+    return { success: true, agentResponse: text };
+  }
+
   /**
    * The display name of a session's owner, for the reply footer of a group
    * chat without reply threads. There, unlike a thread (owned by whoever
@@ -3222,6 +3279,19 @@ export class ChatOpsManager {
       conversationReference:
         decision.originalMessage.metadata?.conversationReference,
     });
+  }
+
+  /**
+   * The DMs that belong to this Slack bot. A person has a separate DM with the
+   * router bot and with each agent bot, so one bot's DM must never replace
+   * another's (which would drop the agent they picked in the router's DM).
+   */
+  private slackDmScope(
+    provider: ChatOpsProvider,
+  ): { agentId: string } | { excludeAgentIds: string[] } | undefined {
+    if (provider.providerId !== "slack") return undefined;
+    if (provider.pinnedAgentId) return { agentId: provider.pinnedAgentId };
+    return { excludeAgentIds: [...this.slackAgentBots.keys()] };
   }
 
   async handleInteractiveApprovalDecision(

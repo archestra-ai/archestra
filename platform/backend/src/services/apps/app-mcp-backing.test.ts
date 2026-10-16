@@ -86,7 +86,8 @@ describe("app backing install scope", () => {
   }) => {
     const org = await makeOrganization();
     const author = await makeUser();
-    await makeMember(author.id, org.id, { role: "member" });
+    // Sharing with everyone or a role takes Full access on every app.
+    await makeMember(author.id, org.id, { role: "admin" });
     const team = await makeTeam(org.id, author.id);
     const app = await makeApp({
       access: "personal",

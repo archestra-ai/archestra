@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -27,7 +28,7 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("sonner");
 const api = "http://localhost:9000/api";
 const server = setupServer(
-  http.get("http://localhost:9000/api/agents/all", () =>
+  http.get("http://localhost:9000/api/agents/chat-roster", () =>
     HttpResponse.json([
       {
         id: "appa-agent",
@@ -158,6 +159,9 @@ function show() {
     ),
   };
 }
+/** The status badge, not the chart legend that shares its words. */
+const statusBadge = { selector: '[data-slot="badge"] > span' };
+
 test("the dashboard summarizes the latest run time and validation count with a direct link", async () => {
   revision = 1;
   server.use(
@@ -176,11 +180,15 @@ test("the dashboard summarizes the latest run time and validation count with a d
   expect(summary).not.toHaveTextContent("1 failed");
   expect(summary).not.toHaveTextContent("1 cannot run");
   expect(summary).toHaveTextContent(
-    `Last run executed on ${formatDate({ date: validationRun.createdAt })}.`,
+    `Last run ${formatDate({ date: validationRun.createdAt })}`,
   );
-  expect(summary).toHaveTextContent(/3\s*validations in this run/);
+  expect(
+    within(summary).getByRole("img", {
+      name: "Validation results over the last 2 runs",
+    }),
+  ).toBeVisible();
   expect(summary).not.toHaveTextContent("Git sync run");
-  expect(screen.getByText("Failed")).toBeVisible();
+  expect(screen.getByText("Failed", statusBadge)).toBeVisible();
   expect(
     screen.getByRole("link", { name: "View Validations" }),
   ).toHaveAttribute("href", "/openappa/validation");
@@ -218,7 +226,7 @@ test.each([
     ),
   );
   show();
-  expect(await screen.findByText(status)).toBeVisible();
+  expect(await screen.findByText(status, statusBadge)).toBeVisible();
 });
 
 test("draft and stale results are visibly qualified", async () => {
@@ -232,7 +240,8 @@ test("draft and stale results are visibly qualified", async () => {
   const summary = await screen.findByRole("region", {
     name: "Last validation run",
   });
-  expect(await screen.findByText("Failed (draft, outdated)")).toBeVisible();
+  expect(await screen.findByText("Failed (draft)")).toBeVisible();
+  expect(screen.queryByText(/outdated/)).not.toBeInTheDocument();
   expect(summary).toHaveTextContent(
     formatDate({ date: validationRun.createdAt }),
   );
@@ -256,18 +265,33 @@ test("unavailable runs show cannot run without detailed errors or invented count
   const summary = await screen.findByRole("region", {
     name: "Last validation run",
   });
-  expect(await screen.findByText("Cannot run")).toBeVisible();
+  expect(await screen.findByText("Cannot run", statusBadge)).toBeVisible();
   expect(summary).not.toHaveTextContent(
     "GitHub denied access to validation files",
   );
-  expect(summary).not.toHaveTextContent("0 passed");
+  expect(summary).not.toHaveTextContent("passed");
+  expect(summary).toHaveTextContent("could not run");
 });
 
 test("no saved runs is distinguished from a history-loading failure", async () => {
   revision = 1;
+  server.use(
+    http.get(`${api}/openappa/policy-tests`, () =>
+      HttpResponse.json({
+        source: "local",
+        files: [],
+        version: "empty",
+        sourceCommit: null,
+        directory: "traces",
+        activeDirectory: "traces",
+        error: null,
+      }),
+    ),
+  );
   show();
-  expect(await screen.findByText("No runs yet.")).toBeVisible();
-  expect(screen.queryByText("Passed")).not.toBeInTheDocument();
+  expect(await screen.findByText("No validations yet")).toBeVisible();
+  expect(screen.getByText("Write a validation")).toBeVisible();
+  expect(screen.queryByText("Passed", statusBadge)).not.toBeInTheDocument();
 });
 
 test("failed history loading is retryable rather than presented as empty or passing", async () => {
@@ -282,11 +306,11 @@ test("failed history loading is retryable rather than presented as empty or pass
   );
   show();
   expect(await screen.findByText("Could not load validation")).toBeVisible();
-  expect(screen.queryByText("No runs yet.")).not.toBeInTheDocument();
-  expect(screen.queryByText("Passed")).not.toBeInTheDocument();
+  expect(screen.queryByText("No validations yet")).not.toBeInTheDocument();
+  expect(screen.queryByText("Passed", statusBadge)).not.toBeInTheDocument();
   unavailable = false;
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-  expect(await screen.findByText("Failed")).toBeVisible();
+  expect(await screen.findByText("Failed", statusBadge)).toBeVisible();
 });
 
 test("the dashboard adopts a newer result when history refreshes", async () => {
@@ -304,11 +328,13 @@ test("the dashboard adopts a newer result when history refreshes", async () => {
     client.invalidateQueries({ queryKey: ["openappa-policy-test-runs"] }),
   );
   await waitFor(() => {
-    expect(screen.getByText("Passed")).toBeVisible();
-    expect(screen.queryByText("Failed")).not.toBeInTheDocument();
+    expect(screen.getByText("Passed", statusBadge)).toBeVisible();
+    expect(screen.queryByText("Failed", statusBadge)).not.toBeInTheDocument();
     expect(
-      screen.getByRole("region", { name: "Last validation run" }),
-    ).toHaveTextContent(/1\s*validation in this run/);
+      screen.getByRole("img", {
+        name: "Validation results over the last 1 run",
+      }),
+    ).toBeVisible();
   });
 });
 

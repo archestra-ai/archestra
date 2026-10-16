@@ -967,16 +967,12 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const [connections, agents] = await Promise.all([
         AgentToolModel.getAllDelegationConnections(organizationId),
-        AgentModel.findByOrganizationId(organizationId, { agentType: "agent" }),
+        AgentModel.findDelegationGraphNodes(organizationId),
       ]);
 
       return reply.send({
         connections,
-        agents: agents.map((a) => ({
-          id: a.id,
-          name: a.name,
-          agentType: a.agentType,
-        })),
+        agents,
       });
     },
   );

@@ -1,6 +1,6 @@
 import {
   assertMobileCostLegend,
-  modelStatistics,
+  costStatistics,
 } from "../../e2e-tests/utils/cost-chart-legend.mjs";
 import { test } from "./fixtures";
 
@@ -9,30 +9,11 @@ test("cost chart legends wrap and the explorer stays within a phone viewport", a
   page,
   mswControl,
 }) => {
-  await mswControl.registerMany([
-    { method: "get", url: "/api/statistics/models", body: modelStatistics },
-    {
-      method: "get",
-      url: "/api/statistics/users",
-      body: {
-        data: [],
-        pagination: {
-          limit: 100,
-          offset: 0,
-          total: 0,
-          totalPages: 0,
-          currentPage: 1,
-          hasNext: false,
-          hasPrev: false,
-        },
-      },
-    },
-    {
-      method: "get",
-      url: "/api/statistics/cost-savings",
-      body: { totalActualCost: 420, totalSubscriptionCost: 0, timeSeries: [] },
-    },
-  ]);
+  await mswControl.use({
+    method: "get",
+    url: "/api/statistics/costs",
+    body: costStatistics,
+  });
   await page.goto("/llm/costs?timeframe=24h");
   await assertMobileCostLegend(page);
 });

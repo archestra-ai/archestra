@@ -235,17 +235,14 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_WHOAMI_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   "yell",
-  "superyell",
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   "get_guardrails_policy",
   "get_openappa_policy_tests",
   "run_openappa_policy_tests",
-  "discover_openappa_validation_scenarios",
-  "draft_openappa_validation_scenario",
-  "preview_openappa_validation_change",
-  "publish_openappa_validation_change",
+  "preview_guardrails_validation_change",
+  "update_guardrails_validation",
   "get_openappa_yell",
   "resolve_openappa_yell",
   "list_openappa_yells",
@@ -266,6 +263,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
   "create_guardrails_repository",
   "connect_guardrails_repository",
+  "sync_guardrails_repository",
   TOOL_CREATE_AGENT_SHORT_NAME,
   TOOL_GET_AGENT_SHORT_NAME,
   TOOL_LIST_AGENTS_SHORT_NAME,
@@ -457,17 +455,14 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   whoami: "identity",
   execute_remedy_plan: "openappa",
   yell: "openappa",
-  superyell: "openappa",
   get_remedy_plans: "openappa",
   list_peer_messages: "openappa",
   read_peer_message: "openappa",
   get_guardrails_policy: "openappa",
   get_openappa_policy_tests: "openappa",
   run_openappa_policy_tests: "openappa",
-  discover_openappa_validation_scenarios: "openappa",
-  draft_openappa_validation_scenario: "openappa",
-  preview_openappa_validation_change: "openappa",
-  publish_openappa_validation_change: "openappa",
+  preview_guardrails_validation_change: "openappa",
+  update_guardrails_validation: "openappa",
   get_openappa_yell: "openappa",
   resolve_openappa_yell: "openappa",
   list_openappa_yells: "openappa",
@@ -481,6 +476,7 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   get_guardrails_policy_change_status: "openappa",
   create_guardrails_repository: "openappa",
   connect_guardrails_repository: "openappa",
+  sync_guardrails_repository: "openappa",
   list_runtime_credentials: "openappa",
   get_runtime_credential: "openappa",
   create_runtime_credential: "openappa",
@@ -829,16 +825,14 @@ export const REQUIRED_OPENAPPA_TOOL_SHORT_NAMES = [
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   "yell",
-  "superyell",
 ] as const satisfies readonly ArchestraToolShortName[];
 
 /**
- * The OpenAPPA feedback tools. superyell sends the same report as yell, then
- * turns OpenAPPA off for the session, so both are offered and refused alike.
+ * The OpenAPPA feedback tool. With break the glass on, a yell also turns
+ * OpenAPPA off for the session that sends it.
  */
 export const YELL_TOOL_SHORT_NAMES = [
   "yell",
-  "superyell",
 ] as const satisfies readonly ArchestraToolShortName[];
 export type YellToolShortName = (typeof YELL_TOOL_SHORT_NAMES)[number];
 
@@ -878,8 +872,8 @@ const IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAME_SET: ReadonlySet<string> = new Set(
 export const OPENAPPA_POLICY_CHANGE_TOOL_SHORT_NAMES = [
   "preview_guardrails_policy_change",
   "update_guardrails_policy",
-  "preview_openappa_validation_change",
-  "publish_openappa_validation_change",
+  "preview_guardrails_validation_change",
+  "update_guardrails_validation",
 ] as const satisfies readonly ArchestraToolShortName[];
 
 export function isImplicitOpenAppaReadToolShortName(
@@ -1158,8 +1152,10 @@ export function isPrefillExemptArchestraToolShortName(
 }
 
 /**
- * tools that stay top-level in `tools/list` regardless of an agent's
- * exposure mode. `ask_user` is a conversation primitive (choice form /
+ * Tools kept top-level by internal chat in progressive exposure mode.
+ * External MCP gateways keep only `ask_user` from this set; they discover the
+ * skill, sandbox and file capabilities through search_tools/run_tool.
+ * `ask_user` is a conversation primitive (choice form /
  * native elicitation), not a capability to discover. skills and sandbox
  * runtime interaction are progressive-disclosure mechanisms, so hiding their
  * discover/activate/read/run and file-transfer path behind
@@ -1189,6 +1185,38 @@ export function isAlwaysExposedArchestraToolShortName(
   shortName: string,
 ): boolean {
   return ALWAYS_EXPOSED_ARCHESTRA_TOOL_SHORT_NAME_SET.has(shortName);
+}
+
+// These tools need an internal chat and its open app; external MCP clients
+// cannot use them, whether called directly or through run_tool.
+const CHAT_ONLY_ARCHESTRA_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
+  TOOL_RENDER_APP_SHORT_NAME,
+  TOOL_COPY_FILE_SHORT_NAME,
+]);
+
+export function isChatOnlyArchestraToolShortName(
+  shortName: string | null,
+): boolean {
+  return (
+    shortName !== null && CHAT_ONLY_ARCHESTRA_TOOL_SHORT_NAMES.has(shortName)
+  );
+}
+
+// Run handles remain usable without an assignment row. Gateways discover these
+// controls through search/run; internal chat keeps their direct declarations.
+export const RUN_CONTROL_ARCHESTRA_TOOL_SHORT_NAMES = [
+  TOOL_GET_RUN_SHORT_NAME,
+  TOOL_LIST_RUNS_SHORT_NAME,
+  TOOL_STEER_RUN_SHORT_NAME,
+  TOOL_CANCEL_RUN_SHORT_NAME,
+] as const satisfies readonly ArchestraToolShortName[];
+
+export function isRunControlArchestraToolShortName(
+  shortName: string | null,
+): boolean {
+  return RUN_CONTROL_ARCHESTRA_TOOL_SHORT_NAMES.some(
+    (candidate) => candidate === shortName,
+  );
 }
 
 export function buildElicitationMandateInstruction(params?: {

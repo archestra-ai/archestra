@@ -1,7 +1,8 @@
 import type { CreatedBy } from "@archestra/shared";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import { ApiError } from "@/types";
+import { idArrayCondition } from "./id-array-condition";
 
 /**
  * Resolves creator user ids into the uniform `CreatedBy` shape the "Created by"
@@ -104,7 +105,9 @@ class CreatedByModel {
             name: schema.serviceAccountsTable.name,
           })
           .from(schema.serviceAccountsTable)
-          .where(inArray(schema.serviceAccountsTable.id, serviceAccountIds))
+          .where(
+            idArrayCondition(schema.serviceAccountsTable.id, serviceAccountIds),
+          )
       : [];
     const rows = humanIds.length
       ? await db
@@ -114,7 +117,7 @@ class CreatedByModel {
             email: schema.usersTable.email,
           })
           .from(schema.usersTable)
-          .where(inArray(schema.usersTable.id, humanIds))
+          .where(idArrayCondition(schema.usersTable.id, humanIds))
       : [];
 
     const creators = new Map<string, CreatedBy>(

@@ -40,6 +40,7 @@ export async function summarizeHitlReview(params: {
   if (cached !== undefined) return cached ?? undefined;
   let summary: string | undefined;
   try {
+    if (!(await reserveSummaryBudget(session))) return undefined;
     summary = await generateSummary({ session, review, prose });
   } catch {
     // Transient failures (including the wall timeout) are not cached. Never
@@ -83,6 +84,29 @@ const SUMMARY_PROMPT_VERSION = 2;
 
 const SUMMARY_TTL_MS = 10 * TimeInMs.Minute;
 const FAILURE_TTL_MS = TimeInMs.Minute;
+
+/** Bound shared-key spend even when an agent varies every blocked payload. */
+async function reserveSummaryBudget(
+  session: OpenAppaSession,
+): Promise<boolean> {
+  const window = Math.floor(Date.now() / TimeInMs.Minute);
+  const scope = createHash("sha256")
+    .update(session.organization_id)
+    .digest("base64url");
+  const orgKey: AllowedCacheKey = `${CacheKey.OpenAppaHitlSummary}-budget-${scope}-${window}`;
+  const caller = createHash("sha256")
+    .update(session.caller_id ?? "")
+    .digest("base64url");
+  const callerKey: AllowedCacheKey = `${orgKey}-${caller}`;
+  return cacheManager.withLock(orgKey, async (cache) => {
+    const orgCount = (await cache.get<number>(orgKey)) ?? 0;
+    const callerCount = (await cache.get<number>(callerKey)) ?? 0;
+    if (orgCount >= 20 || callerCount >= 5) return false;
+    await cache.set(orgKey, orgCount + 1, 2 * TimeInMs.Minute);
+    await cache.set(callerKey, callerCount + 1, 2 * TimeInMs.Minute);
+    return true;
+  });
+}
 
 /** Hard wall for the model call; a summary must never delay a review. */
 const SUMMARY_TIMEOUT_MS = 8_000;

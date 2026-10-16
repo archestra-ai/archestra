@@ -17,6 +17,7 @@ import {
 import {
   ApiError,
   type ClientType,
+  CONNECTION_SETUP_MAX_SKILLS,
   constructResponseSchema,
   DeleteObjectResponseSchema,
   deriveSkillShareLinkStatus,
@@ -62,7 +63,10 @@ const SkillShareLinkResponseSchema = SelectSkillShareLinkSchema.omit({
 const SkillShareLinkBodySchema = z.object({
   // upper bound sized for the "share all org skills" UX at /connection,
   // which snapshots the full org skill set in one POST.
-  skillIds: z.array(z.string().uuid()).max(500).optional(),
+  skillIds: z
+    .array(z.string().uuid())
+    .max(CONNECTION_SETUP_MAX_SKILLS)
+    .optional(),
   pluginIds: z
     .array(z.string().uuid())
     .max(PLUGIN_DELIVERY_MAX_COUNT)

@@ -37,11 +37,20 @@ const policy = {
 };
 const declarationsUrl = `${origin}/api/openappa/policy-declarations`;
 const effectiveUrl = `${origin}/api/openappa/effective-policy`;
+const current = {
+  served: {
+    kind: "current",
+    rootRevision: 1,
+    composedAt: "2026-01-01T00:00:00.000Z",
+  },
+  refusal: null,
+};
 const declarations = {
   batteries: [],
   unusedAliases: [],
   rootRevision: 1,
   lastError: null,
+  composition: current,
   managedInGithub: false,
   heldPull: null,
 };
@@ -62,6 +71,7 @@ function battery(
     servers: [],
     credentials: [],
     helpers: [],
+    served: { status, composed },
   };
 }
 const effective = {
@@ -73,6 +83,7 @@ const effective = {
   compiledAt: "2026-01-01T00:00:00.000Z",
   lastError: null,
   lastErrorAt: null,
+  composition: current,
 };
 let effectiveRequests = 0;
 const server = setupServer();
@@ -238,19 +249,62 @@ test("the editor footer counts the composed batteries and the unenforced ones", 
   ).toHaveAttribute("href", "/openappa/batteries?status=broken");
 });
 
-test("a failed composition says so instead of counting batteries", async () => {
+test("a refusal that keeps an earlier composition says which one stays enforced", async () => {
+  server.use(
+    http.get(declarationsUrl, () =>
+      HttpResponse.json({
+        ...declarations,
+        batteries: [battery("acme", "active", 3)],
+        rootRevision: 2,
+        lastError: "acme: unknown trust rank",
+        composition: {
+          served: {
+            kind: "previous",
+            rootRevision: 1,
+            composedAt: "2026-01-01T00:00:00.000Z",
+            batteries: [{ name: "acme", status: "active", composed: true }],
+          },
+          refusal: {
+            message: "acme: unknown trust rank",
+            at: "2026-01-02T00:00:00.000Z",
+            rootRevision: 2,
+          },
+        },
+      }),
+    ),
+  );
+  mount();
+  const summary = await screen.findByTestId("composition-summary");
+  await waitFor(() => expect(summary).toHaveAttribute("data-stale", "true"));
+  expect(summary).not.toHaveAttribute("data-failed");
+  expect(summary).toHaveAttribute("data-not-enforced", "0");
+  expect(summary).toHaveTextContent(
+    "Revision 2 was refused · an earlier composition stays enforced",
+  );
+});
+
+test("a refusal with no earlier composition says nothing is enforced instead of counting batteries", async () => {
   server.use(
     http.get(declarationsUrl, () =>
       HttpResponse.json({
         ...declarations,
         batteries: [battery("acme", "active", 3)],
         lastError: "acme: unknown trust rank",
+        composition: {
+          served: { kind: "root_only" },
+          refusal: {
+            message: "acme: unknown trust rank",
+            at: "2026-01-02T00:00:00.000Z",
+            rootRevision: 1,
+          },
+        },
       }),
     ),
   );
   mount();
   const summary = await screen.findByTestId("composition-summary");
   await waitFor(() => expect(summary).toHaveAttribute("data-failed", "true"));
+  expect(summary).toHaveTextContent("Composition failed: nothing is enforced");
   expect(summary).not.toHaveAttribute("data-batteries");
 });
 
@@ -260,7 +314,21 @@ test("the effective policy is fetched only once its view is selected", async () 
       effectiveRequests += 1;
       return HttpResponse.json({
         ...effective,
+        rootRevision: 2,
         lastError: "acme: unknown trust rank",
+        composition: {
+          served: {
+            kind: "previous",
+            rootRevision: 1,
+            composedAt: "2026-01-01T00:00:00.000Z",
+            batteries: [],
+          },
+          refusal: {
+            message: "acme: unknown trust rank",
+            at: "2026-01-02T00:00:00.000Z",
+            rootRevision: 2,
+          },
+        },
       });
     }),
   );
@@ -282,10 +350,13 @@ test("the effective policy is fetched only once its view is selected", async () 
     "acme: unknown trust rank",
   );
   expect(screen.getByTestId("effective-policy")).toHaveAttribute(
-    "data-refused",
-    "true",
+    "data-composition",
+    "refused-serving-previous",
   );
-  expect(screen.getByText("Last composed policy")).toBeVisible();
+  expect(screen.getByTestId("effective-policy-error")).toHaveTextContent(
+    "Revision 2 was refused. The runtime still enforces this document, composed from revision 1.",
+  );
+  expect(screen.getByText("Still enforced: revision 1")).toBeVisible();
   expect(
     screen.getByRole("textbox", { name: "Effective guardrails policy" }),
   ).toHaveAttribute("readonly");
@@ -330,6 +401,40 @@ test("the composed view lists no stub while every battery is active", async () =
   expect(
     screen.queryByTestId("effective-policy-stubs"),
   ).not.toBeInTheDocument();
+});
+
+test("the composed view says which annotators it keeps for earlier conversations and which it no longer keeps", async () => {
+  server.use(
+    http.get(effectiveUrl, () =>
+      HttpResponse.json({
+        ...effective,
+        retained: {
+          horizonDays: 30,
+          livenessKnown: true,
+          kept: [
+            {
+              name: "a.tool-call",
+              binding: "https://judge-a.test/annotate",
+              liveRoots: 2,
+              lastActivityAt: "2026-01-01T00:00:00.000Z",
+              retiresAt: "2026-01-31T00:00:00.000Z",
+            },
+          ],
+          inactive: [{ name: "old.judge", binding: 'builtin "jev"' }],
+          dropped: [],
+        },
+      }),
+    ),
+  );
+  mount();
+  await userEvent.click(await screen.findByRole("tab", { name: "Effective" }));
+  const notice = await screen.findByTestId("effective-policy-retained");
+  expect(notice).toHaveTextContent(
+    "a.tool-call (https://judge-a.test/annotate): 2 active conversations, kept until Jan 31, 2026 unless one is active again.",
+  );
+  expect(notice).toHaveTextContent(
+    "No longer kept: old.judge, unused by any conversation for 30 days.",
+  );
 });
 
 test("the source picker and revision show only in the Source view", async () => {

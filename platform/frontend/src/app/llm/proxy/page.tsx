@@ -66,7 +66,7 @@ import type {
   RequestCredential,
   RequestTarget,
 } from "@/components/virtual-key-request-example";
-import { useProfiles } from "@/lib/agent.query";
+import { useAgentOptions } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import config from "@/lib/config/config";
@@ -901,7 +901,7 @@ function OauthClientCreateFlow({
     enabled: open,
   });
   const llmCreate = useCreateOauthClient();
-  const { data: gateways = [] } = useProfiles({
+  const { data: gateways = [] } = useAgentOptions({
     filters: { agentTypes: ["mcp_gateway", "agent"] },
   });
   const [createdCredentials, setCreatedCredentials] =

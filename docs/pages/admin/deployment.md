@@ -2,7 +2,7 @@
 title: Deployment
 description: Install Archestra with Docker or Helm and configure production access
 order: 1
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-15
 ---
 
 Use Docker to try Archestra locally. Use Helm to run it in Kubernetes with a persistent database, workers, and MCP server workloads. The UI listens on port 3000; the backend listens on port 9000.
@@ -28,7 +28,7 @@ You need a Kubernetes cluster, Helm 3 or later, and `kubectl` access. Self-hoste
 Pin the chart version and review its defaults:
 
 ```bash
-export ARCHESTRA_VERSION="1.4.0-rc.42" # x-release-please-version
+export ARCHESTRA_VERSION="1.4.0-rc.43" # x-release-please-version
 helm show values \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --version "$ARCHESTRA_VERSION" > values.yaml
@@ -87,6 +87,20 @@ Provide the same database URL to the migration Job and application. The chart ru
 For Knowledge Base vector storage, PostgreSQL must have the pgvector extension available and the migration user must be able to create the extension, or an administrator must install it first.
 
 Set `archestra.database.connectionBudget` to size query pools across peak web and worker pods, including rollout overlap. Leave room in PostgreSQL for other clients and reserved connections. Each peak pod needs at least 13 budgeted connections; the chart rejects smaller budgets. A fixed `archestra.database.poolMax` or [`ARCHESTRA_DATABASE_POOL_MAX`](/docs/reference/configuration#ARCHESTRA_DATABASE_POOL_MAX) overrides budget sizing. Complete one rollout before starting another.
+
+### Cost Statistics Index
+
+For large interaction histories, an optional covering index reduces database reads for Costs statistics. It adds index storage and maintenance work to interaction inserts.
+
+After the database migrations finish, run this command once from `/app/backend` in the application container during a database maintenance window:
+
+```bash
+node scripts/create-statistics-index.mjs
+```
+
+The command uses [`ARCHESTRA_DATABASE_URL`](/docs/reference/configuration#ARCHESTRA_DATABASE_URL). Connect directly to PostgreSQL or through session pooling, using credentials that can create indexes. Transaction pooling is unsupported.
+
+The build runs concurrently with interaction writes and consumes database I/O while it scans. It stops after a five-second lock wait or a thirty-minute statement timeout. Rerunning preserves a valid index and rebuilds an invalid index left by an interrupted build. Successful output reports `created`, `already_valid`, or `rebuilt_invalid`.
 
 ### Scaling
 
@@ -150,6 +164,8 @@ Pin an exact chart version or image tag from [GitHub Releases](https://github.co
 2. Read release notes for migration requirements.
 3. Test the selected version in staging.
 4. Apply the Helm upgrade above and check rollout and migration Job status.
+
+On the first v1.4 startup, Archestra converts legacy sharing and role permissions before serving API traffic. One replica performs the conversion; other replicas wait, and later restarts skip it. During startup, `/health` responds successfully while `/ready` returns HTTP 503 until the API is ready, so large conversions do not exhaust the Kubernetes startup probe budget.
 
 During shutdown, Archestra stops accepting new model requests and gives active requests up to 60 seconds to finish. Requests that outlast this window can still lose their connection. The Helm chart sets `archestra.terminationGracePeriodSeconds` to 120; keep it at least this high so the container can finish shutdown.
 

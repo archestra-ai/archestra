@@ -7,6 +7,7 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { userHasPermission } from "@/auth";
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import {
@@ -22,6 +23,7 @@ import {
 import { CredentialAccess } from "@/services/credential-access";
 import { githubUserConnectionManager } from "@/services/github-user-connection";
 import {
+  ApiError,
   constructResponseSchema,
   InsertRuntimeCredentialDefinitionSchema,
   RuntimeCredentialDefinitionViewSchema,
@@ -152,11 +154,33 @@ const runtimeCredentialRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { initialGrants, ...definitionInput } = request.body;
+      // A credential just for you is self-service: each person connects
+      // their own value, and only its author can reach it. Organization
+      // credentials and shared ones need the create permission.
+      const canCreateShared = await userHasPermission(
+        request.user.id,
+        request.organizationId,
+        "credential",
+        "create",
+      );
+      if (!canCreateShared) {
+        // Both flags must be sent, so a schema default never decides who
+        // can reach the credential.
+        const personalOnly =
+          definitionInput.allowPersonal === true &&
+          definitionInput.allowOrganization === false &&
+          !initialGrants?.length;
+        if (!personalOnly)
+          throw new ApiError(
+            403,
+            "Adding organization or shared credentials needs the credential:create permission.",
+          );
+      }
       const definition = await createRuntimeCredentialDefinition({
         organizationId: request.organizationId,
         userId: request.user.id,
         definition: definitionInput,
-        initialGrants,
+        initialGrants: canCreateShared ? initialGrants : [],
       });
       return reply.send(definition);
     },

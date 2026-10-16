@@ -100,7 +100,6 @@ async function mockProject(
     body: {
       ...permissions,
       project: ["read", "create", "update", "delete"],
-      scheduledTask: ["read", "create", "update", "delete"],
       file: ["manage"],
     },
   });

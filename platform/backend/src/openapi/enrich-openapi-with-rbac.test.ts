@@ -39,6 +39,25 @@ describe("enrichOpenApiWithRbac", () => {
     );
   });
 
+  it.each([
+    RouteId.GetAgentOptions,
+    RouteId.GetChatAgentRoster,
+  ])("documents %s as dynamically authorized", (operationId) => {
+    const spec = { paths: { "/api/agents/roster": { get: { operationId } } } };
+    const operation = enrichOpenApiWithRbac(spec).paths["/api/agents/roster"]
+      .get as {
+      description?: string;
+      "x-required-permissions"?: { kind: string; note: string };
+    };
+    expect(operation["x-required-permissions"]).toMatchObject({
+      kind: "dynamic",
+      note: expect.stringContaining("agent:read"),
+    });
+    expect(operation.description).not.toContain(
+      "None (no additional RBAC permission required)",
+    );
+  });
+
   it("documents auth-only routes as requiring no additional RBAC permission", () => {
     const spec = {
       paths: {
@@ -74,6 +93,34 @@ describe("enrichOpenApiWithRbac", () => {
     expect(getOperation.description).toContain(
       "None (no additional RBAC permission required)",
     );
+  });
+
+  it("documents that a credential just for the caller needs no permission", () => {
+    const spec = {
+      paths: {
+        "/api/credentials": {
+          post: {
+            operationId: RouteId.CreateRuntimeCredential,
+            description: "Create a credential definition",
+          },
+        },
+      },
+    };
+
+    const enriched = enrichOpenApiWithRbac(spec);
+    const createOperation = enriched.paths["/api/credentials"].post as {
+      "x-required-permissions"?: {
+        kind: "dynamic" | "none" | "static";
+        note?: string;
+        permissions: string[];
+      };
+    };
+
+    expect(createOperation["x-required-permissions"]).toEqual({
+      kind: "dynamic",
+      note: expect.stringContaining("require `credential:create`"),
+      permissions: [],
+    });
   });
 
   it("documents dynamic agent RBAC checks with an explicit note", () => {

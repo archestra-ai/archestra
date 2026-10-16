@@ -18,8 +18,8 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { getVisibleDocsUrl } from "@/lib/docs/docs";
 import {
   useGuardrailsDeployment,
+  useUpdateBreakTheGlassEnabled,
   useUpdateGuardrailsDeployment,
-  useUpdateSuperyellEnabled,
   useUpdateUnsupportedClientAction,
 } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -78,29 +78,29 @@ export function OpenAppaEnforcementSetting() {
 }
 
 /**
- * Whether an agent may call superyell: send a report, then turn OpenAPPA off
- * for its own session once a person approves.
+ * Whether a yell also turns OpenAPPA off for the session that sends it, so a
+ * stuck agent can get unblocked.
  */
-export function OpenAppaSuperyellSetting() {
+export function OpenAppaBreakTheGlassSetting() {
   const deployment = useGuardrailsDeployment();
-  const update = useUpdateSuperyellEnabled();
+  const update = useUpdateBreakTheGlassEnabled();
   const { data: canManage } = useHasPermissions({
     organizationSettings: ["update"],
   });
-  const enabled = Boolean(deployment.data?.superyellEnabled);
+  const enabled = Boolean(deployment.data?.breakTheGlassEnabled);
   return (
     <SettingsBlock
-      id="superyell"
-      title="Allow superyell"
+      id="break-the-glass"
+      title="Break the glass"
       description={
         enabled
-          ? "Agents can call superyell. After a person approves, it sends a report and turns guardrails off for that one session."
-          : "Agents can't call superyell, so guardrails can't be turned off for a session. They can still report problems with yell."
+          ? "A yell will disable guardrails for the session, unblocking your stuck agents."
+          : "A yell only sends a report. Guardrails stay on for the session."
       }
       control={
         deployment.data ? (
           <Switch
-            aria-label="Allow superyell"
+            aria-label="Break the glass"
             checked={enabled}
             disabled={
               !canManage || !deployment.data.featureEnabled || update.isPending

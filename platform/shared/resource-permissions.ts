@@ -38,11 +38,6 @@ export const ScopedResourceSchema = z.enum([
   // Like a service account the organization owns it; who may see, connect,
   // change or delete one is a grant on it, or at \`*\` for every credential.
   "credential",
-  // Authority over a whole class of thing, with no object to sit on. These
-  // replace the `admin` role actions that let someone read rows they did not
-  // create. They are granted at `*` and nowhere else, so they appear on the
-  // organization Permissions screen and never on an object's own tab.
-  "scheduledTask",
   // Retained only to decode historical stored policies during migration.
   "log",
   "auditLog",
@@ -57,9 +52,7 @@ export const ManagedResourceSchema = ScopedResourceSchema.exclude([
 ]);
 
 /** Resources with no individual object policy. Logs use role actions instead. */
-export const ORGANIZATION_WIDE_RESOURCES = new Set<ScopedResource>([
-  "scheduledTask",
-]);
+export const ORGANIZATION_WIDE_RESOURCES = new Set<ScopedResource>();
 
 export const ResourcePermissionActionSchema = z.enum([
   "read",
@@ -94,6 +87,34 @@ export const ResourcePermissionGrantSchema = z.object({
 });
 
 export type ScopedResource = z.infer<typeof ScopedResourceSchema>;
+
+/** Singular, for sentences. `resourceLabels` is plural and reads as "every agents". */
+export const scopedResourceNouns: Record<ScopedResource, string> = {
+  conversation: "chat session",
+  agentRun: "runtime session",
+  agent: "agent",
+  skill: "skill",
+  app: "app",
+  llmModel: "model",
+  mcpGateway: "MCP gateway",
+  mcpRegistry: "MCP registry entry",
+  project: "project",
+  plugin: "plugin",
+  knowledgeBase: "knowledge base",
+  knowledgeConnector: "connector",
+  knowledgeFile: "file",
+  llmVirtualKey: "virtual key",
+  llmProviderApiKey: "provider key",
+  externalAgent: "external agent",
+  oauthClient: "OAuth client",
+  mcpOauthClient: "OAuth client",
+  llmOauthClient: "OAuth client",
+  environment: "environment",
+  log: "log",
+  auditLog: "audit log entry",
+  serviceAccount: "service account",
+  credential: "credential",
+};
 export type ResourcePermissionAction = z.infer<
   typeof ResourcePermissionActionSchema
 >;

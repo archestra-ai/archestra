@@ -3,6 +3,7 @@ import type { AppaPreparedRequest } from "@/openappa/request";
 import type { AppaChatSource, OpenAppaSession } from "@/openappa/service";
 import type { AppaSessionIdentity } from "@/openappa/wire";
 import type { GatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
+import type { ApiError } from "@/types/api";
 import type { CommonToolResult } from "@/types/common-llm-format";
 
 export const APPA_PLUGIN_TRUSTED_CONTEXT: unique symbol = Symbol(
@@ -59,6 +60,8 @@ export type AppaTrustedContext = {
    * the new user turn.
    */
   thread?: "create" | "continue";
+  /** Deferred until the adapter has authenticated the unchanged session lineage. */
+  childReturnRefusal?: ApiError;
 };
 
 export type AppaMatchContext = {
@@ -144,6 +147,14 @@ export type AppaClientAdapter = {
    * can carry a denial while the gateway notice tool is not declared yet.
    */
   readonly pendingServersTool?: string;
+  /**
+   * What the person does when this client sends a request without the
+   * gateway's tools: where to see the gateway's state in the client, how to
+   * sign in to it, and whether to resend or start a new session. Shown with a
+   * denial the proxy cannot turn into a remedy. `serverName` is the gateway
+   * as the client lists it.
+   */
+  gatewayToolsHint?(serverName: string): string;
   /**
    * Reads the trajectory identity the client itself puts on the wire: the id
    * it keeps stable across a resumed or compacted conversation, so a resume

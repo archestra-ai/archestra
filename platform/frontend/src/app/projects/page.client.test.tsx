@@ -7,7 +7,7 @@ import {
 } from "@testing-library/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useInternalAgents } from "@/lib/agent.query";
+import { useInternalAgentOptions } from "@/lib/agent.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
@@ -307,7 +307,7 @@ vi.mock("@/lib/projects/projects.query", () => ({
 }));
 
 vi.mock("@/lib/agent.query", () => ({
-  useInternalAgents: vi.fn(() => ({ data: [] })),
+  useInternalAgentOptions: vi.fn(() => ({ data: [] })),
 }));
 
 vi.mock("@/lib/teams/team.query");
@@ -505,7 +505,7 @@ describe("ProjectsPageClient", () => {
     // An empty picker would read as "this org has no agents" rather than
     // "not yours to set".
     expect(screen.queryByText("Default agent")).not.toBeInTheDocument();
-    expect(useInternalAgents).toHaveBeenCalledWith({ enabled: false });
+    expect(useInternalAgentOptions).toHaveBeenCalledWith({ enabled: false });
   });
 
   it("shows the default-agent field to an editor with agent:read", () => {
@@ -523,7 +523,7 @@ describe("ProjectsPageClient", () => {
     );
 
     expect(screen.getByText("Default agent")).toBeInTheDocument();
-    expect(useInternalAgents).toHaveBeenCalledWith({ enabled: true });
+    expect(useInternalAgentOptions).toHaveBeenCalledWith({ enabled: true });
   });
 
   describe("default agent, with agent:read granted", () => {
@@ -544,10 +544,10 @@ describe("ProjectsPageClient", () => {
     });
 
     it("keeps the saved pin selected once the agent list arrives", () => {
-      vi.mocked(useInternalAgents).mockReturnValue({
+      vi.mocked(useInternalAgentOptions).mockReturnValue({
         data: [PINNED],
         isPending: false,
-      } as unknown as ReturnType<typeof useInternalAgents>);
+      } as unknown as ReturnType<typeof useInternalAgentOptions>);
 
       render(<ProjectsPageClient />);
       fireEvent.click(
@@ -560,10 +560,10 @@ describe("ProjectsPageClient", () => {
     it("does not clear the saved pin while the agent list is still loading", () => {
       // Every agent looks unreachable against an empty list, so an unguarded
       // reset wipes the project's pin the moment the dialog opens.
-      vi.mocked(useInternalAgents).mockReturnValue({
+      vi.mocked(useInternalAgentOptions).mockReturnValue({
         data: undefined,
         isPending: true,
-      } as unknown as ReturnType<typeof useInternalAgents>);
+      } as unknown as ReturnType<typeof useInternalAgentOptions>);
 
       render(<ProjectsPageClient />);
       fireEvent.click(
@@ -574,10 +574,10 @@ describe("ProjectsPageClient", () => {
     });
 
     it("saves the project without a sharing payload", async () => {
-      vi.mocked(useInternalAgents).mockReturnValue({
+      vi.mocked(useInternalAgentOptions).mockReturnValue({
         data: [PINNED],
         isPending: false,
-      } as unknown as ReturnType<typeof useInternalAgents>);
+      } as unknown as ReturnType<typeof useInternalAgentOptions>);
 
       render(<ProjectsPageClient />);
       fireEvent.click(

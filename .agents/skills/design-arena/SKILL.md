@@ -47,7 +47,7 @@ export function DesignArena({ current, variants }: { current: ReactNode; variant
 Adapt class names if the repo isn't Tailwind/shadcn, keeping the look.
 
 ## Commit guard (Biome)
-One-time per repo, if not already present: add a Biome GritQL plugin that fails lint on any arena import, and register it in `biome.json` (`"plugins": ["./biome-plugins/design-arena.grit"]`). This guard file is the only arena-related thing that gets committed.
+One-time per repo, if not already present: add a Biome GritQL plugin that fails lint on any arena import, and register it in `biome.json` (`"plugins": ["./tools/biome-plugins/design-arena.grit"]`). This guard file is the only arena-related thing that gets committed.
 
 ```grit
 `import $_ from $source` where {

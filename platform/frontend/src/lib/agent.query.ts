@@ -39,6 +39,8 @@ const {
   getAgentDefaultSuggestedPrompts,
   getAgents,
   getAllAgents,
+  getAgentOptions,
+  getChatAgentRoster,
   getDefaultMcpGateway,
   getAgent,
   importAgent,
@@ -53,41 +55,26 @@ const {
   unpinAgent,
 } = archestraApiSdk;
 
-/**
- * The roster, without each agent's tools. No consumer of this list reads them
- * — the pickers that show tools fetch them per agent — while the refs carry
- * every tool's name and description, which on an organization of any size is
- * the great majority of the response. Dropping them is what lets the new-chat
- * screen, whose first paint is gated on this list, stop waiting on megabytes
- * it does not draw.
- */
-const internalAgentsQuery = {
-  agentType: "agent",
-  excludeBuiltIn: true,
-  includeTools: false,
-} as const;
+const chatAgentsQueryKey = ["agents", "chat-roster", "v2"] as const;
 
-const chatAgentsQuery = {
-  ...internalAgentsQuery,
-  view: "chat",
-} as const;
-
-export const internalAgentsQueryKey = [
-  "agents",
-  "all",
-  internalAgentsQuery,
-] as const;
-
-const chatAgentsQueryKey = ["agents", "chat-roster", chatAgentsQuery] as const;
-
-export async function fetchInternalAgents() {
-  const { data, error } = await getAllAgents({ query: internalAgentsQuery });
+/** Metadata-only internal agents for selectors and runtime labels. */
+export async function fetchInternalAgentOptions() {
+  const { data, error } = await getAgentOptions({
+    query: { agentType: "agent", excludeBuiltIn: true },
+  });
   throwOnApiError(error, { toastOnError: false });
   return data ?? [];
 }
 
+export function useInternalAgentOptions(params?: { enabled?: boolean }) {
+  return useAgentOptions({
+    filters: { agentType: "agent", excludeBuiltIn: true },
+    enabled: params?.enabled,
+  });
+}
+
 async function fetchChatAgents() {
-  const { data, error } = await getAllAgents({ query: chatAgentsQuery });
+  const { data, error } = await getChatAgentRoster();
   throwOnApiError(error, { toastOnError: false });
   return data ?? [];
 }
@@ -98,20 +85,9 @@ const delegationTargetAgentsQuery = {
 } as const;
 
 export function useDelegationTargetAgents(params?: { enabled?: boolean }) {
-  return useQuery({
-    queryKey: ["agents", "all", delegationTargetAgentsQuery],
-    queryFn: async () => {
-      const { data, error } = await getAllAgents({
-        query: delegationTargetAgentsQuery,
-      });
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? [];
-    },
+  return useAgentOptions({
+    filters: delegationTargetAgentsQuery,
     enabled: params?.enabled,
-    // No staleTime override: inherit the client default so several components
-    // mounting this hook during one page load share a single fetch instead of
-    // each observer refetching the whole roster. Agent mutations invalidate
-    // ["agents"] queries, so edits still show up immediately.
   });
 }
 
@@ -125,6 +101,8 @@ export function useProfiles(
 ) {
   const filters = {
     excludeBuiltIn: true,
+    // Roster consumers use metadata; selected-agent tools load from detail queries.
+    includeTools: false,
     ...params?.filters,
   } satisfies archestraApiTypes.GetAllAgentsData["query"];
   return useQuery({
@@ -136,6 +114,34 @@ export function useProfiles(
     },
     initialData: params?.initialData,
     enabled: params?.enabled,
+  });
+}
+
+/** Names and presentation data only; fetch a resource before editing it. */
+export function useAgentOptions(
+  params: {
+    filters?: archestraApiTypes.GetAgentOptionsData["query"];
+    enabled?: boolean;
+  } = {},
+) {
+  const filters = { excludeBuiltIn: true, ...params.filters };
+  if (
+    filters.agentTypes?.length === 1 &&
+    (filters.agentType === undefined ||
+      filters.agentType === filters.agentTypes[0])
+  ) {
+    filters.agentType = filters.agentTypes[0];
+    delete filters.agentTypes;
+  }
+  return useQuery({
+    queryKey: ["agents", "options", filters],
+    queryFn: async () => {
+      if (filters.ids?.length === 0) return [];
+      const { data, error } = await getAgentOptions({ query: filters });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+    enabled: params.enabled,
   });
 }
 
@@ -480,7 +486,7 @@ export function useProfile(
      * resolve on the first render and the rest fetch immediately, rather than
      * one round trip later.
      *
-     * Safe because findCachedAgent excludes the compact chat roster; the
+     * Safe because findCachedAgent excludes compact and tool-free rosters; the
      * remaining list endpoints serialise whole agents with the same
      * `SelectAgentSchema` this route returns. `initialDataUpdatedAt` carries
      * the list's age across, so a stale row still revalidates on its normal
@@ -818,25 +824,6 @@ export function useAgentCredentialReadiness(params?: { enabled?: boolean }) {
   });
 }
 
-export function useInternalAgents(params?: { enabled?: boolean }) {
-  return useQuery({
-    queryKey: internalAgentsQueryKey,
-    queryFn: fetchInternalAgents,
-    enabled: params?.enabled,
-    // No staleTime override: inherit the client default so several components
-    // mounting this hook during one page load share a single fetch instead of
-    // each observer refetching the whole roster. Agent mutations invalidate
-    // ["agents"] queries, so edits still show up immediately.
-    //
-    // Restored on refresh because the new-chat screen cannot draw without it:
-    // which agent a new chat starts on is resolved from this roster, so an
-    // unrestored copy is a full-area spinner rather than a stale name. It is
-    // names and labels the picker already shows, and carries no credential (an
-    // agent references its key by id).
-    meta: PERSISTED_QUERY_META,
-  });
-}
-
 /**
  * Lightweight roster for chat initialization. Large embedded images and
  * editing-only fields stay out of this query; the selected/edited agent is
@@ -856,19 +843,8 @@ export function useChatAgents(params?: { enabled?: boolean }) {
 }
 
 export function useOrgScopedAgents() {
-  return useQuery({
-    queryKey: [
-      "agents",
-      "all",
-      { agentType: "agent", excludeBuiltIn: true, scope: "org" as const },
-    ],
-    queryFn: async () => {
-      const { data, error } = await getAllAgents({
-        query: { agentType: "agent", excludeBuiltIn: true, scope: "org" },
-      });
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? [];
-    },
+  return useAgentOptions({
+    filters: { agentType: "agent", excludeBuiltIn: true, scope: "org" },
   });
 }
 
@@ -932,14 +908,17 @@ function findCachedAgent(
   for (const query of queryClient
     .getQueryCache()
     .findAll({ queryKey: ["agents"] })) {
-    // The chat roster deliberately carries a partial Agent wire shape. It is
+    // Chat and selector rosters deliberately carry partial Agent data. It is
     // enough to paint and initialize chat, but must never seed an editing form
     // as though it came from the full detail endpoint.
-    if (query.queryKey[1] === "chat-roster") continue;
+    if (["chat-roster", "options"].includes(String(query.queryKey[1])))
+      continue;
     // A list fetched without tools would seed a detail with no tools, which
     // reads as "this agent has none" until the seed goes stale.
-    const params = query.queryKey[2] as { includeTools?: boolean } | undefined;
-    if (params?.includeTools === false) continue;
+    const params = query.queryKey[2] as
+      | { includeTools?: boolean; view?: string }
+      | undefined;
+    if (params?.includeTools === false || params?.view === "chat") continue;
     const cached: unknown = query.state.data;
     const rows = Array.isArray(cached)
       ? cached

@@ -2067,6 +2067,7 @@ export function parseOpenAppaConfig({
   postgresMaxConnections,
   reviewSummaryProvider,
   reviewSummaryModel,
+  keptAnnotatorHorizonDays,
   authSecret,
 }: {
   yellEnabled?: string;
@@ -2074,6 +2075,7 @@ export function parseOpenAppaConfig({
   postgresMaxConnections?: string;
   reviewSummaryProvider?: string;
   reviewSummaryModel?: string;
+  keptAnnotatorHorizonDays?: string;
   authSecret?: string;
 } = {}) {
   const dedicated = offerSigningSecret ?? "";
@@ -2107,8 +2109,30 @@ export function parseOpenAppaConfig({
     // Omitted (not `undefined`) when disabled so exact-shape consumers and
     // tests do not observe a key for a feature that is off.
     ...(reviewSummary ? { reviewSummary } : {}),
+    keptAnnotatorHorizonDays: parseKeptAnnotatorHorizonDays(
+      keptAnnotatorHorizonDays,
+    ),
   };
 }
+
+/**
+ * Days without activity after which an annotator kept for conversations that
+ * started under an earlier policy is no longer kept. 0 keeps it for as long
+ * as a stored opening policy names it.
+ */
+function parseKeptAnnotatorHorizonDays(envValue?: string): number {
+  const value = envValue?.trim();
+  if (value === undefined || value === "")
+    return DEFAULT_KEPT_ANNOTATOR_HORIZON_DAYS;
+  if (!/^\d+$/.test(value) || Number(value) > MAX_KEPT_ANNOTATOR_HORIZON_DAYS)
+    throw new Error(
+      `ARCHESTRA_OPENAPPA_KEPT_ANNOTATOR_HORIZON_DAYS must be a whole number of days from 0 to ${MAX_KEPT_ANNOTATOR_HORIZON_DAYS}`,
+    );
+  return Number(value);
+}
+
+const DEFAULT_KEPT_ANNOTATOR_HORIZON_DAYS = 30;
+const MAX_KEPT_ANNOTATOR_HORIZON_DAYS = 3650;
 
 function deriveOfferSigningSecret(authSecret: string | undefined): string {
   if (!authSecret) return "";
@@ -2366,6 +2390,8 @@ const openappa = parseOpenAppaConfig({
     process.env.ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS,
   reviewSummaryProvider: process.env.ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER,
   reviewSummaryModel: process.env.ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_MODEL,
+  keptAnnotatorHorizonDays:
+    process.env.ARCHESTRA_OPENAPPA_KEPT_ANNOTATOR_HORIZON_DAYS,
   authSecret: authSessionSecret,
 });
 const llmProxyPlugins = parseLlmProxyPlugins(
@@ -3331,6 +3357,17 @@ const config = {
             process.env.ARCHESTRA_ORCHESTRATOR_FAILED_POD_REAP_INTERVAL_SECONDS,
             600,
           ),
+    /**
+     * How often (in minutes) to check whether a running local MCP server's
+     * mutable image tag (`:latest` or untagged) now points at a different
+     * image in its registry, and roll the server onto it when it does.
+     * Defaults to 15; 0 disables the check.
+     */
+    mcpImageUpdateCheckIntervalMinutes: parseNonNegativeInt(
+      process.env
+        .ARCHESTRA_ORCHESTRATOR_MCP_IMAGE_UPDATE_CHECK_INTERVAL_MINUTES,
+      15,
+    ),
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise

@@ -30,7 +30,11 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { ScheduleRunsList } from "@/components/scheduled-tasks/schedule-runs-list";
 import { useStartScheduleRun } from "@/components/scheduled-tasks/use-start-schedule-run";
 import { Button } from "@/components/ui/button";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
 import type { ChatReviewContext } from "@/lib/chat/chat-review-context";
 import { getMcpSandboxBaseUrl } from "@/lib/config/config";
 import { useMcpSandboxDomain } from "@/lib/config/config.query";
@@ -461,11 +465,14 @@ function RunsPanel({
   const runNow = useStartScheduleRun(triggerId);
   const { data: session } = useSession();
   const { data: canCreateRuns } = useHasPermissions({
-    scheduledTask: ["create"],
+    project: ["create"],
   });
-  const { data: isScheduleAdmin } = useHasPermissions(
-    { scheduledTask: ["read"] },
-    "*",
+  const { data: scheduleCapabilities } = useScopedCapabilities();
+  const isScheduleAdmin = scheduleCapabilities?.some(
+    (grant) =>
+      grant.resource === "project" &&
+      grant.scope === "*" &&
+      grant.action === "use",
   );
   const canRun =
     canCreateRuns &&

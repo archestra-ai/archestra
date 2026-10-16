@@ -11,8 +11,9 @@ import { ApiError } from "@/types/api";
  * id so an operator can find the full cause in the logs.
  *
  * A refused policy fails the same way on every request, so clients are told
- * not to retry it (`x-should-retry: false` on a 500). An unavailable runtime
- * may recover, so it stays a retryable 503.
+ * not to retry it (`x-should-retry: false` on a 500). So does a conversation
+ * whose opening policy the runtime cannot reopen (a 409). An unavailable
+ * runtime may recover, so it stays a retryable 503.
  */
 export function openappaFailure(error: unknown): ApiError {
   if (error instanceof ApiError && error.message.startsWith(FAILURE_PREFIX))
@@ -29,6 +30,40 @@ export function openappaFailure(error: unknown): ApiError {
   return apiError;
 }
 
+/**
+ * The notice that replaces one tool call whose annotator gave no answer, or
+ * null for any other failure.
+ *
+ * The runtime cannot rule on that call, so it does not run and nothing is
+ * recorded for it. The failure belongs to that call alone: the other calls of
+ * the response were ruled on their own and still stand, including one that
+ * spent an approval. Failing the whole response would cancel them after the
+ * approval was spent. The notice names the annotator and a plain reason, never
+ * the runtime's detail, which can quote the helper's own error.
+ */
+export function unansweredAnnotationNotice(error: unknown): string | null {
+  const message =
+    error instanceof ApiError && error.cause instanceof Error
+      ? error.cause.message
+      : error instanceof Error
+        ? error.message
+        : "";
+  const match = UNANSWERED_ANNOTATION.exec(message);
+  if (!match) return null;
+  const [, annotator, reason, status] = match;
+  const name = JSON.stringify(summarize(annotator, MAX_NAME));
+  // A helper error without a status may pass; one more attempt costs little,
+  // and the notice stops the model after it fails the same way.
+  const transient =
+    TRANSIENT_NO_ANSWER.has(reason) ||
+    (reason === "non_success" &&
+      (status === undefined || status === "429" || status.startsWith("5")));
+  const head = `[appa] Not checked: OpenAPPA could not rule on this call because its annotator ${name} ${NO_ANSWER_REASON[reason] ?? "gave no answer"}. The call did not run.`;
+  return transient
+    ? `${head} Make the same call again to retry. If it fails the same way again, stop and tell the user that Guardrails could not check this call.`
+    : `${head} Retrying it will not help. Tell the user that Guardrails could not check this call. An administrator can check the annotator on the ${POLICY_PAGE} page.`;
+}
+
 /** A conversation whose opening policy names an annotator the served policy does not answer. */
 export class OpenappaRetiredAnnotatorError extends Error {
   constructor(readonly annotator: string) {
@@ -36,6 +71,17 @@ export class OpenappaRetiredAnnotatorError extends Error {
       "the served policy does not answer an annotator from the opening policy",
     );
     this.name = "OpenappaRetiredAnnotatorError";
+  }
+}
+
+/**
+ * The organization's text was refused and no composition ever opened, so the
+ * runtime has nothing to enforce: every governed call is refused.
+ */
+export class OpenappaRootOnlyError extends Error {
+  constructor(readonly refusal: string) {
+    super("no composition of the organization's policy has opened");
+    this.name = "OpenappaRootOnlyError";
   }
 }
 
@@ -78,6 +124,7 @@ const POLICY_REFUSALS = [
   /^annotator \S+ names /,
   /^root policy: /,
   /^battery \S+: /,
+  /^a hosted document declares /,
 ];
 
 function classify(error: unknown): {
@@ -88,6 +135,11 @@ function classify(error: unknown): {
     return {
       statusCode: 409,
       detail: `this conversation started under a policy that no longer declares annotator "${summarize(error.annotator, MAX_NAME)}". Start a new conversation, or an administrator can declare "${summarize(error.annotator, MAX_NAME)}" again on the ${POLICY_PAGE} page.`,
+    };
+  if (error instanceof OpenappaRootOnlyError)
+    return {
+      statusCode: 500,
+      detail: `the organization's guardrails policy was refused and no earlier composition exists (${summarize(error.refusal)}). An administrator can fix it on the ${POLICY_PAGE} page.`,
     };
   if (error instanceof OpenappaCredentialError)
     return {
@@ -121,6 +173,15 @@ function classify(error: unknown): {
       detail:
         "another request of this session is still working on this operation. Retry the request.",
     };
+  // The runtime cannot reopen the policy this conversation started under: the
+  // stored file is gone or no longer compiles to the identity the opening
+  // recorded. Every later request of the conversation fails the same way.
+  if (message.includes(OPENING_POLICY_UNAVAILABLE))
+    return {
+      statusCode: 409,
+      detail:
+        "this conversation started under a guardrails policy that the policy runtime cannot reopen. Start a new conversation.",
+    };
   // Every later request of the subagent fails the same way: no fork exists
   // for it to open, whatever the retry.
   if (message.includes(UNFORKED_CHILD) || message === UNSTARTED_PARENT)
@@ -139,6 +200,30 @@ const LEASE_LOST =
 /** The runtime's report of an operation another live request is working on. */
 const HELD_ELSEWHERE =
   "OpenAPPA is processing this operation in another request; retry the request";
+
+/** The runtime's refusal of a root whose opening policy it cannot load or verify. */
+const OPENING_POLICY_UNAVAILABLE = "the opening policy is unavailable: ";
+
+/**
+ * The runtime's refusal of a call whose annotator gave no answer:
+ * `annotator=<name> error=<reason>`, where a non-success reason carries the
+ * HTTP status the helper answered with.
+ */
+const UNANSWERED_ANNOTATION =
+  /^OpenAPPA processing interrupted: annotator=(\S+) error=([a-z_]+)(?: status=(\d+))?/;
+
+/** No-answer reasons a second attempt can get past. */
+const TRANSIENT_NO_ANSWER = new Set(["timeout", "unreachable", "transport"]);
+
+const NO_ANSWER_REASON: Record<string, string> = {
+  timeout: "did not answer in time",
+  unreachable: "could not be reached",
+  transport: "could not be reached",
+  non_success: "returned an error",
+  unregistered: "is not set up in this deployment",
+  malformed: "returned an answer OpenAPPA could not read",
+  oversized: "returned an answer that was too large",
+};
 
 /** The runtime's refusal of a child that no approved spawn prepared. */
 const UNFORKED_CHILD = "no prepared fork to open this child";

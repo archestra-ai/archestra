@@ -3681,6 +3681,22 @@ describe("OpenAPPA feature configuration", () => {
     }
   });
 
+  test("keeps annotators for earlier conversations 30 days by default, for a whole number of days, or for good with 0", () => {
+    expect(parseOpenAppaConfig().keptAnnotatorHorizonDays).toBe(30);
+    expect(
+      parseOpenAppaConfig({ keptAnnotatorHorizonDays: " 7 " })
+        .keptAnnotatorHorizonDays,
+    ).toBe(7);
+    expect(
+      parseOpenAppaConfig({ keptAnnotatorHorizonDays: "0" })
+        .keptAnnotatorHorizonDays,
+    ).toBe(0);
+    for (const invalid of ["-1", "1.5", "soon", "3651"])
+      expect(() =>
+        parseOpenAppaConfig({ keptAnnotatorHorizonDays: invalid }),
+      ).toThrow("ARCHESTRA_OPENAPPA_KEPT_ANNOTATOR_HORIZON_DAYS");
+  });
+
   test.each([
     undefined,
     "false",
@@ -3708,6 +3724,7 @@ describe("OpenAPPA feature configuration", () => {
       yellEnabled: true,
       offerSigningSecret: "",
       postgresMaxConnections: 4,
+      keptAnnotatorHorizonDays: 30,
     });
     expect(
       parseOpenAppaConfig({

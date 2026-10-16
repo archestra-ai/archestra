@@ -36,7 +36,6 @@ export const TOOL_PERMISSIONS: Record<
   // OpenAPPA
   execute_remedy_plan: null,
   yell: null,
-  superyell: null,
   get_remedy_plans: null,
   list_peer_messages: null,
   read_peer_message: null,
@@ -50,19 +49,11 @@ export const TOOL_PERMISSIONS: Record<
   get_guardrails_policy: { resource: "openappaPolicy", action: "read" },
   get_openappa_policy_tests: { resource: "openappaPolicy", action: "read" },
   run_openappa_policy_tests: { resource: "openappaPolicy", action: "update" },
-  discover_openappa_validation_scenarios: {
+  preview_guardrails_validation_change: {
     resource: "openappaPolicy",
     action: "read",
   },
-  draft_openappa_validation_scenario: {
-    resource: "openappaPolicy",
-    action: "read",
-  },
-  preview_openappa_validation_change: {
-    resource: "openappaPolicy",
-    action: "read",
-  },
-  publish_openappa_validation_change: {
+  update_guardrails_validation: {
     resource: "openappaPolicy",
     action: "update",
   },
@@ -85,6 +76,11 @@ export const TOOL_PERMISSIONS: Record<
     action: "update",
   },
   connect_guardrails_repository: {
+    resource: "organizationSettings",
+    action: "update",
+  },
+  // Same permission as the REST route's sync action.
+  sync_guardrails_repository: {
     resource: "organizationSettings",
     action: "update",
   },
@@ -225,20 +221,20 @@ export const TOOL_PERMISSIONS: Record<
 
   // Scheduled tasks — mirror the /api/schedule-triggers routes. As with the
   // project reads the permission is only the floor: every handler runs the
-  // same owner / `scheduledTask:*` / project-member gate the REST routes use
-  // (services/schedule-trigger-access.ts), so `scheduledTask:read` never
+  // same owner / `project:*` / project-member gate the REST routes use
+  // (services/schedule-trigger-access.ts), so `project:read` never
   // widens visibility past the caller's own schedules.
-  create_schedule_trigger: { resource: "scheduledTask", action: "create" },
-  update_schedule_trigger: { resource: "scheduledTask", action: "update" },
-  delete_schedule_trigger: { resource: "scheduledTask", action: "delete" },
-  list_schedule_triggers: { resource: "scheduledTask", action: "read" },
-  get_schedule_trigger: { resource: "scheduledTask", action: "read" },
-  list_schedule_trigger_runs: { resource: "scheduledTask", action: "read" },
-  get_schedule_trigger_run: { resource: "scheduledTask", action: "read" },
-  enable_schedule_trigger: { resource: "scheduledTask", action: "update" },
-  disable_schedule_trigger: { resource: "scheduledTask", action: "update" },
+  create_schedule_trigger: { resource: "project", action: "create" },
+  update_schedule_trigger: { resource: "project", action: "update" },
+  delete_schedule_trigger: { resource: "project", action: "delete" },
+  list_schedule_triggers: { resource: "project", action: "read" },
+  get_schedule_trigger: { resource: "project", action: "read" },
+  list_schedule_trigger_runs: { resource: "project", action: "read" },
+  get_schedule_trigger_run: { resource: "project", action: "read" },
+  enable_schedule_trigger: { resource: "project", action: "update" },
+  disable_schedule_trigger: { resource: "project", action: "update" },
   // Starting a run creates a run row, matching RunScheduleTriggerNow.
-  run_schedule_trigger_now: { resource: "scheduledTask", action: "create" },
+  run_schedule_trigger_now: { resource: "project", action: "create" },
 
   // Meta — permission is enforced on the target tool, not on run_tool itself
   search_tools: null,

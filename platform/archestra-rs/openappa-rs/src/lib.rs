@@ -18,6 +18,7 @@ mod replay;
 use appa_eventlog::{
     Backend, LogStore, OperationClaim, OperationKey, OperationRequest, ProcessedResultClaim,
     ProcessedResultKey, ProcessedResultRequest, ReceiptBinding, ReceiptError, SessionScope,
+    encryption::{StorageCipher, field_context},
     postgres::{LeasedPostgres, PostgresError},
 };
 use appa_runtime::{
@@ -50,6 +51,16 @@ use tokio::sync::{Mutex, Semaphore};
 pub struct ReportingOptions {
     pub endpoint: String,
     pub hostname: Option<String>,
+}
+
+/// Transient key material supplied separately from the serializable hook input.
+/// The host validates conversation ownership, escrow and fingerprint first.
+#[napi(object)]
+pub struct ContentEncryption {
+    pub key: napi::bindgen_prelude::Buffer,
+    pub scope: String,
+    /// Opaque capability for this dispatch's authenticated loopback annotator.
+    pub annotator_context: Option<String>,
 }
 
 /// Process-wide runtime slot. The mutex covers initialize only. Every dispatch
@@ -311,6 +322,10 @@ enum ExecutionOutcome {
 struct PresentationInput {
     control_tool: String,
     supports_delegation: bool,
+    /// The reporting tool a block names, spelled the way the model calls it. Absent when
+    /// reporting is off, and then a block does not mention it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    yell_tool: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -451,6 +466,7 @@ fn presentation_options(input: &Input) -> EmbeddedPresentationOptions {
                 control_tool: presentation.control_tool.clone(),
                 supports_delegation: presentation.supports_delegation,
                 include_display_plan: true,
+                yell_tool: presentation.yell_tool.clone(),
             }
         })
 }
@@ -465,6 +481,7 @@ fn result_presentation_options(input: &Input, call: &RecordedCall) -> EmbeddedPr
                 control_tool: presentation.control_tool.clone(),
                 supports_delegation: presentation.supports_delegation,
                 include_display_plan: true,
+                yell_tool: presentation.yell_tool.clone(),
             }
         })
 }
@@ -1023,20 +1040,27 @@ pub async fn inspect_openappa_battery(
 }
 
 #[napi(js_name = "dispatchHook")]
-pub async fn dispatch_hook(input: String, policy: DispatchPolicy) -> napi::Result<String> {
+pub async fn dispatch_hook(
+    input: String,
+    policy: DispatchPolicy,
+    encryption: Option<ContentEncryption>,
+) -> napi::Result<String> {
     let input: Input = serde_json::from_str(&input).map_err(error)?;
     validate(&input)?;
-    run(input, policy.into()).await
+    run(input, policy.into(), encryption).await
 }
 
 /// The policy text the runtime stored when `root` opened. Absent when the root
 /// has no log. This is the opening document, not an error message.
 #[napi(js_name = "readOpenappaOpeningPolicy")]
-pub async fn read_openappa_opening_policy(root: String) -> napi::Result<Option<String>> {
+pub async fn read_openappa_opening_policy(
+    root: String,
+    encryption: Option<ContentEncryption>,
+) -> napi::Result<Option<String>> {
     if root.is_empty() || root.len() > 1024 || root.chars().any(char::is_control) {
         return Err(error("invalid root identity"));
     }
-    let state = initialized().await?;
+    let state = initialized().await?.encrypted(encryption)?;
     let leased = state.lease().await?;
     tokio::task::spawn_blocking(move || match leased.state.store.log(&TrajectoryId(root)) {
         Ok(log) => String::from_utf8(log.policy_file().to_vec())
@@ -1049,11 +1073,45 @@ pub async fn read_openappa_opening_policy(root: String) -> napi::Result<Option<S
     .map_err(error)?
 }
 
+/// The policy file key each root's first stored batch names, in the order given:
+/// none for a batch that does not open a root this build can read. The host reads
+/// the batches; only this decoding knows how the runtime encodes them.
+#[napi(js_name = "openappaOpeningKeys")]
+pub fn openappa_opening_keys(batches: Vec<napi::bindgen_prelude::Buffer>) -> Vec<Option<String>> {
+    batches
+        .iter()
+        .map(|batch| opening_policy_file_key(batch))
+        .collect()
+}
+
+/// The policy file key a root's first batch names, read the way the event log
+/// encodes it: a bare array of facts, or a host record holding `facts`, whose
+/// first fact is `TrajectoryOpened`. None for anything else.
+fn opening_policy_file_key(payload: &[u8]) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_slice(payload).ok()?;
+    let facts = match &value {
+        serde_json::Value::Array(_) => &value,
+        serde_json::Value::Object(row) => row.get("facts")?,
+        _ => return None,
+    };
+    let key = facts
+        .get(0)?
+        .get("TrajectoryOpened")?
+        .get("policy_file_key")?
+        .as_str()?;
+    (key.len() == 64
+        && key
+            .bytes()
+            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f')))
+    .then(|| key.to_owned())
+}
+
 /// Read the current label of a started session without mutating its trajectory.
 #[napi(js_name = "getOpenappaStatus")]
 pub async fn get_openappa_status(
     organization_id: String,
     session_id: String,
+    encryption: Option<ContentEncryption>,
 ) -> napi::Result<Option<OpenappaStatus>> {
     if organization_id.is_empty()
         || organization_id.len() > 512
@@ -1066,7 +1124,7 @@ pub async fn get_openappa_status(
         return Err(error("invalid session identity"));
     }
     let result = AssertUnwindSafe(async move {
-        let state = initialized().await?;
+        let state = initialized().await?.encrypted(encryption)?;
         let leased = state.lease().await?;
         tokio::task::spawn_blocking(move || {
             let key = SessionKey::new(&organization_id, &session_id);
@@ -1134,6 +1192,14 @@ fn validate(input: &Input) -> napi::Result<()> {
             || presentation.control_tool.chars().any(char::is_control))
     {
         return Err(error("invalid control tool presentation"));
+    }
+    if let Some(yell) = input
+        .presentation
+        .as_ref()
+        .and_then(|presentation| presentation.yell_tool.as_ref())
+        && (yell.is_empty() || yell.len() > 1024 || yell.chars().any(char::is_control))
+    {
+        return Err(error("invalid yell tool presentation"));
     }
     for (name, value) in [
         ("tool spelling", &input.spelling),
@@ -1209,9 +1275,13 @@ fn validate(input: &Input) -> napi::Result<()> {
 }
 
 /// Runs one validated event through a view pinned to its organization's deployment.
-async fn run(input: Input, policy: deployments::HostedPolicy) -> napi::Result<String> {
+async fn run(
+    input: Input,
+    policy: deployments::HostedPolicy,
+    encryption: Option<ContentEncryption>,
+) -> napi::Result<String> {
     let result = AssertUnwindSafe(async {
-        let state = initialized().await?;
+        let state = initialized().await?.encrypted(encryption)?;
         let deployment = state
             .deployments
             .deployment(
@@ -1248,6 +1318,7 @@ async fn initialized() -> napi::Result<State> {
 pub async fn execute_remedy_by_offer(
     input: String,
     policy: DispatchPolicy,
+    encryption: Option<ContentEncryption>,
 ) -> napi::Result<String> {
     let input: OfferInput = serde_json::from_str(&input).map_err(error)?;
     if input.organization_id.is_empty()
@@ -1312,7 +1383,8 @@ pub async fn execute_remedy_by_offer(
         withhold_consult_content: input.withhold_consult_content,
     };
     validate(&input)?;
-    let response: Value = serde_json::from_str(&run(input, policy.into()).await?).map_err(error)?;
+    let response: Value =
+        serde_json::from_str(&run(input, policy.into(), encryption).await?).map_err(error)?;
     Ok(with_offer_status(response, OfferStatusKind::Known)?.to_string())
 }
 
@@ -1337,14 +1409,38 @@ pub async fn load_offer_review(
     organization_id: String,
     session_id: String,
     offer_id: String,
+    encryption: Option<ContentEncryption>,
 ) -> napi::Result<Option<OfferReviewOutput>> {
     let session_id_for_output = session_id.clone();
     // Mirror execute_remedy_by_offer: clone state, drop the mutex, then lease
     // a connection before host SQL so review loads never contend with
     // dispatches on the runtime state mutex.
-    let state = initialized().await?;
+    let state = initialized().await?.encrypted(encryption)?;
     let leased = state.lease().await?;
     let pg = &Sql(&leased.state.store);
+    if pg.0.cipher().is_encrypted() {
+        for (input, decision) in encrypted_receipts(pg, &organization_id, &session_id)? {
+            let Some(review) = decision["review"].as_array().and_then(|entries| {
+                entries
+                    .iter()
+                    .find(|entry| entry["offer_id"].as_str() == Some(&offer_id))
+            }) else {
+                continue;
+            };
+            let source = input
+                .get("context")
+                .or_else(|| input.get("semantic"))
+                .unwrap_or(&input);
+            return Ok(Some(OfferReviewOutput {
+                offer_id,
+                session_id,
+                text: review["text"].as_str().unwrap_or_default().to_owned(),
+                tool: source["tool"].as_str().map(str::to_owned),
+                arguments: source.get("arguments").map(Value::to_string),
+            }));
+        }
+        return Ok(None);
+    }
     // The SQL closure needs its own offer id copy because it must be 'static.
     let target_offer_id = offer_id.clone();
     let review = pg
@@ -1762,6 +1858,30 @@ fn rebind_child(root: &TrajectoryId, stored_actor: String) -> HookEvent {
 }
 
 impl State {
+    /// Retention can read this non-content mapping without a conversation key.
+    /// It cannot derive it later from an encrypted opening event.
+    fn record_encrypted_opening(&self, root: &str, organization_id: &str) -> napi::Result<()> {
+        if !self.store.cipher().is_encrypted() {
+            return Ok(());
+        }
+        let log = self
+            .store
+            .log(&TrajectoryId(root.to_owned()))
+            .map_err(error)?;
+        let first = log
+            .facts()
+            .get(..1)
+            .ok_or_else(|| error("root has no opening event"))?;
+        let payload = serde_json::to_vec(first).map_err(error)?;
+        let policy_file_key = opening_policy_file_key(&payload)
+            .ok_or_else(|| error("root has no opening policy identity"))?;
+        let (root, organization_id) = (root.to_owned(), organization_id.to_owned());
+        Sql(&self.store).with_client(move |client| {
+            client.execute("INSERT INTO openappa_root_openings (root, organization_id, policy_file_key) VALUES ($1,$2,$3) ON CONFLICT (root) DO NOTHING", &[&root, &organization_id, &policy_file_key])?;
+            Ok(())
+        }).map_err(error)
+    }
+
     /// Opens this session's root as a fork of `fork_of`.
     /// Freezes the parent session's policy revision, labels, effects, and
     /// denials into the new root. Returns the parent watermark bounding inherited results.
@@ -1842,6 +1962,25 @@ impl State {
             )
             .map_err(error)?;
         Ok(Some(forked_at))
+    }
+
+    fn encrypted(&self, encryption: Option<ContentEncryption>) -> napi::Result<State> {
+        let Some(encryption) = encryption else {
+            return Ok(self.clone());
+        };
+        let cipher =
+            StorageCipher::encrypted(encryption.key.as_ref(), encryption.scope).map_err(error)?;
+        let store = Arc::new(self.store.encrypted_view(cipher).map_err(error)?);
+        let runtime = self.runtime.on(store.clone());
+        let runtime = match encryption.annotator_context {
+            Some(context) => runtime.with_archestra_context(context),
+            None => runtime,
+        };
+        Ok(State {
+            runtime: Arc::new(runtime),
+            store,
+            ..self.clone()
+        })
     }
 
     /// This state with its runtime pinned to `deployment`: every lease of it, and
@@ -2007,7 +2146,19 @@ impl State {
             }
             // A return contract must be delivered before the child starts work.
             // Keep it in the start receipt so repeat SessionStart can deliver it.
-            let start_decision = wire(&decision)?;
+            let start_decision = self
+                .store
+                .cipher()
+                .seal_json(
+                    &field_context(&[
+                        "openappa_sessions",
+                        &key.organization_id,
+                        &key.actor,
+                        "start_decision",
+                    ]),
+                    &wire(&decision)?,
+                )
+                .map_err(error)?;
             let (id, saved_root, row) = (key.actor.clone(), root.clone(), input.clone());
             // Two first events of one session can both get here; the runtime opened the
             // session once, and the first row stands. The other must describe the same
@@ -2027,6 +2178,7 @@ impl State {
             check_session_identity(&stored, &root, &input)?;
         }
 
+        self.record_encrypted_opening(&root, &key.organization_id)?;
         let receipts = lease::Receipts::new(self.store.clone());
         let began = lease::log_end(pg, &root).map_err(error)?;
         let work = self.handle_event(pg, &receipts, input, root.clone(), key, actor);
@@ -2052,14 +2204,16 @@ impl State {
         actor: Actor,
     ) -> napi::Result<Value> {
         if input.event == HookEventKind::SessionStart {
+            let cipher = self.store.cipher().clone();
             return pg
                 .with_client(move |client| {
-                    Ok(client
+                    let stored: Value = client
                         .query_one(
                             "SELECT start_decision FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
                             &[&key.organization_id, &key.actor],
                         )?
-                        .get(0))
+                        .get(0);
+                    cipher.open_json(&field_context(&["openappa_sessions", &key.organization_id, &key.actor, "start_decision"]), stored).map_err(Into::into)
                 })
                 .map_err(error);
         }
@@ -3191,6 +3345,7 @@ fn read_operation_state(pg: &Sql<'_>, key: &OperationKey) -> napi::Result<Operat
     let session_id = key.session.session_id.clone();
     let operation_id = key.operation_id.clone();
     let organization_id = key.session.organization_id.clone();
+    let cipher = pg.0.cipher().clone();
     pg.with_client(move |client| {
         let row = client.query_opt(
             "SELECT input, status, decision FROM openappa_operations WHERE session_id=$1 AND operation_id=$2 AND organization_id=$3",
@@ -3199,7 +3354,7 @@ fn read_operation_state(pg: &Sql<'_>, key: &OperationKey) -> napi::Result<Operat
         let Some(row) = row else {
             return Ok(OperationState::Absent);
         };
-        let input: Value = row.get("input");
+        let input = cipher.open_json(&field_context(&["openappa_operations", &organization_id, &session_id, &operation_id, "input"]), row.get("input"))?;
         let (actual_input, context) = if let Some(obj) = input.as_object() {
             if let Some(semantic) = obj.get("semantic") {
                 (semantic.clone(), obj.get("context").cloned())
@@ -3218,7 +3373,7 @@ fn read_operation_state(pg: &Sql<'_>, key: &OperationKey) -> napi::Result<Operat
                 context,
             });
         }
-        let decision: Option<Value> = row.get("decision");
+        let decision = row.get::<_, Option<Value>>("decision").map(|value| cipher.open_json(&field_context(&["openappa_operations", &organization_id, &session_id, &operation_id, "decision"]), value)).transpose()?;
         let Some(decision) = decision else {
             return Ok(OperationState::Absent);
         };
@@ -3409,12 +3564,60 @@ fn present(value: Option<String>) -> Option<String> {
 /// The original call's retry text. A missing row or missing fields is an empty
 /// presentation, not a refusal: the runtime still decides whether the offer is
 /// live, and old rows fall back to the canonical tool spelling.
+fn encrypted_receipts(
+    pg: &Sql<'_>,
+    organization_id: &str,
+    session_id: &str,
+) -> napi::Result<Vec<(Value, Value)>> {
+    let (organization_id, session_id) = (organization_id.to_owned(), session_id.to_owned());
+    let cipher = pg.0.cipher().clone();
+    pg.with_client(move |client| {
+        use postgres::fallible_iterator::FallibleIterator;
+        let mut rows = client.query_raw("SELECT operation_id, input, decision FROM openappa_operations WHERE organization_id=$1 AND session_id=$2 AND status='complete' ORDER BY created_at DESC LIMIT 10001", [&organization_id, &session_id])?;
+        let mut budget = ReceiptLookupBudget::default();
+        let mut result = Vec::new();
+        while let Some(row) = rows.next()? {
+            let id: String = row.get(0);
+            let input = cipher.open_json(&field_context(&["openappa_operations", &organization_id, &session_id, &id, "input"]), row.get(1))?;
+            let decision = cipher.open_json(&field_context(&["openappa_operations", &organization_id, &session_id, &id, "decision"]), row.get(2))?;
+            budget.take(input.to_string().len() + decision.to_string().len())?;
+            result.push((input, decision));
+        }
+        Ok(result)
+    }).map_err(error)
+}
+
 fn recorded_call_presentation(
     pg: &Sql<'_>,
     organization_id: &str,
     session_id: &str,
     offer_id: &str,
 ) -> napi::Result<CallPresentation> {
+    if pg.0.cipher().is_encrypted() {
+        let rows = encrypted_receipts(pg, organization_id, session_id)?;
+        for (input, decision) in rows {
+            let matches = ["offers", "review"].iter().any(|field| {
+                decision[*field].as_array().is_some_and(|entries| {
+                    entries
+                        .iter()
+                        .any(|entry| entry["offer_id"].as_str() == Some(offer_id))
+                })
+            });
+            if matches {
+                let semantic = input.get("semantic").unwrap_or(&input);
+                return Ok(presentation_from_receipt(
+                    input.get("context"),
+                    input
+                        .get("context")
+                        .and_then(|v| v["tool"].as_str())
+                        .or_else(|| semantic["tool"].as_str())
+                        .map(str::to_owned),
+                    semantic["event"].as_str(),
+                ));
+            }
+        }
+        return Ok(CallPresentation::default());
+    }
     let (organization_id, session_id, offer_id) = (
         organization_id.to_owned(),
         session_id.to_owned(),
@@ -4815,5 +5018,50 @@ mod stored_approved_output_tests {
             stored_approved_output(&long, &decision("another text")),
             long
         );
+    }
+}
+
+#[cfg(test)]
+mod opening_key_tests {
+    use super::opening_policy_file_key;
+
+    const KEY: &str = "9f2c0a5b1e7d4c3a8b6f0e1d2c3b4a5968778695a4b3c2d1e0f9a8b7c6d5e4f3";
+
+    #[test]
+    fn reads_the_key_from_a_bare_batch_and_from_a_host_record() {
+        let opened =
+            format!(r#"{{"TrajectoryOpened":{{"trajectory":"r","policy_file_key":"{KEY}"}}}}"#);
+        assert_eq!(
+            opening_policy_file_key(format!("[{opened}]").as_bytes()).as_deref(),
+            Some(KEY)
+        );
+        assert_eq!(
+            opening_policy_file_key(format!(r#"{{"facts":[{opened}],"host":{{}}}}"#).as_bytes())
+                .as_deref(),
+            Some(KEY)
+        );
+    }
+
+    #[test]
+    fn answers_no_key_for_anything_that_does_not_open_a_root() {
+        for payload in [
+            "".to_string(),
+            "[".to_string(),
+            "\"not a batch\"".to_string(),
+            "[]".to_string(),
+            r#"[{"CallRecorded":{}}]"#.to_string(),
+            r#"[{"TrajectoryOpened":{"policy_file_key":"ABCDEF"}}]"#.to_string(),
+            format!(
+                r#"[{{"TrajectoryOpened":{{"policy_file_key":"{}"}}}}]"#,
+                KEY.to_uppercase()
+            ),
+            r#"{"host":{}}"#.to_string(),
+        ] {
+            assert_eq!(
+                opening_policy_file_key(payload.as_bytes()),
+                None,
+                "{payload}"
+            );
+        }
     }
 }

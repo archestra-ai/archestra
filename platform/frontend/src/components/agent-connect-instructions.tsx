@@ -3,6 +3,7 @@
 import { type AgentType, MCP_GATEWAY_OAUTH_SCOPE } from "@archestra/shared";
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
+import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import {
   resolveAdminDefaultBaseUrl,
   resolveCandidateBaseUrls,
@@ -34,7 +35,7 @@ import {
   MASKED_KEY,
   MaskedCodeExample,
 } from "@/components/virtual-key-connection-guide";
-import { useProfile, useProfiles } from "@/lib/agent.query";
+import { useAgentOptions, useProfile } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import config from "@/lib/config/config";
@@ -299,7 +300,7 @@ function useOauthClientStep(
     oauthClient: ["create"],
   });
   const { data: clients = [] } = useMcpOauthClients({ enabled });
-  const { data: resources = [] } = useProfiles({
+  const { data: resources = [] } = useAgentOptions({
     filters: { agentTypes: ["mcp_gateway", "agent"] },
   });
   const create = useCreateOauthClient();
@@ -396,6 +397,7 @@ function useIdentityProviderStep(target: ConnectTarget): {
     target.id,
   );
 
+  const canSeeSettings = useSettingsAreaAccess() === true;
   const idpId = target.identityProviderId;
   const idpName = identityProviders?.find((idp) => idp.id === idpId)?.issuer;
   // The edit form only shows its IdP field when the org has identity
@@ -415,7 +417,7 @@ function useIdentityProviderStep(target: ConnectTarget): {
           {idpId ? "Change in gateway settings" : "Choose in gateway settings"}
         </Link>
       </Button>
-    ) : (
+    ) : !canSeeSettings ? null : (
       <Button size="sm" asChild>
         <Link href="/settings/identity-providers">
           Set up identity provider

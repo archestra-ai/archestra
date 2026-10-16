@@ -95,14 +95,13 @@ export const ADJUST_WORKFLOW = `# Adjust the current config (\`adjust\`)
 
 Start from the operator's requested outcome, not a full tool rescan. Approval and publishing follow **Approval in Archestra** and **Publish** in the skill body. If the outcome is ambiguous, ask one focused question and wait.
 
-An ordinary, concrete behavior change normally keeps one small intent check, as \`references/validation.md\` describes; then preview, approve, and publish the policy and the check together there, with the complete policy text rather than \`edits\`. Skip it when the operator asks, and for policy-only requests.
-
 1. Read the policy with \`archestra__get_guardrails_policy\`: \`content\`, \`revision\`, \`delivery\`, and \`effective\`.
 2. For syntax or rules the current config does not show, load the \`references/contracts.md\` index and the part it names, and \`references/archestra.md\` for the tool names Archestra evaluates. Before writing a rule on a tool's arguments, inspect it with \`archestra__inspect_guardrails_server\`, \`"detail": "full"\`, and \`"tools"\` naming it, unless this conversation already has that result.
 3. If a battery helps, check \`archestra__list_guardrails_battery_fits\` for it and add it to \`include\`. Existing root rules keep priority. Describe it as **Propose a battery** says. When it needs a token, collect it as steps 1–3 of **Add batteries** in \`references/first-policy.md\` say, then continue here.
 4. Preview the change with \`edits\` and the current revision.
 5. Summarize what changes, what stays the same, and any warnings, and whether approval saves locally or opens a GitHub PR. If the operator asked to see the change, show the preview's \`diff\` in a fenced diff block.
 6. Ask for approval in the same turn, then publish.
+7. For a targeted behavior change, offer a validation for it as **When to offer one** in \`references/validation.md\` says.
 
 When the operator asks why a call was blocked, follow **Explain a block** in the policy-writing rules first.
 `;
@@ -112,6 +111,28 @@ When the operator asks why a call was blocked, follow **Explain a block** in the
 export const REQUESTS_WORKFLOW = `# Explain, review, and investigate
 
 None of these previews or publishes anything. When the operator then picks a change, continue with \`references/adjust.md\`. If the operator said they want no changes or only a report, leave out the closing change question, the numbered changes, and offers to draft a change for the rest of the conversation, until they ask for one.
+
+## Explain how OpenAPPA works
+
+When the operator asks what OpenAPPA or Guardrails is or how it works, without asking about their policy, answer from this section alone: read nothing, and do not mention this deployment's policy, batteries, enforcement, or that nothing changed. Write for a DevOps engineer who has never heard of OpenAPPA. Use the answer below almost word for word: short sentences and everyday words, keeping OpenAPPA's terms (label, trust, audience, rule, human approval, sanitizer, authority, subagent, battery) and explaining each where it first appears. Avoid "trajectory", "delta", "composition", "catch-all", "TOML", "rule pack", "fork", and rule field names.
+
+OpenAPPA checks every tool call your AI agent makes, like reading email, posting to Slack, or pushing code, before it runs.
+
+1. **Data gets a label.** Everything the agent reads gets two tags:
+   - **Trust**: is it trusted, or could an outsider have influenced it (a web page, a GitHub issue, a meeting transcript)?
+   - **Audience**: who may see it: only you, your organization, or the public?
+2. **Each tool has a rule.** The rule says what the label must be for the call to go through.
+   - Sending a Slack message might need trusted data that is safe for your organization.
+   - Publishing to a public GitHub repository must not include internal data.
+   - A risky admin change might need human approval.
+3. **OpenAPPA decides.** It allows the call, asks you to approve that exact call, or blocks it and explains what did not match.
+4. **Ways to continue safely.**
+   - A **sanitizer** cleans data, for example removing private details, so it can go to a wider audience.
+   - An **authority** is a person or team allowed to approve a call that would otherwise be blocked.
+   - A **subagent** can read sensitive data on its own; only its checked or cleaned answer comes back to the main agent.
+5. **Batteries are ready-made rules** for common services like GitHub, Slack, or Grain, so you don't write every rule yourself. Your own rules take priority over them.
+
+End with one sentence offering to help understand and improve the current policy, such as checking which tools it covers. Do not ask what to change.
 
 ## Explain
 

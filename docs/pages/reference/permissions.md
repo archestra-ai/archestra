@@ -2,7 +2,7 @@
 title: "Permissions"
 description: "Built-in role grants, available permissions, and LLM API access requirements"
 order: 6
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-15
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -37,7 +37,6 @@ Full access to core resources, but cannot change organization settings or manage
 | Skills | `read`, `create`, `delete` |
 | Plugins | `read`, `create`, `update`, `delete` |
 | Apps | `read`, `create` |
-| Scheduled Tasks | `read`, `create`, `update`, `delete` |
 | LLM Proxy | `read`, `update` |
 | LLM Provider API Keys | `read`, `create` |
 | LLM Virtual Keys | `read`, `create` |
@@ -71,7 +70,6 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Agents | `read`, `create`, `delete` |
 | Skills | `read`, `create`, `delete` |
 | Apps | `read`, `create` |
-| Scheduled Tasks | `read`, `create`, `update`, `delete` |
 | LLM Proxy | `read` |
 | LLM Provider API Keys | `read` |
 | LLM Virtual Keys | `read`, `create` |
@@ -173,14 +171,10 @@ These permissions can be selected in custom roles. Per-resource actions and scop
 | <span id="plugin:create"></span>`plugin:create` | Create plugins |
 | <span id="plugin:update"></span>`plugin:update` | Modify plugin metadata and files |
 | <span id="plugin:delete"></span>`plugin:delete` | Delete plugins |
-| <span id="project:read"></span>`project:read` | View projects and your own sessions inside them |
-| <span id="project:create"></span>`project:create` | Create projects |
-| <span id="project:update"></span>`project:update` | Edit project descriptions, instructions, and sharing |
-| <span id="project:delete"></span>`project:delete` | Delete projects |
-| <span id="scheduledTask:read"></span>`scheduledTask:read` | View scheduled tasks and their run history |
-| <span id="scheduledTask:create"></span>`scheduledTask:create` | Create new scheduled tasks and trigger runs |
-| <span id="scheduledTask:update"></span>`scheduledTask:update` | Modify scheduled task configuration |
-| <span id="scheduledTask:delete"></span>`scheduledTask:delete` | Delete scheduled tasks |
+| <span id="scheduledTask:read"></span><span id="project:read"></span>`project:read` | View projects, their schedules, and your own sessions inside them |
+| <span id="scheduledTask:create"></span><span id="project:create"></span>`project:create` | Create projects and schedules, and trigger schedule runs |
+| <span id="scheduledTask:update"></span><span id="project:update"></span>`project:update` | Edit project descriptions, instructions, sharing, and schedules |
+| <span id="scheduledTask:delete"></span><span id="project:delete"></span>`project:delete` | Delete projects and schedules |
 | <span id="serviceAccount:read"></span>`serviceAccount:read` | Open Service Accounts |
 | <span id="serviceAccount:create"></span>`serviceAccount:create` | Create service accounts |
 | <span id="skill:read"></span>`skill:read` | Open Skills |

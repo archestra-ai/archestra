@@ -5,6 +5,7 @@ import {
   AGENT_TOOL_PREFIX,
   buildElicitationMandateInstruction,
   isAgentTool,
+  isYellToolShortName,
   OPENAPPA_RUNTIME_TOOL_SHORT_NAMES,
   PROXY_STAMPED_TOOL_ARGUMENTS,
   SELF_FORK_TOOL_NAME,
@@ -17,6 +18,7 @@ import {
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   TOOL_START_RUN_SHORT_NAME,
 } from "@archestra/shared";
+import { isOpenCodeFamilyClient } from "@archestra/shared/opencode-family";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { readRunToolArgs } from "@/archestra-mcp-server/run-tool-target";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
@@ -27,9 +29,11 @@ import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaSpawnCorrelationModel, {
   type AllowedSpawnAlias,
 } from "@/models/openappa-spawn-correlation";
+import { reportAgentRuntimeObservedReads } from "@/observability/metrics/agent-runtime";
 import { childSessionId, clientSessionId } from "@/openappa/actor";
 import {
   type AppaChildReturnCompletion,
+  collectAndStripChildReturns,
   mintChildReturnMarker,
 } from "@/openappa/child-return";
 import {
@@ -45,17 +49,20 @@ import {
   mintDelegationMarker,
   verifyDelegatedPrompt,
 } from "@/openappa/delegation";
+import { recoverDiagnosticTurn } from "@/openappa/diagnostic-recovery";
 import {
   askHitlReviewInForm,
   getHitlAskUserArguments,
   getHitlInspectableAskUserArguments,
   getHitlReview,
   getHitlReviewResult,
+  HITL_QUESTION_TTL_MS,
   type HitlReviewOutcome,
   hitlReviewAskedInForm,
   isHitlReviewOutcome,
   peekHitlDecision,
   recordHitlRuling,
+  renewHitlReview,
   resolveHitlInspectableAnswer,
   sealHitlClosure,
 } from "@/openappa/hitl-review";
@@ -67,6 +74,7 @@ import {
   stripPeerProofs,
 } from "@/openappa/peer-claims";
 import {
+  isObservedRead,
   RUNTIME_TOOL_PROOF_ARGUMENT,
   signRuntimeToolProof,
   stripRuntimeToolProofs,
@@ -83,6 +91,7 @@ import {
   evaluateToolCalls,
   loadChildAddresses,
   loadChildReturns,
+  loadOfferReview,
   notePrompt,
   type OpenAppaSession,
   processProxyResults,
@@ -109,8 +118,12 @@ import {
   startedUnenforced,
   type UnenforcedCalls,
 } from "@/openappa/unenforced";
-import { appaWireFamily } from "@/openappa/wire";
-import { rememberYellSession } from "@/openappa/yell-session";
+import { appaTurnBoundaries, appaWireFamily } from "@/openappa/wire";
+import {
+  isReportingToolCall,
+  rememberYellSession,
+  reportingToolSpellings,
+} from "@/openappa/yell-session";
 import type {
   LlmProxyBeforeModelContext,
   LlmProxyBufferedModelResponseContext,
@@ -156,11 +169,17 @@ import {
   type NativeQuestionNoAnswer,
   type NativeQuestionReading,
 } from "./types";
-import { withCallerScope, withoutCallerScope } from "./utils";
+import {
+  withCallerScope,
+  withoutCallerScope,
+  withoutRemedySections,
+} from "./utils";
 
 type AppaPluginBinding = {
   /** The request continues a provider thread that holds the system prompt. */
   threadContinue: boolean;
+  /** Limits later hooks to reporting and prevents a second recovery attempt. */
+  reportingRecovery?: boolean;
   session: OpenAppaSession;
   identity: AppaTrustedContext["toolIdentity"];
   adapter: AppaClientAdapter | undefined;
@@ -171,12 +190,6 @@ type AppaPluginBinding = {
   sessionInitialized?: boolean;
   /** True when the model's response contained tool calls awaiting client execution. */
   turnOpen: boolean;
-  /**
-   * Admitted return text when a native handback is the only call in the batch.
-   * A buffered stream replacement prevents the start proof from accompanying
-   * the return.
-   */
-  completedHandbackReturn: string | undefined;
   /** True on internal loopback Chat requests. */
   chat: boolean;
   compaction: boolean;
@@ -191,6 +204,8 @@ type AppaPluginBinding = {
   nativeHitlRulings: RecordedNativeHitlRuling[];
   /** Offers whose native answer could not be read; asked again in a form. */
   unreadNativeAnswerOfferIds: string[];
+  /** Offers whose native answer came after their review expired; staged again on request. */
+  expiredNativeQuestionOfferIds: string[];
   /** The native id this request's children will report as their parent. */
   spawnerNativeId: string | undefined;
   /** Server-bound child metadata needed to correlate its terminal return. */
@@ -213,6 +228,7 @@ type AppaPluginBinding = {
 type AppaPluginObserver = {
   session: OpenAppaSession;
   adapter: AppaClientAdapter | undefined;
+  identity: AppaTrustedContext["toolIdentity"];
   requestBody: unknown;
 };
 
@@ -286,7 +302,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       runtimeSessionId: trustedContext.runtimeSessionId,
       runtimeTaskId: trustedContext.runtimeTaskId,
       turnOpen: false,
-      completedHandbackReturn: undefined,
       chat,
       compaction: trustedContext.compaction === true,
       threadContinue: trustedContext.thread === "continue",
@@ -296,6 +311,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       pendingHitlReviewOfferIds: [],
       nativeHitlRulings: [],
       unreadNativeAnswerOfferIds: [],
+      expiredNativeQuestionOfferIds: [],
       spawnerNativeId: trajectory.adapter?.nativeConversationId(
         trajectory.matchContext,
       ),
@@ -355,10 +371,61 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       childResultUpdates[result.id] = content;
       return { ...result, content };
     });
-    const childReturns = await approveChildReturnCarriers({
-      binding,
-      results,
-    });
+    let childReturns: Awaited<ReturnType<typeof approveChildReturnCarriers>>;
+    const trustedContext = context.resources.get(APPA_PLUGIN_TRUSTED_CONTEXT) as
+      | AppaTrustedContext
+      | undefined;
+    try {
+      if (trustedContext?.childReturnRefusal)
+        throw trustedContext.childReturnRefusal;
+      childReturns = await approveChildReturnCarriers({ binding, results });
+    } catch (error) {
+      const family = appaWireFamily(context.interactionType);
+      const recovery =
+        (error instanceof ChildReturnRefusal ||
+          (error instanceof ApiError &&
+            error === trustedContext?.childReturnRefusal)) &&
+        family &&
+        !binding.threadContinue &&
+        !binding.reportingRecovery
+          ? recoverDiagnosticTurn({
+              body: binding.requestBody,
+              family,
+              refusal: error.message,
+              tools: reportingToolSpellings({
+                identity: binding.identity,
+                declarations: binding.request.declaredTools,
+                nativeQuestion: binding.adapter?.nativeQuestion?.toolName,
+              }),
+              isAllowedCall: (call) =>
+                isReportingToolCall({
+                  call,
+                  resolution: this.resolution(binding),
+                  nativeQuestion: binding.adapter?.nativeQuestion?.toolName,
+                }),
+            })
+          : undefined;
+      if (!recovery || !family) throw error;
+      binding.reportingRecovery = true;
+      if (trustedContext) trustedContext.childReturnRefusal = undefined;
+      Object.assign(binding.request, {
+        // Any malformed frame left after filtering must fail closed here.
+        childReturns: collectAndStripChildReturns(binding.requestBody, {
+          openCodeBackgroundReturns:
+            !!binding.adapter && isOpenCodeFamilyClient(binding.adapter.id),
+          codexMailboxReturns: binding.adapter?.id === "codex",
+        }),
+        promptOperationId: undefined,
+        ...appaTurnBoundaries({ family, body: binding.requestBody }),
+      });
+      // reportingRecovery prevents this filtered pass from recovering again.
+      return this.onToolResults({
+        ...context,
+        toolResults: context.toolResults.filter((result) =>
+          recovery.resultIds.has(result.id),
+        ),
+      });
+    }
     Object.assign(childResultUpdates, childReturns.updates);
     const governed = this.governedSession(binding);
     await admitRelayReports({
@@ -393,6 +460,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     binding.nativeHitlRulings = nativeAnswers.rulings;
     // An unread answer leaves its review pending. Its own guidance asks again.
     binding.unreadNativeAnswerOfferIds = nativeAnswers.unreadOfferIds;
+    // An answer whose review expired is no ruling. Its own guidance has the
+    // review staged again.
+    binding.expiredNativeQuestionOfferIds = nativeAnswers.expiredOfferIds;
     // An inspect answer asks for the same card again. The instruction rides
     // the answer's own result text, so the request's earlier messages stay
     // byte-identical across turns.
@@ -431,6 +501,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         ...binding.nativeHitlRulings.map((entry) => entry.offerId),
         ...nativeAnswers.unreadOfferIds,
         ...nativeAnswers.continued.map((entry) => entry.offerId),
+        ...nativeAnswers.expiredOfferIds,
       ]),
     });
     // A handback's result and a message's delivery receipt are the client's
@@ -459,6 +530,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         toolCallIds: [...runtimeSpawns],
       },
     );
+    // A call whose annotator gave no answer never ran, and the runtime has no
+    // record of it. Its result is the notice the client ran in its place, so
+    // it is answered with that notice instead of being ruled on as a call.
+    const unansweredNotices = new Map<string, string>();
+    for (const answer of results) {
+      const notice = await cacheManager.get<string>(
+        unansweredNoticeKey({ session: governed, callId: answer.id }),
+      );
+      if (typeof notice === "string") unansweredNotices.set(answer.id, notice);
+    }
     // The runtime withholds the output of a spawn that failed. What the gateway
     // recorded about the launch is not that output, so it is restored after.
     const failedLaunchResults: Record<string, string> = {};
@@ -468,7 +549,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           !binding.adapter?.isChildHandbackTool?.(result.name) &&
           !binding.adapter?.isRelayTool?.(result.name) &&
           !isPeerInboxResult(binding, result.name, result.namespace) &&
-          !childReturns.ignored.has(result.id),
+          !childReturns.ignored.has(result.id) &&
+          !unansweredNotices.has(result.id),
       )
       // An answer to an issued question is recognized as the very result the
       // client sent, so a result nothing rewrote goes on as that object.
@@ -526,6 +608,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         binding.returnContract = text;
       },
     });
+    for (const [id, notice] of unansweredNotices)
+      result.toolResultUpdates[id] = {
+        content: notice,
+        outputSource: "runtime",
+        denied: true,
+      };
     for (const answer of toolResults) {
       // Read, not consumed: the client sends this result on every later
       // request, and the model must read the same text each time.
@@ -696,6 +784,17 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       });
       requireCodexToolCall({ binding, context });
     }
+    if (binding && binding.expiredNativeQuestionOfferIds.length > 0) {
+      const offerIds = binding.expiredNativeQuestionOfferIds;
+      binding.expiredNativeQuestionOfferIds = [];
+      appendQuestionContinuation({
+        request: context.request,
+        interactionType: context.interactionType,
+        guidance: expiredNativeQuestionGuidance(offerIds),
+        onContinue: binding.threadContinue ? "turn" : undefined,
+      });
+      requireCodexToolCall({ binding, context });
+    }
     if (binding && binding.pendingHitlReviewOfferIds.length > 0) {
       const offerIds = binding.pendingHitlReviewOfferIds;
       binding.pendingHitlReviewOfferIds = [];
@@ -761,7 +860,18 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // Ordinary questions are identified by their actual client call/result
     // frames. Only a pending review needs a proxy-issued, one-use binding.
     if (!tools) return;
-    const illegalSpawn = unsupportedNativeSpawn(binding, context.toolCalls);
+    const illegalSpawn = unsupportedNativeSpawn(
+      binding,
+      binding.reportingRecovery
+        ? context.toolCalls.filter((call) =>
+            isReportingToolCall({
+              call,
+              resolution: this.resolution(binding),
+              nativeQuestion: binding.adapter?.nativeQuestion?.toolName,
+            }),
+          )
+        : context.toolCalls,
+    );
     if (illegalSpawn) {
       const message = illegalSpawnFeedback(illegalSpawn);
       return {
@@ -786,6 +896,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         binding.adapter?.isSpawnTool(name, namespace) === true,
     });
     let changed = incomingToolCalls !== context.toolCalls;
+    if (binding.reportingRecovery)
+      binding.nativeHitlRulings = binding.nativeHitlRulings.filter((entry) =>
+        isReportingReviewTool(entry.reviewedTool),
+      );
     if (binding.nativeHitlRulings.length > 0) {
       const blocked = context.toolCalls[0];
       if (!blocked) return;
@@ -936,15 +1050,18 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             !askedInForm &&
             inspectsNatively(binding, context.canShowToolCallReview === true),
         });
-        if (canonical.invalidOfferCount) {
-          const message =
-            "Submit each pending OpenAPPA HITL offer in a separate ask_user call.";
+        if (canonical.invalidOfferCount || canonical.reviewUnavailable) {
+          const message = canonical.reviewUnavailable
+            ? "The pending approval review changed or expired before its card could be issued. Request the current review again; no permission was granted."
+            : "Submit each pending OpenAPPA HITL offer in a separate ask_user call.";
           return {
             decision: "refuse",
             refusal: {
               refusalMessage: message,
               contentMessage: message,
-              reason: "openappa_hitl_offer_count",
+              reason: canonical.reviewUnavailable
+                ? "openappa_hitl_review_unavailable"
+                : "openappa_hitl_offer_count",
               blockedToolName: call.name,
               blockedToolId: call.id,
               toolInput: toolInputOf(call.arguments),
@@ -1002,13 +1119,19 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (!binding || !tools) return;
     enterCapturedGuardrailsActivation("active");
     const calls = [...context.hostedToolCalls];
-    const decisions = await withCapturedGuardrailsActivation("active", () =>
-      evaluateHostedToolCalls(this.governedSession(binding), calls, {
-        ...this.resolution(binding),
-        control: tools.control,
-        lineage: binding.child?.lineage,
-      }),
-    );
+    const decisions = binding.reportingRecovery
+      ? calls.map(() => ({
+          kind: "hold" as const,
+          feedback:
+            "OpenAPPA blocked this conversation. Only reporting tools and their approval flow may run; this operation did not run.",
+        }))
+      : await withCapturedGuardrailsActivation("active", () =>
+          evaluateHostedToolCalls(this.governedSession(binding), calls, {
+            ...this.resolution(binding),
+            control: tools.control,
+            lineage: binding.child?.lineage,
+          }),
+        );
     const held = calls.flatMap((call, index) => {
       const decision = decisions[index];
       return decision.kind === "hold"
@@ -1048,8 +1171,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
     const observer = this.observers.get(context.resources);
     if (observer) {
-      await recordObservedCalls(observer, context.toolCalls);
-      return;
+      // A call is signed only once the record that this session made it
+      // exists: that record is what the gateway checks an observed proof by.
+      const recorded = await recordObservedCalls(observer, context.toolCalls);
+      return signObservedRuntimeCalls(observer, context.toolCalls, recorded);
     }
     const binding = this.bindings.get(context.resources);
     if (!binding) return;
@@ -1072,9 +1197,63 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // Children named by this trajectory mint under this request's own id: the
     // minted parent:child id for a child turn, the root id for a parent.
     const rootId = session.session_id;
-    const blockedTranscriptCalls = new Set<string>();
+    const blockedTranscriptCalls = new Set<string>(
+      binding.reportingRecovery
+        ? calls
+            .filter(
+              (call) =>
+                !isReportingToolCall({
+                  call,
+                  resolution: this.resolution(binding),
+                  nativeQuestion: binding.adapter?.nativeQuestion?.toolName,
+                }),
+            )
+            .map((call) => call.id)
+        : [],
+    );
+    if (binding.reportingRecovery) {
+      for (const call of calls) {
+        if (blockedTranscriptCalls.has(call.id)) continue;
+        const [target] = normalizeToolCallsForPolicy(
+          [call],
+          this.resolution(binding),
+        );
+        if (
+          archestraMcpBranding.getToolShortName(target.toolCallName) !==
+          TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME
+        )
+          continue;
+        const offerId = toolInputOf(target.toolCallArgs).offer_id;
+        try {
+          const tool =
+            typeof offerId === "string"
+              ? ((await getHitlReview({ session: binding.session, offerId }))
+                  ?.tool ??
+                (
+                  await loadOfferReview({
+                    organizationId: binding.session.organization_id,
+                    sessionId: binding.session.session_id,
+                    offerId,
+                  })
+                )?.tool)
+              : undefined;
+          if (!isReportingReviewTool(tool)) blockedTranscriptCalls.add(call.id);
+        } catch (error) {
+          logger.warn(
+            {
+              err: error,
+              sessionId: binding.session.session_id,
+              callId: call.id,
+            },
+            "OpenAPPA withheld a reporting remedy because its review could not be loaded",
+          );
+          blockedTranscriptCalls.add(call.id);
+        }
+      }
+    }
     if (binding.adapter) {
       for (const call of calls) {
+        if (blockedTranscriptCalls.has(call.id)) continue;
         // Native transcript files contain unchecked intermediate output, not
         // the child's admitted return. A correctly prefixed id is not proof
         // that reading those bytes is safe.
@@ -1112,8 +1291,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // message call first, then bind the peer record to that call id.
     const policy = sharedPolicy(session.organization_id);
     const runtimeCalls = await resolveRuntimeCalls({
-      binding,
-      calls,
+      organizationId: binding.session.organization_id,
+      calls: calls.filter((call) => !blockedTranscriptCalls.has(call.id)),
       resolution: this.resolution(binding),
     });
     const evaluateOptions = {
@@ -1223,6 +1402,17 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const decisionById = new Map(
       rest.map((call, index) => [call.id, decisions[index]]),
     );
+    for (const [id, decision] of decisionById) {
+      // Only the notice of this call runs. The runtime holds no record of the
+      // call, so the result the client sends back is answered from here and
+      // never ruled on as a call that ran.
+      if (decision.kind === "deny" && decision.unanswered)
+        await cacheManager.set(
+          unansweredNoticeKey({ session, callId: id }),
+          decision.feedback,
+          TimeInMs.Day,
+        );
+    }
     for (const [id, feedback] of notLoaded) {
       decisionById.set(id, { kind: "deny", feedback });
       // The runtime holds no record of this call, so the result the client
@@ -1236,8 +1426,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     for (const id of blockedTranscriptCalls) {
       decisionById.set(id, {
         kind: "deny",
-        feedback:
-          "OpenAPPA withheld raw child transcript access; use the verified child completion instead",
+        feedback: binding.reportingRecovery
+          ? "OpenAPPA blocked this conversation. Only reporting tools and their approval flow may run; this operation did not run."
+          : "OpenAPPA withheld raw child transcript access; use the verified child completion instead",
       });
     }
     for (const [id, feedback] of reusedNames) {
@@ -1269,10 +1460,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       if (handbackIds.has(call.id)) {
         const handback = await admitChildHandback({ binding, call });
         rewritten.push({ id: call.id, name: call.name });
+        // The rewritten call carries the admitted return. Claude Code takes a
+        // report only through this call, so it must reach the client as a
+        // call, streamed or not; text in its place is an undelivered report.
         released.push(handback.call);
-        if (calls.length === 1) {
-          binding.completedHandbackReturn = handback.returnText;
-        }
         continue;
       }
       const inbox = peerInbox.get(call.id);
@@ -1324,21 +1515,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             spawn: runtime.spawn,
             wrapped: runtime.wrapper !== undefined,
           });
-          const signed = {
-            ...runtime.args,
-            [RUNTIME_TOOL_PROOF_ARGUMENT]: proof,
-          };
-          released.push({
-            ...call,
-            arguments: runtime.wrapper
-              ? {
-                  ...runtime.wrapper,
-                  tool_args: runtime.stringArgs
-                    ? JSON.stringify(signed)
-                    : signed,
-                }
-              : signed,
-          });
+          released.push(signedCall({ call, runtime, proof }));
           continue;
         }
         // The runtime ruled on the call as the model wrote it; the marker is
@@ -1457,18 +1634,22 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             ruling: decision.feedback,
           });
         }
-        // A call that only needs loading gets that one instruction.
+        // A call that only needs loading gets that one instruction. A client
+        // that defers tools can still load the remedy tools and act on the
+        // plans. Any other session cannot act on them, so the ruling loses its
+        // plan and delegation sections: the model would otherwise pass them
+        // on to the person as options.
+        // A ruling with no plan can still advise a subagent route, which the
+        // runtime renders whether or not it offers a plan; here it is cut too.
         const contentMessage = notLoaded.has(call.id)
           ? decision.feedback
-          : noPlan
-            ? ruling
-            : transient
-              ? `${ruling}\n\n[appa] This request did not include the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the ruling could not be offered as a remedy and the call is refused. The gateway tools usually finish loading a moment after the session starts. Send your message again.`
-              : binding.request.defersTools
-                ? `${ruling}\n\n[appa] This client defers tools it has not loaded, and the ${archestraMcpBranding.serverName} MCP gateway remedy tools are not loaded in this session, so the ruling could not be offered as a remedy and the call is refused. Search for ${TOOL_GET_REMEDY_PLANS_SHORT_NAME} and ${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME} with your tool search, then call the denied tool again to receive the remedy.`
-                : binding.request.declaredTools.length === 0
-                  ? `${ruling}\n\n[appa] This request listed no tools, so the ruling could not be offered as a remedy and the call is refused. Remedies need the ${archestraMcpBranding.serverName} MCP gateway tools in the request. Connect the gateway, then start a new session. In Codex, also set code_mode_host = false: code mode keeps its tools out of the request.`
-                  : `${ruling}\n\n[appa] This client did not declare the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the call is refused. Connect the MCP gateway and allow both remedy tools to use approval plans.`;
+          : binding.request.defersTools
+            ? noPlan
+              ? ruling
+              : `${ruling}\n\n[appa] This client defers tools it has not loaded, and the ${archestraMcpBranding.serverName} MCP gateway remedy tools are not loaded in this session, so the ruling could not be offered as a remedy and the call is refused. Search for ${TOOL_GET_REMEDY_PLANS_SHORT_NAME} and ${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME} with your tool search, then call the denied tool again to receive the remedy.`
+            : noPlan
+              ? `${withoutRemedySections(decision.feedback)}${clarification}${NO_REMEDY_PLAN_HINT}`
+              : `${withoutRemedySections(decision.feedback)}${clarification}\n\n${remedylessRefusalNote({ binding, transient })}`;
         return {
           decision: "refuse",
           refusal: {
@@ -1559,12 +1740,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       binding.compaction = true;
     }
     if (binding?.compaction) return { decision: "release" };
-    if (binding?.completedHandbackReturn !== undefined && context.streaming) {
-      return {
-        decision: "replace",
-        responseText: binding.completedHandbackReturn,
-      };
-    }
     if (!binding || binding.turnOpen || !binding.session.parent_id) {
       return;
     }
@@ -1719,6 +1894,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       this.observers.set(context.resources, {
         session,
         adapter,
+        identity: trustedContext.toolIdentity,
         requestBody: context.requestBody,
       });
     } catch (error) {
@@ -1830,24 +2006,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     binding: AppaPluginBinding,
     call: { name: string; namespace?: string },
   ): string {
-    if (
-      !binding.identity.attestationOf(call.name, call.namespace) &&
-      binding.adapter?.classifyToolName(call.name, call.namespace) === "local"
-    ) {
-      return binding.identity.canonicalize(
-        binding.adapter.normalizeLocalToolName(call.name),
-      );
-    }
-    return binding.identity.canonicalize(call.name, call.namespace);
+    return canonicalCallName(binding, call);
   }
 
   /** The name resolution this binding's calls are ruled under. */
   private resolution(binding: AppaPluginBinding): ToolNameResolution {
-    return {
-      canonicalize: (name: string, namespace?: string) =>
-        this.canonicalize(binding, { name, namespace }),
-      looseRunToolDispatch: binding.identity.looseRunToolDispatch,
-    };
+    return toolNameResolution(binding);
   }
 
   /**
@@ -1933,6 +2097,30 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
 const NO_REMEDY_PLAN_HINT =
   "\n\n[appa] This ruling offers no remedy plan. Explain the ruling to the user and STOP this blocked action. Do not retry the same call, directly or through a wrapper.";
 
+/**
+ * Why a refused call got no remedy, and what the person does about it. The
+ * client's adapter knows where its gateway state is seen and how to sign in.
+ * Without one, the first miss in a session is read as tools still loading.
+ */
+function remedylessRefusalNote(params: {
+  binding: AppaPluginBinding;
+  transient: boolean;
+}): string {
+  const server = archestraMcpBranding.serverName;
+  // A request with no tools at all is not a gateway that is still loading or
+  // needs a sign-in. The client known to send one is Codex in code mode, which
+  // runs its tools outside the request, so the text names its setting.
+  if (params.binding.request.declaredTools.length === 0) {
+    return `[appa] This request listed no tools, so the ruling could not be offered as a remedy and the call is refused. Remedies need the ${server} MCP gateway tools in the request. Connect the gateway, then start a new session. In Codex, also set code_mode_host = false: code mode keeps its tools out of the request.`;
+  }
+  const lead = `[appa] This request did not include the ${server} MCP gateway tools, so no remedy plan can be used in this session, and a subagent started from it has the same limit. The call is refused.`;
+  const hint = params.binding.adapter?.gatewayToolsHint?.(server);
+  if (hint) return `${lead} ${hint}`;
+  return params.transient
+    ? `${lead} The gateway tools usually finish loading a moment after the session starts. Send your message again.`
+    : `${lead} Connect this client to the ${server} MCP gateway, then start a new session.`;
+}
+
 function deniedCallClarificationKey(params: {
   session: OpenAppaSession;
   callId: string;
@@ -1954,6 +2142,15 @@ function waitFailure(wait: CommonToolResult): string {
       ? wait.content
       : JSON.stringify(wait.content);
   return ` The wait itself failed, and the client reported:\n${reported}\n`;
+}
+
+function unansweredNoticeKey(params: {
+  session: OpenAppaSession;
+  callId: string;
+}): AllowedCacheKey {
+  return `${CacheKey.OpenAppaUnansweredAnnotationNotice}-${Buffer.from(
+    `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.callId)}`,
+  ).toString("base64url")}`;
 }
 
 function notLoadedRulingKey(params: {
@@ -2097,8 +2294,60 @@ type RuntimeCall = {
 
 const runtimeToolActions = new Set<string>(OPENAPPA_RUNTIME_TOOL_SHORT_NAMES);
 
+/** The canonical name a call is ruled under, by the session's tool identity. */
+function canonicalCallName(
+  params: {
+    identity: AppaTrustedContext["toolIdentity"];
+    adapter: AppaClientAdapter | undefined;
+  },
+  call: { name: string; namespace?: string },
+): string {
+  if (
+    !params.identity.attestationOf(call.name, call.namespace) &&
+    params.adapter?.classifyToolName(call.name, call.namespace) === "local"
+  ) {
+    return params.identity.canonicalize(
+      params.adapter.normalizeLocalToolName(call.name),
+    );
+  }
+  return params.identity.canonicalize(call.name, call.namespace);
+}
+
+function toolNameResolution(params: {
+  identity: AppaTrustedContext["toolIdentity"];
+  adapter: AppaClientAdapter | undefined;
+}): ToolNameResolution {
+  return {
+    canonicalize: (name: string, namespace?: string) =>
+      canonicalCallName(params, { name, namespace }),
+    looseRunToolDispatch: params.identity.looseRunToolDispatch,
+  };
+}
+
+/** The call as released: its arguments, or its `run_tool` target's, carry the proof. */
+function signedCall(params: {
+  call: ToolCall;
+  runtime: RuntimeCall;
+  proof: string;
+}): ToolCall {
+  const { call, runtime } = params;
+  const signed = {
+    ...runtime.args,
+    [RUNTIME_TOOL_PROOF_ARGUMENT]: params.proof,
+  };
+  return {
+    ...call,
+    arguments: runtime.wrapper
+      ? {
+          ...runtime.wrapper,
+          tool_args: runtime.stringArgs ? JSON.stringify(signed) : signed,
+        }
+      : signed,
+  };
+}
+
 async function resolveRuntimeCalls(params: {
-  binding: AppaPluginBinding;
+  organizationId: string;
   calls: readonly ToolCall[];
   resolution: ToolNameResolution;
 }): Promise<Map<string, RuntimeCall>> {
@@ -2135,7 +2384,7 @@ async function resolveRuntimeCalls(params: {
         call.action === TOOL_START_RUN_SHORT_NAME || isAgentTool(call.action),
     )
   ) {
-    const organizationId = params.binding.session.organization_id;
+    const { organizationId } = params;
     const [runtimeTargets, spawnTargets] = await Promise.all([
       AgentModel.findRuntimeTargets(organizationId),
       AgentModel.findSpawnTargets(organizationId),
@@ -2604,6 +2853,16 @@ async function approveChildReturnCarriers(params: {
  * re-sends that history with every later request, so a retry fails the same
  * way: the SDK is told not to retry, and the user is told how to continue.
  */
+class ChildReturnRefusal extends ApiError {}
+
+function isReportingReviewTool(tool: string | undefined): boolean {
+  // The native intrinsic is unprefixed; gateway tools have branded names.
+  return (
+    tool === "yell" ||
+    isYellToolShortName(archestraMcpBranding.getToolShortName(tool ?? ""))
+  );
+}
+
 function childReturnRefusal(params: {
   reason: string;
   recovery?: string;
@@ -2617,7 +2876,7 @@ function childReturnRefusal(params: {
     params.callId ? `tool call ${params.callId}` : undefined,
     params.childNativeId ? `subagent ${params.childNativeId}` : undefined,
   ].filter((reference) => reference !== undefined);
-  const error = new ApiError(
+  const error = new ChildReturnRefusal(
     params.status ?? 409,
     [
       "OpenAPPA blocked this request.",
@@ -2634,7 +2893,7 @@ function childReturnRefusal(params: {
 }
 
 const CHILD_RETURN_RECOVERY =
-  "To continue, start a new session, or rewind the conversation to a message you sent before this subagent started.";
+  "You can ask your agent to report this failure, or to report it and turn OpenAPPA off for this session. To continue other work, start a new session, or rewind the conversation to a message you sent before this subagent started.";
 const FORKED_CHILD_RETURN_RECOVERY =
   "To keep this context, resume the original session. Otherwise, start a new session, or rewind the conversation to a message you sent before this subagent started.";
 const UNRECORDED_CHILD_RETURN =
@@ -2776,7 +3035,7 @@ async function admitRelayArrivals(params: {
 async function recordObservedCalls(
   observer: AppaPluginObserver,
   calls: readonly ToolCall[],
-): Promise<void> {
+): Promise<boolean> {
   const { session } = observer;
   try {
     const launches = observer.adapter?.teammateLaunches?.(observer.requestBody);
@@ -2804,11 +3063,88 @@ async function recordObservedCalls(
         }),
       ),
     ]);
+    return true;
   } catch (error) {
     logger.warn(
       { err: error },
       "OpenAPPA could not record tool calls made while enforcement was off",
     );
+    return false;
+  }
+}
+
+/**
+ * Signs the runtime reads of a governed session while enforcement is off.
+ * Nothing rules them now, but a read can reach the gateway after enforcement
+ * turns on, and without a proof the gateway cannot tell this session from a
+ * stranger and refuses it. With one, what it reads crosses into this session
+ * as for a ruled call. Anything else stays unsigned (see `isObservedRead`).
+ * Signing never fails the request; an unsigned call behaves as before. When
+ * the calls could not be recorded nothing is signed, and the reads are
+ * counted as unsigned.
+ */
+async function signObservedRuntimeCalls(
+  observer: AppaPluginObserver,
+  calls: readonly ToolCall[],
+  recorded: boolean,
+): Promise<LlmProxyToolCallsOutcome | undefined> {
+  const secret = config.openappa.offerSigningSecret;
+  if (!secret) return undefined;
+  try {
+    const runtimeCalls = await resolveRuntimeCalls({
+      organizationId: observer.session.organization_id,
+      calls,
+      resolution: toolNameResolution(observer),
+    });
+    const toolCalls: ToolCall[] = [];
+    const runtimeProofs: LlmProxyRuntimeToolProof[] = [];
+    let unsigned = 0;
+    for (const call of calls) {
+      const runtime = runtimeCalls.get(call.id);
+      // A proof the model wrote itself is left for the gateway to refuse.
+      const read =
+        runtime !== undefined &&
+        !runtime.spawn &&
+        isObservedRead({ action: runtime.action, args: runtime.args }) &&
+        !Object.hasOwn(runtime.args, RUNTIME_TOOL_PROOF_ARGUMENT);
+      if (read && !recorded) unsigned++;
+      const proof =
+        runtime && read && recorded
+          ? signRuntimeToolProof({
+              session: observer.session,
+              toolCallId: withoutTrajectoryStamp(call.id),
+              action: runtime.action,
+              arguments: runtime.args,
+              spawn: false,
+              observed: true,
+              secret,
+            })
+          : undefined;
+      if (!runtime || !proof) {
+        toolCalls.push(call);
+        continue;
+      }
+      runtimeProofs.push({
+        id: call.id,
+        name: call.name,
+        action: runtime.action,
+        session: observer.session,
+        spawn: false,
+        wrapped: runtime.wrapper !== undefined,
+      });
+      toolCalls.push(signedCall({ call, runtime, proof }));
+    }
+    reportAgentRuntimeObservedReads("signed", runtimeProofs.length);
+    reportAgentRuntimeObservedReads("unsigned", unsigned);
+    return runtimeProofs.length > 0
+      ? { decision: "allow", toolCalls, runtimeProofs }
+      : undefined;
+  } catch (error) {
+    logger.warn(
+      { err: error },
+      "OpenAPPA could not sign runtime calls made while enforcement was off",
+    );
+    return undefined;
   }
 }
 
@@ -4358,6 +4694,7 @@ async function canonicalizeHitlAskUserCall(params: {
 }): Promise<{
   call: LlmProxyToolCallsContext["toolCalls"][number];
   invalidOfferCount: boolean;
+  reviewUnavailable?: boolean;
   offerIds: string[];
   /** The card offers Inspect details; its answers resolve inspection state. */
   inspectable?: boolean;
@@ -4401,6 +4738,15 @@ async function canonicalizeHitlAskUserCall(params: {
           : {}),
       };
     }
+    // A missing snapshot here can be a concurrent replacement, not an absent
+    // feature. Never downgrade it to the old, potentially unreadable card.
+    if (params.offerIds.length > 0)
+      return {
+        call: params.call,
+        invalidOfferCount: false,
+        reviewUnavailable: true,
+        offerIds: [],
+      };
   }
   const hitl = await getHitlAskUserArguments({
     session: params.binding.session,
@@ -4542,6 +4888,7 @@ const EXTERNAL_REMEDY_WORKFLOW_GUIDANCE = [
   "Put the offer ID in remedy_offer_ids, and use the header Approval and the options Approve and Deny.",
   "The platform shows the user the exact review.",
   "Retry the blocked call only after execute_remedy_plan reports that the plan is authorized.",
+  "If a plan makes no sense, you keep getting blocked, the user keeps being asked to approve similar calls, or the user is frustrated, call yell.",
 ].join(" ");
 
 const LEGACY_NATIVE_QUESTION_ID_PATTERN =
@@ -4627,10 +4974,23 @@ async function rememberNativeQuestions(
           ...(question.reviewText ? { reviewText: true } : {}),
           ...(question.digest ? { digest: question.digest } : {}),
         },
-        TimeInMs.Minute * 10,
+        HITL_QUESTION_TTL_MS,
       ),
     ),
   );
+  // The review a question asks about must outlive the question: an answer
+  // that still binds to its question is read against that review, and a
+  // review gone by then would turn the answer into no ruling.
+  for (const question of questions) {
+    for (const offerId of question.offerIds) {
+      if (await renewHitlReview({ session: binding.session, offerId }))
+        continue;
+      logger.warn(
+        { client: binding.adapter?.id, offerId },
+        "OpenAPPA asked a native approval question about a review that is not staged",
+      );
+    }
+  }
 }
 
 function isUserQuestionResult(params: {
@@ -4717,13 +5077,21 @@ async function recordNativeHitlRulings(params: {
   rulings: RecordedNativeHitlRuling[];
   unreadOfferIds: string[];
   continued: HitlReviewContinuation[];
+  expiredOfferIds: string[];
 }> {
   const native = params.binding.adapter?.nativeQuestion;
   const parse = native?.rulingFromResult;
-  if (!parse) return { rulings: [], unreadOfferIds: [], continued: [] };
+  if (!parse)
+    return {
+      rulings: [],
+      unreadOfferIds: [],
+      continued: [],
+      expiredOfferIds: [],
+    };
   const recorded: RecordedNativeHitlRuling[] = [];
   const unreadOfferIds: string[] = [];
   const continued: HitlReviewContinuation[] = [];
+  const expiredOfferIds: string[] = [];
   for (const [answer, claim] of params.verifiedNativeQuestionResults) {
     if (!claim.offerIds || claim.offerIds.length === 0 || !isRecord(answer))
       continue;
@@ -4744,26 +5112,52 @@ async function recordNativeHitlRulings(params: {
       continue;
     }
     // The question the answer is read against comes from the review this
-    // server holds, the same source the question was issued from. Without
-    // that review the answer is not a ruling.
+    // server holds, the same source the question was issued from.
     const asked = await getHitlAskUserArguments({
       session: params.binding.session,
       offerIds: claim.offerIds,
     });
-    const reading = asked
-      ? parse(
+    if (!asked) {
+      // Without the review the answer cannot be read. A decision the review
+      // already reached stands. Otherwise the review expired, and no closure
+      // is sealed: a person who answered must not read as a refusal, and the
+      // next remedy call stages the review again.
+      for (const offerId of claim.offerIds) {
+        const decision = await peekHitlDecision({
+          session: params.binding.session,
+          offerId,
+        });
+        if (
+          decision?.ruling === "deny" ||
+          (decision?.ruling === "none" && decision.closure)
+        ) {
+          recorded.push({ offerId, ruling: decision.ruling });
+          continue;
+        }
+        logger.warn(
           {
-            content:
-              typeof answer.content === "string"
-                ? answer.content
-                : JSON.stringify(answer.content ?? null),
-            ...(typeof answer.isError === "boolean"
-              ? { isError: answer.isError }
-              : {}),
+            client: params.binding.adapter?.id,
+            userAgent: params.binding.requestHeaders["user-agent"],
+            offerId,
           },
-          asked,
-        )
-      : "none";
+          "OpenAPPA native approval answer arrived after its review expired",
+        );
+        expiredOfferIds.push(offerId);
+      }
+      continue;
+    }
+    const reading = parse(
+      {
+        content:
+          typeof answer.content === "string"
+            ? answer.content
+            : JSON.stringify(answer.content ?? null),
+        ...(typeof answer.isError === "boolean"
+          ? { isError: answer.isError }
+          : {}),
+      },
+      asked,
+    );
     if (reading === "unrecognized") {
       // A client version may word its answer differently. Nothing is read
       // from it; a client with forms is asked again there. A known no-answer
@@ -4846,7 +5240,7 @@ async function recordNativeHitlRulings(params: {
       }
     }
   }
-  return { rulings: recorded, unreadOfferIds, continued };
+  return { rulings: recorded, unreadOfferIds, continued, expiredOfferIds };
 }
 
 /**
@@ -5552,6 +5946,15 @@ function unreadNativeAnswerGuidance(offerIds: readonly string[]): string {
     "Ask once more with the declared ask_user tool, one call for each offer ID below.",
     HITL_ASK_USER_CALL,
     "The platform replaces the question text with the exact review. This time it opens as a form.",
+    `Offer IDs: ${JSON.stringify(offerIds)}.`,
+  ].join(" ");
+}
+
+function expiredNativeQuestionGuidance(offerIds: readonly string[]): string {
+  return [
+    "The last approval question was answered after its OpenAPPA review expired, so the platform recorded no ruling and the call stays blocked.",
+    "Call execute_remedy_plan again with the plan shown earlier in the conversation; the platform then asks the user again.",
+    "Retry the blocked call only after execute_remedy_plan reports that the plan is authorized.",
     `Offer IDs: ${JSON.stringify(offerIds)}.`,
   ].join(" ");
 }

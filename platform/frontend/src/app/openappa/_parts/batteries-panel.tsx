@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useEffect, useState } from "react";
+import { useSettingsAreaAccess } from "@/app/_parts/use-settings-area-access";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import {
   openRowOnPlainClick,
@@ -66,6 +67,7 @@ import {
   type BatterySummary,
   batteryMatchesQueryKey,
   type PolicyBattery,
+  type PolicyDeclarations,
   useBatteries,
   useBatteryMatches,
   useCreateBatteryInstall,
@@ -91,7 +93,16 @@ import {
   BATTERY_STATUS,
   BATTERY_STATUS_GROUPS,
   type BatteryStatusGroup,
+  type EnforcedStatus,
 } from "./battery-status";
+import {
+  batteryWorks,
+  compositionNotice,
+  enforcedStatus,
+  nowStatus,
+  servedOnly,
+  servedRevision,
+} from "./composition-view";
 import { DialogSection } from "./dialog-section";
 import {
   GithubManagedPolicyNotice,
@@ -99,23 +110,27 @@ import {
 } from "./github-managed-policy-notice";
 import { batteryStatusBadge } from "./policy-decorations";
 
-type BatteryStatus = PolicyBattery["status"];
-
 const STATUS_OPTIONS = [
   { value: DEFAULT_FILTER_ALL, label: "All batteries" },
   ...BATTERY_STATUS_GROUPS,
 ];
 
 /**
- * Which status group a row falls in: included and enforced cleanly, included
+ * Which status group a row falls in: enforced cleanly, enforced or declared
  * with a problem, not included and fitting a server, or not included.
  */
-function statusGroup(
-  status: BatteryStatus | null,
-  fits: boolean,
-): BatteryStatusGroup {
-  if (status === null) return fits ? "fits" : "other";
-  return BATTERY_STATUS[status].severity === "ok" ? "active" : "broken";
+function statusGroup(params: {
+  row: BatteryTableRow;
+  declarations: PolicyDeclarations;
+  fits: boolean;
+}): BatteryStatusGroup {
+  const { row, declarations, fits } = params;
+  if (row.servedOnly)
+    return BATTERY_STATUS[row.servedOnly.status].severity === "ok"
+      ? "active"
+      : "broken";
+  if (!row.included) return fits ? "fits" : "other";
+  return batteryWorks(declarations, row.included) ? "active" : "broken";
 }
 
 /** A URL value the select offers, else every row: a stale link shows the table. */
@@ -187,11 +202,14 @@ export function BatteriesPanel() {
         }}
       />
     );
-  const { lastError, managedInGithub, heldPull } = declarations.data;
-  const included = declarations.data.batteries;
-  // A composition that failed is not what the runtime enforces, whatever each
-  // entry resolved to, so no entry may claim to be active.
-  const enforced = lastError === null;
+  const policy = declarations.data;
+  const { lastError, managedInGithub, heldPull } = policy;
+  const included = policy.batteries;
+  // A refused text keeps an earlier composition enforced: each battery shows
+  // how that composition holds it, and the notice says which one it is.
+  const notice = compositionNotice(policy);
+  const revision = servedRevision(policy);
+  const statusOf = (entry: PolicyBattery) => enforcedStatus(policy, entry);
   // The repository owns the text while it syncs: an edit here would be undone
   // by the next pull, so the panel only reads it. Bindings live beside the
   // text, so they stay open.
@@ -215,6 +233,17 @@ export function BatteriesPanel() {
     if (!rows.some((row) => row.name === entry.name))
       rows.push({ name: entry.name, summary: null, included: entry });
   }
+  for (const held of servedOnly(policy)) {
+    const row = rows.find((candidate) => candidate.name === held.name);
+    if (row) row.servedOnly = held;
+    else
+      rows.push({
+        name: held.name,
+        summary: null,
+        included: null,
+        servedOnly: held,
+      });
+  }
   const fitting = new Set(
     summary.data?.batteries.available.map((battery) => battery.name),
   );
@@ -222,11 +251,6 @@ export function BatteriesPanel() {
   const editingRow = rows.find((row) => row.name === editing) ?? null;
   const query = search.trim().toLowerCase();
   const filteredRows = rows.filter((row) => {
-    const status = row.included
-      ? enforced
-        ? row.included.status
-        : "refused"
-      : null;
     return (
       (!query ||
         [
@@ -235,7 +259,11 @@ export function BatteriesPanel() {
           ...(row.summary?.namespaces ?? []),
         ].some((value) => value.toLowerCase().includes(query))) &&
       (statusFilter === DEFAULT_FILTER_ALL ||
-        statusGroup(status, fitting.has(row.name)) === statusFilter)
+        statusGroup({
+          row,
+          declarations: policy,
+          fits: fitting.has(row.name),
+        }) === statusFilter)
     );
   });
   const columns: ColumnDef<BatteryTableRow>[] = [
@@ -259,6 +287,20 @@ export function BatteriesPanel() {
       size: 160,
       cell: ({ row }) => {
         const entry = row.original.included;
+        const held = row.original.servedOnly;
+        if (!entry && held) {
+          const badge = batteryStatusBadge(held.status);
+          return (
+            <div className="space-y-1">
+              <Badge variant={badge.variant}>{badge.label}</Badge>
+              <p className="text-xs text-muted-foreground">
+                {revision === null
+                  ? "Still enforced; no longer declared"
+                  : `Still enforced from revision ${revision}`}
+              </p>
+            </div>
+          );
+        }
         if (!entry)
           return (
             <span className="text-muted-foreground">
@@ -267,9 +309,23 @@ export function BatteriesPanel() {
                 : "Not included"}
             </span>
           );
-        const status = enforced ? entry.status : "refused";
-        const badge = batteryStatusBadge(status);
-        return <Badge variant={badge.variant}>{badge.label}</Badge>;
+        const badge = batteryStatusBadge(statusOf(entry));
+        const now = nowStatus(policy, entry);
+        return (
+          <div className="space-y-1">
+            <Badge variant={badge.variant}>{badge.label}</Badge>
+            {revision !== null && entry.served && (
+              <p className="text-xs text-muted-foreground">
+                From revision {revision}
+              </p>
+            )}
+            {now && (
+              <p className="text-xs text-muted-foreground">
+                Now: {BATTERY_STATUS[now].label}
+              </p>
+            )}
+          </div>
+        );
       },
     },
     {
@@ -298,11 +354,18 @@ export function BatteriesPanel() {
   ];
   return (
     <section aria-label="OpenAPPA batteries" className="space-y-4">
-      {lastError !== null && (
-        <InlineNotice variant="error">
+      {notice && (
+        <InlineNotice variant={notice.variant}>
           <AlertTriangle />
-          <span className="font-medium">Batteries are not enforced</span>
-          <InlineNoticeText>{lastError}</InlineNoticeText>
+          <span className="font-medium">{notice.title}</span>
+          <InlineNoticeText>
+            <span>{notice.body}</span>
+            {lastError && (
+              <span className="mt-1 block whitespace-pre-wrap font-mono text-xs">
+                {lastError}
+              </span>
+            )}
+          </InlineNoticeText>
         </InlineNotice>
       )}
       {managedInGithub && <GithubManagedPolicyNotice held={heldPull} />}
@@ -370,7 +433,11 @@ export function BatteriesPanel() {
             variables: editingRow.summary?.credentials ?? [],
           })}
           catalogName={catalogName}
-          enforced={enforced}
+          status={
+            editingRow.included
+              ? statusOf(editingRow.included)
+              : (editingRow.servedOnly?.status ?? null)
+          }
           writable={writable}
           bindable={bindable}
           managedInGithub={managedInGithub}
@@ -415,6 +482,8 @@ type BatteryTableRow = {
   name: string;
   summary: BatterySummary | null;
   included: PolicyBattery | null;
+  /** Held by the enforced composition although the current text no longer declares it. */
+  servedOnly?: { name: string; status: PolicyBattery["status"] };
 };
 
 const UNBOUND = "__unbound__";
@@ -449,7 +518,7 @@ function BatteryDialog({
   installedCatalogIds,
   credentials,
   catalogName,
-  enforced,
+  status,
   writable,
   bindable,
   managedInGithub,
@@ -460,7 +529,8 @@ function BatteryDialog({
   installedCatalogIds: Set<string> | null;
   credentials: BatteryCredential[];
   catalogName: (catalogId: string) => string;
-  enforced: boolean;
+  /** How the enforced composition holds it; null when it is not included. */
+  status: EnforcedStatus | null;
   writable: boolean;
   bindable: boolean;
   managedInGithub: boolean;
@@ -475,7 +545,6 @@ function BatteryDialog({
     create.isPending || bind.isPending || detach.isPending || remove.isPending;
   const organizationWide =
     (included?.scope ?? summary?.scope) === "organization";
-  const status = included ? (enforced ? included.status : "refused") : null;
   const badge = status ? batteryStatusBadge(status) : null;
   const installs = summary?.installs ?? [];
   const servers = included?.servers ?? [];
@@ -820,6 +889,7 @@ function CredentialsSection({
   pending: boolean;
 }) {
   const { data: canRead } = useHasPermissions({ credential: ["read"] });
+  const canSeeSettings = useSettingsAreaAccess() === true;
   const listable = canRead === true;
   const available = useRuntimeCredentials(listable);
   const { refetch } = available;
@@ -839,12 +909,14 @@ function CredentialsSection({
           : "Changing a key takes permission to update guardrails and credentials."
       }
       action={
-        <Button asChild variant="link" size="sm" className="h-auto p-0">
-          <Link href="/settings/credentials" target="_blank" rel="noreferrer">
-            <span>Manage credentials</span>
-            <ExternalLink className="size-3.5" />
-          </Link>
-        </Button>
+        canSeeSettings ? (
+          <Button asChild variant="link" size="sm" className="h-auto p-0">
+            <Link href="/settings/credentials" target="_blank" rel="noreferrer">
+              <span>Manage credentials</span>
+              <ExternalLink className="size-3.5" />
+            </Link>
+          </Button>
+        ) : null
       }
     >
       {bindable && available.isSuccess && options.length === 0 && (

@@ -32,7 +32,6 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   skill: ["read", "create", "delete"],
   plugin: ["read", "create", "update", "delete"],
   app: ["read", "create"],
-  scheduledTask: ["read", "create", "update", "delete"],
 
   // LLM
   llmProxy: ["read", "update"],
@@ -96,7 +95,6 @@ export const editorPermissions: Record<Resource, Action[]> = {
   skill: ["read", "create", "delete"],
   plugin: ["read", "create", "update", "delete"],
   app: ["read", "create"],
-  scheduledTask: ["read", "create", "update", "delete"],
 
   // LLM
   llmProxy: ["read", "update"],
@@ -154,7 +152,6 @@ export const memberPermissions: Record<Resource, Action[]> = {
   skill: ["read", "create", "delete"],
   plugin: [],
   app: ["read", "create"],
-  scheduledTask: ["read", "create", "update", "delete"],
 
   // LLM
   llmProxy: ["read"],
@@ -364,10 +361,6 @@ export const permissionDescriptions: Record<string, string> = {
   "plugin:delete": "Delete plugins",
   "app:read": "Open Apps",
   "app:create": "Create new MCP Apps",
-  "scheduledTask:read": "View scheduled tasks and their run history",
-  "scheduledTask:create": "Create new scheduled tasks and trigger runs",
-  "scheduledTask:update": "Modify scheduled task configuration",
-  "scheduledTask:delete": "Delete scheduled tasks",
 
   // MCP
   "oauthClient:read": "Open OAuth client registrations",
@@ -414,10 +407,12 @@ export const permissionDescriptions: Record<string, string> = {
   "chat:delete": "Delete chat conversations",
   "chat:full-view":
     "Show the full chat: the agent picker, model and API key selectors, and expandable tool calls. Without it, chat shows a simpler view",
-  "project:read": "View projects and your own sessions inside them",
-  "project:create": "Create projects",
-  "project:update": "Edit project descriptions, instructions, and sharing",
-  "project:delete": "Delete projects",
+  "project:read":
+    "View projects, their schedules, and your own sessions inside them",
+  "project:create": "Create projects and schedules, and trigger schedule runs",
+  "project:update":
+    "Edit project descriptions, instructions, sharing, and schedules",
+  "project:delete": "Delete projects and schedules",
   "log:read":
     "View your own LLM proxy and MCP tool call logs in the active organization",
 
@@ -527,7 +522,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ListRuntimeCredentials]: { credential: ["read"] },
   [RouteId.StartGitHubUserConnection]: {},
   [RouteId.CompleteGitHubUserConnection]: { credential: ["read"] },
-  [RouteId.CreateRuntimeCredential]: { credential: ["create"] },
+  // A credential just for you is self-service; the route requires
+  // credential:create for organization and shared ones.
+  [RouteId.CreateRuntimeCredential]: {},
   [RouteId.GetRuntimeCredentialUsage]: {},
   [RouteId.UpdateRuntimeCredential]: {},
   [RouteId.DeleteRuntimeCredential]: {},
@@ -606,6 +603,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAgents]: {},
   [RouteId.GetAgentCatalog]: {},
   [RouteId.GetAllAgents]: {},
+  [RouteId.GetAgentOptions]: {},
+  [RouteId.GetChatAgentRoster]: {},
   [RouteId.GetAgentCredentialReadiness]: {},
   [RouteId.GetAgent]: {},
   // Agent read access is checked in the handler (requireReadableAgent).
@@ -770,6 +769,9 @@ export const requiredEndpointPermissionsMap: Partial<
     mcpRegistry: ["read"],
   },
   [RouteId.GetMcpServers]: {
+    mcpServerInstallation: ["read"],
+  },
+  [RouteId.GetMcpServerAutoModeAgentPage]: {
     mcpServerInstallation: ["read"],
   },
   [RouteId.GetMcpServerAutoModeAgents]: {
@@ -1433,6 +1435,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOverviewStatistics]: {
     llmCost: ["read"],
   },
+  [RouteId.GetCostStatistics]: {
+    llmCost: ["read"],
+  },
   [RouteId.GetCostSavingsStatistics]: {
     llmCost: ["read"],
   },
@@ -1521,6 +1526,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.CreateSlackAgentBotApp]: {
     organizationSettings: ["update"],
   },
+  [RouteId.CreateSlackRouterBotApp]: {
+    organizationSettings: ["update"],
+  },
   [RouteId.MigrateSlackApps]: {
     organizationSettings: ["update"],
   },
@@ -1531,6 +1539,12 @@ export const requiredEndpointPermissionsMap: Partial<
     organizationSettings: ["read"],
   },
   [RouteId.JoinSlackAgentBotChannel]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.ListSlackRouterBotChannels]: {
+    organizationSettings: ["read"],
+  },
+  [RouteId.JoinSlackRouterBotChannel]: {
     organizationSettings: ["update"],
   },
   [RouteId.UpdateTelegramChatOpsConfig]: {
@@ -1554,37 +1568,37 @@ export const requiredEndpointPermissionsMap: Partial<
   },
   // Schedule Trigger Routes
   [RouteId.GetScheduleTriggers]: {
-    scheduledTask: ["read"],
+    project: ["read"],
   },
   [RouteId.CreateScheduleTrigger]: {
-    scheduledTask: ["create"],
+    project: ["create"],
   },
   [RouteId.GetScheduleTrigger]: {
-    scheduledTask: ["read"],
+    project: ["read"],
   },
   [RouteId.UpdateScheduleTrigger]: {
-    scheduledTask: ["update"],
+    project: ["update"],
   },
   [RouteId.DeleteScheduleTrigger]: {
-    scheduledTask: ["delete"],
+    project: ["delete"],
   },
   [RouteId.EnableScheduleTrigger]: {
-    scheduledTask: ["update"],
+    project: ["update"],
   },
   [RouteId.DisableScheduleTrigger]: {
-    scheduledTask: ["update"],
+    project: ["update"],
   },
   [RouteId.RunScheduleTriggerNow]: {
-    scheduledTask: ["create"],
+    project: ["create"],
   },
   [RouteId.GetScheduleTriggerRuns]: {
-    scheduledTask: ["read"],
+    project: ["read"],
   },
   [RouteId.GetScheduleTriggerRun]: {
-    scheduledTask: ["read"],
+    project: ["read"],
   },
   [RouteId.CreateScheduleTriggerRunConversation]: {
-    scheduledTask: ["create"],
+    project: ["create"],
   },
 
   // Knowledge Base Routes
@@ -2018,7 +2032,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/plugins/new": { plugin: ["create"] },
   "/plugins/import": { plugin: ["create"] },
   "/plugins/[id]": { plugin: ["read"] },
-  "/scheduled-tasks": { scheduledTask: ["read"] },
+  "/scheduled-tasks": { project: ["read"] },
 
   // Apps
   "/apps": { app: ["read"] },

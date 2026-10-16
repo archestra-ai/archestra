@@ -11,7 +11,6 @@ import {
 import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 import {
-  useModelStatistics,
   useProfileStatistics,
   useProxyCostStatistics,
   useTeamStatistics,
@@ -26,6 +25,7 @@ import {
   type ToolCallUsageDimension,
   useAppCostAttribution,
   useAppUsage,
+  useCostStatistics,
   useSkillCostAttribution,
   useSkillUsage,
   useToolCallUsage,
@@ -379,7 +379,7 @@ export function usePivotCube(
   });
   const teamQ = useTeamStatistics({ timeframe, enabled: on("team") });
   const agentQ = useProfileStatistics({ timeframe, enabled: on("agent") });
-  const modelQ = useModelStatistics({ timeframe, enabled: on("model") });
+  const modelQ = useCostStatistics({ timeframe, enabled: on("model") });
   const userQ = useUsersForPivot({
     timeframe,
     withModels: src.kind === "user" && src.models,
@@ -658,7 +658,7 @@ export function usePivotCube(
                   series: a.timeSeries,
                   totals: a,
                 }))
-              : (modelQ.data ?? []).map((m) => ({
+              : (modelQ.data?.models ?? []).map((m) => ({
                   key: m.model,
                   label: m.model,
                   sub: undefined,

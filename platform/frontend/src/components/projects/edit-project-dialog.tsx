@@ -18,7 +18,7 @@ import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useInternalAgents } from "@/lib/agent.query";
+import { useInternalAgentOptions } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   agentsForProjectAudience,
@@ -89,7 +89,7 @@ function EditProjectDialogForm({
   // org has no agents" rather than "not yours to set" — hide the field instead.
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
   const { data: accessibleAgents = [], isPending: isAgentsPending } =
-    useInternalAgents({
+    useInternalAgentOptions({
       enabled: open && canReadAgents === true,
     });
 

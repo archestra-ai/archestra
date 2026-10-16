@@ -239,6 +239,14 @@ export const handlers: HttpHandler[] = [
   ),
   ...getJson("/api/user/permissions", adminPermissionsSeed),
   ...getJson("/api/resource-permissions", adminScopedCapabilitiesSeed),
+  // Recipients for an object not created yet: the admin may share with
+  // everyone. Registered before the per-object route, which would match it.
+  ...getJson("/api/resource-permissions/:resource/creation-subjects", [
+    {
+      subject: { type: "organization", id: "*" },
+      name: "Everyone in the organization",
+    },
+  ]),
   // An object's own permissions: none beyond the admin's, who may edit them.
   ...paths("/api/resource-permissions/:resource/:scope").map((url) =>
     http.get(url, ({ params }) =>
@@ -248,6 +256,7 @@ export const handlers: HttpHandler[] = [
         name: "",
         revision: 0,
         actorSubjects: [],
+        canShareOrganizationWide: true,
         grants: [],
         inheritedGrants: [],
         effectiveActions: [
@@ -392,6 +401,12 @@ export const handlers: HttpHandler[] = [
   ...getJson("/api/mcp_server", installedServersSeed),
   // Org-wide auto-mode roster; per-test seeds override when a test needs
   // auto-mode agents in the usage surfaces.
+  ...getJson("/api/mcp_server/auto_mode_agents/page", {
+    data: [],
+    totalAutoCount: 0,
+    organizationId: organizationSeed.id,
+    pagination: { limit: 20, hasNext: false, nextCursor: null },
+  }),
   ...getJson("/api/mcp_server/auto_mode_agents", []),
   ...getJson("/api/secrets/type", { type: "DB", meta: {} }),
   ...getJson("/api/k8s/image-pull-secrets", []),
@@ -457,6 +472,9 @@ export const handlers: HttpHandler[] = [
     }),
   ),
   ...getJson("/api/agents/all", []),
+  ...getJson("/api/agents/chat-roster", []),
+  ...getJson("/api/agents/credential-readiness", []),
+  ...getJson("/api/agents/options", []),
   // Keep literal agent routes before `:id`, or MSW treats the literal segment
   // as an id and returns an agent-shaped response to the activation editor.
   ...getJson("/api/agents/activation-skills", {

@@ -5,6 +5,7 @@ import {
   desc,
   eq,
   getTableColumns,
+  ilike,
   inArray,
   isNotNull,
   isNull,
@@ -25,6 +26,7 @@ import type {
 } from "@/types";
 import { A2A_TERMINAL_TASK_STATES } from "@/types/a2a-task";
 import type { AgentWorkspace } from "@/types/agent-workspace";
+import { escapeLikePattern } from "@/utils/sql-search";
 import A2AMessageModel from "./a2a/message";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
@@ -499,6 +501,9 @@ class AgentRunModel {
     actorUserId: string;
     organizationId: string;
     pagination: PaginationQuery;
+    search?: string;
+    pinned?: boolean;
+    sort?: "started" | "recent" | "pinned";
   }) {
     const actor = actorFromUserId(params.actorUserId);
     const conditions = [
@@ -509,10 +514,26 @@ class AgentRunModel {
         WHERE w.workload_name = ${schema.agentRunsTable.workloadName}
         AND w.last_task_id <> ${schema.agentRunsTable.taskId})`,
     ];
+    if (params.pinned !== undefined) {
+      conditions.push(
+        params.pinned
+          ? isNotNull(schema.agentRunsTable.pinnedAt)
+          : isNull(schema.agentRunsTable.pinnedAt),
+      );
+    }
+    if (params.search?.trim()) {
+      conditions.push(
+        ilike(
+          schema.agentRunsTable.title,
+          `%${escapeLikePattern(params.search.trim())}%`,
+        ),
+      );
+    }
     const [rows, [{ total }]] = await Promise.all([
       AgentRunModel.selectRunSessionsWhere({
         conditions,
         pagination: params.pagination,
+        sort: params.sort,
       }),
       db
         .select({ total: sql<number>`count(*)` })
@@ -721,6 +742,7 @@ class AgentRunModel {
   private static async selectRunSessionsWhere(params: {
     conditions: SQL[];
     pagination?: PaginationQuery;
+    sort?: "started" | "recent" | "pinned";
   }) {
     const {
       logs: _logs,
@@ -768,7 +790,24 @@ class AgentRunModel {
         eq(schema.agentRunsTable.projectId, schema.projectsTable.id),
       )
       .where(and(...params.conditions))
-      .orderBy(desc(schema.agentRunsTable.startedAt))
+      .orderBy(
+        ...(params.sort === "pinned"
+          ? [
+              desc(schema.agentRunsTable.pinnedAt),
+              desc(schema.agentRunsTable.startedAt),
+              desc(schema.agentRunsTable.taskId),
+            ]
+          : params.sort === "recent"
+            ? [
+                desc(
+                  sql`COALESCE(${schema.a2aTasksTable.stateChangedAt}, ${schema.agentRunsTable.startedAt})`,
+                ),
+                // Match the stable client-side recency sort of started-at rows.
+                desc(schema.agentRunsTable.startedAt),
+                desc(schema.agentRunsTable.taskId),
+              ]
+            : [desc(schema.agentRunsTable.startedAt)]),
+      )
       .$dynamic();
 
     return params.pagination

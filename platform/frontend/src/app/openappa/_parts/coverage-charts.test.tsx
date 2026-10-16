@@ -24,7 +24,7 @@ const origin = "http://localhost:9000";
 vi.mock("@/lib/clients/auth/auth-client");
 
 const server = setupServer(
-  http.get("http://localhost:9000/api/agents/all", () =>
+  http.get("http://localhost:9000/api/agents/chat-roster", () =>
     HttpResponse.json([
       {
         id: "appa-agent",
@@ -74,10 +74,27 @@ const totals = (counts: Partial<Totals>): Totals => ({
   ...counts,
 });
 
-function renderCharts({ summary }: { summary: Totals }) {
+const CURRENT: Summary["composition"] = {
+  kind: "current",
+  servedRootRevision: 3,
+  refusedRootRevision: null,
+  rulesMayDiffer: false,
+};
+
+function renderCharts({
+  summary,
+  composition = CURRENT,
+}: {
+  summary: Totals;
+  composition?: Summary["composition"];
+}) {
   server.use(
     http.get(`${origin}/api/openappa/coverage/summary`, () =>
-      HttpResponse.json({ totals: summary, batteries: NO_BATTERIES }),
+      HttpResponse.json({
+        totals: summary,
+        batteries: NO_BATTERIES,
+        composition,
+      }),
     ),
   );
   render(
@@ -166,4 +183,36 @@ test("says so instead of charting while there is no tool", async () => {
   expect(
     screen.queryByRole("link", { name: "Fix in chat" }),
   ).not.toBeInTheDocument();
+});
+
+test("names the earlier composition the chart describes while a refused revision keeps it enforced", async () => {
+  renderCharts({
+    summary: totals({ tools: 2, battery: 2 }),
+    composition: {
+      kind: "previous",
+      servedRootRevision: 3,
+      refusedRootRevision: 4,
+      rulesMayDiffer: true,
+    },
+  });
+  expect(
+    await screen.findByTestId("coverage-composition-caption"),
+  ).toHaveTextContent(
+    "Showing revision 3, which the runtime still enforces; revision 4 was refused. The rules below are the current text's and may differ from what runs.",
+  );
+});
+
+test("says nothing is enforced while only the root text alone is served", async () => {
+  renderCharts({
+    summary: totals({ tools: 2, notEnforced: 2 }),
+    composition: {
+      kind: "root_only",
+      servedRootRevision: null,
+      refusedRootRevision: 1,
+      rulesMayDiffer: false,
+    },
+  });
+  expect(
+    await screen.findByTestId("coverage-composition-caption"),
+  ).toHaveTextContent("Nothing is enforced");
 });

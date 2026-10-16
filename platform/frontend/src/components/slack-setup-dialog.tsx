@@ -198,7 +198,7 @@ export function SlackSetupDialog({
     <SetupDialog
       open={open}
       onOpenChange={handleOpenChange}
-      title={agent ? `Slack bot for ${agent.name}` : "Setup Slack"}
+      title={agent ? `Slack bot for ${agent.name}` : "Slack router bot"}
       description={
         <>
           {agent ? (
@@ -208,8 +208,8 @@ export function SlackSetupDialog({
             </span>
           ) : (
             <span>
-              Follow these steps to connect your {configuredAppName} agents to
-              Slack.
+              Create one Slack app that answers as the agent each DM or channel
+              picks with /select-agent.
             </span>
           )}
           {docsUrl && (

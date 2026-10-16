@@ -112,7 +112,7 @@ vi.mock("@/lib/agent.query", () => ({
     mockUseAgentCredentialReadiness(options),
   useChatAgents: () => ({ data: agents }),
   useCreateProfile: () => ({ mutate: vi.fn() }),
-  useInternalAgents: () => ({ data: agents }),
+  useInternalAgentOptions: () => ({ data: agents }),
   usePinnedAgentIds: () => ({ data: mockPinnedIds }),
   useProfile: (id: string | undefined, options?: unknown) =>
     mockUseProfile(id, options),

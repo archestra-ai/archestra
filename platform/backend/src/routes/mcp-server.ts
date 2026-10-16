@@ -9,7 +9,8 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { hasPermission } from "@/auth";
+import { hasPermission, userHasPermission } from "@/auth";
+import { hasAnyAgentTypeAdminPermission } from "@/auth/agent-type-permissions";
 import { isMcpInstallationAdmin } from "@/auth/mcp-catalog-permissions";
 import mcpClient, {
   McpServerConnectionTimeoutError,
@@ -32,6 +33,7 @@ import logger from "@/logging";
 import {
   AccountModel,
   AgentModel,
+  AgentTeamModel,
   AgentToolModel,
   InternalMcpCatalogModel,
   McpServerAlertMuteModel,
@@ -103,8 +105,10 @@ import {
   broadcastMcpServersChanged,
 } from "@/websocket";
 import { BulkDeleteBodySchema, BulkOutcomeSchema, runBulk } from "./bulk-route";
+import mcpServerAgentUsageRoutes from "./mcp-server-agent-usage";
 
 const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
+  await fastify.register(mcpServerAgentUsageRoutes);
   fastify.get(
     "/api/mcp_server/auto_mode_agents",
     {
@@ -118,11 +122,16 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(McpServerAgentUsageSchema)),
       },
     },
-    async ({ organizationId }, reply) => {
-      const byOrg = await AgentModel.getAutoModeAgentDetailsByOrganizations([
-        organizationId,
+    async ({ user, organizationId }, reply) => {
+      const [byOrg, canSeeAgent] = await Promise.all([
+        AgentModel.getAutoModeAgentDetailsByOrganizations([organizationId]),
+        getVisibleAgentFilter({ userId: user.id, organizationId }),
       ]);
-      return reply.send(byOrg.get(organizationId) ?? []);
+      return reply.send(
+        (byOrg.get(organizationId) ?? []).filter((agent) =>
+          canSeeAgent(agent.id),
+        ),
+      );
     },
   );
 
@@ -135,6 +144,15 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["MCP Server"],
         querystring: z.object({
           catalogId: z.string().optional(),
+          includeAssignedAgents: z
+            .preprocess(
+              (value) => value !== "false" && value !== false,
+              z.boolean(),
+            )
+            .optional()
+            .describe(
+              "Include per-install agent usage (default true). False returns empty assignedAgents for status-only lists.",
+            ),
           assignmentScope: AgentScopeSchema.optional(),
           assignmentTeamIds: z
             .preprocess(
@@ -153,7 +171,13 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ user, headers, query, organizationId }, reply) => {
-      const { assignmentScope, assignmentTeamIds, catalogId, status } = query;
+      const {
+        assignmentScope,
+        assignmentTeamIds,
+        catalogId,
+        status,
+        includeAssignedAgents,
+      } = query;
 
       if (status === "deleted") {
         const { success: canDelete } = await hasPermission(
@@ -231,6 +255,7 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // post-filtering made that request load and decorate every install
           // in the organization before discarding all but one.
           catalogId,
+          includeAssignedAgents,
           // serverType:"app" backings are managed on the Apps surface, not
           // listed as MCP servers — keep them out of the user-facing server
           // list (and its consumers like the agent tool-assignment picker).
@@ -252,22 +277,27 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         });
       }
 
-      const [alertMutesByCatalogId, credentialUsableIds] = await Promise.all([
-        McpServerAlertMuteModel.findForViewer({
-          userId: user.id,
-          catalogIds: [
-            ...new Set(allServers.map((server) => server.catalogId)),
-          ],
-        }),
-        McpServerModel.getCredentialUsableServerIds(
-          user.id,
-          allServers.map((server) => server.id),
-        ),
-      ]);
+      const [alertMutesByCatalogId, credentialUsableIds, canSeeAgent] =
+        await Promise.all([
+          McpServerAlertMuteModel.findForViewer({
+            userId: user.id,
+            catalogIds: [
+              ...new Set(allServers.map((server) => server.catalogId)),
+            ],
+          }),
+          McpServerModel.getCredentialUsableServerIds(
+            user.id,
+            allServers.map((server) => server.id),
+          ),
+          getVisibleAgentFilter({ userId: user.id, organizationId }),
+        ]);
 
       return reply.send(
         allServers.map((server) => ({
           ...server,
+          assignedAgents: server.assignedAgents?.filter((agent) =>
+            canSeeAgent(agent.id),
+          ),
           alertMutes: (
             alertMutesByCatalogId.get(server.catalogId) ?? []
           ).filter((mute) => mute.mcpServerId === server.id),
@@ -305,7 +335,16 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "MCP server not found");
       }
 
-      return reply.send(server);
+      const canSeeAgent = await getVisibleAgentFilter({
+        userId: user.id,
+        organizationId,
+      });
+      return reply.send({
+        ...server,
+        assignedAgents: server.assignedAgents?.filter((agent) =>
+          canSeeAgent(agent.id),
+        ),
+      });
     },
   );
 
@@ -3941,6 +3980,35 @@ function filterInstallUserConfigValues(params: {
   }
 
   return Object.fromEntries(filteredEntries);
+}
+
+/**
+ * Which agents a server's usage may name to the caller. Anyone who manages
+ * shared installations, or is an agent admin, sees every agent. A member sees
+ * only the agents they can open themselves, so another person's personal
+ * agent never appears in their usage (the agent half matches the tools list,
+ * `ToolModel.findAll`).
+ */
+async function getVisibleAgentFilter(params: {
+  userId: string;
+  organizationId: string;
+}): Promise<(agentId: string) => boolean> {
+  const [managesSharedInstalls, isAgentAdmin] = await Promise.all([
+    userHasPermission(
+      params.userId,
+      params.organizationId,
+      "mcpServerInstallation",
+      "update",
+    ),
+    hasAnyAgentTypeAdminPermission(params),
+  ]);
+  if (managesSharedInstalls || isAgentAdmin) {
+    return () => true;
+  }
+  const accessibleAgentIds = new Set(
+    await AgentTeamModel.getUserAccessibleAgentIds(params.userId, false),
+  );
+  return (agentId) => accessibleAgentIds.has(agentId);
 }
 
 async function validateScopeAndAuthorization(params: {

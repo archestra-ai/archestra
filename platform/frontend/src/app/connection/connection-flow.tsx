@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { type ReactNode, useMemo, useState } from "react";
 import { AgentSelector } from "@/components/agent-selector";
 import { WizardStep } from "@/components/wizard-step";
-import { useProfiles } from "@/lib/agent.query";
+import { useAgentOptions } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { isInstallerClientId, visibleClients } from "./clients";
 import { ConnectCommandPanel } from "./connect-command-panel";
@@ -65,7 +65,7 @@ export function ConnectionFlow({
 
   const updateUrlParams = useUpdateUrlParams();
 
-  const { data: mcpGateways } = useProfiles({
+  const { data: mcpGateways } = useAgentOptions({
     filters: {
       agentTypes: ["profile", "mcp_gateway"],
       excludeOtherPersonalAgents: true,

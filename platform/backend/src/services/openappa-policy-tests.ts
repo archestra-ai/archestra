@@ -7,6 +7,7 @@ import logger from "@/logging";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import { memberRosters, openappaBatteriesService } from "@/openappa/batteries";
+import { compositionView } from "@/openappa/composition-view";
 import { openappaDeclarations } from "@/openappa/declarations";
 import {
   githubPolicyTestVersion,
@@ -183,6 +184,8 @@ async function evaluateOpenAppaPolicyTests(
     contentHash: string;
     lastError: string | null;
   };
+  /** Set when the stored composition is run: whether an earlier one stays enforced. */
+  let stillEnforced: string | null = null;
   if (params.proposedPolicy) {
     const bound = validation.valid
       ? await openappaDeclarations.resolveWithBindings({
@@ -221,9 +224,19 @@ async function evaluateOpenAppaPolicyTests(
           : null,
     };
   } else {
-    effective = await openappaBatteriesService.getEffectivePolicy(
+    const stored = await openappaBatteriesService.getEffectivePolicy(
       params.organizationId,
     );
+    const { served } = compositionView(stored);
+    // A refusal that keeps an earlier composition still enforces it, so the
+    // run checks what the runtime enforces. Only the root text alone fails.
+    effective =
+      served.kind === "previous" ? { ...stored, lastError: null } : stored;
+    if (served.kind === "previous")
+      stillEnforced =
+        served.rootRevision === null
+          ? `Runs against the earlier composition the runtime still enforces; the latest attempt was refused: ${stored.lastError}`
+          : `Runs against the composition of revision ${served.rootRevision} the runtime still enforces; the latest attempt was refused: ${stored.lastError}`;
   }
   const currentRoot = await guardrailsPolicyService.get(params.organizationId);
   const currentSource = await OpenAppaGithubSyncModel.find(
@@ -246,6 +259,7 @@ async function evaluateOpenAppaPolicyTests(
       "The effective policy could not be composed; resolve the OpenAPPA configuration error first",
     );
   }
+  if (stillEnforced) validation.warnings.push(stillEnforced);
   const native = await import("@archestra/openappa-rs");
   let engineVersion = native.getOpenappaReplayEngineVersion();
   let files: PolicyTestRunResult["files"];
@@ -319,14 +333,49 @@ async function evaluateOpenAppaPolicyTests(
     },
   };
 }
-export async function replayOpenAppaValidationProposal(
-  params: Parameters<typeof evaluateOpenAppaPolicyTests>[0] & {
-    userId: string;
-  },
+/**
+ * Replays the saved validations against an unsaved policy, without recording
+ * a run, so a policy preview shows which checks the change would break. Null
+ * when there are no saved validations or they cannot be read or replayed: the
+ * policy preview must not fail because of its checks.
+ */
+export async function replaySavedValidations(params: {
+  organizationId: string;
+  userId: string;
+  proposedPolicy: { content: string; expectedRevision: number };
+}) {
+  if (!enterpriseTier.isOpenappaActive()) return null;
+  try {
+    const collection = await loadPolicyTestCollection(
+      params.organizationId,
+      params.userId,
+    );
+    if (collection.error || !collection.files.length) return null;
+    return await replayOpenAppaDraft(
+      {
+        ...params,
+        files: collection.files,
+        sourceVersion: collection.version,
+        directory: collection.directory,
+      },
+      collection,
+    );
+  } catch (error) {
+    logger.warn(
+      { err: error, organizationId: params.organizationId },
+      "Could not replay saved validations for a policy preview",
+    );
+    return null;
+  }
+}
+
+/** Replays draft files without recording a run, reusing an already-loaded suite. */
+export async function replayOpenAppaDraft(
+  params: Parameters<typeof evaluateOpenAppaPolicyTests>[0],
   collection: PolicyTestCollection,
 ) {
   const { result } = await evaluateOpenAppaPolicyTests(params, collection);
-  return { ...result, draft: true, stale: false };
+  return result.files;
 }
 export async function previewOpenAppaPolicyTest(
   params: Parameters<typeof evaluateOpenAppaPolicyTests>[0] & {
@@ -345,6 +394,8 @@ export async function previewOpenAppaPolicyTest(
 export async function runOpenAppaPolicyTests(
   params: Parameters<typeof evaluateOpenAppaPolicyTests>[0] & {
     userId: string;
+    /** Run only these saved files instead of the whole suite. */
+    partial?: boolean;
   },
 ) {
   const collection = await loadPolicyTestCollection(
@@ -352,13 +403,21 @@ export async function runOpenAppaPolicyTests(
     params.userId,
   );
   assertCurrentCollection(collection, params.sourceVersion);
+  const savedFiles = PolicyTestFilesSchema.parse(collection.files);
   if (
-    policyTestFilesHash(params.files) !==
-    policyTestFilesHash(PolicyTestFilesSchema.parse(collection.files))
+    params.partial
+      ? !params.files.every((file) =>
+          savedFiles.some(
+            (item) => item.path === file.path && item.content === file.content,
+          ),
+        )
+      : policyTestFilesHash(params.files) !== policyTestFilesHash(savedFiles)
   )
     throw new ApiError(
       409,
-      "Run all requires the complete saved validation suite. Save draft changes first or use the editor preview.",
+      params.partial
+        ? "Run only saved validation files. Save draft changes first or use the editor preview."
+        : "Run all requires the complete saved validation suite. Save draft changes first or use the editor preview.",
     );
   const { result, snapshots } = await evaluateOpenAppaPolicyTests(
     params,

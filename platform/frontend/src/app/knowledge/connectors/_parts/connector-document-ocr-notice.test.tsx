@@ -6,6 +6,7 @@ import { useSession } from "@/lib/auth/auth.query";
 import { useOrganization } from "@/lib/organization.query";
 import { ConnectorDocumentOcrNotice } from "./connector-document-ocr-notice";
 
+vi.mock("@/app/_parts/use-settings-area-access");
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/auth/auth.query");
 

@@ -309,6 +309,7 @@ const TOOL_AUDIT_SPECS: Record<string, ArchestraToolAuditSpec> = {
   create_schedule_trigger: {
     resourceType: "scheduleTrigger",
     action: "scheduleTrigger.created",
+    recordWhen: (result) => result.structuredContent?.created !== false,
     idFromResult: (s) => str(s?.id),
     fetchById: (id, orgId) => ScheduleTriggerModel.findByIdForAudit(id, orgId),
   },
@@ -376,6 +377,13 @@ const TOOL_AUDIT_SPECS: Record<string, ArchestraToolAuditSpec> = {
       OpenAppaGithubSyncModel.findByIdForAudit(id, orgId),
   },
   connect_guardrails_repository: {
+    resourceType: "organization",
+    action: "organization.updated",
+    useOrganizationAsResource: true,
+    fetchById: (id, orgId) =>
+      OpenAppaGithubSyncModel.findByIdForAudit(id, orgId),
+  },
+  sync_guardrails_repository: {
     resourceType: "organization",
     action: "organization.updated",
     useOrganizationAsResource: true,

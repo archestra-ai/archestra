@@ -11,10 +11,13 @@ import {
   getHitlAskUserArguments,
   getHitlReview,
   getHitlReviewResult,
+  HITL_QUESTION_TTL_MS,
+  hitlReviewAskedInForm,
   peekHitlDecision,
   peekHitlRuling,
   recordHitlReviewResult,
   recordHitlRuling,
+  renewHitlReview,
   reviewOutcomeFromClosure,
   reviewSessionFromTrajectory,
   sealHitlClosure,
@@ -1166,7 +1169,7 @@ test("rulings cannot claim another organization, caller, parent, or expired stag
   }
 });
 
-test("a recorded ruling keeps its own ten-minute TTL without reviving the expired stage", async () => {
+test("an approval keeps its review context for as long as it can be spent", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   try {
     const lookup = {
@@ -1174,21 +1177,160 @@ test("a recorded ruling keeps its own ten-minute TTL without reviving the expire
       offerId: "race",
       callId: "control",
     };
+    const review = { offerId: "race", text: "Review" };
+    await stageHitlReview({ ...lookup, review });
+    vi.setSystemTime(Date.now() + 9 * 60 * 1000);
+    expect(await recordHitlRuling({ ...lookup, ruling: "approve" })).toBe(true);
+    // The stage would have expired by now; the approval kept it with itself.
+    vi.setSystemTime(Date.now() + 9 * 60 * 1000);
+    expect(await getHitlReview(lookup)).toEqual(review);
+    expect(await consumeHitlRuling(lookup)).toBe("approve");
+    expect(await consumeHitlRuling(lookup)).toBeUndefined();
+    expect(await getHitlReview(lookup)).toBeUndefined();
+    expect(await getHitlReviewResult(lookup)).toBe("review_required");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("an unspent approval and its review context expire together", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    const lookup = { session: session("ruling-expiry"), offerId: "race" };
     await stageHitlReview({
       ...lookup,
       review: { offerId: "race", text: "Review" },
     });
     vi.setSystemTime(Date.now() + 9 * 60 * 1000);
     expect(await recordHitlRuling({ ...lookup, ruling: "approve" })).toBe(true);
-    vi.setSystemTime(Date.now() + 2 * 60 * 1000);
+    vi.setSystemTime(Date.now() + 10 * 60 * 1000 + 1);
     expect(await getHitlReview(lookup)).toBeUndefined();
-    expect(await recordHitlRuling({ ...lookup, ruling: "deny" })).toBe(false);
-    expect(await consumeHitlRuling(lookup)).toBe("approve");
     expect(await consumeHitlRuling(lookup)).toBeUndefined();
-    expect(await getHitlReviewResult(lookup)).toBe("review_required");
+    expect(await recordHitlRuling({ ...lookup, ruling: "deny" })).toBe(false);
   } finally {
     vi.useRealTimers();
   }
+});
+
+test("a question keeps its review a full window longer than its answer is accepted", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    const lookup = { session: session("question-window"), offerId: "asked" };
+    const review = {
+      offerId: "asked",
+      text: "Review",
+      tool: "mcp/example/write",
+    };
+    await stageHitlReview({ ...lookup, review });
+    vi.setSystemTime(Date.now() + 9 * 60 * 1000);
+    expect(await renewHitlReview(lookup)).toBe(true);
+    // Long past the staging window, on the question's last second, the
+    // answer still finds the review it is read against.
+    vi.setSystemTime(Date.now() + HITL_QUESTION_TTL_MS - 1000);
+    expect(await getHitlReview(lookup)).toEqual(review);
+    expect(
+      await getHitlAskUserArguments({
+        session: lookup.session,
+        offerIds: [lookup.offerId],
+      }),
+    ).toMatchObject({ remedy_offer_ids: [lookup.offerId] });
+    expect(await recordHitlRuling({ ...lookup, ruling: "approve" })).toBe(true);
+    vi.setSystemTime(Date.now() + 9 * 60 * 1000);
+    expect(await getHitlReview(lookup)).toEqual(review);
+    expect(await consumeHitlRuling(lookup)).toBe("approve");
+    expect(await renewHitlReview(lookup)).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a repeated remedy call keeps a review whose question is open", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    const lookup = { session: session("restaged"), offerId: "asked" };
+    const review = { offerId: "asked", text: "Review" };
+    await stageHitlReview({ ...lookup, review });
+    expect(await renewHitlReview(lookup)).toBe(true);
+    vi.setSystemTime(Date.now() + 15 * 60 * 1000);
+    expect(
+      await stageHitlReview({
+        ...lookup,
+        review: { ...review, remedyArguments: { plan: "again" } },
+      }),
+    ).toEqual({ status: "staged" });
+    // 35 minutes after the question was asked: still within its review.
+    vi.setSystemTime(Date.now() + 20 * 60 * 1000);
+    expect(await getHitlReview(lookup)).toEqual(review);
+    expect(await recordHitlRuling({ ...lookup, ruling: "approve" })).toBe(true);
+    expect(await consumeHitlRuling(lookup)).toBe("approve");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("nothing is renewed for a review that is missing, ruled, or closed", async () => {
+  const active = session("no-renewal");
+  expect(await renewHitlReview({ session: active, offerId: "unknown" })).toBe(
+    false,
+  );
+  for (const [offerId, close] of [
+    [
+      "denied",
+      () =>
+        recordHitlRuling({
+          session: active,
+          offerId: "denied",
+          ruling: "deny",
+        }),
+    ],
+    [
+      "approved",
+      () =>
+        recordHitlRuling({
+          session: active,
+          offerId: "approved",
+          ruling: "approve",
+        }),
+    ],
+    [
+      "sealed",
+      () =>
+        sealHitlClosure({
+          session: active,
+          offerId: "sealed",
+          closure: "declined",
+        }),
+    ],
+  ] as const) {
+    await stageHitlReview({
+      session: active,
+      review: { offerId, text: "Review" },
+    });
+    await close();
+    expect(await renewHitlReview({ session: active, offerId })).toBe(false);
+  }
+});
+
+test("a review that cannot be read fails the reader instead of reading as gone", async () => {
+  const lookup = { session: session("unreadable"), offerId: "asked" };
+  await stageHitlReview({
+    ...lookup,
+    review: { offerId: "asked", text: "Review" },
+  });
+  cacheManager.shutdown();
+  await expect(getHitlReview(lookup)).rejects.toThrow("Not started");
+  await expect(
+    getHitlAskUserArguments({
+      session: lookup.session,
+      offerIds: [lookup.offerId],
+    }),
+  ).rejects.toThrow("Not started");
+  await expect(
+    hitlReviewAskedInForm({
+      session: lookup.session,
+      offerIds: [lookup.offerId],
+    }),
+  ).rejects.toThrow("Not started");
 });
 
 type LockedCache = Parameters<Parameters<typeof cacheManager.withLock>[1]>[0];

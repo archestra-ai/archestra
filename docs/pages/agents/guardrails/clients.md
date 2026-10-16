@@ -32,6 +32,8 @@ Route model requests through the proxy so Guardrails can check the tool calls th
 
 **Other clients** under **Settings → Guardrails** sets what happens to [unrecognized ones](#unrecognized-clients).
 
+- A block that says no remedy plan can be used in this session means the client sent no gateway tools: it is not signed in to the gateway, or the gateway is not connected. The message names the fix for your client. The steps are under [Finish Setup in Your Client](/docs/get-started/connect#finish-setup-in-your-client).
+
 ## Approval Cards
 
 Read the complete call and policy scope before approving. Long text arguments can have a **Generated summary** to help you find the purpose and constraints. The summary can omit details; it never replaces the exact arguments or grants permission.

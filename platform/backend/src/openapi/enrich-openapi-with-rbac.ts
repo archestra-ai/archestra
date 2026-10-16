@@ -277,6 +277,10 @@ const DYNAMIC_ROUTE_PERMISSION_NOTES = {
     "Checked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`. If no type filter is provided, the user must have read access to at least one agent type.",
   [RouteId.GetAllAgents]:
     "Checked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`. If no type filter is provided, the user must have read access to at least one agent type.",
+  [RouteId.GetAgentOptions]:
+    "Checked dynamically based on agent type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`. If no type filter is provided, the user must have read access to at least one agent type.",
+  [RouteId.GetChatAgentRoster]:
+    "Requires `agent:read`; only internal agents visible to the caller are returned.",
   [RouteId.GetAgent]:
     "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:read`; `mcp_gateway` requires `mcpGateway:read`.",
   [RouteId.PinAgent]:
@@ -289,6 +293,8 @@ const DYNAMIC_ROUTE_PERMISSION_NOTES = {
     "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:delete`; `mcp_gateway` requires `mcpGateway:delete`. Additional scope checks may apply.",
   [RouteId.RestoreAgent]:
     "Checked dynamically based on the target agent's type. `profile` and `agent` require `agent:delete`; `mcp_gateway` requires `mcpGateway:delete`. Additional scope checks may apply.",
+  [RouteId.CreateRuntimeCredential]:
+    "Checked dynamically based on the credential being created. A credential just for the caller (`allowPersonal: true`, `allowOrganization: false`, no `initialGrants`) needs no permission, and only its author can reach it. Organization credentials and credentials created with grants require `credential:create`.",
   // The three purge routes are gated by role, not by permission: the caller
   // must hold a built-in admin role. Recorded here because the static
   // permission alone would advertise `delete` as sufficient, and the handler's

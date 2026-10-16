@@ -15,13 +15,26 @@ import {
   it,
   vi,
 } from "vitest";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { AccountPageActionSlotContext } from "@/app/account/_components/account-page-action";
+import { useInternalAgentOptions } from "@/lib/agent.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+} from "@/lib/auth/auth.query";
+import { useFeature } from "@/lib/config/config.query";
 import type { RuntimeCredentialDefinition } from "@/lib/runtime-credentials.query";
 import { RuntimeCredentialsSection } from "./runtime-credentials-section";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
+vi.mock("@/lib/agent.query", () => ({ useInternalAgentOptions: vi.fn() }));
+vi.mock("@/components/claude-code-account", () => ({
+  ClaudeCodeAccount: () => <div>Claude Code sign-in</div>,
+}));
+vi.mock("@/components/agent-icon-picker", () => ({
+  AgentIconPicker: () => null,
+}));
 vi.mock("@/app/settings/layout", () => ({
   useSetSettingsAction: () => setActionButton,
 }));
@@ -92,6 +105,16 @@ beforeEach(() => {
   vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
     typeof useHasPermissions
   >);
+  vi.mocked(useFeature).mockReturnValue(false as never);
+  vi.mocked(useInternalAgentOptions).mockReturnValue({
+    data: [],
+    isError: false,
+    isPending: false,
+    refetch: vi.fn(),
+  } as unknown as ReturnType<typeof useInternalAgentOptions>);
+  vi.mocked(useScopedCapabilities).mockReturnValue({
+    data: [],
+  } as unknown as ReturnType<typeof useScopedCapabilities>);
   Element.prototype.scrollIntoView = vi.fn();
   server.use(
     http.get(`${origin}/api/secrets/type`, () =>
@@ -147,14 +170,153 @@ it("combines type and ownership filters and clears an empty result", async () =>
   expect(screen.getByText("Credential 0")).toBeVisible();
 });
 
-function renderTable() {
+it("Personal Settings lists your personal credentials and never other people's", async () => {
+  const user = userEvent.setup();
+  const requested: (string | null)[] = [];
+  server.use(
+    http.get(`${origin}/api/credentials`, ({ request }) => {
+      requested.push(new URL(request.url).searchParams.get("access"));
+      return HttpResponse.json(credentials);
+    }),
+  );
+  // Bookmarked from Settings, where this reader may browse every credential.
+  url = new URLSearchParams("access=others");
+  renderTable("personal");
+  await screen.findByText("Credential 0");
+  expect(requested.at(-1)).not.toContain("others");
+
+  // The organization's GitHub App stays in Settings.
+  await user.type(
+    screen.getByPlaceholderText(
+      "Search credentials by name, key, and description",
+    ),
+    "credential-11",
+  );
+  expect(
+    await screen.findByText("No credentials match your filters"),
+  ).toBeVisible();
+  expect(
+    screen.queryByRole("columnheader", { name: "Provided by" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("combobox", { name: "Filter by scope" }),
+  ).not.toBeInTheDocument();
+  await user.click(screen.getByRole("combobox", { name: "Filter by type" }));
+  expect(
+    screen.queryByRole("option", { name: "GitHub App" }),
+  ).not.toBeInTheDocument();
+  await user.keyboard("{Escape}");
+  await user.click(screen.getByRole("button", { name: "Filter by access" }));
+  expect(screen.getByText("Shared with me")).toBeVisible();
+  expect(screen.queryByText("Admin access")).not.toBeInTheDocument();
+});
+
+it("adds a credential only you can use, then asks for its value", async () => {
+  const user = userEvent.setup();
+  let created: RuntimeCredentialDefinition | null = null;
+  let body: Record<string, unknown> = {};
+  server.use(
+    http.get(`${origin}/api/credentials`, () =>
+      HttpResponse.json(created ? [...credentials, created] : credentials),
+    ),
+    http.post(`${origin}/api/credentials`, async ({ request }) => {
+      body = (await request.json()) as Record<string, unknown>;
+      created = {
+        ...credentials[0],
+        id: "definition-new",
+        key: String(body.key),
+        name: String(body.name),
+      };
+      return HttpResponse.json(created);
+    }),
+  );
+  renderTable("personal");
+  await screen.findByText("Credential 0");
+  await user.click(screen.getByRole("button", { name: "Add credential" }));
+  const dialog = await screen.findByRole("dialog");
+  // Nobody else gets it, so there is nothing to choose about who provides
+  // or shares it.
+  expect(within(dialog).queryByText("Provided by")).not.toBeInTheDocument();
+  await user.type(within(dialog).getByLabelText("Name"), "My token");
+  await user.click(within(dialog).getByRole("button", { name: "Add" }));
+
+  expect(
+    await screen.findByRole("dialog", { name: /Connect My token/ }),
+  ).toBeVisible();
+  expect(body).toMatchObject({
+    name: "My token",
+    allowPersonal: true,
+    allowOrganization: false,
+    initialGrants: [],
+  });
+});
+
+it("Settings → Credentials shows the reader's Claude Code sign-in above the table", async () => {
+  vi.mocked(useFeature).mockImplementation(
+    (feature) => (feature === "agentRuntime") as never,
+  );
+  vi.mocked(useInternalAgentOptions).mockReturnValue({
+    data: [{ id: "agent-1", runtime: { command: ["archestra-claude-code"] } }],
+    isError: false,
+    isPending: false,
+    refetch: vi.fn(),
+  } as unknown as ReturnType<typeof useInternalAgentOptions>);
+  renderTable();
+  await screen.findByText("Credential 0");
+  expect(screen.getByText("Claude Code sign-in")).toBeVisible();
+});
+
+it("Settings Add credential adds one just for you when you cannot create shared ones", async () => {
+  const user = userEvent.setup();
+  vi.mocked(useHasPermissions).mockImplementation(
+    (permissions) =>
+      ({
+        data: !(
+          "credential" in permissions &&
+          permissions.credential?.includes("create")
+        ),
+      }) as ReturnType<typeof useHasPermissions>,
+  );
+  let body: Record<string, unknown> = {};
+  server.use(
+    http.post(`${origin}/api/credentials`, async ({ request }) => {
+      body = (await request.json()) as Record<string, unknown>;
+      return HttpResponse.json({ ...credentials[0], id: "definition-new" });
+    }),
+  );
+  renderTable();
+  await screen.findByText("Credential 0");
+  // Settings puts its header action in the layout through setActionButton.
+  const header = setActionButton.mock.calls.findLast(([node]) => node)?.[0];
+  render(header);
+  const add = screen.getByRole("button", { name: "Add credential" });
+  expect(add).toBeEnabled();
+  await user.click(add);
+  const dialog = await screen.findByRole("dialog");
+  expect(within(dialog).queryByText("Provided by")).not.toBeInTheDocument();
+  await user.type(within(dialog).getByLabelText("Name"), "My token");
+  await user.click(within(dialog).getByRole("button", { name: "Add" }));
+  await waitFor(() =>
+    expect(body).toMatchObject({
+      allowPersonal: true,
+      allowOrganization: false,
+      initialGrants: [],
+    }),
+  );
+});
+
+function renderTable(mode?: "organization" | "personal") {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   client.setQueryData(["secrets", "type"], { type: "database" });
+  const slot = document.createElement("div");
+  document.body.append(slot);
   render(
     <QueryClientProvider client={client}>
-      <RuntimeCredentialsSection />
+      <AccountPageActionSlotContext.Provider value={slot}>
+        <RuntimeCredentialsSection mode={mode} />
+      </AccountPageActionSlotContext.Provider>
     </QueryClientProvider>,
   );
 }

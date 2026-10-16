@@ -3,12 +3,13 @@
 import { ArrowUpRight, Hash, Lock, Search } from "lucide-react";
 import { useState } from "react";
 import { ChannelDetailsDialog } from "@/app/settings/messaging-channels/_components/channel-details-dialog";
+import { AgentSelector } from "@/components/agent-selector";
 import { FormDialog } from "@/components/form-dialog";
 import { Button } from "@/components/ui/button";
 import { DialogBody } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { useInternalAgents } from "@/lib/agent.query";
+import { useInternalAgentOptions } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   useAllChatOpsBindings,
@@ -16,7 +17,9 @@ import {
 } from "@/lib/chatops/chatops.query";
 import {
   useJoinSlackAgentBotChannel,
+  useJoinSlackRouterBotChannel,
   useSlackAgentBotChannels,
+  useSlackRouterBotChannels,
 } from "@/lib/chatops/chatops-config.query";
 import { cn } from "@/lib/utils/tailwind";
 
@@ -24,6 +27,8 @@ import { cn } from "@/lib/utils/tailwind";
  * Edit an agent's Slack bot: the channels it is in, each with its settings,
  * and adding it to more. In Slack every agent answers through its own bot, so
  * its Slack channels belong here rather than in the agent's channel list.
+ * Without an agent it edits the router bot, whose channels each have a
+ * default agent.
  */
 export function SlackBotEditDialog({
   open,
@@ -36,7 +41,8 @@ export function SlackBotEditDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  agentId: string;
+  /** null for the router bot. */
+  agentId: string | null;
   handle: string;
   appId: string;
   installed: boolean;
@@ -47,7 +53,11 @@ export function SlackBotEditDialog({
       open={open}
       onOpenChange={onOpenChange}
       title={`@${handle}`}
-      description="Channels this bot is in."
+      description={
+        agentId
+          ? "Channels this bot is in."
+          : "Channels this bot is in, with the agent that answers there by default."
+      }
       headerAction={
         <Button size="sm" variant="ghost" asChild>
           <a
@@ -96,15 +106,20 @@ function BotChannels({
   handle,
   reinstallUrl,
 }: {
-  agentId: string;
+  agentId: string | null;
   handle: string;
   reinstallUrl: string | null;
 }) {
-  const channelsQuery = useSlackAgentBotChannels(agentId);
-  const joinMutation = useJoinSlackAgentBotChannel(agentId);
+  const isRouter = agentId === null;
+  const agentChannelsQuery = useSlackAgentBotChannels(agentId ?? undefined);
+  const routerChannelsQuery = useSlackRouterBotChannels(isRouter);
+  const channelsQuery = isRouter ? routerChannelsQuery : agentChannelsQuery;
+  const agentJoin = useJoinSlackAgentBotChannel(agentId ?? "");
+  const routerJoin = useJoinSlackRouterBotChannel();
+  const joinMutation = isRouter ? routerJoin : agentJoin;
   const updateBinding = useUpdateChatOpsBinding();
   const bindingsQuery = useAllChatOpsBindings();
-  const { data: agents = [] } = useInternalAgents();
+  const { data: agents = [] } = useInternalAgentOptions();
   const { data: canEdit } = useHasPermissions({
     organizationSettings: ["update"],
   });
@@ -154,6 +169,7 @@ function BotChannels({
   // in them, so nobody answers as the agent there.
   const missing = bindings.filter(
     (binding) =>
+      !isRouter &&
       binding.provider === "slack" &&
       !binding.isDm &&
       binding.agentId === agentId &&
@@ -214,6 +230,40 @@ function BotChannels({
             <ul className="divide-y rounded-md border">
               {shownMembers.map((channel) => {
                 const binding = bindingFor(channel.channelId);
+                if (isRouter) {
+                  return (
+                    <ChannelRow
+                      key={channel.channelId}
+                      name={channel.channelName ?? channel.channelId}
+                      description={channel.description}
+                      isPrivate={channel.isPrivate}
+                      status={
+                        binding?.agentId
+                          ? `Default agent: ${agentNameFor(binding.agentId)}`
+                          : "No default agent yet: the first message asks for one"
+                      }
+                      action={
+                        binding && canEdit ? (
+                          <AgentSelector
+                            mode="single"
+                            flat
+                            compactTrigger
+                            agents={agents}
+                            value={binding.agentId ?? ""}
+                            onValueChange={(nextAgentId) =>
+                              updateBinding.mutate({
+                                id: binding.id,
+                                body: { agentId: nextAgentId },
+                              })
+                            }
+                            placeholder="Pick an agent"
+                            className="w-44"
+                          />
+                        ) : null
+                      }
+                    />
+                  );
+                }
                 const repliesToAll = repliesToAllAgent(binding);
                 return (
                   <ChannelRow

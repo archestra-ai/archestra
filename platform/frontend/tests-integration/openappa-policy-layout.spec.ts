@@ -91,6 +91,14 @@ for (const viewport of [
           unusedAliases: [],
           rootRevision: 1,
           lastError: null,
+          composition: {
+            served: {
+              kind: "current",
+              rootRevision: 1,
+              composedAt: "2026-09-22T12:00:00Z",
+            },
+            refusal: null,
+          },
           managedInGithub: false,
           heldPull: null,
         },
@@ -125,6 +133,14 @@ for (const viewport of [
           compiledAt: "2026-09-22T12:00:00Z",
           lastError: null,
           lastErrorAt: null,
+          composition: {
+            served: {
+              kind: "current",
+              rootRevision: 1,
+              composedAt: "2026-09-22T12:00:00Z",
+            },
+            refusal: null,
+          },
         },
       });
       const configurationAgent = makeAgent({
@@ -137,8 +153,13 @@ for (const viewport of [
       await mswControl.registerMany([
         {
           method: "get",
-          url: "/api/agents/all",
+          url: "/api/agents/chat-roster",
           body: [configurationAgent],
+        },
+        {
+          method: "get",
+          url: `/api/agents/${configurationAgent.id}`,
+          body: configurationAgent,
         },
         {
           method: "get",
@@ -153,6 +174,12 @@ for (const viewport of [
               builtInFallback: 0,
             },
             batteries: { active: [], broken: [], available: [] },
+            composition: {
+              kind: "current",
+              servedRootRevision: 1,
+              refusedRootRevision: null,
+              rulesMayDiffer: false,
+            },
           },
         },
         {

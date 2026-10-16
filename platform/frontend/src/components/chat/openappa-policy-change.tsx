@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, CheckCircle2, TriangleAlert } from "lucide-react";
+import { ArrowUpRight, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import {
@@ -40,9 +40,6 @@ export function OpenAppaPolicyChange({
 }) {
   const change = parsePolicyChange(output, validationChange);
   if (!change) return null;
-  const counts = validationChange
-    ? parseReplayCounts(parseOutput(output)?.counts)
-    : null;
   const path = change.path ?? "organization.appa.toml";
   // Previewing the unsaved starter changes no line.
   const unchanged = change.before === change.after;
@@ -75,13 +72,6 @@ export function OpenAppaPolicyChange({
             : change.diff || policyDiff(change.before, change.after, path),
         })}
       />
-      {counts && (
-        <InlineNotice variant={replayPassed(counts) ? "success" : "warning"}>
-          {replayPassed(counts) ? <CheckCircle2 /> : <TriangleAlert />}
-          <span className="font-medium">Draft replay</span>
-          <InlineNoticeText>{replaySummary(counts)}</InlineNoticeText>
-        </InlineNotice>
-      )}
       {change.warnings?.map((warning) => (
         <InlineNotice key={warning} variant="warning">
           <TriangleAlert />
@@ -245,7 +235,7 @@ export function getOpenAppaSaveResult({
   if (shortName === "update_guardrails_policy") {
     return getPolicySaveResult(output) ? "policy" : null;
   }
-  if (shortName === "publish_openappa_validation_change") {
+  if (shortName === "update_guardrails_validation") {
     return getValidationSaveResult(output) ? "validation" : null;
   }
   return null;
@@ -337,14 +327,13 @@ function GithubSyncTip() {
 }
 
 /**
- * What saved validations report: an opened pull request, or a local save,
- * with the draft replay's counts. Null for a preview or an unreadable result.
+ * What saved validations report: an opened pull request, or a local save.
+ * Saving runs nothing; the agent runs the saved files separately. Null for a
+ * preview or an unreadable result.
  */
 export function getValidationSaveResult(output: unknown): SaveResult | null {
   const change = parseOutput(output);
   if (!change || change.stage === "preview") return null;
-  const counts = parseReplayCounts(change.counts);
-  if (!counts) return null;
   const pullUrl =
     change.delivery === "pull_request" &&
     Number.isSafeInteger(change.number) &&
@@ -358,13 +347,11 @@ export function getValidationSaveResult(output: unknown): SaveResult | null {
       !change.version)
   )
     return null;
-  const replay = `draft replay: ${replaySummary(counts).replace(/\.$/, "")}`;
-  const tone = replayPassed(counts) ? "success" : "warning";
   if (pullUrl) {
     return {
-      tone,
+      tone: "success",
       title: `Opened ${changeRequestShort(pullUrl)} #${change.number}`,
-      detail: `merge it to apply · ${replay}`,
+      detail: "merge it to apply",
       action: {
         label: `Review ${changeRequestNoun(pullUrl)}`,
         href: pullUrl,
@@ -374,12 +361,12 @@ export function getValidationSaveResult(output: unknown): SaveResult | null {
     };
   }
   return {
-    tone,
+    tone: "success",
     title:
       change.policyChanged === true
         ? "Saved policy and validations"
         : "Saved validations",
-    detail: replay,
+    detail: "not run yet",
     action: {
       label: "View Validations",
       href: "/openappa/validation",
@@ -393,29 +380,6 @@ export function getValidationSaveResult(output: unknown): SaveResult | null {
 export function OpenAppaValidationCompletion({ output }: { output: unknown }) {
   const result = getValidationSaveResult(output);
   return result ? <SaveResultLine result={result} /> : null;
-}
-
-type ReplayCounts = { passed: number; failed: number; cannotRun: number };
-
-function parseReplayCounts(value: unknown): ReplayCounts | null {
-  if (!value || typeof value !== "object") return null;
-  const counts = value as Record<string, unknown>;
-  if (
-    ![counts.passed, counts.failed, counts.cannotRun].every(
-      (count) =>
-        typeof count === "number" && Number.isSafeInteger(count) && count >= 0,
-    )
-  )
-    return null;
-  return counts as ReplayCounts;
-}
-
-function replayPassed(counts: ReplayCounts) {
-  return counts.failed === 0 && counts.cannotRun === 0 && counts.passed > 0;
-}
-
-function replaySummary(counts: ReplayCounts) {
-  return `${counts.passed} passed, ${counts.failed} failed, ${counts.cannotRun} could not run.`;
 }
 
 export function isOpenAppaPolicyChange(
@@ -455,23 +419,14 @@ function parsePolicyChange(
   output: unknown,
   validationChange = false,
 ): PolicyChange | null {
-  let value = parseOutput(output);
+  const value = parseOutput(output);
   if (!value) return null;
-  if (validationChange) {
-    if (value.stage === "preview") {
-      const policy = value.policy;
-      if (
-        !policy ||
-        typeof policy !== "object" ||
-        !("changed" in policy) ||
-        policy.changed !== true
-      )
-        return null;
-      value = { ...value, ...policy };
-    } else if (value.before === value.after) {
-      return null;
-    }
-  }
+  // A validation preview never changes the policy, so it has no diff card.
+  if (
+    validationChange &&
+    (value.stage === "preview" || value.before === value.after)
+  )
+    return null;
   if (
     (value.delivery !== "revision" && value.delivery !== "pull_request") ||
     typeof value.before !== "string" ||

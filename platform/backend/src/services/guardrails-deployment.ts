@@ -28,34 +28,27 @@ export async function isGuardrailsV2Active(): Promise<boolean> {
   return (await readGuardrailsV2Activation()) === "active";
 }
 export async function getGuardrailsDeployment() {
-  const { enabled, unsupportedClientAction, superyellEnabled } =
+  const { enabled, unsupportedClientAction, breakTheGlassEnabled } =
     await GuardrailsDeploymentModel.get();
   return {
     enabled,
     unsupportedClientAction,
-    superyellEnabled,
+    breakTheGlassEnabled,
     featureEnabled: enterpriseTier.isOpenappaActive(),
     active: enterpriseTier.isOpenappaActive() && enabled,
   };
 }
 
-export const SUPERYELL_DISABLED_MESSAGE =
-  "An administrator turned off superyell in Guardrails settings, so OpenAPPA cannot be turned off for this session. Use yell to report the problem instead.";
-
 /**
- * Whether agents are offered superyell and may run it: enforcement is on and
- * an administrator has not turned superyell off in Guardrails settings.
+ * Whether a yell also turns OpenAPPA off for the session that sends it:
+ * enforcement is on and an administrator left break the glass on in
+ * Guardrails settings.
  */
-export async function isSuperyellAvailable(): Promise<boolean> {
-  return superyellAvailableIn(await getGuardrailsDeployment());
-}
-
-/** isSuperyellAvailable for a caller that already read the deployment. */
-export function superyellAvailableIn(deployment: {
+export function breakTheGlassActiveIn(deployment: {
   active: boolean;
-  superyellEnabled: boolean;
+  breakTheGlassEnabled: boolean;
 }): boolean {
-  return deployment.active && deployment.superyellEnabled;
+  return deployment.active && deployment.breakTheGlassEnabled;
 }
 
 /**
@@ -66,11 +59,14 @@ export function superyellAvailableIn(deployment: {
  * So the switch turns on only while every organization's latest policy passes
  * the same check a save runs. Turning it off is never refused.
  */
-export async function setGuardrailsDeployment(update: {
-  enabled?: boolean;
-  unsupportedClientAction?: UnsupportedAppaClientAction;
-  superyellEnabled?: boolean;
-}) {
+export async function setGuardrailsDeployment(
+  update: {
+    enabled?: boolean;
+    unsupportedClientAction?: UnsupportedAppaClientAction;
+    breakTheGlassEnabled?: boolean;
+  },
+  actor?: { userId: string },
+) {
   if (update.enabled && enterpriseTier.isOpenappaActive()) {
     const refusals = await refusedPolicies();
     if (refusals.length > 0)
@@ -79,8 +75,34 @@ export async function setGuardrailsDeployment(update: {
         `Guardrails v2 was not enabled: the guardrails policy is refused, so every proxied request would fail. Fix the policy on the OpenAPPA page first. ${refusals.join(" ")}`,
       );
   }
+  const before = await getGuardrailsDeployment();
   await GuardrailsDeploymentModel.set(update);
-  return getGuardrailsDeployment();
+  const after = await getGuardrailsDeployment();
+  // A switch changes what every running session and runtime may do, so the
+  // moment it happened must be findable in the backend log, not only in the
+  // audit log.
+  logger.info(
+    {
+      userId: actor?.userId,
+      before: deploymentSettings(before),
+      after: deploymentSettings(after),
+    },
+    after.enabled === before.enabled
+      ? "Guardrails deployment settings changed"
+      : `Guardrails enforcement switched ${after.enabled ? "on" : "off"}`,
+  );
+  return after;
+}
+
+function deploymentSettings(
+  deployment: Awaited<ReturnType<typeof getGuardrailsDeployment>>,
+) {
+  return {
+    enabled: deployment.enabled,
+    active: deployment.active,
+    unsupportedClientAction: deployment.unsupportedClientAction,
+    breakTheGlassEnabled: deployment.breakTheGlassEnabled,
+  };
 }
 
 type FirstPolicyEnforcement = {
@@ -142,7 +164,7 @@ export async function turnOnForFirstPolicy(params: {
   if (refusal) return refusal;
   const before = await GuardrailsDeploymentModel.findByIdForAudit();
   try {
-    await setGuardrailsDeployment({ enabled: true });
+    await setGuardrailsDeployment({ enabled: true }, { userId });
   } catch (error) {
     if (error instanceof ApiError)
       return { enabled: false, turnedOn: false, reason: error.message };

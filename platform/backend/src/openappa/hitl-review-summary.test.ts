@@ -145,6 +145,46 @@ describe("summarizeHitlReview", () => {
     vi.clearAllMocks();
   });
 
+  test("distinct payloads cannot exceed shared summary budgets, while cached summaries remain available", async () => {
+    provisionSummaryModel();
+    answer(SUMMARY);
+    // A window crossing would make a fixed-window budget legitimately refill.
+    vi.spyOn(Date, "now").mockReturnValue(1_800_000_000_000);
+    try {
+      const first = proseReview();
+      for (let index = 0; index < 6; index++) {
+        const result = await summarizeHitlReview({
+          session: session(),
+          review:
+            index === 0
+              ? first
+              : review(
+                  JSON.stringify({
+                    message: `${LONG_PROSE} variation ${index}`,
+                  }),
+                ),
+        });
+        expect(result).toBe(index < 5 ? SUMMARY : undefined);
+      }
+      expect(mockGenerateText).toHaveBeenCalledTimes(5);
+      expect(
+        await summarizeHitlReview({ session: session(), review: first }),
+      ).toBe(SUMMARY);
+      expect(mockGenerateText).toHaveBeenCalledTimes(5);
+      // Different callers share the organization ceiling, not one caller's allowance.
+      for (let index = 0; index < 16; index++) {
+        const result = await summarizeHitlReview({
+          session: session(`user:caller-${index}`),
+          review: proseReview(),
+        });
+        expect(result).toBe(index < 15 ? SUMMARY : undefined);
+      }
+      expect(mockGenerateText).toHaveBeenCalledTimes(20);
+    } finally {
+      vi.mocked(Date.now).mockRestore();
+    }
+  });
+
   test("summarizes long prose arguments through one no-tools model call", async () => {
     provisionSummaryModel();
     answer(SUMMARY);

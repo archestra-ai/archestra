@@ -158,7 +158,10 @@ const AssignedAgentSummarySchema = z.object({
  */
 const KnowledgeBaseResponseSchema = SelectKnowledgeBaseSchema.omit({
   createdBy: true,
-}).extend({ createdBy: CreatedByNullableSchema });
+}).extend({
+  createdBy: CreatedByNullableSchema,
+  labels: z.array(LabelWithDetailsSchema),
+});
 
 const KnowledgeBaseWithConnectorsSchema = KnowledgeBaseResponseSchema.extend({
   connectors: z.array(
@@ -559,6 +562,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       return reply.send({
         ...kg,
+        labels: await KnowledgeBaseLabelModel.getLabelsFor(kg.id),
         createdBy: await CreatedByModel.resolveOne(
           CreatedByModel.id(kg, kg.createdBy),
         ),
@@ -585,6 +589,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       return reply.send({
         ...kg,
+        labels: await KnowledgeBaseLabelModel.getLabelsFor(kg.id),
         createdBy: await CreatedByModel.resolveOne(
           CreatedByModel.id(kg, kg.createdBy),
         ),
@@ -611,13 +616,15 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async ({ params: { id }, body, organizationId, user }, reply) => {
-      await findKnowledgeBaseOrThrow({
+      const existing = await findKnowledgeBaseOrThrow({
         id,
         organizationId,
         userId: user.id,
       });
       const { labels, visibility: _v, teamIds: _t, ...columns } = body;
-      const updated = await KnowledgeBaseModel.update(id, columns);
+      const updated = Object.keys(columns).length
+        ? await KnowledgeBaseModel.update(id, columns)
+        : existing;
       if (!updated) {
         throw new ApiError(404, "Knowledge base not found");
       }
@@ -630,6 +637,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       return reply.send({
         ...updated,
+        labels: await KnowledgeBaseLabelModel.getLabelsFor(updated.id),
         createdBy: await CreatedByModel.resolveOne(
           CreatedByModel.id(updated, updated.createdBy),
         ),

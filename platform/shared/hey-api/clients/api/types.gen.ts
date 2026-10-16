@@ -69398,6 +69398,12 @@ export type GetKnowledgeBasesResponses = {
                 name: string | null;
                 email: string | null;
             } | null;
+            labels: Array<{
+                key: string;
+                value: string;
+                keyId?: string;
+                valueId?: string;
+            }>;
             connectors: Array<{
                 id: string;
                 name: string;
@@ -69408,12 +69414,6 @@ export type GetKnowledgeBasesResponses = {
                 id: string;
                 name: string;
                 agentType: string;
-            }>;
-            labels: Array<{
-                key: string;
-                value: string;
-                keyId?: string;
-                valueId?: string;
             }>;
         }>;
         pagination: {
@@ -69554,6 +69554,12 @@ export type CreateKnowledgeBaseResponses = {
             name: string | null;
             email: string | null;
         } | null;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -69746,6 +69752,12 @@ export type GetKnowledgeBaseResponses = {
             name: string | null;
             email: string | null;
         } | null;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 
@@ -69861,6 +69873,12 @@ export type UpdateKnowledgeBaseResponses = {
             name: string | null;
             email: string | null;
         } | null;
+        labels: Array<{
+            key: string;
+            value: string;
+            keyId?: string;
+            valueId?: string;
+        }>;
     };
 };
 

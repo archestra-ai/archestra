@@ -829,11 +829,16 @@ export function useAgentCredentialReadiness(params?: {
     queryKey: ["agents", "credential-readiness", ids],
     queryFn: async () => {
       if (ids?.length === 0) return [];
-      const { data, error } = await getAgentCredentialReadiness({
-        query: { ids },
-      });
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? [];
+      const rows: archestraApiTypes.GetAgentCredentialReadinessResponses["200"] =
+        [];
+      for (let offset = 0; offset < (ids?.length ?? 1); offset += 200) {
+        const { data, error } = await getAgentCredentialReadiness({
+          query: { ids: ids?.slice(offset, offset + 200) },
+        });
+        throwOnApiError(error, { toastOnError: false });
+        rows.push(...(data ?? []));
+      }
+      return rows;
     },
     enabled: params?.enabled,
   });
@@ -853,7 +858,7 @@ export function useChatAgentPage(params: {
     limit: 20,
     cursor: params.cursor,
     search: params.search || undefined,
-    sortBy: "name" as const,
+    sortBy: "chat" as const,
   };
   return useQuery({
     queryKey: ["agents", "chat-roster", "page", query],
@@ -897,6 +902,16 @@ export function useChatAgentReferences(
   });
 }
 
+export function useChatAgentBootstrap(enabled = true) {
+  return useQuery({
+    queryKey: chatAgentsQueryKey,
+    queryFn: fetchChatAgents,
+    enabled,
+    retry: BOOTSTRAP_QUERY_RETRY,
+    meta: PERSISTED_QUERY_META,
+  });
+}
+
 export function useChatAgents(params?: {
   enabled?: boolean;
   ids?: (string | null | undefined)[];
@@ -906,13 +921,7 @@ export function useChatAgents(params?: {
   const memberDefault = useDefaultAgentId();
   const savedId = getSavedAgent();
   const enabled = params?.enabled ?? true;
-  const bootstrap = useQuery({
-    queryKey: chatAgentsQueryKey,
-    queryFn: fetchChatAgents,
-    enabled,
-    retry: BOOTSTRAP_QUERY_RETRY,
-    meta: PERSISTED_QUERY_META,
-  });
+  const bootstrap = useChatAgentBootstrap(enabled);
   const references = useChatAgentReferences(
     [
       ...(params?.ids ?? []),

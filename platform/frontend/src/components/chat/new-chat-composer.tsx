@@ -77,6 +77,7 @@ export function NewChatComposer({
 
   const {
     agentId,
+    selectedAgent,
     modelId,
     apiKeyId,
     provider,
@@ -110,20 +111,17 @@ export function NewChatComposer({
   }, [modelId, chatModels]);
 
   const runtimeEnabled = useFeature("agentRuntime") === true;
-  const runtimeAgent = runtimeEnabled
-    ? internalAgents.find(
-        (agent) => agent.id === agentId && agent.runtime !== null,
-      )
-    : undefined;
+  const currentAgent =
+    internalAgents.find((agent) => agent.id === agentId) ?? selectedAgent;
+  const runtimeAgent =
+    runtimeEnabled && currentAgent?.runtime ? currentAgent : undefined;
   const isRuntimeMode = !!runtimeAgent;
   const runtimePreflight = useAgentRuntimePreflight(
     agentId ?? "",
     isRuntimeMode,
   );
 
-  const agentLlmApiKeyId = internalAgents.find(
-    (a) => a.id === agentId,
-  )?.llmApiKeyId;
+  const agentLlmApiKeyId = currentAgent?.llmApiKeyId;
   // Keys shared only to read cannot run a chat; the agent's own key can.
   const hasNoUsableKey =
     !isRuntimeMode &&

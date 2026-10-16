@@ -4,7 +4,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import type { ReactNode } from "react";
-import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
 import {
   useAgentCredentialReadiness,
   useChatAgentPage,
@@ -29,6 +29,7 @@ beforeAll(() => {
 });
 afterEach(() => {
   server.resetHandlers();
+  vi.restoreAllMocks();
   localStorage.clear();
 });
 afterAll(() => {
@@ -122,7 +123,13 @@ it("fetches only explicit pages and preserves an off-page manual selection from 
       const url = new URL(request.url);
       requests.push(url);
       return HttpResponse.json({
-        data: [agent("later-agent")],
+        data: [
+          {
+            ...agent("later-agent"),
+            llmApiKeyId: "owned-key",
+            runtime: { credentials: [] },
+          },
+        ],
         pagination: { limit: 20, nextCursor: "next-page", hasNext: true },
       });
     }),
@@ -171,8 +178,15 @@ it("fetches only explicit pages and preserves an off-page manual selection from 
   expect(requests).toHaveLength(1);
   expect(requests[0].searchParams.get("limit")).toBe("20");
   expect(requests[0].searchParams.get("search")).toBe("description match");
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new Error("Storage unavailable");
+  });
   act(() => result.current.state.onAgentChange("later-agent"));
   expect(result.current.state.agentId).toBe("later-agent");
+  expect(result.current.state.selectedAgent?.llmApiKeyId).toBe("owned-key");
+  expect(result.current.state.selectedAgent?.runtime).toEqual({
+    credentials: [],
+  });
   rerender({ enabled: true, cursor: "next-page", search: "description match" });
   await waitFor(() => expect(requests).toHaveLength(2));
   expect(requests[1].searchParams.get("cursor")).toBe("next-page");
@@ -234,4 +248,44 @@ it("keeps credential readiness scoped to the selected agents and separate in cac
   expect(result.current.second.data?.map((row) => row.agentId)).toEqual([
     "second",
   ]);
+});
+
+it("exposes a failed default lookup and retries it without silently choosing a fallback", async () => {
+  let available = false;
+  server.use(
+    http.get(`${origin}/api/members/default-agent`, () =>
+      available
+        ? HttpResponse.json({
+            defaultAgentId: "member-default",
+            personalChatAgentId: null,
+          })
+        : HttpResponse.json(
+            { error: { message: "Temporarily unavailable" } },
+            { status: 503 },
+          ),
+    ),
+    http.get(`${origin}/api/organization`, () =>
+      HttpResponse.json({ defaultAgentId: "org-default" }),
+    ),
+    http.get(`${origin}/api/agents/chat-roster`, ({ request }) => {
+      const query = new URL(request.url).searchParams;
+      return HttpResponse.json(
+        query.has("bootstrap")
+          ? [agent("fallback")]
+          : (query.get("ids")?.split(",") ?? []).map(agent),
+      );
+    }),
+  );
+  const { client, wrapper } = setup();
+  client.removeQueries({ queryKey: ["member-default-agent"] });
+  const { result } = renderHook(() => useChatAgents(), { wrapper });
+  await waitFor(() => expect(result.current.isError).toBe(true));
+  expect(result.current.isPending).toBe(false);
+  expect(result.current.data).toBeUndefined();
+  available = true;
+  await act(async () => {
+    await result.current.refetch();
+  });
+  await waitFor(() => expect(result.current.isSuccess).toBe(true));
+  expect(result.current.data?.map((row) => row.id)).toContain("member-default");
 });

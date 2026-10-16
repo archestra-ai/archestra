@@ -482,6 +482,7 @@ export function ChatPageContent({
   // Shared new-chat initialization (agent/model/key resolution + persistence).
   const {
     agentId: initialAgentId,
+    selectedAgent: initialAgentReference,
     modelId: initialModel,
     apiKeyId: initialApiKeyId,
     provider: initialProvider,
@@ -512,11 +513,13 @@ export function ChatPageContent({
     isApiKeysLoading: isLoadingUsableApiKeys,
     routeConversationId,
   });
-  const initialRuntimeAgent = runtimeEnabled
-    ? internalAgents.find(
-        (agent) => agent.id === initialAgentId && agent.runtime !== null,
-      )
-    : undefined;
+  const initialRuntimeCandidate =
+    internalAgents.find((agent) => agent.id === initialAgentId) ??
+    initialAgentReference;
+  const initialRuntimeAgent =
+    runtimeEnabled && initialRuntimeCandidate?.runtime
+      ? initialRuntimeCandidate
+      : undefined;
   const isInitialRuntimeMode = !!initialRuntimeAgent;
   const runtimePreflight = useAgentRuntimePreflight(
     initialAgentId ?? "",
@@ -989,9 +992,9 @@ export function ChatPageContent({
   const conversationAgentSummary = internalAgents.find(
     (agent) => agent.id === conversation?.agentId,
   );
-  const initialAgentSummary = internalAgents.find(
-    (agent) => agent.id === initialAgentId,
-  );
+  const initialAgentSummary =
+    internalAgents.find((agent) => agent.id === initialAgentId) ??
+    initialAgentReference;
   const selectedAgentSummary = conversationId
     ? conversationAgentSummary
     : initialAgentSummary;

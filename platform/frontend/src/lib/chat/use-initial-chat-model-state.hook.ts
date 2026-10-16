@@ -108,7 +108,7 @@ export type InitialChatModelState = {
  */
 export function useInitialChatModelState<TAgent extends InitialChatAgent>(
   params: InitialChatModelStateParams<TAgent>,
-): InitialChatModelState {
+): InitialChatModelState & { selectedAgent: TAgent | null } {
   const {
     agents,
     resolveAgent,
@@ -130,6 +130,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
   } = params;
 
   const [agentId, setAgentId] = useState<string | null>(null);
+  const [selectedAgent, setSelectedAgent] = useState<TAgent | null>(null);
   const [modelId, setModelId] = useState<string>("");
   const [apiKeyId, setApiKeyId] = useState<string | null>(null);
   // Carried into the create request on first submit, so a choice made before
@@ -160,6 +161,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
   const applyAgentSelection = useCallback(
     (agent: TAgent) => {
       setAgentId(agent.id);
+      setSelectedAgent(agent);
       resolvedAgentRef.current = agent;
 
       const resolved = resolveInitialAgentState({
@@ -318,6 +320,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
       })
     ) {
       setAgentId(null);
+      setSelectedAgent(null);
       setModelId("");
       setApiKeyId(null);
       modelInitializedRef.current = false;
@@ -424,15 +427,16 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
   }, [modelId, modelsByProvider]);
 
   const modelSource = useMemo(() => {
-    const agent = agents.find((a) => a.id === agentId);
+    const agent = agents.find((a) => a.id === agentId) ?? selectedAgent;
     return deriveModelSource({
       selectedModelId: modelId,
       agentModelId: agent?.modelId,
       orgModelId: organization?.defaultModelId,
     });
-  }, [modelId, agentId, agents, organization?.defaultModelId]);
+  }, [modelId, agentId, agents, selectedAgent, organization?.defaultModelId]);
 
   return {
+    selectedAgent,
     agentId,
     modelId,
     apiKeyId,

@@ -10,10 +10,10 @@ crate-type = ["cdylib"]
 
 [dependencies]
 # OpenAPPA #666: [aliases.mcp] and [aliases.host] bindings.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "d6253834f50acdac64e2e3807258c4006c0935a0", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "d6253834f50acdac64e2e3807258c4006c0935a0" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "d6253834f50acdac64e2e3807258c4006c0935a0", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "d6253834f50acdac64e2e3807258c4006c0935a0" }
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "f28e69e62f6e7d9e818ed5070ae2a11b832a5b6a", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "f28e69e62f6e7d9e818ed5070ae2a11b832a5b6a" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "f28e69e62f6e7d9e818ed5070ae2a11b832a5b6a", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "f28e69e62f6e7d9e818ed5070ae2a11b832a5b6a" }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"

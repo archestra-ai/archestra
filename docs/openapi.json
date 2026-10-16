@@ -252387,6 +252387,20 @@
           {
             "schema": {
               "type": "string",
+              "default": "full",
+              "enum": [
+                "full",
+                "picker"
+              ]
+            },
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "description": "Picker metadata excludes parameter bodies and assigned-agent lists."
+          },
+          {
+            "schema": {
+              "type": "string",
               "format": "uuid",
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
             },
@@ -252401,67 +252415,105 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "description": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "parameters": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
                         "type": "object",
-                        "additionalProperties": {}
-                      },
-                      "createdAt": {
-                        "type": "string",
-                        "format": "date-time"
-                      },
-                      "group": {
-                        "nullable": true,
-                        "type": "string"
-                      },
-                      "assignedAgentCount": {
-                        "type": "number"
-                      },
-                      "assignedAgents": {
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string"
-                            },
-                            "name": {
-                              "type": "string"
-                            }
+                        "properties": {
+                          "id": {
+                            "type": "string"
                           },
-                          "required": [
-                            "id",
-                            "name"
-                          ],
-                          "additionalProperties": false
-                        }
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "parameters": {
+                            "type": "object",
+                            "additionalProperties": {}
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "group": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "assignedAgentCount": {
+                            "type": "number"
+                          },
+                          "assignedAgents": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "description",
+                          "parameters",
+                          "createdAt",
+                          "group",
+                          "assignedAgentCount",
+                          "assignedAgents"
+                        ],
+                        "additionalProperties": false
                       }
                     },
-                    "required": [
-                      "id",
-                      "name",
-                      "description",
-                      "parameters",
-                      "createdAt",
-                      "group",
-                      "assignedAgentCount",
-                      "assignedAgents"
-                    ],
-                    "additionalProperties": false
-                  }
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "group": {
+                            "nullable": true,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "description",
+                          "createdAt",
+                          "group"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  ]
                 }
               }
             }

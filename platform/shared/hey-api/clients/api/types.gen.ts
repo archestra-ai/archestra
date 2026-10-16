@@ -65546,7 +65546,12 @@ export type GetInternalMcpCatalogToolsData = {
     path: {
         id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Picker metadata excludes parameter bodies and assigned-agent lists.
+         */
+        view?: 'full' | 'picker';
+    };
     url: '/api/internal_mcp_catalog/{id}/tools';
 };
 
@@ -65636,6 +65641,12 @@ export type GetInternalMcpCatalogToolsResponses = {
             id: string;
             name: string;
         }>;
+    }> | Array<{
+        id: string;
+        name: string;
+        description: string | null;
+        createdAt: string;
+        group: string | null;
     }>;
 };
 

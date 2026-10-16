@@ -362,8 +362,10 @@ export function useDeleteInternalMcpCatalogItem() {
   });
 }
 
-export type CatalogTool =
-  archestraApiTypes.GetInternalMcpCatalogToolsResponses["200"][number];
+export type CatalogTool = Pick<
+  archestraApiTypes.GetInternalMcpCatalogToolsResponses["200"][number],
+  "id" | "name" | "description" | "createdAt" | "group"
+>;
 
 /** One `{ id, name, catalogId }` row from the batched catalog-tools route. */
 export type CatalogToolReference =
@@ -383,15 +385,12 @@ export const catalogToolsBatchQueryKey = ["mcp-catalog", "tools"] as const;
 export async function fetchCatalogTools(
   catalogId: string,
 ): Promise<CatalogTool[]> {
-  try {
-    const response = await getInternalMcpCatalogTools({
-      path: { id: catalogId },
-    });
-    return response.data ?? [];
-  } catch (error) {
-    console.error("Failed to fetch catalog tools:", error);
-    return [];
-  }
+  const { data, error } = await getInternalMcpCatalogTools({
+    path: { id: catalogId },
+    query: { view: "picker" },
+  });
+  throwOnApiError(error);
+  return data ?? [];
 }
 
 /**
@@ -440,7 +439,7 @@ export function groupCatalogTools(
  */
 export function useCatalogTools(catalogId: string | null) {
   return useQuery({
-    queryKey: ["mcp-catalog", catalogId, "tools"],
+    queryKey: ["mcp-catalog", catalogId, "tools", "picker"],
     queryFn: async () => {
       if (!catalogId) return [];
       return fetchCatalogTools(catalogId);

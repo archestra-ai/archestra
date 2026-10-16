@@ -269,6 +269,44 @@ describe("mcp server tool execution", () => {
     expect(names).toContain("test_tool_2");
   });
 
+  test("get_mcp_server_tools picker view retains tool metadata without assignment or parameter bodies", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({ organizationId });
+    const tool = await makeTool({
+      catalogId: catalog.id,
+      name: "example__lookup",
+      parameters: { type: "object", properties: { query: { type: "string" } } },
+    });
+    const invoke = (view?: "picker") =>
+      executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_mcp_server_tools`,
+        { mcpServerId: catalog.id, ...(view ? { view } : {}) },
+        mockContext,
+      );
+    const full = await invoke();
+    const picker = await invoke("picker");
+    expect(full.isError).toBe(false);
+    expect(picker.isError).toBe(false);
+    const legacy = JSON.parse((full.content[0] as { text: string }).text);
+    expect(legacy[0]).toMatchObject({
+      id: tool.id,
+      parameters: tool.parameters,
+      assignedAgents: [],
+    });
+    expect(JSON.parse((picker.content[0] as { text: string }).text)).toEqual(
+      legacy.map(
+        ({
+          parameters: _parameters,
+          assignedAgents: _assignedAgents,
+          assignedAgentCount: _assignedAgentCount,
+          ...entry
+        }: Record<string, unknown>) => entry,
+      ),
+    );
+  });
+
   test("get_mcp_server_tools steers an unknown id at the listing tool", async () => {
     const result = await executeArchestraTool(
       `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}get_mcp_server_tools`,

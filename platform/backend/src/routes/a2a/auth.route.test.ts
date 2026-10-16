@@ -408,6 +408,10 @@ describe("a2a route-level authentication", () => {
       actorKind: "serviceAccount",
       actorId: account.id,
     });
+    // The run executes as the account, never with the organization's reach.
+    expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: `service-account:${account.id}` }),
+    );
     const task = await A2ATaskModel.create({
       contextId,
       agentId: agent.id,

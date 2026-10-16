@@ -325,7 +325,7 @@ describe("declaring the legacy battery installs", () => {
     );
   });
 
-  test("declares an organization whose policy GitHub sync owns, and marks it pending", async ({
+  test("declares an organization whose policy GitHub sync owns", async ({
     makeOrganization,
     makeInternalMcpCatalog,
     makeTool,
@@ -354,10 +354,6 @@ describe("declaring the legacy battery installs", () => {
     expect(declared.include.map((entry) => entry.entry)).toEqual([
       "batteries/github/appa.toml",
     ]);
-    expect(
-      (await OpenAppaGithubSyncModel.find(organizationId))
-        ?.declarationsPendingPublish,
-    ).toBe(true);
   });
 
   test("retries a save that lost the revision race", async ({

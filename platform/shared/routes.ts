@@ -533,8 +533,6 @@ export const RouteId = {
   DownloadAgentWorkspaceTransfer: "downloadAgentWorkspaceTransfer",
   UploadAgentWorkspaceTransfer: "uploadAgentWorkspaceTransfer",
   DeleteAgentRun: "deleteAgentRun",
-  GetAgentRunOpenappaReview: "getAgentRunOpenappaReview",
-  DecideAgentRunOpenappaReview: "decideAgentRunOpenappaReview",
 
   // Saved browser login routes (Playwright)
   GetBrowserStorageStates: "getBrowserStorageStates",
@@ -894,8 +892,6 @@ export const RouteId = {
   DeleteOpenappaBatteryPackage: "deleteOpenappaBatteryPackage",
   SetOpenappaCredentialBinding: "setOpenappaCredentialBinding",
   GetOpenappaPolicyDeclarations: "getOpenappaPolicyDeclarations",
-  AcceptHeldAppaGithubPull: "acceptHeldAppaGithubPull",
-  GetHeldAppaGithubPull: "getHeldAppaGithubPull",
   ConsultOpenappaBatteryHelper: "consultOpenappaBatteryHelper",
   // white-label-ok: operation id for the builtin = "archestra" annotator route, a wire identifier
   AnnotateOpenappaToolWithArchestra: "annotateOpenappaToolWithArchestra",

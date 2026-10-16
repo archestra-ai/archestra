@@ -9,23 +9,6 @@ import {
 import { runtimeCredentialsQueryKey } from "@/lib/runtime-credentials.query";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
-/**
- * The pull waiting for approval, itemized: each credential it gives a battery
- * and each battery it removes. Reading the policy is enough to review it.
- */
-export function useHeldPullDetails(enabled: boolean) {
-  return useQuery({
-    enabled,
-    // Under the sync's key, so whatever moves the sync refreshes this too.
-    queryKey: [...appaGithubSyncQueryKey, "held"],
-    queryFn: async () => {
-      const { data, error } = await archestraApiSdk.getHeldAppaGithubPull();
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? null;
-    },
-  });
-}
-
 export function useAppaGithubSync() {
   const { data: canRead } = useHasPermissions({
     organizationSettings: ["read"],

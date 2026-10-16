@@ -1,20 +1,9 @@
-import {
-  boolean,
-  integer,
-  jsonb,
-  pgTable,
-  text,
-  timestamp,
-  uuid,
-} from "drizzle-orm/pg-core";
-import type {
-  AppaSyncInterval,
-  HeldPullReason,
-} from "@/types/openappa-github-sync";
+import { integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import type { AppaSyncInterval } from "@/types/openappa-github-sync";
 import organizationsTable from "./organization";
 
 // One deployment-wide APPA source per organization. Accepted bytes survive disconnects.
-// A row may exist without a source (null repo/path) to carry the declaration flags alone.
+// A row may exist without a source (null repo/path), left by an earlier declaration flag.
 export const openappaGithubSyncTable = pgTable("openappa_github_sync", {
   organizationId: text("organization_id")
     .primaryKey()
@@ -34,16 +23,4 @@ export const openappaGithubSyncTable = pgTable("openappa_github_sync", {
   setupPullRequestNumber: integer("setup_pull_request_number"),
   lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
   lastSyncError: text("last_sync_error"),
-  // The migration window: the declarations this deployment authored are not in the repository yet.
-  declarationsPendingPublish: boolean("declarations_pending_publish")
-    .notNull()
-    .default(false),
-  // A pull that was fetched but not published, awaiting an operator with the right permissions.
-  heldContent: text("held_content"),
-  heldContentHash: text("held_content_hash"),
-  heldSourceCommit: text("held_source_commit"),
-  heldReasons: jsonb("held_reasons")
-    .$type<HeldPullReason[]>()
-    .notNull()
-    .default([]),
 });

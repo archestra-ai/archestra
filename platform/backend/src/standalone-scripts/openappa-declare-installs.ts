@@ -3,7 +3,7 @@
  * OpenAPPA battery installs → policy declarations.
  *
  * Batteries are declared in the organization's policy text now: composition
- * reads `include`, `[server_aliases]` and `[credentials]` from it, and every
+ * reads `include`, `aliases.mcp` and `[credentials]` from it, and every
  * recompose rewrites `openappa_battery_installs` from that text, deleting the
  * rows it does not declare. This one-shot authors those declarations from the
  * legacy rows, so it must run before the first recompose after the deploy.

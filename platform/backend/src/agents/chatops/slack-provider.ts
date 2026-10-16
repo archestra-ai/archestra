@@ -22,6 +22,7 @@ import {
   ChatOpsChannelBindingModel,
   OrganizationModel,
 } from "@/models";
+import ChatOpsProcessedMessageModel from "@/models/chatops-processed-message";
 import type {
   AddApprovalRequestFormOptions,
   ChatOpsApprovalDecision,
@@ -53,12 +54,14 @@ import {
   isChannelThreadMuted,
   isMuteReaction,
   muteChannelThread,
+  stopChannelThreadReply,
 } from "./channel-activation";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_THREAD_HISTORY,
   SLACK_DEFAULT_CONNECTION_MODE,
 } from "./constants";
+import { slackAppFactory } from "./slack-app-factory";
 import { slackMessageText } from "./slack-message-text";
 import { SlackReplyStream } from "./slack-reply-stream";
 import {
@@ -82,8 +85,6 @@ import {
 class SlackProvider implements ChatOpsProvider {
   readonly providerId: ChatOpsProviderType = "slack";
   readonly displayName = "Slack";
-  /** Slack agent sessions show a Stop button while the bot works. */
-  readonly hasNativeStopControl = true;
 
   readonly pinnedAgentId?: string;
   readonly stateScope?: string;
@@ -225,6 +226,7 @@ class SlackProvider implements ChatOpsProvider {
       return;
     }
 
+    await slackAppFactory.ensureManifestScopes(this.config);
     const { botToken } = this.config;
     this.client = new WebClient(botToken);
     this.descriptionClient = new WebClient(botToken, {
@@ -393,10 +395,14 @@ class SlackProvider implements ChatOpsProvider {
     const workspaceId = body.team_id ?? this.teamId;
     switch (event.type) {
       case "reaction_added":
-        await this.handleMuteReaction(event);
+        await this.handleControlEvent(body, () =>
+          this.handleMuteReaction(event),
+        );
         return null;
       case "agent_session_stopped":
-        await this.handleSessionStopped(event);
+        await this.handleControlEvent(body, () =>
+          this.handleSessionStopped(event),
+        );
         return null;
       case "app_home_opened":
         // Agent messaging experience: the DM's Messages tab was opened.
@@ -463,14 +469,23 @@ class SlackProvider implements ChatOpsProvider {
     // then keeps replying to that thread without further mentions until the
     // activation TTL lapses. DMs are always processed without a mention.
     //
-    // Stop, mute commands, and mute reactions end sticky replies until the
+    // Mute commands and mute reactions end sticky replies until the
     // bot is @mentioned again. Commands are handled before reaching the agent.
     //
     // A channel can also opt into answering EVERY message (a per-channel
     // "answer all messages" binding setting): a message the gate would normally
-    // ignore is processed instead, unless that thread was stopped. A bot pinned
+    // ignore is processed instead, unless that thread was muted. A bot pinned
     // to an agent does so only in channels assigned to that agent.
     if (!isDM) {
+      // A redelivered mention must not reactivate a thread muted since the
+      // original delivery. Reply deduplication happens after this gate.
+      if (
+        hasBotMention &&
+        (await ChatOpsProcessedMessageModel.isProcessed(
+          this.stateScope ? `${this.stateScope}:${event.ts}` : event.ts,
+        ))
+      )
+        return null;
       const { proceed } = await applyChannelGate({
         provider: this.providerId,
         channelId: event.channel,
@@ -878,10 +893,16 @@ class SlackProvider implements ChatOpsProvider {
             type: "plain_text" as const,
             text: "Choose an agent…",
           },
-          options: params.agents.map((agent) => ({
-            text: { type: "plain_text" as const, text: agent.name },
-            value: agent.id,
-          })),
+          // Slack rejects the whole card past 100 options or 75-char labels.
+          options: params.agents
+            .slice(0, SLACK_SELECT_MAX_OPTIONS)
+            .map((agent) => ({
+              text: {
+                type: "plain_text" as const,
+                text: truncateSlackOptionText(agent.name),
+              },
+              value: agent.id,
+            })),
         },
       ],
     };
@@ -911,7 +932,7 @@ class SlackProvider implements ChatOpsProvider {
                 `\`${SLACK_SLASH_COMMANDS.SELECT_AGENT}\` — Change the default agent handling requests in the channel\n` +
                 `\`${SLACK_SLASH_COMMANDS.STATUS}\` — Check the current agent handling requests in the channel\n` +
                 `\`${SLACK_SLASH_COMMANDS.HELP}\` — Show available commands\n\n` +
-                "Reply `mute` or react :mute: to stop auto-replies in a thread. Press *Stop* while I'm working to cancel the answer; @mention me to resume.",
+                "Reply `mute` or react :mute: to stop auto-replies in a thread. Mention me again to resume auto-replies. Press *Stop* to cancel only the current answer.",
             },
           },
           { type: "divider" },
@@ -1479,7 +1500,7 @@ class SlackProvider implements ChatOpsProvider {
             `\`${slashCommands.SELECT_AGENT}\` — Change the default agent\n` +
             `\`${slashCommands.STATUS}\` — Show current agent binding\n` +
             `\`${slashCommands.HELP}\` — Show this help message\n\n` +
-            "Reply `mute` or react :mute: to stop auto-replies in a thread. Press *Stop* while I'm working to cancel the answer; @mention me to resume.\n\n" +
+            "Reply `mute` or react :mute: to stop auto-replies in a thread. Mention me again to resume auto-replies. Press *Stop* to cancel only the current answer.\n\n" +
             "Or just send a message to interact with the assigned agent.",
         };
 
@@ -1542,7 +1563,7 @@ class SlackProvider implements ChatOpsProvider {
             isWelcome: false,
           });
         }
-        return { response_type: "in_channel", text: "" };
+        return null;
       }
 
       default:
@@ -1786,6 +1807,20 @@ class SlackProvider implements ChatOpsProvider {
   // Private Methods
   // ===========================================================================
 
+  /** Completed control retries must not stop a later turn or re-mute a resumed thread. */
+  private async handleControlEvent(
+    body: SlackEventPayload,
+    handle: () => Promise<void>,
+  ): Promise<void> {
+    const eventId = body.event_id;
+    const key = eventId
+      ? `slack-control:${this.stateScope ?? "main"}:${eventId}`
+      : null;
+    if (key && (await ChatOpsProcessedMessageModel.isProcessed(key))) return;
+    await handle();
+    if (key) await ChatOpsProcessedMessageModel.tryMarkAsProcessed(key);
+  }
+
   /** Mute reactions are control events, never messages for the agent. */
   private async handleMuteReaction(event: SlackEvent): Promise<void> {
     if (
@@ -1851,13 +1886,7 @@ class SlackProvider implements ChatOpsProvider {
     }
   }
 
-  /**
-   * The Stop button on an agent session: stop the work and end sticky
-   * auto-replies in the thread. muteChannelThread aborts this pod's runs for
-   * the thread and records the mute marker every other pod checks before
-   * replying, so a run elsewhere posts nothing either. Slack halts any live
-   * stream itself but leaves the session "processing" — moving it on is ours.
-   */
+  /** Stop cancels the current turn; only mute ends automatic follow-ups. */
   private async handleSessionStopped(event: SlackEvent): Promise<void> {
     const threadTs = event.thread_ts;
     if (!event.channel || !threadTs) return;
@@ -1865,7 +1894,7 @@ class SlackProvider implements ChatOpsProvider {
       { channelId: event.channel, threadTs, userId: event.user },
       "[SlackProvider] Agent session stopped by user",
     );
-    await muteChannelThread({
+    await stopChannelThreadReply({
       provider: this.providerId,
       channelId: event.channel,
       threadId: threadTs,
@@ -1999,19 +2028,8 @@ class SlackProvider implements ChatOpsProvider {
       trigger_id?: string;
     };
 
-    // Deliver the response body to the user. Prefer ack() over the socket;
-    // if the socket is mid-rotation the ack rejects, so fall back to
-    // response_url (HTTP POST) which Slack guarantees is valid for ~30 min.
-    const deliver = async (response: Record<string, unknown>) => {
-      try {
-        await ack(response);
-        return;
-      } catch (error) {
-        logger.warn(
-          { error: errorMessage(error), command: cmd.command },
-          "[SlackProvider] Slash command ack failed; falling back to response_url",
-        );
-      }
+    // response_url (HTTP POST) works for ~30 min after the command.
+    const postToResponseUrl = async (response: Record<string, unknown>) => {
       if (!cmd.response_url) {
         logger.error(
           { command: cmd.command },
@@ -2028,28 +2046,50 @@ class SlackProvider implements ChatOpsProvider {
       } catch (error) {
         logger.error(
           { error: errorMessage(error), command: cmd.command },
-          "[SlackProvider] Slash command response_url fallback failed",
+          "[SlackProvider] Slash command response_url post failed",
         );
       }
     };
 
-    try {
-      const response = await this.handleSlashCommand(cmd);
-      if (response) {
-        await deliver(response as Record<string, unknown>);
-      } else {
-        // No body to deliver — just close Slack's spinner. If this ack
-        // fails the user briefly sees a timeout; the side effect (e.g.
-        // modal opened via trigger_id) already happened.
+    // Slack shows "the app did not respond" unless the command is acked
+    // within 3s. Looking up the user and agents and posting a card can take
+    // longer, so past the deadline ack empty and send the reply by
+    // response_url instead.
+    let acked = false;
+    const ackTimer = setTimeout(() => {
+      acked = true;
+      ack().catch((error) => {
+        logger.warn(
+          { error: errorMessage(error), command: cmd.command },
+          "[SlackProvider] Slash command ack failed",
+        );
+      });
+    }, SLASH_COMMAND_ACK_DEADLINE_MS);
+
+    // Deliver the reply. Prefer ack() over the socket; if the socket is
+    // mid-rotation the ack rejects, so fall back to response_url.
+    const deliver = async (response?: Record<string, unknown>) => {
+      clearTimeout(ackTimer);
+      if (!acked) {
+        acked = true;
         try {
-          await ack();
+          await ack(response);
+          return;
         } catch (error) {
           logger.warn(
             { error: errorMessage(error), command: cmd.command },
-            "[SlackProvider] Empty slash command ack failed",
+            "[SlackProvider] Slash command ack failed; falling back to response_url",
           );
         }
       }
+      // With no body, the ack only closes Slack's spinner; the side effect
+      // (e.g. the agent card) already happened.
+      if (response) await postToResponseUrl(response);
+    };
+
+    try {
+      const response = await this.handleSlashCommand(cmd);
+      await deliver(response ?? undefined);
     } catch (error) {
       logger.error(
         { error: errorMessage(error), command: cmd.command },
@@ -2752,6 +2792,18 @@ function isRateLimitError(error: unknown): boolean {
 // — the rendered reply lives in `blocks`. Slack rejects oversized payloads with
 // `msg_too_large`, so cap the fallback well below Slack's ~40,000-char text
 // limit instead of duplicating the full (already block-rendered) chunk into it.
+// Slack allows 3s; leave room for the ack to travel back.
+const SLASH_COMMAND_ACK_DEADLINE_MS = 2_000;
+
+const SLACK_SELECT_MAX_OPTIONS = 100;
+const SLACK_OPTION_TEXT_LIMIT = 75;
+
+function truncateSlackOptionText(text: string): string {
+  return text.length > SLACK_OPTION_TEXT_LIMIT
+    ? `${text.slice(0, SLACK_OPTION_TEXT_LIMIT - 1)}…`
+    : text;
+}
+
 const SLACK_FALLBACK_TEXT_LIMIT = 3_000;
 
 function truncateFallbackText(text: string): string {
@@ -3047,6 +3099,7 @@ interface SlackFile {
 
 interface SlackEventPayload {
   type: string;
+  event_id?: string;
   team_id?: string;
   event?: {
     type: string;

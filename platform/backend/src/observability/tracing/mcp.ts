@@ -1,8 +1,12 @@
 import { parseFullToolName } from "@archestra/shared";
 import { context, type Span, SpanStatusCode, trace } from "@opentelemetry/api";
+import { getRootSpan } from "@sentry/core";
 import config from "@/config";
 import { resolveLogContentMode } from "@/log-content";
-import { SESSION_ID_KEY } from "@/observability/request-context";
+import {
+  getErrorTrackingServerSpan,
+  SESSION_ID_KEY,
+} from "@/observability/request-context";
 import type { AgentType } from "@/types";
 import {
   ATTR_ARCHESTRA_AGENT_TYPE,
@@ -16,6 +20,7 @@ import {
   ATTR_GENAI_TOOL_TYPE,
   ATTR_MCP_BLOCKED,
   ATTR_MCP_BLOCKED_REASON,
+  ATTR_MCP_METHOD_NAME,
   ATTR_MCP_SERVER_NAME,
   ATTR_ROUTE_CATEGORY,
   EVENT_GENAI_CONTENT_INPUT,
@@ -203,4 +208,28 @@ export function recordBlockedToolSpans(params: {
     });
     span.end();
   }
+}
+
+/**
+ * Records the JSON-RPC method of an MCP gateway request on the request's HTTP
+ * server spans, so request traces can be told apart by method. All gateway
+ * requests share one route, so the route alone does not say what a request
+ * did.
+ *
+ * A request can have two server spans: the root of the active span, and the
+ * span error tracking opens in a trace of its own. Without error tracking, the
+ * root is the active span.
+ */
+export function setMcpMethodOnRequestSpans(
+  request: object,
+  method: string,
+): void {
+  const activeSpan = trace.getActiveSpan();
+  if (activeSpan) {
+    getRootSpan(activeSpan).setAttribute(ATTR_MCP_METHOD_NAME, method);
+  }
+  getErrorTrackingServerSpan(request)?.setAttribute(
+    ATTR_MCP_METHOD_NAME,
+    method,
+  );
 }

@@ -83,7 +83,7 @@ export const CHATOPS_CHANNEL_AUTO_REPLY = {
  * nobody has to hunt for the right message to react to.
  */
 export const THREAD_MUTE_HINT =
-  'Reply "mute" or react 🔇 to any message in this thread to stop auto-replies';
+  'Reply "mute" or react 🔇 to any message in this thread to stop auto-replies; @mention me to resume';
 
 /**
  * In group conversations the agent hears every message but should not answer

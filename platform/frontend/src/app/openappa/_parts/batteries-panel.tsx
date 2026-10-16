@@ -203,7 +203,7 @@ export function BatteriesPanel() {
       />
     );
   const policy = declarations.data;
-  const { lastError, managedInGithub, heldPull } = policy;
+  const { lastError, managedInGithub } = policy;
   const included = policy.batteries;
   // A refused text keeps an earlier composition enforced: each battery shows
   // how that composition holds it, and the notice says which one it is.
@@ -368,7 +368,7 @@ export function BatteriesPanel() {
           </InlineNoticeText>
         </InlineNotice>
       )}
-      {managedInGithub && <GithubManagedPolicyNotice held={heldPull} />}
+      {managedInGithub && <GithubManagedPolicyNotice />}
       {writable && servers.data?.length === 0 && (
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
           <span>

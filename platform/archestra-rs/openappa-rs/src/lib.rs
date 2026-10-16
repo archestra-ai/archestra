@@ -390,20 +390,21 @@ pub async fn inspect_openappa_policy_tests(input: String) -> napi::Result<String
     .map_err(|_| error("OpenAPPA scenario inspection failed unexpectedly"))?
 }
 
-/// Evaluate bounded `.appa` scenarios against the supplied effective policy. The
-/// replay core answers consults through an in-process stand-in, never a live party,
-/// and keeps every trajectory in memory.
+/// Evaluate bounded `.appa` scenarios against the supplied effective policy with the
+/// credential values the host resolved for it. Every consult the policy declares is
+/// made live, as a dispatch makes it; no tool runs and every trajectory stays in memory.
 #[napi(js_name = "replayOpenappaPolicy")]
 pub async fn replay_openappa_policy(input: String) -> napi::Result<String> {
-    static REPLAY_SLOT: Semaphore = Semaphore::const_new(1);
+    // Live consults wait on remote parties, so a few replays may run at once.
+    static REPLAY_SLOTS: Semaphore = Semaphore::const_new(4);
     AssertUnwindSafe(async move {
-        let _permit = REPLAY_SLOT
+        let _permit = REPLAY_SLOTS
             .try_acquire()
-            .map_err(|_| error("An OpenAPPA replay is already running; retry later"))?;
+            .map_err(|_| error("Too many OpenAPPA replays are running; retry later"))?;
         let request = replay::Request::parse(&input).map_err(error)?;
-        let response = tokio::time::timeout(Duration::from_secs(15), replay::run(request))
+        let response = tokio::time::timeout(Duration::from_secs(120), replay::run(request))
             .await
-            .map_err(|_| error("OpenAPPA replay exceeded its 15 second limit"))?;
+            .map_err(|_| error("OpenAPPA replay exceeded its 120 second limit"))?;
         serde_json::to_string(&response).map_err(error)
     })
     .catch_unwind()
@@ -827,7 +828,7 @@ pub async fn parse_openappa_declarations(content: String) -> napi::Result<Policy
                     })
                     .collect(),
                 server_aliases: parsed
-                    .server_aliases
+                    .mcp_aliases
                     .into_iter()
                     .map(|alias| ServerAliasDeclaration {
                         namespace: alias.namespace,
@@ -1049,7 +1050,7 @@ pub async fn inspect_openappa_battery(
                 text: file.text,
             })
             .collect();
-        std::panic::catch_unwind(|| batteries::inspect(&files))
+        std::panic::catch_unwind(|| batteries::inspect(&files, batteries::PackageOrigin::Uploaded))
             .map_err(|_| error("OpenAPPA battery inspection failed"))?
             .map(|info| BatteryPackage::from(&info))
             .map_err(error)

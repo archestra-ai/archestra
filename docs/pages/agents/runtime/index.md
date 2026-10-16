@@ -120,7 +120,7 @@ What to know:
 [Guardrails](/docs/agents/guardrails) check each tool call and tool result inside the run.
 
 - **Delegated runs** get their parent's restrictions before work starts. Follow-up instructions keep them. An answer crosses the guardrail check before another agent gets it.
-- **Review:** a remedy that needs a person shows on the run page. The run's owner approves or denies it. Client permission settings cannot approve it. A run with no eligible reviewer stays blocked.
+- **Review:** a remedy that needs a person shows in the run's live terminal, as the agent's own question card or form. The run's owner approves or denies it there. Client permission settings cannot approve it. An agent with no question card or form keeps the call blocked.
 - **File downloads:** a protected transfer checks the pinned file content before it returns a download command. It refuses a file that needs changes or that passes the protected export limit. The session owner can still download directly.
 - **Old sessions:** turning on Guardrails does not protect work that started before. Start a new session. Guardrails do not replace filesystem or network sandboxing.
 

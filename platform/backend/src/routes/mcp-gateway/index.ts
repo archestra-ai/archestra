@@ -10,6 +10,7 @@ import type { TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
 import { AgentModel, AgentRunModel, McpToolCallModel } from "@/models";
+import { setMcpMethodOnRequestSpans } from "@/observability/tracing";
 import {
   APPA_SESSION_HEADER,
   isWellFormedAppaId,
@@ -1015,6 +1016,11 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
         };
       }
 
+      const mcpMethod = (request.body as { method?: unknown }).method;
+      if (typeof mcpMethod === "string") {
+        setMcpMethodOnRequestSpans(request.raw, mcpMethod);
+      }
+
       // An MRTR retry carries state the gateway minted. It travels through the
       // client, so it is verified — signature, principal, expiry, and the
       // originating request — before anything acts on it.
@@ -1217,6 +1223,9 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
               isOrganizationToken: tokenAuth.isOrganizationToken,
               organizationId: tokenAuth.organizationId,
               ...(tokenAuth.userId && { userId: tokenAuth.userId }),
+              ...(tokenAuth.serviceAccountId && {
+                serviceAccountId: tokenAuth.serviceAccountId,
+              }),
               ...(tokenAuth.oauthClientId && {
                 oauthClientId: tokenAuth.oauthClientId,
               }),
@@ -1244,6 +1253,9 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
         organizationId: tokenAuth.organizationId,
         ...(tokenAuth.isUserToken && { isUserToken: true }),
         ...(tokenAuth.userId && { userId: tokenAuth.userId }),
+        // The account, not its team, is who acts: runtime binding and run
+        // ownership checks, call-time credentials, and tool permissions all
+        // read it.
         ...(tokenAuth.serviceAccountId && {
           serviceAccountId: tokenAuth.serviceAccountId,
         }),
@@ -1366,7 +1378,11 @@ function runtimeTokenMatchesRun(params: {
     case "user":
       return params.tokenAuth.userId === params.run.actorId;
     case "team":
-      return params.tokenAuth.teamId === params.run.actorId;
+      // A service account acting for the team is not the team's token.
+      return (
+        !params.tokenAuth.serviceAccountId &&
+        params.tokenAuth.teamId === params.run.actorId
+      );
     case "serviceAccount":
       return params.tokenAuth.serviceAccountId === params.run.actorId;
     case "oauthClient":

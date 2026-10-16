@@ -724,7 +724,7 @@ class InternalMcpCatalogModel {
 
   /**
    * Ids of every catalog an organization's guardrails policy can alias: its own
-   * and the global ones. A `[server_aliases]` target is a tool prefix, and these
+   * and the global ones. A `aliases.mcp` target is a tool prefix, and these
    * are the catalogs whose tools carry the prefixes it can name.
    */
   static async findIdsVisibleToOrganization(

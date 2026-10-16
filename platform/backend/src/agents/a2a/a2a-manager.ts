@@ -10,6 +10,7 @@ import {
   type UIMessageChunk,
 } from "ai";
 import { z } from "zod";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import logger from "@/logging";
 import {
   A2AArtifactModel,
@@ -1917,9 +1918,14 @@ function toProtocolPushConfig(config: {
 }
 
 /** TaskStatus.message carrying a terminal reason (same shape GetTask serves). */
-/** The user id a run executes as: team and organization tokens have none. */
+/**
+ * The user id a run executes as. A service account runs as itself; team and
+ * organization tokens have no principal of their own.
+ */
 function executorUserId(actor: A2AActor): string {
-  return actor.kind === "user" ? actor.id : "system";
+  if (actor.kind === "user") return actor.id;
+  if (actor.kind === "serviceAccount") return serviceAccountUserId(actor.id);
+  return "system";
 }
 
 function extractApprovalRequestsFromUiMessage(

@@ -25,8 +25,6 @@ import { policyLineHref } from "./policy-line-href";
 
 type ToolTableProps = {
   catalogId?: string;
-  entityId?: string;
-  autoMode?: boolean;
   /** Adds an Improve action per tool, scoped to this target. */
   target?: OpenAppaLaunchTarget;
 };
@@ -45,13 +43,8 @@ function coverageToolRowId(tool: CoverageTool, index: number): string {
   ]);
 }
 
-/** Tools reachable through an entity, with the policy source for each rule. */
-export function ToolTable({
-  catalogId,
-  entityId,
-  autoMode = false,
-  target,
-}: ToolTableProps) {
+/** A server's tools, or every visible server's, with the policy source for each rule. */
+export function ToolTable({ catalogId, target }: ToolTableProps) {
   const [search, setSearch] = useState("");
   const [serverId, setServerId] = useState<string | undefined>();
   const [policySource, setPolicySource] = useState<string | undefined>();
@@ -79,7 +72,6 @@ export function ToolTable({
     : undefined;
   const tools = useCoverageTools({
     catalogId: catalogId ?? serverId,
-    entityId,
     search: search || undefined,
     governedBy: battery
       ? "battery"
@@ -228,11 +220,7 @@ export function ToolTable({
         isLoading={tools.isFetching}
         emptyIcon={Wrench}
         emptyMessage="No tools available"
-        emptyDescription={
-          autoMode
-            ? "No tools are currently reachable by you through this entity."
-            : "Tools appear here once they are assigned or synced."
-        }
+        emptyDescription="Tools appear here once they are synced."
         hasActiveFilters={Boolean(search || serverId || policySource)}
         filteredEmptyMessage="No tool matches these filters."
         onClearFilters={clearFilters}

@@ -314,9 +314,9 @@ export declare function readOpenappaOpeningPolicy(root: string, encryption?: Con
 export declare function readPeerMessage(input: string, policy: DispatchPolicy): Promise<string>
 
 /**
- * Evaluate bounded `.appa` scenarios against the supplied effective policy. The
- * replay core answers consults through an in-process stand-in, never a live party,
- * and keeps every trajectory in memory.
+ * Evaluate bounded `.appa` scenarios against the supplied effective policy with the
+ * credential values the host resolved for it. Every consult the policy declares is
+ * made live, as a dispatch makes it; no tool runs and every trajectory stays in memory.
  */
 export declare function replayOpenappaPolicy(input: string): Promise<string>
 

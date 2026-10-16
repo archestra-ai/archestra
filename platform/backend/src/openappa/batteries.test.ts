@@ -54,8 +54,6 @@ describe("bundled batteries", () => {
     const bundled = await native.listBundledOpenappaBatteries();
     const names = bundled.map((battery) => battery.name);
     expect(names).toContain("github");
-    // A battery for another host's own tools has nothing to say here.
-    expect(names).not.toContain("claude-code");
     const input = (battery: (typeof bundled)[number]) => ({
       entry: `batteries/${battery.name}/appa.toml`,
       name: battery.name,
@@ -65,8 +63,10 @@ describe("bundled batteries", () => {
           ? { urlBase: "http://127.0.0.1:9000/helpers/install", tokenEnv }
           : undefined,
     });
-    const shipped = bundled.filter((battery) => battery.name === "archestra");
-    expect(shipped).toHaveLength(1);
+    const shipped = bundled.filter(({ name }) =>
+      ["archestra", "claude-code"].includes(name),
+    );
+    expect(shipped).toHaveLength(2);
     for (const battery of bundled) {
       const edited = await native.editOpenappaPolicy(
         root.content,
@@ -96,7 +96,7 @@ describe("composing an organization's declarations", () => {
     config.openappa.enabled = true;
   });
 
-  test("the shipped default governs the built-in tools with the archestra battery", async ({
+  test("the shipped default governs the built-in tools with the archestra battery and client built-ins with the claude-code battery", async ({
     makeOrganization,
   }) => {
     const organizationId = (await makeOrganization()).id;
@@ -107,19 +107,20 @@ describe("composing an organization's declarations", () => {
 
     expect(effective.lastError).toBeNull();
     expect(
-      (await OpenAppaBatteryInstallModel.list(organizationId)).map(
-        ({ batteryName, catalogId, status }) => ({
+      (await OpenAppaBatteryInstallModel.list(organizationId))
+        .map(({ batteryName, catalogId, status }) => ({
           batteryName,
           catalogId,
           status,
-        }),
-      ),
+        }))
+        .sort((a, b) => a.batteryName.localeCompare(b.batteryName)),
     ).toEqual([
       {
         batteryName: "archestra",
         catalogId: ARCHESTRA_MCP_CATALOG_ID,
         status: "active",
       },
+      { batteryName: "claude-code", catalogId: null, status: "active" },
     ]);
   });
 
@@ -930,15 +931,16 @@ describe("a battery with targets", () => {
             kind: block.kind,
             unservedMarks: block.unservedMarks,
           })),
-        self: audience.audiences.find((level) => level.name === "self")?.kind,
+        internal: audience.audiences.find((level) => level.name === "internal")
+          ?.kind,
       };
     };
-    expect(await views()).toEqual({ blocks: [], self: "builtin" });
+    expect(await views()).toEqual({ blocks: [], internal: "builtin" });
 
     config.daggerRuntime.enabled = false;
     expect(await views()).toEqual({
       blocks: [{ kind: "approvals", unservedMarks: ["acme-review"] }],
-      self: "unmapped",
+      internal: "unmapped",
     });
   });
 
@@ -1013,7 +1015,7 @@ describe("a battery with targets", () => {
     config.daggerRuntime.enabled = true;
     const content = `include = ["batteries/github/appa.toml"]
 
-[server_aliases]
+[aliases.mcp]
 github = ["github_prod"]
 
 [policy]
@@ -1395,7 +1397,7 @@ function root(
   const aliases =
     targets.length === 0
       ? ""
-      : `[server_aliases]
+      : `[aliases.mcp]
 acme = [${targets.map((target) => `"${target}"`).join(", ")}]
 
 `;
@@ -1488,7 +1490,7 @@ policy = "multi-user.toml"
         text: `${empty}
 [[policy.tool]]
 name = "mcp/acme/list"
-requires = { attention = ["acme-review"], audience = { contains = ["self"] } }
+requires = { attention = ["acme-review"], audience = { contains = ["internal"] } }
 `,
       },
       { path: "single-user.toml", text: empty },

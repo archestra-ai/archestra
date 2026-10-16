@@ -59,10 +59,6 @@ const source = {
   lastSyncedAt: "2026-09-15T12:00:00Z",
   lastSyncError: null,
   setupPullRequestNumber: null,
-  declarationsPendingPublish: false,
-  heldContentHash: null,
-  heldSourceCommit: null,
-  heldReasons: [],
 };
 const validationRun: PolicyTestRun = {
   id: "latest-run",

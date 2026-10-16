@@ -5,7 +5,7 @@ import {
   USER_ID_HEADER,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
-import { HttpResponse, http } from "msw";
+import { HttpResponse, http, passthrough } from "msw";
 import { takeInternalCall } from "@/clients/internal-call";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -16,6 +16,8 @@ import {
 import { LlmProviderApiKeyModelLinkModel, ModelModel } from "@/models";
 import { openappaActor } from "@/openappa/actor";
 import { openappaDeclarations } from "@/openappa/declarations";
+import { OPENAPPA_CONTEXT_HEADER } from "@/openappa/encrypted-chat";
+import { withOpenappaReplayOwner } from "@/openappa/replay-owner";
 import { OPENAPPA_ARCHESTRA_ANNOTATOR_PATH } from "@/routes/route-paths";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
@@ -384,6 +386,63 @@ describe("archestra annotator", () => {
     ]);
   });
 
+  test("files a validation replay's consult under the organization and user running it, only while it runs", async ({
+    makeOrganization,
+    makeAgent,
+    makeUser,
+    makeMember,
+  }) => {
+    // Not the first organization, which an unattributed consult would use.
+    const owner = (await makeOrganization()).id;
+    const ownerAgent = await makeAgent({
+      organizationId: owner,
+      agentType: "agent",
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+    });
+    await useDefaultModel({
+      provider: "openai",
+      modelId: "gpt-4o-mini",
+      organizationId: owner,
+    });
+    const user = await makeUser();
+    await makeMember(user.id, owner);
+    const sent = answerAt(`/v1/openai/${ownerAgent.id}/chat/completions`, () =>
+      completion('{"rank":"trusted"}'),
+    );
+    // Replay trajectories live in memory: no session row matches them.
+    const replayed = {
+      root: "archestra:replay",
+      trajectory: "archestra:replay",
+    };
+    const ask = (context: string) =>
+      app.inject({
+        method: "POST",
+        url: OPENAPPA_ARCHESTRA_ANNOTATOR_PATH,
+        headers: {
+          authorization: bearer(),
+          [OPENAPPA_CONTEXT_HEADER]: context,
+        },
+        remoteAddress: "127.0.0.1",
+        payload: { ...request, attribution: replayed },
+      });
+
+    let capability = "";
+    const answered = await withOpenappaReplayOwner(
+      { organizationId: owner, userId: user.id },
+      (context) => {
+        capability = context;
+        return ask(context);
+      },
+    );
+
+    expect(answered.json()).toEqual({ rank: "trusted" });
+    expect(sent.map(({ user, session }) => ({ user, session }))).toEqual([
+      { user: user.id, session: null },
+    ]);
+    // A settled replay's capability names no one.
+    expect((await ask(capability)).statusCode).toBe(401);
+  });
+
   test("answers unattributed when the attribution names no single session, and without a user who left the organization", async ({
     makeUser,
     makeOrganization,
@@ -486,6 +545,48 @@ describe("archestra annotator", () => {
     expect(response.json().error.message).toBe(
       `The model call failed: openai/gpt-4o-mini with key "Revoked OpenAI" (${key.id}) was rejected upstream with 401: API key is invalid.`,
     );
+  });
+
+  test("cancels its LLM proxy call when the runtime hangs up", async () => {
+    await useDefaultModel({ provider: "openai", modelId: "gpt-4o-mini" });
+    let reach = () => {};
+    const reached = new Promise<void>((resolve) => {
+      reach = resolve;
+    });
+    let abort = () => {};
+    const upstreamAborted = new Promise<void>((resolve) => {
+      abort = resolve;
+    });
+    server.use(
+      http.post(
+        `http://127.0.0.1:${config.api.port}/v1/openai/${agentId}/chat/completions`,
+        ({ request: proxied }) => {
+          reach();
+          return new Promise<Response>((_, reject) =>
+            proxied.signal.addEventListener("abort", () => {
+              abort();
+              reject(proxied.signal.reason);
+            }),
+          );
+        },
+      ),
+    );
+    const address = await app.listen({ host: "127.0.0.1", port: 0 });
+    const url = `${address}${OPENAPPA_ARCHESTRA_ANNOTATOR_PATH}`;
+    server.use(http.post(url, () => passthrough()));
+
+    const runtime = new AbortController();
+    const consult = fetch(url, {
+      method: "POST",
+      headers: { authorization: bearer(), "content-type": "application/json" },
+      body: JSON.stringify(request),
+      signal: runtime.signal,
+    }).catch(() => null);
+    await reached;
+    runtime.abort();
+
+    await upstreamAborted;
+    expect(await consult).toBeNull();
   });
 
   test("refuses without a call when no LLM key is configured", async () => {

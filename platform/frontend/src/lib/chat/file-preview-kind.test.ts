@@ -41,9 +41,9 @@ describe("getFilePreviewKind", () => {
     );
   });
 
-  it("treats text/* and json as text", () => {
+  it("distinguishes JSON from plain text", () => {
     expect(getFilePreviewKind("text/plain", "a.txt")).toBe("text");
-    expect(getFilePreviewKind("application/json", "a.json")).toBe("text");
+    expect(getFilePreviewKind("application/json", "a.json")).toBe("json");
   });
 
   it("renders PDFs via the browser's own viewer", () => {
@@ -62,7 +62,7 @@ describe("getFilePreviewKind", () => {
   });
 });
 
-it("falls back to text for txt/log/json extensions when the mime is opaque", () => {
+it("falls back to text for txt/log and JSON for json extensions when the mime is opaque", () => {
   expect(getFilePreviewKind("application/octet-stream", "result (1).txt")).toBe(
     "text",
   );
@@ -70,6 +70,6 @@ it("falls back to text for txt/log/json extensions when the mime is opaque", () 
     "text",
   );
   expect(getFilePreviewKind("application/octet-stream", "data.json")).toBe(
-    "text",
+    "json",
   );
 });

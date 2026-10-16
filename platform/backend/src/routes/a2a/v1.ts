@@ -343,7 +343,11 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
               message: userMessage,
               organizationId,
               userId,
-              actorTeamId: tokenAuth.teamId ?? undefined,
+              // Only a team token acts as its team; a service account linked
+              // to one still acts as itself.
+              actorTeamId: tokenAuth.serviceAccountId
+                ? undefined
+                : (tokenAuth.teamId ?? undefined),
               sessionId,
               parentDelegationChain: undefined, // This is the root call, chain starts with agentId
             });

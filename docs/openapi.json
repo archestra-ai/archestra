@@ -317153,6 +317153,7 @@
                               "user_token",
                               "org_token",
                               "team_token",
+                              "service_account_token",
                               "external_idp",
                               "session"
                             ]
@@ -317624,6 +317625,7 @@
                         "user_token",
                         "org_token",
                         "team_token",
+                        "service_account_token",
                         "external_idp",
                         "session"
                       ]
@@ -408838,6 +408840,10 @@
                       "role": {
                         "type": "string"
                       },
+                      "teamId": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "disabled": {
                         "type": "boolean"
                       },
@@ -408908,6 +408914,7 @@
                       "name",
                       "icon",
                       "role",
+                      "teamId",
                       "disabled",
                       "createdAt",
                       "updatedAt",
@@ -409189,6 +409196,11 @@
                     "minLength": 1,
                     "maxLength": 256
                   },
+                  "teamId": {
+                    "nullable": true,
+                    "type": "string",
+                    "minLength": 1
+                  },
                   "labels": {
                     "type": "array",
                     "items": {
@@ -409415,6 +409427,10 @@
                     "role": {
                       "type": "string"
                     },
+                    "teamId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "disabled": {
                       "type": "boolean"
                     },
@@ -409531,6 +409547,7 @@
                     "name",
                     "icon",
                     "role",
+                    "teamId",
                     "disabled",
                     "createdAt",
                     "updatedAt",
@@ -409862,6 +409879,10 @@
                     "role": {
                       "type": "string"
                     },
+                    "teamId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "disabled": {
                       "type": "boolean"
                     },
@@ -409978,6 +409999,7 @@
                     "name",
                     "icon",
                     "role",
+                    "teamId",
                     "disabled",
                     "createdAt",
                     "updatedAt",
@@ -410259,6 +410281,11 @@
                     "minLength": 1,
                     "maxLength": 256
                   },
+                  "teamId": {
+                    "nullable": true,
+                    "type": "string",
+                    "minLength": 1
+                  },
                   "disabled": {
                     "type": "boolean"
                   },
@@ -410364,6 +410391,10 @@
                       "type": "string"
                     },
                     "role": {
+                      "type": "string"
+                    },
+                    "teamId": {
+                      "nullable": true,
                       "type": "string"
                     },
                     "disabled": {
@@ -410482,6 +410513,7 @@
                     "name",
                     "icon",
                     "role",
+                    "teamId",
                     "disabled",
                     "createdAt",
                     "updatedAt",

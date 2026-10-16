@@ -82862,7 +82862,7 @@ export type GetMcpToolCallsResponses = {
             toolResult: unknown;
             userId: string | null;
             runId: string | null;
-            authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
+            authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'service_account_token' | 'external_idp' | 'session';
             oauthClientId: string | null;
             source: 'api' | 'chat';
             createdAt: string;
@@ -82983,7 +82983,7 @@ export type GetMcpToolCallResponses = {
         toolResult: unknown;
         userId: string | null;
         runId: string | null;
-        authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
+        authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'service_account_token' | 'external_idp' | 'session';
         oauthClientId: string | null;
         source: 'api' | 'chat';
         createdAt: string;
@@ -107632,6 +107632,7 @@ export type GetServiceAccountsResponses = {
         name: string;
         icon: string | null;
         role: string;
+        teamId: string | null;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -107655,6 +107656,7 @@ export type CreateServiceAccountData = {
         name: string;
         icon?: string | null;
         role: string;
+        teamId?: string | null;
         labels?: Array<{
             key: string;
             value: string;
@@ -107770,6 +107772,7 @@ export type CreateServiceAccountResponses = {
         name: string;
         icon: string | null;
         role: string;
+        teamId: string | null;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -107978,6 +107981,7 @@ export type GetServiceAccountResponses = {
         name: string;
         icon: string | null;
         role: string;
+        teamId: string | null;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;
@@ -108010,6 +108014,7 @@ export type UpdateServiceAccountData = {
         name?: string;
         icon?: string | null;
         role?: string;
+        teamId?: string | null;
         disabled?: boolean;
         labels?: Array<{
             key: string;
@@ -108109,6 +108114,7 @@ export type UpdateServiceAccountResponses = {
         name: string;
         icon: string | null;
         role: string;
+        teamId: string | null;
         disabled: boolean;
         createdAt: string;
         updatedAt: string;

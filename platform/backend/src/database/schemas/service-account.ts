@@ -9,6 +9,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import organizationsTable from "./organization";
+import { team } from "./team";
 import usersTable from "./user";
 
 const serviceAccountsTable = pgTable(
@@ -23,6 +24,14 @@ const serviceAccountsTable = pgTable(
     icon: text("icon"),
     role: text("role").notNull(),
     disabled: boolean("disabled").notNull().default(false),
+    /**
+     * Team the account acts for. Grants made to the team (and its ancestors)
+     * reach the account, and MCP credentials resolved at call time prefer the
+     * team's installs. Null for an account that acts for the organization.
+     */
+    teamId: text("team_id").references((): AnyPgColumn => team.id, {
+      onDelete: "set null",
+    }),
     /**
      * Who created this. Nullable: rows predating creator tracking have no
      * answer, and `ON DELETE SET NULL` gives the column back to "unknown" when
@@ -45,6 +54,7 @@ const serviceAccountsTable = pgTable(
   },
   (table) => [
     index("service_accounts_organization_id_idx").on(table.organizationId),
+    index("service_accounts_team_id_idx").on(table.teamId),
     uniqueIndex("service_accounts_organization_id_name_unique_idx").on(
       table.organizationId,
       table.name,

@@ -4,13 +4,20 @@ import { describe, expect, it } from "vitest";
 import { AgentIcon } from "./agent-icon";
 
 describe("AgentIcon", () => {
-  it("renders a catalog asset path as an image", () => {
+  it("renders an image path as an image", () => {
     const { container } = render(
-      <AgentIcon icon="/agent-logos/hermes.png" size={24} />,
+      <AgentIcon icon="/uploads/team-logo.png" size={24} />,
     );
 
     expect(screen.getByRole("img", { name: "Agent icon" })).toBeVisible();
-    expect(container).not.toHaveTextContent("/agent-logos/hermes.png");
+    expect(container).not.toHaveTextContent("/uploads/team-logo.png");
+  });
+
+  it("draws an agent catalog icon as the template's logo, not its file", () => {
+    render(<AgentIcon icon="/agent-logos/opencode.svg" size={20} />);
+
+    expect(screen.getByRole("img", { name: "OpenCode logo" })).toBeVisible();
+    expect(screen.queryByRole("img", { name: "Agent icon" })).toBeNull();
   });
 
   it("renders a built-in service logo token as an SVG mark, not literal text", () => {

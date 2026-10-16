@@ -1,4 +1,4 @@
-import { APPA_KEEPER_AGENT_ICON } from "@archestra/shared";
+import { type AgentCatalogId, APPA_KEEPER_AGENT_ICON } from "@archestra/shared";
 import { siAnthropic, siGithub, siGitlab } from "simple-icons";
 
 /** Values the shared Agent icon controls render as images rather than emoji. */
@@ -8,6 +8,30 @@ export function isAgentImageIcon(
   return (
     icon?.startsWith("data:image/") === true || icon?.startsWith("/") === true
   );
+}
+
+/**
+ * The icon an agent catalog template saves on the agents it creates. Agent
+ * icons draw these values as the template's Connect page mark, not as the
+ * file they name, so stored agents and the Connect page show the same logo.
+ */
+export const CATALOG_AGENT_ICONS: Record<AgentCatalogId, string> = {
+  "claude-code": "/model-logos/anthropic.svg",
+  codex: "/model-logos/openai.svg",
+  opencode: "/agent-logos/opencode.svg",
+  hermes: "/agent-logos/hermes.png",
+  openclaw: "/agent-logos/openclaw.svg",
+};
+
+/** The catalog template whose saved icon this is, if any. */
+export function getCatalogAgentId(
+  icon: string | null | undefined,
+): AgentCatalogId | null {
+  if (!icon) return null;
+  const match = Object.entries(CATALOG_AGENT_ICONS).find(
+    ([, value]) => value === icon,
+  );
+  return match ? (match[0] as AgentCatalogId) : null;
 }
 
 export function getBuiltInServiceIconPath(

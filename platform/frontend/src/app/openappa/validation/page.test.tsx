@@ -1818,6 +1818,7 @@ test("inventory rows open files while selection and compact actions stay indepen
       name: "Policy validation scenario.appa",
     }),
   ).toBeVisible();
+  const mutationsBeforeBack = new Set(client.getMutationCache().getAll());
   fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
   await screen.findByRole("link", { name: scenario.path });
   await waitFor(() =>
@@ -1849,15 +1850,22 @@ test("inventory rows open files while selection and compact actions stay indepen
       screen.getByRole("link", { name: scenario.path }).closest("tr"),
     ).not.toHaveTextContent("Running"),
   );
-  // Inspection replaces the row actions, so wait for its result before opening
-  // the menu rather than clicking a menu item that can be unmounted mid-click.
+  // Inspection replaces the row actions, so wait for the inspection the
+  // reopened list started before opening the menu, rather than clicking a menu
+  // item that can be unmounted mid-click. The run succeeds too, so tell the
+  // inspection apart by its variables: it sends only the files.
   await waitFor(
     () =>
       expect(
         client
           .getMutationCache()
           .getAll()
-          .some((mutation) => mutation.state.status === "success"),
+          .some(
+            (mutation) =>
+              !mutationsBeforeBack.has(mutation) &&
+              mutation.state.status === "success" &&
+              Object.keys(mutation.state.variables ?? {}).join() === "files",
+          ),
       ).toBe(true),
     { timeout: 5000 },
   );

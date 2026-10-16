@@ -173,6 +173,12 @@ type AgentListFilters = {
   providerApiKeyId?: string;
   /** Caller-relative pin filter for the paginated Agents surface. */
   pinned?: boolean;
+  /**
+   * Attach each agent's assigned tools. Defaults to true; off, agents come
+   * back with `tools: []`, meaning "not requested" rather than "none
+   * assigned".
+   */
+  includeTools?: boolean;
 };
 
 type AgentCatalogRowRef = {
@@ -2147,57 +2153,50 @@ class AgentModel {
       return createPaginatedResult([], Number(total), pagination);
     }
 
-    // Step 2: Get full agent data with tools for the paginated agent IDs
-    const [agentsData, [{ total: totalResult }]] = await Promise.all([
+    // Step 2: Get full agent data for the paginated agent IDs. Tool refs are
+    // a query of their own: joined, every agent row came back once per
+    // assigned tool, system prompt and icon included.
+    const [agentRows, toolRows, [{ total: totalResult }]] = await Promise.all([
       db
         .select()
         .from(schema.agentsTable)
-        .leftJoin(
-          schema.agentToolsTable,
-          eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
-        )
-        .leftJoin(
-          schema.toolsTable,
-          eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
-        )
         .where(inArray(schema.agentsTable.id, sortedAgentIds)),
+      filters?.includeTools !== false
+        ? db
+            .select({
+              agentId: schema.agentToolsTable.agentId,
+              tool: agentToolRefColumns,
+            })
+            .from(schema.agentToolsTable)
+            .innerJoin(
+              schema.toolsTable,
+              eq(schema.agentToolsTable.toolId, schema.toolsTable.id),
+            )
+            .where(inArray(schema.agentToolsTable.agentId, sortedAgentIds))
+        : Promise.resolve([]),
       db.select({ total: count() }).from(schema.agentsTable).where(whereClause),
     ]);
 
     // Sort in memory to maintain the order from the sorted query
     const orderMap = new Map(sortedAgentIds.map((id, index) => [id, index]));
-    agentsData.sort(
-      (a, b) =>
-        (orderMap.get(a.agents.id) ?? 0) - (orderMap.get(b.agents.id) ?? 0),
+    agentRows.sort(
+      (a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0),
     );
 
-    // Group the flat join results by agent
-    const agentsMap = new Map<string, Agent>();
-
-    for (const row of agentsData) {
-      const agent = row.agents;
-      const tool = row.tools;
-
-      if (!agentsMap.has(agent.id)) {
-        agentsMap.set(agent.id, {
-          ...agent,
-          tools: [],
-          teams: [] as Array<{ id: string; name: string }>,
-          users: [] as Array<{ id: string; name: string; email: string }>,
-          labels: [],
-          knowledgeBaseIds: [],
-          connectorIds: [],
-          suggestedPrompts: [],
-        });
-      }
-
-      // Add tool if it exists (leftJoin returns null for agents with no tools)
-      if (tool) {
-        agentsMap.get(agent.id)?.tools.push(tool);
-      }
+    const agents: Agent[] = agentRows.map((agent) => ({
+      ...agent,
+      tools: [],
+      teams: [] as Array<{ id: string; name: string }>,
+      users: [] as Array<{ id: string; name: string; email: string }>,
+      labels: [],
+      knowledgeBaseIds: [],
+      connectorIds: [],
+      suggestedPrompts: [],
+    }));
+    const agentsById = new Map(agents.map((agent) => [agent.id, agent]));
+    for (const row of toolRows) {
+      agentsById.get(row.agentId)?.tools.push(row.tool);
     }
-
-    const agents = Array.from(agentsMap.values());
     const agentIds = agents.map((agent) => agent.id);
 
     // Populate teams and labels for all agents with bulk queries to avoid N+1

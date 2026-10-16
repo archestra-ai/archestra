@@ -287,13 +287,15 @@ export function AuditLogTable() {
 
   // Two lifecycle buckets: agents are soft-deleted, so a deleted agent's
   // history stays reachable through the picker (the audit page is admin-only,
-  // which is also what the deleted bucket requires).
+  // which is also what the deleted bucket requires). The picker shows names
+  // only, so it skips the agents' tool assignments.
   const { data: activeAgentsResponse } = useProfilesPaginated({
     limit: ENTITY_FILTER_LIMIT,
     offset: 0,
     sortBy: "name",
     sortDirection: "asc",
     status: "active",
+    includeTools: false,
   });
   const { data: deletedAgentsResponse } = useProfilesPaginated({
     limit: ENTITY_FILTER_LIMIT,
@@ -301,6 +303,7 @@ export function AuditLogTable() {
     sortBy: "name",
     sortDirection: "asc",
     status: "deleted",
+    includeTools: false,
   });
 
   // The remaining LIST_NAME_RESOURCE_TYPES entities for the entity picker.

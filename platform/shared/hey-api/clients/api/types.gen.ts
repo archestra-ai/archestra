@@ -89986,6 +89986,11 @@ export type AnnotateOpenappaToolWithArchestraData = {
         schema: {
             [key: string]: unknown;
         };
+        attribution?: {
+            root: string;
+            trajectory: string;
+            call_id?: string;
+        };
     };
     path?: never;
     query?: never;

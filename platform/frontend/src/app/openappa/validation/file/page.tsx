@@ -26,9 +26,7 @@ import {
   useGuardedInAppNavigation,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
-import { useGuardrailsPolicy } from "@/lib/guardrails-policy.query";
 import { useListReturnHref } from "@/lib/hooks/use-list-return-url";
-import { useEffectivePolicy } from "@/lib/openappa-batteries.query";
 import {
   type PolicyTestCollection,
   type PolicyTestPreview,
@@ -145,7 +143,11 @@ function ValidationFileEditor({ path }: { path: string }) {
   } | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const router = useRouter();
-  const previewRun = preview?.run;
+  // An editor test describes the text it tested; editing again drops it.
+  const previewRun =
+    preview && JSON.stringify(preview.file) === JSON.stringify(file)
+      ? preview.run
+      : undefined;
   // A saved file shows its newest recorded result until an editor test of a
   // draft replaces it.
   const savedHash = useValidationFileHashes(baselineFile ? [baselineFile] : []);
@@ -159,23 +161,7 @@ function ValidationFileEditor({ path }: { path: string }) {
         }
       : null;
   const running = suite.runningPath === path;
-  const policy = useGuardrailsPolicy();
-  const effectivePolicy = useEffectivePolicy(Boolean(previewRun), 10000);
   const result = previewRun?.files[0] ?? recorded?.latest?.result;
-  const stale = Boolean(
-    previewRun &&
-      (previewRun.stale ||
-        previewRun.sourceVersion !== baseline.version ||
-        sourceChanged ||
-        suite.loadError ||
-        policy.isError ||
-        effectivePolicy.isError ||
-        (policy.data && policy.data.contentHash !== previewRun.policyHash) ||
-        (effectivePolicy.data &&
-          effectivePolicy.data.contentHash !==
-            previewRun.effectivePolicyHash) ||
-        JSON.stringify(preview?.file) !== JSON.stringify(file)),
-  );
   const busy = suite.busy || previewMutation.isPending;
   const runnable = Boolean(
     file &&
@@ -251,9 +237,7 @@ function ValidationFileEditor({ path }: { path: string }) {
               <ValidationStatusBadge
                 status={
                   previewRun
-                    ? stale
-                      ? "stale"
-                      : (result?.status ?? "not_run")
+                    ? (result?.status ?? "not_run")
                     : (recorded?.state?.status ?? "not_run")
                 }
               />
@@ -390,16 +374,6 @@ function ValidationFileEditor({ path }: { path: string }) {
           {result && (
             <div className="space-y-3">
               <p className="text-xs text-muted-foreground">{`${result.steps.length} of ${result.assertionCount} assertions evaluated`}</p>
-              {stale && (
-                <InlineNotice>
-                  <TriangleAlert />
-                  <span className="font-medium">Stale inputs</span>
-                  <InlineNoticeText>
-                    These results belong to different policy or validation
-                    inputs. Run again to validate this draft.
-                  </InlineNoticeText>
-                </InlineNotice>
-              )}
               {result.steps.length > 0 && <StepResults steps={result.steps} />}
             </div>
           )}

@@ -14,7 +14,7 @@ import {
   InspectPolicyTestsSchema,
   PolicyTestCollectionSchema,
   PolicyTestInspectionSchema,
-  PolicyTestPreviewSchema,
+  PolicyTestRunResultSchema,
   PolicyTestRunSchema,
   PreviewPolicyTestSchema,
   RunPolicyTestsSchema,
@@ -114,7 +114,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         operationId: RouteId.PreviewOpenAppaPolicyTest,
         tags: ["OpenAPPA"],
         body: PreviewPolicyTestSchema,
-        response: constructResponseSchema(PolicyTestPreviewSchema),
+        response: constructResponseSchema(PolicyTestRunResultSchema),
       },
     },
     async (request, reply) =>

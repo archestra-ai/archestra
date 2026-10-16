@@ -73,7 +73,6 @@ const validationRun: PolicyTestRun = {
   effectivePolicyHash: "effective-v1",
   engineVersion: "engine-v1",
   draft: false,
-  stale: false,
   trigger: "github_sync",
   validation: { valid: true, errors: [], warnings: [] },
   files: ["passed", "failed", "cannot_run"].map((status, index) => ({

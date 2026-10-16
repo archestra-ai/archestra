@@ -104,7 +104,6 @@ const detailColumns: ColumnDef<PolicyTestRun>[] = [
           <Badge variant="outline">Policy change run</Badge>
         )}
         {row.original.draft && <Badge variant="secondary">Draft run</Badge>}
-        {row.original.stale && <Badge variant="outline">Stale inputs</Badge>}
       </div>
     ),
   },
@@ -142,7 +141,6 @@ function RunDetailsDialog({
             <ValidationRunOutcome run={run} />
             {run.partial && <Badge variant="outline">Single file run</Badge>}
             {run.draft && <Badge variant="secondary">Draft run</Badge>}
-            {run.stale && <Badge variant="outline">Stale inputs</Badge>}
           </div>
           <ValidationRunDiagnostics run={run} />
           {run.files.map((file) => (

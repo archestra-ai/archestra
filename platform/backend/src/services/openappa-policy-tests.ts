@@ -431,13 +431,7 @@ export async function previewOpenAppaPolicyTest(
   },
 ) {
   const { result } = await evaluateOpenAppaPolicyTests(params);
-  return {
-    ...result,
-    stale: isPolicyTestRunStale(
-      result,
-      await currentPolicyTestRunContext(params.organizationId),
-    ),
-  };
+  return result;
 }
 export async function runOpenAppaPolicyTests(
   params: Parameters<typeof evaluateOpenAppaPolicyTests>[0] & {
@@ -488,10 +482,6 @@ export async function runOpenAppaPolicyTests(
     createdAt: saved.createdAt,
     createdBy: saved.createdBy,
     ...result,
-    stale: isPolicyTestRunStale(
-      result,
-      await currentPolicyTestRunContext(params.organizationId),
-    ),
   };
 }
 export async function runAutomaticOpenAppaPolicyTests(
@@ -680,27 +670,6 @@ async function executeAutomaticPolicyValidation(
     "Informational policy validation completed",
   );
 }
-async function currentPolicyTestRunContext(organizationId: string) {
-  const [root, effective, source, suite] = await Promise.all([
-    guardrailsPolicyService.get(organizationId),
-    openappaBatteriesService.getEffectivePolicy(organizationId),
-    OpenAppaGithubSyncModel.find(organizationId),
-    OpenAppaPolicyTestsModel.find(organizationId),
-  ]);
-  const native = await import("@archestra/openappa-rs");
-  const engineVersion = native.getOpenappaReplayEngineVersion();
-  const githubVersion =
-    source?.interval && suite?.sourceCommit === source.sourceCommit
-      ? githubPolicyTestVersion({
-          repo: source.repo,
-          commit: source.sourceCommit,
-          directory: suite.directory,
-          files: suite.files,
-        })
-      : null;
-  return { root, effective, source, suite, engineVersion, githubVersion };
-}
-
 function assertCurrentCollection(
   collection: PolicyTestCollection,
   version: string,
@@ -717,34 +686,9 @@ function assertCurrentCollection(
       "The validation source changed; reload before running",
     );
 }
-function isPolicyTestRunStale(
-  result: PolicyTestRunResult,
-  context: Awaited<ReturnType<typeof currentPolicyTestRunContext>>,
-) {
-  const { root, effective, source, suite, engineVersion, githubVersion } =
-    context;
-  return (
-    engineVersion !== result.engineVersion ||
-    root.contentHash !== result.policyHash ||
-    effective.contentHash !== result.effectivePolicyHash ||
-    (source?.interval
-      ? result.source !== "github" ||
-        source.sourceCommit !== result.sourceCommit ||
-        (result.executionError &&
-        result.sourceVersion.startsWith("unavailable:")
-          ? result.sourceVersion !==
-            `unavailable:${source.repo}:${source.sourceCommit}:${suite?.directory ?? "traces"}`
-          : githubVersion !== result.sourceVersion)
-      : result.source !== "local" ||
-        (suite?.version ?? "empty") !== result.sourceVersion)
-  );
-}
 export async function getOpenAppaPolicyTestRuns(organizationId: string) {
   enabled();
-  const [rows, context] = await Promise.all([
-    OpenAppaPolicyTestsModel.listRuns(organizationId),
-    currentPolicyTestRunContext(organizationId),
-  ]);
+  const rows = await OpenAppaPolicyTestsModel.listRuns(organizationId);
   return rows.map((row) => {
     const result = PolicyTestRunResultSchema.parse(row.result);
     return {
@@ -752,7 +696,6 @@ export async function getOpenAppaPolicyTestRuns(organizationId: string) {
       createdAt: row.createdAt,
       createdBy: row.createdBy,
       ...result,
-      stale: isPolicyTestRunStale(result, context),
     };
   });
 }

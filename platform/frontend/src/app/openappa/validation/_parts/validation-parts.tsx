@@ -366,11 +366,9 @@ export function statusLabel(status: string) {
       ? "Passed"
       : status === "failed"
         ? "Failed"
-        : status === "stale"
-          ? "Stale result"
-          : status === "not_run"
-            ? "Not run"
-            : status;
+        : status === "not_run"
+          ? "Not run"
+          : status;
 }
 
 export function ValidationRunDiagnostics({

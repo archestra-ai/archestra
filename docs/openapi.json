@@ -354243,9 +354243,6 @@
                         "warnings"
                       ],
                       "additionalProperties": false
-                    },
-                    "stale": {
-                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -354262,8 +354259,7 @@
                     "engineVersion",
                     "draft",
                     "files",
-                    "validation",
-                    "stale"
+                    "validation"
                   ],
                   "additionalProperties": false
                 }
@@ -354696,9 +354692,6 @@
                           "warnings"
                         ],
                         "additionalProperties": false
-                      },
-                      "stale": {
-                        "type": "boolean"
                       }
                     },
                     "required": [
@@ -354715,8 +354708,7 @@
                       "engineVersion",
                       "draft",
                       "files",
-                      "validation",
-                      "stale"
+                      "validation"
                     ],
                     "additionalProperties": false
                   }
@@ -355186,9 +355178,6 @@
                         "warnings"
                       ],
                       "additionalProperties": false
-                    },
-                    "stale": {
-                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -355202,8 +355191,7 @@
                     "engineVersion",
                     "draft",
                     "files",
-                    "validation",
-                    "stale"
+                    "validation"
                   ],
                   "additionalProperties": false
                 }

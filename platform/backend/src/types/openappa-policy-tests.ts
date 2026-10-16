@@ -97,15 +97,11 @@ export const PolicyTestRunResultSchema = z.object({
   validation: GuardrailsValidationSchema,
 });
 export type PolicyTestRunResult = z.infer<typeof PolicyTestRunResultSchema>;
-export const PolicyTestPreviewSchema = PolicyTestRunResultSchema.extend({
-  stale: z.boolean(),
-});
 export const PolicyTestRunSchema = createSelectSchema(
   openappaPolicyTestRunsTable,
 )
   .omit({ organizationId: true, result: true })
-  .extend(PolicyTestRunResultSchema.shape)
-  .extend({ stale: z.boolean() });
+  .extend(PolicyTestRunResultSchema.shape);
 export const UpdatePolicyTestsSchema = z.strictObject({
   files: PolicyTestFilesSchema,
   expectedVersion: z.string(),

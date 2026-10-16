@@ -113,7 +113,6 @@ const run = {
   effectivePolicyHash: "effective-v2",
   engineVersion: "engine-v1",
   draft: false,
-  stale: false,
   files: [
     {
       path: scenario.path,
@@ -592,7 +591,7 @@ test.each([
   ).toBeDisabled();
 });
 
-test("Git editor previews run without local save and become stale after edits", async () => {
+test("Git editor previews run without local save and are dropped after edits", async () => {
   let payload: unknown;
   server.use(
     http.get(endpoint, () =>
@@ -634,7 +633,8 @@ test("Git editor previews run without local save and become stale after edits", 
   fireEvent.change(editor, {
     target: { value: "mcp/files/read {}\nexpect deny\n" },
   });
-  expect(screen.getByText("Stale result")).toBeVisible();
+  expect(screen.queryByText("Passed")).not.toBeInTheDocument();
+  expect(screen.getByText("Not run")).toBeVisible();
 });
 
 test("file previews show draft diagnostics without changing suite results or history", async () => {
@@ -726,32 +726,6 @@ test("file preview failures preserve editor text and can be retried", async () =
   fireEvent.click(screen.getByRole("button", { name: "Test draft" }));
   expect(await screen.findByText(/assertions evaluated/)).toBeVisible();
   expect(screen.queryByText("File test could not run")).not.toBeInTheDocument();
-});
-
-test.each([
-  "root",
-  "effective",
-])("file preview becomes stale when the %s policy changes", async (changed) => {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  server.use(http.post(`${endpoint}/preview`, () => HttpResponse.json(run)));
-  showPage(client);
-  await openValidationFile(scenario.path);
-  fireEvent.change(
-    await screen.findByRole("textbox", {
-      name: "Policy validation scenario.appa",
-    }),
-    { target: { value: `${scenario.content}# editor draft\n` } },
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Test draft" }));
-  await screen.findByText(/assertions evaluated/);
-  const key =
-    changed === "root" ? ["guardrails-policy"] : ["openappa-effective-policy"];
-  await waitFor(() => expect(client.getQueryData(key)).toBeDefined());
-  act(() => client.setQueryData(key, { contentHash: "changed-policy-hash" }));
-  expect(await screen.findByText("Stale result")).toBeVisible();
-  expect(screen.getByText("Stale inputs")).toBeVisible();
 });
 
 test("file preview uses the editor draft and Run all uses persisted files after discard", async () => {
@@ -1134,21 +1108,15 @@ test("status filters keep failures, execution failures and unrun files apart and
   );
 });
 
-test("changed inputs retain the historical outcome and show its run time without stale statuses", async () => {
+test("changed inputs retain the historical outcome and show its run time", async () => {
   currentHref = "/openappa/validation?status=passed";
-  server.use(
-    http.get(`${endpoint}/runs`, () =>
-      HttpResponse.json([{ ...run, stale: true }]),
-    ),
-  );
+  server.use(http.get(`${endpoint}/runs`, () => HttpResponse.json([run])));
   showPage();
   await waitFor(() => {
     const row = screen.getByRole("link", { name: scenario.path }).closest("tr");
     expect(row).toHaveTextContent("Passed");
     expect(row).toHaveTextContent(formatDate({ date: run.createdAt }));
   });
-  expect(screen.queryByText("Stale inputs")).not.toBeInTheDocument();
-  expect(screen.queryByText("Stale result")).not.toBeInTheDocument();
   fireEvent.click(
     screen.getByRole("combobox", { name: "Filter by validation status" }),
   );
@@ -1467,7 +1435,6 @@ test("last-run summary adds up the per-file statuses, so a refused policy passes
         {
           ...run,
           draft: true,
-          stale: true,
           files: [
             run.files[0],
             { ...run.files[0], path: "failed.appa", status: "failed" },

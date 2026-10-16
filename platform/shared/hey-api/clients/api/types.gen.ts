@@ -93497,7 +93497,6 @@ export type RunOpenAppaPolicyTestsResponses = {
             errors: Array<string>;
             warnings: Array<string>;
         };
-        stale: boolean;
     };
 };
 
@@ -93618,7 +93617,6 @@ export type GetOpenAppaPolicyTestRunsResponses = {
             errors: Array<string>;
             warnings: Array<string>;
         };
-        stale: boolean;
     }>;
 };
 
@@ -93743,7 +93741,6 @@ export type PreviewOpenAppaPolicyTestResponses = {
             errors: Array<string>;
             warnings: Array<string>;
         };
-        stale: boolean;
     };
 };
 

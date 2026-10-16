@@ -125,7 +125,6 @@ describe("policy replay runs", () => {
     expect(preview.statusCode, preview.body).toBe(200);
     expect(preview.json()).toMatchObject({
       draft: true,
-      stale: false,
       validation: { valid: true },
       files: [
         {
@@ -281,7 +280,7 @@ describe("policy replay runs", () => {
       })),
     );
   });
-  test("uses real replay state and file isolation, stores outcomes and marks policy changes stale", async () => {
+  test("uses real replay state and file isolation, stores outcomes and snapshots", async () => {
     const sourceVersion = await saveFiles();
     const run = await ctx.app.inject({
       method: "POST",
@@ -291,7 +290,6 @@ describe("policy replay runs", () => {
     expect(run.statusCode, run.body).toBe(200);
     expect(run.json()).toMatchObject({
       draft: false,
-      stale: false,
       policyRevision: 1,
       validation: { valid: true },
       files: [
@@ -316,23 +314,7 @@ describe("policy replay runs", () => {
       method: "GET",
       url: "/api/openappa/policy-tests/runs",
     });
-    expect(history.json()[0]).toMatchObject({
-      id: run.json().id,
-      stale: false,
-    });
-    const changed = `${content}\n# new policy revision\n`;
-    await GuardrailsPolicyModel.save({
-      organizationId: ctx.organizationId,
-      content: changed,
-      contentHash: hash(changed),
-      updatedBy: ctx.user.id,
-      expectedRevision: 1,
-    });
-    const stale = await ctx.app.inject({
-      method: "GET",
-      url: "/api/openappa/policy-tests/runs",
-    });
-    expect(stale.json()[0]).toMatchObject({ id: run.json().id, stale: true });
+    expect(history.json()[0]).toMatchObject({ id: run.json().id });
   });
   test("saved runs reject stale versions, subsets and draft bytes without replacing history", async () => {
     const sourceVersion = await saveFiles();
@@ -480,7 +462,7 @@ describe("policy replay runs", () => {
       files: [{ status: "cannot_run" }],
     });
   });
-  test("a policy changed while native replay waits makes the returned frozen run stale", async () => {
+  test("a policy changed while native replay waits leaves the run recording the policy it replayed", async () => {
     const sourceVersion = await saveFiles([files[0]]);
     const native = await import("@archestra/openappa-rs");
     const replay = native.replayOpenappaPolicy;
@@ -518,18 +500,9 @@ describe("policy replay runs", () => {
       const run = await pending;
       expect(run.statusCode, run.body).toBe(200);
       expect(run.json()).toMatchObject({
-        stale: true,
         policyRevision: 1,
         policyHash: hash(content),
         files: [{ status: "passed" }],
-      });
-      const history = await ctx.app.inject({
-        method: "GET",
-        url: "/api/openappa/policy-tests/runs",
-      });
-      expect(history.json()[0]).toMatchObject({
-        id: run.json().id,
-        stale: true,
       });
     } finally {
       release();

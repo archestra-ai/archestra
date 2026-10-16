@@ -104,6 +104,9 @@ export function identifyRemedyChains(
   })[] = [];
   const isOpen = (chain: RemedyChain) => chain.finalAttempt === null;
 
+  // Each call scans the open chains, so a message costs chains × calls. Both
+  // stay small in a real turn (a few guarded calls among tens of tool calls).
+
   for (const { index, step, part, toolName } of invocations) {
     const resultIndex = part.toolCallId
       ? resultIndexByCallId.get(part.toolCallId)

@@ -87,6 +87,7 @@ import {
   buildAgentRuntimeEnvironmentEgressPolicies,
 } from "./network-policy";
 import { resolvePlatformServiceDestination } from "./platform-service";
+import { describeAgentRuntimePodFailure } from "./pod-failure";
 import { agentSandboxApi } from "./sandbox-api";
 import {
   type AgentRuntimeStartupProgress,
@@ -1228,11 +1229,17 @@ class AgentRuntimeManager {
         const expired = sandbox.status?.conditions?.find(
           (entry) => entry.reason === "SandboxExpired",
         );
-        if (finished || expired) {
-          const condition = finished ?? expired;
+        const condition = finished ?? expired;
+        const podFailure = describeAgentRuntimePodFailure(
+          pod,
+          params.session.runtimeScope,
+          condition,
+        );
+        if (finished || expired || podFailure) {
           return {
             outcome: "failed",
             reason:
+              podFailure ??
               condition?.message ??
               condition?.reason ??
               "The Agent Runtime run exited without completing",
@@ -1830,7 +1837,12 @@ done`
       const pod = await this.findPod(params.session);
       const phase = pod?.status?.phase;
       if (phase === "Running" && pod?.metadata?.name) return pod.metadata.name;
-      if (phase === "Succeeded" || phase === "Failed") return null;
+      const podFailure = describeAgentRuntimePodFailure(
+        pod,
+        params.session.runtimeScope,
+      );
+      if (podFailure) throw new Error(podFailure);
+      if (phase === "Succeeded") return null;
 
       const progress = describeAgentRuntimeStartupProgress(pod);
       if (params.onProgress) {

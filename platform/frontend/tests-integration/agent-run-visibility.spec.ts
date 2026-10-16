@@ -97,4 +97,64 @@ test("keeps a long run owner and the access details inside the phone viewport", 
     expect(bounds.x).toBeGreaterThanOrEqual(0);
     expect(bounds.x + bounds.width).toBeLessThanOrEqual(390);
   }
+
+  const fullView = page.getByRole("link", { name: "Open full view" });
+  await expect(fullView).toHaveAttribute("href", `/chat/runs/${run.taskId}`);
+  await expect(
+    page.getByRole("button", { name: "Stop", exact: true }),
+  ).toHaveCount(0);
+
+  const ownRun = {
+    ...run,
+    actorId: "test-user-admin",
+    actorUserId: "test-user-admin",
+    endedAt: null,
+    state: "TASK_STATE_WORKING",
+  };
+  await mswControl.registerMany([
+    { method: "get", url: `/api/agents/${agent.id}/runs`, body: [ownRun] },
+    {
+      method: "get",
+      url: "/api/agent-runs",
+      body: { data: [], pagination: {} },
+    },
+    {
+      method: "get",
+      url: `/api/agent-runs/${run.taskId}`,
+      body: {
+        ...ownRun,
+        sessionId: run.taskId,
+        viewerRole: "owner",
+        workspace: null,
+        agent: { id: agent.id, name: agent.name, icon: null },
+      },
+    },
+  ]);
+  await page.reload();
+  const stop = page.getByRole("button", { name: "Stop", exact: true });
+  for (const width of [390, 1280]) {
+    await page.setViewportSize({ width, height: 844 });
+    for (const control of [
+      fullView,
+      stop,
+      page.getByRole("button", { name: "Share", exact: true }),
+    ]) {
+      await expect(control).toBeVisible();
+      await control.scrollIntoViewIfNeeded();
+      const bounds = await control.boundingBox();
+      if (!bounds) throw new Error("Run control is not rendered");
+      expect(bounds.x).toBeGreaterThanOrEqual(0);
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+    }
+  }
+  await stop.click();
+  await expect(
+    page.getByRole("dialog", { name: "Stop this run?" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await fullView.click();
+  await expect(page).toHaveURL(`/chat/runs/${run.taskId}`);
+  await expect(
+    page.getByRole("heading", { name: "Live terminal", exact: true }),
+  ).toBeVisible();
 });

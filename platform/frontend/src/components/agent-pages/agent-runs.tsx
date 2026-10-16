@@ -1,7 +1,14 @@
 "use client";
 
 import { formatDistanceToNow } from "date-fns";
-import { Info, Search, Share2, TerminalSquare } from "lucide-react";
+import {
+  Info,
+  Maximize2,
+  Search,
+  Share2,
+  Square,
+  TerminalSquare,
+} from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { AgentRunLiveness } from "@/components/agent-run-liveness";
@@ -9,6 +16,7 @@ import { AgentRunLogs } from "@/components/agent-run-logs";
 import { AgentRunState } from "@/components/agent-run-state";
 import { AgentRunTerminal } from "@/components/agent-run-terminal";
 import { ShareAgentRunDialog } from "@/components/chat/share-agent-run-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EmptyState } from "@/components/empty-state";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
@@ -26,7 +34,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { type AgentRunListItem, useAgentRuns } from "@/lib/agent-runtime.query";
+import {
+  type AgentRunListItem,
+  useAgentRuns,
+  useCancelAgentRun,
+} from "@/lib/agent-runtime.query";
 import { useScopedCapabilities, useSession } from "@/lib/auth/auth.query";
 import { cn } from "@/lib/utils/tailwind";
 
@@ -226,6 +238,8 @@ function RunDetails({
   const active = !run.endedAt;
   const startedBy = `Started by ${initiatorLabel(run)}${canAttach ? " (you)" : ""}`;
   const [permissionsOpen, setPermissionsOpen] = useState(false);
+  const [stopDialogOpen, setStopDialogOpen] = useState(false);
+  const cancelRun = useCancelAgentRun();
   const capabilities = useScopedCapabilities();
   const canManageAccess =
     canAttach ||
@@ -238,8 +252,8 @@ function RunDetails({
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <div className="flex flex-shrink-0 items-start justify-between gap-4 border-b px-5 py-3.5">
-        <div className="min-w-0 space-y-1">
+      <div className="flex flex-shrink-0 flex-wrap items-start justify-between gap-4 border-b px-5 py-3.5">
+        <div className="min-w-0 flex-1 basis-64 space-y-1">
           <div className="flex min-w-0 items-center gap-2">
             <h2 className="truncate text-sm font-medium">{run.title}</h2>
             <AgentRunState
@@ -298,18 +312,38 @@ function RunDetails({
             </Tooltip>
           </div>
         </div>
-        {canManageAccess && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="shrink-0"
-            onClick={() => setPermissionsOpen(true)}
-          >
-            <Share2 className="size-4" />
-            Share
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/chat/runs/${run.taskId}`}>
+              <Maximize2 className="size-4" />
+              <span>Open full view</span>
+            </Link>
           </Button>
-        )}
+          {active && canAttach && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={cancelRun.isPending}
+              onClick={() => setStopDialogOpen(true)}
+            >
+              <Square className="size-4" />
+              <span>Stop</span>
+            </Button>
+          )}
+          {canManageAccess && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={() => setPermissionsOpen(true)}
+            >
+              <Share2 className="size-4" />
+              Share
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
@@ -333,6 +367,20 @@ function RunDetails({
         taskId={run.taskId}
         open={permissionsOpen}
         onOpenChange={setPermissionsOpen}
+      />
+      <DeleteConfirmDialog
+        open={stopDialogOpen}
+        onOpenChange={setStopDialogOpen}
+        title="Stop this run?"
+        description="The Agent process will stop. Its workspace, saved files, and run history will be retained so you can continue later."
+        isPending={cancelRun.isPending}
+        confirmLabel="Stop run"
+        pendingLabel="Stopping…"
+        onConfirm={() =>
+          cancelRun.mutate(run.taskId, {
+            onSuccess: () => setStopDialogOpen(false),
+          })
+        }
       />
     </section>
   );

@@ -514,6 +514,312 @@ test.for([
 });
 
 test.for([
+  {
+    name: "container memory termination",
+    status: {
+      phase: "Failed",
+      containerStatuses: [
+        {
+          name: "agent-runtime",
+          state: {
+            terminated: {
+              exitCode: 137,
+              signal: 9,
+              reason: "OOMKilled",
+              message: "Container exceeded its memory limit",
+            },
+          },
+        },
+      ],
+    },
+    details: [
+      "agent-runtime",
+      "OOMKilled",
+      "exit code 137",
+      "signal 9",
+      "Container exceeded its memory limit",
+    ],
+  },
+  {
+    name: "node eviction",
+    status: {
+      phase: "Failed",
+      reason: "Evicted",
+      message: "The node was low on resource: ephemeral-storage.",
+    },
+    details: ["Evicted", "The node was low on resource: ephemeral-storage."],
+  },
+  {
+    name: "workspace initialization failure",
+    status: {
+      phase: "Failed",
+      initContainerStatuses: [
+        {
+          name: "initialize-workspace",
+          state: {
+            terminated: {
+              exitCode: 1,
+              reason: "Error",
+              message: "Could not initialize the workspace volume",
+            },
+          },
+        },
+      ],
+    },
+    details: [
+      "initialize-workspace",
+      "exit code 1",
+      "Could not initialize the workspace volume",
+    ],
+  },
+  {
+    name: "missing termination diagnostics",
+    status: { phase: "Failed" },
+    details: ["Kubernetes reported no additional failure details"],
+  },
+  {
+    name: "pod disruption",
+    status: {
+      phase: "Failed",
+      conditions: [
+        {
+          type: "DisruptionTarget",
+          status: "True",
+          reason: "TerminationByKubelet",
+          message: "Kubelet is terminating the pod.",
+        },
+      ],
+      containerStatuses: [
+        {
+          name: "completed-helper",
+          state: { terminated: { exitCode: 0, reason: "Completed" } },
+        },
+      ],
+    },
+    details: ["TerminationByKubelet", "Kubelet is terminating the pod."],
+  },
+])("preserves Kubernetes diagnostics for $name instead of a generic Sandbox summary", async ({
+  status,
+  details,
+}, { run }) => {
+  server.use(
+    http.get(sandboxUrl, () =>
+      HttpResponse.json({
+        status: {
+          conditions: [
+            {
+              type: "Finished",
+              status: "True",
+              reason: "PodFailed",
+              message: "Pod failed",
+            },
+          ],
+        },
+      }),
+    ),
+    http.get(podsUrl, () =>
+      HttpResponse.json({
+        items: [{ metadata: { name: "worker", namespace: "test" }, status }],
+      }),
+    ),
+  );
+  const exec = completeExec();
+  const completion = await manager.waitForCompletion({ session: run });
+  expect(completion.outcome).toBe("failed");
+  expect(completion.reason).toContain("test/worker");
+  for (const detail of details) expect(completion.reason).toContain(detail);
+  expect(completion.reason).not.toContain("exit code 0");
+  expect(exec).not.toHaveBeenCalled();
+});
+
+test("reports a failed pod before the Sandbox controller publishes its finished condition", async ({
+  run,
+}) => {
+  server.use(
+    http.get(podsUrl, () =>
+      HttpResponse.json({
+        items: [
+          {
+            metadata: { name: "worker" },
+            status: {
+              phase: "Failed",
+              reason: "Evicted",
+              message: "The node was low on resource: memory.",
+            },
+          },
+        ],
+      }),
+    ),
+  );
+  const exec = completeExec();
+  await expect(
+    manager.waitForCompletion({ session: run }),
+  ).resolves.toMatchObject({
+    outcome: "failed",
+    reason: expect.stringContaining("Evicted"),
+  });
+  expect(exec).not.toHaveBeenCalled();
+});
+
+test("keeps Sandbox expiry context alongside pod termination diagnostics", async ({
+  run,
+}) => {
+  server.use(
+    http.get(sandboxUrl, () =>
+      HttpResponse.json({
+        status: {
+          conditions: [
+            {
+              type: "Finished",
+              status: "True",
+              reason: "SandboxExpired",
+              message: "The workspace retention deadline has passed.",
+            },
+          ],
+        },
+      }),
+    ),
+    http.get(podsUrl, () =>
+      HttpResponse.json({
+        items: [
+          {
+            metadata: { name: "worker" },
+            status: {
+              phase: "Failed",
+              containerStatuses: [
+                {
+                  name: "agent-runtime",
+                  state: {
+                    terminated: { exitCode: 143, signal: 15, reason: "Error" },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    ),
+  );
+  const completion = await manager.waitForCompletion({ session: run });
+  expect(completion.reason).toContain("exit code 143");
+  expect(completion.reason).toContain("SandboxExpired");
+  expect(completion.reason).toContain(
+    "The workspace retention deadline has passed.",
+  );
+});
+
+test("keeps a recorded successful turn ahead of a finished Sandbox condition", async ({
+  run,
+}) => {
+  server.use(
+    http.get(sandboxUrl, () =>
+      HttpResponse.json({
+        status: {
+          conditions: [
+            {
+              type: "Finished",
+              status: "True",
+              reason: "PodFailed",
+              message: "Pod failed",
+            },
+          ],
+        },
+      }),
+    ),
+  );
+  completeExec("0");
+  await expect(manager.waitForCompletion({ session: run })).resolves.toEqual({
+    outcome: "succeeded",
+  });
+});
+
+test("bounds and strips terminal control sequences from pod diagnostics without including the pod spec", async ({
+  run,
+}) => {
+  server.use(
+    http.get(podsUrl, () =>
+      HttpResponse.json({
+        items: [
+          {
+            metadata: { name: "worker" },
+            spec: {
+              containers: [
+                {
+                  name: "agent-runtime",
+                  env: [{ name: "API_KEY", value: "synthetic-private-value" }],
+                },
+              ],
+            },
+            status: {
+              phase: "Failed",
+              reason: "Evicted",
+              message: `\u001b[31m${"diagnostic ".repeat(600)}\u001b[0m\u0000`,
+              containerStatuses: [
+                {
+                  name: "agent-runtime",
+                  state: {
+                    terminated: {
+                      exitCode: 137,
+                      reason: "OOMKilled",
+                      message: "termination ".repeat(600),
+                    },
+                  },
+                },
+                {
+                  name: "helper",
+                  state: {
+                    terminated: { exitCode: 1, message: "helper ".repeat(600) },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    ),
+  );
+  const completion = await manager.waitForCompletion({ session: run });
+  expect(completion.reason).toContain("OOMKilled");
+  expect(completion.reason).toContain("truncated");
+  expect(completion.reason?.length).toBeLessThanOrEqual(4096);
+  expect(completion.reason).not.toContain("\u001b");
+  expect(completion.reason).not.toContain("\u0000");
+  expect(completion.reason).not.toContain("synthetic-private-value");
+});
+
+test("preserves failed-pod diagnostics while resuming a workspace, before executing a turn", async ({
+  run,
+}) => {
+  server.use(
+    http.get(
+      `${origin}/api/v1/namespaces/test/secrets/:name`,
+      () => new HttpResponse(null, { status: 404 }),
+    ),
+    http.get(sandboxUrl, () =>
+      HttpResponse.json({ metadata: { name: run.workloadName }, spec: {} }),
+    ),
+    http.patch(sandboxUrl, () => HttpResponse.json({})),
+    http.get(podsUrl, () =>
+      HttpResponse.json({
+        items: [
+          {
+            metadata: { name: "worker" },
+            status: {
+              phase: "Failed",
+              reason: "Evicted",
+              message: "The node was low on resource: memory.",
+            },
+          },
+        ],
+      }),
+    ),
+  );
+  const exec = completeExec();
+  await expect(manager.recoverRun(run)).rejects.toThrow("Evicted");
+  expect(exec).not.toHaveBeenCalled();
+});
+
+test.for([
   401, 403, 422,
 ])("does not hide permanent HTTP %i failures", async (status, { run }) => {
   let requests = 0;

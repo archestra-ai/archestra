@@ -79,7 +79,8 @@ What to know:
 Select the agent in Chat or in a [Project](/docs/chat/projects) and send a task. This starts a **run**: a container that works on your task. Follow-ups continue the same run. The live terminal opens and shows startup progress. Attach files before you send, and the agent reads them in its container.
 
 - **Leave and come back:** the run keeps working. Reopen it from the sidebar and send a follow-up.
-- **Past runs:** the agent's **Runs** tab lists live and finished runs. **Resume** reopens a run without sending a message.
+- **Past runs:** the agent's **Runs** tab lists live and finished runs. Select **Open full view** for the larger terminal and run controls. For a retained run you started, select **Resume** to reopen it without sending a message.
+- **Stop a run:** the person who started it can select **Stop** in Chat or on the agent's **Runs** tab. Confirm with **Stop run**. Saved files and history remain available.
 - **Copy text:** turn off **Focus terminal** to select text in the browser.
 - **Follow-ups** reach the agent between its turns. To type them into its terminal instead, set **Steering** to **Terminal input** on the **Agent Runtime** tab.
 - **Open a web app:** **View connection details** gives a port forwarding command for the agent's **Ports to forward**.
@@ -138,6 +139,7 @@ What to know:
 ## Troubleshooting
 
 - **A run does not start:** see [Setup troubleshooting](/docs/agents/runtime/setup#troubleshooting).
+- **A run ends with a pod failure:** open **Failed details** for the Kubernetes pod name, failure reason, and container exit code when available. Share these details with your cluster operator; for example, `OOMKilled` identifies a memory termination and `Evicted` includes Kubernetes' eviction message.
 - **A model call fails with HTTP 500 and `x-should-retry: false`:** the organization's [Guardrails](/docs/agents/guardrails) policy is invalid. An administrator must fix it. Retrying does not help.
 - **A model call fails with HTTP 400 and names `X-Archestra-Runtime-Binding`:** the agent's image does not send the [run headers](/docs/agents/runtime/custom-images#send-the-run-headers). Rebuild it on a current maintained image, then start a new run.
 - **Find a run's traffic:** LLM Proxy Logs and MCP Gateway Logs show the run ID. For health metrics, see [Agent Runtime Health](/docs/admin/observability/metrics#agent-runtime-health).

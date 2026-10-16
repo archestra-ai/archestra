@@ -102,8 +102,6 @@ export const CacheKey = {
   ConnectionHealthRateLimit: "connection-health-rate-limit",
   /** GitHub Copilot device-flow sign-in rate limiting per user */
   GithubCopilotDeviceAuthRateLimit: "github-copilot-device-auth-rate-limit",
-  /** App Gallery share (GitHub device-flow) sign-in rate limiting per user */
-  AppGalleryDeviceAuthRateLimit: "app-gallery-device-auth-rate-limit",
   /** Microsoft 365 Copilot device-flow sign-in rate limiting per user */
   Microsoft365CopilotDeviceAuthRateLimit:
     "microsoft-365-copilot-device-auth-rate-limit",

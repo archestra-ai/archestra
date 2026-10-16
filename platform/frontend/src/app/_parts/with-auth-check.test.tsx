@@ -44,10 +44,7 @@ vi.mock("./auth-surface-frame", () => ({
 }));
 
 // Mock shared module
-// Partial: the gate reads real shared constants (the render route it lets
-// through) alongside the permissions map this suite substitutes. Replacing the
-// whole module drops every other export, so it breaks the moment the component
-// imports one more of them.
+// Keep shared exports while substituting the permissions used by this suite.
 vi.mock("@archestra/shared", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@archestra/shared")>()),
   requiredPagePermissionsMap: {
@@ -110,6 +107,22 @@ describe("WithAuthCheck", () => {
       expect(mockRouterPush).toHaveBeenCalledWith(
         "/auth/sign-in?redirectTo=%2Fdashboard",
       );
+    });
+
+    it("requires authentication on the retired renderer path", () => {
+      vi.mocked(usePathname).mockReturnValue("/app-recording-render");
+      setWindowLocation("/app-recording-render");
+
+      render(
+        <WithAuthCheck>
+          <MockChild />
+        </WithAuthCheck>,
+      );
+
+      expect(mockRouterPush).toHaveBeenCalledWith(
+        "/auth/sign-in?redirectTo=%2Fapp-recording-render",
+      );
+      expect(screen.queryByTestId("protected-content")).not.toBeInTheDocument();
     });
 
     it("should redirect to sign-in with encoded redirectTo param for complex paths", () => {

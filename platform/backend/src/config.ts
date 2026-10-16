@@ -4,7 +4,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   AGENT_CATALOG_IMAGE_REGISTRY,
-  APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS,
   BM25_B_DEFAULT,
   BM25_B_MAX,
   BM25_B_MIN,
@@ -49,7 +48,7 @@ import {
 } from "@/types/email-provider-type";
 import packageJson from "../../package.json";
 
-type ProcessType = "web" | "worker" | "renderer" | "all";
+type ProcessType = "web" | "worker" | "all";
 type FileStorageProviderType = "db" | "filesystem" | "s3";
 
 /**
@@ -269,35 +268,6 @@ const addLoopbackEquivalents = (origins: string[]): string[] => {
 };
 
 /**
- * Where the offline video renderer reaches this deployment's own frontend to
- * load the replay page it films.
- *
- * Falls back to this deployment's first configured origin before loopback.
- * That set is the same one CORS, auth and the app sandbox are built from, so
- * whichever way a deployment spells its frontend — a public hostname, a
- * tunnel, an extra trusted origin — the renderer targets something already
- * trusted rather than an address nothing was configured for. Defaulting
- * straight to loopback is what makes a tunnelled deployment film an empty app
- * pane: the sandbox declines to be framed by an untrusted origin, and the
- * render cannot tell that apart from an app that drew nothing.
- *
- * The backend's own base URL is deliberately not a candidate: the page being
- * filmed is a frontend route.
- *
- * @public — exported for testability
- */
-export function resolveRenderBaseUrl(params: {
-  explicit: string | undefined;
-  configuredOrigins: string[];
-}): string {
-  return (
-    params.explicit?.trim() ||
-    params.configuredOrigins[0] ||
-    "http://localhost:3000"
-  );
-}
-
-/**
  * Base URL for the `ollama-native` transport.
  *
  * Same Ollama server as the OpenAI-compatible provider, different endpoint: the
@@ -326,15 +296,6 @@ export function deriveOllamaNativeBaseUrl(params: {
 export function stripOllamaV1Suffix(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
 }
-
-const hackathonRecorderRenderBaseUrl = resolveRenderBaseUrl({
-  // Undocumented on purpose, like the rest of the Apps Hackathon recorder (a
-  // temporary, hackathon-only feature — see the recorder flag below). Do not add
-  // this to .env.example or the deployment docs. It rarely needs setting anyway:
-  // the fallback already targets a trusted configured origin.
-  explicit: process.env.ARCHESTRA_HACKATHON_RECORDER_RENDER_BASE_URL,
-  configuredOrigins: getConfiguredOrigins(),
-});
 
 /**
  * Explicitly configured origins for CORS and better-auth, with loopback
@@ -1500,11 +1461,7 @@ export function parseConnectorSyncMaxDuration(
 /** @public — exported for testability */
 export function parseProcessType(value: string | undefined): ProcessType {
   const normalized = value?.toLowerCase();
-  if (
-    normalized === "web" ||
-    normalized === "worker" ||
-    normalized === "renderer"
-  ) {
+  if (normalized === "web" || normalized === "worker") {
     return normalized;
   }
   return "all";
@@ -2191,141 +2148,6 @@ function parseOpenAppaReviewSummary({
   }
   return { provider: supportedProvider, model: trimmedModel };
 }
-
-/**
- * The hackathon recorder (record/replay/edit app demo sessions).
- *
- * On for every community deployment, and NEVER on for a deployment running an
- * activated enterprise license: a licensed customer must not be shown a
- * temporary community promotion. There is no deployment opt-out flag, because
- * the two gates above this one already cover "when" and "whether" — the
- * hackathon date window keeps it hidden outside the event, and the
- * per-organization toggle lets an admin switch it off — so a community
- * deployment needs no third switch of its own.
- *
- * `enterpriseOverride` is the single escape hatch: it turns the recorder on for
- * Archestra's own licensed staging. It affects this deployment gate only — the
- * date window and the organization toggle still apply. It is documented
- * nowhere and named as an enterprise override on purpose, so no customer
- * stumbles onto the enterprise path.
- *
- * This is the DEPLOYMENT gate only. Two more gates sit above it at request
- * time — the organization's own toggle, and the hackathon date window —
- * because neither can be decided once at boot. See `assertAppsHackathonAvailable`.
- *
- * @public — exported for testability
- */
-export function parseHackathonRecorderEnabled(params: {
-  enterpriseLicenseActivated: boolean;
-  enterpriseOverride: string | undefined;
-}): boolean {
-  if (params.enterpriseLicenseActivated) {
-    return params.enterpriseOverride === "true";
-  }
-  return true;
-}
-
-/**
- * The longest final cut a recording may be submitted or exported at, in ms.
- *
- * One bound behind every length surface — the submit button, the submission
- * flow's own backstop, the video export, the editor's trim-to-limit control and
- * the tour's "keep it under N" note — so a deployment that raises it raises all
- * of them together and no surface can quote a number the checks disagree with.
- *
- * Rejects a value that is not a positive integer number of milliseconds rather
- * than silently falling back: a typo here would otherwise read as the platform
- * ignoring the operator's limit. A hard floor keeps a fat-fingered tiny value
- * from making every recording unsubmittable.
- *
- * Undocumented on purpose, like the rest of the recorder — not in .env.example
- * or the deployment docs.
- *
- * @public — exported for testability
- */
-export function parseHackathonRecorderMaxFinalCutMs(
-  value: string | undefined,
-): number {
-  const raw = value?.trim();
-  if (!raw) return APP_RECORDING_DEFAULT_MAX_FINAL_CUT_MS;
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed < MIN_HACKATHON_FINAL_CUT_MS) {
-    throw new Error(
-      `ARCHESTRA_HACKATHON_RECORDER_MAX_FINAL_CUT_MS must be a whole number of milliseconds >= ${MIN_HACKATHON_FINAL_CUT_MS}, got "${raw}"`,
-    );
-  }
-  return parsed;
-}
-
-/**
- * Floor for the configurable final-cut limit. Below a few seconds nothing is a
- * demo and every recording would be born over the line.
- */
-const MIN_HACKATHON_FINAL_CUT_MS = 5_000;
-
-/**
- * Defaults for the "Archestra App Gallery" sharing surface — the PUBLIC
- * device-flow OAuth client id and the public gallery repository. Baked in so
- * every non-enterprise deployment (local dev and OSS included) offers sharing
- * to the official gallery out of the box; an env override repoints a fork
- * elsewhere. Enterprise has the whole hackathon recorder disabled, so these
- * never surface there.
- *
- * @public — exported for testability
- */
-export const DEFAULT_HACKATHON_GALLERY_GITHUB_CLIENT_ID =
-  "Ov23liqkaqAROe7B7ZZ4";
-/** @public — exported for testability (see the client-id default above) */
-export const DEFAULT_HACKATHON_GALLERY_REPO = "archestra-ai/apps-gallery";
-
-/**
- * The App Gallery repository a shared recording is submitted to, as
- * `owner/name` on github.com. Unset means sharing is not offered — the
- * recorder itself works without it (record/replay/download stay local).
- *
- * Undocumented on purpose, like the rest of the recorder — not in
- * .env.example or the deployment docs.
- *
- * @public — exported for testability
- */
-export function parseHackathonGalleryRepo(
-  envValue: string | undefined,
-): { owner: string; name: string } | undefined {
-  const raw = envValue?.trim();
-  if (!raw) {
-    return undefined;
-  }
-  const match = /^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)$/.exec(raw);
-  if (!match) {
-    throw new Error(
-      `ARCHESTRA_HACKATHON_GALLERY_GITHUB_REPO must be "owner/name" (a github.com repository), got "${raw}"`,
-    );
-  }
-  return { owner: match[1], name: match[2] };
-}
-
-/**
- * The public App Gallery sharing config: each value is the env override, else
- * the baked default (see DEFAULT_HACKATHON_GALLERY_*), so every non-enterprise
- * deployment offers sharing to the official gallery out of the box. The
- * explicit optional types are load-bearing: the values are never actually
- * undefined here, but the route's "not configured" guard and its tests still
- * drive them to undefined, and an object-property annotation (unlike an
- * annotated const, which CFA narrows to its string initializer) keeps that
- * assignable.
- */
-const hackathonGallery: {
-  githubClientId: string | undefined;
-  repo: { owner: string; name: string } | undefined;
-} = {
-  githubClientId:
-    process.env.ARCHESTRA_HACKATHON_GALLERY_GITHUB_CLIENT_ID?.trim() ||
-    DEFAULT_HACKATHON_GALLERY_GITHUB_CLIENT_ID,
-  repo: parseHackathonGalleryRepo(
-    process.env.ARCHESTRA_HACKATHON_GALLERY_GITHUB_REPO?.trim() ||
-      DEFAULT_HACKATHON_GALLERY_REPO,
-  ),
-};
 
 // The code execution sandbox (run_command / upload_file / download_file, plus
 // skill activation-mounts) runs on a Dagger engine. Two ways it turns on:
@@ -3249,92 +3071,6 @@ const config = {
     fullWhiteLabeling:
       process.env.ARCHESTRA_ENTERPRISE_LICENSE_FULL_WHITE_LABELING === "true",
   },
-  hackathonRecorder: {
-    enabled: parseHackathonRecorderEnabled({
-      enterpriseLicenseActivated:
-        process.env.ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED === "true",
-      // Undocumented on purpose — see parseHackathonRecorderEnabled. Do not
-      // add this to .env.example or the deployment docs.
-      enterpriseOverride:
-        process.env.ARCHESTRA_HACKATHON_RECORDER_ENTERPRISE_OVERRIDE,
-    }),
-    /**
-     * Offering the offline VIDEO export (the player's download button and the
-     * render endpoints behind it). Off unless a deployment opts in: a render
-     * drives a headless Chromium for as long as the cut runs, which is a cost
-     * no deployment should pay by surprise — and the gallery submission, which
-     * is what the hackathon actually needs, does not depend on it.
-     *
-     * Undocumented on purpose, like the rest of the recorder — not in
-     * .env.example or the deployment docs.
-     */
-    videoDownloadEnabled:
-      process.env.ARCHESTRA_HACKATHON_RECORDER_VIDEO_DOWNLOAD_ENABLED ===
-      "true",
-    /** The longest final cut that may be submitted or exported (see the parser). */
-    maxFinalCutMs: parseHackathonRecorderMaxFinalCutMs(
-      process.env.ARCHESTRA_HACKATHON_RECORDER_MAX_FINAL_CUT_MS,
-    ),
-    /**
-     * Sharing a recording to the public App Gallery (a PR filed on the
-     * participant's own GitHub account). Both values default to the official
-     * Archestra gallery + its public device-flow OAuth client (see
-     * DEFAULT_HACKATHON_GALLERY_*), so every non-enterprise deployment offers
-     * sharing out of the box; an env override repoints a fork elsewhere.
-     *
-     * `githubClientId` is the PUBLIC client id of the "Archestra App Gallery"
-     * GitHub OAuth app with the device flow enabled — the device flow needs no
-     * client secret, which is what lets community deployments offer sharing
-     * with nothing but this id. Register a classic OAuth app, not a GitHub
-     * App: a GitHub App's user token cannot write to the participant's fork
-     * unless they also install the app on their account.
-     *
-     * Undocumented on purpose, like the rest of the recorder — not in
-     * .env.example or the deployment docs.
-     */
-    gallery: hackathonGallery,
-    /**
-     * Escape hatch, not a requirement: the renderer finds or installs its own
-     * Chromium (see app-recording-render-runtime). Set this only to pin a
-     * specific browser — it must be a FULL Chromium, since Playwright's
-     * headless shell carries no WebCodecs encoder.
-     *
-     * Undocumented on purpose, like the rest of the recorder — not in
-     * .env.example or the deployment docs.
-     */
-    chromiumPath:
-      process.env.ARCHESTRA_HACKATHON_RECORDER_CHROMIUM_PATH?.trim() ||
-      undefined,
-    /**
-     * Where the renderer reaches this deployment's own frontend to load the
-     * replay page it films.
-     */
-    renderBaseUrl: hackathonRecorderRenderBaseUrl,
-    /**
-     * The origins that base URL may be reached as, so the app sandbox can name
-     * them as permitted frame ancestors. Loopback is spelled two ways and they
-     * are distinct origins to a browser: a render that loads `127.0.0.1` is
-     * refused by a policy naming only `localhost`, and the app pane films
-     * empty.
-     */
-    renderFrameAncestors: addLoopbackEquivalents([
-      hackathonRecorderRenderBaseUrl,
-    ]),
-    /**
-     * The in-cluster URL of the dedicated render service, when video rendering
-     * runs as its own single-replica deployment (see startRenderer). Set it and
-     * the web tier stops rendering in-process and proxies render/status/
-     * download/cancel there instead — so a multi-replica web tier no longer
-     * scatters a render's follow-up requests across pods that never held its
-     * (in-memory) job. Unset — the OSS single container, local dev — and the web
-     * process renders in-process exactly as before.
-     *
-     * Undocumented on purpose, like the rest of the recorder — not in
-     * .env.example or the deployment docs.
-     */
-    rendererUrl:
-      process.env.ARCHESTRA_APP_RECORDING_RENDERER_URL?.trim() || undefined,
-  },
   /**
    * Codegen mode is set when running `pnpm codegen` via turbo.
    * This ensures enterprise routes are always included in generated API specs,
@@ -4190,15 +3926,11 @@ const config = {
   },
 };
 
-// "all" runs the web server and the worker in one process; "web"/"worker" run
-// exactly one. "renderer" is neither — it runs only the isolated app-recording
-// video render service (see startRenderer), so a multi-replica web tier can
-// offload rendering to a single stable pod that owns every in-memory job.
+// "all" runs both the web server and worker; each can also run separately.
 export const shouldRunWebServer =
   config.processType === "web" || config.processType === "all";
 export const shouldRunWorker =
   config.processType === "worker" || config.processType === "all";
-export const shouldRunRenderer = config.processType === "renderer";
 
 export default config;
 

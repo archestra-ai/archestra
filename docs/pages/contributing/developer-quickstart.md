@@ -2,7 +2,7 @@
 title: Developer Quickstart
 description: Run Archestra from source with Tilt and a local Kubernetes cluster.
 order: 1
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -89,39 +89,3 @@ pnpm also does not run package install scripts in this repository. Both settings
 ```bash
 pnpm rebuild <package-name>
 ```
-
-## Scoped Development Tools
-
-Use the opt-in local executor to inspect a repository without asking a model whether a shell command is safe. It exposes three MCP tools: Git status, diff statistics, and a bounded commit log. The operator fixes the workspace, allowed operations, and expiry when starting it; tool calls cannot supply paths or commands.
-
-This executor requires Linux, Bubblewrap with `--ro-bind-fd` and `--ro-bind-data` support, Git at `/usr/bin/git`, Python 3, `prlimit`, and permission to create user and network namespaces. Use a checkout with its own `.git` directory. Linked worktrees, fetching, tests, and file edits are not supported.
-
-From `platform/`, generate a task-specific Claude Code configuration:
-
-```bash
-pnpm --dir backend exec tsx src/standalone-scripts/openappa-dev-tools.ts \
-  --print-mcp-config \
-  --workspace /absolute/path/to/checkout \
-  --task-id inspect-change \
-  --expires "$(date -u -d '+1 hour' +%Y-%m-%dT%H:%M:%SZ)" \
-  --allow git_status,git_diff_summary,git_log \
-  --bwrap /usr/bin/bwrap > /tmp/openappa-dev-mcp.json
-```
-
-Print the matching policy fragment with `pnpm --dir backend exec tsx src/standalone-scripts/openappa-dev-tools.ts --print-policy`. Review it with your existing [Guardrails policy](/docs/agents/guardrails/policies), placing these exact contracts before an annotator fallback.
-
-The fragment does not grant permission to use native Bash or replace existing rules. Its result labels are `suspicious` and `self`; authorizing a workspace does not authorize sharing its metadata with the whole organization. Choose a wider audience only when that workspace has an explicit sharing policy.
-
-Connect Claude Code to your development proxy, then load both the task configuration and your existing Archestra gateway configuration:
-
-```bash
-claude --strict-mcp-config --mcp-config /path/to/archestra-gateway.json /tmp/openappa-dev-mcp.json
-```
-
-The gateway supplies the tools to accept a non-review read restriction when the policy offers one. Loading only the executor can leave that restriction unresolved.
-
-The MCP server name must remain `openappa-dev` so its names match the generated contracts. This name is a policy selector, not proof of an executable: use the fragment only with an operator-controlled client and this executor's configuration.
-
-Ask for Git status through `mcp__openappa-dev__git_status`. The executor checks filesystem and network isolation before serving, runs without network access against a read-only workspace, and refuses expired scopes. Each operation has memory, CPU, time, and output limits; a scope allows at most four processes at once.
-
-If isolation is unavailable, it stops rather than falling back to a shell. Accepting a policy's read restriction may still require a remedy; these tools do not bypass that boundary.

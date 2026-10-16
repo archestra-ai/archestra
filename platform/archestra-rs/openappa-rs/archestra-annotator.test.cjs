@@ -2,9 +2,7 @@
 // endpoint the host publishes, with the host's bearer, and applies the answer.
 const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
-const { execFileSync } = require('node:child_process');
 const { createServer } = require('node:http');
-const { join } = require('node:path');
 const { test } = require('node:test');
 const native = require('./index.cjs');
 const { databaseUrl } = require('./test-database.cjs');
@@ -112,50 +110,4 @@ test('an annotator endpoint that fails refuses run_command', { skip: !databaseUr
   const outcome = await call(policy, session, 'ls', 'archestra__run_command', { command: 'ls' }).catch((error) => ({ decision: 'error', error }));
   assert.notEqual(outcome.decision, 'allow_call');
   assert.ok(requests.length >= 1, 'the runtime tried the endpoint');
-});
-
-test('an explicit development contract bypasses a bounded fallback that cannot invent human approvals', { skip: !databaseUrl, timeout: 30000 }, async (t) => {
-  await native.initializeOpenappa(databaseUrl, 4);
-  const { requests } = await endpoint(t, 200, {
-    ...NEUTRAL,
-    requires: { ...NEUTRAL.requires, attention: ['human-approval'] },
-  });
-  const backend = join(__dirname, '../../backend');
-  const contracts = execFileSync(process.execPath, [
-    '--import', require.resolve('tsx/esm', { paths: [backend] }),
-    join(backend, 'src/standalone-scripts/openappa-dev-tools.ts'),
-    '--print-policy',
-  ], { encoding: 'utf8', timeout: 10000 });
-  const policy = {
-    content: `[policy]
-version = 2
-
-${contracts}
-
-[[policy.annotator]]
-name = "bounded-fallback"
-builtin = "archestra"
-ranks = ["suspicious"]
-audiences = ["self", "internal"]
-marks = []
-effects = []
-
-[[policy.tool]]
-name = "Bash"
-annotator = "bounded-fallback"
-`,
-    credentials: {},
-  };
-  const session = scope();
-  const inspection = await call(policy, session, 'inspect', 'mcp__openappa-dev__git_status', {});
-  assert.equal(inspection.decision, 'deny_call', JSON.stringify(inspection));
-  assert.ok(inspection.offers?.length, 'the caller can accept the explicit restriction without a model annotation');
-  assert.equal(requests.length, 0, 'a known executor contract does not ask the fallback model');
-
-  const shell = await call(policy, session, 'shell', 'Bash', { command: 'git status' })
-    .catch((error) => ({ decision: 'error', feedback: error.message }));
-  assert.equal(requests.length, 1, 'native shell syntax does not inherit the scoped executor contract');
-  assert.notEqual(shell.decision, 'allow_call', JSON.stringify(shell));
-  assert.match(shell.feedback, /field=requires\.attention allowed=declaration\.attention_marks/);
-  assert.ok(!shell.offers?.length, 'an invalid annotation must not mint a human approval offer');
 });

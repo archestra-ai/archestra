@@ -872,14 +872,12 @@ jobs:
         with:
           working-directory: ./platform
 
-      - name: Ensure shell and sandbox test dependencies
+      - name: Ensure Zsh and PowerShell for shell runtime tests
         run: |
-          if ! command -v zsh >/dev/null 2>&1 || ! command -v bwrap >/dev/null 2>&1; then
+          if ! command -v zsh >/dev/null 2>&1; then
             sudo apt-get update
-            sudo apt-get install -y zsh bubblewrap
+            sudo apt-get install -y zsh
           fi
-          test -x /usr/bin/bwrap
-          echo "ARCHESTRA_OPENAPPA_DEV_BWRAP=/usr/bin/bwrap" >> "$GITHUB_ENV"
           if ! command -v pwsh >/dev/null 2>&1; then
             echo "::error::PowerShell is required so shell runtime tests cannot skip."
             exit 1

@@ -79,6 +79,8 @@ export function AgentIcon({
   }
 
   if (isAgentImageIcon(icon)) {
+    // Square border box: a logo with another aspect ratio, or the tone
+    // padding that arrives after the image loads, cannot resize it.
     return (
       <Image
         src={icon}
@@ -86,7 +88,7 @@ export function AgentIcon({
         width={size}
         height={size}
         className={cn(
-          "shrink-0 rounded-sm object-contain",
+          "aspect-square shrink-0 rounded-sm object-contain",
           imageToneClassName(imageTone),
           className,
         )}
@@ -127,11 +129,15 @@ export function AgentIcon({
     );
   }
 
-  // Emoji
+  // Emoji: a fixed square box, so the emoji font's glyph width does not
+  // set the width. A wider glyph stays centered and overflows the box.
   return (
     <span
-      className={cn("shrink-0 leading-none", className)}
-      style={{ fontSize: size }}
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center leading-none",
+        className,
+      )}
+      style={{ width: size, height: size, fontSize: size }}
     >
       {icon}
     </span>

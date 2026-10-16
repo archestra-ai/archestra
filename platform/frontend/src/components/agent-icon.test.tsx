@@ -20,6 +20,23 @@ describe("AgentIcon", () => {
     expect(container).not.toHaveTextContent("logo:github");
   });
 
+  it("keeps an emoji in a square box of the requested size", () => {
+    render(<AgentIcon icon="🤖" size={20} />);
+
+    expect(screen.getByText("🤖")).toHaveStyle({
+      width: "20px",
+      height: "20px",
+    });
+  });
+
+  it("keeps a non-square logo in a square box", () => {
+    render(<AgentIcon icon="/uploads/tall-logo.svg" size={20} />);
+
+    expect(screen.getByRole("img", { name: "Agent icon" })).toHaveClass(
+      "aspect-square",
+    );
+  });
+
   it("draws the APPA Keeper for its icon token, not literal text", () => {
     const { container } = render(
       <AgentIcon icon={APPA_KEEPER_AGENT_ICON} size={20} />,

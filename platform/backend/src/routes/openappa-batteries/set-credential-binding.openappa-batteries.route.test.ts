@@ -1,3 +1,4 @@
+import { parseOpenappaDeclarations } from "@archestra/openappa-rs";
 import { ADMIN_ROLE_NAME, ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
@@ -16,6 +17,7 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ToolModel from "@/models/tool";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import { openappaDeclarations } from "@/openappa/declarations";
 import helperRoutes from "@/routes/openappa-helpers/openappa-helpers.routes";
 import { OPENAPPA_HELPERS_PREFIX } from "@/routes/route-paths";
@@ -27,7 +29,11 @@ import type { User } from "@/types";
 import routes from "./openappa-batteries.routes";
 
 const GITHUB_TOKEN = "APPA_PROVIDER_GITHUB_TOKEN";
+const ANNOTATOR_TOKEN = "APPA_P5_ANNOTATOR_TOKEN";
+const ANNOTATOR_KEY = "p5-annotator";
 const TOKEN_VALUE = "ghp_bound_under_test";
+const ANNOTATOR_VALUE = "p5-fixture-token";
+const HOST_ENV_CANARY = "host-env-must-not-leak";
 
 describe("binding a battery credential", () => {
   let app: FastifyInstanceWithZod;
@@ -57,16 +63,18 @@ describe("binding a battery credential", () => {
   });
 
   /** An organization credential with a value, which a binding may name. */
-  const connectGithubToken = async () => {
+  const connectCredential = async (params: {
+    key: string;
+    name: string;
+    value: string;
+  }) => {
     await RuntimeCredentialDefinitionModel.create({
-      // Not shared with the organization, which a new credential is by
-      // default: these tests decide who else may use it.
       initialPermissionGrants: [],
       organizationId,
       createdBy: admin.id,
       definition: {
-        key: "github-token",
-        name: "GitHub token",
+        key: params.key,
+        name: params.name,
         kind: "secret",
         description: "",
         icon: null,
@@ -78,7 +86,15 @@ describe("binding a battery credential", () => {
       organizationId,
       scope: "organization",
       userId: null,
-      credentialId: "github-token",
+      credentialId: params.key,
+      value: params.value,
+    });
+  };
+
+  const connectGithubToken = async () => {
+    await connectCredential({
+      key: "github-token",
+      name: "GitHub token",
       value: TOKEN_VALUE,
     });
   };
@@ -329,14 +345,336 @@ describe("binding a battery credential", () => {
     });
   });
 
-  test("a key with no organization value and a variable outside the provider namespace are refused", async () => {
+  test("a key with no organization value and a host-reserved variable are refused", async () => {
     expect((await bind("github-token")).statusCode).toBe(400);
     expect((await bind("github-token", "HOME")).statusCode).toBe(400);
+    await connectCredential({
+      key: ANNOTATOR_KEY,
+      name: "P5 annotator",
+      value: ANNOTATOR_VALUE,
+    });
+    const reserved = await bind(ANNOTATOR_KEY, "APPA_ARCHESTRA_BRIDGE_TOKEN");
+    expect(reserved.statusCode).toBe(400);
     expect(await OpenAppaCredentialBindingModel.list(organizationId)).toEqual(
       [],
     );
   });
+
+  test("a root HTTP token_env resolves the organization credential, not the process environment", async ({
+    makeOrganization,
+  }) => {
+    await connectCredential({
+      key: ANNOTATOR_KEY,
+      name: "P5 annotator",
+      value: ANNOTATOR_VALUE,
+    });
+    const bound = await bind(ANNOTATOR_KEY, ANNOTATOR_TOKEN);
+    expect(bound.statusCode, bound.body).toBe(200);
+    expect(bound.json().credentialBindings).toEqual([
+      { variable: ANNOTATOR_TOKEN, key: ANNOTATOR_KEY },
+    ]);
+    const root = await guardrailsPolicyService.get(organizationId);
+    const saved = await guardrailsPolicyService.update({
+      organizationId,
+      userId: admin.id,
+      content: annotatorPolicy(root.content, "http://127.0.0.1:9/annotate"),
+      expectedRevision: root.revision,
+    });
+    const effective = await openappaBatteriesService.recompile(organizationId);
+    expect(effective.lastError).toBeNull();
+    expect(effective.content).toContain(`token_env = "${ANNOTATOR_TOKEN}"`);
+    expect(effective.content).not.toContain(`${ANNOTATOR_TOKEN} =`);
+    const prior = process.env[ANNOTATOR_TOKEN];
+    process.env[ANNOTATOR_TOKEN] = HOST_ENV_CANARY;
+    try {
+      const dispatched = await openappaDeclarations.dispatchPolicy({
+        organizationId,
+        content: effective.content,
+      });
+      expect(dispatched.credentials[ANNOTATOR_TOKEN]).toBe(ANNOTATOR_VALUE);
+      expect(dispatched.credentials[ANNOTATOR_TOKEN]).not.toBe(HOST_ENV_CANARY);
+      const other = (await makeOrganization()).id;
+      const crossOrg = await openappaDeclarations.dispatchPolicy({
+        organizationId: other,
+        content: effective.content,
+      });
+      expect(crossOrg.credentials[ANNOTATOR_TOKEN]).toBeUndefined();
+    } finally {
+      if (prior === undefined) delete process.env[ANNOTATOR_TOKEN];
+      else process.env[ANNOTATOR_TOKEN] = prior;
+    }
+
+    await RuntimeCredentialConnectionModel.delete({
+      organizationId,
+      scope: "organization",
+      userId: null,
+      credentialId: ANNOTATOR_KEY,
+    });
+    process.env[ANNOTATOR_TOKEN] = HOST_ENV_CANARY;
+    try {
+      const missing = await openappaDeclarations.dispatchPolicy({
+        organizationId,
+        content: effective.content,
+      });
+      expect(missing.credentials[ANNOTATOR_TOKEN]).toBeUndefined();
+    } finally {
+      delete process.env[ANNOTATOR_TOKEN];
+    }
+    expect(saved.revision).toBeGreaterThan(root.revision);
+  });
+
+  test("retargeting a bound root HTTP annotator requires use on that credential", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    await connectCredential({
+      key: ANNOTATOR_KEY,
+      name: "P5 annotator",
+      value: ANNOTATOR_VALUE,
+    });
+    expect((await bind(ANNOTATOR_KEY, ANNOTATOR_TOKEN)).statusCode).toBe(200);
+    const policyOnly = await makeCustomRole(organizationId, {
+      permission: { openappaPolicy: ["read", "update"] },
+    });
+    const editor = await makeUser();
+    await makeMember(editor.id, organizationId, { role: policyOnly.role });
+    const root = await guardrailsPolicyService.get(organizationId);
+    await expect(
+      guardrailsPolicyService.update({
+        organizationId,
+        userId: editor.id,
+        content: annotatorPolicy(root.content, "http://127.0.0.1:9/annotate"),
+        expectedRevision: root.revision,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+
+    const saved = await guardrailsPolicyService.update({
+      organizationId,
+      userId: admin.id,
+      content: annotatorPolicy(root.content, "http://127.0.0.1:9/annotate"),
+      expectedRevision: root.revision,
+    });
+    const unrelated = `${annotatorPolicy(root.content, "http://127.0.0.1:9/annotate")}\n[[policy.tool]]\nname = "notes__keep"\ndelta = {}\n`;
+    const kept = await guardrailsPolicyService.update({
+      organizationId,
+      userId: editor.id,
+      content: unrelated,
+      expectedRevision: saved.revision,
+    });
+    await expect(
+      guardrailsPolicyService.update({
+        organizationId,
+        userId: editor.id,
+        content: annotatorPolicy(
+          root.content,
+          "https://attacker.example/annotate",
+        ),
+        expectedRevision: kept.revision,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    expect(
+      (await guardrailsPolicyService.get(organizationId)).content,
+    ).toContain("http://127.0.0.1:9/annotate");
+    expect(
+      (await guardrailsPolicyService.get(organizationId)).content,
+    ).not.toContain("attacker.example");
+  });
+
+  test("retargeting a quoted, escaped, or dotted HTTP reader requires use", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    await connectCredential({
+      key: ANNOTATOR_KEY,
+      name: "P5 annotator",
+      value: ANNOTATOR_VALUE,
+    });
+    expect((await bind(ANNOTATOR_KEY, ANNOTATOR_TOKEN)).statusCode).toBe(200);
+    const policyOnly = await makeCustomRole(organizationId, {
+      permission: { openappaPolicy: ["read", "update"] },
+    });
+    const editor = await makeUser();
+    await makeMember(editor.id, organizationId, { role: policyOnly.role });
+    const names = ['say"hi', "say\\hi", "say'hi", "p5.note"] as const;
+    let revision = (await guardrailsPolicyService.get(organizationId)).revision;
+    const base = (await guardrailsPolicyService.get(organizationId)).content;
+    for (const name of names) {
+      const native = await parseOpenappaDeclarations(
+        namedAnnotator(base, name, "http://127.0.0.1:9/annotate"),
+      );
+      expect(native.tokenEnvReaders[0]?.reader).toContain(
+        "externals.annotators.",
+      );
+      if (name === 'say"hi')
+        expect(native.tokenEnvReaders[0]?.reader).toBe(
+          `externals.annotators.'say"hi'`,
+        );
+      if (name === "say\\hi")
+        expect(native.tokenEnvReaders[0]?.reader).toBe(
+          "externals.annotators.'say\\hi'",
+        );
+      const saved = await guardrailsPolicyService.update({
+        organizationId,
+        userId: admin.id,
+        content: namedAnnotator(base, name, "http://127.0.0.1:9/annotate"),
+        expectedRevision: revision,
+      });
+      const kept = await guardrailsPolicyService.update({
+        organizationId,
+        userId: editor.id,
+        content: `${namedAnnotator(base, name, "http://127.0.0.1:9/annotate")}\n[[policy.tool]]\nname = "notes__keep"\ndelta = {}\n`,
+        expectedRevision: saved.revision,
+      });
+      const reordered = await guardrailsPolicyService.update({
+        organizationId,
+        userId: editor.id,
+        content: namedAnnotator(
+          base,
+          name,
+          "http://127.0.0.1:9/annotate",
+          true,
+        ),
+        expectedRevision: kept.revision,
+      });
+      await expect(
+        guardrailsPolicyService.update({
+          organizationId,
+          userId: editor.id,
+          content: namedAnnotator(
+            base,
+            name,
+            "https://attacker.example/annotate",
+          ),
+          expectedRevision: reordered.revision,
+        }),
+      ).rejects.toMatchObject({ statusCode: 403 });
+      expect(
+        (await guardrailsPolicyService.get(organizationId)).content,
+      ).not.toContain("attacker.example");
+      revision = reordered.revision;
+    }
+  });
+
+  test("switching an llm provider without a URL requires use on the bound token", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    await connectCredential({
+      key: "llm-token",
+      name: "LLM token",
+      value: "llm-fixture-token",
+    });
+    expect((await bind("llm-token", "APPA_LLM_TOKEN")).statusCode).toBe(200);
+    const policyOnly = await makeCustomRole(organizationId, {
+      permission: { openappaPolicy: ["read", "update"] },
+    });
+    const editor = await makeUser();
+    await makeMember(editor.id, organizationId, { role: policyOnly.role });
+    const root = await guardrailsPolicyService.get(organizationId);
+    await expect(
+      guardrailsPolicyService.update({
+        organizationId,
+        userId: editor.id,
+        content: llmPolicy(root.content, "anthropic"),
+        expectedRevision: root.revision,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    const saved = await guardrailsPolicyService.update({
+      organizationId,
+      userId: admin.id,
+      content: llmPolicy(root.content, "anthropic"),
+      expectedRevision: root.revision,
+    });
+    const kept = await guardrailsPolicyService.update({
+      organizationId,
+      userId: editor.id,
+      content: `${llmPolicy(root.content, "anthropic")}\n[[policy.tool]]\nname = "notes__keep"\ndelta = {}\n`,
+      expectedRevision: saved.revision,
+    });
+    await expect(
+      guardrailsPolicyService.update({
+        organizationId,
+        userId: editor.id,
+        content: llmPolicy(root.content, "openai"),
+        expectedRevision: kept.revision,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    expect(
+      (await guardrailsPolicyService.get(organizationId)).content,
+    ).toContain('provider = "anthropic"');
+  });
+
+  test("a URL token_env cannot name a provider credential", async () => {
+    const root = await guardrailsPolicyService.get(organizationId);
+    await expect(
+      guardrailsPolicyService.update({
+        organizationId,
+        userId: admin.id,
+        content: annotatorPolicy(
+          root.content,
+          "http://127.0.0.1:9/annotate",
+        ).replace(ANNOTATOR_TOKEN, "APPA_PROVIDER_P5_ANNOTATOR_TOKEN"),
+        expectedRevision: root.revision,
+      }),
+    ).rejects.toThrow(/outside APPA_PROVIDER_/);
+  });
 });
+
+function namedAnnotator(
+  base: string,
+  name: string,
+  url: string,
+  reorder = false,
+): string {
+  const key = /^[A-Za-z0-9_-]+$/.test(name) ? name : JSON.stringify(name);
+  const fields = reorder
+    ? `token_env = '${ANNOTATOR_TOKEN}'\nurl = '${url}'`
+    : `url = "${url}"\ntoken_env = "${ANNOTATOR_TOKEN}"`;
+  return `${base}
+[[policy.annotator]]
+name = ${JSON.stringify(name)}
+ranks = ["suspicious"]
+audiences = ["self"]
+marks = []
+
+[[policy.tool]]
+name = "notes__share"
+annotator = ${JSON.stringify(name)}
+
+[externals.annotators.${key}]
+${fields}
+`;
+}
+
+function llmPolicy(base: string, provider: string): string {
+  return `${base}
+[externals.llm]
+provider = "${provider}"
+model = "claude"
+token_env = "APPA_LLM_TOKEN"
+`;
+}
+
+function annotatorPolicy(base: string, url: string): string {
+  return `${base}
+[[policy.annotator]]
+name = "p5.note"
+ranks = ["suspicious"]
+audiences = ["self"]
+marks = []
+
+[[policy.tool]]
+name = "notes__share"
+annotator = "p5.note"
+
+[externals.annotators."p5.note"]
+url = "${url}"
+token_env = "${ANNOTATOR_TOKEN}"
+`;
+}
 
 /** Grant one person `use` on a credential, the way its Permissions tab would. */
 async function grantCredentialUse(params: {

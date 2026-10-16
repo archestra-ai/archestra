@@ -131,6 +131,51 @@ test('a probe-declared spawn starts its child once, under the real call', { skip
   assert.equal(result.decision, 'ack', "the crossed value is the spawn's result");
 });
 
+test('projected return contracts are selectable and authority offers stay untyped', { skip: !databaseUrl }, async () => {
+  await native.initializeOpenappa(databaseUrl, 2);
+  const run = family();
+  const probe = await run.hook(run.parent, run.spawnCall('s1:declare'));
+  assert.equal(probe.decision, 'deny_call', JSON.stringify(probe));
+  const asSpoken = probe.offers.find((offer) => offer.returns === 'as_spoken');
+  const attested = probe.offers.find((offer) => offer.returns && offer.returns.sanitizer === 'attest-schema');
+  assert.ok(asSpoken && attested && asSpoken.offer_id !== attested.offer_id, JSON.stringify(probe.offers));
+  assert.ok(probe.offers.every((offer) => offer.returns === 'as_spoken' || offer.returns?.sanitizer === 'attest-schema'));
+
+  const authority = await run.hook(run.parent, run.call('inbox', 'read_inbox'));
+  assert.equal(authority.decision, 'deny_call', JSON.stringify(authority));
+  assert.ok(authority.offers?.length, JSON.stringify(authority));
+  assert.ok(
+    authority.offers.every((offer) => offer.returns === undefined && offer.input_sanitizer === undefined),
+    JSON.stringify(authority.offers),
+  );
+
+  await assert.rejects(
+    () => run.remedy(run.parent, 's1:not-a-schema', {
+      offer_id: asSpoken.offer_id,
+      label: {},
+      return_schema: schema,
+    }),
+    /return_schema/,
+    'an as-spoken offer must not accept a schema',
+  );
+  const spoken = await run.remedy(run.parent, 's1:return', { offer_id: asSpoken.offer_id, label: {} });
+  assert.equal(spoken.result?.isError, false, JSON.stringify(spoken));
+
+  const attestedRun = family();
+  await assert.rejects(
+    () => startSpawn(attestedRun, {
+      type: 'object',
+      properties: { note: { type: 'string' } },
+      required: ['note'],
+    }),
+    /return_schema.*does not compile/,
+  );
+  assert.equal((await attestedRun.hook(attestedRun.parent, attestedRun.spawnCall('s1'))).decision, 'deny_call');
+  const declared = await startSpawn(family(), schema);
+  assert.equal(declared.declared.result.isError, false);
+  assert.equal(declared.call.decision, 'allow_call');
+});
+
 test('an attested return schema admits only bounded leaves', { skip: !databaseUrl }, async () => {
   await native.initializeOpenappa(databaseUrl, 2);
   const run = family();

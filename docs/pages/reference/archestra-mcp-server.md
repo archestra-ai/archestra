@@ -2975,7 +2975,7 @@ Required RBAC permission: `update` on the MCP gateway (granted per item)
 | `validate_guardrails_policy` | Validate proposed organization.appa.toml without applying changes. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `preview_guardrails_policy_change` | Validate a proposed change to organization.appa.toml and return its unified `diff` and `changed` line counts. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `update_guardrails_policy` | Publish a change to organization.appa.toml. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
-| `bind_guardrails_credential` | Bind one battery credential variable to a runtime credential key, or pass key null to unbind it. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
+| `bind_guardrails_credential` | Bind one credential variable to a runtime credential key, or pass key null to unbind it. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
 | `get_openappa_policy_tests` | Read the authoritative .appa validation files, their version, configured directory and accepted Git commit. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `run_openappa_policy_tests` | Replay saved validations offline against the current policy and record the result in validation run history. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
 | `preview_guardrails_validation_change` | Validate a proposed change to the .appa validation files and replay it. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
@@ -3190,7 +3190,7 @@ Required RBAC permission: [`openappaPolicy:update`](/docs/reference/permissions#
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `variable` | `string` | Yes | The battery's credential variable, e.g. APPA_PROVIDER_GITHUB_TOKEN. |
+| `variable` | `string` | Yes | A battery credential (APPA_PROVIDER_GITHUB_TOKEN) or a root HTTP token variable (APPA_P5_ANNOTATOR_TOKEN). Not an APPA_ARCHESTRA_* host setting. |
 | `key` | `string \| null` | Yes | The runtime credential key to bind, or null to unbind. |
 
 

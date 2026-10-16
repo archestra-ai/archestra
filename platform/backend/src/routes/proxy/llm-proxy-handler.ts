@@ -715,6 +715,7 @@ export async function handleLLMProxy<
     childTrajectoryReceipts = stripChildTrajectoryReceiptsFromRequest({
       family: requestWireFamily,
       body,
+      strip: false,
     });
     childTrajectoryReceipts.push(
       ...opaqueProofs.flatMap(
@@ -737,6 +738,7 @@ export async function handleLLMProxy<
       }),
     );
     const childReturnOptions = {
+      claudeAgentMetadata: nativeClient?.id === "claude-code",
       // Kilo Code frames its background tasks as OpenCode does.
       openCodeBackgroundReturns:
         !!nativeClient && isOpenCodeFamilyClient(nativeClient.id),
@@ -752,6 +754,12 @@ export async function handleLLMProxy<
       childReturnRefusal = error;
       childReturns = { completions: [] };
     }
+    // Decode native hand-back indentation before removing transport receipts;
+    // stripping first leaves whitespace that does not match the crossed value.
+    stripChildTrajectoryReceiptsFromRequest({
+      family: requestWireFamily,
+      body,
+    });
   }
   // Restores original provider call IDs before request processing, logging,
   // or plugin rulings: the trajectory stamps first, then any stamp a
@@ -1954,10 +1962,6 @@ export async function handleLLMProxy<
                   platformLoopback && incomingAppaSessionHeader !== undefined
                     ? undefined
                     : callerId,
-                // Bind fallback root if no session was provided.
-                fallbackSessionId: callerId
-                  ? `${callerId}@${resolvedAgent.id}`
-                  : undefined,
               }),
         });
         // The executor signed the trajectory its spawn bound; the child's own
@@ -1973,27 +1977,21 @@ export async function handleLLMProxy<
           // The launcher stored the authenticated parent before giving the pod data.
           openappaSession = runtimeSession;
         }
-        if (!openappaSession)
-          throw new ApiError(
+        if (!openappaSession) {
+          // A credential-scoped fallback would let unrelated conversations end
+          // each other's offers. A fresh ID per request would lose restrictions.
+          const error = new ApiError(
             400,
-            "OpenAPPA requires valid X-Appa-Session-ID and optional X-Appa-Parent-ID headers",
+            "Guardrails require a stable session ID. Send the same X-Appa-Session-ID with every request in this conversation, or reconnect a supported client that supplies its native session ID. Use a different ID for each independent conversation.",
           );
+          error.shouldRetry = false;
+          throw error;
+        }
         if (forkOf && callerId && openappaSession)
           openappaSession = {
             ...openappaSession,
             fork_of: scopedSessionId(callerId, forkOf),
           };
-        if (
-          callerId &&
-          openappaSession?.session_id === `${callerId}@${resolvedAgent.id}`
-        ) {
-          // Every conversation of this credential on this agent now shares one
-          // root: a turn ending in one releases the offers of the others.
-          logger.warn(
-            { agentId: resolvedAgent.id, callerId },
-            "OpenAPPA bound a fallback root because the client reported no session",
-          );
-        }
       } else if (
         appaObserving &&
         !delegatedRun &&

@@ -152,6 +152,18 @@ function classify(error: unknown): {
       statusCode: 500,
       detail: `the organization's guardrails policy was refused (${summarize(message)}). An administrator can fix it on the ${POLICY_PAGE} page.`,
     };
+  // The native bridge exposes this configuration refusal as an exception, not
+  // a decision. Keep it refused without telling clients that retrying will help.
+  if (
+    /^OpenAPPA processing interrupted: tool [^\r\n]+ is not declared in this policy and no wildcard covers it; the call is refused before it runs$/.test(
+      message,
+    )
+  )
+    return {
+      statusCode: 500,
+      detail:
+        "the organization's guardrails policy has no contract for the requested tool. An administrator can add a contract on the OpenAPPA page, or remove the tool from this client's available tools. Retrying the same request will not add a contract.",
+    };
   if (message.startsWith("OpenAPPA had no free PostgreSQL connection"))
     return {
       statusCode: 503,

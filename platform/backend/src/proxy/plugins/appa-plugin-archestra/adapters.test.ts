@@ -219,6 +219,38 @@ describe("APPA child trajectory adapters", () => {
     }
   });
 
+  test("classifies a Claude Code session transport as a session, not a teammate", () => {
+    const message = (to: string, body: unknown = "Report") =>
+      claudeCode.relayMessage({
+        name: "SendMessage",
+        arguments: { to, message: body },
+      });
+    expect(message("team-lead")?.to).toEqual({ kind: "lead" });
+    expect(message("main")?.to).toEqual({ kind: "lead" });
+    expect(message("*")?.to).toEqual({ kind: "broadcast" });
+    expect(message("auditor")?.to).toEqual({
+      kind: "teammate",
+      name: "auditor",
+    });
+    for (const to of [
+      "uds:/tmp/peer.sock",
+      "bridge:peer",
+      "local_agent",
+      "/tmp/peer.sock",
+      "\\\\.\\pipe\\peer",
+      "auditor [abc123]",
+    ]) {
+      expect(message(to)?.to).toEqual({ kind: "session", id: to });
+    }
+    expect(message("auditor", "")).toBeUndefined();
+    expect(
+      claudeCode.relayMessage({
+        name: "Bash",
+        arguments: { to: "uds:/tmp/peer.sock", message: "Report" },
+      }),
+    ).toBeUndefined();
+  });
+
   test("keeps Claude Code Skill in-session before a real child spawn", () => {
     expect(claudeCode.isSpawnTool("Skill")).toBe(false);
     expect(claudeCode.isSpawnTool("host/claude-code/Skill")).toBe(false);
@@ -661,6 +693,9 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
       `Async agent launched successfully.\nagentId: ${"a".repeat(129)}`,
       '{"status":"async_launched","agent_id":"bad id"}',
       "The agent is working in the background.\nagentId: a1",
+      // Live foreground Agent result. It is a final return, not a launch ack.
+      // Classifying it as a launch would skip the missing-record refusal.
+      "  \nfixture-child\n\nresult: replied with the single word fixture-child as requested; nothing was blocked, so no remedy steps were needed.",
     ]) {
       const malformed = { ...claudeLaunch, content };
       expect(claudeCode.normalizeChildLaunchResult(malformed)).toBeUndefined();

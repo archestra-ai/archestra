@@ -198,6 +198,56 @@ describe("bind_guardrails_credential", () => {
     expect(await storedKey()).toBeNull();
   });
 
+  test("binds a root HTTP token and refuses a host-reserved variable", async () => {
+    await RuntimeCredentialDefinitionModel.create({
+      initialPermissionGrants: [],
+      organizationId,
+      createdBy: adminId,
+      definition: {
+        key: "p5-annotator",
+        name: "P5 annotator",
+        kind: "secret",
+        description: "",
+        icon: null,
+        allowPersonal: false,
+        allowOrganization: true,
+      },
+    });
+    await RuntimeCredentialConnectionModel.upsert({
+      organizationId,
+      scope: "organization",
+      userId: null,
+      credentialId: "p5-annotator",
+      value: "p5-fixture-token",
+    });
+    const bound = await executeArchestraTool(
+      "archestra__bind_guardrails_credential",
+      { variable: "APPA_P5_ANNOTATOR_TOKEN", key: "p5-annotator" },
+      { agent, organizationId, userId: adminId },
+    );
+    expect(bound.isError).toBeFalsy();
+    expect(
+      (
+        await OpenAppaCredentialBindingModel.find({
+          organizationId,
+          variable: "APPA_P5_ANNOTATOR_TOKEN",
+        })
+      )?.credentialKey,
+    ).toBe("p5-annotator");
+    const reserved = await executeArchestraTool(
+      "archestra__bind_guardrails_credential",
+      { variable: "APPA_ARCHESTRA_BRIDGE_TOKEN", key: "p5-annotator" },
+      { agent, organizationId, userId: adminId },
+    );
+    expect(reserved.isError).toBe(true);
+    expect(
+      await OpenAppaCredentialBindingModel.find({
+        organizationId,
+        variable: "APPA_ARCHESTRA_BRIDGE_TOKEN",
+      }),
+    ).toBeNull();
+  });
+
   test("a key with no organization value is refused as a tool error", async () => {
     expect(errorText(await bind("no-such-key"))).toBe(
       "Error: no-such-key is not a credential with an organization value",

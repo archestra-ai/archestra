@@ -3,6 +3,7 @@ import config from "@/config";
 import {
   collectAndStripChildReturns,
   mintChildReturnMarker,
+  parentVisibleChildReturn,
 } from "./child-return";
 import { mintChildTrajectoryReceipt } from "./child-trajectory-receipt";
 import { stampToolCallId } from "./trajectory-stamp";
@@ -19,9 +20,87 @@ const RETURN = {
   value: "SUMMARY(24 characters): safe",
 } as const;
 
+describe("verified child id line", () => {
+  test.each([
+    "fixture-alpha\nagentId: decoy stays in the data",
+    "fixture-alpha\nagentId: aa55bbf1408e6091d (use SendMessage with to: 'aa55bbf1408e6091d')",
+    "agentId: not-the-child\nfixture-alpha",
+  ])("preserves admitted data through repeated native presentation: %s", (value) => {
+    const visible = parentVisibleChildReturn(value, "aa55bbf1408e6091d");
+    const body = {
+      messages: [
+        {
+          role: "assistant",
+          content: [
+            { type: "tool_use", id: "spawn-id", name: "Agent", input: {} },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            { type: "tool_result", tool_use_id: "spawn-id", content: visible },
+          ],
+        },
+      ],
+    };
+    const original = JSON.stringify(body);
+    for (let pass = 0; pass < 2; pass++) {
+      const { completions } = collectAndStripChildReturns(body, {
+        claudeAgentMetadata: true,
+      });
+      expect(completions).toEqual([
+        expect.objectContaining({ value, childNativeId: "aa55bbf1408e6091d" }),
+      ]);
+      expect(JSON.stringify(body)).toBe(original);
+    }
+  });
+});
+
 describe("OpenAPPA child-return markers", () => {
   beforeEach(() => {
     config.openappa.offerSigningSecret = SECRET;
+  });
+
+  test("keeps id-like lines inside an indented native report as data", () => {
+    const value =
+      "start\nagentId: not-the-child\n<usage>this is report data</usage>\nend";
+    const report = `${value}\n\n${mintChildReturnMarker({ ...RETURN, value })}`;
+    const body = {
+      messages: [
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: RETURN.spawnCallId,
+              name: "Agent",
+              input: {},
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: RETURN.spawnCallId,
+              content: `[Subagent hand-back] The report follows:\n${report
+                .split("\n")
+                .map((line) => `  ${line}`)
+                .join(
+                  "\n",
+                )}\nagentId: ${RETURN.childNativeId}\n<usage>tokens: 10</usage>`,
+            },
+          ],
+        },
+      ],
+    };
+    const { completions } = collectAndStripChildReturns(body, {
+      claudeAgentMetadata: true,
+    });
+    expect(completions).toEqual([
+      expect.objectContaining({ value, childNativeId: RETURN.childNativeId }),
+    ]);
   });
 
   test("preserves prose, schemas, and unrelated tool content byte-exact", () => {

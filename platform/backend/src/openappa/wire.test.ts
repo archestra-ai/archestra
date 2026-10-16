@@ -475,6 +475,15 @@ describe("child trajectory receipt text carriers", () => {
       ["assistant", contexts[1]],
     ] as const) {
       const body = { messages: [{ role, content }] };
+      const original = JSON.stringify(body);
+      expect(
+        stripChildTrajectoryReceiptsFromRequest({
+          family: "anthropic:messages",
+          body,
+          strip: false,
+        }),
+      ).toEqual([]);
+      expect(JSON.stringify(body)).toBe(original);
       const receipts = stripChildTrajectoryReceiptsFromRequest({
         family: "anthropic:messages",
         body,
@@ -485,6 +494,15 @@ describe("child trajectory receipt text carriers", () => {
     const ownContext = {
       messages: [{ role: "assistant", content: `${footer}\n\n${contexts[1]}` }],
     };
+    const originalContext = JSON.stringify(ownContext);
+    expect(
+      stripChildTrajectoryReceiptsFromRequest({
+        family: "anthropic:messages",
+        body: ownContext,
+        strip: false,
+      }),
+    ).toEqual([expect.objectContaining({ childId: "s1:a1:g1" })]);
+    expect(JSON.stringify(ownContext)).toBe(originalContext);
     expect(
       stripChildTrajectoryReceiptsFromRequest({
         family: "anthropic:messages",
@@ -506,6 +524,15 @@ describe("child trajectory receipt text carriers", () => {
         },
       ],
     };
+    const originalResult = JSON.stringify(toolResult);
+    expect(
+      stripChildTrajectoryReceiptsFromRequest({
+        family: "anthropic:messages",
+        body: toolResult,
+        strip: false,
+      }),
+    ).toEqual([]);
+    expect(JSON.stringify(toolResult)).toBe(originalResult);
     expect(
       stripChildTrajectoryReceiptsFromRequest({
         family: "anthropic:messages",

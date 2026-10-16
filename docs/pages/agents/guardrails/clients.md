@@ -77,6 +77,8 @@ Reuse `$SESSION_ID` when sending tool results back to the model.
 - Any string up to 512 bytes works (no control characters). It does not need to be a UUID.
 - [`X-Archestra-Session-Id`](/docs/llm-proxy#custom-headers) labels requests in logs, but Guardrails ignore it. When you send both `X-Archestra-Session-Id` and `X-Appa-Session-ID`, use the same value for both.
 
+If a recognized client sends no session ID, the proxy rejects the request with HTTP 400 before contacting the model. Reconnect the client or supply `X-Appa-Session-ID`; repeating the request without an ID does not fix it. Sharing an API key does not give separate conversations a shared Guardrails session.
+
 ## Unrecognized Clients
 
 By default, Guardrails let an unrecognized client through, unchecked. To change that, go to **Settings → Guardrails** and set **Other clients**:
@@ -92,3 +94,5 @@ Work handed to another agent stays under the same policy.
 
 - **Subagents:** a subagent runs in its own session. The parent decides before it starts what it may return. Its answer passes a [checked return path](https://www.openappa.com/contracts#remedy-plans-and-child-returns).
 - **Claude Code teammates:** a message that adds no restrictions arrives directly. Any other message waits. The receiver can read it with [`read_peer_message`](/docs/reference/archestra-mcp-server#read_peer_message), and then takes on its restrictions.
+
+Address Claude Code teammates by name, send to the team lead, or use the ID returned for a spawned subagent. The recipient must belong to the verified task family. Socket paths, `bridge:` addresses, and `local_` session addresses cannot identify a checked recipient, so Guardrails refuse those sends. Your policy still applies to each message, including any explicit approval requirement.

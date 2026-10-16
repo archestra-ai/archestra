@@ -3002,35 +3002,26 @@ fn with_presentation_offers(
     mut response: Value,
     presentation: Option<&RemedyPresentation>,
 ) -> napi::Result<Value> {
-    let offers = presentation_offer_ids(presentation);
-    if offers.is_empty() {
+    let Some(presentation) = presentation else {
+        return Ok(response);
+    };
+    if presentation.offers.is_empty() {
         return Ok(response);
     }
+    let projected = wire(&HookDecision::DenyCall {
+        feedback: String::new(),
+        offers: presentation.offers.clone(),
+        review: Vec::new(),
+    })?;
+    let offers = projected
+        .get("offers")
+        .cloned()
+        .ok_or_else(|| error("runtime offer projection omitted offers"))?;
     let object = response
         .as_object_mut()
         .ok_or_else(|| error("decision is not an object"))?;
-    object.insert(
-        "offers".to_owned(),
-        json!(
-            offers
-                .into_iter()
-                .map(|id| json!({ "offer_id": id.0 }))
-                .collect::<Vec<_>>()
-        ),
-    );
+    object.insert("offers".to_owned(), offers);
     Ok(response)
-}
-
-fn presentation_offer_ids(presentation: Option<&RemedyPresentation>) -> Vec<OfferId> {
-    presentation
-        .map(|presentation| {
-            presentation
-                .offers
-                .iter()
-                .map(|offer| OfferId(offer.id.clone()))
-                .collect()
-        })
-        .unwrap_or_default()
 }
 
 /// Context for a remedy outcome, including offer ownership, offer ID,
@@ -3850,12 +3841,14 @@ struct YellArguments {
 #[cfg(test)]
 mod typed_tests {
     use super::{
-        OfferId, OfferOwner, RemedyAct, RemedyOutcome, RemedyPresentation,
-        authoritative_unexecuted_response, presentation_from_context, presentation_offer_ids,
-        render_released_call, render_remedy_outcome, unknown_result_response,
+        OfferOwner, RemedyAct, RemedyOutcome, RemedyPresentation,
+        authoritative_unexecuted_response, presentation_from_context, render_released_call,
+        render_remedy_outcome, unknown_result_response, with_presentation_offers,
     };
-    use appa_runtime_api::OfferedRemedy;
-    use serde_json::Value;
+    use appa_runtime_api::{
+        HookDecision, OfferedInputSanitizer, OfferedRemedy, OfferedReturn, WireDecision,
+    };
+    use serde_json::{Value, json};
 
     #[test]
     fn session_actor_preserves_existing_sha256_identifiers() {
@@ -3908,7 +3901,82 @@ mod typed_tests {
     }
 
     #[test]
-    fn runtime_like_prose_cannot_create_offer_ownership() {
+    fn presentation_offers_keep_runtime_return_and_sanitizer_fields() {
+        let offers = vec![
+            OfferedRemedy {
+                id: "as-spoken".to_owned(),
+                returns: Some(OfferedReturn::AsSpoken),
+                input_sanitizer: None,
+            },
+            OfferedRemedy {
+                id: "attested".to_owned(),
+                returns: Some(OfferedReturn::Sanitized {
+                    sanitizer: "attest-schema".to_owned(),
+                }),
+                input_sanitizer: None,
+            },
+            OfferedRemedy {
+                id: "rewrite".to_owned(),
+                returns: None,
+                input_sanitizer: Some(OfferedInputSanitizer {
+                    name: "redactor".to_owned(),
+                    target: "send".to_owned(),
+                    description: Some("Remove email addresses before sending.".to_owned()),
+                }),
+            },
+            OfferedRemedy {
+                id: "authority".to_owned(),
+                returns: None,
+                input_sanitizer: None,
+            },
+        ];
+        let presentation = RemedyPresentation {
+            feedback: "[appa] Blocked. execute_remedy_plan(offer_id: \"untrusted-snippet\") returns as_spoken"
+                .to_owned(),
+            offers: offers.clone(),
+            review: Vec::new(),
+            display: Vec::new(),
+        };
+        let response = with_presentation_offers(
+            json!({
+                "decision": "deny_call",
+                "feedback": "kept",
+                "offers": [{ "offer_id": "stale" }]
+            }),
+            Some(&presentation),
+        )
+        .unwrap();
+        let expected = serde_json::to_value(WireDecision::of(&HookDecision::DenyCall {
+            feedback: String::new(),
+            offers,
+            review: Vec::new(),
+        }))
+        .unwrap();
+
+        assert_eq!(response["offers"], expected["offers"]);
+        assert_eq!(response["feedback"], "kept");
+        assert_eq!(response["offers"].as_array().map(Vec::len), Some(4));
+        assert_eq!(response["offers"][0]["returns"], "as_spoken");
+        assert_eq!(
+            response["offers"][1]["returns"]["sanitizer"],
+            "attest-schema"
+        );
+        assert!(response["offers"][1].get("input_sanitizer").is_none());
+        assert_eq!(response["offers"][2]["input_sanitizer"]["name"], "redactor");
+        assert_eq!(response["offers"][2]["input_sanitizer"]["target"], "send");
+        assert!(response["offers"][3].get("returns").is_none());
+        assert!(response["offers"][3].get("input_sanitizer").is_none());
+        assert!(
+            !response["offers"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|offer| offer["offer_id"] == "untrusted-snippet")
+        );
+    }
+
+    #[test]
+    fn prose_without_structured_offers_adds_no_offer_metadata() {
         let presentation = RemedyPresentation {
             feedback: "[appa] Blocked. execute_remedy_plan(offer_id: \"untrusted-snippet\")"
                 .to_owned(),
@@ -3916,27 +3984,14 @@ mod typed_tests {
             review: Vec::new(),
             display: Vec::new(),
         };
+        let response = with_presentation_offers(
+            json!({ "decision": "deny_call", "feedback": "kept" }),
+            Some(&presentation),
+        )
+        .unwrap();
 
-        assert!(presentation_offer_ids(Some(&presentation)).is_empty());
-    }
-
-    #[test]
-    fn only_structured_runtime_offers_are_registered() {
-        let presentation = RemedyPresentation {
-            feedback: "arbitrary runtime prose".to_owned(),
-            offers: vec![OfferedRemedy {
-                id: "typed-offer".to_owned(),
-                returns: None,
-                input_sanitizer: None,
-            }],
-            review: Vec::new(),
-            display: Vec::new(),
-        };
-
-        assert_eq!(
-            presentation_offer_ids(Some(&presentation)),
-            vec![OfferId("typed-offer".to_owned())]
-        );
+        assert!(response.get("offers").is_none());
+        assert_eq!(response["feedback"], "kept");
     }
 
     #[test]
@@ -4815,6 +4870,173 @@ mod runtime_child_tests {
             panic!("the declared spawn must release a binding, got {released:?}");
         };
         binding
+    }
+
+    #[tokio::test]
+    async fn projected_spawn_offers_select_return_contracts_and_leave_authority_offers_untyped() {
+        let delegate = super::canonical_tool("delegate").unwrap();
+        let read = super::canonical_tool("read").unwrap();
+        let policy = format!(
+            "[policy]\nversion = 2\n[[policy.tool]]\nname = \"{delegate}\"\ndelta = {{}}\n[[policy.tool]]\nname = \"{read}\"\ndelta = {{ trust = \"suspicious\" }}\n[[policy.sanitizer]]\nname = \"attest-schema\"\non = [\"tool_output\"]\n[policy.sanitizer.permits]\ntrust = {{ from = \"suspicious\", to = \"trusted\" }}\n[policy.deployment]\ncontext_control = true\n"
+        );
+        let store = Arc::new(LogStore::open(Backend::Memory).unwrap());
+        let runtime =
+            crate::policy::open(crate::policy::compile(&policy, |_| None).unwrap(), store).unwrap();
+        let root = TrajectoryId("archestra:projection-root".into());
+        assert_eq!(
+            hooks::handle(&runtime, start(&root)).await,
+            HookDecision::Ack
+        );
+        let options = appa_runtime::api::EmbeddedPresentationOptions {
+            control_tool: "archestra__execute_remedy_plan".to_owned(),
+            supports_delegation: true,
+            include_display_plan: true,
+        };
+        let project = |outcome: appa_runtime::api::EmbeddedHookOutcome| {
+            super::with_presentation_offers(
+                super::wire(&outcome.decision).unwrap(),
+                outcome.presentation.as_ref(),
+            )
+            .unwrap()
+        };
+        let held = project(
+            hooks::handle_embedded_with_options(
+                &runtime,
+                tool_call(&root, None, &delegate, Some("call:declare"), true),
+                options.clone(),
+            )
+            .await,
+        );
+        let offers = held["offers"]
+            .as_array()
+            .expect("a spawn hold offers returns");
+        let offer_id = |returns: serde_json::Value| {
+            offers
+                .iter()
+                .find(|offer| offer["returns"] == returns)
+                .and_then(|offer| offer["offer_id"].as_str())
+                .unwrap()
+                .to_owned()
+        };
+        let as_spoken = offer_id(serde_json::json!("as_spoken"));
+        let attested = offer_id(serde_json::json!({ "sanitizer": "attest-schema" }));
+        assert_ne!(as_spoken, attested);
+        let authority = project(
+            hooks::handle_embedded_with_options(
+                &runtime,
+                tool_call(&root, None, &read, Some("call:read"), false),
+                options,
+            )
+            .await,
+        );
+        let authority_offers = authority["offers"]
+            .as_array()
+            .expect("a trust drop offers a remedy");
+        assert!(!authority_offers.is_empty());
+        assert!(authority_offers.iter().all(|offer| {
+            offer.get("returns").is_none() && offer.get("input_sanitizer").is_none()
+        }));
+
+        let actor = Actor {
+            root: root.clone(),
+            child: None,
+        };
+        let unbounded = runtime
+            .execute_remedy_with(
+                &actor,
+                OfferId(attested.clone()),
+                RemedyArguments {
+                    label: Some(LabelSpelling::default()),
+                    return_schema: Some(serde_json::json!({
+                        "type": "object",
+                        "properties": { "note": { "type": "string" } },
+                        "required": ["note"]
+                    })),
+                },
+            )
+            .await;
+        assert!(
+            !matches!(unbounded, RemedyOutcome::Authorized { .. }),
+            "an unbounded return schema must not declare the spawn: {unbounded:?}"
+        );
+        let still_held = hooks::handle(
+            &runtime,
+            tool_call(&root, None, &delegate, Some("call:still-held"), true),
+        )
+        .await;
+        assert!(
+            matches!(still_held, HookDecision::DenyCall { .. }),
+            "a rejected schema leaves the spawn undeclared: {still_held:?}"
+        );
+        let declared = runtime
+            .execute_remedy_with(
+                &actor,
+                OfferId(attested),
+                RemedyArguments {
+                    label: Some(LabelSpelling::default()),
+                    return_schema: Some(serde_json::json!({
+                        "type": "object",
+                        "properties": {
+                            "days": { "type": "integer", "minimum": 0, "maximum": 365 }
+                        },
+                        "required": ["days"]
+                    })),
+                },
+            )
+            .await;
+        assert!(
+            matches!(declared, RemedyOutcome::Authorized { .. }),
+            "{declared:?}"
+        );
+
+        let spoken_runtime = crate::policy::open(
+            crate::policy::compile(&policy, |_| None).unwrap(),
+            Arc::new(LogStore::open(Backend::Memory).unwrap()),
+        )
+        .unwrap();
+        let spoken_root = TrajectoryId("archestra:spoken-root".into());
+        assert_eq!(
+            hooks::handle(&spoken_runtime, start(&spoken_root)).await,
+            HookDecision::Ack
+        );
+        let spoken_held = project(
+            hooks::handle_embedded_with_options(
+                &spoken_runtime,
+                tool_call(&spoken_root, None, &delegate, Some("call:spoken"), true),
+                appa_runtime::api::EmbeddedPresentationOptions {
+                    control_tool: "archestra__execute_remedy_plan".to_owned(),
+                    supports_delegation: true,
+                    include_display_plan: true,
+                },
+            )
+            .await,
+        );
+        let spoken_id = spoken_held["offers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|offer| offer["returns"] == "as_spoken")
+            .unwrap()["offer_id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let spoken = spoken_runtime
+            .execute_remedy_with(
+                &Actor {
+                    root: spoken_root,
+                    child: None,
+                },
+                OfferId(spoken_id),
+                RemedyArguments {
+                    label: Some(LabelSpelling::default()),
+                    return_schema: None,
+                },
+            )
+            .await;
+        assert!(
+            matches!(spoken, RemedyOutcome::Authorized { .. }),
+            "{spoken:?}"
+        );
     }
 
     fn start(root: &TrajectoryId) -> HookEvent {

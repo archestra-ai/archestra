@@ -117,7 +117,7 @@ import { ResourcePermissions } from "@/services/resource-permissions";
 import { ApiError, UuidIdSchema } from "@/types";
 import { ValidateGuardrailsPolicySchema } from "@/types/guardrails-policy";
 import { ProposedGuardrailsPolicySchema } from "@/types/guardrails-policy-proposal";
-import { BATTERY_CREDENTIAL_VARIABLE } from "@/types/openappa-batteries";
+import { BINDABLE_CREDENTIAL_VARIABLE } from "@/types/openappa-batteries";
 import type { CoverageTool } from "@/types/openappa-coverage";
 import {
   type ExternalConsult,
@@ -914,13 +914,13 @@ const registry = defineArchestraTools([
     shortName: "bind_guardrails_credential",
     title: "Bind OpenAPPA battery credential",
     description:
-      "Bind one battery credential variable to a runtime credential key, or pass key null to unbind it. The binding is stored beside the policy, not in its text, so it needs no policy change and works while Git sync owns the policy. One variable has one key for the whole organization: every battery whose `credentials` list it is in reads that key. Use the variable names list_guardrails_battery_fits returns and keys from list_runtime_credentials that have an organization value. A variable bound by a `[credentials]` line in the policy text is refused; that line wins until a policy change removes it (update_guardrails_policy; with Git sync, through the repository). Returns every declared battery with its credentials and their source.",
+      "Bind one credential variable to a runtime credential key, or pass key null to unbind it. The binding is stored beside the policy, not in its text, so it needs no policy change and works while Git sync owns the policy. One variable has one key for the whole organization. Use an `APPA_PROVIDER_*` name from list_guardrails_battery_fits for a battery helper, or another `APPA_*` name (not `APPA_PROVIDER_*` or `APPA_ARCHESTRA_*`) for a root HTTP `token_env`, for example APPA_P5_ANNOTATOR_TOKEN. Use keys from list_runtime_credentials that have an organization value. A variable bound by a `[credentials]` line in the policy text is refused; that line wins until a policy change removes it (update_guardrails_policy; with Git sync, through the repository). Do not put a URL token in `[credentials]`: that table only admits `APPA_PROVIDER_*`, which a URL `token_env` cannot use. Returns every declared battery with its credentials and their source.",
     schema: z.strictObject({
       variable: z
         .string()
-        .regex(BATTERY_CREDENTIAL_VARIABLE)
+        .regex(BINDABLE_CREDENTIAL_VARIABLE)
         .describe(
-          "The battery's credential variable, e.g. APPA_PROVIDER_GITHUB_TOKEN.",
+          "A battery credential (APPA_PROVIDER_GITHUB_TOKEN) or a root HTTP token variable (APPA_P5_ANNOTATOR_TOKEN). Not an APPA_ARCHESTRA_* host setting.",
         ),
       key: z
         .string()

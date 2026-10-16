@@ -451,11 +451,14 @@ export function appendSessionReceiptToResponse(params: {
 export function stripChildTrajectoryReceiptsFromRequest(params: {
   family: AppaWireFamily;
   body: unknown;
+  /** Collect proofs before decoding native return framing, without altering it. */
+  strip?: boolean;
 }): AppaChildTrajectoryReceipt[] {
   const receipts: AppaChildTrajectoryReceipt[] = [];
   // A receipt returned by a tool belongs to its callee, never to the caller.
   for (const site of toolResultTextSites(params.family, params.body)) {
-    site.set(stripChildTrajectoryReceipts(site.get()).text);
+    if (params.strip !== false)
+      site.set(stripChildTrajectoryReceipts(site.get()).text);
   }
   for (const site of historyTextSites(params.family, params.body)) {
     // SDK reminders and summaries can wrap notifications in prose. Strip the
@@ -467,7 +470,7 @@ export function stripChildTrajectoryReceiptsFromRequest(params: {
         (envelope) => stripChildTrajectoryReceipts(envelope).text,
       );
     const stripped = stripChildTrajectoryReceipts(text);
-    site.set(stripped.text);
+    if (params.strip !== false) site.set(stripped.text);
     receipts.push(...stripped.receipts);
   }
   return receipts;

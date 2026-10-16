@@ -147,10 +147,7 @@ import {
   stripChildTrajectoryReceiptsFromRequest,
   stripSessionReceiptsFromRequest,
 } from "@/openappa/wire";
-import {
-  asRecord,
-  parseJsonHeader,
-} from "@/proxy/plugins/appa-plugin-archestra/adapters/trajectory";
+import { parseJsonHeader } from "@/proxy/plugins/appa-plugin-archestra/adapters/trajectory";
 import {
   APPA_CLIENT_ADAPTERS,
   appaTrajectory,
@@ -200,6 +197,7 @@ import {
   type OpenAiCodexPassthrough,
   type ToolCallBlock,
 } from "@/types";
+import { asRecord } from "@/utils/as-record";
 import { trackBackgroundWork } from "@/utils/background-work";
 import { repairLoneSurrogates } from "@/utils/lone-surrogates";
 import { isLoopbackRequest } from "@/utils/network";

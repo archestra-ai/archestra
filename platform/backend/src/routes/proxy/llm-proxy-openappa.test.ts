@@ -4236,6 +4236,65 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(toolEcho.body).not.toContain("protected session");
   });
 
+  test.for([
+    { decision: "release" as const },
+    { decision: "replace" as const },
+  ])("records a buffered stream's session receipt as issued only on release ($decision)", async ({
+    decision,
+  }) => {
+    config.openappa = {
+      ...config.openappa,
+      offerSigningSecret: "test-context-secret-with-32-characters",
+    };
+    options = { includeToolUse: false, streamStopReason: "end_turn" };
+    const unregister = registerLlmProxyPlugin({
+      id: "test-buffered-receipt",
+      buffersModelResponse: () => true,
+      async onBufferedModelResponse() {
+        return decision === "replace"
+          ? { decision, responseText: "REPLACED ANSWER" }
+          : { decision };
+      },
+    });
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: {
+          ...externalClientHeaders(),
+          "user-agent": "claude-cli/2.1.278 (external, cli)",
+          "x-claude-code-session-id": "68c625e3-1b2c-4d3e-8f90-a1b2c3d4e5f6",
+        },
+        payload: payload(true),
+      });
+      await drainBackgroundWork();
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.body.includes("REPLACED ANSWER")).toBe(
+        decision === "replace",
+      );
+      expect(response.body.includes("protected session")).toBe(
+        decision === "release",
+      );
+      const sessions = await db
+        .select()
+        .from(database.schema.openappaSessionsTable)
+        .where(
+          eq(
+            database.schema.openappaSessionsTable.organizationId,
+            agent.organizationId,
+          ),
+        );
+      expect(sessions.some((row) => row.receiptToken !== null)).toBe(true);
+      expect(sessions.some((row) => row.receiptIssuedAt !== null)).toBe(
+        decision === "release",
+      );
+    } finally {
+      unregister();
+    }
+  });
+
   test("keeps the session mark off a client's tool-less side call", async () => {
     config.openappa = {
       ...config.openappa,

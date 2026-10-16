@@ -6,6 +6,7 @@ import {
 import type { AppaSessionIdentity } from "@/openappa/wire";
 import { ApiError } from "@/types";
 import type { CommonToolResult } from "@/types/common-llm-format";
+import { asRecord } from "@/utils/as-record";
 import type {
   AppaClientAdapter,
   AppaMatchContext,
@@ -21,7 +22,6 @@ import { openCodeQuestionRuling } from "./native-question-ruling";
 const QUESTION_HEADER_MAX_LENGTH = 30;
 
 import {
-  asRecord,
   bindMintedChildTrajectory,
   namesChildrenFromArguments,
   stringField,

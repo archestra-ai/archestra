@@ -742,6 +742,13 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
           canEditCurrentAgent &&
           !hasNonBuiltInTools && (
             <AddToolsButton
+              // Tucked into the end of the tool circles when there are any,
+              // so it reads as the next one in the stack.
+              overlap={
+                triggerSubagents.length > 0 ||
+                assignedServers.length > 0 ||
+                knowledgeSources.some((source) => source.connectorType)
+              }
               onClick={() => openQuickEdit(currentAgent.id, "add-tools")}
             />
           )}
@@ -1260,7 +1267,13 @@ function AgentToolIcons({
 }
 
 /** Shortcut for an agent with no tools of its own; opens Add tools. */
-function AddToolsButton({ onClick }: { onClick: () => void }) {
+function AddToolsButton({
+  overlap,
+  onClick,
+}: {
+  overlap: boolean;
+  onClick: () => void;
+}) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -1269,7 +1282,13 @@ function AddToolsButton({ onClick }: { onClick: () => void }) {
           size="icon-xs"
           aria-label="Add tools"
           onClick={onClick}
-          className="ml-1 rounded-full bg-muted hover:bg-muted/80 size-5"
+          className={cn(
+            "size-5 rounded-full bg-muted hover:bg-muted/80",
+            // The agent button's end padding plus the row gap leave 20px
+            // between the last circle and this one; -ml-4 closes that to the
+            // circles' own 6px overlap.
+            overlap ? "relative -ml-4 ring-1 ring-background" : "ml-1",
+          )}
         >
           <Plus className="size-3 text-muted-foreground" />
         </Button>

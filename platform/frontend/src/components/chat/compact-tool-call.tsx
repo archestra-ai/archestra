@@ -34,6 +34,7 @@ import {
   getHumanRulingDisplay,
   getToolErrorText,
   getToolHeaderState,
+  withParsedArguments,
 } from "@/lib/chat/chat-tools-display.utils";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { cn } from "@/lib/utils/tailwind";
@@ -66,7 +67,6 @@ import {
 import {
   RemedyChainCard,
   RemedyGuardrailsSteps,
-  withParsedArguments,
 } from "./openappa-remedy-chain-card";
 import {
   getRemedyChainStatus,

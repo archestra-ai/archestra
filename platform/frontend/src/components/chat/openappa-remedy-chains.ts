@@ -153,6 +153,9 @@ export function identifyRemedyChains(
       const offerId = (part.input as { offer_id?: unknown } | undefined)
         ?.offer_id;
       if (typeof offerId !== "string" || offerId.length === 0) continue;
+      // The ruling text is the only place a remedy's offer is tied to its
+      // blocked call. A plain search is enough because the runtime mints each
+      // offer id as a unique 16-character hex string.
       chains
         .findLast(
           (chain) => isOpen(chain) && chain.rulingText.includes(offerId),

@@ -250,6 +250,10 @@ describe("MCP Gateway - subscriptions/listen route", () => {
     const provider = new node.NodeTracerProvider({
       spanProcessors: [new tracing.SimpleSpanProcessor(exporter)],
     });
+    // Workers are shared between test files: replace the global provider only
+    // for this test, as a second registration would be ignored.
+    const originalProvider = trace.getTracerProvider();
+    trace.disable();
     provider.register();
     const started: Span[] = [];
     try {
@@ -312,6 +316,7 @@ describe("MCP Gateway - subscriptions/listen route", () => {
       trace.disable();
       context.disable();
       propagation.disable();
+      trace.setGlobalTracerProvider(originalProvider);
     }
   });
 });

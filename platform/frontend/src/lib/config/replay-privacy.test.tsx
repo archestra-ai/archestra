@@ -37,6 +37,10 @@ describe("replay privacy", () => {
     "/knowledge/files",
     "/skills/skill-id",
     "/a/app-id",
+    "/openappa/policy",
+    "/openappa/validation/file",
+    "/guardrails-v2",
+    "/tools",
   ])("blocks text and hidden attributes on %s", async (pathname) => {
     vi.mocked(usePathname).mockReturnValue(pathname);
     render(
@@ -128,7 +132,7 @@ describe("replay privacy", () => {
       capture_pageview: false,
       capture_pageleave: false,
       before_send: (event) => {
-        captured.push(event);
+        captured.push(config.posthog.config.before_send(event));
         return null;
       },
     });
@@ -140,13 +144,44 @@ describe("replay privacy", () => {
       link.addEventListener("click", (event) => event.preventDefault());
       document.body.append(link);
       link.click();
-      analytics.capture("message_sent", { messageLength: 10 });
+      analytics.capture("message_sent", {
+        messageLength: 10,
+        $current_url:
+          "https://example.com/chat?user_prompt=private-prompt#private-hash",
+        $referrer: "https://example.com/oauth-callback?code=private-code",
+        $set_once: {
+          $initial_current_url:
+            "https://example.com/chat?user_prompt=private-initial-prompt",
+        },
+      });
 
       expect(JSON.stringify(captured)).toContain('"message_sent"');
       expect(JSON.stringify(captured)).not.toContain('"$autocapture"');
       expect(JSON.stringify(captured)).not.toContain("private-");
     } finally {
       analytics.opt_out_capturing();
+    }
+  });
+
+  it("strips private query strings and fragments from replay and network URLs", () => {
+    const maskUrl =
+      config.posthog.config.session_recording.maskCapturedNetworkRequestFn;
+    for (const [name, expected] of [
+      [
+        "https://example.com/chat?user_prompt=private-prompt#private-fragment",
+        "https://example.com/chat",
+      ],
+      [
+        "https://example.com/oauth-callback?code=private-code",
+        "https://example.com/oauth-callback",
+      ],
+      ["/api/chat?token=private-token", "/api/chat"],
+      ["https://example.com/llm/usage", "https://example.com/llm/usage"],
+    ]) {
+      // Replay metadata invokes the callback with only the URL name.
+      const result = maskUrl({ name } as Parameters<typeof maskUrl>[0]);
+      expect(result.name).toBe(expected);
+      expect(JSON.stringify(result)).not.toContain("private-");
     }
   });
 

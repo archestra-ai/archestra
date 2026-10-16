@@ -21,6 +21,10 @@ export function isSensitiveReplayPath(pathname: string | null): boolean {
   );
 }
 
+export function stripTelemetryUrlContent(url: string): string {
+  return url.split(/[?#]/)[0];
+}
+
 // Block whole surfaces, including identifiers and URLs held in DOM attributes.
 const SENSITIVE_PATHS = [
   "/chat",
@@ -40,6 +44,9 @@ const SENSITIVE_PATHS = [
   "/skills",
   "/plugins",
   "/knowledge",
+  "/openappa",
+  "/guardrails-v2",
+  "/tools",
   "/apps",
   "/a",
   "/review",

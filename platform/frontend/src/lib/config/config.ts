@@ -1,7 +1,10 @@
 import { DEFAULT_INTERNAL_API_BASE_URL } from "@archestra/shared/consts";
 import { env } from "next-runtime-env";
 import type { PostHogConfig } from "posthog-js";
-import { REPLAY_BLOCK_SELECTOR } from "@/lib/telemetry-privacy";
+import {
+  REPLAY_BLOCK_SELECTOR,
+  stripTelemetryUrlContent,
+} from "@/lib/telemetry-privacy";
 
 const environment: "development" | "production" =
   (process.env.NODE_ENV?.toLowerCase() as "development" | "production") ??
@@ -251,6 +254,28 @@ export default {
       // Keep interaction analytics without collecting page content.
       autocapture: false,
       enable_recording_console_log: false,
+      before_send: (event) => {
+        if (!event) return event;
+        for (const properties of [
+          event.properties,
+          event.properties.$set,
+          event.properties.$set_once,
+        ]) {
+          if (!properties || typeof properties !== "object") continue;
+          for (const key of [
+            "$current_url",
+            "$referrer",
+            "$initial_current_url",
+            "$initial_referrer",
+          ]) {
+            const value = properties[key];
+            if (typeof value === "string") {
+              properties[key] = stripTelemetryUrlContent(value);
+            }
+          }
+        }
+        return event;
+      },
       session_recording: {
         maskAllInputs: true,
         maskTextSelector: "*",
@@ -258,6 +283,11 @@ export default {
         captureCanvas: { recordCanvas: false },
         recordHeaders: false,
         recordBody: false,
+        // This callback also masks replay page URLs and navigation metadata.
+        maskCapturedNetworkRequestFn: (data) => ({
+          ...data,
+          name: stripTelemetryUrlContent(data.name),
+        }),
       },
     } satisfies Partial<PostHogConfig>,
   },

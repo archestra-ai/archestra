@@ -19,6 +19,7 @@ import {
   getHumanRulingDisplay,
   getToolErrorText,
   getToolHeaderState,
+  withParsedArguments,
 } from "@/lib/chat/chat-tools-display.utils";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { getToolCardTitle } from "./chat-messages.utils";
@@ -129,26 +130,6 @@ export function RemedyGuardrailsSteps({
       </div>
     </div>
   );
-}
-
-/**
- * A denial notice carries the blocked call's arguments in their wire form.
- * When that form is a JSON string, show the object it holds.
- */
-export function withParsedArguments(
-  input: ToolUIPart["input"],
-): ToolUIPart["input"] {
-  if (typeof input !== "object" || input === null) return input;
-  const { arguments: args } = input as { arguments?: unknown };
-  if (typeof args !== "string") return input;
-  try {
-    return {
-      ...(input as Record<string, unknown>),
-      arguments: JSON.parse(args),
-    };
-  } catch {
-    return input;
-  }
 }
 
 // === Internal helpers ===

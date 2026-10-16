@@ -205,3 +205,23 @@ export function isCompactEligible(params: {
 
   return true;
 }
+
+/**
+ * A denial notice carries the blocked call's arguments in their wire form.
+ * When that form is a JSON string, show the object it holds.
+ */
+export function withParsedArguments(
+  input: ToolUIPart["input"],
+): ToolUIPart["input"] {
+  if (typeof input !== "object" || input === null) return input;
+  const { arguments: args } = input as { arguments?: unknown };
+  if (typeof args !== "string") return input;
+  try {
+    return {
+      ...(input as Record<string, unknown>),
+      arguments: JSON.parse(args),
+    };
+  } catch {
+    return input;
+  }
+}

@@ -554,6 +554,24 @@ export function ChatMessages({
     () => new Set(subagentToolCalls.keys()),
     [subagentToolCalls],
   );
+  // Shared by the tool cards below, guarded or not.
+  const sendUserText = (text: string) =>
+    session?.sendMessage({
+      role: "user",
+      parts: [{ type: "text", text }],
+      metadata: { createdAt: new Date().toISOString() },
+    });
+  const subagentCallsFor = (toolCallId: string | undefined) =>
+    toolCallId && subagentParentToolCallIds.has(toolCallId) ? (
+      <SubagentToolCalls
+        parentToolCallId={toolCallId}
+        subagentToolCalls={subagentToolCalls}
+        canExpandToolCalls={canExpandToolCalls}
+        connectedCatalogIds={orchestrator.connectedCatalogIds}
+        getToolShortName={getToolShortName}
+        toolIconMap={toolIconMap}
+      />
+    ) : null;
 
   if (
     messages.length === 0 &&
@@ -743,27 +761,9 @@ export function ChatMessages({
                                       toolResultPart: entry.toolResultPart,
                                       errorText: entry.errorText,
                                       remedyChain: entry.remedyChain,
-                                      nestedToolCalls:
-                                        subagentParentToolCallIds.has(
-                                          entryCallId(entry),
-                                        ) ? (
-                                          <SubagentToolCalls
-                                            parentToolCallId={entryCallId(
-                                              entry,
-                                            )}
-                                            subagentToolCalls={
-                                              subagentToolCalls
-                                            }
-                                            canExpandToolCalls={
-                                              canExpandToolCalls
-                                            }
-                                            connectedCatalogIds={
-                                              orchestrator.connectedCatalogIds
-                                            }
-                                            getToolShortName={getToolShortName}
-                                            toolIconMap={toolIconMap}
-                                          />
-                                        ) : null,
+                                      nestedToolCalls: subagentCallsFor(
+                                        entryCallId(entry),
+                                      ),
                                     },
                             )}
                             toolIconMap={toolIconMap}
@@ -773,14 +773,7 @@ export function ChatMessages({
                             appContext={{
                               agentId,
                               earlyToolUiStarts,
-                              onSendMessage: (text) =>
-                                session?.sendMessage({
-                                  role: "user",
-                                  parts: [{ type: "text", text }],
-                                  metadata: {
-                                    createdAt: new Date().toISOString(),
-                                  },
-                                }),
+                              onSendMessage: sendUserText,
                             }}
                           />
                         );
@@ -817,15 +810,7 @@ export function ChatMessages({
                                 ? earlyToolUiStarts[releasedId]
                                 : undefined
                             }
-                            onSendMessage={(text) =>
-                              session?.sendMessage({
-                                role: "user",
-                                parts: [{ type: "text", text }],
-                                metadata: {
-                                  createdAt: new Date().toISOString(),
-                                },
-                              })
-                            }
+                            onSendMessage={sendUserText}
                             nestedToolCalls={
                               <>
                                 <RemedyGuardrailsSteps
@@ -834,19 +819,7 @@ export function ChatMessages({
                                     onToolApprovalResponse
                                   }
                                 />
-                                {releasedId &&
-                                subagentParentToolCallIds.has(releasedId) ? (
-                                  <SubagentToolCalls
-                                    parentToolCallId={releasedId}
-                                    subagentToolCalls={subagentToolCalls}
-                                    canExpandToolCalls={canExpandToolCalls}
-                                    connectedCatalogIds={
-                                      orchestrator.connectedCatalogIds
-                                    }
-                                    getToolShortName={getToolShortName}
-                                    toolIconMap={toolIconMap}
-                                  />
-                                ) : null}
+                                {subagentCallsFor(releasedId)}
                               </>
                             }
                           />
@@ -1425,15 +1398,7 @@ export function ChatMessages({
                                   ? earlyToolUiStarts[part.toolCallId]
                                   : undefined
                               }
-                              onSendMessage={(text) =>
-                                session?.sendMessage({
-                                  role: "user",
-                                  parts: [{ type: "text", text }],
-                                  metadata: {
-                                    createdAt: new Date().toISOString(),
-                                  },
-                                })
-                              }
+                              onSendMessage={sendUserText}
                             />
                           );
                         }
@@ -1548,15 +1513,7 @@ export function ChatMessages({
                                 }
                                 getToolShortName={getToolShortName}
                                 toolIconMap={toolIconMap}
-                                onSendMessage={(text) =>
-                                  session?.sendMessage({
-                                    role: "user",
-                                    parts: [{ type: "text", text }],
-                                    metadata: {
-                                      createdAt: new Date().toISOString(),
-                                    },
-                                  })
-                                }
+                                onSendMessage={sendUserText}
                                 earlyToolUiData={earlyToolUiStarts[tcId]}
                               />
                             );
@@ -1623,30 +1580,8 @@ export function ChatMessages({
                                 earlyToolUiData={
                                   tcId ? earlyToolUiStarts[tcId] : undefined
                                 }
-                                onSendMessage={(text) =>
-                                  session?.sendMessage({
-                                    role: "user",
-                                    parts: [{ type: "text", text }],
-                                    metadata: {
-                                      createdAt: new Date().toISOString(),
-                                    },
-                                  })
-                                }
-                                nestedToolCalls={
-                                  tcId &&
-                                  subagentParentToolCallIds.has(tcId) ? (
-                                    <SubagentToolCalls
-                                      parentToolCallId={tcId}
-                                      subagentToolCalls={subagentToolCalls}
-                                      canExpandToolCalls={canExpandToolCalls}
-                                      connectedCatalogIds={
-                                        orchestrator.connectedCatalogIds
-                                      }
-                                      getToolShortName={getToolShortName}
-                                      toolIconMap={toolIconMap}
-                                    />
-                                  ) : null
-                                }
+                                onSendMessage={sendUserText}
+                                nestedToolCalls={subagentCallsFor(tcId)}
                               />
                             );
                           }

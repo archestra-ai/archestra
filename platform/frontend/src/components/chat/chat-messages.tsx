@@ -555,23 +555,36 @@ export function ChatMessages({
     [subagentToolCalls],
   );
   // Shared by the tool cards below, guarded or not.
-  const sendUserText = (text: string) =>
-    session?.sendMessage({
-      role: "user",
-      parts: [{ type: "text", text }],
-      metadata: { createdAt: new Date().toISOString() },
-    });
-  const subagentCallsFor = (toolCallId: string | undefined) =>
-    toolCallId && subagentParentToolCallIds.has(toolCallId) ? (
-      <SubagentToolCalls
-        parentToolCallId={toolCallId}
-        subagentToolCalls={subagentToolCalls}
-        canExpandToolCalls={canExpandToolCalls}
-        connectedCatalogIds={orchestrator.connectedCatalogIds}
-        getToolShortName={getToolShortName}
-        toolIconMap={toolIconMap}
-      />
-    ) : null;
+  const sendUserText = useCallback(
+    (text: string) =>
+      session?.sendMessage({
+        role: "user",
+        parts: [{ type: "text", text }],
+        metadata: { createdAt: new Date().toISOString() },
+      }),
+    [session],
+  );
+  const subagentCallsFor = useCallback(
+    (toolCallId: string | undefined) =>
+      toolCallId && subagentParentToolCallIds.has(toolCallId) ? (
+        <SubagentToolCalls
+          parentToolCallId={toolCallId}
+          subagentToolCalls={subagentToolCalls}
+          canExpandToolCalls={canExpandToolCalls}
+          connectedCatalogIds={orchestrator.connectedCatalogIds}
+          getToolShortName={getToolShortName}
+          toolIconMap={toolIconMap}
+        />
+      ) : null,
+    [
+      subagentParentToolCallIds,
+      subagentToolCalls,
+      canExpandToolCalls,
+      orchestrator.connectedCatalogIds,
+      getToolShortName,
+      toolIconMap,
+    ],
+  );
 
   if (
     messages.length === 0 &&

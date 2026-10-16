@@ -134,6 +134,27 @@ describe("identifyRemedyChains", () => {
     expect(chains.flatMap(remedyChainPartIndices)).not.toContain(2);
   });
 
+  it("links a remedy only to the ruling that offered it, not one that mentions it", () => {
+    const parts = [
+      notice({ id: "a1", tool: "fs__read", args: { p: "a" } }),
+      notice({
+        id: "b1",
+        tool: "web__fetch",
+        args: { url: "b" },
+        note: `The earlier offer ${offerFor("a1")} does not cover this call.`,
+      }),
+      remedy({ id: "a2", offerId: offerFor("a1") }),
+    ];
+
+    const [first, second] = identifyRemedyChains(parts, { getToolShortName });
+
+    expect(first.steps.map((step) => step.part.toolCallId)).toEqual([
+      "a1",
+      "a2",
+    ]);
+    expect(second.steps.map((step) => step.part.toolCallId)).toEqual(["b1"]);
+  });
+
   it("leaves a remedy whose offer no ruling names as a normal call", () => {
     const parts = [
       notice({ id: "c1", tool: "fs__read", args: {} }),
@@ -371,8 +392,10 @@ function notice(params: {
   id: string;
   tool: string;
   args: unknown;
+  /** Extra ruling prose, after the offered remedy. */
+  note?: string;
 }): UIMessage["parts"][number] {
-  const ruling = `[appa] Blocked: ${params.tool} cannot run yet.\n  - ${REMEDY}(offer_id: "${offerFor(params.id)}", plan: "Accept")`;
+  const ruling = `[appa] Blocked: ${params.tool} cannot run yet.\n  - ${REMEDY}(offer_id: "${offerFor(params.id)}", plan: "Accept")${params.note ? `\n${params.note}` : ""}`;
   return {
     type: `tool-${NOTICE}`,
     toolCallId: params.id,

@@ -190,7 +190,9 @@ export async function preflightAgentRuntimeCredentials(params: {
       throw error;
     }
     // Never resolve these for this caller: reading the organization value is
-    // exactly what they may not do.
+    // exactly what they may not do. Only saved credentials (with a
+    // credentialId) are gated, as at launch; a shared value without one still
+    // resolves below.
     for (const declaration of shared) {
       if (declaration.credentialId) {
         adminOnly.push({

@@ -528,6 +528,7 @@ jobs:
         with:
           workspaces: platform/archestra-rs
           targets: x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+          shared-key: platform-rust-checks
           cache: ${{ runner.os == 'Linux' }}
           toolchain-before-cache: "true"
 
@@ -673,6 +674,7 @@ jobs:
         uses: ./.github/actions/setup-rust-build
         with:
           workspaces: ai-labs
+          shared-key: ai-labs-rust-checks
           cache: ${{ runner.os == 'Linux' }}
           toolchain-before-cache: "true"
 

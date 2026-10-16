@@ -2,7 +2,7 @@
 title: Developer Quickstart
 description: Run Archestra from source with Tilt and a local Kubernetes cluster.
 order: 1
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -66,6 +66,14 @@ To query the development database:
 ```bash
 kubectl exec -n archestra-dev postgresql-0 -- env PGPASSWORD=archestra_dev_password psql -U archestra -d archestra_dev
 ```
+
+## Before Joining the Merge Queue
+
+Run `pnpm preflight` from a clean checkout of the finished PR revision before requesting queue entry. It checks types, lint, unused exports, white-label copy, and frontend/shared unit tests. Coding agents follow this step through `platform/AGENTS.md`; no PR label is needed.
+
+Run the relevant focused tests for your changes, too. Preflight runs locally when requested, so intermediate pushes add no preflight CI runs. The merge queue still runs the full build, backend suites, Rust checks, browser suites, and generated-file validation.
+
+If code changes after preflight, rerun it on the new revision. GitHub does not enforce this local check as a queue-admission requirement.
 
 ## Running a Second Stack
 

@@ -1,0 +1,75 @@
+name: Warm Rust Check Caches
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "platform/archestra-rs/**"
+      - "platform/rust-toolchain.toml"
+      - "ai-labs/**"
+      - ".github/actions/setup-rust-build/**"
+      - ".github/workflows/on-pull-requests.yml"
+      - ".github/workflows/warm-rust-check-caches.yml"
+  schedule:
+    - cron: "7 4 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  warm-rust-check-caches:
+    name: Warm ${{ matrix.cache-key }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - workspace: platform/archestra-rs
+            cache-key: platform-rust-checks
+            targets: x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+          - workspace: ai-labs
+            cache-key: ai-labs-rust-checks
+            targets: ""
+    concurrency:
+      group: warm-rust-check-caches-${{ matrix.cache-key }}
+      # Keep an in-flight publisher; only the newest pending revision matters.
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: ${{ matrix.workspace }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      # Match the consumer's runner, toolchain order and shared key. Queue
+      # jobs restore this default-branch entry without publishing their own.
+      - name: Restore or save Cargo dependencies
+        id: cargo-cache
+        uses: ./.github/actions/setup-rust-build
+        with:
+          workspaces: ${{ matrix.workspace }}
+          shared-key: ${{ matrix.cache-key }}
+          targets: ${{ matrix.targets }}
+          toolchain-before-cache: "true"
+
+      - name: Install musl dependencies
+        if: steps.cargo-cache.outputs.cache-hit != 'true' && matrix.targets != ''
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Warm check and test dependencies
+        if: steps.cargo-cache.outputs.cache-hit != 'true'
+        run: |
+          cargo check --workspace --all-targets --locked
+          cargo test --workspace --locked --no-run
+
+      - name: Warm musl check dependencies
+        if: steps.cargo-cache.outputs.cache-hit != 'true' && matrix.targets != ''
+        env:
+          CC_x86_64_unknown_linux_musl: musl-gcc
+        run: cargo check --workspace --locked --target x86_64-unknown-linux-musl

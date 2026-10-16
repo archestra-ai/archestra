@@ -109,7 +109,8 @@ jobs:
     timeout-minutes: 20
     concurrency:
       group: on-commits-to-main-warm-backend-cache
-      cancel-in-progress: true
+      # Finish publishing the cache; newer pending commits collapse to the latest.
+      cancel-in-progress: false
     permissions:
       contents: read # Checkout only; the product is an Actions cache entry.
     defaults:

@@ -843,7 +843,7 @@ function SidebarNewChatItem() {
     <SidebarMenuItem>
       <SidebarMenuButton
         asChild
-        tooltip="New chat"
+        tooltip="New CHAAAAAT"
         className="h-9 rounded-lg border bg-sidebar-raised font-medium shadow-xs group-data-[collapsible=icon]:border-transparent group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:shadow-none"
       >
         <SidebarPrefetchLink
@@ -853,7 +853,7 @@ function SidebarNewChatItem() {
           }}
         >
           <Plus />
-          <span className="min-w-0 flex-1 truncate">New chat</span>
+          <span className="min-w-0 flex-1 truncate">New CHAAAAAT</span>
           <ShortcutHint modifier="alt" letter={SHORTCUT_NEW_CHAT.label} />
         </SidebarPrefetchLink>
       </SidebarMenuButton>

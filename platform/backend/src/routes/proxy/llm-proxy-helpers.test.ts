@@ -806,6 +806,12 @@ describe("buildInteractionRecord", () => {
     expect(record.billingMode).toBe("metered");
     expect(record.inputTokens).toBe(100);
     expect(record.outputTokens).toBe(50);
+    expect(record.latencyMs).toBeUndefined();
+  });
+
+  test("persists request elapsed time when supplied", () => {
+    const record = buildInteractionRecord({ ...baseParams, latencyMs: 1234 });
+    expect(record.latencyMs).toBe(1234);
   });
 
   test("carries a subscription billing mode through to the record", () => {

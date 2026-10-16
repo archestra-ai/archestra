@@ -513,7 +513,7 @@ export default function SessionDetailPage({
                             </Badge>
                           </div>
                         </TableCell>
-                        <TableCell className="text-right font-mono text-xs tabular-nums text-muted-foreground">{formatRequestLatency(interaction.latencyMs)}</TableCell>
+                        <TableCell className="text-right font-mono text-xs tabular-nums text-muted-foreground">{formatRequestLatency((interaction as typeof interaction & { latencyMs?: number | null }).latencyMs)}</TableCell>
                         <TableCell className="font-mono text-xs">
                           {(interaction.inputTokens ?? 0).toLocaleString()} in /{" "}
                           {(interaction.outputTokens ?? 0).toLocaleString()} out

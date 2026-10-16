@@ -10851,6 +10851,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "latency_ms": {
+          "name": "latency_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {

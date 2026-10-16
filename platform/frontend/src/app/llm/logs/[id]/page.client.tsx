@@ -175,7 +175,7 @@ function LogDetail({
     { label: "Provider", value: interaction.provider },
     {
       label: "Latency",
-      value: <span className="font-mono tabular-nums text-muted-foreground">{formatRequestLatency(dynamicInteraction.latencyMs)}</span>,
+      value: <span className="font-mono tabular-nums text-muted-foreground">{formatRequestLatency((dynamicInteraction as typeof dynamicInteraction & { latencyMs?: number | null }).latencyMs)}</span>,
     },
     ...(failed
       ? [

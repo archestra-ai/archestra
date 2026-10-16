@@ -43,15 +43,15 @@ import { cn } from "@/lib/utils/tailwind";
 import { ValidationStatusBadge } from "../validation/_parts/validation-parts";
 import { GithubSyncSetupDialog } from "./github-sync-setup-dialog";
 import { OpenAppaChatButton } from "./openappa-chat-button";
-import { useValidationFileHashes } from "./use-validation-file-hashes";
 import {
   ValidationRunChart,
   ValidationRunChartPlaceholder,
 } from "./validation-run-chart";
 import {
-  currentValidationRun,
   validationRunBars,
   validationRunStatus,
+  validationSuiteSummary,
+  validationSummaryText,
 } from "./validation-run-history";
 
 /** Where the policy syncs from, the latest validation run, and the unresolved yells. */
@@ -221,19 +221,19 @@ function ValidationCard() {
   // Without the files (a GitHub source the viewer cannot read), the newest run
   // stands in for the current one, as before files were compared.
   const files = collection.data?.error ? undefined : collection.data?.files;
-  const hashes = useValidationFileHashes(files);
-  const known = Boolean(files && hashes.data);
-  const run = !history.data
-    ? null
-    : known && hashes.data
-      ? currentValidationRun(hashes.data, history.data)
-      : (history.data[0] ?? null);
-  const status = run ? validationRunStatus(run) : null;
-  const passed = run?.files.filter((file) => file.status === "passed").length;
+  const known = Boolean(files);
+  const summary =
+    history.data && files ? validationSuiteSummary(files, history.data) : null;
+  const newest = history.data?.[0] ?? null;
+  const fallback = !known && newest ? newest : null;
+  const status = summary?.status ?? (fallback && validationRunStatus(fallback));
+  const lastRun = summary
+    ? `Last run ${formatDate({ date: summary.runAt })} · ${validationSummaryText(summary)}`
+    : fallback
+      ? `Last run ${formatDate({ date: fallback.createdAt })} · ${fallback.files.length ? `${fallback.files.filter((file) => file.status === "passed").length} of ${fallback.files.length} passed` : "could not run"}`
+      : null;
   const pending =
-    history.isPending ||
-    (collection.isPending && !collection.isError) ||
-    (files !== undefined && hashes.isPending);
+    history.isPending || (collection.isPending && !collection.isError);
   const noFiles = known && files?.length === 0;
   return (
     <StatusCard
@@ -241,13 +241,7 @@ function ValidationCard() {
       title="Validations"
       status={
         history.isError || pending || noFiles ? undefined : (
-          <ValidationStatusBadge status={status ?? "not_run"}>
-            <span>
-              {status
-                ? `${{ passed: "Passed", failed: "Failed", cannot_run: "Cannot run" }[status]}${run?.draft ? " (draft)" : ""}`
-                : "Not run"}
-            </span>
-          </ValidationStatusBadge>
+          <ValidationStatusBadge status={status ?? "not_run"} />
         )
       }
       action={
@@ -285,16 +279,14 @@ function ValidationCard() {
           title="No validations yet"
           description="Unit tests for your policy: each checks that a case is allowed or blocked."
         />
-      ) : run ? (
+      ) : lastRun ? (
         <section
           className="space-y-3"
           aria-label="Last validation run"
           aria-live="polite"
         >
           <ValidationRunChart bars={validationRunBars(history.data ?? [])} />
-          <CardDescription className="text-center">
-            {`Last run ${formatDate({ date: run.createdAt })} · ${run.files.length ? `${passed} of ${run.files.length} passed` : "could not run"}`}
-          </CardDescription>
+          <CardDescription className="text-center">{lastRun}</CardDescription>
         </section>
       ) : (
         <ValidationRunChartPlaceholder

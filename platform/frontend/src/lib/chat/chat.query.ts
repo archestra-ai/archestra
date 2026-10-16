@@ -18,7 +18,6 @@ import { toast } from "sonner";
 import { invalidateToolAssignmentQueries } from "@/lib/agent-tools.hook";
 import { callApi } from "@/lib/chat/api-call";
 import { chatMessageQueue } from "@/lib/chat/chat-message-queue";
-import { clearReviewContext } from "@/lib/chat/chat-review-context";
 import { conversationStorageKeys } from "@/lib/chat/chat-utils";
 import {
   type ConversationFileItem,
@@ -786,9 +785,6 @@ export function useDeleteConversation() {
         for (const legacyKey of keys.legacyEncryptedChatKeys) {
           localStorage.removeItem(legacyKey);
         }
-        // Also drop any docked-review context (localStorage + in-memory map) so
-        // a deleted review chat leaves nothing behind.
-        clearReviewContext(deletedId);
       }
       // Drops both the in-memory queue and its persisted copy.
       chatMessageQueue.clear(deletedId);

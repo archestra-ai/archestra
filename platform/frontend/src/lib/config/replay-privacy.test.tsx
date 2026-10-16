@@ -39,7 +39,6 @@ describe("replay privacy", () => {
     "/a/app-id",
     "/openappa/policy",
     "/openappa/validation/file",
-    "/guardrails-v2",
     "/tools",
   ])("blocks text and hidden attributes on %s", async (pathname) => {
     vi.mocked(usePathname).mockReturnValue(pathname);

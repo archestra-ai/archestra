@@ -9,30 +9,21 @@ import {
   SecretCopyButton,
 } from "@/components/secret-copy-button";
 import { Button } from "@/components/ui/button";
-import type {
-  TeamToken,
-  useFetchTeamTokenValue,
-} from "@/lib/teams/team-token.query";
 import type { useFetchUserTokenValue } from "@/lib/user-token.query";
 
 interface CurlExampleSectionProps {
   code: string;
   tokenForDisplay: string;
-  isPersonalTokenSelected: boolean;
-  hasAdminPermission: boolean;
-  selectedTeamToken: TeamToken | null;
+  /** Whether the caller has a personal token the examples can embed. */
+  hasPersonalToken: boolean;
   fetchUserTokenMutation: ReturnType<typeof useFetchUserTokenValue>;
-  fetchTeamTokenMutation: ReturnType<typeof useFetchTeamTokenValue>;
 }
 
 export function CurlExampleSection({
   code,
   tokenForDisplay,
-  isPersonalTokenSelected,
-  hasAdminPermission,
-  selectedTeamToken,
+  hasPersonalToken,
   fetchUserTokenMutation,
-  fetchTeamTokenMutation,
 }: CurlExampleSectionProps) {
   const [showExposedToken, setShowExposedToken] = useState(false);
   const [isLoadingToken, setIsLoadingToken] = useState(false);
@@ -46,23 +37,10 @@ export function CurlExampleSection({
   const displayCode = code.replace(tokenForDisplay, displayToken);
 
   const fetchToken = useCallback(async (): Promise<string | null> => {
-    if (isPersonalTokenSelected) {
-      const result = await fetchUserTokenMutation.mutateAsync();
-      return result?.value ?? null;
-    }
-    if (selectedTeamToken) {
-      const result = await fetchTeamTokenMutation.mutateAsync(
-        selectedTeamToken.id,
-      );
-      return result?.value ?? null;
-    }
-    return null;
-  }, [
-    isPersonalTokenSelected,
-    selectedTeamToken,
-    fetchUserTokenMutation,
-    fetchTeamTokenMutation,
-  ]);
+    if (!hasPersonalToken) return null;
+    const result = await fetchUserTokenMutation.mutateAsync();
+    return result?.value ?? null;
+  }, [hasPersonalToken, fetchUserTokenMutation]);
 
   const handleExposeToken = useCallback(async () => {
     if (showExposedToken) {
@@ -85,8 +63,7 @@ export function CurlExampleSection({
     }
   }, [showExposedToken, fetchToken]);
 
-  const canResolveToken =
-    isPersonalTokenSelected || (hasAdminPermission && !!selectedTeamToken);
+  const canResolveToken = hasPersonalToken;
 
   const getSecretText = useCallback(async (): Promise<string | null> => {
     const tokenValue = exposedTokenValue ?? (await fetchToken());

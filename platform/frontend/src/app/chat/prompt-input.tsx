@@ -48,7 +48,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useProfile } from "@/lib/agent.query";
-import { dataUrlToBlob } from "@/lib/app-session-recording/app-recording-binary";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConversation, useToggleHooksDebug } from "@/lib/chat/chat.query";
 import {
@@ -70,6 +69,7 @@ import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.quer
 import { useOrganization } from "@/lib/organization.query";
 import { scanText } from "@/lib/sensitive-data";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
+import { dataUrlToBlob } from "@/lib/utils/data-url";
 import { cn } from "@/lib/utils/tailwind";
 import {
   ChatPromptInputTools,

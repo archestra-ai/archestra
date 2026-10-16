@@ -1,7 +1,5 @@
 import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import config from "@/config";
-import ToolModel from "@/models/tool";
-import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { beforeEach, describe, expect, test } from "@/test";
 import { seedCoverage } from "@/test/openappa-coverage";
 import { useRouteTestApp } from "@/test/route-test-app";
@@ -14,7 +12,7 @@ describe("GET /api/openappa/coverage/entities", () => {
     await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
   });
 
-  test("lists neither gateways nor agents, however they are asked for", async ({
+  test("lists neither gateways nor agents", async ({
     makeAgent,
     makeMember,
     makeUser,
@@ -46,82 +44,25 @@ describe("GET /api/openappa/coverage/entities", () => {
     // Only registry servers are policy targets.
     for (const url of [
       "/api/openappa/coverage/entities?search=My%20Gateway",
-      "/api/openappa/coverage/entities?type=mcp_gateway",
       `/api/openappa/coverage/entities?entityId=${ownGateway.id}&limit=1`,
       `/api/openappa/coverage/entities?entityId=${otherGateway.id}&limit=1`,
       "/api/openappa/coverage/entities?search=Unassigned",
-      "/api/openappa/coverage/entities?type=agent&search=Unassigned",
       `/api/openappa/coverage/entities?entityId=${unassigned.id}&limit=1`,
     ]) {
       const response = await ctx.app.inject({ method: "GET", url });
       expect(response.statusCode).toBe(200);
       expect(response.json().data).toEqual([]);
     }
-
-    await expect(
-      ToolModel.findCoverageInventory(ctx.organizationId, {
-        visibility: {
-          userId: ctx.user.id,
-          agentTypes: ["agent", "mcp_gateway"],
-        },
-      }),
-    ).resolves.toMatchObject({ entities: expect.any(Array) });
+    for (const type of ["agent", "mcp_gateway"]) {
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: `/api/openappa/coverage/entities?type=${type}`,
+      });
+      expect(response.statusCode).toBe(400);
+    }
   });
 
-  test("resolves an Auto mode gateway's tools and omits excluded tools", async ({
-    makeAgent,
-    makeAgentTool,
-    makeInternalMcpCatalog,
-    makeTool,
-  }) => {
-    const gateway = await makeAgent({
-      organizationId: ctx.organizationId,
-      name: "Dynamic gateway",
-      agentType: "mcp_gateway",
-      accessAllTools: true,
-    });
-    const catalog = await makeInternalMcpCatalog({
-      organizationId: ctx.organizationId,
-      name: "Projects",
-    });
-    await makeTool({
-      catalogId: catalog.id,
-      name: "projects__list",
-      rawName: "list",
-    });
-    const secondCatalog = await makeInternalMcpCatalog({
-      organizationId: ctx.organizationId,
-      name: "Other Projects",
-    });
-    await makeTool({
-      catalogId: secondCatalog.id,
-      name: "projects__list",
-      rawName: "list",
-    });
-    const excluded = await makeTool({
-      catalogId: catalog.id,
-      name: "projects__delete",
-      rawName: "delete",
-    });
-    await makeAgentTool(gateway.id, excluded.id);
-    await agentToolExclusionsService.replaceExclusions({
-      agentId: gateway.id,
-      organizationId: ctx.organizationId,
-      excludedToolIds: [excluded.id],
-    });
-    const tools = await ctx.app.inject({
-      method: "GET",
-      url: `/api/openappa/coverage/tools?entityId=${gateway.id}`,
-    });
-    expect(tools.statusCode).toBe(200);
-    expect(tools.json().data).toHaveLength(1);
-    expect(tools.json().data[0]).toMatchObject({
-      fullName: "projects__list",
-    });
-    expect(tools.json().data[0].toolId).not.toBe(excluded.id);
-  });
-
-  test("sorts by name, by type with MCP servers first, or by tool count, either way", async ({
+  test("sorts by name or by tool count, either way", async ({
     makeInternalMcpCatalog,
     makeTool,
   }) => {
@@ -151,43 +92,29 @@ describe("GET /api/openappa/coverage/entities", () => {
       large.id,
       small.id,
     ]);
-    // Ties stay by name, whichever way the type goes.
-    expect(await order("&sortBy=type")).toEqual([small.id, large.id]);
-    expect(await order("&sortBy=type&sortDirection=desc")).toEqual([
-      small.id,
-      large.id,
-    ]);
     expect(await order("&sortBy=tools&sortDirection=desc")).toEqual([
       large.id,
       small.id,
     ]);
   });
 
-  test("identifies the built-in default fallback for an assigned tool", async ({
-    makeAgent,
-    makeAgentTool,
+  test("identifies the built-in default fallback for a server's tool", async ({
     makeInternalMcpCatalog,
     makeTool,
   }) => {
-    const gateway = await makeAgent({
-      organizationId: ctx.organizationId,
-      agentType: "mcp_gateway",
-      name: "Gateway",
-    });
     const catalog = await makeInternalMcpCatalog({
       organizationId: ctx.organizationId,
       name: "Docs",
     });
-    const tool = await makeTool({
+    await makeTool({
       catalogId: catalog.id,
       name: "docs__search",
       rawName: "search",
     });
-    await makeAgentTool(gateway.id, tool.id);
 
     const response = await ctx.app.inject({
       method: "GET",
-      url: `/api/openappa/coverage/tools?entityId=${gateway.id}`,
+      url: `/api/openappa/coverage/tools?catalogId=${catalog.id}`,
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().data).toEqual([
@@ -200,16 +127,9 @@ describe("GET /api/openappa/coverage/entities", () => {
   });
 
   test("the default policy covers run_command at the root and search_tools, search_files, and load_skill through the archestra battery, and leaves other built-in tools to the fallback", async ({
-    makeAgent,
-    makeAgentTool,
     makeInternalMcpCatalog,
     makeTool,
   }) => {
-    const gateway = await makeAgent({
-      organizationId: ctx.organizationId,
-      agentType: "mcp_gateway",
-      name: "Gateway",
-    });
     const builtInCatalog = await makeInternalMcpCatalog({
       id: ARCHESTRA_MCP_CATALOG_ID,
       organizationId: null,
@@ -222,17 +142,16 @@ describe("GET /api/openappa/coverage/entities", () => {
       "load_skill",
       "list_skills",
     ]) {
-      const tool = await makeTool({
+      await makeTool({
         catalogId: builtInCatalog.id,
         name: `archestra__${rawName}`,
         rawName,
       });
-      await makeAgentTool(gateway.id, tool.id);
     }
 
     const response = await ctx.app.inject({
       method: "GET",
-      url: `/api/openappa/coverage/tools?entityId=${gateway.id}&limit=10`,
+      url: `/api/openappa/coverage/tools?catalogId=${builtInCatalog.id}&limit=10`,
     });
     expect(response.statusCode).toBe(200);
     const sources = Object.fromEntries(
@@ -389,26 +308,9 @@ describe("GET /api/openappa/coverage/entities", () => {
     });
     expect(appResponse.statusCode).toBe(200);
     expect(appResponse.json().data).toEqual([]);
-
-    const toolsResponse = await ctx.app.inject({
-      method: "GET",
-      url: `/api/openappa/coverage/tools?entityId=${agent.id}`,
-    });
-    expect(toolsResponse.statusCode).toBe(200);
-    expect(
-      toolsResponse
-        .json()
-        .data.map((tool: { fullName: string }) => tool.fullName),
-    ).toEqual([
-      "archestra__search_tools",
-      "docs__list_pages",
-      "acme__delete_item",
-      "docs__microsoft_docs_search",
-      "docs__microsoft_docs_search",
-    ]);
   });
 
-  test("narrows to the servers that reach one tool", async ({
+  test("narrows to the server of one tool", async ({
     makeInternalMcpCatalog,
     makeTool,
     makeAgent,

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   index,
   integer,
   pgTable,
@@ -11,6 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 import appsTable from "./app";
 import conversationsTable from "./conversation";
+import serviceAccountsTable from "./service-account";
 import usersTable from "./user";
 
 /**
@@ -34,9 +36,15 @@ const skillSandboxesTable = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     organizationId: text("organization_id").notNull(),
-    userId: text("user_id")
-      .notNull()
-      .references(() => usersTable.id, { onDelete: "cascade" }),
+    /** Owning person; null when a service account owns the sandbox. */
+    userId: text("user_id").references(() => usersTable.id, {
+      onDelete: "cascade",
+    }),
+    /** Owning service account; null when a person owns the sandbox. */
+    serviceAccountId: uuid("service_account_id").references(
+      () => serviceAccountsTable.id,
+      { onDelete: "cascade" },
+    ),
     /**
      * Conversation the sandbox was created from, when known. Deleting the
      * conversation (retention sweep) deletes its sandboxes and their files.
@@ -73,6 +81,7 @@ const skillSandboxesTable = pgTable(
   (table) => [
     index("skill_sandboxes_organization_id_idx").on(table.organizationId),
     index("skill_sandboxes_user_id_idx").on(table.userId),
+    index("skill_sandboxes_service_account_id_idx").on(table.serviceAccountId),
     index("skill_sandboxes_conversation_id_idx").on(table.conversationId),
     index("skill_sandboxes_app_id_idx").on(table.appId),
     uniqueIndex("skill_sandboxes_default_uidx")
@@ -84,6 +93,20 @@ const skillSandboxesTable = pgTable(
     uniqueIndex("skill_sandboxes_app_default_uidx")
       .on(table.organizationId, table.userId, table.appId)
       .where(sql`${table.isDefault} AND ${table.appId} IS NOT NULL`),
+    // A service account's rows have a NULL user_id, which the indexes above
+    // treat as distinct; key its defaults on service_account_id instead.
+    uniqueIndex("skill_sandboxes_service_account_default_uidx")
+      .on(table.organizationId, table.serviceAccountId, table.conversationId)
+      .where(sql`${table.isDefault} AND ${table.serviceAccountId} IS NOT NULL`),
+    uniqueIndex("skill_sandboxes_service_account_app_default_uidx")
+      .on(table.organizationId, table.serviceAccountId, table.appId)
+      .where(
+        sql`${table.isDefault} AND ${table.serviceAccountId} IS NOT NULL AND ${table.appId} IS NOT NULL`,
+      ),
+    check(
+      "skill_sandboxes_owner_chk",
+      sql`num_nonnulls(${table.userId}, ${table.serviceAccountId}) = 1`,
+    ),
   ],
 );
 

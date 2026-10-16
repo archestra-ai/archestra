@@ -1,3 +1,4 @@
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { ConversationModel, FileModel, ProjectModel } from "@/models";
 import { FileNameExistsError } from "@/models/file";
 import { expect, test } from "@/test";
@@ -199,4 +200,39 @@ test("insertRow rejects a duplicate filename for a user's headless (no-conversat
   await expect(
     insert({ organizationId: org.id, userId: user.id, filename: "dup.txt" }),
   ).rejects.toBeInstanceOf(FileNameExistsError);
+});
+
+test("a service account's headless filenames are unique per account, apart from people's", async ({
+  makeUser,
+  makeOrganization,
+  makeServiceAccount,
+}) => {
+  const org = await makeOrganization();
+  const user = await makeUser();
+  const account = await makeServiceAccount(org.id);
+  const accountUserId = serviceAccountUserId(account.id);
+
+  const own = await insert({
+    organizationId: org.id,
+    userId: accountUserId,
+    filename: "dup.txt",
+  });
+  await expect(
+    insert({
+      organizationId: org.id,
+      userId: accountUserId,
+      filename: "dup.txt",
+    }),
+  ).rejects.toBeInstanceOf(FileNameExistsError);
+  await expect(
+    insert({ organizationId: org.id, userId: user.id, filename: "dup.txt" }),
+  ).resolves.toBeTruthy();
+
+  const found = await FileModel.findOrphanByName({
+    organizationId: org.id,
+    userId: accountUserId,
+    filename: "dup.txt",
+  });
+  expect(found?.id).toBe(own.id);
+  expect(found?.userId).toBe(accountUserId);
 });

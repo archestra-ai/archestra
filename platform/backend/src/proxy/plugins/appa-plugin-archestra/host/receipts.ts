@@ -28,7 +28,6 @@ export class OpenappaReceipts {
   private readonly session: SessionReceipt | undefined;
   private readonly childTrajectory: ChildTrajectoryReceipt | undefined;
   private readonly compactionContext: string | undefined;
-  private buffered = false;
   private sessionReceiptPrepared = false;
 
   private constructor(params: {
@@ -103,7 +102,6 @@ export class OpenappaReceipts {
     >,
     options: { buffered: boolean },
   ): void {
-    this.buffered = options.buffered;
     if (this.compactionContext) {
       adapter.setCompactionContext?.(this.compactionContext);
     }
@@ -125,8 +123,11 @@ export class OpenappaReceipts {
     }
   }
 
-  prefixRefusal(contentMessage: string): string {
-    return !this.buffered && this.childTrajectory
+  prefixRefusal(
+    contentMessage: string,
+    options: { buffered: boolean },
+  ): string {
+    return !options.buffered && this.childTrajectory
       ? `${this.childTrajectory.footer}\n\n${contentMessage}`
       : contentMessage;
   }

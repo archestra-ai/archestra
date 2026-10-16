@@ -2249,7 +2249,9 @@ async function handleStreaming<
         toolInvocationRefusal;
 
       const fullContentMessage =
-        appaReceipts?.prefixRefusal(contentMessage) ?? contentMessage;
+        appaReceipts?.prefixRefusal(contentMessage, {
+          buffered: bufferModelResponse,
+        }) ?? contentMessage;
       childStream.discard(streamAdapter);
       // Drop the held tool-call events and use the existing refusal format.
       // Its text comes from APPA when enabled.

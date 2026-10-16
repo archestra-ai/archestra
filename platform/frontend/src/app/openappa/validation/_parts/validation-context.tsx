@@ -52,6 +52,7 @@ export function ValidationProvider({ children }: { children: ReactNode }) {
       <QueryLoadError
         title="Could not load policy validation"
         description={source.error?.message}
+        error={source.error}
         onRetry={() => source.refetch()}
       />
     );

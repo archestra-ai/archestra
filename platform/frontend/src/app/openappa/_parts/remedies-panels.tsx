@@ -27,6 +27,7 @@ export function RemediesCard() {
       {view.isLoadingError ? (
         <QueryLoadError
           title="Could not load authorities and sanitizers"
+          error={view.error}
           onRetry={() => view.refetch()}
         />
       ) : !view.data ? (

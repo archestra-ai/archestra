@@ -60,11 +60,18 @@ export function useAgentRuntimePreflight(agentId: string, enabled = true) {
 /** Why a runtime agent's Send is blocked by its preflight, if it is. */
 export function runtimePreflightDisabledReason(preflight: {
   isPending: boolean;
-  data?: { ready: boolean } | null;
+  isError?: boolean;
+  data?: {
+    ready: boolean;
+    missing?: Array<{ adminOnly?: boolean }>;
+  } | null;
 }): string | undefined {
   if (preflight.isPending) return "Checking the agent's credentials…";
+  if (preflight.isError) return "Can't check this agent's setup";
   if (preflight.data?.ready !== true) {
-    return "Connect the credentials this agent needs";
+    return preflight.data?.missing?.some((entry) => entry.adminOnly)
+      ? "Only admins can run this agent"
+      : "Connect the credentials this agent needs";
   }
   return undefined;
 }

@@ -273,7 +273,15 @@ describe("ProjectSchedulesSection with project read+create", () => {
   it("keeps another actor's schedule read-only for a project collaborator", async () => {
     const user = userEvent.setup();
     vi.mocked(useScheduleTriggers).mockReturnValue({
-      data: { data: [{ ...SCHEDULE, actorUserId: "another-user" }] },
+      data: {
+        data: [
+          {
+            ...SCHEDULE,
+            actorUserId: "another-user",
+            actor: { id: "another-user", name: "Dana", email: null },
+          },
+        ],
+      },
     } as unknown as ReturnType<typeof useScheduleTriggers>);
     render(<ProjectSchedulesSection projectId="project-1" />);
     expect(
@@ -288,8 +296,11 @@ describe("ProjectSchedulesSection with project read+create", () => {
     await user.click(
       screen.getByRole("button", { name: "Actions for Weekly summary" }),
     );
-    expect(screen.getByRole("menuitem", { name: "Run now" })).toHaveAttribute(
-      "data-disabled",
+    // Disabled, and it says why instead of leaving the reader to guess.
+    const runNow = screen.getByRole("menuitem", { name: /run now/i });
+    expect(runNow).toHaveAttribute("data-disabled");
+    expect(runNow).toHaveTextContent(
+      "Set up by Dana. Only they or an admin can run it.",
     );
     expect(
       screen.queryByRole("menuitem", { name: "Delete schedule" }),

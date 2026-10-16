@@ -76763,6 +76763,9 @@
                           },
                           "canConnect": {
                             "type": "boolean"
+                          },
+                          "adminOnly": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -76790,6 +76793,9 @@
                             "type": "string"
                           },
                           "canConnect": {
+                            "type": "boolean"
+                          },
+                          "adminOnly": {
                             "type": "boolean"
                           }
                         },

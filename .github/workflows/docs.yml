@@ -91,13 +91,14 @@ jobs:
       - name: Run docs check regression tests
         run: python3 -m unittest discover -s .github/scripts -p 'test_docs_*.py'
 
-  # This is the only job with the required check name. It runs even if its
-  # dependency fails or skips, and fails closed for every merge-group result
-  # except success. Ordinary PRs explicitly defer capture to the queue.
+  # Standalone manual validation retains the local build fallback. Queue/PR
+  # validation is owned by platform-e2e-tests.yml, where capture can depend
+  # directly on the exact image build. These event conditions are disjoint.
   docs-screenshot-validation:
     name: Docs Screenshot Validation
     needs: [docs-screenshot-capture]
-    if: always()
+    # Merge-queue validation lives beside its image producer in platform-e2e-tests.yml.
+    if: always() && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -115,7 +116,7 @@ jobs:
 
   docs-screenshot-capture:
     name: Capture Docs Screenshots (validation)
-    if: github.event_name == 'merge_group' || (github.event_name == 'workflow_dispatch' && inputs.validation_only)
+    if: github.event_name == 'workflow_dispatch' && inputs.validation_only
     runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 25
     permissions:

@@ -383,6 +383,59 @@ jobs:
   # Docker contexts on slower standard runners. The required check names stay
   # unchanged, while the scans leave the queue critical path: they begin once
   # the images are pushed and run alongside the E2E environments.
+  # Start screenshot compute only once the queue's exact images are published.
+  # This removes the second full platform build from the independent docs job.
+  docs-screenshot-capture:
+    name: Capture Docs Screenshots (validation)
+    needs: [platform-e2e-build]
+    if: github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch'
+    runs-on: ubicloud-standard-8-ubuntu-2404
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read # Required for private mirrors' local-image artifacts.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Load the queue's platform image
+        id: platform-image
+        uses: ./.github/actions/load-platform-image
+        with:
+          source: ${{ env.UNTRUSTED_PR == 'true' && 'artifact' || 'registry' }}
+          image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('archestra-platform:{0}', github.sha) || format('{0}/{1}:{2}-e2e-slim', env.PLATFORM_IMAGE_REGISTRY, env.PLATFORM_IMAGE_NAME, github.sha) }}
+          wait-timeout-seconds: "60"
+      - name: Load the queue's MCP server base image
+        id: mcp-image
+        uses: ./.github/actions/load-mcp-server-base-image
+        with:
+          source: ${{ env.UNTRUSTED_PR == 'true' && 'artifact' || 'registry' }}
+          image-tag: ${{ env.UNTRUSTED_PR == 'true' && format('mcp-server-base:{0}', github.sha) || format('{0}/{1}:{2}', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME, github.sha) }}
+      - uses: ./.github/actions/capture-docs-screenshots
+        with:
+          platform-image: ${{ steps.platform-image.outputs.image-tag }}
+          mcp-server-base-image: ${{ steps.mcp-image.outputs.image-tag }}
+
+  docs-screenshot-validation:
+    name: Docs Screenshot Validation
+    needs: [docs-screenshot-capture]
+    if: always() && (github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Report screenshot validation
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          VALIDATION_ONLY: "true"
+          CAPTURE_RESULT: ${{ needs.docs-screenshot-capture.result }}
+        run: python3 .github/scripts/check-docs-screenshot-result.py
+
   merge-queue-image-scanning:
     name: Docker Image Scanning (${{ matrix.name }})
     needs: [platform-e2e-build]
@@ -646,7 +699,7 @@ jobs:
     name: Platform E2E Tests (Hibernation ${{ matrix.name }})
     needs: [platform-e2e-build]
     if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event.label.name == 'run-e2e' }}
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: ubicloud-standard-16-ubuntu-2404
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -1541,7 +1594,7 @@ jobs:
   platform-rust-napi-musl-smoke:
     name: Platform Rust NAPI musl Smoke
     if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: ubicloud-standard-16-ubuntu-2404
     timeout-minutes: 30
     permissions:
       contents: read

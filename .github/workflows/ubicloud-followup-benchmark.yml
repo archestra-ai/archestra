@@ -1,0 +1,383 @@
+# Temporary paired validation; removed before this PR is finalized.
+name: Ubicloud Follow-up Validation
+permissions: {}
+concurrency:
+  group: ubicloud-followup-validation-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+env:
+  PLATFORM_IMAGE_REGISTRY: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
+  PLATFORM_IMAGE_NAME: platform
+  MCP_SERVER_BASE_IMAGE_REGISTRY: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
+  MCP_SERVER_BASE_IMAGE_NAME: mcp-server-base
+  UNTRUSTED_PR: 'false'
+'on':
+  pull_request:
+    branches:
+    - main
+    paths:
+    - .github/workflows/ubicloud-followup-benchmark.yml
+jobs:
+  images:
+    name: Pin existing verified-run images
+    runs-on: ubuntu-24.04
+    if: github.repository == 'archestra-ai/archestra' && github.event.pull_request.head.repo.full_name == github.repository && !github.event.repository.private
+    permissions:
+      contents: read
+    outputs:
+      platform-full: ${{ steps.images.outputs.platform-full }}
+      platform-slim: ${{ steps.images.outputs.platform-slim }}
+      mcp-base: ${{ steps.images.outputs.mcp-base }}
+    steps:
+    - name: Checkout benchmark source
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+        fetch-depth: 1
+        ref: a554dd1dcbddcb60ae022436f8d276c06b3406dd
+    - name: Resolve shared immutable images
+      id: images
+      env:
+        SOURCE_SHA: a554dd1dcbddcb60ae022436f8d276c06b3406dd
+      run: |
+        set -euo pipefail
+        resolve() {
+          local tag="$1" output="$2" file digest
+          file=$(mktemp)
+          docker buildx imagetools inspect "$tag" --raw > "$file"
+          jq -e '.schemaVersion == 2' "$file" >/dev/null
+          digest="sha256:$(sha256sum "$file" | awk '{print $1}')"
+          rm "$file"
+          printf '%s=%s@%s
+        ' "$output" "${tag%:*}" "$digest" >> "$GITHUB_OUTPUT"
+          printf 'Pinned %s@%s
+        ' "${tag%:*}" "$digest"
+        }
+        resolve "${PLATFORM_IMAGE_REGISTRY}/${PLATFORM_IMAGE_NAME}:${SOURCE_SHA}-e2e" platform-full
+        resolve "${PLATFORM_IMAGE_REGISTRY}/${PLATFORM_IMAGE_NAME}:${SOURCE_SHA}-e2e-slim" platform-slim
+        resolve "${MCP_SERVER_BASE_IMAGE_REGISTRY}/${MCP_SERVER_BASE_IMAGE_NAME}:${SOURCE_SHA}" mcp-base
+  image-build:
+    name: Changed-source images (${{ matrix.profile }}, ${{ matrix.provider }})
+    if: github.repository == 'archestra-ai/archestra' && github.event.pull_request.head.repo.full_name == github.repository && !github.event.repository.private
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - profile: app
+          provider: Blacksmith
+          slug: blacksmith
+          runner: blacksmith-16vcpu-ubuntu-2404
+          platform: linux/amd64
+          cache_mode: min
+        - profile: app
+          provider: Ubicloud
+          slug: ubicloud
+          runner: ubicloud-standard-16-ubuntu-2404
+          platform: linux/amd64
+          cache_mode: min
+        - profile: native
+          provider: Blacksmith
+          slug: blacksmith
+          runner: blacksmith-16vcpu-ubuntu-2404
+          platform: linux/amd64
+          cache_mode: min
+        - profile: native
+          provider: Ubicloud
+          slug: ubicloud
+          runner: ubicloud-standard-16-ubuntu-2404
+          platform: linux/amd64
+          cache_mode: min
+        - profile: publisher
+          provider: Blacksmith
+          slug: blacksmith
+          runner: blacksmith-16vcpu-ubuntu-2404
+          platform: linux/amd64
+          cache_mode: max
+        - profile: publisher
+          provider: Ubicloud
+          slug: ubicloud
+          runner: ubicloud-standard-16-ubuntu-2404
+          platform: linux/amd64
+          cache_mode: max
+        - profile: arm-app
+          provider: Blacksmith
+          slug: blacksmith
+          runner: blacksmith-32vcpu-ubuntu-2404-arm
+          platform: linux/arm64
+          cache_mode: max
+        - profile: arm-app
+          provider: Ubicloud
+          slug: ubicloud
+          runner: ubicloud-standard-30-arm-ubuntu-2404
+          platform: linux/arm64
+          cache_mode: max
+      max-parallel: 4
+    steps:
+    - name: Checkout benchmark source
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+        fetch-depth: 1
+        ref: a554dd1dcbddcb60ae022436f8d276c06b3406dd
+    - name: Record runner identity
+      run: |
+        node -e 'const os=require("os"); console.log(JSON.stringify({cpuCount:os.cpus().length,cpuModel:os.cpus()[0].model,memoryBytes:os.totalmem()}))'
+        git rev-parse HEAD
+        docker version --format '{{.Server.Version}}'
+    - name: Invalidate real compilation inputs identically on both providers
+      env:
+        PROFILE: ${{ matrix.profile }}
+      run: |
+        set -euo pipefail
+        printf '\n// CI runner comparison: app source cache miss, 2026-10-16.\n' >> platform/frontend/src/app/layout.tsx
+        printf '\n// CI runner comparison: app source cache miss, 2026-10-16.\n' >> platform/backend/src/process-local-cache-registry.ts
+        if [ "$PROFILE" = native ]; then
+          printf '\n// CI runner comparison: native source cache miss, 2026-10-16.\n' >> platform/archestra-rs/image-core/src/lib.rs
+        fi
+        git diff --stat
+        sha256sum platform/frontend/src/app/layout.tsx platform/backend/src/process-local-cache-registry.ts platform/archestra-rs/image-core/src/lib.rs
+    - name: Authenticate to Google Artifact Registry
+      uses: ./.github/actions/auth-to-gar
+      with:
+        service_account: ${{ secrets.DEVELOPMENT_GCP_DEPLOY_SERVICE_ACCOUNT_NAME }}
+        workload_identity_provider: ${{ secrets.DEVELOPMENT_GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+    - name: Build slim Platform image (lite/K8s jobs, no Dagger engine tar) and push
+      uses: ./.github/actions/build-docker-image
+      with:
+        context: ./platform
+        push: 'true'
+        target: unified-slim
+        tags: ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:ci-ubicloud-followup-${{ github.run_id }}-${{ matrix.profile }}-${{
+          matrix.slug }}-slim
+        provenance: 'false'
+        sbom: generator=docker/scout-sbom-indexer:1.24.0@sha256:4b67f29eb0d1244ab0f62de867ac5dafd7262fcd7ebbdefa6ec8aacd6b15252d
+        turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+        turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+        cache-from: |
+          type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache
+          type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache-${{ matrix.platform == 'linux/arm64' && 'arm64' || 'amd64' }}
+        cache-to: type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:ci-ubicloud-followup-cache-${{ github.run_id
+          }}-${{ matrix.profile }}-${{ matrix.slug }},mode=${{ matrix.cache_mode }}
+        platforms: ${{ matrix.platform }}
+        version: ci-ubicloud-followup
+    - name: Build Platform image and push to Artifact Registry
+      uses: ./.github/actions/build-docker-image
+      with:
+        context: ./platform
+        outputs: ${{ matrix.profile == 'publisher' && 'type=image,push=true' || 'type=image,compression=zstd,compression-level=3,force-compression=true,oci-mediatypes=true,push=true'
+          }}
+        tags: ${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:ci-ubicloud-followup-${{ github.run_id }}-${{ matrix.profile }}-${{
+          matrix.slug }}-full
+        provenance: 'false'
+        sbom: generator=docker/scout-sbom-indexer:1.24.0@sha256:4b67f29eb0d1244ab0f62de867ac5dafd7262fcd7ebbdefa6ec8aacd6b15252d
+        turbo-team: ${{ secrets.TURBOREPO_REMOTE_CACHING_TEAM }}
+        turbo-token: ${{ secrets.TURBOREPO_REMOTE_CACHING_TOKEN }}
+        setup-builder: 'false'
+        cache-from: |
+          type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache
+          type=registry,ref=${{ env.PLATFORM_IMAGE_REGISTRY }}/${{ env.PLATFORM_IMAGE_NAME }}:buildcache-${{ matrix.platform == 'linux/arm64' && 'arm64' || 'amd64' }}
+        platforms: ${{ matrix.platform }}
+        version: ci-ubicloud-followup
+  lite-shard-2:
+    name: Repeat Lite shard 2 (${{ matrix.provider }})
+    needs:
+    - images
+    if: github.repository == 'archestra-ai/archestra' && github.event.pull_request.head.repo.full_name == github.repository && !github.event.repository.private
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - name: chromium-2of2
+          chromium_shard: '2'
+          provider: Blacksmith
+          runner: blacksmith-8vcpu-ubuntu-2404
+          secondary_projects_default: ''
+          secondary_projects_nightly: ''
+        - name: chromium-2of2
+          chromium_shard: '2'
+          provider: Ubicloud
+          runner: ubicloud-standard-8-ubuntu-2404
+          secondary_projects_default: ''
+          secondary_projects_nightly: ''
+    permissions:
+      contents: read
+      id-token: write
+      actions: read
+    steps:
+    - name: Reclaim disk space (background)
+      run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup &
+    - name: Checkout repository
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+        fetch-depth: 1
+        ref: a554dd1dcbddcb60ae022436f8d276c06b3406dd
+    - name: Record runner identity
+      run: |
+        node -e 'const os=require("os"); console.log(JSON.stringify({cpuCount:os.cpus().length,cpuModel:os.cpus()[0].model,memoryBytes:os.totalmem()}))'
+        git rev-parse HEAD
+        docker version --format '{{.Server.Version}}'
+    - name: Pre-pull Lite images (background)
+      env:
+        TRUSTED_PLATFORM_IMAGE: ${{ needs.images.outputs.platform-slim }}
+        IS_UNTRUSTED_PR: ${{ env.UNTRUSTED_PR }}
+      run: |
+        if [ "$IS_UNTRUSTED_PR" != "true" ]; then
+          docker pull "$TRUSTED_PLATFORM_IMAGE" >"${RUNNER_TEMP}/lite-platform-pull.log" 2>&1 &
+        fi
+        version=$(jq -r '.devDependencies["@playwright/test"]' platform/e2e-tests/package.json | sed 's/^[\^~]//')
+        docker pull "mcr.microsoft.com/playwright:v${version}-noble" >"${RUNNER_TEMP}/lite-playwright-pull.log" 2>&1 &
+    - name: Setup environment
+      uses: ./.github/actions/setup-env
+      with:
+        working-directory: ./platform
+    - name: Load platform image
+      id: load-platform-image
+      uses: ./.github/actions/load-platform-image
+      with:
+        source: ${{ env.UNTRUSTED_PR == 'true' && 'artifact' || 'registry' }}
+        image-tag: ${{ needs.images.outputs.platform-slim }}
+        wait-timeout-seconds: '60'
+    - name: Wait for MCP server base image
+      if: ${{ env.UNTRUSTED_PR != 'true' }}
+      env:
+        MCP_SERVER_BASE_IMAGE: ${{ needs.images.outputs.mcp-base }}
+      run: |
+        deadline=$(( $(date +%s) + 60 ))
+        until docker buildx imagetools inspect "${MCP_SERVER_BASE_IMAGE}" > /dev/null 2>&1; do
+          if [ "$(date +%s)" -ge "${deadline}" ]; then
+            echo "Timed out waiting for ${MCP_SERVER_BASE_IMAGE} to appear in the registry"
+            exit 1
+          fi
+          echo "${MCP_SERVER_BASE_IMAGE} not pushed yet, retrying in 10s..."
+          sleep 10
+        done
+        echo "${MCP_SERVER_BASE_IMAGE} is available"
+    - name: Start lite e2e stack
+      env:
+        PLATFORM_IMAGE: ${{ steps.load-platform-image.outputs.image-tag }}
+        ARCHESTRA_BETA: 'false'
+        MCP_SERVER_BASE_IMAGE: ${{ env.UNTRUSTED_PR == 'true' && format('{0}/{1}:latest', env.MCP_SERVER_BASE_IMAGE_REGISTRY, env.MCP_SERVER_BASE_IMAGE_NAME)
+          || needs.images.outputs.mcp-base }}
+      run: ./platform/scripts/e2e-lite.sh up
+    - name: Configure embedded Kind registry cache
+      uses: ./.github/actions/configure-kind-registry-cache
+      with:
+        cluster-name: archestra-mcp
+    - name: Create e2e test env file
+      run: "# UI/API must be \"localhost\", not 127.0.0.1: the SSO specs bounce the\n# browser to Keycloak, which redirects back to the realm's\
+        \ registered\n# http://localhost:3000 redirect URI \u2014 starting the flow on 127.0.0.1\n# strands better-auth's state cookie on the\
+        \ other host and every SSO\n# login fails with state_mismatch. (The K8s job's specs run on the\n# same localhost defaults.)\n# The *_INTERNAL/BACKEND\
+        \ URLs are what the containerized backend must\n# resolve \u2014 the sidecars' docker network names (see e2e-lite.sh).\n{\n  echo \"E2E_UI_BASE_URL=http://localhost:3000\"\
+        \n  echo \"E2E_API_BASE_URL=http://localhost:9000\"\n  echo \"E2E_WIREMOCK_BASE_URL=http://127.0.0.1:9092\"\n  echo \"E2E_WIREMOCK_INTERNAL_URL=http://e2e-tests-wiremock:8080\"\
+        \n  echo \"E2E_KEYCLOAK_BACKEND_URL=http://e2e-tests-keycloak:8080\"\n  # Selects this leg's chromium files (playwright.config.ts).\n\
+        \  echo \"E2E_CHROMIUM_SHARD=${CHROMIUM_SHARD}\"\n} > /tmp/lite-e2e.env\ncat /tmp/lite-e2e.env\n"
+      env:
+        CHROMIUM_SHARD: ${{ matrix.chromium_shard }}
+    - name: Run lite E2E tests
+      id: e2e
+      uses: ./.github/actions/run-e2e-tests
+      with:
+        projects: chromium
+        extra_args: --grep-invert '@quickstart' --workers=3
+        timeout: '20'
+        env_file: /tmp/lite-e2e.env
+        blob_report_name: report-chromium-shard-${{ matrix.chromium_shard }}.zip
+    - name: Run API and identity provider E2E tests on the same stack
+      if: ${{ matrix.name == 'chromium-1of2' }}
+      uses: ./.github/actions/run-e2e-tests
+      with:
+        projects: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && matrix.secondary_projects_nightly || matrix.secondary_projects_default
+          }}
+        extra_args: --grep-invert '@quickstart'
+        timeout: '20'
+        env_file: /tmp/lite-e2e.env
+        blob_report_dir: blob-report-api
+    - name: Upload blob report
+      if: ${{ !cancelled() }}
+      continue-on-error: true
+      uses: ./.github/actions/github-upload-artifact
+      with:
+        name: blob-report-lite-${{ matrix.name }}-${{ matrix.provider }}
+        path: platform/e2e-tests/blob-report/
+        retention-days: 1
+    - name: Upload API and identity provider blob report
+      if: ${{ !cancelled() && matrix.name == 'chromium-1of2' }}
+      continue-on-error: true
+      uses: ./.github/actions/github-upload-artifact
+      with:
+        name: blob-report-lite-api-${{ matrix.provider }}
+        path: platform/e2e-tests/blob-report-api/
+        retention-days: 1
+    - name: Show platform logs on failure
+      if: failure()
+      run: |
+        echo "=== Lite Platform Container Logs ==="
+        docker logs archestra-lite --tail=500 2>&1 || echo "Could not get container logs"
+
+        echo "=== Keycloak Container Logs ==="
+        docker logs e2e-tests-keycloak --tail=200 2>&1 || echo "Could not get Keycloak logs"
+
+        echo "=== WireMock Container Logs ==="
+        docker logs e2e-tests-wiremock --tail=200 2>&1 || echo "Could not get WireMock logs"
+
+        echo "=== Embedded Kind Pods (MCP servers, Dagger engine) ==="
+        docker exec archestra-lite kubectl --kubeconfig /app/data/.kubeconfig get pods -A -o wide 2>&1 || true
+
+        echo "=== Docker Container Status ==="
+        docker ps -a
+  docs-capture:
+    name: Docs capture (${{ matrix.mode }}, ${{ matrix.provider }})
+    if: github.repository == 'archestra-ai/archestra' && github.event.pull_request.head.repo.full_name == github.repository && !github.event.repository.private
+    needs:
+    - images
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - provider: Blacksmith
+          mode: reuse
+          runner: blacksmith-8vcpu-ubuntu-2404
+        - provider: Ubicloud
+          mode: reuse
+          runner: ubicloud-standard-8-ubuntu-2404
+        - provider: Blacksmith
+          mode: duplicate
+          runner: blacksmith-8vcpu-ubuntu-2404
+        - provider: Ubicloud
+          mode: duplicate
+          runner: ubicloud-standard-8-ubuntu-2404
+    steps:
+    - name: Checkout benchmark source
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+        fetch-depth: 1
+        ref: ${{ github.event.pull_request.head.sha }}
+    - name: Verify identical application context
+      env:
+        EXPECTED_TREE: 68d1c153a941e71ec2231d317d106a358f8a1eef
+      run: test "$(git rev-parse HEAD:platform)" = "$EXPECTED_TREE"
+    - name: Record runner identity
+      run: |
+        node -e 'const os=require("os"); console.log(JSON.stringify({cpuCount:os.cpus().length,cpuModel:os.cpus()[0].model,memoryBytes:os.totalmem()}))'
+        git rev-parse HEAD
+        docker version --format '{{.Server.Version}}'
+    - name: Build duplicate platform image (observed fallback control)
+      if: matrix.mode == 'duplicate'
+      run: docker build -t archestra-platform:ci-docs-control ./platform
+    - name: Capture all screenshots through the production action
+      uses: ./.github/actions/capture-docs-screenshots
+      with:
+        platform-image: ${{ matrix.mode == 'duplicate' && 'archestra-platform:ci-docs-control' || needs.images.outputs.platform-slim }}
+        mcp-server-base-image: ${{ needs.images.outputs.mcp-base }}

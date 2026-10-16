@@ -6,7 +6,9 @@ import {
 } from "@archestra/shared";
 import {
   type QueryClient,
+  useInfiniteQuery,
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
@@ -844,24 +846,31 @@ export function useAgentCredentialReadiness(params: {
   enabled?: boolean;
   ids: string[];
 }) {
-  const ids = [...new Set(params.ids)].sort();
   return useQuery({
-    queryKey: ["agents", "credential-readiness", ids],
-    queryFn: async () => {
-      if (ids.length === 0) return [];
-      const rows: archestraApiTypes.GetAgentCredentialReadinessResponses["200"] =
-        [];
-      for (let offset = 0; offset < ids.length; offset += 200) {
-        const { data, error } = await getAgentCredentialReadiness({
-          query: { ids: ids.slice(offset, offset + 200) },
-        });
-        throwOnApiError(error, { toastOnError: false });
-        rows.push(...(data ?? []));
-      }
-      return rows;
-    },
-    enabled: params?.enabled,
+    ...agentCredentialReadinessQuery(params.ids),
+    enabled: params.enabled,
   });
+}
+
+/** Keep completed readiness batches cached as the picker appends more agents. */
+export function useAgentCredentialReadinessPages(params: {
+  enabled: boolean;
+  batches: string[][];
+}) {
+  const batches = [
+    ...new Map(
+      params.batches
+        .filter((ids) => ids.length > 0)
+        .map((ids) => {
+          const query = agentCredentialReadinessQuery(ids);
+          return [JSON.stringify(query.queryKey), query] as const;
+        }),
+    ).values(),
+  ];
+  const results = useQueries({
+    queries: batches.map((query) => ({ ...query, enabled: params.enabled })),
+  });
+  return { data: results.flatMap((result) => result.data ?? []) };
 }
 
 /**
@@ -869,26 +878,29 @@ export function useAgentCredentialReadiness(params: {
  * editing-only fields stay out of this query; the selected/edited agent is
  * hydrated through useProfile when its full record is needed.
  */
-export function useChatAgentPage(params: {
-  cursor?: string;
+export function useChatAgentPages(params: {
   search?: string;
   enabled: boolean;
 }) {
   const query = {
     limit: 20,
-    cursor: params.cursor,
     search: params.search || undefined,
     sortBy: "chat" as const,
   };
-  return useQuery({
-    queryKey: ["agents", "chat-roster", "page", query],
-    queryFn: async () => {
+  return useInfiniteQuery({
+    queryKey: ["agents", "chat-roster", "infinite", query],
+    initialPageParam: undefined as string | undefined,
+    queryFn: async ({ pageParam }) => {
       const { data, error } = await archestraApiSdk.getChatAgentRosterPage({
-        query,
+        query: { ...query, cursor: pageParam },
       });
       throwOnApiError(error, { toastOnError: false });
       return data;
     },
+    getNextPageParam: (lastPage) =>
+      lastPage?.pagination.hasNext
+        ? (lastPage.pagination.nextCursor ?? undefined)
+        : undefined,
     enabled: params.enabled,
   });
 }
@@ -1104,11 +1116,37 @@ function findCachedChatAgent(client: QueryClient, id: string) {
   const cached = client.getQueriesData<
     | archestraApiTypes.GetChatAgentRosterResponses["200"]
     | { data: archestraApiTypes.GetChatAgentRosterResponses["200"] }
+    | {
+        pages: { data: archestraApiTypes.GetChatAgentRosterResponses["200"] }[];
+      }
   >({ queryKey: ["agents", "chat-roster"] });
   for (const [, value] of cached) {
-    const rows = Array.isArray(value) ? value : value?.data;
+    const rows = Array.isArray(value)
+      ? value
+      : value && "pages" in value
+        ? value.pages.flatMap((page) => page.data)
+        : value?.data;
     const row = rows?.find((agent) => agent.id === id);
     if (row) return row;
   }
   return undefined;
+}
+
+function agentCredentialReadinessQuery(requestedIds: string[]) {
+  const ids = [...new Set(requestedIds)].sort();
+  return {
+    queryKey: ["agents", "credential-readiness", ids],
+    queryFn: async () => {
+      const rows: archestraApiTypes.GetAgentCredentialReadinessResponses["200"] =
+        [];
+      for (let offset = 0; offset < ids.length; offset += 200) {
+        const { data, error } = await getAgentCredentialReadiness({
+          query: { ids: ids.slice(offset, offset + 200) },
+        });
+        throwOnApiError(error, { toastOnError: false });
+        rows.push(...(data ?? []));
+      }
+      return rows;
+    },
+  };
 }

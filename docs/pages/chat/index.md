@@ -26,7 +26,7 @@ You can continue typing while the agent generates a response. Queued messages wa
 Switch the model, agent, or provider key for one conversation without changing the agent itself.
 
 - **New chat:** the agent and the model sit under the prompt. Click the model to search models or switch to the **Key** tab. On a narrow screen both move into the **More options** menu (⋮).
-- **Started chat:** open **More options** (⋮). Its tabs show the current model, agent, and key. Pick a tab, search, and choose. Picking a key switches to its models.
+- **Started chat:** open **More options** (⋮). Its tabs show the current agent, key, and model. Pick a tab, search, and choose. Picking a key switches to its models.
 
 Each model lists its context size, price per million tokens, and what it can read or do.
 

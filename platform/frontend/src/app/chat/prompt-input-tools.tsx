@@ -11,7 +11,7 @@ import {
   type ThinkingEffortSetting,
 } from "@archestra/shared";
 import { MoreVerticalIcon, PaperclipIcon } from "lucide-react";
-import { memo, useCallback, useEffect, useState } from "react";
+import { memo, type ReactNode, useCallback, useEffect, useState } from "react";
 import {
   PromptInputButton,
   PromptInputTools,
@@ -102,6 +102,8 @@ export interface ChatPromptInputToolsProps {
   onCompactConversation?: () => Promise<void> | void;
   /** A compaction is already running (manual or automatic) */
   isContextCompacting?: boolean;
+  /** Open the conversation's Files panel; absent before the chat exists */
+  onOpenFiles?: () => void;
   /** Agent's configured LLM API key ID - passed to LlmProviderApiKeySelector */
   agentLlmApiKeyId?: string | null;
   /** Current agent ID for agent selector */
@@ -182,6 +184,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   lastCompaction,
   onCompactConversation,
   isContextCompacting = false,
+  onOpenFiles,
   agentLlmApiKeyId,
   selectorAgentId,
   onAgentChange,
@@ -226,11 +229,27 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   // and surfaced in the conversation's Files panel (and staged into the
   // sandbox when one is available), so the only gate is the org-level toggle.
   const showFileUploadButton = allowFileUploads;
-  const attachHint = runtimeMode
-    ? "Attach files for the Agent's runtime"
-    : sandboxAvailable
-      ? "Attach any file"
-      : "Attach any file. Unreadable ones go to Files.";
+  const attachHint: ReactNode = runtimeMode ? (
+    "Attach files for the Agent's runtime"
+  ) : sandboxAvailable ? (
+    "Attach any file"
+  ) : (
+    <>
+      Attach any file. Ones the model can't read are kept in{" "}
+      {onOpenFiles ? (
+        <UnstyledButton
+          type="button"
+          onClick={onOpenFiles}
+          className="underline underline-offset-2 hover:no-underline"
+        >
+          Files
+        </UnstyledButton>
+      ) : (
+        <span>this chat's files</span>
+      )}
+      .
+    </>
+  );
 
   // Check if user can update agent settings (to show settings link in tooltip)
   const { data: canUpdateAgentSettings } = useHasPermissions({

@@ -212,6 +212,8 @@ export interface ArchestraPromptInputProps
   isContextCompacting?: boolean;
   /** Manually compact the active conversation */
   onCompactConversation?: () => Promise<void> | void;
+  /** Open the conversation's Files panel (where unreadable attachments land) */
+  onOpenFiles?: () => void;
   /**
    * One-shot composer prefill (e.g. a skill slash command from a deep link).
    * Applied to the controller-owned input, then acknowledged via
@@ -281,6 +283,7 @@ const PromptInputContent = ({
   subscriptionConnectRequired = false,
   isContextCompacting = false,
   onCompactConversation,
+  onOpenFiles,
   selectorAgentId,
   onAgentChange,
   modelSource,
@@ -1109,6 +1112,7 @@ const PromptInputContent = ({
           lastCompaction={lastCompaction}
           onCompactConversation={compactConversation}
           isContextCompacting={isContextCompacting}
+          onOpenFiles={onOpenFiles}
         />
         {/* shrink-0: the send/mic cluster is a fixed unit and must never
             compress. When the toolbar runs out of room the collapse hook
@@ -1336,6 +1340,7 @@ const ArchestraPromptInput = ({
   subscriptionConnectRequired,
   isContextCompacting,
   onCompactConversation,
+  onOpenFiles,
   selectorAgentId,
   onAgentChange,
   modelSource,
@@ -1456,6 +1461,7 @@ const ArchestraPromptInput = ({
           subscriptionProvider={subscriptionProvider}
           isContextCompacting={isContextCompacting}
           onCompactConversation={onCompactConversation}
+          onOpenFiles={onOpenFiles}
           selectorAgentId={selectorAgentId}
           onAgentChange={onAgentChange}
           modelSource={modelSource}

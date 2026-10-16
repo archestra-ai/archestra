@@ -85,8 +85,9 @@ export function ChatModelButton({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        side="top"
+        side="bottom"
         align="start"
+        sideOffset={8}
         className="w-auto overflow-hidden p-0"
       >
         <ChatSetupMenu {...menuProps} close={() => setOpen(false)} />

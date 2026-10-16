@@ -153,9 +153,11 @@ describe("ChatSetupMenu", () => {
     within(tabs).getByRole("tab", { name: "Agent: My Assistant" });
     within(tabs).getByRole("tab", { name: /^Key: Org vLLM/ });
 
-    expect(screen.getByRole("option", { name: /Qwen3 32B/ })).toHaveTextContent(
-      "128K context·$3 / $15 per M·Vision·Tools·Reasoning",
-    );
+    const thinker = screen.getByRole("option", { name: /Qwen3 32B/ });
+    expect(thinker).toHaveTextContent("128K context·$3 / $15");
+    for (const capability of ["Reads images", "Uses tools", "Reasons"]) {
+      within(thinker).getByRole("img", { name: capability });
+    }
 
     await user.click(screen.getByRole("option", { name: /Llama 3 8B/ }));
 

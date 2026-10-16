@@ -12,15 +12,21 @@ import { Command as CommandPrimitive, defaultFilter } from "cmdk";
 import {
   AlertTriangleIcon,
   ArrowRightIcon,
+  AudioLinesIcon,
   BoxIcon,
   BrainIcon,
   CheckIcon,
+  EyeIcon,
+  FileTextIcon,
   KeyRoundIcon,
   LogInIcon,
+  type LucideIcon,
   RotateCcwIcon,
   SearchIcon,
   SettingsIcon,
   UsersRoundIcon,
+  VideoIcon,
+  WrenchIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
@@ -122,8 +128,6 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
     () => data.modelSections.flatMap((s) => s.models),
     [data.modelSections],
   );
-  // The price unit is spelled out once, on the first priced row.
-  const firstPricedModelId = allModels.find((m) => modelPrice(m))?.dbId;
   const allAgents = useMemo(
     () => data.agentGroups.flatMap((g) => g.agents),
     [data.agentGroups],
@@ -135,11 +139,13 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
 
   // ---- scopes on offer, in tab order
   const scopes = useMemo(() => {
+    // Broadest choice first: the agent, then the key that decides which
+    // models exist, then the model. The menu still opens on Model.
     const list: Scope[] = [];
-    if (showModels || showSignIn) list.push("model");
     if (ctx.onAgentChange && allAgents.length > 0) list.push("agent");
     if (showProvider && ctx.canChangeCredential && data.keys.length > 0)
       list.push("key");
+    if (showModels || showSignIn) list.push("model");
     return list;
   }, [
     showModels,
@@ -324,7 +330,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
 
   if (!scope) {
     return (
-      <div className="flex h-10 w-[400px] max-w-[calc(100vw-2rem)] items-center px-3 text-xs text-muted-foreground">
+      <div className="flex h-10 w-[350px] max-w-[calc(100vw-2rem)] items-center px-3 text-xs text-muted-foreground">
         Nothing to change in this chat
       </div>
     );
@@ -340,7 +346,7 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
       filter={(value, search, keywords) =>
         defaultFilter(keywords?.length ? keywords.join(" ") : value, search)
       }
-      className="w-[400px] max-w-[calc(100vw-2rem)] rounded-none bg-transparent"
+      className="w-[350px] max-w-[calc(100vw-2rem)] rounded-none bg-transparent"
     >
       <div className="flex h-10 items-center gap-2.5 border-b pr-2 pl-3">
         <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
@@ -353,12 +359,6 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
           aria-label={placeholder}
           className="h-10 min-w-0 flex-1 bg-transparent text-sm outline-hidden placeholder:text-muted-foreground"
         />
-        {showReasoning && (
-          <BrainIcon
-            aria-hidden
-            className="size-3.5 shrink-0 text-muted-foreground/70"
-          />
-        )}
         {showReasoning && (
           <Segmented
             groupRef={reasoningRef}
@@ -497,7 +497,9 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
             {data.modelSections.map((s) => (
               <CommandGroup
                 key={s.provider}
-                heading={s.label}
+                // One provider is implied by the key; name providers only
+                // when the list mixes them.
+                heading={data.modelSections.length > 1 ? s.label : undefined}
                 className={GROUP}
               >
                 {s.models.map((m) => {
@@ -506,7 +508,6 @@ export function ChatSetupMenu(ctx: ChatSetupMenuProps) {
                     <ModelEntry
                       key={m.dbId}
                       model={m}
-                      withPriceUnit={m.dbId === firstPricedModelId}
                       keywords={modelKeywords(m, data.providerLabel)}
                       selected={isCurrent}
                       warning={isCurrent && !searching ? warning : null}
@@ -626,77 +627,70 @@ const ITEM =
 
 function ModelRow({
   model,
-  withPriceUnit,
   keywords,
   selected,
   onSelect,
 }: {
   model: LlmModel;
-  withPriceUnit: boolean;
   keywords: string[];
   selected: boolean;
   onSelect: () => void;
 }) {
   const needsConnect = !!model.requiresUserConnection && !model.isConnected;
+  const capabilities = modelCapabilities(model);
   return (
     <CommandItem
       value={modelValue(model.dbId)}
       data-testid={getChatModelOptionTestId(model.id)}
       keywords={keywords}
       onSelect={onSelect}
-      // Two lines: the logo drops 2px to center on the name line.
-      className={cn(
-        ITEM,
-        "h-auto min-h-11 items-start py-1 [&>img:first-child]:mt-0.5",
-      )}
+      className={cn(ITEM, "h-auto min-h-11 items-start py-1")}
     >
-      <ModelSelectorLogo
-        provider={logoNameForProvider(model.provider)}
-        className="size-4 shrink-0"
-      />
+      {/* The check leads, so the capability icons can sit flush right. */}
+      <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
+        {selected && <CheckIcon className="size-4" aria-label="Current" />}
+      </span>
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex h-5 min-w-0 items-center gap-2">
-          <span className="min-w-0 truncate">{model.displayName}</span>
-          {model.isBest && (
-            <span className="shrink-0 text-[11px] text-muted-foreground">
-              Recommended
+          <span className="min-w-0 flex-1 truncate">{model.displayName}</span>
+          {capabilities.length > 0 && (
+            <span className="flex shrink-0 items-center gap-1 text-muted-foreground/70">
+              {capabilities.map(({ key, label, Icon }) => (
+                <span key={key} role="img" aria-label={label} title={label}>
+                  <Icon className="size-3" aria-hidden />
+                </span>
+              ))}
             </span>
           )}
-          <span className="flex-1" />
-          {needsConnect && (
-            <span className="shrink-0 text-xs text-primary/80">Connect</span>
-          )}
-          <Selected on={selected} />
         </div>
         <div className="truncate text-xs leading-4 text-muted-foreground tabular-nums">
-          <ModelSpecs
-            model={model}
-            showPrice={!needsConnect}
-            withPriceUnit={withPriceUnit}
-          />
+          <ModelSpecs model={model} needsConnect={needsConnect} />
         </div>
       </div>
     </CommandItem>
   );
 }
 
-/** Context · price · what it reads and does, in a fixed order. */
+/** Context size and price; a model that needs connecting says so instead. */
 function ModelSpecs({
   model,
-  showPrice,
-  withPriceUnit,
+  needsConnect,
 }: {
   model: LlmModel;
-  showPrice: boolean;
-  withPriceUnit: boolean;
+  needsConnect: boolean;
 }) {
-  const caps = model.capabilities;
   const parts: { key: string; node: ReactNode }[] = [];
-  const context = formatContext(caps?.contextLength);
+  const context = formatContext(model.capabilities?.contextLength);
   if (context) parts.push({ key: "context", node: `${context} context` });
   const price = modelPrice(model);
-  if (showPrice && model.isFree) parts.push({ key: "price", node: "Free" });
-  else if (showPrice && price) {
+  if (needsConnect) {
+    parts.push({
+      key: "connect",
+      node: <span className="text-primary/80">Connect</span>,
+    });
+  } else if (model.isFree) {
+    parts.push({ key: "price", node: "Free" });
+  } else if (price) {
     parts.push({
       key: "price",
       node: (
@@ -704,20 +698,10 @@ function ModelSpecs({
           title={`${price.input} input / ${price.output} output per million tokens`}
         >
           {price.input} / {price.output}
-          {withPriceUnit && <span className="opacity-70"> per M</span>}
         </span>
       ),
     });
   }
-  const inputs = caps?.inputModalities ?? [];
-  for (const [modality, label] of INPUT_LABELS) {
-    if (inputs.includes(modality)) parts.push({ key: modality, node: label });
-  }
-  if (caps?.supportsToolCalling === true)
-    parts.push({ key: "tools", node: "Tools" });
-  // A null means no source claimed reasoning support, so only `true` counts.
-  if (caps?.supportsReasoningEffort === true)
-    parts.push({ key: "reasoning", node: "Reasoning" });
   // Never leave the line blank: fall back to the provider's model id.
   if (parts.length === 0) return <>{model.id}</>;
   return (
@@ -906,32 +890,39 @@ function Segmented({
       aria-label="Reasoning effort"
       title="Reasoning effort (→ from search)"
       onKeyDown={move}
-      className="inline-flex h-6 shrink-0 items-center rounded-md bg-muted p-0.5"
+      className="inline-flex h-6 shrink-0 items-center rounded-md bg-muted/50"
     >
-      {REASONING_OPTIONS.map((o, i) => {
-        const checked = i === index;
-        return (
-          <UnstyledButton
-            key={o.label}
-            ref={(el) => {
-              refs.current[i] = el;
-            }}
-            role="radio"
-            aria-checked={checked}
-            tabIndex={checked ? 0 : -1}
-            title={`Reasoning: ${o.label} — ${o.hint}`}
-            onClick={() => onChange(o.value)}
-            className={cn(
-              "h-5 rounded-[5px] px-2 text-xs outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",
-              checked
-                ? "bg-background text-foreground shadow-xs"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {o.value === "medium" ? "Med" : o.label}
-          </UnstyledButton>
-        );
-      })}
+      {/* The brain is a lighter lead-in cell of the control, not a loose glyph. */}
+      <BrainIcon
+        aria-hidden
+        className="mx-1.5 size-3.5 shrink-0 text-muted-foreground/70"
+      />
+      <span className="inline-flex h-6 items-center rounded-md bg-muted p-0.5">
+        {REASONING_OPTIONS.map((o, i) => {
+          const checked = i === index;
+          return (
+            <UnstyledButton
+              key={o.label}
+              ref={(el) => {
+                refs.current[i] = el;
+              }}
+              role="radio"
+              aria-checked={checked}
+              tabIndex={checked ? 0 : -1}
+              title={`Reasoning: ${o.label} — ${o.hint}`}
+              onClick={() => onChange(o.value)}
+              className={cn(
+                "h-5 rounded-[5px] px-2 text-xs outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",
+                checked
+                  ? "bg-background text-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {o.value === "medium" ? "Med" : o.label}
+            </UnstyledButton>
+          );
+        })}
+      </span>
     </div>
   );
 }
@@ -998,12 +989,27 @@ function keyValue(id: string) {
   return `key:${id}`;
 }
 
-const INPUT_LABELS = [
-  ["image", "Vision"],
-  ["pdf", "PDF"],
-  ["audio", "Audio"],
-  ["video", "Video"],
+const MODALITY_CAPABILITIES = [
+  ["image", "Reads images", EyeIcon],
+  ["pdf", "Reads PDFs", FileTextIcon],
+  ["audio", "Hears audio", AudioLinesIcon],
+  ["video", "Watches video", VideoIcon],
 ] as const;
+
+function modelCapabilities(model: LlmModel) {
+  const caps = model.capabilities;
+  const inputs: string[] = caps?.inputModalities ?? [];
+  const list: { key: string; label: string; Icon: LucideIcon }[] = [];
+  for (const [key, label, Icon] of MODALITY_CAPABILITIES) {
+    if (inputs.includes(key)) list.push({ key, label, Icon });
+  }
+  if (caps?.supportsToolCalling === true)
+    list.push({ key: "tools", label: "Uses tools", Icon: WrenchIcon });
+  // A null means no source claimed reasoning support, so only `true` counts.
+  if (caps?.supportsReasoningEffort === true)
+    list.push({ key: "reasoning", label: "Reasons", Icon: BrainIcon });
+  return list;
+}
 
 function modelPrice(model: LlmModel) {
   const input = formatPrice(model.capabilities?.pricePerMillionInput);

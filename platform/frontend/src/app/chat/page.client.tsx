@@ -2536,6 +2536,11 @@ export function ChatPageContent({
     [conversationId],
   );
 
+  const openFilesPanel = useCallback(
+    () => openRightPanelTab("files"),
+    [openRightPanelTab],
+  );
+
   const closeRightPanel = useCallback(() => {
     setIsArtifactOpen(false);
     setIsBrowserPanelOpen(false);
@@ -3686,6 +3691,9 @@ export function ChatPageContent({
                                 conversationPerUserConnect.provider
                               }
                               isContextCompacting={isContextCompacting}
+                              onOpenFiles={
+                                conversationId ? openFilesPanel : undefined
+                              }
                               onCompactConversation={
                                 isActionAvailableForConversation(
                                   conversation,

@@ -2270,6 +2270,40 @@ describe("SlackProvider.sendAgentSelectionCard", () => {
       SLACK_SLASH_COMMANDS.HELP,
     );
   });
+
+  test("keeps the agent picker within Slack's option limits", async () => {
+    const provider = createProvider();
+    const postEphemeral = vi.fn().mockResolvedValue({ ok: true });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — mock Slack client
+    (provider as any).client = { chat: { postEphemeral } };
+
+    await provider.sendAgentSelectionCard({
+      message: {
+        messageId: "1234567890.123456",
+        channelId: "C12345",
+        workspaceId: "T12345",
+        senderId: "U_SENDER",
+        senderName: "Test User",
+        text: "",
+        rawText: "",
+        timestamp: new Date(),
+        isThreadReply: false,
+      },
+      agents: Array.from({ length: 150 }, (_, index) => ({
+        id: `agent-${index}`,
+        name: `${"Agent ".repeat(20)}${index}`,
+      })),
+      isWelcome: false,
+    });
+
+    const select = postEphemeral.mock.calls[0][0].blocks
+      .flatMap((block: { elements?: unknown[] }) => block.elements ?? [])
+      .find((element: { type: string }) => element.type === "static_select");
+    expect(select.options).toHaveLength(100);
+    for (const option of select.options) {
+      expect(option.text.text.length).toBeLessThanOrEqual(75);
+    }
+  });
 });
 
 // =============================================================================
@@ -4056,6 +4090,40 @@ describe("SlackProvider.handleSlashCommandSocket", () => {
     ).resolves.toBeUndefined();
 
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  test("slow command → acked empty before Slack's deadline, reply sent by response_url", async () => {
+    vi.useFakeTimers();
+    try {
+      const provider = createProvider();
+      const response = { response_type: "ephemeral", text: "ok" };
+      // biome-ignore lint/suspicious/noExplicitAny: test-only — stub method
+      vi.spyOn(provider as any, "handleSlashCommand").mockImplementation(
+        () =>
+          new Promise((resolve) => setTimeout(() => resolve(response), 5_000)),
+      );
+      const fetchSpy = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValue(new Response(null, { status: 200 }));
+      const ack = vi.fn().mockResolvedValue(undefined);
+
+      // biome-ignore lint/suspicious/noExplicitAny: test-only — call private
+      const done = (provider as any).handleSlashCommandSocket(slashBody, ack);
+      await vi.advanceTimersByTimeAsync(2_500);
+      expect(ack).toHaveBeenCalledTimes(1);
+      expect(ack).toHaveBeenCalledWith();
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(3_000);
+      await done;
+      expect(ack).toHaveBeenCalledTimes(1);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(fetchSpy.mock.calls[0][1]?.body as string)).toEqual(
+        response,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test("handleSlashCommand throws → error response delivered", async () => {

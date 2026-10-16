@@ -878,10 +878,16 @@ class SlackProvider implements ChatOpsProvider {
             type: "plain_text" as const,
             text: "Choose an agent…",
           },
-          options: params.agents.map((agent) => ({
-            text: { type: "plain_text" as const, text: agent.name },
-            value: agent.id,
-          })),
+          // Slack rejects the whole card past 100 options or 75-char labels.
+          options: params.agents
+            .slice(0, SLACK_SELECT_MAX_OPTIONS)
+            .map((agent) => ({
+              text: {
+                type: "plain_text" as const,
+                text: truncateSlackOptionText(agent.name),
+              },
+              value: agent.id,
+            })),
         },
       ],
     };
@@ -1542,7 +1548,7 @@ class SlackProvider implements ChatOpsProvider {
             isWelcome: false,
           });
         }
-        return { response_type: "in_channel", text: "" };
+        return null;
       }
 
       default:
@@ -1999,19 +2005,8 @@ class SlackProvider implements ChatOpsProvider {
       trigger_id?: string;
     };
 
-    // Deliver the response body to the user. Prefer ack() over the socket;
-    // if the socket is mid-rotation the ack rejects, so fall back to
-    // response_url (HTTP POST) which Slack guarantees is valid for ~30 min.
-    const deliver = async (response: Record<string, unknown>) => {
-      try {
-        await ack(response);
-        return;
-      } catch (error) {
-        logger.warn(
-          { error: errorMessage(error), command: cmd.command },
-          "[SlackProvider] Slash command ack failed; falling back to response_url",
-        );
-      }
+    // response_url (HTTP POST) works for ~30 min after the command.
+    const postToResponseUrl = async (response: Record<string, unknown>) => {
       if (!cmd.response_url) {
         logger.error(
           { command: cmd.command },
@@ -2028,28 +2023,50 @@ class SlackProvider implements ChatOpsProvider {
       } catch (error) {
         logger.error(
           { error: errorMessage(error), command: cmd.command },
-          "[SlackProvider] Slash command response_url fallback failed",
+          "[SlackProvider] Slash command response_url post failed",
         );
       }
     };
 
-    try {
-      const response = await this.handleSlashCommand(cmd);
-      if (response) {
-        await deliver(response as Record<string, unknown>);
-      } else {
-        // No body to deliver — just close Slack's spinner. If this ack
-        // fails the user briefly sees a timeout; the side effect (e.g.
-        // modal opened via trigger_id) already happened.
+    // Slack shows "the app did not respond" unless the command is acked
+    // within 3s. Looking up the user and agents and posting a card can take
+    // longer, so past the deadline ack empty and send the reply by
+    // response_url instead.
+    let acked = false;
+    const ackTimer = setTimeout(() => {
+      acked = true;
+      ack().catch((error) => {
+        logger.warn(
+          { error: errorMessage(error), command: cmd.command },
+          "[SlackProvider] Slash command ack failed",
+        );
+      });
+    }, SLASH_COMMAND_ACK_DEADLINE_MS);
+
+    // Deliver the reply. Prefer ack() over the socket; if the socket is
+    // mid-rotation the ack rejects, so fall back to response_url.
+    const deliver = async (response?: Record<string, unknown>) => {
+      clearTimeout(ackTimer);
+      if (!acked) {
+        acked = true;
         try {
-          await ack();
+          await ack(response);
+          return;
         } catch (error) {
           logger.warn(
             { error: errorMessage(error), command: cmd.command },
-            "[SlackProvider] Empty slash command ack failed",
+            "[SlackProvider] Slash command ack failed; falling back to response_url",
           );
         }
       }
+      // With no body, the ack only closes Slack's spinner; the side effect
+      // (e.g. the agent card) already happened.
+      if (response) await postToResponseUrl(response);
+    };
+
+    try {
+      const response = await this.handleSlashCommand(cmd);
+      await deliver(response ?? undefined);
     } catch (error) {
       logger.error(
         { error: errorMessage(error), command: cmd.command },
@@ -2752,6 +2769,18 @@ function isRateLimitError(error: unknown): boolean {
 // — the rendered reply lives in `blocks`. Slack rejects oversized payloads with
 // `msg_too_large`, so cap the fallback well below Slack's ~40,000-char text
 // limit instead of duplicating the full (already block-rendered) chunk into it.
+// Slack allows 3s; leave room for the ack to travel back.
+const SLASH_COMMAND_ACK_DEADLINE_MS = 2_000;
+
+const SLACK_SELECT_MAX_OPTIONS = 100;
+const SLACK_OPTION_TEXT_LIMIT = 75;
+
+function truncateSlackOptionText(text: string): string {
+  return text.length > SLACK_OPTION_TEXT_LIMIT
+    ? `${text.slice(0, SLACK_OPTION_TEXT_LIMIT - 1)}…`
+    : text;
+}
+
 const SLACK_FALLBACK_TEXT_LIMIT = 3_000;
 
 function truncateFallbackText(text: string): string {

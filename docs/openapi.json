@@ -139475,7 +139475,7 @@
         "tags": [
           "ChatOps Webhooks"
         ],
-        "description": "MS Teams Bot Framework webhook endpoint",
+        "description": "MS Teams webhook endpoint",
         "requestBody": {
           "required": true,
           "content": {

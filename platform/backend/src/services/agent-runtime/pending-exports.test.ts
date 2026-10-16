@@ -505,6 +505,7 @@ describe("files pinned while their runtime is mid-call", () => {
     // A crossed read releases its pin; this one stays for the in-pod sweep.
     expect(pod.discarded).toEqual([]);
     expect(counted).toHaveBeenCalledWith("discard_failed");
+    // The mocked admission does not write the native runtime's return store.
     const admitted = crossing.mock.calls[1][0];
     vi.spyOn(openappa, "loadChildReturns").mockResolvedValue([
       {
@@ -517,6 +518,10 @@ describe("files pinned while their runtime is mid-call", () => {
     expect(served.isError).not.toBe(true);
     expect(served.structuredContent).toMatchObject({ content: "final report" });
     expect(crossing).toHaveBeenCalledTimes(2);
+    expect(served.structuredContent).toHaveProperty(
+      "pinned_at",
+      expect.any(String),
+    );
   });
 
   test("a pinned file the runtime's requests fail to read three times is released with a refusal", async ({

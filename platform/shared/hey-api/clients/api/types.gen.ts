@@ -21530,6 +21530,7 @@ export type GetAgentRuntimePreflightResponses = {
             label: string;
             description?: string;
             canConnect?: boolean;
+            adminOnly?: boolean;
         }>;
         misconfigured: Array<{
             key: string;
@@ -21537,6 +21538,7 @@ export type GetAgentRuntimePreflightResponses = {
             label: string;
             description?: string;
             canConnect?: boolean;
+            adminOnly?: boolean;
         }>;
         incompatible: string | null;
     };

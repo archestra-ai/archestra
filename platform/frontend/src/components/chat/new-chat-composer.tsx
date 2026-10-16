@@ -3,7 +3,10 @@
 import type { FileUIPart } from "ai";
 import { useMemo } from "react";
 import ArchestraPromptInput from "@/app/chat/prompt-input";
-import { AgentRuntimeCredentialPrompt } from "@/components/agent-run-credential-prompt";
+import {
+  AgentRuntimeCredentialPrompt,
+  AgentRuntimePreflightError,
+} from "@/components/agent-run-credential-prompt";
 import { useChatAgents, useDefaultAgentId } from "@/lib/agent.query";
 import {
   runtimePreflightDisabledReason,
@@ -198,6 +201,12 @@ export function NewChatComposer({
             declarations={runtimeAgent?.runtime?.credentials ?? []}
             incompatible={runtimePreflight.data.incompatible}
             onConnected={() => runtimePreflight.refetch()}
+          />
+        )}
+        {isRuntimeMode && runtimePreflight.isError && (
+          <AgentRuntimePreflightError
+            error={runtimePreflight.error}
+            onRetry={() => void runtimePreflight.refetch()}
           />
         )}
       </div>

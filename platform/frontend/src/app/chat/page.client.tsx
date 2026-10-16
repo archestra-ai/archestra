@@ -33,7 +33,10 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { scheduledRunContext } from "@/app/_parts/scheduled-run-sidebar.utils";
-import { AgentRuntimeCredentialPrompt } from "@/components/agent-run-credential-prompt";
+import {
+  AgentRuntimeCredentialPrompt,
+  AgentRuntimePreflightError,
+} from "@/components/agent-run-credential-prompt";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
 import { AppLogo } from "@/components/app-logo";
@@ -3942,26 +3945,41 @@ export function ChatPageContent({
                                   runtimeMode={isInitialRuntimeMode}
                                   runtimeAgentName={initialRuntimeAgent?.name}
                                 />
-                                {isInitialRuntimeMode &&
-                                  runtimePreflight.data?.ready === false && (
-                                    <AgentRuntimeCredentialPrompt
-                                      agentId={initialAgentId ?? ""}
-                                      missing={[
-                                        ...runtimePreflight.data.missing,
-                                        ...runtimePreflight.data.misconfigured,
-                                      ]}
-                                      declarations={
-                                        initialRuntimeAgent?.runtime
-                                          ?.credentials ?? []
-                                      }
-                                      incompatible={
-                                        runtimePreflight.data.incompatible
-                                      }
-                                      onConnected={() =>
-                                        runtimePreflight.refetch()
-                                      }
-                                    />
-                                  )}
+                                {/* The runtime drawer overlays the space
+                                    under the composer, so these start below
+                                    it rather than under it. */}
+                                <div className="pt-7 empty:hidden">
+                                  {isInitialRuntimeMode &&
+                                    runtimePreflight.data?.ready === false && (
+                                      <AgentRuntimeCredentialPrompt
+                                        agentId={initialAgentId ?? ""}
+                                        missing={[
+                                          ...runtimePreflight.data.missing,
+                                          ...runtimePreflight.data
+                                            .misconfigured,
+                                        ]}
+                                        declarations={
+                                          initialRuntimeAgent?.runtime
+                                            ?.credentials ?? []
+                                        }
+                                        incompatible={
+                                          runtimePreflight.data.incompatible
+                                        }
+                                        onConnected={() =>
+                                          runtimePreflight.refetch()
+                                        }
+                                      />
+                                    )}
+                                  {isInitialRuntimeMode &&
+                                    runtimePreflight.isError && (
+                                      <AgentRuntimePreflightError
+                                        error={runtimePreflight.error}
+                                        onRetry={() =>
+                                          void runtimePreflight.refetch()
+                                        }
+                                      />
+                                    )}
+                                </div>
                               </>
                             )}
                           </div>

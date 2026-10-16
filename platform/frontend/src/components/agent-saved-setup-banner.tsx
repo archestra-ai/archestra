@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { agentEditHref } from "@/components/agent-pages/agent-page-config";
+import { adminOnlyDescription } from "@/components/agent-run-credential-prompt";
 import { AgentRuntimeCredentialsDialog } from "@/components/agent-runtime-credentials-dialog";
 import {
   AgentSetupBanner,
@@ -49,6 +50,7 @@ export function AgentSavedSetupBanner({
     return (
       <QueryLoadError
         title="Cannot check agent setup"
+        error={preflight.error}
         onRetry={() => {
           void preflight.refetch();
           if (isCodex) void keys.refetch();
@@ -66,6 +68,27 @@ export function AgentSavedSetupBanner({
     );
   }
   const missing = [...preflight.data.missing, ...preflight.data.misconfigured];
+  // An organization credential this person may not run with blocks the agent
+  // whatever else they set up, so it is the only thing worth showing.
+  const adminOnlyLabels = missing
+    .filter((credential) => credential.adminOnly)
+    .map(({ label }) => label);
+  if (adminOnlyLabels.length > 0) {
+    return (
+      <AgentSetupBanner
+        key={agentId}
+        items={[
+          {
+            id: "admin-only",
+            label: "Only admins can run this agent",
+            description: adminOnlyDescription(adminOnlyLabels),
+            status: "now",
+          },
+        ]}
+        showReady={showReady}
+      />
+    );
+  }
   const needsClaudeAccount = missing.some(
     ({ key }) => key === "CLAUDE_CODE_ACCOUNT",
   );
@@ -73,22 +96,32 @@ export function AgentSavedSetupBanner({
     new Map(missing.map((credential) => [credential.key, credential])).values(),
   )
     .filter(({ key }) => key !== "CLAUDE_CODE_ACCOUNT")
-    .map(({ key, label }) => ({
-      id: key,
-      label: `Provide ${label}`,
-      description: `This agent needs ${label} in its container. Set a value, or connect it.`,
-      status: "now",
-      action: (
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => setCredentialsOpen(true)}
-        >
-          Set up
-        </Button>
-      ),
-    }));
+    .map(
+      ({ key, label, canConnect }): AgentSetupItem =>
+        canConnect === false
+          ? {
+              id: key,
+              label: `Ask an admin for ${label}`,
+              description: `This agent needs ${label} to run. Ask an admin to share it with you.`,
+              status: "now",
+            }
+          : {
+              id: key,
+              label: `Provide ${label}`,
+              description: `This agent needs ${label} in its container. Set a value, or connect it.`,
+              status: "now",
+              action: (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setCredentialsOpen(true)}
+                >
+                  Set up
+                </Button>
+              ),
+            },
+    );
   if (needsClaudeAccount) {
     items.unshift({
       id: "CLAUDE_CODE_ACCOUNT",

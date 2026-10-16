@@ -213,6 +213,7 @@ const agentRuntimeRoutes: FastifyPluginAsyncZod = async (fastify) => {
         runtime,
         organizationId: request.organizationId,
         userId: request.user.id,
+        reportAdminOnlyCredentials: true,
       });
       const modelCompatibility =
         await getResolvedAgentRuntimeModelCompatibility({

@@ -3,7 +3,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { useMyAgentRun, useMyAgentRuns } from "./agent-runtime.query";
+import {
+  runtimePreflightDisabledReason,
+  useMyAgentRun,
+  useMyAgentRuns,
+} from "./agent-runtime.query";
 
 vi.mock("@archestra/shared", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@archestra/shared")>();
@@ -210,5 +214,31 @@ describe("useMyAgentRuns", () => {
     expect(sdk.getMyAgentRuns).toHaveBeenNthCalledWith(2, {
       query: { limit: 100, offset: 100, sort: "recent" },
     });
+  });
+});
+
+describe("runtimePreflightDisabledReason", () => {
+  it("names why Send is off for each preflight outcome", () => {
+    expect(
+      runtimePreflightDisabledReason({ isPending: false, isError: true }),
+    ).toBe("Can't check this agent's setup");
+    expect(
+      runtimePreflightDisabledReason({
+        isPending: false,
+        data: { ready: false, missing: [{ adminOnly: true }] },
+      }),
+    ).toBe("Only admins can run this agent");
+    expect(
+      runtimePreflightDisabledReason({
+        isPending: false,
+        data: { ready: false, missing: [{}] },
+      }),
+    ).toBe("Connect the credentials this agent needs");
+    expect(
+      runtimePreflightDisabledReason({
+        isPending: false,
+        data: { ready: true, missing: [] },
+      }),
+    ).toBeUndefined();
   });
 });

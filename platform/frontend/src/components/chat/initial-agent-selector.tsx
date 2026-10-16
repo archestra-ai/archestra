@@ -9,9 +9,11 @@ import {
   Check,
   Copy,
   ExternalLink,
+  Infinity as InfinityIcon,
   Plus,
   Search,
   SlidersHorizontal,
+  Wrench,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -550,9 +552,10 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                   the icons are part of the agent's own button rather than a
                   second control. */}
               {currentAgent?.accessAllTools ? (
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  All tools
-                </span>
+                <AllToolsIcons
+                  descriptionId={toolSummaryId}
+                  agentName={displayAgentName}
+                />
               ) : !triggerIconsLoaded ? (
                 <span
                   className="flex min-w-14 shrink-0 items-center"
@@ -1112,6 +1115,48 @@ type SummaryKnowledge = {
  * `descriptionId` labels the summary the button points at, so screen readers
  * hear it without a hover.
  */
+/**
+ * The same stacked circles as a fixed tool list, standing in for "every tool"
+ * so an Auto-mode agent's button reads like any other agent's.
+ */
+function AllToolsIcons({
+  descriptionId,
+  agentName,
+}: {
+  descriptionId: string;
+  agentName: string;
+}) {
+  return (
+    <>
+      <span id={descriptionId} className="sr-only">
+        {`${agentName} uses all tools`}
+      </span>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="flex shrink-0 items-center" aria-hidden="true">
+            <OverlappedIcons
+              icons={ALL_TOOLS_ICONS}
+              maxVisible={ALL_TOOLS_ICONS.length}
+            />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top">All tools</TooltipContent>
+      </Tooltip>
+    </>
+  );
+}
+
+const ALL_TOOLS_ICONS = [
+  {
+    key: "tools",
+    icon: <Wrench className="size-3 text-muted-foreground" />,
+  },
+  {
+    key: "all",
+    icon: <InfinityIcon className="size-3 text-muted-foreground" />,
+  },
+];
+
 function AgentToolIcons({
   descriptionId,
   agentName,

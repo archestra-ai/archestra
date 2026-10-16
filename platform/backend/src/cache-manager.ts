@@ -69,8 +69,6 @@ export const CacheKey = {
   /** Canonical result text replayed on later requests. Keep the deployed preview's
    * namespace so upgrading a live conversation does not rewrite its earlier results. */
   OpenAppaHitlReviewContinuation: "openappa-hitl-page-continuation",
-  /** Pending OpenAPPA review indexed by a verified runtime workspace */
-  OpenAppaRuntimeHitlReview: "openappa-runtime-hitl-review",
   /** Sessions already told once to resend a request that lacked the gateway remedy tools */
   OpenAppaRemedyToolsMissing: "openappa-remedy-tools-missing",
   /** Ruling on a call to a tool the client had not loaded, answered on that call's result */

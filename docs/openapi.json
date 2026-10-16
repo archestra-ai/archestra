@@ -2,7 +2,7 @@
   "openapi": "3.0.0",
   "info": {
     "title": "Archestra",
-    "version": "1.4.0-rc.48"
+    "version": "1.4.0-rc.49"
   },
   "components": {
     "schemas": {
@@ -81771,630 +81771,6 @@
                   },
                   "required": [
                     "deleted"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "type": "object",
-                          "additionalProperties": {}
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "none",
-          "note": "None (no additional RBAC permission required)",
-          "permissions": []
-        }
-      }
-    },
-    "/api/agent-runs/{taskId}/openappa-review": {
-      "get": {
-        "operationId": "getAgentRunOpenappaReview",
-        "tags": [
-          "Agents"
-        ],
-        "description": "Read the pending OpenAPPA review for a runtime the caller can see\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-            },
-            "in": "path",
-            "name": "taskId",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "none",
-                        "pending",
-                        "no_reviewer"
-                      ]
-                    },
-                    "canDecide": {
-                      "type": "boolean"
-                    },
-                    "offerId": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "text": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "tool": {
-                      "nullable": true,
-                      "type": "string"
-                    },
-                    "arguments": {
-                      "nullable": true,
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "status",
-                    "canDecide",
-                    "offerId",
-                    "text",
-                    "tool",
-                    "arguments"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_validation_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authentication_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_authorization_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        },
-                        "details": {
-                          "type": "object",
-                          "additionalProperties": {}
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_not_found_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_conflict_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "object",
-                      "properties": {
-                        "message": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "api_internal_server_error"
-                          ]
-                        },
-                        "internal_code": {
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "message",
-                        "type"
-                      ],
-                      "additionalProperties": false
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-required-permissions": {
-          "kind": "none",
-          "note": "None (no additional RBAC permission required)",
-          "permissions": []
-        }
-      },
-      "post": {
-        "operationId": "decideAgentRunOpenappaReview",
-        "tags": [
-          "Agents"
-        ],
-        "description": "Approve or deny the pending OpenAPPA review for a runtime this user owns\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "decision": {
-                    "type": "string",
-                    "enum": [
-                      "approve",
-                      "deny"
-                    ]
-                  },
-                  "offerId": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                },
-                "required": [
-                  "decision",
-                  "offerId"
-                ]
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-            },
-            "in": "path",
-            "name": "taskId",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "decision": {
-                      "type": "string",
-                      "enum": [
-                        "approve",
-                        "deny"
-                      ]
-                    },
-                    "offerId": {
-                      "type": "string"
-                    },
-                    "steered": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "decision",
-                    "offerId",
-                    "steered"
                   ],
                   "additionalProperties": false
                 }
@@ -344900,8 +344276,6 @@
             "schema": {
               "type": "string",
               "enum": [
-                "agent",
-                "mcp_gateway",
                 "mcp_server"
               ]
             },
@@ -344934,7 +344308,6 @@
               "type": "string",
               "enum": [
                 "name",
-                "type",
                 "tools"
               ]
             },
@@ -344979,8 +344352,6 @@
                           "type": {
                             "type": "string",
                             "enum": [
-                              "agent",
-                              "mcp_gateway",
                               "mcp_server"
                             ]
                           },
@@ -345007,11 +344378,6 @@
                             "maximum": 9007199254740991
                           },
                           "fallbackCount": {
-                            "type": "integer",
-                            "minimum": -9007199254740991,
-                            "maximum": 9007199254740991
-                          },
-                          "builtInCount": {
                             "type": "integer",
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
@@ -345053,9 +344419,6 @@
                               "notCovered"
                             ],
                             "additionalProperties": false
-                          },
-                          "autoMode": {
-                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -345067,9 +344430,7 @@
                           "toolCount",
                           "governedCount",
                           "fallbackCount",
-                          "builtInCount",
-                          "rules",
-                          "autoMode"
+                          "rules"
                         ],
                         "additionalProperties": false
                       }
@@ -345417,16 +344778,6 @@
           {
             "schema": {
               "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-            },
-            "in": "query",
-            "name": "entityId",
-            "required": false
-          },
-          {
-            "schema": {
-              "type": "string",
               "enum": [
                 "battery",
                 "root",
@@ -345662,25 +345013,6 @@
                           },
                           "enforced": {
                             "type": "boolean"
-                          },
-                          "agents": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "id": {
-                                  "type": "string"
-                                },
-                                "name": {
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "id",
-                                "name"
-                              ],
-                              "additionalProperties": false
-                            }
                           }
                         },
                         "required": [
@@ -345697,8 +345029,7 @@
                           "rule",
                           "fallbackLine",
                           "unlisted",
-                          "enforced",
-                          "agents"
+                          "enforced"
                         ],
                         "additionalProperties": false
                       }
@@ -411103,7 +410434,7 @@
         "tags": [
           "Site Notification"
         ],
-        "description": "Create a new site notification\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
+        "description": "Replace the organization site notification, optionally keeping it inactive.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -411119,6 +410450,9 @@
                     "type": "string",
                     "format": "date-time",
                     "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+                  },
+                  "isActive": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -420623,7 +419957,7 @@
         "tags": [
           "Skills"
         ],
-        "description": "Manage a Git-synced skill: change its pull frequency or its source (repository, branch, folder, credential), trigger an immediate pull, or disconnect it from the Git source (interval null) — a disconnected skill keeps its content and provenance and becomes editable in the app.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
+        "description": "Manage a Git-synced skill: change its pull frequency or its source (repository, branch, folder, credential), trigger an immediate pull, or disconnect it from the Git source (interval null) — a disconnected skill keeps its content and provenance and becomes editable in the app. Providing a full source reconnects a previously imported skill after verifying the repository.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)",
         "requestBody": {
           "required": true,
           "content": {

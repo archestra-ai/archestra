@@ -893,7 +893,7 @@ describe("SlackProvider.parseWebhookNotification — answer-all channels", () =>
     expect(result).toBeNull();
   });
 
-  test("the Stop button silences an answer-all thread until it is re-mentioned", async () => {
+  test("the Stop button keeps answer-all enabled for later messages", async () => {
     const provider = createProvider();
     const apiCall = vi.fn().mockResolvedValue({ ok: true });
     // biome-ignore lint/suspicious/noExplicitAny: test-only — inject client mock
@@ -921,10 +921,10 @@ describe("SlackProvider.parseWebhookNotification — answer-all channels", () =>
       ),
     ).toBeNull();
 
-    // Later un-mentioned messages stay quiet despite answer-all...
-    expect(await message("still there?", "7777777777.000013")).toBeNull();
+    // Stop cancels a turn without muting later messages.
+    expect(await message("still there?", "7777777777.000013")).not.toBeNull();
 
-    // ...until a fresh mention lifts the stop.
+    // A new mention still works too.
     expect(
       await provider.parseWebhookNotification(
         makeEventPayload(
@@ -1047,7 +1047,9 @@ describe("SlackProvider — bots pinned to an agent sharing a channel", () => {
     await marketing.parseWebhookNotification(mutePayload, {});
 
     const next = message("anyone there?", "5555555555.000022");
-    expect(await marketing.parseWebhookNotification(next, {})).toBeNull();
+    expect(await marketing.parseWebhookNotification(next, {})).toEqual(
+      control === "stop" ? expect.any(Object) : null,
+    );
     expect(await main.parseWebhookNotification(next, {})).not.toBeNull();
   });
 
@@ -1161,7 +1163,7 @@ describe("SlackProvider.parseWebhookNotification — thread mute controls", () =
     return { provider, apiCall, setStatus };
   }
 
-  test("Stop in an active thread ends auto-replies and moves the session out of processing", async () => {
+  test("Stop preserves auto-replies and moves the session out of processing", async () => {
     const { provider, apiCall } = createStopProvider();
     const channel = "C_STOP";
     const threadTs = "6666666666.000001";
@@ -1201,7 +1203,7 @@ describe("SlackProvider.parseWebhookNotification — thread mute controls", () =
         ),
         {},
       ),
-    ).toBeNull();
+    ).not.toBeNull();
   });
 
   test("Stop aborts the thread's in-flight runs as stopped, not superseded", async () => {

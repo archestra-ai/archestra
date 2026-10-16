@@ -3,6 +3,7 @@ import { SESSION_ID_HEADER } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { executeA2AMessage } from "@/agents/a2a-executor";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import { AgentModel, AgentTeamModel, TeamModel, UserModel } from "@/models";
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
@@ -271,6 +272,10 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
             },
           });
         }
+      } else if (tokenAuth.serviceAccountId) {
+        // A service account key (or an OAuth app bound to one) runs as that
+        // account, never with the organization's reach.
+        userId = serviceAccountUserId(tokenAuth.serviceAccountId);
       } else {
         // Team/org token - we don't have a specific user, use a system context
         // The LLM client will work without user-specific API key resolution

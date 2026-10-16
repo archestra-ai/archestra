@@ -55,7 +55,6 @@ import {
   LimitValidationService,
   LlmProviderApiKeyModel,
   ModelModel,
-  OpenAppaSessionModel,
   TeamModel,
   UserModel,
 } from "@/models";
@@ -84,13 +83,9 @@ import {
 } from "@/openappa/child-return";
 import {
   type AppaChildTrajectoryReceipt,
-  appendChildTrajectoryReceipt,
   stripChildTrajectoryReceipts,
 } from "@/openappa/child-trajectory-receipt";
-import {
-  unwrapCompactionCarriersFromRequest,
-  wrapCompactionResponse,
-} from "@/openappa/compaction-carrier";
+import { unwrapCompactionCarriersFromRequest } from "@/openappa/compaction-carrier";
 import {
   type AppaDelegationMarker,
   collectDelegationMarkers,
@@ -110,7 +105,6 @@ import {
   openappaEnabled,
   sessionFromHeaders,
 } from "@/openappa/service";
-import { formatSessionReceipt } from "@/openappa/session-token";
 import {
   APPA_SUBAGENT_BINDING_HEADER,
   verifySubagentBinding,
@@ -137,8 +131,6 @@ import { startedUnenforced } from "@/openappa/unenforced";
 import {
   type AppaSessionIdentity,
   appaWireFamily,
-  appendChildTrajectoryReceiptToResponse,
-  appendSessionReceiptToResponse,
   declaredToolEntries,
   providerWire,
   restoreTrajectoryStamps,
@@ -148,6 +140,8 @@ import {
   stripSessionReceiptsFromRequest,
 } from "@/openappa/wire";
 import { parseJsonHeader } from "@/proxy/plugins/appa-plugin-archestra/adapters/trajectory";
+import { BufferedChildStream } from "@/proxy/plugins/appa-plugin-archestra/host/child-stream-buffer";
+import { OpenappaReceipts } from "@/proxy/plugins/appa-plugin-archestra/host/receipts";
 import {
   APPA_CLIENT_ADAPTERS,
   appaTrajectory,
@@ -155,9 +149,7 @@ import {
   nativeSpawnParentId,
 } from "@/proxy/plugins/appa-plugin-archestra/session-identity";
 import {
-  APPA_CHILD_TRAJECTORY_RECEIPT,
   APPA_PLUGIN_TRUSTED_CONTEXT,
-  type AppaChildTrajectoryReceiptOutput,
   type AppaTrustedContext,
 } from "@/proxy/plugins/appa-plugin-archestra/types";
 import {
@@ -198,7 +190,6 @@ import {
   type ToolCallBlock,
 } from "@/types";
 import { asRecord } from "@/utils/as-record";
-import { trackBackgroundWork } from "@/utils/background-work";
 import { repairLoneSurrogates } from "@/utils/lone-surrogates";
 import { isLoopbackRequest } from "@/utils/network";
 import { isUuid } from "@/utils/uuid";
@@ -263,9 +254,7 @@ const {
  */
 export interface LLMProxyContext<TRequest> {
   connectionVerification?: boolean;
-  sessionReceipt?: SessionReceiptOutput;
-  childTrajectoryReceipt?: ChildTrajectoryReceiptOutput;
-  childCompactionContext?: string;
+  appaReceipts?: OpenappaReceipts;
   pluginRegistry?: LlmProxyPluginRegistry;
   pluginContext?: LlmProxyRequestContext;
   agent: GatewayAgent;
@@ -325,19 +314,6 @@ export interface LLMProxyContext<TRequest> {
    */
   streamTiming: StreamTiming;
 }
-
-type SessionReceiptOutput = {
-  family: NonNullable<ReturnType<typeof appaWireFamily>>;
-  organizationId: string;
-  sessionId: string;
-  code: string;
-  footer: string;
-};
-
-type ChildTrajectoryReceiptOutput = {
-  family: NonNullable<ReturnType<typeof appaWireFamily>>;
-  footer: string;
-};
 
 export interface StreamTiming {
   requestReceivedAt: number;
@@ -479,54 +455,12 @@ function isBoundedHeaderValue(
   );
 }
 
-function markSessionReceiptIssued(receipt: {
-  organizationId: string;
-  sessionId: string;
-}): void {
-  trackBackgroundWork(
-    OpenAppaSessionModel.markReceiptIssued({
-      organizationId: receipt.organizationId,
-      sessionId: receipt.sessionId,
-    }).catch((error) => {
-      logger.warn(
-        { err: error, sessionId: receipt.sessionId },
-        "OpenAPPA failed to record session receipt issuance",
-      );
-    }),
-  );
-}
-
 /**
  * Detects Claude Code compaction summary requests. Claude Code puts the
  * instruction on a user turn (sometimes also in `system`); scan those text
  * sites only so a large tool result cannot trigger a false re-issue and so
  * the body is never serialized just to search it.
  */
-/**
- * Claude Code's next-prompt suggestion: after an answer, it asks the model
- * what the user might type next, with the session's tools and history, and
- * shows the reply as a hint in the input box. Its last user message carries
- * this fixed instruction.
- */
-function isClientPromptSuggestion(body: unknown): boolean {
-  const messages = asRecord(body)?.messages;
-  if (!Array.isArray(messages)) return false;
-  const content = asRecord(messages.at(-1))?.content;
-  const texts =
-    typeof content === "string"
-      ? [content]
-      : Array.isArray(content)
-        ? content.map((part) => asRecord(part)?.text)
-        : [];
-  return texts.some(
-    (text) =>
-      typeof text === "string" &&
-      text.trimStart().startsWith(PROMPT_SUGGESTION_INSTRUCTION),
-  );
-}
-
-const PROMPT_SUGGESTION_INSTRUCTION = "[SUGGESTION MODE:";
-
 function isClientCompactionRequest(params: {
   body: unknown;
   headers: Record<string, string | string[] | undefined>;
@@ -612,26 +546,6 @@ function containsCompactionInstruction(value: unknown): boolean {
 
 const CLAUDE_COMPACTION_INSTRUCTION =
   "Your task is to create a detailed summary of the conversation so far";
-
-/** Returns true if the request requires JSON-only structured output. */
-function hasStructuredOutputConstraint(body: unknown): boolean {
-  if (!body || typeof body !== "object" || Array.isArray(body)) return false;
-  const request = body as Record<string, unknown>;
-  const format =
-    request.response_format ??
-    (request.text && typeof request.text === "object"
-      ? (request.text as Record<string, unknown>).format
-      : undefined) ??
-    (request.output_config && typeof request.output_config === "object"
-      ? (request.output_config as Record<string, unknown>).format
-      : undefined) ??
-    request.output_format;
-  if (!format || typeof format !== "object" || Array.isArray(format)) {
-    return false;
-  }
-  const type = (format as Record<string, unknown>).type;
-  return type === "json_schema" || type === "json_object";
-}
 
 /**
  * The subset of a proxied request body we read for session-id and client-app
@@ -1579,9 +1493,7 @@ export async function handleLLMProxy<
     // The session a request has while enforcement is off, for the records
     // OpenAPPA reads once it turns on. Nothing governs it.
     let observedSession: OpenAppaSession | undefined;
-    let sessionReceipt: SessionReceiptOutput | undefined;
-    let childTrajectoryReceipt: ChildTrajectoryReceiptOutput | undefined;
-    let childCompactionContext: string | undefined;
+    let appaReceipts: OpenappaReceipts | undefined;
     let appaIdentity: AppaSessionIdentity = {};
     let hasNativeClientSession = false;
     const approvedProxySetupContext = connectionProxySetupContext(request.raw);
@@ -2253,46 +2165,16 @@ export async function handleLLMProxy<
         // content explicitly so APPA cannot inspect a blocked/raw version.
         toolResults: requestAdapter.getToolResults(),
       });
-      const issued = pluginContext.resources.get(
-        APPA_CHILD_TRAJECTORY_RECEIPT,
-      ) as AppaChildTrajectoryReceiptOutput | undefined;
-      childCompactionContext = issued?.footer;
-      if (
-        !issued &&
-        openappaSession &&
-        hasNativeClientSession &&
-        !isInternalChat &&
-        !hasStructuredOutputConstraint(body) &&
-        // The agent loop declares its tools. A client's side calls (Claude
-        // Code's auto-mode classifier, its quota check, its next-prompt
-        // suggestion) are never shown as the session's reply, so the mark
-        // would be lost there and would alter what the client parses.
-        (clientCompaction ||
-          (declaredToolEntries(body).length > 0 &&
-            !isClientPromptSuggestion(body))) &&
-        appaCallerId &&
-        appaFamily
-      ) {
-        const receipt = await OpenAppaSessionModel.ensureReceiptToken({
-          organizationId: resolvedAgent.organizationId,
-          sessionId: openappaSession.session_id,
-        });
-        if (receipt && (receipt.receiptIssuedAt == null || clientCompaction)) {
-          sessionReceipt = {
-            family: appaFamily,
-            organizationId: resolvedAgent.organizationId,
-            sessionId: openappaSession.session_id,
-            code: receipt.token,
-            footer: formatSessionReceipt(receipt.token),
-          };
-        }
-      }
-      if (issued && appaFamily && (!issued.inHistory || clientCompaction)) {
-        childTrajectoryReceipt = {
-          family: appaFamily,
-          footer: issued.footer,
-        };
-      }
+      appaReceipts = await OpenappaReceipts.prepare({
+        context: pluginContext,
+        body,
+        session: openappaSession,
+        callerId: appaCallerId,
+        family: appaFamily,
+        hasNativeClientSession,
+        isInternalChat,
+        clientCompaction,
+      });
     }
     // Nothing OpenAPPA wrote for the client and the gateway goes on to the
     // provider, whether or not this request has a session (deployment switch
@@ -2533,9 +2415,7 @@ export async function handleLLMProxy<
 
     const ctx: LLMProxyContext<TRequest> = {
       connectionVerification,
-      ...(sessionReceipt ? { sessionReceipt } : {}),
-      ...(childTrajectoryReceipt ? { childTrajectoryReceipt } : {}),
-      ...(childCompactionContext ? { childCompactionContext } : {}),
+      ...(appaReceipts ? { appaReceipts } : {}),
       ...(pluginContext ? { pluginRegistry, pluginContext } : {}),
       agent: resolvedAgent,
       originalRequest: requestAdapter.getOriginalRequest(),
@@ -2779,9 +2659,7 @@ async function handleStreaming<
     streamTiming,
     pluginRegistry,
     pluginContext,
-    sessionReceipt,
-    childTrajectoryReceipt,
-    childCompactionContext,
+    appaReceipts,
   } = ctx;
 
   const providerName = provider.provider;
@@ -2791,25 +2669,9 @@ async function handleStreaming<
   if (pluginContext && pluginRegistry?.governsHostedToolCalls(pluginContext)) {
     streamAdapter.withholdHostedToolCalls?.();
   }
-  let sessionReceiptPrepared = false;
-  if (childCompactionContext) {
-    streamAdapter.setCompactionContext?.(childCompactionContext);
-  }
-  if (sessionReceipt || childTrajectoryReceipt) {
-    streamAdapter.setTextSuffix?.((text) => {
-      if (text.length === 0 && !childTrajectoryReceipt) return "";
-      const parts: string[] = [];
-      if (childTrajectoryReceipt) {
-        parts.push(childTrajectoryReceipt.footer);
-      }
-      if (sessionReceipt && text.length > 0) {
-        sessionReceiptPrepared = true;
-        if (!bufferModelResponse) markSessionReceiptIssued(sessionReceipt);
-        parts.push(sessionReceipt.footer);
-      }
-      return parts.join("\n");
-    });
-  }
+  appaReceipts?.attachToStream(streamAdapter, {
+    buffered: bufferModelResponse,
+  });
   let billingMode = initialBillingMode;
   const streamStartTime = Date.now();
   let firstChunkTime: number | undefined;
@@ -2866,46 +2728,10 @@ async function handleStreaming<
     reply.raw.write(data);
     keepAlive.touch();
   };
-  const MAX_BUFFERED_CHILD_STREAM_BYTES = 10 * 1024 * 1024;
-  let bufferedChildBytes = 0;
-  const bufferedModelEvents: (string | Uint8Array)[] = [];
-  const bufferedPolicyEvents: (string | Uint8Array)[] = [];
-  const emitModelEvent = (
-    data: string | Uint8Array,
-    isResponsePreamble = false,
-  ) => {
-    if (
-      bufferModelResponse &&
-      !(isResponsePreamble && !preambleSseCarriesContent(data))
-    ) {
-      bufferedChildBytes +=
-        typeof data === "string" ? Buffer.byteLength(data) : data.byteLength;
-      if (bufferedChildBytes > MAX_BUFFERED_CHILD_STREAM_BYTES) {
-        throw new ApiError(
-          413,
-          "OpenAPPA child stream exceeded response buffer limit",
-        );
-      }
-      bufferedModelEvents.push(data);
-      return;
-    }
-    writeToClient(data);
-  };
-  const emitPolicyEvent = (data: string | Uint8Array) => {
-    if (bufferModelResponse) {
-      bufferedChildBytes +=
-        typeof data === "string" ? Buffer.byteLength(data) : data.byteLength;
-      if (bufferedChildBytes > MAX_BUFFERED_CHILD_STREAM_BYTES) {
-        throw new ApiError(
-          413,
-          "OpenAPPA child stream exceeded response buffer limit",
-        );
-      }
-      bufferedPolicyEvents.push(data);
-      return;
-    }
-    writeToClient(data);
-  };
+  const childStream = new BufferedChildStream({
+    enabled: bufferModelResponse,
+    write: writeToClient,
+  });
   // Providers whose transport can't self-instrument duration (Bedrock) rely on
   // us to record llm_request_duration_seconds. Guard against a second (error-path)
   // observation once the stream has been established.
@@ -3066,7 +2892,7 @@ async function handleStreaming<
           // branch still do; zhipuai.ts guards it), as does one whose terminal
           // frame echoes the turn's calls (the Responses adapters).
           if (result.sseData) {
-            emitModelEvent(result.sseData, result.isResponsePreamble);
+            childStream.emitModel(result.sseData, result.isResponsePreamble);
           }
 
           if (result.isFinal) {
@@ -3180,9 +3006,7 @@ async function handleStreaming<
         );
       }
       const failureEvents = streamAdapter.formatToolCallsSSE([]);
-      if (bufferModelResponse) {
-        for (const event of bufferedModelEvents) writeToClient(event);
-      }
+      childStream.flushModel();
       for (const event of failureEvents) writeToClient(event);
       writeToClient(streamAdapter.formatEndSSE());
       reply.raw.end();
@@ -3220,7 +3044,7 @@ async function handleStreaming<
       );
       if (!reply.raw.destroyed) {
         for (const event of heldEvents) {
-          emitPolicyEvent(event);
+          childStream.emitPolicy(event);
         }
       }
     }
@@ -3302,20 +3126,14 @@ async function handleStreaming<
         toolInvocationRefusal;
 
       const fullContentMessage =
-        !bufferModelResponse && childTrajectoryReceipt
-          ? `${childTrajectoryReceipt.footer}\n\n${contentMessage}`
-          : contentMessage;
-      if (bufferModelResponse) {
-        streamAdapter.prepareResponseReplacement?.();
-        bufferedModelEvents.length = 0;
-        bufferedPolicyEvents.length = 0;
-      }
+        appaReceipts?.prefixRefusal(contentMessage) ?? contentMessage;
+      childStream.discard(streamAdapter);
       // Drop the held tool-call events and use the existing refusal format.
       // Its text comes from APPA when enabled.
       const refusalEvents =
         streamAdapter.formatCompleteTextSSE(fullContentMessage);
       for (const event of refusalEvents) {
-        emitPolicyEvent(event);
+        childStream.emitPolicy(event);
       }
 
       recordBlockedToolCallMetrics({
@@ -3362,7 +3180,7 @@ async function handleStreaming<
           );
         }
         for (const event of allEvents) {
-          emitPolicyEvent(event);
+          childStream.emitPolicy(event);
         }
       }
     }
@@ -3382,17 +3200,11 @@ async function handleStreaming<
           stripChildTrajectoryReceipts(streamAdapter.state.text).text,
       });
       if (bufferedOutcome.decision === "replace") {
-        streamAdapter.prepareResponseReplacement?.();
-        bufferedModelEvents.length = 0;
-        bufferedPolicyEvents.length = 0;
-        bufferedPolicyEvents.push(
-          ...streamAdapter.formatCompleteTextSSE(
-            childTrajectoryReceipt
-              ? appendChildTrajectoryReceipt(
-                  bufferedOutcome.responseText,
-                  childTrajectoryReceipt.footer,
-                )
-              : bufferedOutcome.responseText,
+        childStream.discard(streamAdapter);
+        childStream.replaceResponse(
+          streamAdapter.formatCompleteTextSSE(
+            appaReceipts?.appendToReplacement(bufferedOutcome.responseText) ??
+              bufferedOutcome.responseText,
           ),
         );
         response = streamAdapter.toProviderResponse();
@@ -3413,15 +3225,8 @@ async function handleStreaming<
     }
 
     if (bufferModelResponse && !reply.raw.destroyed) {
-      for (const event of bufferedModelEvents) writeToClient(event);
-      for (const event of bufferedPolicyEvents) writeToClient(event);
-      if (
-        sessionReceipt &&
-        sessionReceiptPrepared &&
-        bufferedOutcome.decision === "release"
-      ) {
-        markSessionReceiptIssued(sessionReceipt);
-      }
+      childStream.flushAll();
+      appaReceipts?.markReleased(bufferedOutcome.decision);
     }
 
     // Stream end events
@@ -3514,9 +3319,7 @@ async function handleStreaming<
     }
     if (codexError?.isIncompleteTerminal) {
       // Preserve Chat's legal partial terminal only after failure cleanup.
-      if (bufferModelResponse) {
-        for (const event of bufferedModelEvents) writeToClient(event);
-      }
+      childStream.flushModel();
       const terminal = streamAdapter.processChunk({
         id: codexError.completion.id,
         object: "chat.completion.chunk",
@@ -3767,9 +3570,7 @@ async function handleNonStreaming<
     userTeams,
     pluginRegistry,
     pluginContext,
-    sessionReceipt,
-    childTrajectoryReceipt,
-    childCompactionContext,
+    appaReceipts,
   } = ctx;
 
   const providerName = provider.provider;
@@ -4335,42 +4136,11 @@ async function handleNonStreaming<
       response: clientResponse,
     });
   }
-  if (childCompactionContext) {
-    clientResponse = wrapCompactionResponse(
-      clientResponse,
-      childCompactionContext,
-    );
-    const response = asRecord(clientResponse);
-    if (
-      response?.object === "response.compaction" ||
-      (Array.isArray(response?.output) &&
-        response.output.length > 0 &&
-        response.output.every((item) => asRecord(item)?.type === "compaction"))
-    ) {
-      // Opaque clients keep the compaction item itself, not synthetic messages.
-      return sendResponse(clientResponse);
-    }
-  }
-  if (!sessionReceipt && !childTrajectoryReceipt) {
-    return sendResponse(clientResponse);
-  }
-  const outboundResponse = structuredClone(clientResponse);
-  if (childTrajectoryReceipt) {
-    appendChildTrajectoryReceiptToResponse({
-      family: childTrajectoryReceipt.family,
-      response: outboundResponse,
-      footer: childTrajectoryReceipt.footer,
-    });
-  }
-  if (sessionReceipt) {
-    const appended = appendSessionReceiptToResponse({
-      family: sessionReceipt.family,
-      response: outboundResponse,
-      code: sessionReceipt.code,
-    });
-    if (appended) markSessionReceiptIssued(sessionReceipt);
-  }
-  return sendResponse(outboundResponse);
+  return sendResponse(
+    appaReceipts
+      ? appaReceipts.decorateResponse(clientResponse)
+      : clientResponse,
+  );
 }
 
 class RecordedCodexGenerationFailure extends ApiError {
@@ -4418,60 +4188,6 @@ async function failResponsesGeneration(params: {
     }
   }
   return true;
-}
-
-// Verifies that preamble frames carry no content before release without buffering.
-// Envelopes like message_start or response.created can contain text.
-// Any frame that cannot be proven content-free is treated as content.
-function preambleSseCarriesContent(data: string | Uint8Array): boolean {
-  const text =
-    typeof data === "string" ? data : Buffer.from(data).toString("utf8");
-  let sawDataLine = false;
-  for (const line of text.split("\n")) {
-    if (!line.startsWith("data:")) continue;
-    sawDataLine = true;
-    let frame: unknown;
-    try {
-      frame = JSON.parse(line.slice("data:".length).trim());
-    } catch {
-      return true;
-    }
-    const payload = asRecord(frame);
-    if (!payload) return true;
-    // Anthropic envelope: message_start carries the initial Message object.
-    if (payload.type === "message_start") {
-      const content = asRecord(payload.message)?.content;
-      if (Array.isArray(content) && content.length > 0) return true;
-      continue;
-    }
-    // OpenAI/Azure Responses envelope: response.created and
-    // response.in_progress carry the in-flight Response object.
-    if (
-      typeof payload.type === "string" &&
-      payload.type.startsWith("response.")
-    ) {
-      const output = asRecord(payload.response)?.output;
-      if (Array.isArray(output) && output.length > 0) return true;
-      continue;
-    }
-    // OpenAI chat chunk: only a role-only delta is content-free.
-    if (Array.isArray(payload.choices)) {
-      for (const choice of payload.choices) {
-        const delta = asRecord(asRecord(choice)?.delta);
-        if (
-          delta?.content ||
-          delta?.reasoning_content ||
-          delta?.refusal ||
-          delta?.tool_calls
-        ) {
-          return true;
-        }
-      }
-      continue;
-    }
-    return true;
-  }
-  return !sawDataLine;
 }
 
 /**

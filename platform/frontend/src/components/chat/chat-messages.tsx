@@ -1721,11 +1721,9 @@ export function ChatMessages({
 function entryCallId(entry: {
   part: DynamicToolUIPart | ToolUIPart;
   remedyChain?: RemedyChain;
-}): string {
+}): string | undefined {
   return (
-    entry.remedyChain?.finalAttempt?.part.toolCallId ??
-    entry.part.toolCallId ??
-    ""
+    entry.remedyChain?.finalAttempt?.part.toolCallId ?? entry.part.toolCallId
   );
 }
 

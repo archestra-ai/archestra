@@ -1,7 +1,7 @@
 name: Backend Runner Benchmark
 
 # Temporary, same-source comparison; never a required check or merge-group job.
-# Repeat unchanged source after the initial wave warmed both provider caches.
+# Production-like caches; test three Ubicloud shards against the existing two Blacksmith shards.
 on:
   pull_request:
     branches: [main]
@@ -83,7 +83,7 @@ jobs:
           compression-level: 0
 
   backend-unit-tests:
-    name: Benchmark ${{ matrix.provider }} backend (shard ${{ matrix.shard }}/2)
+    name: Benchmark ${{ matrix.provider }} backend (shard ${{ matrix.shard }}/${{ matrix.shards }})
     needs: [backend-test-dependencies]
     runs-on: ${{ matrix.runner }}
     # A merge-queue shard can take about 15 minutes, including setup and
@@ -102,16 +102,24 @@ jobs:
         include:
           - provider: Blacksmith
             runner: blacksmith-16vcpu-ubuntu-2404
+            shards: 2
             shard: 1
           - provider: Blacksmith
             runner: blacksmith-16vcpu-ubuntu-2404
+            shards: 2
             shard: 2
           - provider: Ubicloud
             runner: ubicloud-standard-16-ubuntu-2404
+            shards: 3
             shard: 1
           - provider: Ubicloud
             runner: ubicloud-standard-16-ubuntu-2404
+            shards: 3
             shard: 2
+          - provider: Ubicloud
+            runner: ubicloud-standard-16-ubuntu-2404
+            shards: 3
+            shard: 3
     steps:
       - name: Checkout project
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -157,9 +165,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: platform/backend/node_modules/.vite/vitest
-          key: backend-vitest-${{ runner.os }}-node24-shard-${{ matrix.shard }}-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/backend/vitest.config.ts', 'platform/backend/src/**/*.test.ts') }}
-          restore-keys: |
-            backend-vitest-${{ runner.os }}-node24-shard-${{ matrix.shard }}-
+          key: backend-vitest-benchmark-cold-${{ github.run_id }}-${{ matrix.provider }}-shard-${{ matrix.shard }}
 
       # Node's compile cache persists V8 bytecode for the large module graph
       # that every Vitest fork imports. A same-host 2,616-test shard improved
@@ -170,9 +176,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/node-compile-cache
-          key: backend-node-compile-${{ runner.os }}-${{ runner.arch }}-node24-shard-${{ matrix.shard }}-${{ hashFiles('platform/pnpm-lock.yaml', 'platform/backend/vitest.config.ts', 'platform/backend/src/**/*.ts') }}
-          restore-keys: |
-            backend-node-compile-${{ runner.os }}-${{ runner.arch }}-node24-shard-${{ matrix.shard }}-
+          key: backend-node-compile-benchmark-cold-${{ github.run_id }}-${{ matrix.provider }}-shard-${{ matrix.shard }}
 
       - name: Record runner and source identity
         run: |
@@ -180,10 +184,11 @@ jobs:
           node -e 'const os = require("node:os"); console.log(JSON.stringify({available_cpus: os.availableParallelism(), cpu_model: os.cpus()[0].model, memory_bytes: os.totalmem(), node: process.version, architecture: process.arch}))'
           sha256sum backend/vitest.config.ts backend/src/test/vitest-resource-limits.ts
 
-      - name: Run backend unit tests (shard ${{ matrix.shard }} of 2)
+      - name: Run backend unit tests (shard ${{ matrix.shard }} of ${{ matrix.shards }})
         working-directory: ./platform/backend
         env:
           NODE_COMPILE_CACHE: ${{ runner.temp }}/node-compile-cache
           SHARD: ${{ matrix.shard }}
-        run: pnpm exec vitest run --shard="${SHARD}/2"
+          SHARDS: ${{ matrix.shards }}
+        run: pnpm exec vitest run --shard="${SHARD}/${SHARDS}"
 

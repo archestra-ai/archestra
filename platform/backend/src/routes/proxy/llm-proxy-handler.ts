@@ -77,20 +77,7 @@ import {
   type SpanTeamInfo,
 } from "@/observability/tracing";
 import { scopedSessionId } from "@/openappa/actor";
-import {
-  type CollectedChildReturns,
-  collectAndStripChildReturns,
-} from "@/openappa/child-return";
-import {
-  type AppaChildTrajectoryReceipt,
-  stripChildTrajectoryReceipts,
-} from "@/openappa/child-trajectory-receipt";
-import { unwrapCompactionCarriersFromRequest } from "@/openappa/compaction-carrier";
-import {
-  type AppaDelegationMarker,
-  collectDelegationMarkers,
-  stripDelegationMarkers,
-} from "@/openappa/delegation";
+import { stripChildTrajectoryReceipts } from "@/openappa/child-trajectory-receipt";
 import { forkedSession } from "@/openappa/lineage";
 import {
   prepareAppaRequest,
@@ -110,9 +97,8 @@ import {
   verifySubagentBinding,
 } from "@/openappa/subagent-binding";
 import {
-  APPA_THREAD_RECORD,
-  clientKeepsThreadPairing,
   echoedCallsMessage,
+  GovernedThread,
   readThreadRequest,
   type ThreadRecord,
   threadAlreadyContinuedBody,
@@ -125,22 +111,17 @@ import {
 import {
   restoreTrajectoryStampText,
   stampedSessions,
-  withoutTrajectoryStamp,
 } from "@/openappa/trajectory-stamp";
 import { startedUnenforced } from "@/openappa/unenforced";
 import {
   type AppaSessionIdentity,
   appaWireFamily,
   declaredToolEntries,
-  providerWire,
-  restoreTrajectoryStamps,
-  restoreTrajectoryStampsInText,
   sessionReceiptEvidence,
-  stripChildTrajectoryReceiptsFromRequest,
-  stripSessionReceiptsFromRequest,
 } from "@/openappa/wire";
-import { parseJsonHeader } from "@/proxy/plugins/appa-plugin-archestra/adapters/trajectory";
+import { resolveInstallerSetupBypass } from "@/proxy/plugins/appa-plugin-archestra/host/admission";
 import { BufferedChildStream } from "@/proxy/plugins/appa-plugin-archestra/host/child-stream-buffer";
+import { scrubOpenappaIngress } from "@/proxy/plugins/appa-plugin-archestra/host/ingress";
 import { OpenappaReceipts } from "@/proxy/plugins/appa-plugin-archestra/host/receipts";
 import {
   APPA_CLIENT_ADAPTERS,
@@ -158,7 +139,6 @@ import {
   type LlmProxyRequestContext,
   type LlmProxyToolCallRefusal,
 } from "@/proxy/plugins/registry";
-import { collectedDelegationMarkers } from "@/routes/proxy/utils/delegation-markers";
 import {
   RUNTIME_BINDING_HEADER,
   resolveRuntimeIdentityByVirtualKeys,
@@ -166,12 +146,6 @@ import {
   runtimeBindingAuthorizes,
   runtimeSessionConflicts,
 } from "@/services/agent-runtime/runtime-identity";
-import {
-  carriesConnectionSetupReference,
-  connectionProxySetupContext,
-  readVerifiedConnectionProxySetup,
-} from "@/services/connection-proxy-setup-context";
-import { claimConnectionSetupConversation } from "@/services/connection-setup-conversation-claim";
 import { nativeSetupClientFromProvenance } from "@/services/connection-setup-scope";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
 import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
@@ -255,6 +229,7 @@ const {
 export interface LLMProxyContext<TRequest> {
   connectionVerification?: boolean;
   appaReceipts?: OpenappaReceipts;
+  governedThread?: GovernedThread;
   pluginRegistry?: LlmProxyPluginRegistry;
   pluginContext?: LlmProxyRequestContext;
   agent: GatewayAgent;
@@ -456,98 +431,6 @@ function isBoundedHeaderValue(
 }
 
 /**
- * Detects Claude Code compaction summary requests. Claude Code puts the
- * instruction on a user turn (sometimes also in `system`); scan those text
- * sites only so a large tool result cannot trigger a false re-issue and so
- * the body is never serialized just to search it.
- */
-function isClientCompactionRequest(params: {
-  body: unknown;
-  headers: Record<string, string | string[] | undefined>;
-  url: string;
-}): boolean {
-  const { body, headers } = params;
-  if (params.url.split("?")[0].endsWith("/responses/compact")) return true;
-  const header = (name: string) =>
-    utils.headers.metaHeader.getHeaderValue(headers, name);
-  if (
-    header(OPENCODE_AGENT_HEADER) === "compaction" ||
-    header("x-openai-subagent") === "compact"
-  )
-    return true;
-  if (!body || typeof body !== "object" || Array.isArray(body)) return false;
-  const request = body as Record<string, unknown>;
-  const metadata =
-    asRecord(request.client_metadata) ?? asRecord(request.metadata);
-  const nestedTurn = metadata?.["x-codex-turn-metadata"];
-  if (
-    [
-      metadata,
-      asRecord(metadata?.turn_metadata),
-      asRecord(metadata?.turn),
-      typeof nestedTurn === "string"
-        ? parseJsonHeader(
-            { "x-codex-turn-metadata": nestedTurn },
-            "x-codex-turn-metadata",
-          )
-        : asRecord(nestedTurn),
-      parseJsonHeader(headers, "x-codex-turn-metadata"),
-    ].some((turn) => turn?.request_kind === "compaction")
-  )
-    return true;
-  if (containsCompactionInstruction(request.system)) return true;
-  if (!Array.isArray(request.messages)) return false;
-  for (let index = request.messages.length - 1; index >= 0; index--) {
-    const message = request.messages[index];
-    if (!message || typeof message !== "object" || Array.isArray(message)) {
-      continue;
-    }
-    const role = (message as Record<string, unknown>).role;
-    if (role !== "user") continue;
-    const content = (message as Record<string, unknown>).content;
-    const texts =
-      typeof content === "string"
-        ? [content]
-        : Array.isArray(content)
-          ? content.flatMap((part) => {
-              const text = asRecord(part)?.text;
-              return typeof text === "string" ? [text] : [];
-            })
-          : [];
-    // A model spawn prompt can request a summary.
-    // The delegation marker distinguishes it from client compaction.
-    if (texts.some((text) => text.includes("[appa] delegated trajectory ")))
-      return false;
-    return containsCompactionInstruction(content);
-  }
-  return false;
-}
-
-function containsCompactionInstruction(value: unknown): boolean {
-  if (typeof value === "string") {
-    const text = value.trimStart();
-    return (
-      text.startsWith(CLAUDE_COMPACTION_INSTRUCTION) ||
-      text.startsWith(
-        `CRITICAL: Respond with TEXT ONLY. ${CLAUDE_COMPACTION_INSTRUCTION}`,
-      )
-    );
-  }
-  if (!Array.isArray(value)) return false;
-  for (const block of value) {
-    if (!block || typeof block !== "object" || Array.isArray(block)) continue;
-    const text = (block as Record<string, unknown>).text;
-    if (typeof text === "string" && containsCompactionInstruction(text)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-const CLAUDE_COMPACTION_INSTRUCTION =
-  "Your task is to create a detailed summary of the conversation so far";
-
-/**
  * The subset of a proxied request body we read for session-id and client-app
  * extraction. Each consumer only touches its own fields (`detectClaudeClientId`
  * → `system`/`metadata`; `detectCodexClientId` → `client_metadata`;
@@ -593,85 +476,11 @@ export async function handleLLMProxy<
   const hasProxyPlugins = pluginRegistry.hasPlugins();
   let pluginContext: LlmProxyRequestContext | undefined;
   let pluginSessionInitialized = false;
-  const clientCompaction = isClientCompactionRequest({
+  const appaIngress = scrubOpenappaIngress({
+    request,
     body,
-    headers: headers as Record<string, string | string[] | undefined>,
-    url: request.url,
-  });
-
-  // Removes receipts and delegation markers before forwarding requests.
-  // Markers must not reach providers or logs, even when OpenAPPA is off.
-  // When active, OpenAPPA resolves extracted markers into lineage evidence.
-  // A child return the proxy cannot read is withheld from a governed parent
-  // only, and the proxy does not know yet whether OpenAPPA governs this
-  // request. Until it does, the first refusal waits here and that return stays
-  // as the client sent it.
-  let childReturnRefusal: ApiError | undefined;
-  const requestWireFamily = appaWireFamily(provider.interactionType);
-  let strippedReceiptCodes: string[] = [];
-  let delegationMarkers: AppaDelegationMarker[] | undefined;
-  let childReturns: CollectedChildReturns | undefined;
-  let childTrajectoryReceipts: AppaChildTrajectoryReceipt[] | undefined;
-  if (requestWireFamily) {
-    strippedReceiptCodes = stripSessionReceiptsFromRequest({
-      family: requestWireFamily,
-      body,
-    });
-    const opaqueProofs =
-      requestWireFamily === "openai:responses"
-        ? unwrapCompactionCarriersFromRequest(body)
-        : [];
-    childTrajectoryReceipts = stripChildTrajectoryReceiptsFromRequest({
-      family: requestWireFamily,
-      body,
-    });
-    childTrajectoryReceipts.push(
-      ...opaqueProofs.flatMap(
-        (proof) => stripChildTrajectoryReceipts(proof).receipts,
-      ),
-    );
-    // A route that translated the wire first collected the markers from the
-    // client's own wire; the translated text may no longer end with them.
-    delegationMarkers =
-      collectedDelegationMarkers(request) ??
-      collectDelegationMarkers({
-        family: requestWireFamily,
-        body,
-      });
-    stripDelegationMarkers({ family: requestWireFamily, body });
-    const nativeClient = APPA_CLIENT_ADAPTERS.find((adapter) =>
-      adapter.matches({
-        headers: headers as Record<string, string | string[] | undefined>,
-        requestBody: body,
-      }),
-    );
-    const childReturnOptions = {
-      // Kilo Code frames its background tasks as OpenCode does.
-      openCodeBackgroundReturns:
-        !!nativeClient && isOpenCodeFamilyClient(nativeClient.id),
-      codexMailboxReturns: nativeClient?.id === "codex",
-      onRefusal: (refusal: ApiError) => {
-        childReturnRefusal ??= refusal;
-      },
-    };
-    try {
-      childReturns = collectAndStripChildReturns(body, childReturnOptions);
-    } catch (error) {
-      if (!(error instanceof ApiError) || error.statusCode !== 400) throw error;
-      childReturnRefusal = error;
-      childReturns = { completions: [] };
-    }
-  }
-  // Restores original provider call IDs before request processing, logging,
-  // or plugin rulings: the trajectory stamps first, then any stamp a
-  // client copied into text. Neither needs an OpenAPPA session, so no id the
-  // proxy gave a client reaches a provider with Guardrails off either.
-  const trajectoryStamps = restoreTrajectoryStamps({
     interactionType: provider.interactionType,
-    body,
   });
-  const wire = providerWire(provider.interactionType);
-  if (wire) restoreTrajectoryStampsInText({ wire, body });
 
   // Extract header-based context
   const headersForExtraction = headers as Record<
@@ -1485,67 +1294,20 @@ export async function handleLLMProxy<
       | Awaited<ReturnType<LlmProxyPluginRegistry["onToolResults"]>>
       | undefined;
     let openappaSession: OpenAppaSession | undefined;
-    // Set when a thread continue was given its tools back for the ruling.
-    let hydratedThreadTools = false;
-    let continuingThread = false;
-    let threadDeltaSystem: unknown;
-    let threadEchoedCalls: object | undefined;
+    let governedThread: GovernedThread | undefined;
     // The session a request has while enforcement is off, for the records
     // OpenAPPA reads once it turns on. Nothing governs it.
     let observedSession: OpenAppaSession | undefined;
     let appaReceipts: OpenappaReceipts | undefined;
     let appaIdentity: AppaSessionIdentity = {};
     let hasNativeClientSession = false;
-    const approvedProxySetupContext = connectionProxySetupContext(request.raw);
-    let verifiedProxySetup: ReturnType<typeof readVerifiedConnectionProxySetup>;
-    if (approvedProxySetupContext) {
-      for (const keyId of [virtualKeyId, passthroughVirtualKeyId]) {
-        if (!keyId) continue;
-        verifiedProxySetup = readVerifiedConnectionProxySetup({
-          token: approvedProxySetupContext,
-          organizationId: resolvedAgent.organizationId,
-          virtualApiKeyId: keyId,
-          proxyAgentId: resolvedAgent.id,
-          secret: config.auth.secret,
-        });
-        if (verifiedProxySetup) break;
-      }
-    }
-    const approvedProxySetup = verifiedProxySetup !== undefined;
-    // The setup URL stays in the client's settings for the whole window, so
-    // sessions started after the setup send it too. The reference must be in
-    // this request, and the first well-formed native conversation to present
-    // it owns the exemption until the token expires.
-    const carriesReference =
-      approvedProxySetup &&
-      !!approvedProxySetupContext &&
-      carriesConnectionSetupReference({
-        token: approvedProxySetupContext,
-        requestBody: body,
-        secret: config.auth.secret,
-      });
-    const installerConversation =
-      carriesReference &&
-      verifiedProxySetup !== undefined &&
-      (await claimConnectionSetupConversation({
-        organizationId: verifiedProxySetup.organizationId,
-        setupId: verifiedProxySetup.setupId,
-        expiresAt: verifiedProxySetup.expiresAt,
-        headers: headersForExtraction,
-        requestBody: body,
-      }));
-    const installerSetupBypass = appaActive && installerConversation;
-    if (installerSetupBypass) {
-      logger.info(
-        { profileId: resolvedAgent.id, proof: "approved-installer" },
-        "Connection setup APPA bypass active",
-      );
-    } else if (appaActive && approvedProxySetup) {
-      logger.info(
-        { profileId: resolvedAgent.id },
-        "Connection setup URL outside the installer's conversation; Guardrails apply",
-      );
-    }
+    const installerSetupBypass = await resolveInstallerSetupBypass({
+      request,
+      body,
+      agent: resolvedAgent,
+      virtualKeyIds: [virtualKeyId, passthroughVirtualKeyId],
+      appaActive,
+    });
     let appaCallerId: string | undefined;
     let appaFamily: ReturnType<typeof appaWireFamily>;
     let forkOf: string | undefined;
@@ -1810,7 +1572,7 @@ export async function handleLLMProxy<
           ? await sessionReceiptEvidence({
               organizationId: resolvedAgent.organizationId,
               callerId,
-              codes: strippedReceiptCodes,
+              codes: appaIngress.strippedReceiptCodes,
             })
           : [];
         // History carrying verified stamps or session receipts identifies
@@ -1830,7 +1592,7 @@ export async function handleLLMProxy<
         const stamped =
           traceable && callerId
             ? stampedSessions({
-                stamps: trajectoryStamps,
+                stamps: appaIngress.trajectoryStamps,
                 organizationId: resolvedAgent.organizationId,
                 callerId,
                 secret: config.openappa.offerSigningSecret,
@@ -1941,12 +1703,14 @@ export async function handleLLMProxy<
         session: appaIdentity,
         customTools: new Set(),
         declaredTools: [],
-        ...(delegationMarkers
-          ? { delegation: { markers: delegationMarkers } }
+        ...(appaIngress.delegationMarkers
+          ? { delegation: { markers: appaIngress.delegationMarkers } }
           : {}),
-        ...(childReturns ? { childReturns } : {}),
-        ...(childTrajectoryReceipts && childTrajectoryReceipts.length > 0
-          ? { childTrajectoryReceipts }
+        ...(appaIngress.childReturns
+          ? { childReturns: appaIngress.childReturns }
+          : {}),
+        ...(appaIngress.childTrajectoryReceipts
+          ? { childTrajectoryReceipts: appaIngress.childTrajectoryReceipts }
           : {}),
       });
       if (
@@ -2072,23 +1836,26 @@ export async function handleLLMProxy<
           }
           const state = found?.ok ? found : undefined;
           let threadRecord: ThreadRecord;
+          let continuation:
+            | { deltaSystem: unknown; echoedCalls?: object }
+            | undefined;
           if (state) {
             // The system prompt of a continue is the client's own delta.
-            continuingThread = true;
-            threadDeltaSystem = structuredClone(
-              (body as { system?: unknown }).system,
-            );
+            continuation = {
+              deltaSystem: structuredClone(
+                (body as { system?: unknown }).system,
+              ),
+            };
             // The results answer calls the thread holds: put them back, as a
             // full request would carry them, for the ruling only.
             const messages = (body as { messages?: unknown }).messages;
             if (state.calls.length > 0 && Array.isArray(messages)) {
-              threadEchoedCalls = echoedCallsMessage(state.calls);
-              messages.unshift(threadEchoedCalls);
+              continuation.echoedCalls = echoedCallsMessage(state.calls);
+              messages.unshift(continuation.echoedCalls);
             }
           }
           if (state && !declaresTools) {
             (body as { tools?: unknown }).tools = toolSkeletonOf(state.tools);
-            hydratedThreadTools = true;
             appaToolIdentity =
               await utils.gatewayToolNames.resolveGatewayToolIdentity({
                 organizationId: resolvedAgent.organizationId,
@@ -2117,7 +1884,17 @@ export async function handleLLMProxy<
               ...(previousMessageId ? { previousMessageId } : {}),
             };
           }
-          pluginContext.resources.set(APPA_THREAD_RECORD, threadRecord);
+          governedThread = new GovernedThread({
+            record: threadRecord,
+            ...(continuation
+              ? {
+                  continuation: {
+                    ...continuation,
+                    hydratedTools: !declaresTools,
+                  },
+                }
+              : {}),
+          });
         }
         const appaRequest = prepareAppaRequest({
           body,
@@ -2125,10 +1902,14 @@ export async function handleLLMProxy<
           session: appaIdentity,
           identity: appaToolIdentity,
           trustBarePlatformTools: isInternalChat,
-          ...(delegationMarkers ? { delegationMarkers } : {}),
-          ...(childReturns ? { childReturns } : {}),
-          ...(childTrajectoryReceipts && childTrajectoryReceipts.length > 0
-            ? { childTrajectoryReceipts }
+          ...(appaIngress.delegationMarkers
+            ? { delegationMarkers: appaIngress.delegationMarkers }
+            : {}),
+          ...(appaIngress.childReturns
+            ? { childReturns: appaIngress.childReturns }
+            : {}),
+          ...(appaIngress.childTrajectoryReceipts
+            ? { childTrajectoryReceipts: appaIngress.childTrajectoryReceipts }
             : {}),
         });
         pluginContext.resources.set(APPA_PLUGIN_TRUSTED_CONTEXT, {
@@ -2138,9 +1919,9 @@ export async function handleLLMProxy<
           request: appaRequest,
           claims: appaClaims,
           ...(runtimeSessionId ? { runtimeSessionId, runtimeTaskId } : {}),
-          compaction: clientCompaction && !isInternalChat,
+          compaction: appaIngress.clientCompaction && !isInternalChat,
           enforcement: "active",
-          childReturnRefusal,
+          childReturnRefusal: appaIngress.childReturnRefusal,
           ...(threadRequest ? { thread: threadRequest.type } : {}),
           ...(isInternalChat ? { chatSource: source } : {}),
         } satisfies AppaTrustedContext);
@@ -2152,7 +1933,7 @@ export async function handleLLMProxy<
           request: lineageRequest(),
           claims: appaClaims,
           ...(runtimeSessionId ? { runtimeSessionId, runtimeTaskId } : {}),
-          compaction: clientCompaction && !isInternalChat,
+          compaction: appaIngress.clientCompaction && !isInternalChat,
           enforcement: "inactive",
           ...(isInternalChat ? { chatSource: source } : {}),
         } satisfies AppaTrustedContext);
@@ -2173,7 +1954,7 @@ export async function handleLLMProxy<
         family: appaFamily,
         hasNativeClientSession,
         isInternalChat,
-        clientCompaction,
+        clientCompaction: appaIngress.clientCompaction,
       });
     }
     // Nothing OpenAPPA wrote for the client and the gateway goes on to the
@@ -2345,24 +2126,7 @@ export async function handleLLMProxy<
 
     // Build final request
     const builtRequest = requestAdapter.toProviderRequest();
-    // The provider thread owns the tools of a continue; the ruling only borrowed them.
-    if (continuingThread) {
-      const thread = builtRequest as {
-        tools?: unknown;
-        system?: unknown;
-        messages: unknown[];
-      };
-      if (hydratedThreadTools) delete thread.tools;
-      // The thread keeps the system prompt it was created with, guidance
-      // included. A continue sends only its own system blocks, as the client
-      // wrote them: guidance the ruling added to them would repeat in the thread.
-      if (threadDeltaSystem === undefined) delete thread.system;
-      else thread.system = threadDeltaSystem;
-      // The adapters may hand back copies, so the echo is found by its place
-      // (first) and its content (the same call ids), not by identity.
-      if (threadEchoedCalls && isEchoOf(thread.messages[0], threadEchoedCalls))
-        thread.messages = thread.messages.slice(1);
-    }
+    governedThread?.restoreProviderRequest(builtRequest);
 
     // Repair unpaired UTF-16 surrogates before the body leaves for the
     // provider. Half a surrogate pair has no UTF-8 encoding, so a provider
@@ -2416,6 +2180,7 @@ export async function handleLLMProxy<
     const ctx: LLMProxyContext<TRequest> = {
       connectionVerification,
       ...(appaReceipts ? { appaReceipts } : {}),
+      ...(governedThread ? { governedThread } : {}),
       ...(pluginContext ? { pluginRegistry, pluginContext } : {}),
       agent: resolvedAgent,
       originalRequest: requestAdapter.getOriginalRequest(),
@@ -3110,8 +2875,7 @@ async function handleStreaming<
       );
     }
 
-    await recordGovernedThreadResponse({
-      context: ctx.pluginContext,
+    await ctx.governedThread?.recordResponse({
       messageId: streamAdapter.state.responseId,
       providerCalls: toolCalls,
       clientCalls: toolInvocationRefusal
@@ -3791,8 +3555,7 @@ async function handleNonStreaming<
   let blockedToolCalls: readonly { reason: string }[] =
     hostedHold?.blocked ?? [];
   if (toolCalls.length === 0) {
-    await recordGovernedThreadResponse({
-      context: ctx.pluginContext,
+    await ctx.governedThread?.recordResponse({
       messageId: (responseAdapter.getOriginalResponse() as { id?: string }).id,
       providerCalls: [],
       clientCalls: [],
@@ -3825,8 +3588,7 @@ async function handleNonStreaming<
     if (policyOutcome.wasRewritten)
       rewrittenToolCalls = policyOutcome.toolCalls;
     const toolInvocationRefusal = policyOutcome.refusal;
-    await recordGovernedThreadResponse({
-      context: ctx.pluginContext,
+    await ctx.governedThread?.recordResponse({
       messageId: (responseAdapter.getOriginalResponse() as { id?: string }).id,
       providerCalls: toolCalls,
       clientCalls: toolInvocationRefusal
@@ -4285,77 +4047,6 @@ function observedAppaSession(params: {
       );
     return undefined;
   }
-}
-
-/**
- * Whether `message` is the echoed calls the ruling borrowed: an assistant
- * message with the same tool call ids, in the same order.
- */
-function isEchoOf(message: unknown, echo: object): boolean {
-  const ids = (value: unknown): unknown[] => {
-    const content = (value as { content?: unknown } | undefined)?.content;
-    return Array.isArray(content)
-      ? content.map((block) => (block as { id?: unknown } | undefined)?.id)
-      : [];
-  };
-  if ((message as { role?: string } | undefined)?.role !== "assistant")
-    return false;
-  const found = ids(message);
-  const expected = ids(echo);
-  return (
-    expected.length > 0 &&
-    found.length === expected.length &&
-    found.every((id, index) => id === expected[index])
-  );
-}
-
-function parseCallArguments(args: unknown): Record<string, unknown> {
-  if (args && typeof args === "object") return args as Record<string, unknown>;
-  try {
-    const parsed = typeof args === "string" ? JSON.parse(args) : {};
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-/**
- * Keeps what a governed provider thread was ruled on, so its next continue can
- * be ruled on too. A response the client holds a rewrite of that the provider
- * cannot continue from is kept as diverged: the continue is answered with a
- * replay request.
- */
-async function recordGovernedThreadResponse(params: {
-  context: LlmProxyRequestContext | undefined;
-  messageId: string | undefined;
-  providerCalls: readonly { id: string }[];
-  clientCalls: readonly { id: string; name: string; arguments?: unknown }[];
-  refused: boolean;
-  held: boolean;
-}): Promise<void> {
-  const record = params.context?.resources.get(APPA_THREAD_RECORD) as
-    | ThreadRecord
-    | undefined;
-  if (!record) return;
-  await threadStates.record({
-    record,
-    messageId: params.messageId,
-    calls: params.refused
-      ? []
-      : params.clientCalls.map((call) => ({
-          id: call.id,
-          name: call.name,
-          input: parseCallArguments(call.arguments),
-        })),
-    diverged: !clientKeepsThreadPairing({
-      providerCallIds: params.providerCalls.map((call) => call.id),
-      clientCallIds: params.clientCalls.map((call) =>
-        withoutTrajectoryStamp(call.id),
-      ),
-      refused: params.refused,
-      held: params.held,
-    }),
-  });
 }
 
 async function evaluateProxyPluginToolCalls(

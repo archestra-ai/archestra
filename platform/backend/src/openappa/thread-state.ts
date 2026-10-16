@@ -5,6 +5,7 @@ import OpenAppaThreadStateModel from "@/models/openappa-thread-state";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import type { ThreadCall, ThreadTool } from "@/types/openappa-thread-state";
 import { openappaEncryptedChat } from "./encrypted-chat";
+import { withoutTrajectoryStamp } from "./trajectory-stamp";
 
 /**
  * Governing a provider-side thread.
@@ -20,9 +21,6 @@ import { openappaEncryptedChat } from "./encrypted-chat";
  * answered with the provider's own `thread_not_found`: the client replays the
  * whole conversation with a create, which OpenAPPA governs from the start.
  */
-
-/** Where a governed thread request keeps its record while the request runs. */
-export const APPA_THREAD_RECORD = Symbol("archestra.appa.thread-record");
 
 /** Why the proxy asks the client to replay a thread instead of continuing it. */
 type ThreadReplayReason =
@@ -188,6 +186,81 @@ class ThreadStates {
 
 export const threadStates = new ThreadStates();
 
+/** A governed thread request: what it keeps, and what its ruling borrowed. */
+export class GovernedThread {
+  constructor(
+    private readonly params: {
+      record: ThreadRecord;
+      /** Set for a continue the proxy holds state for. */
+      continuation?: {
+        /** Whether the ruling was given the thread's tools back. */
+        hydratedTools: boolean;
+        /** The continue's own system blocks, as the client wrote them. */
+        deltaSystem: unknown;
+        echoedCalls?: object;
+      };
+    },
+  ) {}
+
+  /** The provider thread owns the tools of a continue; the ruling only borrowed them. */
+  restoreProviderRequest(built: unknown): void {
+    const { continuation } = this.params;
+    if (!continuation) return;
+    const thread = built as {
+      tools?: unknown;
+      system?: unknown;
+      messages: unknown[];
+    };
+    if (continuation.hydratedTools) delete thread.tools;
+    // The thread keeps the system prompt it was created with, guidance
+    // included. A continue sends only its own system blocks, as the client
+    // wrote them: guidance the ruling added to them would repeat in the thread.
+    if (continuation.deltaSystem === undefined) delete thread.system;
+    else thread.system = continuation.deltaSystem;
+    // The adapters may hand back copies, so the echo is found by its place
+    // (first) and its content (the same call ids), not by identity.
+    if (
+      continuation.echoedCalls &&
+      isEchoOf(thread.messages[0], continuation.echoedCalls)
+    )
+      thread.messages = thread.messages.slice(1);
+  }
+
+  /**
+   * Keeps what a governed provider thread was ruled on, so its next continue can
+   * be ruled on too. A response the client holds a rewrite of that the provider
+   * cannot continue from is kept as diverged: the continue is answered with a
+   * replay request.
+   */
+  async recordResponse(params: {
+    messageId: string | undefined;
+    providerCalls: readonly { id: string }[];
+    clientCalls: readonly { id: string; name: string; arguments?: unknown }[];
+    refused: boolean;
+    held: boolean;
+  }): Promise<void> {
+    await threadStates.record({
+      record: this.params.record,
+      messageId: params.messageId,
+      calls: params.refused
+        ? []
+        : params.clientCalls.map((call) => ({
+            id: call.id,
+            name: call.name,
+            input: parseCallArguments(call.arguments),
+          })),
+      diverged: !clientKeepsThreadPairing({
+        providerCallIds: params.providerCalls.map((call) => call.id),
+        clientCallIds: params.clientCalls.map((call) =>
+          withoutTrajectoryStamp(call.id),
+        ),
+        refused: params.refused,
+        held: params.held,
+      }),
+    });
+  }
+}
+
 /**
  * The tools a thread declared, in the order the request listed them. The
  * declarations come from the gateway-marker pass, which ran over the same
@@ -226,6 +299,8 @@ export function toolSkeletonOf(tools: readonly ThreadTool[]): unknown[] {
  * response. The provider holds the model's own output, the client holds what
  * the proxy returned: they pair while every call id the provider holds is one
  * the client holds, and the response was not replaced by text.
+ *
+ * @public — exported for testability
  */
 export function clientKeepsThreadPairing(params: {
   providerCallIds: readonly string[];
@@ -307,3 +382,35 @@ export function echoedCallsMessage(calls: readonly ThreadCall[]) {
 
 const RETENTION_DAYS = 7;
 const MAX_CALLS_BYTES = 256 * 1024;
+
+/**
+ * Whether `message` is the echoed calls the ruling borrowed: an assistant
+ * message with the same tool call ids, in the same order.
+ */
+function isEchoOf(message: unknown, echo: object): boolean {
+  const ids = (value: unknown): unknown[] => {
+    const content = (value as { content?: unknown } | undefined)?.content;
+    return Array.isArray(content)
+      ? content.map((block) => (block as { id?: unknown } | undefined)?.id)
+      : [];
+  };
+  if ((message as { role?: string } | undefined)?.role !== "assistant")
+    return false;
+  const found = ids(message);
+  const expected = ids(echo);
+  return (
+    expected.length > 0 &&
+    found.length === expected.length &&
+    found.every((id, index) => id === expected[index])
+  );
+}
+
+function parseCallArguments(args: unknown): Record<string, unknown> {
+  if (args && typeof args === "object") return args as Record<string, unknown>;
+  try {
+    const parsed = typeof args === "string" ? JSON.parse(args) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}

@@ -4,10 +4,11 @@
 //! audience source it declares is consulted live: the host's own endpoints, battery
 //! helpers, and model-backed annotators such as `archestra` or `jev`. No tool runs, and
 //! every trajectory stays in memory. A consult that gives no answer ends its file
-//! `cannot_run` at the first step that answer could have decided. Replay takes every
-//! remedy it is offered, so a policy naming an external authority or sanitizer is refused
-//! as a whole; built-in human review remains unanswered if a scenario reaches it.
-use appa_eventlog::{Backend, LogStore};
+//! `cannot_run` at the first step that answer could have decided. As in `appa replay`,
+//! every authority and sanitizer is answered in process: an authority approves and a
+//! sanitizer returns the body unchanged, so a step that expects `hitl` takes the offer and
+//! its file goes on. A policy naming an external authority or sanitizer is refused as a
+//! whole.
 use appa_runtime::{
     api::{ConsultRecord, ConsultRecorder, ExternalOutcome, ExternalRole, OfferKind, Runtime},
     config::{Config, HostDefaults, Implementation},
@@ -23,7 +24,7 @@ use std::{
 use crate::deployments::HostCredentials;
 
 pub(crate) const ENGINE_VERSION: &str =
-    "10aa0e09e32d8c6704bdb030dc3c66140bf81915:archestra-live-v1";
+    "10aa0e09e32d8c6704bdb030dc3c66140bf81915:archestra-live-v2";
 const MAX_FILES: usize = 32;
 const MAX_FILE_BYTES: usize = 256 * 1024;
 const MAX_INPUT_BYTES: usize = 2 * 1024 * 1024;
@@ -217,8 +218,6 @@ fn replay_runtime(request: &Request, defaults: HostDefaults) -> Result<Replaying
     let config = Config::hosted(&request.content, defaults, |var| credentials.lookup(var))
         .map_err(|error| format!("The effective policy cannot load: {error}"))?;
     let externals = &config.externals;
-    // Replay opens without an elicitation channel or a supplied human ruling.
-    // The hitl backend therefore abstains when invoked, never prompts or approves.
     let stock = |binding: &Implementation| matches!(binding, Implementation::Builtin(name) if matches!(name.as_str(), "approve" | "hitl" | "redact-email" | "redact-secrets"));
     if externals
         .authorities
@@ -228,10 +227,13 @@ fn replay_runtime(request: &Request, defaults: HostDefaults) -> Result<Replaying
     {
         return Err("Replay cannot run a policy with an external authority or sanitizer: replay takes every remedy it is offered, which would act through that party".into());
     }
-    let store = Arc::new(LogStore::open(Backend::Memory).map_err(|error| error.to_string())?);
     let unanswered = Arc::new(Unanswered::default());
+    // The deployment `appa replay` runs, under the Archestra adapter: no person is asked,
+    // since every authority and sanitizer is answered in process.
     let runtime =
-        crate::policy::open(config.with_do_something(), store)?.recording(unanswered.clone());
+        Runtime::open_in_memory_as(config.with_do_something(), None, crate::adapter::adapter())
+            .map_err(|error| error.to_string())?
+            .recording(unanswered.clone());
     let runtime = match &request.annotator_context {
         Some(context) => runtime.with_archestra_context(context.clone()),
         None => runtime,
@@ -487,6 +489,48 @@ mod tests {
             assert_eq!(response.files[0].status, Status::CannotRun);
             assert!(response.files[0].steps.is_empty());
         }
+    }
+
+    /// A call that lowers trust, then one that needs `trusted`: the block offers `hitl`,
+    /// which replay answers in process, so the expectation passes and the file goes on.
+    #[tokio::test]
+    async fn an_expected_hitl_offer_is_taken_as_approved_and_the_file_goes_on() {
+        let policy = format!(
+            "{POLICY}\n[[policy.authority]]\nname = 'hitl'\n\n[policy.authority.permits]\ntrust_below = 'trusted'\n\n[externals.authorities.hitl]\nbuiltin = 'hitl'\n"
+        );
+        let response = run(request(
+            &policy,
+            &[
+                (
+                    "review.appa",
+                    "mcp/files/read {}\nexpect allow\nmcp/mail/send {}\nexpect authority hitl\nmcp/files/read {}\nexpect allow",
+                ),
+                (
+                    "deny.appa",
+                    "mcp/files/read {}\nexpect allow\nmcp/mail/send {}\nexpect deny",
+                ),
+            ],
+        ))
+        .await;
+        let review = &response.files[0];
+        assert_eq!(
+            review.status,
+            Status::Passed,
+            "{:?}",
+            review
+                .steps
+                .iter()
+                .map(|step| &step.error)
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(review.steps.len(), 3);
+        assert_eq!(review.steps[1].actual.as_deref(), Some("authority hitl"));
+        // An offered review is not a plain refusal.
+        assert_eq!(response.files[1].status, Status::Failed);
+        assert_eq!(
+            response.files[1].steps[1].actual.as_deref(),
+            Some("authority hitl")
+        );
     }
 
     /// A consult endpoint on loopback: the no-op path answers with the host's no-op

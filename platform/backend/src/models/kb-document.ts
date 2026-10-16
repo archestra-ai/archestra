@@ -343,11 +343,20 @@ class KbDocumentModel {
     return rows.map((r) => r.id);
   }
 
+  /**
+   * Total documents in a connector, read from the trigger-maintained
+   * `kb_connector_document_counts` row rather than counted. A connector that
+   * never held a document has no row and counts 0.
+   */
   static async countByConnector(connectorId: string): Promise<number> {
     const [result] = await db
-      .select({ count: count() })
-      .from(schema.kbDocumentsTable)
-      .where(eq(schema.kbDocumentsTable.connectorId, connectorId));
+      .select({
+        count: schema.kbConnectorDocumentCountsTable.documentCount,
+      })
+      .from(schema.kbConnectorDocumentCountsTable)
+      .where(
+        eq(schema.kbConnectorDocumentCountsTable.connectorId, connectorId),
+      );
 
     return result?.count ?? 0;
   }
@@ -1129,6 +1138,14 @@ class KbDocumentModel {
     return byKey;
   }
 
+  /**
+   * Documents per knowledge base: the sum of the stored counts of every
+   * connector assigned to it (including soft-deleted connectors that are still
+   * assigned, matching a live count of their documents). Reading the stored
+   * counts keeps the knowledge base listing independent of how many documents
+   * the connectors hold. Knowledge bases without counted connectors are absent
+   * from the map.
+   */
   static async countByKnowledgeBaseIds(
     knowledgeBaseIds: string[],
   ): Promise<Map<string, number>> {
@@ -1138,14 +1155,18 @@ class KbDocumentModel {
       .select({
         knowledgeBaseId:
           schema.knowledgeBaseConnectorAssignmentsTable.knowledgeBaseId,
-        count: count(),
+        // sum(bigint) is numeric, which the driver returns as a string.
+        count:
+          sql<number>`sum(${schema.kbConnectorDocumentCountsTable.documentCount})`.mapWith(
+            Number,
+          ),
       })
-      .from(schema.kbDocumentsTable)
+      .from(schema.knowledgeBaseConnectorAssignmentsTable)
       .innerJoin(
-        schema.knowledgeBaseConnectorAssignmentsTable,
+        schema.kbConnectorDocumentCountsTable,
         eq(
+          schema.kbConnectorDocumentCountsTable.connectorId,
           schema.knowledgeBaseConnectorAssignmentsTable.connectorId,
-          schema.kbDocumentsTable.connectorId,
         ),
       )
       .where(

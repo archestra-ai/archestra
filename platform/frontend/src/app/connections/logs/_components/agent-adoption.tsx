@@ -16,6 +16,7 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { DataTable } from "@/components/ui/data-table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TableCell, TableRow } from "@/components/ui/table";
 import {
   Tooltip,
   TooltipContent,
@@ -357,37 +358,43 @@ function UserTable({
             ? "No users yet."
             : "No users match your filters"
         }
-        renderSubComponent={({ row }) => (
-          <div className="divide-y bg-muted/20">
-            {row.original.agents.map((agent) => (
-              <div
-                key={agent.clientId ?? agent.name}
-                className="grid min-w-[700px] grid-cols-[minmax(240px,1fr)_170px_170px] items-center gap-3 px-4 py-3"
-              >
-                <div className="flex min-w-0 items-start gap-2">
-                  <span className="mt-1.5">
-                    <StateDot state={agent.status} />
-                    <span className="sr-only">
-                      {AGENT_STATES[agent.status].label}
-                    </span>
-                  </span>
+        renderExpandedRows={({ row }) =>
+          row.original.agents.map((agent) => (
+            <TableRow
+              key={agent.clientId ?? agent.name}
+              className="bg-muted/20 hover:bg-muted/30"
+            >
+              <TableCell />
+              <TableCell />
+              <TableCell>
+                <div className="flex min-w-0 items-center gap-2">
+                  <AgentIcon agent={agent} size={20} />
                   <div className="min-w-0">
-                    <span className="flex items-center gap-1.5 text-xs font-medium">
-                      <AgentIcon agent={agent} size={16} />
-                      <span className="truncate">{agentLabel(agent)}</span>
+                    <span className="block truncate text-xs font-medium">
+                      {agentLabel(agent)}
                     </span>
                     <SetupLine agent={agent} />
                   </div>
                 </div>
+              </TableCell>
+              <TableCell>
+                <StatePill
+                  state={agent.status}
+                  label={AGENT_STATES[agent.status].label}
+                />
+              </TableCell>
+              <TableCell>
                 <LastCall
                   at={agent.lastGatewayCallAt}
                   rangeStart={rangeStart}
                 />
+              </TableCell>
+              <TableCell>
                 <LastCall at={agent.lastLlmCallAt} rangeStart={rangeStart} />
-              </div>
-            ))}
-          </div>
-        )}
+              </TableCell>
+            </TableRow>
+          ))
+        }
       />
     </div>
   );
@@ -496,11 +503,17 @@ function SortButton({
 }
 
 /** What each state means, in a line each, behind an icon on the card. */
-function StatePill({ state }: { state: AgentAdoptionStatus }) {
+function StatePill({
+  state,
+  label,
+}: {
+  state: AgentAdoptionStatus;
+  label?: string;
+}) {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap">
       <StateDot state={state} />
-      <span>{STATES[state].label}</span>
+      <span>{label ?? STATES[state].label}</span>
     </span>
   );
 }

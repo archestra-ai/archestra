@@ -87,6 +87,8 @@ interface DataTableProps<TData, TValue> {
   getRowId?: (row: TData, index: number) => string;
   /** Render a sub-component below a row when it is expanded. */
   renderSubComponent?: (props: { row: Row<TData> }) => React.ReactNode;
+  /** Render expanded TableRow elements in the same columns as their parent. */
+  renderExpandedRows?: (props: { row: Row<TData> }) => React.ReactNode;
   /** Return an optional class name for each rendered row. */
   getRowClassName?: (row: TData) => string | undefined;
   /** Show a loading spinner instead of "No results" when data is being fetched */
@@ -154,6 +156,7 @@ export function DataTable<TData, TValue>({
   hideSelectedCount,
   getRowId,
   renderSubComponent,
+  renderExpandedRows,
   getRowClassName,
   isLoading = false,
   emptyMessage = "No results",
@@ -232,7 +235,7 @@ export function DataTable<TData, TValue>({
     // Only use client-side sorting when not using manual sorting
     ...(manualSorting ? {} : { getSortedRowModel: getSortedRowModel() }),
     getFilteredRowModel: getFilteredRowModel(),
-    ...(renderSubComponent
+    ...(renderSubComponent || renderExpandedRows
       ? {
           getExpandedRowModel: getExpandedRowModel(),
           getRowCanExpand: () => true,
@@ -253,7 +256,7 @@ export function DataTable<TData, TValue>({
         ...Object.fromEntries(autoHidden.map((id) => [id, false])),
       },
       rowSelection: rowSelection || {},
-      ...(renderSubComponent ? { expanded } : {}),
+      ...(renderSubComponent || renderExpandedRows ? { expanded } : {}),
       pagination: pagination
         ? {
             pageIndex: pagination.pageIndex,
@@ -500,6 +503,9 @@ export function DataTable<TData, TValue>({
                         </TableCell>
                       ))}
                     </TableRow>
+                    {renderExpandedRows &&
+                      row.getIsExpanded() &&
+                      renderExpandedRows({ row })}
                     {renderSubComponent && row.getIsExpanded() && (
                       <TableRow>
                         <TableCell

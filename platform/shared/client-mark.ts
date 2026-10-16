@@ -1,7 +1,8 @@
 /**
  * A client's mark as the UI draws it: the glyph on its brand-colour tile. The
- * Connect page tile, the client icon in the LLM logs and the Plugin pages all
- * render one mark the same way, so a client looks alike everywhere.
+ * Connect page tile, agents made from the agent catalog, the client icon in
+ * the LLM logs and the Plugin pages all render one mark the same way, so a
+ * client looks alike everywhere.
  */
 export interface ClientMark {
   /** viewBox of `path` and `accent.path`. */

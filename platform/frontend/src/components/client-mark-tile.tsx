@@ -1,22 +1,29 @@
 import type { ClientMark } from "@archestra/shared";
+import { cn } from "@/lib/utils/tailwind";
 
 /**
- * A client's mark on its rounded tile. The Connect page tile and the client
- * icon in the LLM logs and on the Plugin pages draw a mark through this, so
- * the same client looks alike at every size and in both themes.
+ * A client's mark on its rounded tile. The Connect page tile, agents made
+ * from the agent catalog, and the client icon in the LLM logs and on the
+ * Plugin pages draw a mark through this, so the same client looks alike at
+ * every size and in both themes.
  */
 export function ClientMarkTile({
   mark,
   label,
   size,
+  className,
 }: {
   mark: ClientMark;
   label: string;
   size: number;
+  className?: string;
 }) {
   return (
     <div
-      className="flex shrink-0 items-center justify-center border"
+      className={cn(
+        "flex shrink-0 items-center justify-center border",
+        className,
+      )}
       style={{
         width: size,
         height: size,

@@ -41,6 +41,7 @@ import {
   wrapLanguageModel,
 } from "ai";
 import { createOllama } from "ollama-ai-provider-v2";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import { isAnthropicNativeEndpoint } from "@/clients/anthropic-endpoint";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { anthropicVertexClient } from "@/clients/anthropic-vertex";
@@ -70,6 +71,7 @@ import config from "@/config";
 import { ENCRYPTED_CHAT_KEY_HEADER } from "@/content-encryption/encrypted-chat";
 import logger from "@/logging";
 import ModelModel from "@/models/model";
+import UserTokenModel from "@/models/user-token";
 import {
   APPA_PARENT_HEADER,
   APPA_SESSION_HEADER,
@@ -238,10 +240,9 @@ export function createLLMModel(params: {
     supportedEndpoints,
   } = params;
 
-  // Build headers for LLM Proxy
-  const clientHeaders: Record<string, string> = params.internalCall
-    ? internalCallHeader()
-    : {};
+  // Build headers for LLM Proxy. Every model built here dials the proxy from
+  // this process, so every call carries the in-process proof.
+  const clientHeaders: Record<string, string> = internalCallHeader();
   if (externalAgentId) {
     clientHeaders[EXTERNAL_AGENT_ID_HEADER] = externalAgentId;
   }
@@ -445,9 +446,18 @@ export async function createLLMModelForAgent(params: {
         ?.supportedEndpoints ?? null)
     : null;
 
+  // A real user's call authenticates to the proxy with that user's personal
+  // platform token, so the proxy knows who is calling. The provider key still
+  // comes from the chat key row named by chatApiKeyId. System and service-account
+  // calls have no personal token and keep the key path under the internal proof.
+  const proxyCredential =
+    chatApiKeyId && userId !== "system" && !isServiceAccountUserId(userId)
+      ? await personalTokenValue({ organizationId, userId })
+      : apiKey;
+
   const model = createLLMModel({
     provider,
-    apiKey,
+    apiKey: proxyCredential,
     agentId,
     modelName,
     userId,
@@ -1154,6 +1164,25 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
  * into outgoing HTTP headers. This enables the LLM proxy handler to extract the
  * parent context and create child spans, linking chat → LLM proxy traces together.
  */
+/**
+ * The user's personal platform token value, created on first use. The proxy
+ * resolves it to the user, the same way the MCP gateway resolves it.
+ */
+async function personalTokenValue(params: {
+  organizationId: string;
+  userId: string;
+}): Promise<string> {
+  const token = await UserTokenModel.ensureUserToken(
+    params.userId,
+    params.organizationId,
+  );
+  const value = await UserTokenModel.getTokenValue(token.id);
+  if (!value) {
+    throw new ApiError(500, "The personal platform token has no value.");
+  }
+  return value;
+}
+
 function createTracedFetch(): typeof globalThis.fetch {
   return (input, init) => {
     const headers = new Headers(init?.headers);

@@ -1,3 +1,4 @@
+import { hasInternalCall } from "@/clients/internal-call";
 import { resolveVirtualKeyProviderMappings } from "@/services/virtual-key-providers";
 /**
  * Authentication and API key resolution for the LLM proxy handler.
@@ -40,7 +41,6 @@ import { ResourcePermissions } from "@/services/resource-permissions";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import { ApiError, type GatewayAgent } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
-import { isLoopbackRequest } from "@/utils/network";
 import { selectMappedProviderKey } from "@/utils/provider-key-mappings";
 import { getPassthroughVirtualKeyToken } from "./utils/headers/virtual-key";
 
@@ -582,12 +582,8 @@ export function assertAuthenticatedForKeylessProvider(params: {
   apiKey: string | undefined;
   wasVirtualKeyResolved: boolean;
   wasJwksAuthenticated: boolean;
-  /**
-   * Whether the request arrived over the loopback socket. Resolve it with
-   * `isLoopbackRequest`, never from `request.ip`, which `trustProxy` rewrites
-   * from forwarded headers.
-   */
-  isLoopbackCaller: boolean;
+  /** The request carried a valid in-process proof (see `hasInternalCall`). */
+  isInternalCall: boolean;
   /**
    * True when the backend authenticates upstream with its OWN credentials and
    * discards whatever the caller sent (Gemini in Vertex AI mode). A
@@ -602,14 +598,14 @@ export function assertAuthenticatedForKeylessProvider(params: {
     apiKey,
     wasVirtualKeyResolved,
     wasJwksAuthenticated,
-    isLoopbackCaller,
+    isInternalCall,
     providerSuppliesServerCredential = false,
   } = params;
 
   if (wasVirtualKeyResolved || wasJwksAuthenticated) return;
   if (apiKey && !providerSuppliesServerCredential) return;
 
-  if (!isLoopbackCaller) {
+  if (!isInternalCall) {
     throw new ApiError(
       401,
       providerSuppliesServerCredential
@@ -645,14 +641,11 @@ export async function authenticatePassthroughProxyRequest(params: {
 }): Promise<void> {
   const { request, provider, agentId } = params;
 
-  // Internal loopback callers (in-app chat → proxy) are trusted, matching the
-  // keyless-provider allowance in the instrumented handler.
-  //
-  // NOTE: this remains a broad allowance — traffic the frontend rewrites to the
-  // API genuinely arrives over loopback, so it still lands here (#7229). Reading
-  // the socket peer only removes the ability to *forge* that state through
-  // forwarded headers; it does not narrow which callers qualify.
-  if (isLoopbackRequest(request)) return;
+  // In-process callers that carry the internal proof are trusted, matching the
+  // keyless-provider allowance in the instrumented handler. The proof is a
+  // per-process secret, so a request arriving through the frontend rewrite
+  // cannot satisfy it.
+  if (hasInternalCall(request.headers)) return;
 
   const unauthenticated = new ApiError(
     401,

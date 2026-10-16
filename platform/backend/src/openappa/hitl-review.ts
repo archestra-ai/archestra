@@ -7,6 +7,15 @@ import { parseWorkloadPrincipal } from "@/services/agent-runtime/runtime-identit
 import { sessionCallerId } from "./actor";
 import { isCommandExecutionTool } from "./command-normalization";
 import {
+  type HitlReviewCard,
+  hitlInspectionDigest,
+  hitlReviewOverviewCard,
+  needsHitlReviewInspection,
+  renderHitlReviewText,
+  withInspectDetailsOption,
+} from "./hitl-review-overview";
+import { summarizeHitlReview } from "./hitl-review-summary";
+import {
   formatArgumentLines,
   parseReviewedArguments,
   reviewedToolLabel,
@@ -100,19 +109,22 @@ type PendingHitlReview = {
   tool?: string;
   arguments?: string;
   remedyArguments?: Record<string, unknown>;
+  /** Generated reading aid, never part of the approved tool arguments. */
+  summary?: string;
 };
 
-type HitlAskUserArguments = {
-  question: string;
-  /** The one-line question for hosts with option previews (Claude Code). */
-  shortQuestion?: string;
-  /** The call in full, as markdown, for each option's preview. */
-  callPreview?: string;
-  header: string;
-  options: Array<{ label: string; description: string }>;
-  allowMultiple: false;
-  remedy_offer_ids: [string];
-};
+type HitlAskUserArguments = HitlReviewCard;
+
+/**
+ * The inspection state of a review whose native card offers "Inspect
+ * details". `pending`: a signed Inspect answer arrived and the complete
+ * review text has not been provably delivered; the next issued card carries
+ * the text above it. `delivered`: an answer came back from a card issued
+ * with the text, which only a client that received it can hold — the text
+ * precedes the card in the same response. A re-staged review whose rendered
+ * payload differs resets the state; a closed or ruled review has none.
+ */
+type HitlInspectionStatus = "pending" | "delivered";
 
 const HITL_REVIEW_TTL_MS = 10 * TimeInMs.Minute;
 /**
@@ -177,6 +189,7 @@ export async function stageHitlReview(params: {
   session: OpenAppaSession;
   review: PendingHitlReview;
   callId?: string;
+  prepareSummary?: boolean;
 }): Promise<
   | { status: "staged" }
   | { status: "approve" | "deny" }
@@ -185,6 +198,42 @@ export async function stageHitlReview(params: {
       closure?: "declined" | "cancelled" | "unanswered" | "unavailable";
     }
 > {
+  const decision = await peekHitlDecision({
+    session: params.session,
+    offerId: params.review.offerId,
+  });
+  if (decision?.ruling === "none")
+    return {
+      status: "none",
+      ...(decision.closure ? { closure: decision.closure } : {}),
+    };
+  if (decision) return { status: decision.ruling };
+  // A stage that cannot be read fails closed: silently reading it as absent
+  // would drop the presentation freeze for a review the user may already be
+  // reading, and no fallback exists for staged state.
+  const prior = await cacheManager.get<PendingHitlReview>(
+    stagePresenceKey(params.session, params.review.offerId),
+    { throwOnError: true },
+  );
+  // Freeze the presentation for a repeated offer. Regenerating a summary after
+  // the user saw it would also change the native question used to bind answers.
+  const samePayload =
+    prior?.offerId === params.review.offerId &&
+    prior.tool === params.review.tool &&
+    prior.arguments === params.review.arguments &&
+    prior.text === params.review.text;
+  let summary = samePayload ? prior.summary : undefined;
+  if (!samePayload && params.prepareSummary !== false) {
+    try {
+      summary = await summarizeHitlReview(params);
+    } catch {
+      logger.warn(
+        "Approval summary unavailable; retaining the complete review",
+      );
+    }
+  }
+  const { summary: _untrustedSummary, ...exactReview } = params.review;
+  const review = { ...exactReview, ...(summary ? { summary } : {}) };
   const staged = await cacheManager.withLock(
     stagePresenceKey(params.session, params.review.offerId),
     async (cache) => {
@@ -204,13 +253,22 @@ export async function stageHitlReview(params: {
           ...(closure ? { closure } : {}),
         };
       }
+      // Another request may have staged this offer while we generated the
+      // reading aid. An already-issued presentation of the same call wins,
+      // even without a summary. The remedy plan is not part of the
+      // presentation: a repeated remedy call keeps the stage it finds.
       const issued = await cache.get<PendingHitlReview>(
         stagePresenceKey(params.session, params.review.offerId),
       );
-      if (issued?.offerId === params.review.offerId) {
-        // A repeated remedy call keeps the stage it finds: the question a
-        // client already shows about it may still be open, and that question
-        // was promised the review's lifetime (`renewHitlReview`).
+      const sameStagedCall =
+        issued?.offerId === params.review.offerId &&
+        issued.tool === params.review.tool &&
+        issued.arguments === params.review.arguments &&
+        issued.text === params.review.text;
+      if (sameStagedCall) {
+        // The question a client already shows about this stage may still be
+        // open, and that question was promised the review's lifetime
+        // (`renewHitlReview`): re-staging must not reset it.
         const pending = await cache.get<PendingHitlReview>(
           reviewKey(params.session, params.review.offerId),
         );
@@ -223,14 +281,16 @@ export async function stageHitlReview(params: {
         }
         return { status: "staged" as const };
       }
+      // A changed call re-staged under the same offer replaces the stage, so
+      // its inspection digest binds answers to the payload now offered.
       await cache.set(
         stagePresenceKey(params.session, params.review.offerId),
-        params.review,
+        review,
         HITL_REVIEW_TTL_MS,
       );
       await cache.set(
         reviewKey(params.session, params.review.offerId),
-        params.review,
+        review,
         HITL_REVIEW_TTL_MS,
       );
       return { status: "staged" as const };
@@ -351,6 +411,18 @@ export async function getHitlAskUserArguments(params: {
   const offerId = params.offerIds[0];
   const review = await getHitlReview({ session: params.session, offerId });
   if (!review) return undefined;
+  return buildHitlAskUserCard(review);
+}
+
+/**
+ * The review as one card: the call by the name the user knows it under, its
+ * arguments as named values, and what an approval accepts besides the
+ * person's attention, such as a wider audience. Where the coverage is not in
+ * the shape read here, the full text is shown and nothing it covers is left
+ * out.
+ */
+function buildHitlAskUserCard(review: PendingHitlReview): HitlAskUserArguments {
+  const offerId = review.offerId;
   const options = [
     { label: "Approve", description: "Allow this exact tool call." },
     { label: "Deny", description: "Keep this tool call blocked." },
@@ -368,23 +440,231 @@ export async function getHitlAskUserArguments(params: {
   // line about it. Where it would withhold that preview, and on forms and
   // other hosts, the question itself carries the exact call and what an
   // approval accepts besides it.
-  const args = withoutCommandAlias(
-    review.tool,
-    parseReviewedArguments(review.arguments) ?? {},
-  );
+  const parsed = parseReviewedArguments(review.arguments);
+  if (review.arguments && !parsed) {
+    return {
+      question: `${formatReviewQuestion(review.text)}\n\nExact arguments (unparsed):\n${review.arguments}`,
+      header: "Approval",
+      options,
+      allowMultiple: false,
+      remedy_offer_ids: [offerId],
+    };
+  }
+  const args = withoutCommandAlias(review.tool, parsed ?? {});
   const accepted = acceptedCoverage(review.text);
   const preview = callPreview(review.tool, args);
   return {
     question:
-      approvalQuestion({ tool: review.tool, args, accepted }) ??
-      formatReviewQuestion(review.text),
+      approvalQuestion({
+        tool: review.tool,
+        args,
+        accepted,
+        summary: review.summary,
+      }) ??
+      [...summaryBlock(review.summary), formatReviewQuestion(review.text)].join(
+        "\n\n",
+      ),
     shortQuestion: `Approve the ${preview.subject}?`,
-    callPreview: previewText({ preview, accepted }),
+    callPreview: previewText({ preview, accepted, summary: review.summary }),
     header: "Approval",
     options,
     allowMultiple: false,
     remedy_offer_ids: [offerId],
   };
+}
+
+/**
+ * The inspectable card for a review: the ordinary card with an "Inspect
+ * details" option, or — when the plain card cannot show the review — the
+ * compact overview card. When a signed Inspect answer is still pending, the
+ * card carries the complete review text for the transport to place above
+ * it; the pending state is not consumed here, only when an answer to that
+ * very card comes back. Returns undefined when the review is already ruled
+ * on, so the caller falls back to the ordinary card.
+ */
+export async function getHitlInspectableAskUserArguments(params: {
+  session: OpenAppaSession;
+  offerIds: readonly string[];
+  /** Render the complete review text when an inspection is pending. */
+  emit?: boolean;
+}): Promise<
+  | {
+      card: HitlAskUserArguments;
+      /** The staged payload this card is issued from; rides its claim. */
+      digest: string;
+      reviewText?: string;
+    }
+  | undefined
+> {
+  if (params.offerIds.length !== 1) return undefined;
+  const offerId = params.offerIds[0];
+  const review = await getHitlReview({ session: params.session, offerId });
+  if (!review) return undefined;
+  const base = buildHitlAskUserCard(review);
+  const digest = hitlInspectionDigest(review);
+  const outcome = await cacheManager.withLock(
+    stagePresenceKey(params.session, offerId),
+    async (cache) => {
+      // A review that already has its answer offers no further inspection.
+      const rulings = await readLockedRulings(cache, params.session, offerId);
+      if (rulings.deny || rulings.approve || rulings.none)
+        return { closed: true as const };
+      const staged = await cache.get<PendingHitlReview>(
+        stagePresenceKey(params.session, offerId),
+      );
+      if (staged?.offerId !== offerId) return { closed: true as const };
+      if (hitlInspectionDigest(staged) !== digest)
+        return { closed: true as const };
+      const stored = hitlInspectionOf(
+        await cache.get<StoredHitlInspection>(
+          inspectionKey(params.session, offerId),
+        ),
+        offerId,
+      );
+      if (stored && stored.digest !== digest) {
+        // A re-staged review renders differently: a past inspection no
+        // longer describes it.
+        await cache.delete(inspectionKey(params.session, offerId));
+        return { inspection: undefined };
+      }
+      return { inspection: stored };
+    },
+  );
+  if ("closed" in outcome) return undefined;
+  const card = needsHitlReviewInspection(base)
+    ? hitlReviewOverviewCard({ base, review }).card
+    : withInspectDetailsOption(base);
+  const reviewText =
+    params.emit !== false && outcome.inspection?.status === "pending"
+      ? renderHitlReviewText(review)
+      : undefined;
+  return { card, digest, ...(reviewText ? { reviewText } : {}) };
+}
+
+/**
+ * Reads the answer to an inspectable card atomically with the inspection
+ * state, binding the answer to the exact staged payload the answered card
+ * was issued from: a card issued before a re-stage is stale and rules
+ * nothing, and only a matching claim carrying the review-text marker proves
+ * the client received that payload's complete review. An answer whose claim
+ * carries the marker moves a pending inspection to delivered before it is
+ * read — the text precedes the card in the same response, so receiving the
+ * card is receiving the text. Approve records only for a matching claim with
+ * no undelivered inspection outstanding, and only when the card could carry
+ * an approval at all; Deny records on any matching card; Inspect marks the
+ * review pending (or reports the text already shown). Nothing here retries
+ * or grants on a stale claim.
+ */
+export async function resolveHitlInspectableAnswer(params: {
+  session: OpenAppaSession;
+  offerId: string;
+  answer: "approve" | "deny" | "inspect";
+  /** The answered card was issued with the complete review text above it. */
+  carriedReviewText: boolean;
+  /** The payload digest the answered card was issued with. */
+  claimDigest: string;
+}): Promise<
+  | { status: "recorded"; ruling: "approve" | "deny" }
+  | { status: "inspect-pending" | "inspect-shown" }
+  | { status: "stale" }
+  | { status: "closed" }
+> {
+  const { session, offerId } = params;
+  const outcome = await cacheManager.withLock(
+    stagePresenceKey(session, offerId),
+    async (cache) => {
+      const existing = await readLockedRulings(cache, session, offerId);
+      if (existing.deny || existing.approve || existing.none)
+        return { status: "closed" as const };
+      const staged = await cache.get<PendingHitlReview>(
+        stagePresenceKey(session, offerId),
+      );
+      if (staged?.offerId !== offerId) return { status: "closed" as const };
+      const digest = hitlInspectionDigest(staged);
+      // The answered card must be this payload's card: an answer to a card
+      // issued before a re-stage rules nothing, whatever label it carries.
+      if (params.claimDigest !== digest) return { status: "stale" as const };
+      let inspection = hitlInspectionOf(
+        await cache.get<StoredHitlInspection>(inspectionKey(session, offerId)),
+        offerId,
+      );
+      if (inspection && inspection.digest !== digest) {
+        // The staged payload changed since the inspection; it describes a
+        // review that is no longer offered.
+        await cache.delete(inspectionKey(session, offerId));
+        inspection = undefined;
+      }
+      // A card issued with the review text places that text before the card
+      // in the same response; only a client that received it can answer it.
+      // The transition is local: on the ruling paths below the inspection
+      // record is deleted atomically with the ruling in this same lock, and
+      // on the Inspect path it is persisted explicitly. No delivered state
+      // can be observed without one of those writes.
+      if (params.carriedReviewText && inspection?.status === "pending") {
+        inspection = { ...inspection, status: "delivered" as const };
+      }
+      if (params.answer === "inspect") {
+        if (inspection?.status === "delivered") {
+          await cache.set(
+            inspectionKey(session, offerId),
+            { offerId, ...inspection },
+            HITL_REVIEW_TTL_MS,
+          );
+          return { status: "inspect-shown" as const };
+        }
+        await cache.set(
+          inspectionKey(session, offerId),
+          { offerId, digest, status: "pending" as const },
+          HITL_REVIEW_TTL_MS,
+        );
+        return { status: "inspect-pending" as const };
+      }
+      // No approval while a requested inspection has not been delivered:
+      // the reviewer asked to read the complete review first.
+      if (params.answer === "approve" && inspection?.status === "pending") {
+        return { status: "stale" as const };
+      }
+      if (params.answer === "approve") {
+        const base = buildHitlAskUserCard(staged);
+        const approvable =
+          !needsHitlReviewInspection(base) ||
+          hitlReviewOverviewCard({ base, review: staged }).approve;
+        if (!approvable) return { status: "stale" as const };
+      }
+      const pending = await cache.getAndDelete<PendingHitlReview>(
+        reviewKey(session, offerId),
+      );
+      // A denial stands even when the spendable stage is already gone; an
+      // approval requires it.
+      if (pending?.offerId !== offerId && params.answer === "approve") {
+        return { status: "closed" as const };
+      }
+      await cache.delete(inspectionKey(session, offerId));
+      await cache.set(
+        rulingKey(session, offerId, params.answer),
+        { offerId, ruling: params.answer },
+        HITL_REVIEW_TTL_MS,
+      );
+      if (params.answer === "deny") {
+        await cache.delete(rulingKey(session, offerId, "approve"));
+        await cache.delete(rulingKey(session, offerId, "none"));
+      } else {
+        await cache.delete(rulingKey(session, offerId, "none"));
+      }
+      return { status: "recorded" as const, ruling: params.answer };
+    },
+  );
+  if (outcome.status === "recorded") {
+    logger.info(
+      {
+        sessionId: session.session_id,
+        callerId: session.caller_id,
+        ruling: outcome.ruling,
+      },
+      "OpenAPPA human-review ruling recorded",
+    );
+  }
+  return outcome;
 }
 
 export async function recordHitlRuling(params: {
@@ -550,6 +830,7 @@ export async function sealHitlClosure(params: {
       );
       await cache.delete(reviewKey(params.session, params.offerId));
       await cache.delete(stagePresenceKey(params.session, params.offerId));
+      await cache.delete(inspectionKey(params.session, params.offerId));
       return "sealed" as const;
     },
   );
@@ -600,6 +881,7 @@ export async function consumeHitlRuling(params: {
       if (!selected) return undefined;
       await cache.delete(reviewKey(params.session, params.offerId));
       await cache.delete(stagePresenceKey(params.session, params.offerId));
+      await cache.delete(inspectionKey(params.session, params.offerId));
       // A closure is not spent. Put it back so the next remedy call still
       // fails closed instead of opening another question.
       if (selected === "none") {
@@ -629,6 +911,7 @@ export async function clearHitlReview(params: {
       await cache.getAndDeleteMany([
         reviewKey(params.session, params.offerId),
         stagePresenceKey(params.session, params.offerId),
+        inspectionKey(params.session, params.offerId),
         ...HITL_RULINGS.map((ruling) =>
           rulingKey(params.session, params.offerId, ruling),
         ),
@@ -675,24 +958,26 @@ export function hitlRulingFromLabels(
   return undefined;
 }
 
-/**
- * The review as one question: the call by the name the user knows it under,
- * its arguments as named values, and what an approval accepts besides the
- * person's attention, such as a wider audience. Undefined when the review
- * text's coverage is not in the shape read here, so the full text is shown
- * and nothing it covers is left out.
- */
 function approvalQuestion(params: {
   tool: string;
   args: Record<string, unknown>;
   accepted: string[] | undefined;
+  summary?: string;
 }): string | undefined {
   if (!params.accepted) return undefined;
-  const argumentLines = formatArgumentLines(params.args);
+  const needsBlock = Object.values(params.args).some(
+    (value) =>
+      typeof value === "string" &&
+      (value.length > 1000 || value.includes("\n")),
+  );
+  const argumentLines = needsBlock
+    ? `Full arguments (YAML, not summarized):\n${dumpYaml(params.args, { lineWidth: -1, noRefs: true }).trimEnd()}`
+    : formatArgumentLines(params.args);
   return [
     `Approve ${reviewedToolLabel(params.tool)}?`,
     // Native clients can truncate long questions; show review coverage first.
     ...acceptedBlock(params.accepted),
+    ...summaryBlock(params.summary),
     ...(argumentLines ? [argumentLines] : []),
     "Approve lets this exact call run. Deny keeps it blocked.",
   ].join("\n\n");
@@ -715,6 +1000,14 @@ function acceptedBlock(accepted: string[] | undefined): string[] {
       "\n",
     ),
   ];
+}
+
+function summaryBlock(summary: string | undefined): string[] {
+  return summary
+    ? [
+        `Generated summary (may omit details; the full call below is authoritative):\n${summary}`,
+      ]
+    : [];
 }
 
 /**
@@ -759,6 +1052,7 @@ type CallPreview = { subject: string; summary?: string; body: string[] };
 function previewText(params: {
   preview: CallPreview;
   accepted: string[] | undefined;
+  summary?: string;
 }): string {
   const { subject, summary, body } = params.preview;
   const accepted = params.accepted ?? [];
@@ -770,6 +1064,7 @@ function previewText(params: {
   ];
   return [
     heading.join("\n"),
+    ...summaryBlock(params.summary).map(escapeMarkdown),
     ...body,
     ...(accepted.length > 0
       ? [
@@ -1008,6 +1303,13 @@ function closureOf(
   return isHitlClosureReason(entry?.closure) ? entry.closure : undefined;
 }
 
+/**
+ * Reads the three ruling slots inside the caller's lock. Locked reads run as
+ * raw SQL in the lock's transaction and decode with JSON.parse, so a storage
+ * or decode failure throws and rolls the transaction back: an unreadable
+ * ruling — a deny above all — fails closed instead of reading as absent.
+ * There is deliberately no silent-miss option on the locked cache.
+ */
 async function readLockedRulings(
   cache: LockedCache,
   session: OpenAppaSession,
@@ -1045,6 +1347,37 @@ function stagePresenceKey(
 
 function formKey(session: OpenAppaSession, offerId: string): AllowedCacheKey {
   return scopedKey(CacheKey.OpenAppaHitlRuling, session, `${offerId}:form`);
+}
+
+/** The inspection state of an inspectable native review, beside its rulings. */
+function inspectionKey(
+  session: OpenAppaSession,
+  offerId: string,
+): AllowedCacheKey {
+  return scopedKey(CacheKey.OpenAppaHitlRuling, session, `${offerId}:inspect`);
+}
+
+type StoredHitlInspection = {
+  offerId?: unknown;
+  digest?: unknown;
+  status?: unknown;
+};
+
+type HitlInspection = {
+  digest: string;
+  status: HitlInspectionStatus;
+};
+
+/** A cached inspection state, or undefined when the stored value is not one. */
+function hitlInspectionOf(
+  entry: StoredHitlInspection | undefined,
+  offerId: string,
+): HitlInspection | undefined {
+  if (entry?.offerId !== offerId) return undefined;
+  const { digest, status } = entry;
+  if (typeof digest !== "string" || digest.length === 0) return undefined;
+  if (status !== "pending" && status !== "delivered") return undefined;
+  return { digest, status };
 }
 
 function reviewKey(session: OpenAppaSession, offerId: string): AllowedCacheKey {

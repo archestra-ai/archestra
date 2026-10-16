@@ -263,6 +263,7 @@ async function handRulingToRemedyCall(params: {
     ...remedyArguments
   } = row.remedyArguments;
   const staged = await stageHitlReview({
+    prepareSummary: false,
     session,
     review: {
       offerId: offer.offerId,

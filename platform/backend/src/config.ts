@@ -35,6 +35,7 @@ import {
   MIN_CHILD_CHUNK_SIZE_TOKENS,
   MIN_CHUNK_SIZE_TOKENS,
   parsePublicHostSchemes,
+  providerSupportsChat,
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
@@ -2064,12 +2065,16 @@ export function parseOpenAppaConfig({
   yellEnabled,
   offerSigningSecret,
   postgresMaxConnections,
+  reviewSummaryProvider,
+  reviewSummaryModel,
   keptAnnotatorHorizonDays,
   authSecret,
 }: {
   yellEnabled?: string;
   offerSigningSecret?: string;
   postgresMaxConnections?: string;
+  reviewSummaryProvider?: string;
+  reviewSummaryModel?: string;
   keptAnnotatorHorizonDays?: string;
   authSecret?: string;
 } = {}) {
@@ -2090,6 +2095,10 @@ export function parseOpenAppaConfig({
       "OpenAPPA is enabled without a signing key. Signed delegation, history-based trajectory recovery, and peer inbox calls are unavailable. Set ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET or configure an auth secret to use those paths.",
     );
   }
+  const reviewSummary = parseOpenAppaReviewSummary({
+    provider: reviewSummaryProvider,
+    model: reviewSummaryModel,
+  });
   return {
     enabled: true,
     yellEnabled: (yellEnabled ?? "true") === "true",
@@ -2097,6 +2106,9 @@ export function parseOpenAppaConfig({
     postgresMaxConnections: parseOpenAppaPostgresMaxConnections(
       postgresMaxConnections,
     ),
+    // Omitted (not `undefined`) when disabled so exact-shape consumers and
+    // tests do not observe a key for a feature that is off.
+    ...(reviewSummary ? { reviewSummary } : {}),
     keptAnnotatorHorizonDays: parseKeptAnnotatorHorizonDays(
       keptAnnotatorHorizonDays,
     ),
@@ -2139,6 +2151,45 @@ function parseOpenAppaPostgresMaxConnections(envValue?: string): number {
     defaultValue: DEFAULT_OPENAPPA_POSTGRES_MAX_CONNECTIONS,
     maxValue: MAX_OPENAPPA_POSTGRES_MAX_CONNECTIONS,
   });
+}
+
+/**
+ * Explicit opt-in model for OpenAPPA review summaries. Both variables must be
+ * set together; both blank keeps summaries disabled. The provider must be a
+ * chat-capable supported provider, and its credentials come from the existing
+ * provider configuration (e.g. ARCHESTRA_CHAT_KIMI_API_KEY) — never inferred
+ * from the organization's default provider. Validation errors name variables
+ * only, never credential values.
+ */
+function parseOpenAppaReviewSummary({
+  provider,
+  model,
+}: {
+  provider?: string;
+  model?: string;
+}): { provider: SupportedProvider; model: string } | undefined {
+  const trimmedProvider = provider?.trim() ?? "";
+  const trimmedModel = model?.trim() ?? "";
+  if (trimmedProvider.length === 0 && trimmedModel.length === 0) {
+    return undefined;
+  }
+  if (trimmedProvider.length === 0 || trimmedModel.length === 0) {
+    throw new Error(
+      "ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER and ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_MODEL must be set together. Set both to enable review summaries, or unset both to keep them disabled.",
+    );
+  }
+  if (!(SupportedProviders as readonly string[]).includes(trimmedProvider)) {
+    throw new Error(
+      `ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER "${trimmedProvider}" is not a supported provider. Supported values: ${SupportedProviders.join(", ")}`,
+    );
+  }
+  const supportedProvider = trimmedProvider as SupportedProvider;
+  if (!providerSupportsChat(supportedProvider)) {
+    throw new Error(
+      `ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER "${trimmedProvider}" does not support chat completions. Choose a chat provider such as anthropic, openai, or kimi.`,
+    );
+  }
+  return { provider: supportedProvider, model: trimmedModel };
 }
 
 /**
@@ -2337,6 +2388,8 @@ const openappa = parseOpenAppaConfig({
   offerSigningSecret: process.env.ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET,
   postgresMaxConnections:
     process.env.ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS,
+  reviewSummaryProvider: process.env.ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER,
+  reviewSummaryModel: process.env.ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_MODEL,
   keptAnnotatorHorizonDays:
     process.env.ARCHESTRA_OPENAPPA_KEPT_ANNOTATOR_HORIZON_DAYS,
   authSecret: authSessionSecret,

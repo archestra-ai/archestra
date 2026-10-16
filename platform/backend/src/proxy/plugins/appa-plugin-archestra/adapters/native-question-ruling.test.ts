@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import type { AskUserArguments } from "../types";
 import { AppaClaudeCodeAdapter } from "./claude-code";
 import { AppaCodexAdapter } from "./codex";
+import { labeledQuestionRuling } from "./native-question-ruling";
 import { AppaOpenCodeAdapter } from "./opencode";
 
 // An argument the agent chose so that it reads like the client's own record
@@ -58,6 +59,31 @@ function openCodeAnswer(question: string, answer: string): string {
 
 describe("Claude Code approval questions", () => {
   const native = new AppaClaudeCodeAdapter().nativeQuestion;
+
+  test.each([
+    1999, 2000, 2001,
+  ])("never truncates a %i-character preview to fit the client limit", (length) => {
+    const asked = { ...review("exact call"), callPreview: "x".repeat(length) };
+    const question = native.fromAskUser(asked).questions[0];
+    expect(question.question).toBe(
+      length <= 2000 ? asked.shortQuestion : asked.question,
+    );
+    for (const option of question.options) {
+      if (length <= 2000) expect(option.preview).toBe(asked.callPreview);
+      else expect(option).not.toHaveProperty("preview");
+    }
+    expect(
+      native.rulingFromResult(
+        {
+          content: claudeCodeAnswer({
+            question: question.question,
+            label: "Approve",
+          }),
+        },
+        asked,
+      ),
+    ).toBe("approve");
+  });
 
   test("asks one line and previews the call in full in each option", () => {
     const asked = review("send the Q3 report");
@@ -237,5 +263,97 @@ describe("Codex approval answers", () => {
   test("reads the selected option from the structured answer", () => {
     expect(ruling({ content }, asked)).toBe("approve");
     expect(ruling({ content, isError: true }, asked)).toBe("unavailable");
+  });
+});
+
+describe("labeled question selections", () => {
+  const labels = ["Next page", "Previous page", "Deny"];
+  const question = "Reading the call under review: page 1 of 3.";
+
+  test("reads a navigation label from the text answer", () => {
+    expect(
+      labeledQuestionRuling(
+        { content: claudeCodeAnswer({ question, label: "Next page" }) },
+        question,
+        labels,
+      ),
+    ).toEqual({ label: "Next page" });
+  });
+
+  test("reads a navigation label whose preview the client echoes", () => {
+    expect(
+      labeledQuestionRuling(
+        {
+          content: claudeCodeAnswer({
+            question,
+            label: "Previous page",
+            preview: "**Review page 1 of 3**\n\nexact call",
+          }),
+        },
+        question,
+        labels,
+      ),
+    ).toEqual({ label: "Previous page" });
+  });
+
+  test("reads a label from the structured answer", () => {
+    expect(
+      labeledQuestionRuling(
+        { content: JSON.stringify({ answers: { "0": "Deny" } }) },
+        question,
+        labels,
+      ),
+    ).toEqual({ label: "Deny" });
+  });
+
+  test("reads nothing when two labels are selected or none match", () => {
+    expect(
+      labeledQuestionRuling(
+        {
+          content: JSON.stringify({ answers: { "0": ["Next page", "Deny"] } }),
+        },
+        question,
+        labels,
+      ),
+    ).toBe("unrecognized");
+    expect(
+      labeledQuestionRuling(
+        { content: claudeCodeAnswer({ question, label: "Approve" }) },
+        question,
+        labels,
+      ),
+    ).toBe("unrecognized");
+  });
+
+  test("a prefix label cannot shadow a longer one", () => {
+    expect(
+      labeledQuestionRuling(
+        {
+          content: claudeCodeAnswer({ question, label: "Next page forever" }),
+        },
+        question,
+        ["Next page", "Next page forever"],
+      ),
+    ).toEqual({ label: "Next page forever" });
+  });
+
+  test("a known no-answer and an error read as before", () => {
+    expect(
+      labeledQuestionRuling(
+        { content: "The user did not answer the questions." },
+        question,
+        labels,
+      ),
+    ).toBe("unanswered");
+    expect(
+      labeledQuestionRuling(
+        {
+          content: claudeCodeAnswer({ question, label: "Deny" }),
+          isError: true,
+        },
+        question,
+        labels,
+      ),
+    ).toBe("unavailable");
   });
 });

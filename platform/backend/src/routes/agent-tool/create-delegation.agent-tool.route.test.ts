@@ -97,6 +97,57 @@ describe("POST /api/agents/:agentId/delegations/:targetAgentId", () => {
     expect(JSON.stringify(record?.after)).toContain(added.id);
     expect(JSON.stringify(record?.before)).not.toContain(added.id);
   });
+  test("removing one edge audits an update and preserves its source agent", async ({
+    makeAgent,
+  }) => {
+    const source = await makeAgent({
+      agentType: "agent",
+      organizationId,
+      authorId: user.id,
+    });
+    const target = await makeAgent({
+      agentType: "agent",
+      organizationId,
+      authorId: user.id,
+    });
+    expect((await post(source.id, target.id)).statusCode).toBe(200);
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/agents/${source.id}/delegations/${target.id}`,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(await ids(source.id)).toEqual([]);
+    await expect
+      .poll(async () => {
+        const { data } = await AuditLogModel.findPaginated({
+          organizationId,
+          resourceType: "agent",
+          limit: 20,
+          offset: 0,
+        });
+        return data.find(
+          (row) =>
+            row.resourceId === source.id &&
+            row.action === "agent.updated" &&
+            JSON.stringify(row.before).includes(target.id) &&
+            !JSON.stringify(row.after).includes(target.id),
+        );
+      })
+      .toEqual(
+        expect.objectContaining({ resourceId: source.id, outcome: "success" }),
+      );
+    const { data } = await AuditLogModel.findPaginated({
+      organizationId,
+      resourceType: "agent",
+      limit: 20,
+      offset: 0,
+    });
+    expect(
+      data.filter(
+        (row) => row.resourceId === source.id && row.action === "agent.deleted",
+      ),
+    ).toEqual([]);
+  });
   test("concurrent independent edge creation preserves both targets", async ({
     makeAgent,
   }) => {

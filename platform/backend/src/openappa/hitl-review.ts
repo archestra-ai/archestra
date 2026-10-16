@@ -208,8 +208,12 @@ export async function stageHitlReview(params: {
       ...(decision.closure ? { closure: decision.closure } : {}),
     };
   if (decision) return { status: decision.ruling };
+  // A stage that cannot be read fails closed: silently reading it as absent
+  // would drop the presentation freeze for a review the user may already be
+  // reading, and no fallback exists for staged state.
   const prior = await cacheManager.get<PendingHitlReview>(
     stagePresenceKey(params.session, params.review.offerId),
+    { throwOnError: true },
   );
   // Freeze the presentation for a repeated offer. Regenerating a summary after
   // the user saw it would also change the native question used to bind answers.
@@ -592,6 +596,10 @@ export async function resolveHitlInspectableAnswer(params: {
       }
       // A card issued with the review text places that text before the card
       // in the same response; only a client that received it can answer it.
+      // The transition is local: on the ruling paths below the inspection
+      // record is deleted atomically with the ruling in this same lock, and
+      // on the Inspect path it is persisted explicitly. No delivered state
+      // can be observed without one of those writes.
       if (params.carriedReviewText && inspection?.status === "pending") {
         inspection = { ...inspection, status: "delivered" as const };
       }
@@ -1295,6 +1303,13 @@ function closureOf(
   return isHitlClosureReason(entry?.closure) ? entry.closure : undefined;
 }
 
+/**
+ * Reads the three ruling slots inside the caller's lock. Locked reads run as
+ * raw SQL in the lock's transaction and decode with JSON.parse, so a storage
+ * or decode failure throws and rolls the transaction back: an unreadable
+ * ruling — a deny above all — fails closed instead of reading as absent.
+ * There is deliberately no silent-miss option on the locked cache.
+ */
 async function readLockedRulings(
   cache: LockedCache,
   session: OpenAppaSession,

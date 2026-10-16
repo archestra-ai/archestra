@@ -5013,6 +5013,10 @@ async function claimNativeQuestionResults(params: {
   results: ReadonlyArray<{ id: string; name: string; namespace?: string }>;
 }): Promise<Map<object, NativeQuestionClaim>> {
   const candidates = params.results.flatMap((result) => {
+    // An answer without its own string id names no issued question: it is
+    // dropped before any claim key is built or looked up, never conflated
+    // with other unidentifiable answers under a placeholder id.
+    if (typeof result.id !== "string" || result.id.length === 0) return [];
     const name = nativeQuestionName(params.binding, result.name);
     if (!name || !releasesUserQuestion(params.binding, result)) return [];
     const scope = { session: params.binding.session, id: result.id };
@@ -5108,7 +5112,9 @@ async function recordNativeHitlRulings(params: {
         claimDigest: claim.digest ?? "",
       });
       if (outcome.kind === "ruling") recorded.push(outcome.ruling);
-      else continued.push(outcome.continuation);
+      // A dropped answer records nothing and advances nothing.
+      else if (outcome.kind === "continued")
+        continued.push(outcome.continuation);
       continue;
     }
     // The question the answer is read against comes from the review this
@@ -5256,14 +5262,17 @@ type HitlReviewContinuation = {
 
 type InspectableHitlAnswerOutcome =
   | { kind: "ruling"; ruling: RecordedNativeHitlRuling }
-  | { kind: "continued"; continuation: HitlReviewContinuation };
+  | { kind: "continued"; continuation: HitlReviewContinuation }
+  | { kind: "drop" };
 
 /**
  * Reads the answer to a card that offered Inspect details. Approve and Deny
  * record the ruling; Inspect asks for the complete review as conversation
  * text. A known no-answer seals the review as before; an unreadable answer
  * fails closed without the form. A stale answer — a card superseded before
- * its inspection text was delivered, a forged marker — changes nothing.
+ * its inspection text was delivered, a forged marker — changes nothing. An
+ * answer without its own string id is dropped: it rules nothing, and no
+ * placeholder id may stand in for it.
  */
 async function recordInspectableHitlAnswer(params: {
   binding: AppaPluginBinding;
@@ -5274,7 +5283,17 @@ async function recordInspectableHitlAnswer(params: {
 }): Promise<InspectableHitlAnswerOutcome> {
   const { binding, offerId } = params;
   const session = binding.session;
-  const resultId = typeof params.answer.id === "string" ? params.answer.id : "";
+  if (typeof params.answer.id !== "string" || params.answer.id.length === 0) {
+    // An unidentifiable answer claims nothing: no ruling, no continuation,
+    // and nothing cached under a placeholder id it would share with every
+    // other unidentifiable answer.
+    logger.warn(
+      { client: binding.adapter?.id, offerId },
+      "OpenAPPA dropped an unidentifiable answer to a review card",
+    );
+    return { kind: "drop" };
+  }
+  const resultId = params.answer.id;
   const stale: InspectableHitlAnswerOutcome = {
     kind: "continued",
     continuation: { offerId, resultId, selection: "stale" },
@@ -5543,6 +5562,9 @@ async function replayedReviewContinuations(params: {
   const { binding } = params;
   const keys = new Map<string, AllowedCacheKey>();
   for (const result of params.results) {
+    // An answer without its own string id names no continuation and looks
+    // nothing up.
+    if (typeof result.id !== "string" || result.id.length === 0) continue;
     if (params.answered[result.id] !== undefined) continue;
     if (!nativeQuestionName(binding, result.name)) continue;
     if (!releasesUserQuestion(binding, result)) continue;
@@ -5557,17 +5579,29 @@ async function replayedReviewContinuations(params: {
   const updates: Record<string, string> = Object.create(null);
   if (keys.size === 0) return updates;
   const stored = await cacheManager.getMany<string>([...keys.values()]);
+  const renewals: Promise<void>[] = [];
   for (const [resultId, key] of keys) {
     const instruction = stored.get(key);
     if (instruction === undefined) continue;
     updates[resultId] = instruction;
-    try {
-      await cacheManager.set(key, instruction, TimeInMs.Day);
-    } catch {
-      logger.warn("OpenAPPA could not refresh a review continuation");
-    }
+    renewals.push(renewContinuationLease(key, instruction));
   }
+  // Each renewal rewrites only its own row, so the independent keys renew
+  // together; the fan-out is bounded by this request's own result count.
+  await Promise.all(renewals);
   return updates;
+}
+
+/** A lease renewal loses only itself on failure, never the request. */
+async function renewContinuationLease(
+  key: AllowedCacheKey,
+  instruction: string,
+): Promise<void> {
+  try {
+    await cacheManager.set(key, instruction, TimeInMs.Day);
+  } catch {
+    logger.warn("OpenAPPA could not refresh a review continuation");
+  }
 }
 
 /** Pending pre-upgrade questions expire after ten minutes. New IDs use no MAC. */

@@ -44,6 +44,18 @@ test("ordinary prose is readable chat paragraphs rather than a wide code block",
   expect(result).toContain("message:\n\nDear reviewer,\n\nthis is prose.");
 });
 
+test("malformed embedded JSON stays visible instead of using a negative slice boundary", () => {
+  const text = `Tool: example_tool\nArguments:\n{"message":"unfinished"\n\nWhat this ruling would cover:\n  - trust must reach trusted\n\n${footer}`;
+  const result = renderHitlReviewText({
+    tool: "example_tool",
+    text,
+    arguments: '{"message":"complete"}',
+  });
+  expect(result).toContain('"unfinished"');
+  expect(result).toContain("complete");
+  expect(result).toContain("trust must reach trusted");
+});
+
 test("review data cannot introduce active Markdown images outside literal blocks", () => {
   const image = "![untrusted](https://example.invalid/image)";
   const result = renderHitlReviewText({

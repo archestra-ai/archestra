@@ -24,6 +24,9 @@ import type { OpenAppaSession } from "./service";
  *
  * Summaries are cached per organization, caller, tool, exact raw arguments and
  * review text, so a re-staged identical review reuses the earlier answer.
+ * Concurrent identical reviews singleflight on a short cache lease: one
+ * claimer generates, followers of the in-flight payload show no summary this
+ * time and spend nothing.
  */
 export async function summarizeHitlReview(params: {
   session: OpenAppaSession;
@@ -43,39 +46,63 @@ export async function summarizeHitlReview(params: {
   const key = summaryCacheKey(session, review);
   const cached = await cacheManager.get<string | null>(key);
   if (cached !== undefined) return cached ?? undefined;
+
+  // The lock spans only this check-and-claim. The budget check and the model
+  // call run after it is released, so a lock never spans a model call.
+  let claim: SummaryClaim;
+  try {
+    claim = await cacheManager.withLock(key, async (cache) => {
+      const existing = await cache.get<string | null>(key);
+      if (existing !== undefined) return { outcome: "cached", value: existing };
+      const leaseKey = generationLeaseKey(key);
+      if ((await cache.get<number>(leaseKey)) !== undefined)
+        return { outcome: "leased" };
+      await cache.set(leaseKey, Date.now(), GENERATION_LEASE_TTL_MS);
+      return { outcome: "claimed" };
+    });
+  } catch (error) {
+    logger.warn(
+      { tool: review.tool, reason: classifySummaryError(error) },
+      "OpenAPPA review summary generation claim failed",
+    );
+    return undefined;
+  }
+  if (claim.outcome === "cached") return claim.value ?? undefined;
+  if (claim.outcome === "leased") return undefined;
+
   let summary: string | undefined;
   try {
-    if (!(await reserveSummaryBudget(session))) return undefined;
+    if (!(await reserveSummaryBudget(session))) {
+      await releaseGenerationClaim(key);
+      return undefined;
+    }
     summary = await generateSummary({ session, review, prose });
-  } catch {
-    // Transient failures (including the wall timeout) are not cached. Never
-    // log payload values: the metadata names the call, not its arguments.
+  } catch (error) {
+    // Transient failures (including the wall timeout) are not cached. Only a
+    // closed-set classification is logged: an upstream error can quote the
+    // request, so its message and name never reach the logs.
+    await releaseGenerationClaim(key);
     logger.warn(
-      { tool: review.tool },
+      { tool: review.tool, reason: classifySummaryError(error) },
       "OpenAPPA review summary generation failed",
     );
     return undefined;
   }
   try {
-    // Only the check-and-set holds the lock: model resolution and generation
-    // run outside it, so the lock never spans a model call. A concurrent
-    // summary of the same payload wins; the later writer serves the winner.
-    return await cacheManager.withLock(key, async (cache) => {
-      const existing = await cache.get<string | null>(key);
-      if (existing !== undefined) return existing ?? undefined;
-      // A definitive failure (no tagged answer, overlong) is cached briefly so
-      // a re-staged review does not immediately re-buy the same refusal.
-      await cache.set(
-        key,
-        summary ?? null,
-        summary ? SUMMARY_TTL_MS : FAILURE_TTL_MS,
-      );
-      return summary;
-    });
-  } catch {
+    // Only the claimer writes. A definitive failure (no tagged answer,
+    // overlong) is cached briefly so a re-staged review does not immediately
+    // re-buy the same refusal.
+    await cacheManager.set(
+      key,
+      summary ?? null,
+      summary ? SUMMARY_TTL_MS : FAILURE_TTL_MS,
+    );
+    await releaseGenerationClaim(key);
+    return summary;
+  } catch (error) {
     // A cache outage must not hide a summary that was already computed.
     logger.warn(
-      { tool: review.tool },
+      { tool: review.tool, reason: classifySummaryError(error) },
       "OpenAPPA review summary could not be cached",
     );
     return summary;
@@ -85,32 +112,95 @@ export async function summarizeHitlReview(params: {
 // === Internal helpers
 
 /** Bump when the prompt or the extraction contract changes. */
-const SUMMARY_PROMPT_VERSION = 2;
+const SUMMARY_PROMPT_VERSION = 3;
 
 const SUMMARY_TTL_MS = 10 * TimeInMs.Minute;
 const FAILURE_TTL_MS = TimeInMs.Minute;
 
-/** Bound shared-key spend even when an agent varies every blocked payload. */
+/** Hard wall for the model call; a summary must never delay a review. */
+const SUMMARY_TIMEOUT_MS = 8_000;
+
+/** How long a generation claim survives an abandoned claimer. */
+const GENERATION_LEASE_TTL_MS = 2 * SUMMARY_TIMEOUT_MS;
+
+type SummaryClaim =
+  | { outcome: "cached"; value: string | null }
+  | { outcome: "leased" }
+  | { outcome: "claimed" };
+
+function generationLeaseKey(key: AllowedCacheKey): AllowedCacheKey {
+  return `${key}-generation`;
+}
+
+async function releaseGenerationClaim(key: AllowedCacheKey): Promise<void> {
+  // Best effort: a dangling lease expires on its own within the lease TTL.
+  await cacheManager.delete(generationLeaseKey(key));
+}
+
+const SUMMARY_BUDGET_WINDOW_MS = TimeInMs.Minute;
+const SUMMARY_BUDGET_ENTRY_TTL_MS = 2 * TimeInMs.Minute;
+const CALLER_SUMMARY_BUDGET = 5;
+const ORG_SUMMARY_BUDGET = 20;
+
+/**
+ * Bound shared-key spend over a rolling 60-second window, even when an agent
+ * varies every blocked payload and even across a calendar-minute boundary.
+ * Only generation spends here; cache hits never reach this check.
+ */
 async function reserveSummaryBudget(
   session: OpenAppaSession,
 ): Promise<boolean> {
-  const window = Math.floor(Date.now() / TimeInMs.Minute);
   const scope = summaryFingerprint(["budget-org", session.organization_id]);
-  const orgKey: AllowedCacheKey = `${CacheKey.OpenAppaHitlSummary}-budget-${scope}-${window}`;
+  const orgKey: AllowedCacheKey = `${CacheKey.OpenAppaHitlSummary}-budget-${scope}`;
   const caller = summaryFingerprint(["budget-caller", session.caller_id ?? ""]);
   const callerKey: AllowedCacheKey = `${orgKey}-${caller}`;
   return cacheManager.withLock(orgKey, async (cache) => {
-    const orgCount = (await cache.get<number>(orgKey)) ?? 0;
-    const callerCount = (await cache.get<number>(callerKey)) ?? 0;
-    if (orgCount >= 20 || callerCount >= 5) return false;
-    await cache.set(orgKey, orgCount + 1, 2 * TimeInMs.Minute);
-    await cache.set(callerKey, callerCount + 1, 2 * TimeInMs.Minute);
+    const now = Date.now();
+    const orgSpends = recentSpends(await cache.get<number[]>(orgKey), now);
+    const callerSpends = recentSpends(
+      await cache.get<number[]>(callerKey),
+      now,
+    );
+    if (
+      orgSpends.length >= ORG_SUMMARY_BUDGET ||
+      callerSpends.length >= CALLER_SUMMARY_BUDGET
+    )
+      return false;
+    await cache.set(orgKey, [...orgSpends, now], SUMMARY_BUDGET_ENTRY_TTL_MS);
+    await cache.set(
+      callerKey,
+      [...callerSpends, now],
+      SUMMARY_BUDGET_ENTRY_TTL_MS,
+    );
     return true;
   });
 }
 
-/** Hard wall for the model call; a summary must never delay a review. */
-const SUMMARY_TIMEOUT_MS = 8_000;
+/** Spends inside the rolling window, oldest first. A malformed entry is empty. */
+function recentSpends(value: unknown, now: number): number[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (spentAt): spentAt is number =>
+      typeof spentAt === "number" && now - spentAt < SUMMARY_BUDGET_WINDOW_MS,
+  );
+}
+
+type SummaryFailureReason = "timeout" | "auth" | "rate_limit" | "unknown";
+
+/**
+ * Closed-set classification for logs. An upstream error's message — and even
+ * its name — can quote request secrets, so only known structural signals are
+ * read and arbitrary values are never logged.
+ */
+function classifySummaryError(error: unknown): SummaryFailureReason {
+  if (!(error instanceof Error)) return "unknown";
+  if (error.name === "TimeoutError" || error.name === "AbortError")
+    return "timeout";
+  const status = (error as { statusCode?: unknown }).statusCode;
+  if (status === 401 || status === 403) return "auth";
+  if (status === 429) return "rate_limit";
+  return "unknown";
+}
 
 /** Prose argument fields worth summarizing; command/code fields never are. */
 const PROSE_ARGUMENT_NAMES = [
@@ -218,10 +308,22 @@ function summaryPrompt(
     ...prose.flatMap(({ name, value }) => [
       "",
       `<argument name="${name}">`,
-      value,
+      escapeXmlData(value),
       "</argument>",
     ]),
   ].join("\n");
+}
+
+/**
+ * Escape untrusted prose so it cannot break out of its <argument> block and
+ * impersonate prompt structure. Field names come from a constant list and
+ * stay unescaped.
+ */
+function escapeXmlData(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 /**
@@ -231,6 +333,7 @@ function summaryPrompt(
  * Newlines are the one allowed control character.
  */
 function isShowableSummary(text: string): boolean {
+  if (text.trim().length === 0) return false;
   if (text.length > MAX_SUMMARY_CHARS) return false;
   return !/[\p{Cc}\p{Cf}]/u.test(text.replaceAll("\n", ""));
 }
@@ -256,10 +359,18 @@ function summaryCacheKey(
   return `${CacheKey.OpenAppaHitlSummary}-${digest}`;
 }
 
-/** Cache fingerprints are not password storage. HMAC also hides low-entropy
- * identities and argument values from anyone able to inspect cache key names. */
+/**
+ * Cache fingerprints are not password storage. The deployment signing secret
+ * is never used as an HMAC key directly: a domain-separated sub-key is
+ * derived first, so cache-key material stays cryptographically separate from
+ * offer-signing material. HMAC also hides low-entropy identities and argument
+ * values from anyone able to inspect cache key names.
+ */
 function summaryFingerprint(value: unknown): string {
-  return createHmac("sha256", config.openappa.offerSigningSecret)
+  const subkey = createHmac("sha256", config.openappa.offerSigningSecret)
+    .update("openappa:review-summary:cache-subkey:v1\0")
+    .digest();
+  return createHmac("sha256", subkey)
     .update("openappa:review-summary-cache:v1\0")
     .update(JSON.stringify(value))
     .digest("base64url");

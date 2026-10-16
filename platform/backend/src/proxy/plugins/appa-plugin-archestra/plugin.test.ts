@@ -3740,6 +3740,112 @@ describe("asking through the client's own question tool", () => {
     }
   });
 
+  test("an answer with an empty id claims nothing, caches nothing, and rules nothing", async () => {
+    const offerId = "offer-inspectable-empty-id";
+    const { plugin, context, trusted, askCard, answer } =
+      inspectableClaudeReview({
+        sessionId: "user:user|claude-inspectable-empty-id",
+        offerId,
+      });
+    await stageInspectableReview(trusted.session, offerId);
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+
+    try {
+      await plugin.onSessionInit(context);
+      const issued = await askCard();
+      const outcome = await plugin.onToolResults({
+        ...context,
+        toolResults: [
+          {
+            id: "",
+            name: "AskUserQuestion",
+            content: JSON.stringify(
+              `Your questions have been answered: "${issued.card.question}"="Approve". You can now continue with these answers in mind.`,
+            ),
+            isError: false,
+          },
+        ],
+      });
+      // No approval, no continuation text, no cache entry under the empty id.
+      expect(outcome?.toolResultUpdates[""]).toBeUndefined();
+      expect(
+        await peekHitlRuling({ session: trusted.session, offerId }),
+      ).toBeUndefined();
+      expect(
+        await cacheManager.get(hitlReviewContinuationKey(trusted.session, "")),
+      ).toBeUndefined();
+      // The identified answer's one-use claim is intact: it still rules.
+      const approved = await answer(
+        issued.answerId,
+        issued.card.question,
+        "Approve",
+      );
+      expect(approved.guidance).toContain("approved OpenAPPA offer IDs");
+      await expect(
+        consumeHitlRuling({ session: trusted.session, offerId }),
+      ).resolves.toBe("approve");
+    } finally {
+      processResults.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test("an answer with a non-string or missing id cannot claim, advance, or approve", async () => {
+    const offerId = "offer-inspectable-foreign-id";
+    const { plugin, context, trusted, askCard, answer } =
+      inspectableClaudeReview({
+        sessionId: "user:user|claude-inspectable-foreign-id",
+        offerId,
+      });
+    await stageInspectableReview(trusted.session, offerId);
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+
+    try {
+      await plugin.onSessionInit(context);
+      const issued = await askCard();
+      for (const id of [123, undefined]) {
+        // The generic result path refuses a result whose id is not a string
+        // before any claim or continuation lookup: the request fails closed
+        // and nothing is claimed, cached, or ruled.
+        await expect(
+          plugin.onToolResults({
+            ...context,
+            toolResults: [
+              {
+                id: id as unknown as string,
+                name: "AskUserQuestion",
+                content: JSON.stringify(
+                  `Your questions have been answered: "${issued.card.question}"="Approve". You can now continue with these answers in mind.`,
+                ),
+                isError: false,
+              },
+            ],
+          }),
+        ).rejects.toThrow();
+      }
+      expect(
+        await peekHitlRuling({ session: trusted.session, offerId }),
+      ).toBeUndefined();
+      // The identified answer's one-use claim is intact: it still rules.
+      const approved = await answer(
+        issued.answerId,
+        issued.card.question,
+        "Approve",
+      );
+      expect(approved.guidance).toContain("approved OpenAPPA offer IDs");
+      await expect(
+        consumeHitlRuling({ session: trusted.session, offerId }),
+      ).resolves.toBe("approve");
+    } finally {
+      processResults.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
   test("a Deny on an inspectable card closes the review as denied", async () => {
     const offerId = "offer-inspectable-deny";
     const { plugin, context, trusted, askCard, answer } =
@@ -4066,6 +4172,72 @@ describe("asking through the client's own question tool", () => {
       expect(replayed?.toolResultUpdates[first.answerId]).toBe(
         inspected.resultText,
       );
+    } finally {
+      processResults.mockRestore();
+      await plugin.onCleanup(context);
+    }
+  });
+
+  test("replays a cached continuation even when its lease renewal fails", async () => {
+    const offerId = "offer-inspectable-replay-renewal";
+    const { plugin, context, trusted, askCard, answer } =
+      inspectableClaudeReview({
+        sessionId: "user:user|claude-inspectable-replay-renewal",
+        offerId,
+      });
+    await stageInspectableReview(trusted.session, offerId);
+    const processResults = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({ toolResultUpdates: {} });
+
+    try {
+      await plugin.onSessionInit(context);
+      const first = await askCard();
+      const inspected = await answer(
+        first.answerId,
+        first.card.question,
+        "Inspect details",
+      );
+      expect(inspected.resultText).toContain('chose "Inspect details"');
+      const fresh = requestContext({
+        sessionId: "user:user|claude-inspectable-replay-renewal",
+      });
+      fresh.headers = { "user-agent": "claude-code/1" };
+      const freshTrusted = fresh.resources.get(
+        APPA_PLUGIN_TRUSTED_CONTEXT,
+      ) as AppaTrustedContext;
+      freshTrusted.request = trusted.request;
+      await plugin.onSessionInit(fresh);
+      const realSet = cacheManager.set.bind(cacheManager);
+      const cacheSet = vi
+        .spyOn(cacheManager, "set")
+        .mockImplementation(async (key, value, ttl) => {
+          if (key.startsWith(`${CacheKey.OpenAppaHitlReviewContinuation}-`))
+            throw new Error("Continuation cache unavailable");
+          return realSet(key, value, ttl);
+        });
+      try {
+        const replayed = await plugin.onToolResults({
+          ...fresh,
+          toolResults: [
+            {
+              id: first.answerId,
+              name: "AskUserQuestion",
+              content: JSON.stringify(
+                `Your questions have been answered: "${first.card.question}"="Inspect details". You can now continue with these answers in mind.`,
+              ),
+              isError: false,
+            },
+          ],
+        });
+        // A failed renewal loses only the lease: the replayed text is the
+        // stored instruction, byte-identical, and the request does not fail.
+        expect(replayed?.toolResultUpdates[first.answerId]).toBe(
+          inspected.resultText,
+        );
+      } finally {
+        cacheSet.mockRestore();
+      }
     } finally {
       processResults.mockRestore();
       await plugin.onCleanup(context);
@@ -7431,6 +7603,29 @@ function nativeQuestionCacheKey(
     )
     .digest("base64url");
   return `${CacheKey.OpenAppaNativeQuestion}-${scope}` as AllowedCacheKey;
+}
+
+function hitlReviewContinuationKey(
+  session: {
+    organization_id: string;
+    caller_id?: string;
+    session_id: string;
+    parent_id?: string;
+  },
+  resultId: string,
+): AllowedCacheKey {
+  const scope = createHash("sha256")
+    .update(
+      JSON.stringify([
+        session.organization_id,
+        session.caller_id ?? "",
+        session.session_id,
+        session.parent_id ?? "",
+        resultId,
+      ]),
+    )
+    .digest("base64url");
+  return `${CacheKey.OpenAppaHitlReviewContinuation}-${scope}` as AllowedCacheKey;
 }
 
 function legacyNativeQuestionCacheKey(

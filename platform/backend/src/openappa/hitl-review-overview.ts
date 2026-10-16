@@ -314,15 +314,15 @@ function argumentOverviewLines(
       raw.length <= 300 &&
       !UNSAFE.test(raw)
     ) {
-      line = `${safeLabel(label)}:\n${raw}`;
+      line = `${safeText(label)}:\n${raw}`;
     } else if (
       raw.length <= 100 &&
       (value === null || typeof value !== "object") &&
       !UNSAFE.test(raw)
     ) {
-      line = `${safeLabel(label)}:\n${safeText(raw)}`;
+      line = `${safeText(label)}:\n${safeText(raw)}`;
     } else {
-      line = `${safeLabel(label)}:\n${wrapOverviewProse(`Shown in full via Inspect details (${raw.length} characters).`)}`;
+      line = `${safeText(label)}:\n${wrapOverviewProse(`Shown in full via Inspect details (${raw.length} characters).`)}`;
     }
     if (budget - line.length < 0) {
       lines.push("More arguments: shown in full via Inspect details.");
@@ -440,14 +440,14 @@ function prefixWithoutEmbeddedCall(review: HitlInspectableReview): string[] {
   if (args) {
     const at = prefix.lastIndexOf("Arguments:\n");
     const start = at + "Arguments:\n".length;
-    if (at >= 0 && prefix[start] === "{") {
-      const end = jsonObjectEnd(prefix, start);
+    const end =
+      at >= 0 && prefix[start] === "{" ? jsonObjectEnd(prefix, start) : -1;
+    if (end > start) {
       try {
         const embedded: unknown = JSON.parse(prefix.slice(start, end));
         // Rust and JavaScript can pretty-print object keys in different orders.
         // Compare values, but retain ambiguous numeric representations verbatim.
         if (
-          end > start &&
           safeNumbers(args) &&
           safeNumbers(embedded) &&
           isDeepStrictEqual(args, embedded)
@@ -483,11 +483,6 @@ function prefixWithoutEmbeddedCall(review: HitlInspectableReview): string[] {
   return prefix
     .split("\n")
     .map((line) => line.trimEnd())
-    .filter((line, index, lines) => {
-      // Collapse the blank runs the removal left to single separators.
-      if (line !== "") return true;
-      return index > 0 && lines[index - 1] !== "" && index < lines.length - 1;
-    })
     .filter((line) => line !== "");
 }
 
@@ -561,11 +556,6 @@ function wrapOverviewProse(text: string): string {
  * genuine backslash sequence stays exactly as written.
  */
 function safeText(text: string): string {
-  return UNSAFE.test(text) ? escapedLiteral(text) : text;
-}
-
-function safeLabel(text: string): string {
-  // Escaped explicitly: the JSON literal keeps the name readable and exact.
   return UNSAFE.test(text) ? escapedLiteral(text) : text;
 }
 

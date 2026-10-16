@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import { sql } from "drizzle-orm";
+import type { KeyvStoreAdapter } from "keyv";
 import { describe, expect, test, vi } from "vitest";
+import { type AllowedCacheKey, cacheManager } from "@/cache-manager";
+import db from "@/database";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import {
   consumeHitlRuling,
@@ -741,5 +745,277 @@ describe("inspection state", () => {
     expect(hitlInspectionDigest(review)).toBe(
       hitlInspectionDigest({ ...review }),
     );
+  });
+
+  test("concurrent inspections of one offer both stay pending and grant nothing", async () => {
+    const offerId = "offer-inspect-concurrent";
+    const reviewSession = session("user:user|inspect-concurrent");
+    await stageHitlReview({
+      session: reviewSession,
+      review: longReview(offerId),
+    });
+    const digest = await issuedDigest(reviewSession, offerId);
+    const [first, second] = await Promise.all([
+      resolveHitlInspectableAnswer({
+        session: reviewSession,
+        offerId,
+        answer: "inspect",
+        carriedReviewText: false,
+        claimDigest: digest,
+      }),
+      resolveHitlInspectableAnswer({
+        session: reviewSession,
+        offerId,
+        answer: "inspect",
+        carriedReviewText: false,
+        claimDigest: digest,
+      }),
+    ]);
+    expect(first).toEqual({ status: "inspect-pending" });
+    expect(second).toEqual({ status: "inspect-pending" });
+    expect(
+      await peekHitlRuling({ session: reviewSession, offerId }),
+    ).toBeUndefined();
+    // Neither pending inspection lets an approval through without the text.
+    const early = await resolveHitlInspectableAnswer({
+      session: reviewSession,
+      offerId,
+      answer: "approve",
+      carriedReviewText: false,
+      claimDigest: digest,
+    });
+    expect(early).toEqual({ status: "stale" });
+    expect(
+      await peekHitlRuling({ session: reviewSession, offerId }),
+    ).toBeUndefined();
+  });
+
+  test("duplicate emissions of one card share its binding; a replayed answer closes", async () => {
+    const offerId = "offer-inspect-duplicate";
+    const reviewSession = session("user:user|inspect-duplicate");
+    await stageHitlReview({
+      session: reviewSession,
+      review: longReview(offerId),
+    });
+    const digest = await issuedDigest(reviewSession, offerId);
+    // A second issue of the same payload carries the same binding token.
+    const duplicate = await getHitlInspectableAskUserArguments({
+      session: reviewSession,
+      offerIds: [offerId],
+      emit: false,
+    });
+    expect(duplicate?.digest).toBe(digest);
+    const approved = await resolveHitlInspectableAnswer({
+      session: reviewSession,
+      offerId,
+      answer: "approve",
+      carriedReviewText: false,
+      claimDigest: digest,
+    });
+    expect(approved).toEqual({ status: "recorded", ruling: "approve" });
+    // The duplicate card's identical answer is a replay, not a second ruling.
+    const replayed = await resolveHitlInspectableAnswer({
+      session: reviewSession,
+      offerId,
+      answer: "approve",
+      carriedReviewText: false,
+      claimDigest: digest,
+    });
+    expect(replayed).toEqual({ status: "closed" });
+    // Exactly one approval was recorded and it is spent exactly once.
+    await expect(
+      consumeHitlRuling({ session: reviewSession, offerId }),
+    ).resolves.toBe("approve");
+    await expect(
+      consumeHitlRuling({ session: reviewSession, offerId }),
+    ).resolves.toBeUndefined();
+  });
+});
+
+type LockedCache = Parameters<Parameters<typeof cacheManager.withLock>[1]>[0];
+
+/** Fails the first read inside the next entered lock once, transiently. */
+function failNextLockedRead(): void {
+  const lock = cacheManager.withLock.bind(cacheManager);
+  let failed = false;
+  vi.spyOn(cacheManager, "withLock").mockImplementation(
+    <T>(scope: AllowedCacheKey, callback: (cache: LockedCache) => Promise<T>) =>
+      lock(scope, async (cache) => {
+        const get = cache.get;
+        cache.get = async <V>(key: AllowedCacheKey) => {
+          if (!failed) {
+            failed = true;
+            throw new Error("transient cache read failure");
+          }
+          return get<V>(key);
+        };
+        return callback(cache);
+      }),
+  );
+}
+
+/**
+ * Runs `body` against the real cache whose store fails the first read of an
+ * entry matching `failOn`, as a transient storage outage would. Other reads
+ * are served by the test database, so the state before and after the fault is
+ * real. The real store is restarted by the next test's setup.
+ */
+async function withFailingStore(
+  failOn: (raw: string | undefined) => boolean,
+  body: () => Promise<void>,
+): Promise<void> {
+  cacheManager.shutdown();
+  let failed = false;
+  const store: KeyvStoreAdapter = {
+    opts: {},
+    on: () => store,
+    async get(key) {
+      const result = await db.execute<{ value: string }>(
+        sql`SELECT value FROM keyv_cache WHERE key = ${key}`,
+      );
+      const raw = result.rows[0]?.value;
+      if (!failed && failOn(raw)) {
+        failed = true;
+        throw new Error("transient cache read failure");
+      }
+      return raw as never;
+    },
+    async set() {
+      throw new Error("transient cache write failure");
+    },
+    async delete() {
+      return false;
+    },
+    async clear() {},
+  };
+  cacheManager.start(store);
+  try {
+    await body();
+  } finally {
+    cacheManager.shutdown();
+  }
+}
+
+describe("fail-closed cache reads", () => {
+  test("an unreadable stored decision fails staging closed instead of hiding a deny", async () => {
+    const offerId = "offer-failclosed-hidden-deny";
+    const reviewSession = session("user:user|failclosed-hidden-deny");
+    await stageHitlReview({
+      session: reviewSession,
+      review: longReview(offerId),
+    });
+    const denied = await resolveHitlInspectableAnswer({
+      session: reviewSession,
+      offerId,
+      answer: "deny",
+      carriedReviewText: false,
+      claimDigest: await issuedDigest(reviewSession, offerId),
+    });
+    expect(denied).toEqual({ status: "recorded", ruling: "deny" });
+    await withFailingStore(
+      (raw) => raw?.includes('"ruling"') ?? false,
+      async () => {
+        // The stored deny cannot be read: the repeated offer must fail, not
+        // stage over a denial it could not see.
+        await expect(
+          stageHitlReview({
+            session: reviewSession,
+            review: longReview(offerId),
+          }),
+        ).rejects.toThrow("transient cache read failure");
+        // The outage was transient; the deny is still there.
+        expect(await peekHitlRuling({ session: reviewSession, offerId })).toBe(
+          "deny",
+        );
+      },
+    );
+  });
+
+  test("an unreadable stage fails staging closed instead of dropping the issued presentation", async () => {
+    const offerId = "offer-failclosed-stage-read";
+    const reviewSession = session("user:user|failclosed-stage-read");
+    await stageHitlReview({
+      session: reviewSession,
+      review: longReview(offerId),
+    });
+    await withFailingStore(
+      (raw) => raw?.includes('"text"') ?? false,
+      async () => {
+        await expect(
+          stageHitlReview({
+            session: reviewSession,
+            review: longReview(offerId),
+          }),
+        ).rejects.toThrow("transient cache read failure");
+        // The issued stage survived the outage untouched.
+        expect(await issuedDigest(reviewSession, offerId)).toBe(
+          hitlInspectionDigest(longReview(offerId)),
+        );
+      },
+    );
+  });
+
+  test("a failed ruling read inside the lock cannot hide an existing deny", async () => {
+    const offerId = "offer-failclosed-locked-deny";
+    const reviewSession = session("user:user|failclosed-locked-deny");
+    await stageHitlReview({
+      session: reviewSession,
+      review: longReview(offerId),
+    });
+    const digest = await issuedDigest(reviewSession, offerId);
+    const denied = await resolveHitlInspectableAnswer({
+      session: reviewSession,
+      offerId,
+      answer: "deny",
+      carriedReviewText: false,
+      claimDigest: digest,
+    });
+    expect(denied).toEqual({ status: "recorded", ruling: "deny" });
+    failNextLockedRead();
+    await expect(
+      resolveHitlInspectableAnswer({
+        session: reviewSession,
+        offerId,
+        answer: "approve",
+        carriedReviewText: true,
+        claimDigest: digest,
+      }),
+    ).rejects.toThrow("transient cache read failure");
+    // The deny was neither hidden nor replaced.
+    expect(await peekHitlRuling({ session: reviewSession, offerId })).toBe(
+      "deny",
+    );
+  });
+
+  test("a failed read inside the lock grants nothing and leaves the stage spendable", async () => {
+    const offerId = "offer-failclosed-locked-grant";
+    const reviewSession = session("user:user|failclosed-locked-grant");
+    await stageHitlReview({
+      session: reviewSession,
+      review: longReview(offerId),
+    });
+    const digest = await issuedDigest(reviewSession, offerId);
+    failNextLockedRead();
+    await expect(
+      resolveHitlInspectableAnswer({
+        session: reviewSession,
+        offerId,
+        answer: "approve",
+        carriedReviewText: false,
+        claimDigest: digest,
+      }),
+    ).rejects.toThrow("transient cache read failure");
+    expect(
+      await peekHitlRuling({ session: reviewSession, offerId }),
+    ).toBeUndefined();
+    // The rollback left no partial state: the same card can still approve.
+    const approved = await resolveHitlInspectableAnswer({
+      session: reviewSession,
+      offerId,
+      answer: "approve",
+      carriedReviewText: false,
+      claimDigest: digest,
+    });
+    expect(approved).toEqual({ status: "recorded", ruling: "approve" });
   });
 });

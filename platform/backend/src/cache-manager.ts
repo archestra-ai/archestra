@@ -16,6 +16,7 @@ export { LRUCacheManager } from "@/in-memory-lru-cache";
  * of related entries using deleteByPrefix().
  */
 export const CacheKey = {
+  OpenAppaHitlSummary: "openappa-hitl-summary",
   ClientConnection: "client-connection",
   ClientConnectionRateLimit: "client-connection-rate-limit",
   /** models.dev sync tracking */
@@ -64,6 +65,8 @@ export const CacheKey = {
   OpenAppaHitlQuestionAsked: "openappa-hitl-question-asked",
   /** Per-call server-issued review status, for history only; never a ruling. */
   OpenAppaHitlReviewHistory: "openappa-hitl-review-history",
+  /** Canonical result text of an answered review card, replayed on later requests */
+  OpenAppaHitlReviewContinuation: "openappa-hitl-page-continuation",
   /** Pending OpenAPPA review indexed by a verified runtime workspace */
   OpenAppaRuntimeHitlReview: "openappa-runtime-hitl-review",
   /** Sessions already told once to resend a request that lacked the gateway remedy tools */

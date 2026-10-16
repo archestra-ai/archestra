@@ -578,12 +578,15 @@ class AnthropicResponseAdapter
     return reason ? [reason] : [];
   }
 
+  readonly supportsToolCallReview = true;
+
   withRewrittenToolCalls(
     toolCalls: Array<{
       id: string;
       name: string;
       arguments: string;
       wireId?: string;
+      reviewDetails?: string;
     }>,
   ): AnthropicResponse {
     // Positional: one rewritten entry per call this response carries, in
@@ -591,20 +594,34 @@ class AnthropicResponseAdapter
     // call carries the one it is given instead.
     let next = 0;
     const wireIdByProviderId = new Map<string, string>();
-    const content = this.response.content.map((block) => {
-      if (block.type !== "tool_use") return block;
-      const rewritten = toolCalls[next++];
-      if (!rewritten) return block;
-      if (rewritten.wireId && rewritten.wireId !== block.id) {
-        wireIdByProviderId.set(block.id, rewritten.wireId);
-      }
-      return {
-        ...block,
-        id: rewritten.wireId ?? block.id,
-        name: rewritten.name,
-        input: parseArgs(rewritten.arguments),
-      };
-    });
+    const content = this.response.content.flatMap(
+      (block): AnthropicResponse["content"] => {
+        if (block.type !== "tool_use") return [block];
+        const rewritten = toolCalls[next++];
+        if (!rewritten) return [block];
+        if (rewritten.wireId && rewritten.wireId !== block.id) {
+          wireIdByProviderId.set(block.id, rewritten.wireId);
+        }
+        return [
+          // A server-held review precedes its card as plain assistant text.
+          ...(rewritten.reviewDetails
+            ? [
+                {
+                  type: "text" as const,
+                  text: rewritten.reviewDetails,
+                  citations: null,
+                },
+              ]
+            : []),
+          {
+            ...block,
+            id: rewritten.wireId ?? block.id,
+            name: rewritten.name,
+            input: parseArgs(rewritten.arguments),
+          },
+        ];
+      },
+    );
     // Response keys outside `content` (for example `safeguard_results`, keyed
     // by tool-use id) must name the calls the way the client now knows them.
     const { content: _content, ...rest } = this.response;
@@ -1018,6 +1035,8 @@ class AnthropicStreamAdapter
     });
   }
 
+  readonly supportsToolCallReview = true;
+
   formatToolCallsSSE(toolCalls: StreamAccumulatorState["toolCalls"]): string[] {
     // Same release semantics as getRawToolCallEvents: these blocks are becoming
     // the client's, so toProviderResponse must name them. The buffered raw
@@ -1028,6 +1047,28 @@ class AnthropicStreamAdapter
     this.toolCallsReleased = true;
     const events: string[] = [];
     for (const toolCall of toolCalls) {
+      // A server-held review precedes its card, in one short-lived text block
+      // with its own output index, so every later block keeps its index.
+      if (toolCall.reviewDetails) {
+        const reviewIndex = this.nextOutIndex++;
+        for (const event of [
+          {
+            type: "content_block_start",
+            index: reviewIndex,
+            content_block: { type: "text", text: "" },
+          },
+          {
+            type: "content_block_delta",
+            index: reviewIndex,
+            delta: { type: "text_delta", text: toolCall.reviewDetails },
+          },
+          { type: "content_block_stop", index: reviewIndex },
+        ]) {
+          events.push(
+            `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+          );
+        }
+      }
       if (toolCall.wireId && toolCall.wireId !== toolCall.id) {
         this.wireIdByProviderId.set(toolCall.id, toolCall.wireId);
       }
@@ -1190,6 +1231,17 @@ class AnthropicStreamAdapter
         // Keep empty object if parse fails
       }
 
+      content.push(
+        ...(toolCall.reviewDetails
+          ? [
+              {
+                type: "text" as const,
+                text: toolCall.reviewDetails,
+                citations: null,
+              },
+            ]
+          : []),
+      );
       content.push({
         type: "tool_use",
         id: toolCall.id,

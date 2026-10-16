@@ -2109,6 +2109,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
               label: "Deny",
               description: "Keep this tool call blocked.",
             },
+            {
+              label: "Inspect details",
+              description:
+                "Show the complete, unchanged review as text in the conversation before deciding.",
+            },
           ],
           multiSelect: false,
         },

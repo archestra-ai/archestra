@@ -3777,4 +3777,78 @@ describe("OpenAPPA feature configuration", () => {
         .postgresMaxConnections,
     ).toBe(expected);
   });
+
+  describe("review summary model (explicit opt-in)", () => {
+    test.each([
+      { provider: undefined, model: undefined },
+      { provider: "", model: "" },
+      { provider: "  ", model: " " },
+    ])("stays disabled when both variables are blank (%j)", ({
+      provider,
+      model,
+    }) => {
+      const result = parseOpenAppaConfig({
+        reviewSummaryProvider: provider,
+        reviewSummaryModel: model,
+      });
+      expect(result.reviewSummary).toBeUndefined();
+      expect(result).not.toHaveProperty("reviewSummary");
+    });
+
+    test("enables with a supported chat provider and model", () => {
+      expect(
+        parseOpenAppaConfig({
+          reviewSummaryProvider: "kimi",
+          reviewSummaryModel: "kimi-for-coding",
+        }).reviewSummary,
+      ).toEqual({ provider: "kimi", model: "kimi-for-coding" });
+      expect(
+        parseOpenAppaConfig({
+          reviewSummaryProvider: " anthropic ",
+          reviewSummaryModel: " claude-sonnet-4-5 ",
+        }).reviewSummary,
+      ).toEqual({ provider: "anthropic", model: "claude-sonnet-4-5" });
+    });
+
+    test.each([
+      { provider: "kimi", model: undefined },
+      { provider: "kimi", model: "" },
+      { provider: undefined, model: "kimi-for-coding" },
+      { provider: " ", model: "kimi-for-coding" },
+    ])("rejects a partial configuration (%j)", ({ provider, model }) => {
+      expect(() =>
+        parseOpenAppaConfig({
+          reviewSummaryProvider: provider,
+          reviewSummaryModel: model,
+        }),
+      ).toThrow(
+        "ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER and ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_MODEL must be set together",
+      );
+    });
+
+    test("rejects an unsupported provider", () => {
+      expect(() =>
+        parseOpenAppaConfig({
+          reviewSummaryProvider: "not-a-provider",
+          reviewSummaryModel: "some-model",
+        }),
+      ).toThrow(
+        'ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER "not-a-provider" is not a supported provider',
+      );
+    });
+
+    test.each([
+      "voyage",
+      "jev",
+    ])("rejects a non-chat provider (%s)", (provider) => {
+      expect(() =>
+        parseOpenAppaConfig({
+          reviewSummaryProvider: provider,
+          reviewSummaryModel: "some-model",
+        }),
+      ).toThrow(
+        `ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER "${provider}" does not support chat completions`,
+      );
+    });
+  });
 });

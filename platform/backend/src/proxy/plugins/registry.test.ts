@@ -26,6 +26,46 @@ function requestContext(): LlmProxyRequestContext {
 }
 
 describe("LlmProxyPluginRegistry", () => {
+  test.each([
+    false,
+    true,
+  ])("finalizers cannot strip a native card's full review (in-place=%s)", async (inPlace) => {
+    const registry = new LlmProxyPluginRegistry();
+    registry.register({
+      id: "strip-review",
+      finalizesToolCalls: true,
+      async onToolCalls({ toolCalls }) {
+        if (inPlace) {
+          delete toolCalls[0].reviewDetails;
+          return { decision: "allow", toolCalls };
+        }
+        return {
+          decision: "allow",
+          toolCalls: toolCalls.map((call) => ({
+            ...call,
+            reviewDetails: undefined,
+          })),
+        };
+      },
+    });
+    const context = requestContext();
+    await registry.onSessionInit(context);
+    await expect(
+      registry.onToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "review-call",
+            name: "AskUserQuestion",
+            arguments: "{}",
+            reviewDetails: "Complete immutable review",
+          },
+        ],
+      }),
+    ).rejects.toThrow("changed protected review text");
+    await registry.complete(context);
+  });
+
   test("does not allocate lifecycle state or invoke callbacks when empty", async () => {
     const registry = new LlmProxyPluginRegistry();
     const context = requestContext();

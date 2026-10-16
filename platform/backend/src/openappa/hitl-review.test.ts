@@ -1,3 +1,4 @@
+import { load as loadYaml } from "js-yaml";
 import { describe, expect, test, vi } from "vitest";
 import { type AllowedCacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
@@ -22,6 +23,12 @@ import {
 import type { OpenAppaSession } from "./service";
 
 vi.mock("@/logging");
+vi.mock("ai", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("ai")>()),
+  generateText: vi
+    .fn()
+    .mockRejectedValue(new Error("summary service unavailable")),
+}));
 
 // The real cache, stored in this file's test database.
 setupTestCacheManager();
@@ -447,7 +454,6 @@ test("shows any other call's arguments in full as YAML", async () => {
 test.each([
   ["no arguments", undefined],
   ["empty arguments", "{}"],
-  ["arguments that are not an object", "[1,2]"],
 ])("says the call has no arguments when the review has %s", async (_, reviewedArguments) => {
   const active = session("bare-call");
   await stageHitlReview({
@@ -469,6 +475,29 @@ test.each([
   expect(question?.callPreview).toBe(
     "**local\\_tool call**\n\nThis call has no arguments.",
   );
+});
+
+test.each([
+  "[1,2]",
+  "{incomplete JSON",
+])("never treats unparsed arguments as an empty call: %s", async (raw) => {
+  const active = session("unparsed-review");
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "raw",
+      text: "Full policy review.",
+      tool: "example_tool",
+      arguments: raw,
+    },
+  });
+  const asked = await getHitlAskUserArguments({
+    session: active,
+    offerIds: ["raw"],
+  });
+  expect(asked?.question).toContain(raw);
+  expect(asked?.question).toContain("Full policy review.");
+  expect(asked?.callPreview).toBeUndefined();
 });
 
 /** A review as the OpenAPPA runtime writes it, with the given coverage lines. */
@@ -587,7 +616,6 @@ describe.each([
       { label: "Deny", description: "Keep this tool call blocked." },
     ];
     if (adapter.id === "claude-code") {
-      // Claude Code asks one line and previews the call in each option.
       expect(asked.question).toBe(`Approve the ${tool} command?`);
       expect(asked.options).toEqual(
         options.map((option) => ({ ...option, preview: question.callPreview })),
@@ -658,17 +686,16 @@ test("asks the full question when Claude Code would withhold the preview", async
   ]) {
     const asked = adapter.nativeQuestion.fromAskUser(question).questions[0];
     expect(asked.question).toBe(question.question);
-    const lines = asked.question.split("\n\n")[2].split("\n");
-    expect(lines.length).toBeGreaterThan(3);
-    expect(lines.map((line) => line.slice("text  ".length)).join(" ")).toBe(
-      text,
-    );
+    const fullArgs = asked.question
+      .split("Full arguments (YAML, not summarized):\n")[1]
+      .split("\n\nApprove lets")[0];
+    expect(loadYaml(fullArgs)).toEqual({ text });
     // Keep coverage in the prefix even for clients that truncate long questions.
     expect(asked.question.length).toBeGreaterThan(2000);
     expect(asked.question.slice(0, 2000)).toContain(
       "the readers must be the public audience",
     );
-    expect(asked.question.slice(0, 2000)).toContain("text  word0");
+    expect(asked.question.slice(0, 2000)).toContain("text: word0");
     for (const option of asked.options)
       expect(option).not.toHaveProperty("preview");
   }
@@ -685,6 +712,41 @@ test("asks the full question when the preview has control characters", async () 
   expect(question.question).toBe(asked.question);
   for (const option of question.options)
     expect(option).not.toHaveProperty("preview");
+});
+
+test("pretty-printed long arguments round-trip without loss when summarization is unavailable", async () => {
+  const active = session("pretty-long-fallback");
+  const args = {
+    message: `# Work order\n\n${"Preserve this exact sentence. ".repeat(100)}\n\n  indentation\n\tand tabs\n`,
+    command: "printf 'a  b'\nexit 0",
+    nested: { enabled: true },
+  };
+  await stageHitlReview({
+    session: active,
+    review: {
+      offerId: "pretty",
+      tool: "start_run",
+      text: runtimeReview(
+        "  - attention: human-approval\n  - trust must reach trusted",
+      ),
+      arguments: JSON.stringify(args),
+    },
+  });
+  const asked = await getHitlAskUserArguments({
+    session: active,
+    offerIds: ["pretty"],
+  });
+  if (!asked) throw new Error("expected the full pending review");
+  const full = asked.question
+    .split("Full arguments (YAML, not summarized):\n")[1]
+    .split("\n\nApprove lets this exact call run.")[0];
+  expect(loadYaml(full ?? "")).toEqual(args);
+  expect(asked?.question).toContain("trust must reach trusted");
+  const native = new AppaClaudeCodeAdapter().nativeQuestion.fromAskUser(asked);
+  expect(native.questions[0].question).toBe(asked?.question);
+  expect(
+    native.questions[0].options.every((option) => !("preview" in option)),
+  ).toBe(true);
 });
 
 test("keeps both arguments when a command tool's cmd and command differ", async () => {

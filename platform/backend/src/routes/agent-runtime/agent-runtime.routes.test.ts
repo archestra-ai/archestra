@@ -1165,7 +1165,7 @@ describe("Agent Runtime routes", () => {
     });
   });
 
-  test("requires organization settings access to use a shared credential", async ({
+  test("tells a member who may not run with an organization credential, and still refuses the run", async ({
     makeMember,
     makeUser,
   }) => {
@@ -1185,8 +1185,26 @@ describe("Agent Runtime routes", () => {
       url: `/api/agents/${agent.id}/runtime/preflight`,
     });
 
-    expect(response.statusCode).toBe(403);
+    // The setup check answers instead of failing, so the member's pages can
+    // say what is wrong rather than reporting a load error.
+    expect(response.statusCode).toBe(200);
     expect(response.body).not.toContain("shared-value");
+    expect(response.json()).toEqual({
+      ready: false,
+      configured: [],
+      missing: [
+        expect.objectContaining({
+          key: "SHARED_TOKEN",
+          label: "Shared token",
+          canConnect: false,
+          adminOnly: true,
+        }),
+        expect.objectContaining({ key: "PERSONAL_TOKEN" }),
+      ],
+      misconfigured: [],
+      incompatible: null,
+    });
+    // Running with it is still refused.
     const runtime = resolveAgentRuntime(agent);
     assert(runtime);
     await expect(
@@ -1266,7 +1284,12 @@ describe("Agent Runtime routes", () => {
       method: "GET",
       url: `/api/agents/${agent.id}/runtime/preflight`,
     });
-    expect(preflight.statusCode).toBe(403);
+    expect(preflight.statusCode).toBe(200);
+    expect(preflight.json()).toMatchObject({
+      ready: false,
+      configured: ["PERSONAL_TOKEN"],
+      missing: [{ key: "SHARED_TOKEN", adminOnly: true, canConnect: false }],
+    });
   });
 
   test("refuses a personal value for a credential the caller may not use", async ({

@@ -157,20 +157,53 @@ export async function preflightAgentRuntimeCredentials(params: {
   organizationId: string;
   userId: string | null;
   authorizationUserId?: string | null;
+  /**
+   * Report organization credentials the caller may not run with as `missing`
+   * entries marked `adminOnly`, instead of refusing the whole check. For the
+   * read-only setup check a person sees; a launch leaves this off and still
+   * refuses.
+   */
+  reportAdminOnlyCredentials?: boolean;
 }): Promise<{
   configured: string[];
   missing: MissingAgentRuntimeCredential[];
   misconfigured: MissingAgentRuntimeCredential[];
 }> {
-  const { shared, perUser } = splitDeclarations(applicableCredentials(params));
-  await requireSharedCredentialAccess({
-    shared,
-    organizationId: params.organizationId,
-    userId:
-      params.authorizationUserId === undefined
-        ? params.userId
-        : params.authorizationUserId,
-  });
+  const declarations = splitDeclarations(applicableCredentials(params));
+  const { perUser } = declarations;
+  let { shared } = declarations;
+  const adminOnly: MissingAgentRuntimeCredential[] = [];
+  try {
+    await requireSharedCredentialAccess({
+      shared,
+      organizationId: params.organizationId,
+      userId:
+        params.authorizationUserId === undefined
+          ? params.userId
+          : params.authorizationUserId,
+    });
+  } catch (error) {
+    if (
+      !params.reportAdminOnlyCredentials ||
+      !(error instanceof SharedCredentialAccessDeniedError)
+    ) {
+      throw error;
+    }
+    // Never resolve these for this caller: reading the organization value is
+    // exactly what they may not do. Only saved credentials (with a
+    // credentialId) are gated, as at launch; a shared value without one still
+    // resolves below.
+    for (const declaration of shared) {
+      if (declaration.credentialId) {
+        adminOnly.push({
+          ...toMissing(declaration),
+          canConnect: false,
+          adminOnly: true,
+        });
+      }
+    }
+    shared = shared.filter((declaration) => !declaration.credentialId);
+  }
   const batch = await CredentialResolutionBatch.create({
     organizationId: params.organizationId,
     credentialIds: [...shared, ...(params.userId ? perUser : [])].flatMap(
@@ -245,7 +278,7 @@ export async function preflightAgentRuntimeCredentials(params: {
       if (entry.credentialId) entry.canConnect = usable.has(entry.credentialId);
   }
 
-  return { configured, missing, misconfigured };
+  return { configured, missing: [...adminOnly, ...missing], misconfigured };
 }
 
 async function requireSharedCredentialAccess(params: {
@@ -282,10 +315,18 @@ async function requireSharedCredentialAccess(params: {
     "update",
   );
   if (!permitted) {
-    throw new ApiError(
+    throw new SharedCredentialAccessDeniedError();
+  }
+}
+
+/** A person without organization settings access tried to run with an organization credential. */
+class SharedCredentialAccessDeniedError extends ApiError {
+  constructor() {
+    super(
       403,
-      "Organization Agent settings permission is required to use shared credentials",
+      "Only admins can run this agent, because it uses an organization credential. Ask an admin to run it for you.",
     );
+    this.name = "SharedCredentialAccessDeniedError";
   }
 }
 

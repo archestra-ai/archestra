@@ -174,6 +174,7 @@ export function ClaudeCodeAccount({
           ) : discoveredModels.isError ? (
             <QueryLoadError
               title="Could not load Claude Code models"
+              error={discoveredModels.error}
               onRetry={() => void discoveredModels.refetch()}
             />
           ) : (
@@ -226,6 +227,7 @@ export function ClaudeCodeAccount({
         {account.isError ? (
           <QueryLoadError
             title="Could not check Claude Code"
+            error={account.error}
             onRetry={() => void account.refetch()}
           />
         ) : connected ? (

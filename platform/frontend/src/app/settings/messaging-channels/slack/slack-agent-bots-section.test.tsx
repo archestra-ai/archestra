@@ -1,8 +1,20 @@
-import { render, screen } from "@testing-library/react";
+import { archestraApiClient } from "@archestra/shared";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
 import { useSearchParams } from "next/navigation";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useInternalAgents } from "@/lib/agent.query";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { useSession } from "@/lib/auth/auth.query";
 import { useAllChatOpsBindings } from "@/lib/chatops/chatops.query";
 import {
@@ -20,6 +32,63 @@ import {
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { SlackAgentBotsSection } from "./slack-agent-bots-section";
 
+const optionRequests: string[] = [];
+const optionAgents = [
+  { id: "a1", name: "Marketing" },
+  { id: "a2", name: "Coding" },
+  { id: "a3", name: "Sales" },
+];
+const optionServer = setupServer(
+  http.get("http://localhost:9000/api/agents/options", ({ request }) => {
+    const url = new URL(request.url);
+    optionRequests.push(url.pathname + url.search);
+    const ids = [
+      ...url.searchParams.getAll("ids"),
+      ...url.searchParams.getAll("ids[]"),
+    ].flatMap((value) => value.split(","));
+    return HttpResponse.json(
+      optionAgents.filter((agent) => ids.includes(agent.id)),
+    );
+  }),
+  http.get("http://localhost:9000/api/agents/options/page", ({ request }) => {
+    const url = new URL(request.url);
+    optionRequests.push(url.pathname + url.search);
+    const excluded = [
+      ...url.searchParams.getAll("excludeIds"),
+      ...url.searchParams.getAll("excludeIds[]"),
+    ].flatMap((value) => value.split(","));
+    const search = url.searchParams.get("search")?.toLowerCase() ?? "";
+    return HttpResponse.json({
+      data: optionAgents.filter(
+        (agent) =>
+          !excluded.includes(agent.id) &&
+          agent.name.toLowerCase().includes(search),
+      ),
+      pagination: { hasNext: false, nextCursor: null },
+    });
+  }),
+);
+beforeAll(() => optionServer.listen({ onUnhandledRequest: "error" }));
+afterEach(() => {
+  optionServer.resetHandlers();
+  optionRequests.length = 0;
+});
+afterAll(() => {
+  optionServer.close();
+  archestraApiClient.setConfig({ baseUrl: "" });
+});
+function QueryBoundary({ children }: { children: React.ReactNode }) {
+  return (
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      {children}
+    </QueryClientProvider>
+  );
+}
+
 const router = vi.hoisted(() => ({ replace: vi.fn() }));
 vi.mock("next/navigation", () => ({
   useRouter: () => router,
@@ -27,7 +96,6 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/hooks/use-app-name");
-vi.mock("@/lib/agent.query", () => ({ useInternalAgents: vi.fn() }));
 vi.mock("@/lib/chatops/chatops-config.query", () => ({
   useConvertSlackAppToAgentBot: vi.fn(),
   useCreateSlackAgentBotApp: vi.fn(),
@@ -106,6 +174,7 @@ function setup(params: {
       connectionMode="socket"
       connectionModeSettings={null}
     />,
+    { wrapper: QueryBoundary },
   );
 }
 
@@ -116,18 +185,13 @@ const mutation = (mutateAsync = vi.fn()) => ({
 });
 
 beforeEach(() => {
+  archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
   vi.clearAllMocks();
   vi.mocked(useAppName).mockReturnValue("Archestra");
   vi.mocked(useSession).mockReturnValue({
     data: { user: { id: "me" } },
   } as unknown as ReturnType<typeof useSession>);
-  vi.mocked(useInternalAgents).mockReturnValue({
-    data: [
-      { id: "a1", name: "Marketing" },
-      { id: "a2", name: "Coding" },
-      { id: "a3", name: "Sales" },
-    ],
-  } as unknown as ReturnType<typeof useInternalAgents>);
+
   saveToken.mockResolvedValue({ success: true, migrated: [] });
   vi.mocked(useSlackAgentBotChannels).mockReturnValue({
     data: undefined,
@@ -312,8 +376,50 @@ describe("SlackAgentBotsSection", () => {
       "People can no longer pick their own agent with /select-agent",
     );
 
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Convert" })).toBeEnabled(),
+    );
     await userEvent.click(screen.getByRole("button", { name: "Convert" }));
     expect(convert).toHaveBeenCalledWith("a3");
+  });
+
+  it("loads only bot references until the candidate picker opens, excluding agents that already have a bot", async () => {
+    setup({ bots: [bot("a1", "Marketing")] });
+    await waitFor(() =>
+      expect(
+        optionRequests.some(
+          (path) =>
+            decodeURIComponent(path).includes("ids[]=a1") ||
+            path.includes("ids=a1"),
+        ),
+      ).toBe(true),
+    );
+    expect(optionRequests.some((path) => path.includes("/page"))).toBe(false);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Add Slack bot" }),
+    );
+    await userEvent.click(screen.getByRole("combobox"));
+    expect(await screen.findByRole("option", { name: "Sales" })).toBeVisible();
+    expect(screen.queryByRole("option", { name: "Marketing" })).toBeNull();
+    await userEvent.click(screen.getByRole("option", { name: "Sales" }));
+    expect(await screen.findByLabelText("Slack name")).toHaveValue(
+      "archestra_sales",
+    );
+    const page = optionRequests.find((path) => path.includes("/page"));
+    expect(
+      new URL(page ?? "", "http://localhost:9000").searchParams.get(
+        "excludeIds",
+      ),
+    ).toBe("a1");
+    expect(
+      optionRequests
+        .filter((path) => !path.includes("/page"))
+        .every((path) =>
+          new URL(path, "http://localhost:9000").searchParams
+            .keys()
+            .some((key) => key.startsWith("ids")),
+        ),
+    ).toBe(true);
   });
 
   it("creates the router bot from the person's token, then asks for the tokens Slack does not hand over", async () => {

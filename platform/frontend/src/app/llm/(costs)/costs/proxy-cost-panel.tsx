@@ -86,6 +86,7 @@ export function ProxyCostPanel({
             {backButton}
             <QueryLoadError
               title="Could not load proxy costs"
+              error={query.error}
               onRetry={() => query.refetch()}
             />
           </>

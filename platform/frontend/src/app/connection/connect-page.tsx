@@ -113,7 +113,6 @@ import {
   setupModeFor,
   useManualSteps,
 } from "./manual-setup";
-import { detectPlatform } from "./platform.utils";
 import { useUpdateUrlParams } from "./use-update-url-params";
 
 // The approval panel is large; the page only needs it for Claude Desktop's
@@ -647,8 +646,8 @@ function ConnectArea({
   const { copied, copy: copyText } = useCopy();
   const [origin, setOrigin] = useState("");
   useEffect(() => setOrigin(window.location.origin), []);
-  const [windows, setWindows] = useState(false);
-  useEffect(() => setWindows(detectPlatform() === "windows"), []);
+  // The page's OS, so the plugins it shows are the ones this command installs.
+  const { windows, setWindows } = data;
   const manual = setup === "manual";
   const script = setup === "script";
   const download = setup === "download";

@@ -9,25 +9,15 @@ export const dynamic = "force-dynamic";
 
 export default async function NewAgentPageServer() {
   try {
-    const [canCreateAgent, canAddExternalAgent] = await Promise.all([
-      serverHasPermissions({ agent: ["create"] }),
-      serverHasPermissions({
-        agent: ["read"],
-        organizationSettings: ["update"],
-      }),
-    ]);
+    // Every choice on this page, including connecting an external agent over
+    // A2A, needs Agent create, the same permission the backend checks.
+    const canCreateAgent = await serverHasPermissions({ agent: ["create"] });
 
-    if (!canCreateAgent && !canAddExternalAgent) {
+    if (!canCreateAgent) {
       return <ForbiddenPage />;
     }
 
-    return (
-      <AgentCreatePage
-        kind="agent"
-        canCreateAgent={canCreateAgent}
-        canAddExternalAgent={canAddExternalAgent}
-      />
-    );
+    return <AgentCreatePage kind="agent" canCreateAgent />;
   } catch (error) {
     return <ServerErrorFallback error={error as ErrorExtended} />;
   }

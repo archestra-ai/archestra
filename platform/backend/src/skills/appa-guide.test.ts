@@ -199,14 +199,14 @@ describe("APPA Guide feature availability", () => {
     if (!reference) throw new Error("Archestra reference not found");
     for (const text of [APPA_GUIDE_SKILL.content, reference]) {
       expect(text).toContain("archestra__bind_guardrails_credential");
-      // A text line wins over the stored binding and locks it in the UI.
+      // Validation refuses a text line: keys are set with bindings only.
       for (const [, toml] of text.matchAll(/```toml\n([\s\S]*?)```/g))
         expect(toml).not.toContain("[credentials]");
       expect(text).not.toContain("`[server_aliases]`, and `[credentials]`");
       expect(text).not.toContain("`[server_aliases]` and `[credentials]`");
     }
     expect(APPA_GUIDE_SKILL.content).toContain(
-      "overrides the stored binding and locks it in the Batteries dialog; do not add one",
+      "validation refuses a `[credentials]` line",
     );
   });
 

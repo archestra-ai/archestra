@@ -73,9 +73,9 @@ import {
   useInternalMcpCatalog,
   useRefreshInternalMcpCatalogImage,
 } from "@/lib/mcp/internal-mcp-catalog.query";
+import { useMcpUsageSummary } from "@/lib/mcp/mcp-agent-usage.query";
 import {
   type McpDeploymentFeedState,
-  useAutoModeAgents,
   useMcpDeploymentStatuses,
   useMcpInstallationStatusCacheSync,
   useMcpServers,
@@ -117,7 +117,7 @@ import {
 import { deriveAgentUsage } from "../_parts/mcp-server-agent-usage";
 import type { CatalogItem, InstalledServer } from "../_parts/mcp-server-card";
 import { McpServerIssueNotice } from "../_parts/mcp-server-issue-notice";
-import { McpServerUsageTab } from "../_parts/mcp-server-usage-tab";
+import { McpServerPagedUsageTab } from "../_parts/mcp-server-usage-tab";
 import { PlaywrightSavedLoginsTab } from "../_parts/playwright-saved-logins-tab";
 import { useCatalogInstall } from "../_parts/use-catalog-install";
 import { useChatWithCatalogItem } from "../_parts/use-chat-with-catalog-item";
@@ -319,8 +319,9 @@ function CatalogItemDetails({
           defaultEnvironmentName: defaultEnvironment.name,
         });
 
-  const allServersForCatalog = (allMcpServers ?? []).filter(
-    (s) => s.catalogId === item.id,
+  const allServersForCatalog = useMemo(
+    () => (allMcpServers ?? []).filter((s) => s.catalogId === item.id),
+    [allMcpServers, item.id],
   );
 
   // Aggregate installations for the logs/inspector dropdown — local installs
@@ -462,13 +463,22 @@ function CatalogItemDetails({
       : isMemberView
         ? "Installation"
         : "Installations";
-  const { data: autoModeAgents } = useAutoModeAgents({
+  const assignedUsage = useMemo(
+    () =>
+      deriveAgentUsage({
+        serversForCatalog: allServersForCatalog,
+        autoModeAgents: undefined,
+      }),
+    [allServersForCatalog],
+  );
+  const { data: usageSummary } = useMcpUsageSummary({
+    catalogId: item.id,
+    assignedAgents: assignedUsage.assigned,
     enabled: !isMemberView,
+    previews: false,
   });
-  const agentUsageCount = deriveAgentUsage({
-    serversForCatalog: allServersForCatalog,
-    autoModeAgents,
-  }).total;
+  const agentUsageCount =
+    usageSummary?.pagination.total ?? assignedUsage.assigned.length;
 
   const tabs: {
     label: React.ReactNode;
@@ -691,9 +701,9 @@ function CatalogItemDetails({
         )}
         {effectiveTab === "logins" && <PlaywrightSavedLoginsTab />}
         {effectiveTab === "usage" && (
-          <McpServerUsageTab
+          <McpServerPagedUsageTab
+            catalogId={item.id}
             serversForCatalog={allServersForCatalog}
-            autoModeAgents={autoModeAgents}
           />
         )}
 

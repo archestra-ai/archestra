@@ -813,13 +813,13 @@ describe("agent type permission isolation (routes)", () => {
       // Admin should see built-in agents
       const adminRes = await app.inject({
         method: "GET",
-        url: "/api/agents/all?agentType=agent",
+        url: "/api/agents?agentType=agent&includeBuiltIn=true",
       });
       if (adminRes.statusCode !== 200) {
         console.error("ADMIN ALL ERROR:", adminRes.json());
       }
       expect(adminRes.statusCode).toBe(200);
-      const adminAgents = adminRes.json();
+      const adminAgents = adminRes.json().data;
       const adminBuiltIn = adminAgents.filter(
         (a: { builtIn: boolean }) => a.builtIn,
       );
@@ -830,10 +830,10 @@ describe("agent type permission isolation (routes)", () => {
       try {
         const memberRes = await memberApp.inject({
           method: "GET",
-          url: "/api/agents/all?agentType=agent",
+          url: "/api/agents?agentType=agent&includeBuiltIn=true",
         });
         expect(memberRes.statusCode).toBe(200);
-        const memberAgents = memberRes.json();
+        const memberAgents = memberRes.json().data;
         const memberBuiltIn = memberAgents.filter(
           (a: { builtIn: boolean }) => a.builtIn,
         );

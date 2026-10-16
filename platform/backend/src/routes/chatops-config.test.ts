@@ -1,8 +1,13 @@
+import { HttpResponse, http } from "msw";
 import { vi } from "vitest";
 import config from "@/config";
 import { createFastifyInstance } from "@/fastify-instance";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { ChatOpsConfigModel, OrganizationModel } from "@/models";
+import AuditLogModel from "@/models/audit-log";
 import { beforeEach, describe, expect, test } from "@/test";
+import { useMswServer } from "@/test/msw";
+import { drainBackgroundWork } from "@/utils/background-work";
 import chatopsRoutes from "./chatops";
 
 const { reinitializeMock } = vi.hoisted(() => ({
@@ -20,15 +25,6 @@ vi.mock("@/agents/chatops/chatops-manager", () => ({
   },
 }));
 
-// Mock credential validation so tests don't hit real APIs
-vi.mock("botframework-connector", () => ({
-  MicrosoftAppCredentials: class {
-    getToken() {
-      return Promise.resolve("mock-token");
-    }
-  },
-}));
-
 vi.mock("@slack/web-api", () => ({
   WebClient: class {
     auth = { test: () => Promise.resolve({ ok: true }) };
@@ -38,13 +34,34 @@ vi.mock("@slack/web-api", () => ({
   },
 }));
 
+const tokenHandler = http.post(
+  "https://login.microsoftonline.com/:tenant/oauth2/v2.0/token",
+  () =>
+    HttpResponse.json({
+      token_type: "Bearer",
+      access_token: "test-token",
+      expires_in: 3600,
+    }),
+);
+
 describe("PUT /api/chatops/config/ms-teams", () => {
+  const server = useMswServer(tokenHandler);
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  test("saves config to DB and reinitializes", async () => {
+  test("saves config to DB, reinitializes, and audits a redacted change", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
     const app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      request.organizationId = org.id;
+      request.user = user;
+    });
+    registerAuditLogHook(app);
     await app.register(chatopsRoutes);
 
     const response = await app.inject({
@@ -74,8 +91,69 @@ describe("PUT /api/chatops/config/ms-teams", () => {
     });
 
     expect(reinitializeMock).toHaveBeenCalledTimes(1);
-
+    await drainBackgroundWork();
+    const { data: audits } = await AuditLogModel.findPaginated({
+      organizationId: org.id,
+      resourceType: "chatOpsConfig",
+      limit: 10,
+      offset: 0,
+    });
+    expect(audits).toHaveLength(1);
+    expect(audits[0]).toMatchObject({
+      action: "chatOpsConfig.updated",
+      outcome: "success",
+    });
+    expect(audits[0].after).not.toBeNull();
+    expect(audits[0].before).not.toEqual(audits[0].after);
+    expect(JSON.stringify(audits[0])).not.toContain("dev-app-secret");
     await app.close();
+  });
+
+  test("rejects invalid Azure credentials without changing saved config or reinitializing", async () => {
+    const previous = {
+      enabled: false,
+      appId: "previous-app",
+      appSecret: "previous-secret",
+      tenantId: "previous-tenant",
+      graphTenantId: "previous-tenant",
+      graphClientId: "previous-app",
+      graphClientSecret: "previous-secret",
+    };
+    await ChatOpsConfigModel.saveMsTeamsConfig(previous);
+    server.use(
+      http.post(
+        "https://login.microsoftonline.com/:tenant/oauth2/v2.0/token",
+        () =>
+          HttpResponse.json(
+            {
+              error: "invalid_client",
+              error_description: "Invalid client secret",
+            },
+            { status: 401 },
+          ),
+      ),
+    );
+    const app = createFastifyInstance();
+    await app.register(chatopsRoutes);
+    try {
+      const response = await app.inject({
+        method: "PUT",
+        url: "/api/chatops/config/ms-teams",
+        payload: {
+          enabled: true,
+          appId: "new-app",
+          appSecret: "invalid-secret",
+        },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error.message).toContain(
+        "Invalid MS Teams credentials",
+      );
+      expect(await ChatOpsConfigModel.getMsTeamsConfig()).toEqual(previous);
+      expect(reinitializeMock).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
   });
 
   test("merges partial updates with existing DB config", async () => {
@@ -114,6 +192,7 @@ describe("PUT /api/chatops/config/ms-teams", () => {
 });
 
 describe("PUT /api/chatops/config/slack", () => {
+  useMswServer(tokenHandler);
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -153,6 +232,7 @@ describe("PUT /api/chatops/config/slack", () => {
 });
 
 describe("PUT /api/chatops/config/telegram", () => {
+  useMswServer(tokenHandler);
   const fetchMock = vi.fn();
 
   beforeEach(() => {
@@ -232,6 +312,7 @@ describe("PUT /api/chatops/config/telegram", () => {
 });
 
 describe("channels the organization turned off", () => {
+  useMswServer(tokenHandler);
   beforeEach(() => {
     vi.clearAllMocks();
   });

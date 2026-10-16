@@ -256,7 +256,9 @@ test.describe("Chat message queue", () => {
       await route.continue();
     });
 
-    const marker = `queue-compact-e2e-${Math.random().toString(36).slice(2, 10)}`;
+    // Each test has a fresh browser conversation. A human-readable marker
+    // avoids the secret scan that a random, hyphenated token can trigger.
+    const marker = "queue compaction scenario";
     const textarea = page.getByTestId(E2eTestId.ChatPromptTextarea);
     await expect(textarea).toBeVisible({ timeout: 15_000 });
     await textarea.fill(

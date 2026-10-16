@@ -14,6 +14,8 @@ export interface ArchestraContext {
     session: import("@/openappa/service").OpenAppaSession;
     toolCallId: string;
     spawn: boolean;
+    /** Signed while enforcement was off; no policy ruled the call. */
+    observed?: true;
   };
   /**
    * The child trajectory an OpenAPPA spawn bound this delegated run to, minted

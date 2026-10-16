@@ -273,6 +273,7 @@ function SubjectPicker({
       {recipients.isError ? (
         <QueryLoadError
           title="Could not load recipients"
+          error={recipients.error}
           onRetry={() => void recipients.refetch()}
           className="min-h-40"
         />

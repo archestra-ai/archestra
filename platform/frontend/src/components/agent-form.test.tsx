@@ -1,4 +1,5 @@
 import {
+  type archestraApiTypes,
   BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
   BUILT_IN_AGENT_IDS,
   E2eTestId,
@@ -43,6 +44,51 @@ global.ResizeObserver = class ResizeObserver {
   unobserve() {}
   disconnect() {}
 } as typeof ResizeObserver;
+
+// Legacy behavior fixtures remain local; real HTTP paging is covered by the
+// remote-selector integration suite.
+vi.mock("@/lib/agent-options.query", () => ({
+  useAgentOptionsByIds: () => useDelegationTargetAgentsMock(),
+  useAgentOptionIds: () => ({
+    data: (
+      useDelegationTargetAgentsMock()
+        .data as archestraApiTypes.GetAgentOptionsResponses["200"]
+    ).map((row: { id: string }) => row.id),
+    isSuccess: true,
+  }),
+  useAgentOptionsPage: (params: { search?: string }) => {
+    const result = useDelegationTargetAgentsMock() as {
+      data: archestraApiTypes.GetAgentOptionsResponses["200"];
+    };
+    const search = params.search?.trim().toLowerCase() ?? "";
+    const rows = (result.data ?? []).filter(
+      (row: {
+        name?: string;
+        description?: string | null;
+        authorEmail?: string | null;
+      }) =>
+        !search ||
+        [row.name, row.description, row.authorEmail].some((value) =>
+          value?.toLowerCase().includes(search),
+        ),
+    );
+    return {
+      data: {
+        pages: [
+          { data: rows, pagination: { hasNext: false, nextCursor: null } },
+        ],
+      },
+      isSuccess: true,
+      isLoading: false,
+      isPending: false,
+      isError: false,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+      refetch: vi.fn(),
+    };
+  },
+}));
 
 vi.mock("next/navigation");
 

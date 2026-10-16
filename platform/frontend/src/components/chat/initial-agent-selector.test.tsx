@@ -110,9 +110,31 @@ vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/agent.query", () => ({
   useAgentCredentialReadiness: (options?: unknown) =>
     mockUseAgentCredentialReadiness(options),
+  useAgentSearch: ({
+    name,
+    enabled,
+  }: {
+    name?: string;
+    enabled?: boolean;
+  }) => ({
+    // Mirrors the server-side name search: only typed text narrows the page.
+    data: enabled
+      ? agents.filter((agent) =>
+          agent.name.toLowerCase().includes((name ?? "").toLowerCase()),
+        )
+      : undefined,
+  }),
   useChatAgents: () => ({ data: agents }),
+  useChatAgentPage: () => ({
+    data: { data: agents, pagination: { hasNext: false, nextCursor: null } },
+    isPending: false,
+    isFetching: false,
+  }),
+  useChatAgentReferences: (ids: string[]) => ({
+    data: agents.filter((agent) => ids.includes(agent.id)),
+  }),
   useCreateProfile: () => ({ mutate: vi.fn() }),
-  useInternalAgents: () => ({ data: agents }),
+  useInternalAgentOptions: () => ({ data: agents }),
   usePinnedAgentIds: () => ({ data: mockPinnedIds }),
   useProfile: (id: string | undefined, options?: unknown) =>
     mockUseProfile(id, options),
@@ -312,9 +334,9 @@ describe("InitialAgentSelector keyboard navigation", () => {
     );
     expect(mockUseProfile).toHaveBeenCalledWith("agent-1", { enabled: true });
     // Readiness is for the picker; the trigger never pays for it.
-    expect(mockUseAgentCredentialReadiness).toHaveBeenLastCalledWith({
-      enabled: false,
-    });
+    expect(mockUseAgentCredentialReadiness).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: false }),
+    );
     // The server icons come from the agent detail; the full tool-assignment
     // list (every tool's schema) is only for the edit dialog.
     expect(mockUseAllProfileTools).not.toHaveBeenCalledWith(

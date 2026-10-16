@@ -36,8 +36,10 @@ import {
 
 type CatalogItem =
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number];
-type CatalogTool =
-  archestraApiTypes.GetInternalMcpCatalogToolsResponses["200"][number];
+type CatalogTool = Pick<
+  archestraApiTypes.GetInternalMcpCatalogToolsResponses["200"][number],
+  "id" | "name" | "description" | "createdAt" | "group"
+>;
 type AssignedTool = archestraApiTypes.GetAppToolsResponses["200"][number];
 
 const EMPTY_TOOLS: CatalogTool[] = [];
@@ -180,7 +182,7 @@ export function AppToolsEditor({
   // don't fetch catalog tools.
   const toolQueries = useQueries({
     queries: candidates.map((c) => ({
-      queryKey: ["mcp-catalog", c.id, "tools"] as const,
+      queryKey: ["mcp-catalog", c.id, "tools", "picker"] as const,
       queryFn: () => fetchCatalogTools(c.id),
       enabled: canEdit,
     })),

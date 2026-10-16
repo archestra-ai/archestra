@@ -114,6 +114,7 @@ function getSourceIcon({
     "skill:description_generation": <Sparkles className="h-3 w-3 shrink-0" />,
     "guardrail:dual_llm": <ShieldCheck className="h-3 w-3 shrink-0" />,
     "guardrail:annotator": <ShieldCheck className="h-3 w-3 shrink-0" />,
+    "guardrail:hitl_summary": <ShieldCheck className="h-3 w-3 shrink-0" />,
     "chatops:slack": (
       <Image
         src="/icons/slack.png"

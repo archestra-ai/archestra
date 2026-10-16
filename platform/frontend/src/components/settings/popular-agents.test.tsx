@@ -114,7 +114,6 @@ function renderFlow({
         savedMessage="Popular agents updated"
       />
       <AgentCatalog
-        canAddExternalAgent
         canCreateAgent
         runtimeAvailable
         onStartFromScratch={vi.fn()}

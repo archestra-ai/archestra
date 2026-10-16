@@ -6,7 +6,6 @@ import { setupServer } from "msw/node";
 import type { ReactNode } from "react";
 import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
 import { useAgentOptions, useProfiles } from "@/lib/agent.query";
-import { useGatewayToolPreview } from "@/lib/mcp/gateway-tool-preview.query";
 import { fetchAllSkills } from "@/lib/skills/skill.query";
 import { useGatewayServers } from "./use-gateway-servers";
 
@@ -107,14 +106,14 @@ it("shows gateway server counts before fetching tool names for the details view"
   expect(toolRequests).toBe(1);
 });
 
-it("expands gateway tool schemas only when requested and retains the result afterwards", async () => {
-  let previews = 0;
+it("loads the gateway roster as one page, filtered by type, without tool payloads", async () => {
+  const requested: string[] = [];
   server.use(
-    http.get(`${origin}/api/agents/gateway/mcp-tool-preview`, () => {
-      previews++;
+    http.get(`${origin}/api/agents`, ({ request }) => {
+      const url = new URL(request.url);
+      requested.push(url.searchParams.get("agentTypes") ?? "");
       return HttpResponse.json({
-        tools: [{ name: "example__search", tokens: 12 }],
-        tokenCount: { total: 12 },
+        data: [{ id: "gateway", name: "Gateway" }],
       });
     }),
   );
@@ -124,35 +123,25 @@ it("expands gateway tool schemas only when requested and retains the result afte
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
-  const { result, rerender } = renderHook(
-    ({ enabled }) =>
-      useGatewayToolPreview({ agentId: "gateway", client: "generic", enabled }),
-    { wrapper, initialProps: { enabled: false } },
+  const { result } = renderHook(
+    () =>
+      useProfiles({
+        filters: { agentTypes: ["profile", "mcp_gateway"] },
+      }),
+    { wrapper },
   );
-  expect(result.current.fetchStatus).toBe("idle");
-  expect(previews).toBe(0);
-  rerender({ enabled: true });
-  await waitFor(() => expect(result.current.data?.tools).toHaveLength(1));
-  expect(previews).toBe(1);
-  rerender({ enabled: false });
-  expect(result.current.data?.tokenCount?.total).toBe(12);
-  expect(previews).toBe(1);
+  await waitFor(() => expect(result.current.data?.[0].name).toBe("Gateway"));
+  expect(requested).toEqual(["profile,mcp_gateway"]);
 });
 
-it("keeps gateway selector rosters lightweight unless a caller explicitly needs tools", async () => {
-  const requested: string[] = [];
+it("requests the gateway roster without tool payloads", async () => {
+  const requested: URL[] = [];
   server.use(
-    http.get(`${origin}/api/agents/all`, ({ request }) => {
-      const includeTools =
-        new URL(request.url).searchParams.get("includeTools") ?? "";
-      requested.push(includeTools);
-      return HttpResponse.json([
-        {
-          id: "gateway",
-          name: "Gateway",
-          tools: includeTools === "true" ? [{ name: "example__search" }] : [],
-        },
-      ]);
+    http.get(`${origin}/api/agents`, ({ request }) => {
+      requested.push(new URL(request.url));
+      return HttpResponse.json({
+        data: [{ id: "gateway", name: "Gateway" }],
+      });
     }),
   );
   const client = new QueryClient({
@@ -161,25 +150,16 @@ it("keeps gateway selector rosters lightweight unless a caller explicitly needs 
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
-  const { result, rerender } = renderHook(
-    ({ includeTools }) =>
+  const { result } = renderHook(
+    () =>
       useProfiles({
-        filters: {
-          agentTypes: ["profile", "mcp_gateway"],
-          ...(includeTools === undefined ? {} : { includeTools }),
-        },
+        filters: { agentTypes: ["profile", "mcp_gateway"] },
       }),
-    {
-      wrapper,
-      initialProps: { includeTools: undefined as boolean | undefined },
-    },
+    { wrapper },
   );
   await waitFor(() => expect(result.current.data?.[0].name).toBe("Gateway"));
-  expect(result.current.data?.[0].tools).toEqual([]);
-  expect(requested).toEqual(["false"]);
-  rerender({ includeTools: true });
-  await waitFor(() => expect(result.current.data?.[0].tools).toHaveLength(1));
-  expect(requested).toEqual(["false", "true"]);
+  expect(requested).toHaveLength(1);
+  expect(requested[0].searchParams.has("includeTools")).toBe(false);
 });
 
 it("keeps lightweight option data separate from full editing data and retains it on request failure", async () => {
@@ -197,14 +177,11 @@ it("keeps lightweight option data separate from full editing data and retains it
             { id: "gateway", name: "Gateway", agentType: "mcp_gateway" },
           ]),
     ),
-    http.get(`${origin}/api/agents/all`, () =>
-      HttpResponse.json([
-        {
-          id: "gateway",
-          name: "Gateway",
-          tools: [{ name: "example__search" }],
-        },
-      ]),
+    http.get(`${origin}/api/agents`, () =>
+      HttpResponse.json({
+        data: [{ id: "gateway", name: "Gateway" }],
+        pagination: { currentPage: 1, limit: 100, total: 1, totalPages: 1 },
+      }),
     ),
   );
   const client = new QueryClient({
@@ -216,14 +193,12 @@ it("keeps lightweight option data separate from full editing data and retains it
   const { result } = renderHook(
     () => {
       const options = useAgentOptions();
-      const full = useProfiles({ filters: { includeTools: true } });
+      const full = useProfiles();
       return { options, full, isOptionsError: options.isError };
     },
     { wrapper },
   );
-  await waitFor(() =>
-    expect(result.current.full.data?.[0].tools).toHaveLength(1),
-  );
+  await waitFor(() => expect(result.current.full.data).toHaveLength(1));
   await waitFor(() =>
     expect(result.current.options.data?.[0].name).toBe("Gateway"),
   );
@@ -232,6 +207,6 @@ it("keeps lightweight option data separate from full editing data and retains it
   await result.current.options.refetch();
   await waitFor(() => expect(result.current.isOptionsError).toBe(true));
   expect(result.current.options.data?.[0].name).toBe("Gateway");
-  expect(result.current.full.data?.[0].tools).toHaveLength(1);
+  expect(result.current.full.data).toHaveLength(1);
   client.clear();
 });

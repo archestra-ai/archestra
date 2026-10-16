@@ -4,13 +4,19 @@ import type { OpenAppaSession } from "./service";
 
 export const RUNTIME_TOOL_PROOF_ARGUMENT = "runtime_proof";
 
-/** The proxy supplies the source trajectory; MCP headers may name its parent. */
+/**
+ * The proxy supplies the source trajectory; MCP headers may name its parent.
+ * `observed` marks a call the proxy signed while enforcement was off: nothing
+ * ruled it, so the gateway checks it against the record of calls made then
+ * instead of the runtime's released calls.
+ */
 export function signRuntimeToolProof(params: {
   session: OpenAppaSession;
   toolCallId: string;
   action: string;
   arguments: Record<string, unknown>;
   spawn: boolean;
+  observed?: true;
   secret: string;
   now?: number;
 }): string | undefined {
@@ -27,6 +33,7 @@ export function signRuntimeToolProof(params: {
       action: params.action,
       arguments_hash: argumentsHash(params.arguments),
       spawn: params.spawn,
+      ...(params.observed ? { observed: true } : {}),
       iat: now,
       exp: now + PROOF_TTL_SECONDS,
     });
@@ -35,6 +42,26 @@ export function signRuntimeToolProof(params: {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The runtime calls the proxy may sign while enforcement is off. Nothing
+ * rules a call then, so only reads qualify: what they return crosses the
+ * guardrail into the session at the gateway. A launch, steer, write or upload
+ * made while enforcement was off is refused once it is back on, so the model
+ * makes it again and the proxy rules it. An allowlist: an action or transfer
+ * direction not named here, including one added later, is not a read.
+ */
+export function isObservedRead(params: {
+  action: string;
+  args: Record<string, unknown>;
+}): boolean {
+  if (params.action === "get_run" || params.action === "read_workspace_file")
+    return true;
+  return (
+    params.action === "transfer_workspace_file" &&
+    params.args.direction === "download"
+  );
 }
 
 export function verifyRuntimeToolProof(params: {
@@ -49,6 +76,7 @@ export function verifyRuntimeToolProof(params: {
   session: OpenAppaSession;
   toolCallId: string;
   spawn: boolean;
+  observed?: true;
 } | null {
   if (
     !params.secret ||
@@ -93,6 +121,7 @@ export function verifyRuntimeToolProof(params: {
       },
       toolCallId: claims.call_id,
       spawn: claims.spawn,
+      ...(claims.observed ? { observed: true as const } : {}),
     };
   } catch {
     return null;
@@ -146,6 +175,8 @@ const ClaimsSchema = z
     action: z.string().min(1).max(512),
     arguments_hash: z.string().regex(/^[a-f0-9]{64}$/),
     spawn: z.boolean(),
+    // Absent on proofs signed while enforcement was on, so those still verify.
+    observed: z.literal(true).optional(),
     iat: z.number().int().nonnegative(),
     exp: z.number().int().nonnegative(),
   })

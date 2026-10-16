@@ -384,6 +384,7 @@ function VirtualKeysTable() {
     return (
       <QueryLoadError
         title="Couldn't load virtual keys"
+        error={query.error}
         onRetry={() => query.refetch()}
       />
     );

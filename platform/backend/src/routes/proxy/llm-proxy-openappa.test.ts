@@ -4,7 +4,10 @@ import { encryptedChatDekFingerprint } from "@/content-encryption/encrypted-chat
  * PostgreSQL engine is exercised separately by openappa-rs/smoke.test.cjs. */
 
 import type { ServerResponse } from "node:http";
-import { extractMcpHumanRuling } from "@archestra/shared";
+import {
+  ENCRYPTED_CHAT_REDACTED_MARKER,
+  extractMcpHumanRuling,
+} from "@archestra/shared";
 import { CONNECTION_SETUP_WINDOW_MS } from "@archestra/shared/connection-setup";
 import { eq } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -2263,6 +2266,101 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   test.each([
     false,
     true,
+  ])("records an encrypted chat refused for want of a key and escrow as a redacted failed interaction (stream=%s)", async (stream) => {
+    await db
+      .update(database.schema.conversationsTable)
+      .set({ encryptedChat: true })
+      .where(eq(database.schema.conversationsTable.id, sessionId));
+    const response = await post(payload(stream), {
+      "x-archestra-session-id": sessionId,
+    });
+
+    expect(response.statusCode, response.body).toBe(409);
+    expect(response.json()).toEqual({
+      error: {
+        message:
+          "Encrypted chat key and escrow are required for policy storage",
+        type: "api_conflict_error",
+      },
+    });
+    expect(response.headers["x-should-retry"]).toBeUndefined();
+    expect(providerRequests).toEqual([]);
+    const rows = await db
+      .select()
+      .from(database.schema.interactionsTable)
+      .where(eq(database.schema.interactionsTable.profileId, agent.id));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      sessionId,
+      request: ENCRYPTED_CHAT_REDACTED_MARKER,
+      response: ENCRYPTED_CHAT_REDACTED_MARKER,
+      processedRequest: null,
+    });
+  });
+
+  const unenforcedRecords = async () => [
+    ...(await db
+      .select()
+      .from(database.schema.openappaUnenforcedSessionsTable)
+      .where(
+        eq(
+          database.schema.openappaUnenforcedSessionsTable.organizationId,
+          agent.organizationId,
+        ),
+      )),
+    ...(await db
+      .select()
+      .from(database.schema.openappaUnenforcedCallsTable)
+      .where(
+        eq(
+          database.schema.openappaUnenforcedCallsTable.organizationId,
+          agent.organizationId,
+        ),
+      )),
+  ];
+
+  // A delegated child presents the parent's session; only a valid binding
+  // names its own trajectory.
+  const invalidSubagentBinding = { "x-archestra-appa-subagent": "expired" };
+
+  test("serves a child with an invalid subagent binding while OpenAPPA is off", async () => {
+    config.openappa.enabled = false;
+    const response = await post(payload(false), invalidSubagentBinding);
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(providerRequests).toHaveLength(1);
+    expect(events).toEqual([]);
+    expect(await unenforcedRecords()).toEqual([]);
+  });
+
+  test("serves a child with an invalid subagent binding while only observing, without observing it under its parent", async () => {
+    await GuardrailsDeploymentModel.setEnabled(false);
+    const child = await post(payload(false), invalidSubagentBinding);
+
+    expect(child.statusCode, child.body).toBe(200);
+    expect(providerRequests).toHaveLength(1);
+    expect(events).toEqual([]);
+    expect(await unenforcedRecords()).toEqual([]);
+
+    // The parent's own request is observed.
+    const parent = await post(payload(false));
+    expect(parent.statusCode, parent.body).toBe(200);
+    expect(await unenforcedRecords()).not.toEqual([]);
+  });
+
+  test("refuses a child with an invalid subagent binding while enforcing", async () => {
+    const response = await post(payload(false), invalidSubagentBinding);
+
+    expect(response.statusCode, response.body).toBe(403);
+    expect(response.json().error.message).toBe(
+      "The subagent binding is invalid or expired",
+    );
+    expect(providerRequests).toEqual([]);
+  });
+
+  test.each([
+    false,
+    true,
   ])("encrypted Chat stays governed and sends its key only outside the native hook JSON (deny=%s)", async (deny) => {
     const dek = randomBytes(32);
     await db
@@ -2546,6 +2644,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             {
               label: "Deny",
               description: "Keep this tool call blocked.",
+            },
+            {
+              label: "Inspect details",
+              description:
+                "Show the complete, unchanged review as text in the conversation before deciding.",
             },
           ],
           multiSelect: false,
@@ -4136,6 +4239,65 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     ]);
     expect(toolEcho.statusCode, toolEcho.body).toBe(200);
     expect(toolEcho.body).not.toContain("protected session");
+  });
+
+  test.for([
+    { decision: "release" as const },
+    { decision: "replace" as const },
+  ])("records a buffered stream's session receipt as issued only on release ($decision)", async ({
+    decision,
+  }) => {
+    config.openappa = {
+      ...config.openappa,
+      offerSigningSecret: "test-context-secret-with-32-characters",
+    };
+    options = { includeToolUse: false, streamStopReason: "end_turn" };
+    const unregister = registerLlmProxyPlugin({
+      id: "test-buffered-receipt",
+      buffersModelResponse: () => true,
+      async onBufferedModelResponse() {
+        return decision === "replace"
+          ? { decision, responseText: "REPLACED ANSWER" }
+          : { decision };
+      },
+    });
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: {
+          ...externalClientHeaders(),
+          "user-agent": "claude-cli/2.1.278 (external, cli)",
+          "x-claude-code-session-id": "68c625e3-1b2c-4d3e-8f90-a1b2c3d4e5f6",
+        },
+        payload: payload(true),
+      });
+      await drainBackgroundWork();
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.body.includes("REPLACED ANSWER")).toBe(
+        decision === "replace",
+      );
+      expect(response.body.includes("protected session")).toBe(
+        decision === "release",
+      );
+      const sessions = await db
+        .select()
+        .from(database.schema.openappaSessionsTable)
+        .where(
+          eq(
+            database.schema.openappaSessionsTable.organizationId,
+            agent.organizationId,
+          ),
+        );
+      expect(sessions.some((row) => row.receiptToken !== null)).toBe(true);
+      expect(sessions.some((row) => row.receiptIssuedAt !== null)).toBe(
+        decision === "release",
+      );
+    } finally {
+      unregister();
+    }
   });
 
   test("keeps the session mark off a client's tool-less side call", async () => {

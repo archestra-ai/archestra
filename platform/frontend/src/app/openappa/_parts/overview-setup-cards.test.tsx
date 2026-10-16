@@ -20,7 +20,7 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("sonner");
 const api = "http://localhost:9000/api";
 const server = setupServer(
-  http.get("http://localhost:9000/api/agents/all", () =>
+  http.get("http://localhost:9000/api/agents/chat-roster", () =>
     HttpResponse.json([
       {
         id: "appa-agent",
@@ -51,10 +51,6 @@ const source = {
   lastSyncedAt: "2026-09-15T12:00:00Z",
   lastSyncError: null,
   setupPullRequestNumber: null,
-  declarationsPendingPublish: false,
-  heldContentHash: null,
-  heldSourceCommit: null,
-  heldReasons: [],
 };
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {

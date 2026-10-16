@@ -1,5 +1,5 @@
 {
-  "id": "7f37e0be-17cc-4405-bed7-3e73a955e59c",
+  "id": "e304a199-1141-40cd-b1f5-c76ec01c1be9",
   "prevId": "de87642e-7234-411c-9c03-64708230a983",
   "version": "7",
   "dialect": "postgresql",
@@ -21665,12 +21665,6 @@
           "notNull": true,
           "default": false
         },
-        "team_id": {
-          "name": "team_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_by": {
           "name": "created_by",
           "type": "text",
@@ -21704,21 +21698,6 @@
           "columns": [
             {
               "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "service_accounts_team_id_idx": {
-          "name": "service_accounts_team_id_idx",
-          "columns": [
-            {
-              "expression": "team_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -21763,19 +21742,6 @@
             "id"
           ],
           "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "service_accounts_team_id_team_id_fk": {
-          "name": "service_accounts_team_id_team_id_fk",
-          "tableFrom": "service_accounts",
-          "tableTo": "team",
-          "columnsFrom": [
-            "team_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
           "onUpdate": "no action"
         },
         "service_accounts_created_by_user_id_fk": {
@@ -29033,38 +28999,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "declarations_pending_publish": {
-          "name": "declarations_pending_publish",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "held_content": {
-          "name": "held_content",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "held_content_hash": {
-          "name": "held_content_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "held_source_commit": {
-          "name": "held_source_commit",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "held_reasons": {
-          "name": "held_reasons",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
         }
       },
       "indexes": {},

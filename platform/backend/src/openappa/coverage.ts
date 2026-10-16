@@ -55,7 +55,11 @@ import {
  * select their catalog page before the tools and policy counts are hydrated.
  */
 class OpenAppaCoverageService {
-  /** Complete policy rows for one caller-readable catalog, without list facets. */
+  /**
+   * Policy rows for one caller-readable catalog, without list facets. Rows
+   * leave `agents` empty: reading every visible agent does not scale to large
+   * organizations, and the inspection does not report them.
+   */
   async toolsForCatalog(
     params: { organizationId: string; catalogId: string } & CoverageVisibility,
   ): Promise<CoverageTool[]> {
@@ -66,6 +70,7 @@ class OpenAppaCoverageService {
         ...params,
         visibleCatalogIds: [params.catalogId],
         includeAutoModeTools: false,
+        includeAgentAssignments: false,
         includeAppCatalogs: true,
       },
       params.catalogId,

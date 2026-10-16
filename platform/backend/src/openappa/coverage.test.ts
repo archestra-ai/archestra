@@ -1,4 +1,6 @@
+import { vi } from "vitest";
 import config from "@/config";
+import AgentTeamModel from "@/models/agent-team";
 import ToolModel from "@/models/tool";
 import { beforeEach, describe, expect, test } from "@/test";
 import { seedCoverage } from "@/test/openappa-coverage";
@@ -53,6 +55,10 @@ describe("openappaCoverageService.toolsForCatalog", () => {
       ),
     );
 
+    const accessibleAgentIds = vi.spyOn(
+      AgentTeamModel,
+      "getUserAccessibleAgentIds",
+    );
     for (const catalogId of Object.values(catalogIds)) {
       const scoped = await openappaCoverageService.toolsForCatalog({
         ...visibility,
@@ -61,9 +67,14 @@ describe("openappaCoverageService.toolsForCatalog", () => {
         catalogId,
       });
       expect(scoped).toEqual(
-        report.data.filter((tool) => tool.catalogId === catalogId),
+        report.data
+          .filter((tool) => tool.catalogId === catalogId)
+          .map((tool) => ({ ...tool, agents: [] })),
       );
     }
+    // Large organizations hold more agents than one query can bind.
+    expect(accessibleAgentIds).not.toHaveBeenCalled();
+    accessibleAgentIds.mockRestore();
   });
 });
 

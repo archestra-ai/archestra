@@ -16,7 +16,9 @@ export function DeleteCatalogDialog({
   onDeleted,
 }: DeleteCatalogDialogProps) {
   const deleteMutation = useDeleteInternalMcpCatalogItem();
-  const { data: installedServers = [] } = useMcpServers();
+  const { data: installedServers = [] } = useMcpServers({
+    includeAssignedAgents: false,
+  });
 
   const handleConfirm = async () => {
     if (!item) return;

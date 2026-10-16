@@ -34,7 +34,10 @@ export async function getSkillPermissionChecker(params: {
     organizationId: params.organizationId,
   });
   const skill = permissions.skill ?? [];
-  const grants = await ResourcePermissions.resolveAll(params);
+  const grants = await ResourcePermissions.resolveAll({
+    ...params,
+    resources: ["skill"],
+  });
   return {
     allowsScoped: (skillId, action) =>
       hasScopedPermission({

@@ -11,9 +11,8 @@ import { TeamManagementDialog } from "./team-management-dialog";
 
 type Team = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
 
-const { useTeamsMock, useTokensMock } = vi.hoisted(() => ({
+const { useTeamsMock } = vi.hoisted(() => ({
   useTeamsMock: vi.fn(),
-  useTokensMock: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/auth.query");
@@ -23,7 +22,6 @@ vi.mock("@/lib/member.query");
 vi.mock("@/lib/config/config", () => ({
   default: { enterpriseFeatures: { core: false } },
 }));
-vi.mock("@/lib/teams/team-token.query", () => ({ useTokens: useTokensMock }));
 vi.mock("@/lib/teams/team.query", () => ({
   useTeams: useTeamsMock,
 }));
@@ -100,7 +98,6 @@ beforeEach(() => {
     emptyMessage: "",
     // biome-ignore lint/suspicious/noExplicitAny: partial hook result stub
   } as any);
-  useTokensMock.mockReturnValue({ data: { tokens: [] } });
   useTeamsMock.mockReturnValue({ data: [] });
   serveMembers([
     {

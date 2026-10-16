@@ -14,6 +14,11 @@ import {
   it,
   vi,
 } from "vitest";
+import {
+  makeInteraction,
+  makeSessionSummary,
+  paginated,
+} from "@/mocks/data/interactions";
 import SessionDetailPage from "./page.client";
 
 vi.mock("next/navigation");
@@ -91,6 +96,35 @@ it("lets a failed session lookup recover on retry instead of claiming access is 
   expect(
     screen.queryByRole("button", { name: "Retry" }),
   ).not.toBeInTheDocument();
+});
+
+it("shows total latency per request and leaves untimed records empty", async () => {
+  const rows = [1240, 386, 0, null].map((durationMs, i) => ({
+    ...makeInteraction({
+      id: `request-${i}`,
+      sessionId: "test-session",
+      durationMs,
+    }),
+    requestType: "main",
+    externalAgentIdLabel: null,
+  }));
+  server.use(
+    http.get(sessionsUrl, () =>
+      HttpResponse.json(
+        paginated([makeSessionSummary({ sessionId: "test-session" })]),
+      ),
+    ),
+    http.get(`${origin}/api/interactions/summaries`, () =>
+      HttpResponse.json(paginated(rows)),
+    ),
+  );
+  await renderPage();
+  expect(
+    await screen.findByLabelText("Total request latency: 1.24s"),
+  ).toBeVisible();
+  expect(screen.getByLabelText("Total request latency: 386ms")).toBeVisible();
+  expect(screen.getByLabelText("Total request latency: 0ms")).toBeVisible();
+  expect(screen.getAllByLabelText(/Total request latency/)).toHaveLength(3);
 });
 
 async function renderPage() {

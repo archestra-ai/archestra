@@ -14,7 +14,6 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo } from "react";
 import { useLogsHeaderAction } from "@/app/_parts/logs-section-layout";
 import { AgentSelector } from "@/components/agent-selector";
-import { BilledCost } from "@/components/billed-cost";
 import { ClientSourceBadge } from "@/components/client-source-badge";
 import {
   CollectionFilters,
@@ -24,13 +23,14 @@ import {
   filterSearchClass,
 } from "@/components/filter-bar";
 import { SourceFilterOption } from "@/components/log-filter-option";
+import { LogTime } from "@/components/log-time";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
+import { SessionUsage } from "@/components/session-usage";
 import { SourceBadge } from "@/components/source-badge";
 import { TimeRangePicker } from "@/components/time-range-picker/time-range-picker";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { UnattributedUserBadge } from "@/components/unattributed-user-badge";
 import {
   ClientFilterSelect,
@@ -47,7 +47,6 @@ import {
   useInteractionSessions,
   useUniqueUserIds,
 } from "@/lib/interactions/interaction.query";
-import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { ErrorBoundary } from "../../_parts/error-boundary";
 
 function formatDuration(start: Date | string, end: Date | string): string {
@@ -373,7 +372,7 @@ function SessionsTable() {
         // the acting user (or why there is none), and the virtual key's name,
         // and the first two truncate to noise below about this width.
         header: "Agent",
-        size: 215,
+        size: 200,
         minSize: 175,
         cell: ({ row }) => {
           const session = row.original;
@@ -414,8 +413,8 @@ function SessionsTable() {
       {
         id: "models",
         header: "Model",
-        size: 155,
-        minSize: 120,
+        size: 120,
+        minSize: 100,
         cell: ({ row }) => {
           const [model, ...additionalModels] = row.original.models;
           return model ? (
@@ -437,58 +436,15 @@ function SessionsTable() {
       {
         id: "usage",
         header: "Usage",
-        size: 125,
-        minSize: 110,
-        cell: ({ row }) => {
-          const session = row.original;
-          const read = session.totalCacheReadTokens;
-          const totalInput =
-            session.totalInputTokens +
-            session.totalCacheReadTokens +
-            session.totalCacheWriteTokens;
-          const hitRate =
-            totalInput > 0 ? Math.round((read / totalInput) * 100) : 0;
-          return (
-            <div>
-              <div className="text-sm tabular-nums">
-                {session.requestCount.toLocaleString()}{" "}
-                {session.requestCount === 1 ? "request" : "requests"}
-              </div>
-              <div className="text-xs text-muted-foreground tabular-nums">
-                {read > 0 ? `${hitRate}% cache read` : "No cache read"}
-              </div>
-            </div>
-          );
-        },
-      },
-      {
-        id: "cost",
-        header: "Spend",
-        size: 115,
-        minSize: 100,
-        cell: ({ row }) =>
-          row.original.totalCost ? (
-            <TooltipProvider>
-              <BilledCost
-                cost={row.original.totalCost}
-                billedCost={row.original.totalBilledCost}
-                subscriptionCost={row.original.totalSubscriptionCost}
-                baselineCost={
-                  row.original.totalBaselineCost || row.original.totalCost
-                }
-                format="percent"
-                tooltip="hover"
-                variant="session"
-                subscriptionBadge="compact"
-              />
-            </TooltipProvider>
-          ) : null,
+        size: 178,
+        minSize: 178,
+        cell: ({ row }) => <SessionUsage session={row.original} />,
       },
       {
         id: "time",
         header: "Last request",
-        size: 165,
-        minSize: 150,
+        size: 154,
+        minSize: 145,
         cell: ({ row }) => {
           const { firstRequestTime, lastRequestTime, requestCount } =
             row.original;
@@ -499,20 +455,7 @@ function SessionsTable() {
             requestCount > 1 && firstRequestTime
               ? formatDuration(firstRequestTime, lastRequestTime)
               : null;
-          return (
-            <div className="min-w-0">
-              <div className="text-sm">
-                {formatRelativeTimeFromNow(lastRequestTime)}
-              </div>
-              <div className="truncate font-mono text-[11px] text-muted-foreground">
-                {formatDate({
-                  date: String(lastRequestTime),
-                  dateFormat: "MMM d, yyyy · HH:mm",
-                })}
-                {duration ? ` · ${duration}` : ""}
-              </div>
-            </div>
-          );
+          return <LogTime timestamp={lastRequestTime} span={duration} />;
         },
       },
     ],
@@ -621,6 +564,8 @@ function SessionsTable() {
 
       <DataTable
         columns={columns}
+        fixedWidthColumnIds={["agent", "models", "usage", "time"]}
+        flexibleColumnIds={["session"]}
         data={sessions}
         hideSelectedCount
         manualPagination

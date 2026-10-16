@@ -1,14 +1,24 @@
 import { and, count, eq, inArray } from "drizzle-orm";
-import { describe, expect } from "vitest";
+import { describe, expect, vi } from "vitest";
 import db, { schema } from "@/database";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import AuditLogModel from "@/models/audit-log";
 import SkillModel from "@/models/skill";
 import { test } from "@/test";
+import {
+  STUB_COMMIT_SHA,
+  stubGithub,
+  stubSkillManifest,
+} from "@/test/github-skills-stub";
 import type { InsertSkill } from "@/types";
 import skillRoutes from "./skill.routes";
 import { MANIFEST, useSkillRouteTestApp } from "./skill.test-helpers";
 
 describe("PATCH /api/skills/:id/github-sync", () => {
-  const ctx = useSkillRouteTestApp(skillRoutes);
+  const ctx = useSkillRouteTestApp(async (app) => {
+    registerAuditLogHook(app);
+    await app.register(skillRoutes);
+  });
 
   async function seedSynced(overrides: Partial<InsertSkill> = {}) {
     const skill = await SkillModel.createWithFiles({
@@ -66,6 +76,122 @@ describe("PATCH /api/skills/:id/github-sync", () => {
       payload: { content: MANIFEST },
     });
     expect(update.statusCode).toBe(200);
+  });
+
+  test("reconnects disconnected Git provenance through a verified full source and audits the change", async () => {
+    const skill = await seedSynced({
+      githubSyncInterval: null,
+      githubSyncRef: null,
+    });
+    stubGithub([
+      {
+        owner: "route-reconnect",
+        repo: "skills",
+        files: {
+          "synced-skill/SKILL.md": stubSkillManifest("synced-skill"),
+          "synced-skill/reference.txt": "new resource bytes",
+        },
+      },
+    ]);
+    const response = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/skills/${skill.id}/github-sync`,
+      payload: {
+        interval: "1h",
+        source: {
+          repoUrl: "/route-reconnect/skills/tree/main",
+          skillPath: "synced-skill",
+        },
+      },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      id: skill.id,
+      sourceType: "github",
+      sourceRef: "route-reconnect/skills@main:synced-skill",
+      sourceCommit: STUB_COMMIT_SHA,
+      githubSyncRef: "main",
+      githubSyncInterval: "1h",
+    });
+    expect(response.json().content).toContain("# synced-skill");
+    await vi.waitFor(async () => {
+      const audit = await AuditLogModel.findPaginated({
+        organizationId: ctx.organizationId,
+        resourceId: skill.id,
+        limit: 10,
+        offset: 0,
+      });
+      expect(audit.data).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            action: "skill.updated",
+            before: expect.objectContaining({ githubSyncInterval: null }),
+            after: expect.objectContaining({
+              githubSyncInterval: "1h",
+              sourceCommit: STUB_COMMIT_SHA,
+            }),
+          }),
+        ]),
+      );
+    });
+  });
+
+  test("a failed reconnect leaves the editable snapshot disconnected and unchanged", async () => {
+    const skill = await seedSynced({
+      githubSyncInterval: null,
+      githubSyncRef: null,
+    });
+    stubGithub([
+      {
+        owner: "route-reconnect-missing",
+        repo: "skills",
+        files: { "elsewhere/SKILL.md": stubSkillManifest("elsewhere") },
+      },
+    ]);
+    const response = await ctx.app.inject({
+      method: "PATCH",
+      url: `/api/skills/${skill.id}/github-sync`,
+      payload: {
+        source: {
+          repoUrl: "/route-reconnect-missing/skills/tree/main",
+          skillPath: "missing",
+        },
+      },
+    });
+    expect(response.statusCode, response.body).toBe(400);
+    expect(await SkillModel.findById(skill.id)).toMatchObject({
+      content: "# body",
+      sourceRef: "acme/skills@main:synced-skill",
+      sourceCommit: "abc",
+      githubSyncInterval: null,
+    });
+  });
+
+  test("does not convert manual or built-in skills through the reconnect path", async () => {
+    for (const sourceType of ["manual", "built_in"] as const) {
+      const skill = await seedSynced({
+        name: `${sourceType}-snapshot`,
+        sourceType,
+        githubSyncInterval: null,
+        githubSyncRef: null,
+      });
+      const response = await ctx.app.inject({
+        method: "PATCH",
+        url: `/api/skills/${skill.id}/github-sync`,
+        payload: {
+          source: {
+            repoUrl: "/route-reconnect-rejected/skills/tree/main",
+            skillPath: "synced-skill",
+          },
+        },
+      });
+      expect(response.statusCode, response.body).toBe(400);
+      expect(await SkillModel.findById(skill.id)).toMatchObject({
+        sourceType,
+        githubSyncInterval: null,
+        content: "# body",
+      });
+    }
   });
 
   test("syncNow enqueues one sync task, deduping in-flight pulls", async () => {

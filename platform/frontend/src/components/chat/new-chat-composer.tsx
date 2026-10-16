@@ -148,6 +148,26 @@ export function NewChatComposer({
           collapses against it instead of stretching to the surrounding
           column. */}
       <div className="w-full">
+        <div className="mb-3 empty:hidden">
+          {isRuntimeMode && runtimePreflight.data?.ready === false && (
+            <AgentRuntimeCredentialPrompt
+              agentId={agentId}
+              missing={[
+                ...runtimePreflight.data.missing,
+                ...runtimePreflight.data.misconfigured,
+              ]}
+              declarations={runtimeAgent?.runtime?.credentials ?? []}
+              incompatible={runtimePreflight.data.incompatible}
+              onConnected={() => runtimePreflight.refetch()}
+            />
+          )}
+          {isRuntimeMode && runtimePreflight.isError && (
+            <AgentRuntimePreflightError
+              error={runtimePreflight.error}
+              onRetry={() => void runtimePreflight.refetch()}
+            />
+          )}
+        </div>
         <ArchestraPromptInput
           onSubmit={(message) => {
             const text = message.text?.trim() ?? "";
@@ -195,24 +215,6 @@ export function NewChatComposer({
           runtimeMode={isRuntimeMode}
           runtimeAgentName={runtimeAgent?.name}
         />
-        {isRuntimeMode && runtimePreflight.data?.ready === false && (
-          <AgentRuntimeCredentialPrompt
-            agentId={agentId}
-            missing={[
-              ...runtimePreflight.data.missing,
-              ...runtimePreflight.data.misconfigured,
-            ]}
-            declarations={runtimeAgent?.runtime?.credentials ?? []}
-            incompatible={runtimePreflight.data.incompatible}
-            onConnected={() => runtimePreflight.refetch()}
-          />
-        )}
-        {isRuntimeMode && runtimePreflight.isError && (
-          <AgentRuntimePreflightError
-            error={runtimePreflight.error}
-            onRetry={() => void runtimePreflight.refetch()}
-          />
-        )}
       </div>
     </ViewTransition>
   );

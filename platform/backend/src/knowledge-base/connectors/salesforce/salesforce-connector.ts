@@ -126,7 +126,7 @@ const CASE_COMMENTS_SUBQUERY =
  * Allows standard API names, custom fields (__c), relationship paths (Account.Name).
  */
 const SAFE_SOQL_IDENTIFIER =
-  /^[a-zA-Z_][a-zA-Z0-9_]*(?:__[a-zA-Z0-9]+)?(?:\.[a-zA-Z_][a-zA-Z0-9_]*(?:__[a-zA-Z0-9]+)?)*$/;
+  /^[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*$/;
 
 // ===== Internal types =====
 

@@ -24,7 +24,6 @@ import {
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
-  TeamTokenModel,
   VirtualApiKeyModel,
 } from "@/models";
 import ServiceAccountModel from "@/models/service-account";
@@ -157,10 +156,7 @@ export async function buildAgentRunLaunchSpec(params: {
       boundWorkspace.actorKind !== params.actor.kind ||
       boundWorkspace.actorId !== params.actor.id)
   ) {
-    throw new ApiError(
-      409,
-      "The runtime workspace is not available for this actor",
-    );
+    throw new ApiError(409, "The saved run is not available for this actor");
   }
   if (params.runtimeSession && boundWorkspace) {
     const expected = runtimeOpenAppaSession({
@@ -176,7 +172,7 @@ export async function buildAgentRunLaunchSpec(params: {
     ) {
       throw new ApiError(
         409,
-        "The runtime session does not match the persisted workspace",
+        "The runtime session does not match the saved run",
       );
     }
   }
@@ -649,11 +645,9 @@ async function resolveGatewayToken(params: {
   agentId: string;
   organizationId: string;
 }): Promise<string> {
-  if (params.actor.kind === "team") {
-    const token = await TeamTokenModel.findTeamToken(params.actor.id);
-    const value = token ? await TeamTokenModel.getTokenValue(token.id) : null;
-    if (value) return value;
-  } else {
+  // Team tokens are retired, so a team actor (only left on runs started
+  // before then) has nothing to act with.
+  if (params.actor.kind !== "team") {
     const selected = await selectMCPGatewayToken(
       params.agentId,
       params.actor.kind === "user" ? params.actor.id : "system",

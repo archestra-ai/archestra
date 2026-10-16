@@ -9,9 +9,11 @@ import {
   Check,
   Copy,
   ExternalLink,
+  Infinity as InfinityIcon,
   Plus,
   Search,
   SlidersHorizontal,
+  Wrench,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -34,7 +36,6 @@ import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { McpInstallDialogs } from "@/components/chat/mcp-install-dialogs";
 import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -522,7 +523,9 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
 
   return (
     <>
-      <div className="flex min-w-0 max-w-[340px] items-center">
+      {/* One hover surface for the agent button and the Add tools circle
+          after it, so the circle never cuts through the button's edge. */}
+      <div className="flex min-w-0 max-w-[340px] items-center rounded-md transition-colors hover:bg-accent dark:hover:bg-accent/50">
         <Popover
           open={open}
           onOpenChange={(newOpen) => {
@@ -540,7 +543,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
               aria-describedby={toolSummaryId}
               data-agent-selector
               onKeyDown={navigation.onTriggerKeyDown}
-              className="min-w-0"
+              className="min-w-0 hover:bg-transparent dark:hover:bg-transparent"
             >
               <AgentIcon icon={displayAgent?.icon} size={16} />
               <span className="truncate flex-1 text-left">
@@ -551,9 +554,10 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                   the icons are part of the agent's own button rather than a
                   second control. */}
               {currentAgent?.accessAllTools ? (
-                <Badge variant="secondary" className="shrink-0">
-                  All tools
-                </Badge>
+                <AllToolsIcons
+                  descriptionId={toolSummaryId}
+                  agentName={displayAgentName}
+                />
               ) : !triggerIconsLoaded ? (
                 <span
                   className="flex min-w-14 shrink-0 items-center"
@@ -579,18 +583,18 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                   onOpenChange={setSummaryOpen}
                 />
               )}
-              {runtimeEnabled && displayAgent?.runtime && (
-                <RuntimeCapableIndicator runtime={displayAgent.runtime} />
-              )}
+              {/* No runtime mark here: the composer's runtime row below
+                  already says this agent starts a dedicated runtime. */}
             </PromptInputButton>
           </PopoverTrigger>
           <PopoverContent
             side="bottom"
             align="start"
             sideOffset={8}
-            className="w-[360px] p-0 rounded-xl"
+            collisionPadding={12}
+            className="w-[calc(100vw-1.5rem)] rounded-xl p-0 sm:w-[360px]"
           >
-            <div className="p-2.5">
+            <div className="px-2.5 pt-2.5 pb-1">
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                 <Input
@@ -602,7 +606,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                     setSearch(e.target.value);
                     if (listRef.current) listRef.current.scrollTop = 0;
                   }}
-                  className="h-8 pl-8 text-sm rounded-lg bg-muted/50"
+                  className="h-8 rounded-lg border-transparent bg-muted/50 pl-8 text-sm shadow-none focus-visible:border-transparent focus-visible:ring-0"
                   autoFocus
                 />
               </div>
@@ -742,6 +746,13 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
           canEditCurrentAgent &&
           !hasNonBuiltInTools && (
             <AddToolsButton
+              // Tucked into the end of the tool circles when there are any,
+              // so it reads as the next one in the stack.
+              overlap={
+                triggerSubagents.length > 0 ||
+                assignedServers.length > 0 ||
+                knowledgeSources.some((source) => source.connectorType)
+              }
               onClick={() => openQuickEdit(currentAgent.id, "add-tools")}
             />
           )}
@@ -966,7 +977,9 @@ function AgentPickerRow({
       className={cn(
         "rounded-lg px-2 py-1.5 transition-colors",
         !isBlocked && "hover:bg-accent",
-        isHighlighted && "bg-accent ring-2 ring-inset ring-primary",
+        // The highlight is a fill, like the setup menu; a ring here reads as a
+        // second selection state.
+        isHighlighted && "bg-accent",
       )}
     >
       <div className="flex w-full items-center gap-2">
@@ -1113,6 +1126,48 @@ type SummaryKnowledge = {
  * `descriptionId` labels the summary the button points at, so screen readers
  * hear it without a hover.
  */
+/**
+ * The same stacked circles as a fixed tool list, standing in for "every tool"
+ * so an Auto-mode agent's button reads like any other agent's.
+ */
+function AllToolsIcons({
+  descriptionId,
+  agentName,
+}: {
+  descriptionId: string;
+  agentName: string;
+}) {
+  return (
+    <>
+      <span id={descriptionId} className="sr-only">
+        {`${agentName} uses all tools`}
+      </span>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="flex shrink-0 items-center" aria-hidden="true">
+            <OverlappedIcons
+              icons={ALL_TOOLS_ICONS}
+              maxVisible={ALL_TOOLS_ICONS.length}
+            />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top">All tools</TooltipContent>
+      </Tooltip>
+    </>
+  );
+}
+
+const ALL_TOOLS_ICONS = [
+  {
+    key: "tools",
+    icon: <Wrench className="size-3 text-muted-foreground" />,
+  },
+  {
+    key: "all",
+    icon: <InfinityIcon className="size-3 text-muted-foreground" />,
+  },
+];
+
 function AgentToolIcons({
   descriptionId,
   agentName,
@@ -1183,6 +1238,7 @@ function AgentToolIcons({
               icons={icons}
               maxVisible={MAX_VISIBLE_AVATARS}
               overflowTooltip=""
+              itemClassName={CIRCLE_LIFT}
             />
           </span>
         </HoverCardTrigger>
@@ -1192,7 +1248,7 @@ function AgentToolIcons({
           side="top"
           align="start"
           collisionPadding={8}
-          className="w-80 max-h-(--radix-hover-card-content-available-height) overflow-y-auto p-3"
+          className="w-max min-w-48 max-w-80 max-h-(--radix-hover-card-content-available-height) overflow-y-auto p-3"
         >
           {subagents.length > 0 && (
             <SummaryGroup title="Subagents">
@@ -1260,7 +1316,13 @@ function AgentToolIcons({
 }
 
 /** Shortcut for an agent with no tools of its own; opens Add tools. */
-function AddToolsButton({ onClick }: { onClick: () => void }) {
+function AddToolsButton({
+  overlap,
+  onClick,
+}: {
+  overlap: boolean;
+  onClick: () => void;
+}) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -1269,7 +1331,14 @@ function AddToolsButton({ onClick }: { onClick: () => void }) {
           size="icon-xs"
           aria-label="Add tools"
           onClick={onClick}
-          className="ml-1 rounded-full bg-muted hover:bg-muted/80 size-5"
+          className={cn(
+            "size-5 rounded-full bg-muted hover:bg-muted/80",
+            // The agent button's end padding plus the row gap leave 20px
+            // between the last circle and this one; -ml-4 closes that to the
+            // circles' own 6px overlap.
+            overlap ? "relative mr-1 -ml-4 ring-1 ring-background" : "ml-1",
+            CIRCLE_LIFT,
+          )}
         >
           <Plus className="size-3 text-muted-foreground" />
         </Button>
@@ -1340,3 +1409,7 @@ function useAfterFirstPaint() {
   }, []);
   return ready;
 }
+
+// A hovered circle rises a hair above its neighbours, marking it as live.
+const CIRCLE_LIFT =
+  "relative hover:z-10 motion-safe:transition-transform motion-safe:duration-150 motion-safe:hover:-translate-y-[1.5px]";

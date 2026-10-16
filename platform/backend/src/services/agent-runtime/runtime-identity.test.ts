@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import config from "@/config";
-import db, { schema } from "@/database";
 import {
   A2AContextModel,
   A2ATaskModel,
@@ -8,7 +7,6 @@ import {
   AgentWorkspaceModel,
   VirtualApiKeyModel,
 } from "@/models";
-import { openappaActor, scopedSessionId } from "@/openappa/actor";
 import { describe, expect, test } from "@/test";
 import type { AgentRunActorKind } from "@/types/agent-runtime";
 import {
@@ -16,7 +14,6 @@ import {
   resolveGatewayRuntimeSession,
   resolveRuntimeIdentityByVirtualKeys,
   resolveRuntimeSessionForWorkspace,
-  resolveVerifiedRuntimeAssociation,
   runtimeBindingAuthorizes,
   runtimeOpenAppaSession,
   runtimeSessionConflicts,
@@ -209,7 +206,7 @@ describe("runtime OpenAPPA identity", () => {
           workspaceId: run.workspace.id,
           taskId: randomUUID(),
         }),
-      ).rejects.toThrow("persisted workspace");
+      ).rejects.toThrow("saved run");
     } finally {
       config.openappa.offerSigningSecret = prior;
     }
@@ -536,146 +533,20 @@ describe("runtime OpenAPPA identity", () => {
     ).toMatchObject({ kind: "reject" });
   });
 
-  test("an offer session resolves only when the caller owns that workspace root", async ({
+  test("a workspace's runtime session resolves only in its own organization", async ({
     makeOrganization,
-    makeUser,
     makeAgent,
   }) => {
     const org = await makeOrganization();
     const other = await makeOrganization();
-    const user = await makeUser();
     const agent = await makeAgent({ organizationId: org.id });
-    const teamId = randomUUID();
     const team = await persistWorkspace({
       organizationId: org.id,
       agentId: agent.id,
       actorKind: "team",
-      actorId: teamId,
-    });
-    const personal = await persistWorkspace({
-      organizationId: org.id,
-      agentId: agent.id,
-      actorKind: "user",
-      actorId: user.id,
-      actorUserId: user.id,
+      actorId: randomUUID(),
     });
     const principal = workloadPrincipal(team.workspace.id);
-    const root = scopedSessionId(principal, team.workspace.workloadName);
-
-    expect(
-      await resolveVerifiedRuntimeAssociation({
-        organizationId: org.id,
-        callerId: principal,
-        sessionId: root,
-      }),
-    ).toMatchObject({
-      principal,
-      taskId: team.task.id,
-      actorUserId: null,
-      workloadName: team.workspace.workloadName,
-    });
-    const childSession = `${root}:native-child`;
-    await db.insert(schema.openappaSessionsTable).values({
-      actor: openappaActor(root),
-      root: openappaActor(root),
-      organizationId: org.id,
-      callerId: principal,
-      sessionId: root,
-      parentId: null,
-      startDecision: { decision: "ack", protocol: 1 },
-    });
-    await db.insert(schema.openappaSessionsTable).values({
-      actor: openappaActor(childSession),
-      root: openappaActor(root),
-      organizationId: org.id,
-      callerId: principal,
-      sessionId: childSession,
-      parentId: root,
-      startDecision: { decision: "ack", protocol: 1 },
-    });
-    expect(
-      await resolveVerifiedRuntimeAssociation({
-        organizationId: org.id,
-        callerId: principal,
-        sessionId: childSession,
-        parentId: root,
-      }),
-    ).toMatchObject({ principal, taskId: team.task.id });
-    const grandchildSession = `${childSession}:grandchild`;
-    await db.insert(schema.openappaSessionsTable).values({
-      actor: openappaActor(grandchildSession),
-      root: openappaActor(root),
-      organizationId: org.id,
-      callerId: principal,
-      sessionId: grandchildSession,
-      parentId: childSession,
-      startDecision: { decision: "ack", protocol: 1 },
-    });
-    expect(
-      await resolveVerifiedRuntimeAssociation({
-        organizationId: org.id,
-        callerId: principal,
-        sessionId: grandchildSession,
-        parentId: childSession,
-      }),
-    ).toMatchObject({ principal, taskId: team.task.id });
-    expect(
-      await resolveVerifiedRuntimeAssociation({
-        organizationId: org.id,
-        callerId: principal,
-        sessionId: `${root}:native-child`,
-      }),
-    ).toBeNull();
-    expect(
-      await resolveVerifiedRuntimeAssociation({
-        organizationId: org.id,
-        callerId: principal,
-        sessionId: "not-the-child",
-        parentId: root,
-      }),
-    ).toBeNull();
-    expect(
-      await resolveVerifiedRuntimeAssociation({
-        organizationId: org.id,
-        callerId: principal,
-        sessionId: `${root}:native-child:grandchild`,
-        parentId: root,
-      }),
-    ).toBeNull();
-    expect(
-      await resolveVerifiedRuntimeAssociation({
-        organizationId: org.id,
-        callerId: principal,
-        sessionId: team.workspace.workloadName,
-      }),
-    ).toBeNull();
-    expect(
-      await resolveVerifiedRuntimeAssociation({
-        organizationId: org.id,
-        callerId: `virtual-key:${team.virtualKeyId}`,
-        sessionId: scopedSessionId(
-          `virtual-key:${team.virtualKeyId}`,
-          team.workspace.workloadName,
-        ),
-      }),
-    ).toBeNull();
-    expect(
-      await resolveVerifiedRuntimeAssociation({
-        organizationId: other.id,
-        callerId: principal,
-        sessionId: root,
-      }),
-    ).toBeNull();
-    expect(
-      await resolveVerifiedRuntimeAssociation({
-        organizationId: org.id,
-        callerId: `user:${user.id}`,
-        sessionId: `user:${user.id}|${personal.workspace.workloadName}`,
-      }),
-    ).toMatchObject({
-      principal: `user:${user.id}`,
-      actorUserId: user.id,
-    });
     expect(
       await resolveRuntimeSessionForWorkspace({
         organizationId: other.id,

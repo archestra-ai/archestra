@@ -5,30 +5,15 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { CONNECT_CLIENTS } from "./clients";
 import { McpClientInstructions } from "./mcp-client-instructions";
 
-const {
-  userTokenMock,
-  fetchUserTokenValueMock,
-  tokensMock,
-  fetchTeamTokenValueMock,
-} = vi.hoisted(() => ({
+const { userTokenMock, fetchUserTokenValueMock } = vi.hoisted(() => ({
   userTokenMock: vi.fn(),
   fetchUserTokenValueMock: vi.fn(),
-  tokensMock: vi.fn(),
-  fetchTeamTokenValueMock: vi.fn(),
 }));
 
 vi.mock("@/lib/user-token.query", () => ({
   useUserToken: () => userTokenMock(),
   useFetchUserTokenValue: () => ({
     mutateAsync: fetchUserTokenValueMock,
-    isPending: false,
-  }),
-}));
-
-vi.mock("@/lib/teams/team-token.query", () => ({
-  useTokens: () => tokensMock(),
-  useFetchTeamTokenValue: () => ({
-    mutateAsync: fetchTeamTokenValueMock,
     isPending: false,
   }),
 }));
@@ -51,7 +36,6 @@ function renderInstructions() {
   return render(
     <McpClientInstructions
       client={genericClient}
-      gatewayId="gw-1"
       gatewaySlug="my-gateway"
       gatewayName="My Gateway"
       baseUrl="http://localhost:9000"
@@ -80,16 +64,9 @@ beforeEach(() => {
       lastUsedAt: null,
     },
   });
-  tokensMock.mockReturnValue({
-    data: {
-      tokens: [],
-      permissions: { canAccessOrgToken: false, canAccessTeamTokens: false },
-    },
-  });
   fetchUserTokenValueMock.mockResolvedValue({
     value: "archestra_personal_real",
   });
-  fetchTeamTokenValueMock.mockResolvedValue({ value: "archestra_org_real" });
 });
 
 describe("static-token copy", () => {
@@ -132,42 +109,33 @@ describe("static-token copy", () => {
     expect(fetchUserTokenValueMock).not.toHaveBeenCalled();
   });
 
-  it("copies the real team/org token when no personal token exists", async () => {
-    userTokenMock.mockReturnValue({ data: undefined });
-    tokensMock.mockReturnValue({
-      data: {
-        tokens: [
-          {
-            id: "tok-org",
-            organizationId: "org-1",
-            teamId: null,
-            isOrganizationToken: true,
-            name: "Org token",
-            tokenStart: "archestra_org",
-            createdAt: "2026-01-01T00:00:00.000Z",
-            lastUsedAt: null,
-            team: null,
-          },
-        ],
-        permissions: { canAccessOrgToken: true, canAccessTeamTokens: false },
-      },
-    });
+  it("points automation at service accounts instead of offering shared tokens", async () => {
     const user = userEvent.setup();
-    const writeText = vi.spyOn(navigator.clipboard, "writeText");
     renderInstructions();
 
     await user.click(screen.getByRole("tab", { name: "Static token" }));
-    const row = getTokenRow("Bearer archestra_org***");
 
-    await user.click(row.getByRole("button", { name: "Copy" }));
-    await user.click(
-      screen.getByRole("menuitem", { name: "Copy with real token" }),
-    );
+    expect(
+      screen.queryByRole("button", { name: "Switch token" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "service account" }),
+    ).toHaveAttribute("href", "/settings/service-accounts");
+  });
 
-    await waitFor(() =>
-      expect(fetchTeamTokenValueMock).toHaveBeenCalledWith("tok-org"),
-    );
-    expect(writeText).toHaveBeenCalledWith("Bearer archestra_org_real");
+  it("hides the service account pointer from users who cannot open it", async () => {
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: false,
+    } as ReturnType<typeof useHasPermissions>);
+    const user = userEvent.setup();
+    renderInstructions();
+
+    await user.click(screen.getByRole("tab", { name: "Static token" }));
+
+    expect(screen.getByText("Bearer archestra_abc***")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "service account" }),
+    ).not.toBeInTheDocument();
   });
 
   it("copies nothing when the token value cannot be fetched", async () => {

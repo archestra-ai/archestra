@@ -142,7 +142,9 @@ export function McpServerTable({
   const router = useRouter();
   const { data: session } = useSession();
   const _currentUserId = session?.user?.id;
-  const { data: allMcpServers } = useMcpServers();
+  const { data: allMcpServers } = useMcpServers({
+    includeAssignedAgents: false,
+  });
   const isInstalledForViewer = (item: CatalogItem) =>
     isMcpServerInstalledForViewer(
       (allMcpServers ?? []).filter((server) => server.catalogId === item.id),
@@ -445,7 +447,9 @@ const McpServerRowActions = memo(function McpServerRowActions({
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
-  const { data: allMcpServers } = useMcpServers();
+  const { data: allMcpServers } = useMcpServers({
+    includeAssignedAgents: false,
+  });
   const { data: canManageInstalls } = useHasPermissions(
     { mcpRegistry: ["update"] },
     "*",
@@ -572,7 +576,6 @@ const McpServerRowActions = memo(function McpServerRowActions({
               scope: install.scope,
               teamId: install.teamId,
             },
-            assignedAgents: install.assignedAgents ?? [],
           },
         ]
       : [];

@@ -448,6 +448,27 @@ export const handlers: HttpHandler[] = [
     pagination: { limit: 20, hasNext: false, nextCursor: null },
   }),
   ...getJson("/api/mcp_server/auto_mode_agents", []),
+  // One install with its agents, which the list leaves out. The uninstall
+  // confirmation reads it to name the agents that lose access. After the
+  // literal `auto_mode_agents` paths so they are never read as an id.
+  ...paths("/api/mcp_server/:id").map((url) =>
+    http.get(url, ({ params }) => {
+      const server = installedServersSeed.find(
+        (candidate) => candidate.id === params.id,
+      );
+      return server
+        ? HttpResponse.json(server)
+        : HttpResponse.json(
+            {
+              error: {
+                message: "MCP server not found",
+                type: "api_not_found_error",
+              },
+            },
+            { status: 404 },
+          );
+    }),
+  ),
   ...getJson("/api/secrets/type", { type: "DB", meta: {} }),
   ...getJson("/api/k8s/image-pull-secrets", []),
   ...getJson("/api/k8s/capabilities", {
@@ -477,13 +498,7 @@ export const handlers: HttpHandler[] = [
     },
   }),
 
-  // Gateway tokens, read by the agent detail page's connect panel. No tokens
-  // issued and no org/team token access, which is the quiet default: the panel
-  // renders its empty state instead of a roster.
-  ...getJson("/api/tokens", {
-    tokens: [],
-    permissions: { canAccessOrgToken: false, canAccessTeamTokens: false },
-  }),
+  // The caller's personal gateway token, read by the connect panels.
   ...getJson("/api/user-tokens/me", {
     id: "test-user-token",
     name: "Test Admin's token",
@@ -559,14 +574,6 @@ export const handlers: HttpHandler[] = [
   // sidebar. Default empty so dialog open doesn't blow up the leak guard.
   ...getJson("/api/chat/conversations", []),
   ...getJson("/api/chat/conversations/:id/openappa-status", null),
-  ...getJson("/api/agent-runs/:taskId/openappa-review", {
-    status: "none",
-    canDecide: false,
-    offerId: null,
-    text: null,
-    tool: null,
-    arguments: null,
-  }),
   ...getJson("/api/roles", {
     data: [],
     pagination: {

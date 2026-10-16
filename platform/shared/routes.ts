@@ -534,8 +534,6 @@ export const RouteId = {
   DownloadAgentWorkspaceTransfer: "downloadAgentWorkspaceTransfer",
   UploadAgentWorkspaceTransfer: "uploadAgentWorkspaceTransfer",
   DeleteAgentRun: "deleteAgentRun",
-  GetAgentRunOpenappaReview: "getAgentRunOpenappaReview",
-  DecideAgentRunOpenappaReview: "decideAgentRunOpenappaReview",
 
   // Saved browser login routes (Playwright)
   GetBrowserStorageStates: "getBrowserStorageStates",
@@ -707,9 +705,6 @@ export const RouteId = {
   GetImpersonableUsers: "getImpersonableUsers",
 
   // Team Token Routes
-  GetTokens: "getTokens",
-  GetTokenValue: "getTokenValue",
-  RotateToken: "rotateToken",
 
   // User Token Routes (Personal Tokens)
   GetUserToken: "getUserToken",
@@ -1040,21 +1035,6 @@ export const RouteId = {
   UnpinExternalApp: "unpinExternalApp",
   PostAppRenderDiagnostics: "postAppRenderDiagnostics",
   PostAppRenderScreenshot: "postAppRenderScreenshot",
-  // App session recordings live client-side (IndexedDB); the only server
-  // endpoint forwards a shared recording plugin to the public demo catalog.
-  EnhanceAppRecording: "enhanceAppRecording",
-  RenderAppRecordingVideo: "renderAppRecordingVideo",
-  GetAppRecordingRenderStatus: "getAppRecordingRenderStatus",
-  DownloadAppRecordingVideo: "downloadAppRecordingVideo",
-  CancelAppRecordingRender: "cancelAppRecordingRender",
-  // Reviewer-facing: fetch a hackathon submission's recording plugin from
-  // GitHub (server-side, to dodge the frontend CSP) for the on-platform,
-  // read-only review player.
-  ReviewAppRecording: "reviewAppRecording",
-  // Sharing a recording to the public App Gallery: the backend only relays
-  // the GitHub device flow (browser CORS); the PR itself is filed client-side.
-  AppGalleryDeviceAuthStart: "appGalleryDeviceAuthStart",
-  AppGalleryDeviceAuthPoll: "appGalleryDeviceAuthPoll",
   // Frontend session-based proxy to the app-bound MCP server (chat + standalone)
   McpAppProxyPost: "mcpAppProxyPost",
 } as const;

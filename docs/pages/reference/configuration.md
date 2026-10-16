@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 2
-lastUpdated: 2026-10-15
+lastUpdated: 2026-10-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -71,7 +71,7 @@ Archestra reads its configuration from environment variables. Pass them with `-e
 
 - **`ARCHESTRA_PROCESS_TYPE`** - Which part of the backend this process runs.
   - Default: `all`
-  - Values: `all`, `web`, `worker`, `renderer`
+  - Values: `all`, `web`, `worker`
   - The Helm chart sets it for each deployment. Set it yourself only when you split processes without the chart.
 
 ## General

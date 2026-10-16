@@ -66,6 +66,8 @@ async function fixture(client = KILO_CLIENT, apiMajor = 1) {
   const siblingPath = path.join(configDir, client.commentedConfigFile);
   const pluginPath = path.join(home, "plugin.mjs");
   await writeFile(pluginPath, install.v1);
+  const installPath = path.join(home, "install.cjs");
+  await writeFile(installPath, install.script);
   return {
     home,
     root,
@@ -73,6 +75,7 @@ async function fixture(client = KILO_CLIENT, apiMajor = 1) {
     configPath,
     siblingPath,
     pluginPath,
+    installPath,
     install,
     run: (script: string, extraEnv: Record<string, string> = {}) =>
       exec(process.execPath, ["--input-type=module", "-e", script], {
@@ -558,7 +561,7 @@ describe("pre-bind local repair", () => {
     const action =
       operation === "launch"
         ? `await require(${JSON.stringify(path.join(files.root, "bootstrap.cjs"))}).locked(root, async () => {});`
-        : `eval(${JSON.stringify(files.install.script)});`;
+        : `require(${JSON.stringify(files.installPath)});`;
     const result = await files.run(`
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
@@ -593,7 +596,7 @@ console.log(JSON.stringify({ attempts, released: !fs.existsSync(lock) }));
     const action =
       operation === "launch"
         ? `await require(${JSON.stringify(path.join(files.root, "bootstrap.cjs"))}).locked(root, async () => {});`
-        : `eval(${JSON.stringify(files.install.script)});`;
+        : `require(${JSON.stringify(files.installPath)});`;
     await expect(
       files.run(`
 import { createRequire } from "node:module";

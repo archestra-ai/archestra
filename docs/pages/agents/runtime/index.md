@@ -3,7 +3,7 @@ title: Agent Runtime
 description: Run coding agents and long tasks in their own Kubernetes containers
 order: 2
 beta: "Agent Runtime is in Beta and requires the [Agent Sandbox controller](/docs/agents/runtime/setup#cluster-prerequisites)."
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-16
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -41,7 +41,9 @@ Removing a choice preserves existing agents and their runtime configuration.
 
 ### Update the Image
 
-A saved agent keeps its image when Archestra upgrades. To use a newer image, change **Image** on the **Agent Runtime** tab. New runs use it. A continued run keeps its original image.
+Built-in coding agent images use the deployment's current catalog image unless pinned by digest. When the image reference changes, your next follow-up restarts the Agent on that image and keeps your files.
+
+If you change a custom image or the **Privileged mode** setting, which grants access to the host system, start a new run. Existing files are kept until their retention deadline.
 
 ## Models and Credentials
 
@@ -54,6 +56,7 @@ Each run gets a temporary virtual key. Provider keys stay in Archestra.
 What to know:
 
 - Each person connects their own subscription before their first run. Subscription usage shows in the logs, but it does not count toward cost limits.
+- Claude subscription runs use Opus unless you select another **Model**. **Claude account default** follows Claude Code's choice for your account.
 - Tools run with the permissions of the person who started the run.
 
 ### Clone a Private GitHub Repository
@@ -63,7 +66,7 @@ The built-in coding agent images use `GITHUB_TOKEN` to authenticate Git commands
 1. Save a GitHub token in [Credentials](/docs/admin/security/credentials), with access to the repository. Cloning needs read access to repository contents; pushing needs write access.
 2. Open the agent's **Agent Runtime** tab. Under **Environment**, click **Add variable**.
 3. Set **Key** to `GITHUB_TOKEN` and **Type** to **Secret**. Under **Secret source**, select your saved credential.
-4. Save the agent, start a new run, and ask it to clone the repository using its HTTPS URL. A successful clone creates the repository's directory in the workspace.
+4. Save the agent, start a new run, and ask it to clone the repository using its HTTPS URL. A successful clone creates the repository's directory in the Agent's container.
 
 What to know:
 
@@ -76,10 +79,11 @@ What to know:
 Select the agent in Chat or in a [Project](/docs/chat/projects) and send a task. This starts a **run**: a container that works on your task. Follow-ups continue the same run. The live terminal opens and shows startup progress. Attach files before you send, and the agent reads them in its container.
 
 - **Leave and come back:** the run keeps working. Reopen it from the sidebar and send a follow-up.
-- **Past runs:** the agent's **Runs** tab lists live and finished runs. **Resume** reopens a run without sending a message.
-- **Copy text:** turn off **Focus terminal** to select text in the browser.
+- **Past runs:** the agent's **Runs** tab lists live and finished runs. Select the **Open full view** expand icon for the larger terminal and run controls. For a retained run you started, select **Resume** to reopen it without sending a message.
+- **Stop a run:** the person who started it can select **Stop** in Chat or on the agent's **Runs** tab. Confirm with **Stop run**. Saved files and history remain available.
+- **Copy text:** select **Select text** to copy text with the browser. Select **Type** to use the running app's controls again.
 - **Follow-ups** reach the agent between its turns. To type them into its terminal instead, set **Steering** to **Terminal input** on the **Agent Runtime** tab.
-- **Open a web app:** **View connection details** gives a port forwarding command for the agent's **Ports to forward**.
+- **Open a web app:** for a run you started, select **Open full view**, then **More run actions → View connection details** for the agent's port forwarding command.
 
 What to know:
 
@@ -120,7 +124,7 @@ What to know:
 [Guardrails](/docs/agents/guardrails) check each tool call and tool result inside the run.
 
 - **Delegated runs** get their parent's restrictions before work starts. Follow-up instructions keep them. An answer crosses the guardrail check before another agent gets it.
-- **Review:** a remedy that needs a person shows on the run page. The run's owner approves or denies it. Client permission settings cannot approve it. A run with no eligible reviewer stays blocked.
+- **Review:** a remedy that needs a person shows in the run's live terminal, as the agent's own question card or form. The run's owner approves or denies it there. Client permission settings cannot approve it. An agent with no question card or form keeps the call blocked.
 - **File downloads:** a protected transfer checks the pinned file content before it returns a download command. It refuses a file that needs changes or that passes the protected export limit. The session owner can still download directly.
 - **Old sessions:** turning on Guardrails does not protect work that started before. Start a new session. Guardrails do not replace filesystem or network sandboxing.
 
@@ -135,6 +139,7 @@ What to know:
 ## Troubleshooting
 
 - **A run does not start:** see [Setup troubleshooting](/docs/agents/runtime/setup#troubleshooting).
+- **A run ends with a pod failure:** open **Failed details** for the Kubernetes pod name, failure reason, and container exit code when available. Share these details with your cluster operator; for example, `OOMKilled` identifies a memory termination and `Evicted` includes Kubernetes' eviction message.
 - **A model call fails with HTTP 500 and `x-should-retry: false`:** the organization's [Guardrails](/docs/agents/guardrails) policy is invalid. An administrator must fix it. Retrying does not help.
 - **A model call fails with HTTP 400 and names `X-Archestra-Runtime-Binding`:** the agent's image does not send the [run headers](/docs/agents/runtime/custom-images#send-the-run-headers). Rebuild it on a current maintained image, then start a new run.
 - **Find a run's traffic:** LLM Proxy Logs and MCP Gateway Logs show the run ID. For health metrics, see [Agent Runtime Health](/docs/admin/observability/metrics#agent-runtime-health).

@@ -165,7 +165,7 @@ export function ManageUsersContent({
   // Subscribe to live mcp-servers query to get fresh data. We fetch all
   // servers (no catalogId filter) and keep those installed from this catalog.
   const { data: allServersUnfiltered = [], isFetched: serversFetched } =
-    useMcpServers();
+    useMcpServers({ includeAssignedAgents: false });
   const { data: catalogItems } = useInternalMcpCatalog({});
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
@@ -580,7 +580,6 @@ export function ManageUsersContent({
                     scope: uninstallTarget.scope,
                     teamId: uninstallTarget.teamId,
                   },
-                  assignedAgents: uninstallTarget.assignedAgents ?? [],
                 },
               ]
             : []

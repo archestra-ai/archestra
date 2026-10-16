@@ -17,7 +17,7 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { TeamTokenModel, UserTokenModel } from "@/models";
+import { UserTokenModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import mcpGatewayRoutes from "./index";
@@ -46,16 +46,12 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
   test("a client on the stateless revision gets its question as an input request, never mid-call", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     const organizationId = (await makeOrganization()).id;
     // The token must belong to the agent's organization.
     const agent = await makeAgent({ organizationId });
-    const token = await TeamTokenModel.create({
-      organizationId,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId });
     await app.listen({ port: 0, host: "127.0.0.1" });
     const { port } = app.server.address() as AddressInfo;
     const url = `http://127.0.0.1:${port}/v1/mcp/${agent.id}`;
@@ -133,16 +129,12 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
   test("a legacy client that declared elicitation at initialize gets the same round trip", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     // The token must belong to the agent's organization.
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
     await app.listen({ port: 0, host: "127.0.0.1" });
     const { port } = app.server.address() as AddressInfo;
     const url = `http://127.0.0.1:${port}/v1/mcp/${agent.id}`;
@@ -254,15 +246,11 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
   test("a legacy client's answer reaches the replica that asked when the load balancer sends it to another", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
     // A second replica: its own routes and registry, the same shared cache.
     const otherReplica = await gatewayApp(
       new PendingInboundRequests({ shared: cachedPendingRequests }),
@@ -345,16 +333,12 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
   test("a client without elicitation keeps a plain JSON response", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     // The token must belong to the agent's organization.
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
     await app.listen({ port: 0, host: "127.0.0.1" });
     const { port } = app.server.address() as AddressInfo;
     const url = `http://127.0.0.1:${port}/v1/mcp/${agent.id}`;
@@ -399,23 +383,17 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
   test("routes client cancellation to the original pending transport", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     const organizationId = (await makeOrganization()).id;
     // The token must belong to the agent's organization.
     const agent = await makeAgent({ organizationId });
-    const token = await TeamTokenModel.create({
-      organizationId,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId });
     const onmessage = vi.fn();
     const transport = {
       onmessage,
     } as unknown as StreamableHTTPServerTransport;
-    const storedToken = await TeamTokenModel.validateToken(token.value);
-    if (!storedToken) throw new Error("token was not persisted");
-    const caller = `token:${storedToken.id}`;
+    const caller = `token:${token.tokenId}`;
     const wireId = await pendingInboundRequests.register({
       id: 17,
       transport,
@@ -510,17 +488,11 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
   test("a storage failure while claiming an answer is not acknowledged", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     const organizationId = (await makeOrganization()).id;
     const agent = await makeAgent({ organizationId });
-    const token = await TeamTokenModel.create({
-      organizationId,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
-    const storedToken = await TeamTokenModel.validateToken(token.value);
-    if (!storedToken) throw new Error("token was not persisted");
+    const token = await makeServiceAccountToken({ organizationId });
     const onmessage = vi.fn();
     const transport = {
       onmessage,
@@ -540,7 +512,7 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
         transport,
         agentId: agent.id,
         organizationId,
-        caller: `token:${storedToken.id}`,
+        caller: `token:${token.tokenId}`,
       });
       const response = await broken.inject({
         method: "POST",
@@ -565,16 +537,12 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
   test("a client without elicitation on the same token does not take another client's forms away", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     const organizationId = (await makeOrganization()).id;
     // The token must belong to the agent's organization.
     const agent = await makeAgent({ organizationId });
-    const token = await TeamTokenModel.create({
-      organizationId,
-      name: "Shared Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId });
     await app.listen({ port: 0, host: "127.0.0.1" });
     const { port } = app.server.address() as AddressInfo;
     const url = `http://127.0.0.1:${port}/v1/mcp/${agent.id}`;
@@ -642,23 +610,14 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
   test("a legacy client keeps its forms when this process no longer remembers it", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     const organizationId = (await makeOrganization()).id;
     // The token must belong to the agent's organization.
     const agent = await makeAgent({ organizationId });
-    const token = await TeamTokenModel.create({
-      organizationId,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId });
     // Another caller who can reach the same agent.
-    const otherToken = await TeamTokenModel.create({
-      organizationId,
-      name: "Other Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const otherToken = await makeServiceAccountToken({ organizationId });
     await app.listen({ port: 0, host: "127.0.0.1" });
     const { port } = app.server.address() as AddressInfo;
     const url = `http://127.0.0.1:${port}/v1/mcp/${agent.id}`;
@@ -760,22 +719,13 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
   test("only the caller that was asked can answer, under an id no other question shares", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     // Both tokens reach the agent: they share its organization.
     const organizationId = (await makeOrganization()).id;
     const agent = await makeAgent({ organizationId });
-    const ownerToken = await TeamTokenModel.create({
-      organizationId,
-      name: "Owner Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
-    const otherToken = await TeamTokenModel.create({
-      organizationId,
-      name: "Other Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const ownerToken = await makeServiceAccountToken({ organizationId });
+    const otherToken = await makeServiceAccountToken({ organizationId });
     await app.listen({ port: 0, host: "127.0.0.1" });
     const { port } = app.server.address() as AddressInfo;
     const url = `http://127.0.0.1:${port}/v1/mcp/${agent.id}`;
@@ -871,15 +821,11 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
   test("conflicting answers from two replicas deliver one choice", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
     const otherReplica = await gatewayApp(
       new PendingInboundRequests({ shared: cachedPendingRequests }),
     );
@@ -959,15 +905,11 @@ describe("MCP Gateway - in-band elicitation round trip", () => {
   test("a failed registration does not send the form", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({ organizationId: org.id });
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Org Token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
     const broken = await gatewayApp(
       new PendingInboundRequests({
         shared: {

@@ -7,7 +7,6 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { TeamTokenModel } from "@/models";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
@@ -95,18 +94,14 @@ describe("MCP Gateway GET transport", () => {
   test("declines GET for UUID and slug URLs unless an event stream is requested", async ({
     makeAgent,
     makeOrganization,
+    makeServiceAccountToken,
   }) => {
     const org = await makeOrganization();
     const agent = await makeAgent({
       organizationId: org.id,
       agentType: "mcp_gateway",
     });
-    const token = await TeamTokenModel.create({
-      organizationId: org.id,
-      name: "Gateway token",
-      teamId: null,
-      isOrganizationToken: true,
-    });
+    const token = await makeServiceAccountToken({ organizationId: org.id });
 
     for (const identifier of [agent.id, agent.slug]) {
       for (const accept of ["application/json", "*/*", undefined]) {

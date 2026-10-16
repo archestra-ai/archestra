@@ -86,7 +86,9 @@ export function SelectMcpServerCredentialTypeAndTeams({
   // picks a new one, so the scope is locked to the existing value rather than
   // disabled because the scope is "already installed".
   const lockToExistingScope = isReinstall || isReauth;
-  const { data: installedServers } = useMcpServers();
+  const { data: installedServers } = useMcpServers({
+    includeAssignedAgents: false,
+  });
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
 

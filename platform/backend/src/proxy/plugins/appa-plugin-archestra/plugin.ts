@@ -760,7 +760,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // ask_user to it. Otherwise the model calls a tool that cannot return
       // the user's answer, and then asks again in prose.
       const nativeQuestion =
-        !binding.runtimeSessionId &&
         binding.adapter?.nativeQuestion &&
         binding.adapter.nativeQuestion.isAvailable?.(binding.requestHeaders) !==
           false &&
@@ -1969,7 +1968,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     /** The call carries a server-held review, not arguments the model wrote. */
     review: boolean,
   ): LlmProxyToolCallsContext["toolCalls"][number] {
-    if (binding.runtimeSessionId) return call;
     const native = binding.adapter?.nativeQuestion;
     if (
       !native?.fromAskUser ||
@@ -5441,7 +5439,6 @@ function inspectsNatively(
   const native = binding.adapter?.nativeQuestion;
   return (
     binding.adapter?.id === "claude-code" &&
-    !binding.runtimeSessionId &&
     !!native?.fromAskUser &&
     native.isAvailable?.(binding.requestHeaders) !== false &&
     declaresNativeQuestion(binding, native.toolName) &&

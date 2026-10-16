@@ -94,8 +94,18 @@ export const InsertSkillSandboxSkillMountSchema = createInsertSchema(
   createdAt: true,
 });
 
-export type SkillSandbox = z.infer<typeof SelectSkillSandboxSchema>;
-export type InsertSkillSandbox = z.infer<typeof InsertSkillSandboxSchema>;
+/**
+ * A sandbox with its owner as one principal id: a person's user id, or
+ * `service-account:<id>`. The model maps it to the owner columns.
+ */
+export type SkillSandbox = Omit<
+  z.infer<typeof SelectSkillSandboxSchema>,
+  "userId" | "serviceAccountId"
+> & { userId: string };
+export type InsertSkillSandbox = Omit<
+  z.infer<typeof InsertSkillSandboxSchema>,
+  "userId" | "serviceAccountId"
+> & { userId: string };
 export type SkillSandboxCommand = z.infer<
   typeof SelectSkillSandboxCommandSchema
 >;

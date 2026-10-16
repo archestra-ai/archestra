@@ -65,7 +65,6 @@ describe("config routes", () => {
       maintenanceMode: null,
       siteNotificationMessage: null,
       enterpriseCoreActive: expect.any(Boolean),
-      mcpSandboxDomain: null,
       analytics: {
         enabled: expect.any(Boolean),
         instanceId: expect.any(String),

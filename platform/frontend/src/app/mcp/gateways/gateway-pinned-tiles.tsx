@@ -1,7 +1,6 @@
 "use client";
 
 import type { AgentType } from "@archestra/shared";
-import Link from "next/link";
 import type { ReactNode } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import {
@@ -9,6 +8,7 @@ import {
   getAgentActionModel,
 } from "@/components/agent-pages/agent-actions-model";
 import { agentDetailHref } from "@/components/agent-pages/agent-page-config";
+import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
 import { type PinnedTile, PinnedTiles } from "@/components/pinned-tiles";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -127,7 +127,9 @@ export function GatewayPinnedTiles({
         action:
           connect.visible && connect.href ? (
             <Button size="sm" asChild>
-              <Link href={connect.href}>{connect.label}</Link>
+              <IntentPrefetchLink href={connect.href}>
+                {connect.label}
+              </IntentPrefetchLink>
             </Button>
           ) : undefined,
         // A pin the viewer made, on a gateway that is not also pinned for

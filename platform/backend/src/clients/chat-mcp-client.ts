@@ -291,43 +291,20 @@ export const __test = {
 
 /**
  * Select the token the chat MCP client presents to the gateway:
- * - a team token's call uses that team's token;
  * - a service account (`service-account:<id>`) gets no bearer value: its
  *   tools are listed in-process (see {@link getChatMcpTools});
  * - the headless "system" sentinel uses the organization token;
- * - a person uses their personal token, then a team token for a team they
- *   share with the profile.
+ * - a person uses their personal token.
  *
  * @param agentId - The profile (agent) ID
  * @param userId - The user requesting access
- * @param actorTeamId - Set when a team token made the call; uses that team's token
  * @returns Token value and metadata, or null if no token available
  */
 export async function selectMCPGatewayToken(
   agentId: string,
   userId: string,
   organizationId: string,
-  actorTeamId?: string,
 ): Promise<McpGatewayToken | null> {
-  if (actorTeamId) {
-    const teamToken = await TeamTokenModel.findTeamToken(actorTeamId);
-    if (teamToken) {
-      const tokenValue = await TeamTokenModel.getTokenValue(teamToken.id);
-      if (tokenValue) {
-        logger.info(
-          { agentId, actorTeamId, tokenId: teamToken.id },
-          "Using the requesting team's own token for chat MCP client",
-        );
-        return {
-          tokenValue,
-          tokenId: teamToken.id,
-          teamId: actorTeamId,
-          isOrganizationToken: false,
-        };
-      }
-    }
-  }
-
   // Synthetic principals have no users row, so they can never own a personal
   // user token. A service account needs no bearer value at all: its tools are
   // listed and run in-process as the account, with the same agent access
@@ -387,13 +364,7 @@ export async function selectMCPGatewayToken(
     };
   }
 
-  // Get user's team IDs and profile's team IDs (needed for fallback token selection)
-  const userTeamIds = await TeamModel.getUserTeamIds(userId);
-  const profileTeamIds = await AgentTeamModel.getTeamsForAgent(agentId);
-  const commonTeamIds = userTeamIds.filter((id) => profileTeamIds.includes(id));
-
-  // 1. Always try to get/create a personal user token first
-  // This ensures userId is available in the token for global catalog tools
+  // A personal token carries the userId that global catalog tools need.
   const userToken = await UserTokenModel.ensureUserToken(
     userId,
     organizationId,
@@ -417,47 +388,7 @@ export async function selectMCPGatewayToken(
     };
   }
 
-  // Get all team tokens for this organization
-  const tokens = await TeamTokenModel.findAll(organizationId);
-
-  // 2. Try to find a team token where user is in that team and profile is assigned to it
-  if (commonTeamIds.length > 0) {
-    for (const token of tokens) {
-      if (token.teamId && commonTeamIds.includes(token.teamId)) {
-        const tokenValue = await TeamTokenModel.getTokenValue(token.id);
-        if (tokenValue) {
-          logger.info(
-            {
-              agentId,
-              userId,
-              tokenId: token.id,
-              teamId: token.teamId,
-            },
-            "Selected team-scoped token for chat MCP client (fallback)",
-          );
-          return {
-            tokenValue,
-            tokenId: token.id,
-            teamId: token.teamId,
-            isOrganizationToken: false,
-          };
-        }
-      }
-    }
-  }
-
-  logger.warn(
-    {
-      agentId,
-      userId,
-      userTeamCount: userTeamIds.length,
-      profileTeamCount: profileTeamIds.length,
-      commonTeamCount: commonTeamIds.length,
-      tokenCount: tokens.length,
-    },
-    "No valid token found for user",
-  );
-
+  logger.warn({ agentId, userId }, "No valid token found for user");
   return null;
 }
 
@@ -870,7 +801,6 @@ export async function getChatMcpTools({
   agentId,
   userId,
   organizationId,
-  actorTeamId,
   chatOpsBindingId,
   chatOpsThreadId,
   chatOpsPinnedAgentId,
@@ -899,8 +829,6 @@ export async function getChatMcpTools({
   agentId: string;
   userId: string;
   organizationId: string;
-  /** Set when a team token made the call (userId is then "system") */
-  actorTeamId?: string;
   /** ChatOps channel binding ID for Slack/MS Teams-triggered executions */
   chatOpsBindingId?: string;
   /** ChatOps thread identifier for thread-scoped agent overrides */
@@ -1045,7 +973,6 @@ export async function getChatMcpTools({
     agentId,
     userId,
     organizationId,
-    actorTeamId,
   );
   if (!mcpGwToken) {
     logger.warn(

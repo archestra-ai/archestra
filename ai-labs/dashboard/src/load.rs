@@ -2,7 +2,7 @@
 //! jsonl parsing. Reads the shared contract from `archestra-bench-core`; never writes anything.
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::time::SystemTime;
 
 use archestra_bench_core::{
@@ -318,7 +318,10 @@ fn is_run_dir(dir: &Path) -> bool {
 /// Scan the experiments dir for runs, newest (by dir mtime) first. A missing experiments dir is an
 /// empty list, not an error — the dashboard should come up before the first run exists.
 pub fn list_runs(experiments_dir: &Path) -> Result<Vec<RunListEntry>> {
-    let entries = match std::fs::read_dir(experiments_dir) {
+    let Ok(root) = experiments_dir.canonicalize() else {
+        return Ok(Vec::new());
+    };
+    let entries = match std::fs::read_dir(&root) {
         Ok(entries) => entries,
         Err(_) => return Ok(Vec::new()),
     };
@@ -346,26 +349,33 @@ pub fn list_runs(experiments_dir: &Path) -> Result<Vec<RunListEntry>> {
     Ok(runs)
 }
 
-/// Load one run by id. `Ok(None)` when `run_id` does not exactly match a scanned run dir name —
-/// the id is matched against directory listing names, never joined into a path, so traversal
-/// sequences can't escape the experiments dir.
+/// Load one run by id. `Ok(None)` when `run_id` is not a plain run dir name under the experiments
+/// dir, or the dir it names is not a run (see [`resolve_run_dir`] for the traversal rules).
 pub fn load_run(experiments_dir: &Path, run_id: &str) -> Result<Option<Run>> {
-    let entries = match std::fs::read_dir(experiments_dir) {
-        Ok(entries) => entries,
-        Err(_) => return Ok(None),
+    let Some(dir) = resolve_run_dir(experiments_dir, run_id) else {
+        return Ok(None);
     };
-    for entry in entries {
-        let entry = entry.wrap_err("reading experiments dir entry")?;
-        if entry.file_name().to_string_lossy() != run_id {
-            continue;
-        }
-        let dir = entry.path();
-        if !is_run_dir(&dir) {
-            return Ok(None);
-        }
-        return Ok(Some(load_run_dir(&dir, run_id)?));
+    Ok(Some(load_run_dir(&dir, run_id)?))
+}
+
+/// Resolve a run id to its directory directly under `experiments_dir`. The id must be one plain
+/// path component (no `..`, separators, or absolute paths), and the canonical target must stay
+/// inside the canonical experiments root, so a symlink cannot point a run outside it.
+fn resolve_run_dir(experiments_dir: &Path, run_id: &str) -> Option<PathBuf> {
+    if !is_plain_run_id(run_id) {
+        return None;
     }
-    Ok(None)
+    let root = experiments_dir.canonicalize().ok()?;
+    let dir = root.join(run_id).canonicalize().ok()?;
+    if !dir.starts_with(&root) || !is_run_dir(&dir) {
+        return None;
+    }
+    Some(dir)
+}
+
+fn is_plain_run_id(run_id: &str) -> bool {
+    let mut components = Path::new(run_id).components();
+    matches!(components.next(), Some(Component::Normal(_))) && components.next().is_none()
 }
 
 fn load_run_dir(dir: &Path, id: &str) -> Result<Run> {

@@ -52,9 +52,9 @@ test.describe("Context window visualizer", () => {
       .first();
     await expect(modelSelectorTrigger).toBeVisible({ timeout: 10_000 });
     await modelSelectorTrigger.click();
-    await expect(
-      page.getByRole("dialog", { name: "Select Model" }),
-    ).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByTestId(E2eTestId.ChatSetupMenu)).toBeVisible({
+      timeout: 5_000,
+    });
     await selectRuntimeModelFromDialog(page, runtimeModel);
 
     // Send a message and wait for the assistant turn to finish — the breakdown
@@ -189,9 +189,9 @@ test.describe("Context window visualizer", () => {
       .first();
     await expect(modelSelectorTrigger).toBeVisible({ timeout: 10_000 });
     await modelSelectorTrigger.click();
-    await expect(
-      page.getByRole("dialog", { name: "Select Model" }),
-    ).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByTestId(E2eTestId.ChatSetupMenu)).toBeVisible({
+      timeout: 5_000,
+    });
     await selectRuntimeModelFromDialog(page, runtimeModel);
 
     const testMessageId = `context-compact-e2e-${Math.random().toString(36).slice(2, 10)}`;

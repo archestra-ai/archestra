@@ -40,7 +40,6 @@ import ServiceAccountModel from "@/models/service-account";
 import SkillModel from "@/models/skill";
 import SkillShareLinkModel from "@/models/skill-share-link";
 import TeamModel from "@/models/team";
-import TeamTokenModel from "@/models/team-token";
 import UserTokenModel from "@/models/user-token";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
 
@@ -171,7 +170,11 @@ export const AUDIT_DECISIONS = {
   scheduleTriggersTable: { audited: true, model: ScheduleTriggerModel },
   skillsTable: { audited: true, model: SkillModel },
   teamsTable: { audited: true, model: TeamModel },
-  teamTokensTable: { audited: true, model: TeamTokenModel },
+  teamTokensTable: {
+    audited: false,
+    reason:
+      "Retired: read only by the startup migration onto service accounts; no route writes it",
+  },
   toolsTable: {
     audited: false,
     reason:

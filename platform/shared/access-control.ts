@@ -535,8 +535,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.StartAgentRun]: {},
   [RouteId.GetMyAgentRuns]: {},
   [RouteId.GetMyAgentRun]: {},
-  [RouteId.GetAgentRunOpenappaReview]: {},
-  [RouteId.DecideAgentRunOpenappaReview]: {},
   [RouteId.UpdateAgentRun]: {},
   [RouteId.CancelAgentRun]: {},
   [RouteId.ContinueAgentRun]: {},
@@ -693,15 +691,6 @@ export const requiredEndpointPermissionsMap: Partial<
   // Labels are cross-type — any agent-type read permission suffices (checked in handler)
   [RouteId.GetLabelKeys]: {},
   [RouteId.GetLabelValues]: {},
-  [RouteId.GetTokens]: {
-    team: ["read"],
-  },
-  [RouteId.GetTokenValue]: {
-    team: ["read"],
-  },
-  [RouteId.RotateToken]: {
-    team: ["read"],
-  },
   [RouteId.GetTools]: {
     mcpRegistry: ["read"],
   },
@@ -1909,27 +1898,6 @@ export const requiredEndpointPermissionsMap: Partial<
   // Same trust model as diagnostics: the host page posts the viewer's render
   // screenshot, the handler re-checks app-visibility.
   [RouteId.PostAppRenderScreenshot]: {},
-  // App session recordings live client-side (IndexedDB); sharing forwards a
-  // client-assembled plugin to the public demo catalog. Any viewer of an app
-  // they can see may share their own recording; the handler re-checks app
-  // visibility and the feature flag.
-  // Reads the recording's conversation to draft the enhancement, so it takes
-  // the same permission as the chat-scoped generation routes.
-  [RouteId.EnhanceAppRecording]: { chat: ["update"] },
-  [RouteId.RenderAppRecordingVideo]: { chat: ["update"] },
-  [RouteId.GetAppRecordingRenderStatus]: { chat: ["update"] },
-  [RouteId.DownloadAppRecordingVideo]: { chat: ["update"] },
-  [RouteId.CancelAppRecordingRender]: { chat: ["update"] },
-  // Reviewing a hackathon submission: any authenticated org member may open the
-  // read-only review player. The plugin it serves is public GitHub data fetched
-  // server-side, so no per-resource permission is required beyond being signed in.
-  [RouteId.ReviewAppRecording]: {},
-  // Same chat-scoped permission as the recording routes above: sharing starts
-  // from the player inside a chat session; the handler re-checks the feature
-  // gates.
-  [RouteId.AppGalleryDeviceAuthStart]: { chat: ["update"] },
-  [RouteId.AppGalleryDeviceAuthPoll]: { chat: ["update"] },
-
   // Config endpoint - any authenticated user can access
   [RouteId.GetConfig]: {},
   // Bundles the signed-in user's own startup reads; each part is self-scoped.

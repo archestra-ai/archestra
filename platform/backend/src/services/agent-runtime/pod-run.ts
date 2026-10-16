@@ -122,7 +122,7 @@ async function startAgentRunSession(params: {
   )
     throw new ApiError(
       409,
-      "The prior workspace is unavailable for this actor, Agent, or environment",
+      "The prior run is unavailable for this actor, Agent, or environment",
     );
 
   let task = params.task;
@@ -248,7 +248,7 @@ async function startAgentRunSession(params: {
       if (!claimed)
         throw new ApiError(
           409,
-          "This workspace is already in use or its retention deadline has passed",
+          "This Agent is already in use or its saved files have reached their retention deadline",
         );
       claimedWorkspace = true;
       const previous = await AgentRunModel.findByTaskId(workspace.lastTaskId);

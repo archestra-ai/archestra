@@ -495,7 +495,7 @@ describe("McpClient", () => {
     await callAs(firstCaller.id, "call-first-2");
     await callAs(secondCaller.id, "call-second-1");
 
-    const callWithOrganizationToken = (tokenId: string, callId: string) =>
+    const callWithServiceAccountToken = (tokenId: string, callId: string) =>
       mcpClient.executeToolCallForOwner(
         {
           id: callId,
@@ -506,12 +506,13 @@ describe("McpClient", () => {
         {
           tokenId,
           teamId: null,
-          isOrganizationToken: true,
+          isOrganizationToken: false,
+          serviceAccountId: `sa-${tokenId}`,
         },
       );
-    await callWithOrganizationToken("organization-token-one", "call-org-1");
-    await callWithOrganizationToken("organization-token-one", "call-org-2");
-    await callWithOrganizationToken("organization-token-two", "call-org-3");
+    await callWithServiceAccountToken("service-account-token-one", "call-sa-1");
+    await callWithServiceAccountToken("service-account-token-one", "call-sa-2");
+    await callWithServiceAccountToken("service-account-token-two", "call-sa-3");
 
     const anonymousResult = await mcpClient.executeToolCallForOwner(
       {
@@ -745,6 +746,40 @@ describe("McpClient", () => {
     expect(mockListTools).toHaveBeenCalledWith(undefined, {
       signal: controller.signal,
     });
+  });
+
+  test.each([
+    false,
+    true,
+  ])("persists processing latency for an upstream call (failure=%s)", async (failure) => {
+    const tool = await ToolModel.createToolIfNotExists({
+      name: "github-mcp-server__list_repos",
+      description: "List repos",
+      parameters: {},
+      catalogId,
+    });
+    await AgentToolModel.create(agentId, tool.id, { mcpServerId });
+    let now = 1000;
+    const clock = vi.spyOn(performance, "now").mockImplementation(() => now);
+    mockCallTool.mockImplementation(async () => {
+      now += 386;
+      if (failure) throw new Error("Invalid tool arguments");
+      return { content: [{ type: "text", text: "ok" }], isError: false };
+    });
+    try {
+      const result = await mcpClient.executeToolCallForOwner(
+        { id: "timed-call", name: tool.name, arguments: {} },
+        agentOwner(agentId),
+      );
+      expect(result.isError).toBe(failure);
+      const [row] = await db
+        .select()
+        .from(schema.mcpToolCallsTable)
+        .where(eq(schema.mcpToolCallsTable.agentId, agentId));
+      expect(row.durationMs).toBe(386);
+    } finally {
+      clock.mockRestore();
+    }
   });
 
   test("rethrows an aborted call instead of retrying it", async () => {
@@ -2052,7 +2087,7 @@ describe("McpClient", () => {
         );
       });
 
-      test("still offers the install link for a team-token caller (fail-open: no user identity to check accessibility against)", async ({
+      test("still offers the install link for a team service-account caller (fail-open: no user identity to check accessibility against)", async ({
         makeMember,
         makeOrganization,
         makeTeam,
@@ -2063,11 +2098,11 @@ describe("McpClient", () => {
         await makeMember(owner.id, org.id, { role: "member" });
         const team = await makeTeam(org.id, owner.id);
 
-        // A personal-scope catalog item owned by `owner`. A team token has no
-        // user identity, so accessibility cannot be evaluated for it; the
+        // A personal-scope catalog item owned by `owner`. A service account has
+        // no user identity, so accessibility cannot be evaluated for it; the
         // fail-open MUST keep offering the install link (the caller behind the
         // token may still be able to act on it). If accessibility were ever
-        // computed for team tokens, this personal item would be inaccessible
+        // computed for service accounts, this personal item would be inaccessible
         // and the link would be dropped — so this pin guards the fail-open.
         const catalogItem = await InternalMcpCatalogModel.create(
           {
@@ -2095,6 +2130,7 @@ describe("McpClient", () => {
             tokenId: "tok-team",
             teamId: team.id,
             isOrganizationToken: false,
+            serviceAccountId: randomUUID(),
             organizationId: org.id,
           },
         );
@@ -3966,11 +4002,12 @@ describe("McpClient", () => {
         expect(result?.isError).toBeFalsy();
       });
 
-      test("returns install URL with team context when team token has no server", async ({
+      test("returns install URL naming the service account when a team-linked account has no server", async ({
         makeUser,
         makeTeam,
         makeOrganization,
       }) => {
+        const serviceAccountId = randomUUID();
         const org = await makeOrganization();
         const testUser = await makeUser({ email: "teamauth@example.com" });
         const team = await makeTeam(org.id, testUser.id, {
@@ -4008,26 +4045,29 @@ describe("McpClient", () => {
           toolCall,
           agentOwner(agentId),
           {
-            tokenId: "team-token",
+            tokenId: "team-service-account-token",
             teamId: team.id,
             isOrganizationToken: false,
+            serviceAccountId,
           },
         );
 
         expect(result).toMatchObject({
           isError: true,
         });
-        expect(result?.error).toContain(`team: ${team.id}`);
+        // A team-linked account is named as itself, never as its team.
+        expect(result?.error).toContain(`service account: ${serviceAccountId}`);
         expect(result?.error).toContain(
           `${MCP_CATALOG_INSTALL_PATH}?install=${dynCatalog.id}`,
         );
       });
 
-      test("returns auth-required error with team context when servers exist but no owner is in team", async ({
+      test("returns auth-required error naming the service account when no owner is in its team", async ({
         makeUser,
         makeTeam,
         makeOrganization,
       }) => {
+        const serviceAccountId = randomUUID();
         const org = await makeOrganization();
         // Two users: one owns the server, the other is in the team
         const serverOwner = await makeUser({
@@ -4081,14 +4121,16 @@ describe("McpClient", () => {
           arguments: { channel: "#general", text: "hello" },
         };
 
-        // Call with teamMember's team token - serverOwner is NOT in this team
+        // Call as a service account acting for the team - serverOwner is NOT
+        // in this team
         const result = await mcpClient.executeToolCallForOwner(
           toolCall,
           agentOwner(agentId),
           {
-            tokenId: "team-token-no-cred",
+            tokenId: "team-service-account-token-no-cred",
             teamId: team.id,
             isOrganizationToken: false,
+            serviceAccountId,
           },
         );
 
@@ -4096,7 +4138,8 @@ describe("McpClient", () => {
         expect(result?.error).toContain(
           `Authentication required for "slack-mcp-server"`,
         );
-        expect(result?.error).toContain(`team: ${team.id}`);
+        // A team-linked account is named as itself, never as its team.
+        expect(result?.error).toContain(`service account: ${serviceAccountId}`);
         expect(result?.error).toContain(
           `${config.frontendBaseUrl}${MCP_CATALOG_INSTALL_PATH}?install=${dynCatalog.id}`,
         );
@@ -6509,9 +6552,10 @@ describe("McpClient", () => {
           },
           agentOwner(agentId),
           {
-            tokenId: "team-token",
-            teamId: team.id,
+            tokenId: "user-token",
+            teamId: null,
             isOrganizationToken: false,
+            isUserToken: true,
             userId: teamMember.id,
           },
         );
@@ -6915,7 +6959,7 @@ describe("McpClient", () => {
         );
       });
 
-      test("returns config error when a team token hits a personal static assignment", async ({
+      test("returns config error when a team service account hits a personal static assignment", async ({
         makeUser,
         makeTeam,
         makeOrganization,
@@ -6983,9 +7027,10 @@ describe("McpClient", () => {
           toolCall,
           agentOwner(agentId),
           {
-            tokenId: "team-token",
+            tokenId: "team-service-account-token",
             teamId: team.id,
             isOrganizationToken: false,
+            serviceAccountId: randomUUID(),
           },
         );
 
@@ -8461,7 +8506,8 @@ describe("McpClient", () => {
           {
             tokenId: "tok-1",
             teamId: null,
-            isOrganizationToken: true,
+            isOrganizationToken: false,
+            serviceAccountId: "sa-1",
             passthroughHeaders: {
               "x-correlation-id": "abc-123",
               "x-tenant-id": "tenant-1",
@@ -8508,7 +8554,8 @@ describe("McpClient", () => {
           {
             tokenId: "tok-1",
             teamId: null,
-            isOrganizationToken: true,
+            isOrganizationToken: false,
+            serviceAccountId: "sa-1",
             passthroughHeaders: {
               authorization: "Bearer malicious-override",
               "x-custom": "allowed",
@@ -9847,20 +9894,21 @@ describe("pickInstallForCaller (caller-scoped install selection)", () => {
     expect(picked?.id).toBe(orgInstall.id);
   });
 
-  // Team-scoped API tokens (routes/mcp-gateway.ts sets tokenAuth.teamId, no
-  // userId) take the separate `if (tokenAuth?.teamId)` branch — untouched by
-  // every test above, which all use a userId-bearing token.
-  const teamToken = (
-    teamId: string,
+  // Service-account callers carry no userId; the team the account acts for
+  // arrives as tokenAuth.teamId and takes the separate `if (tokenAuth?.teamId)`
+  // branch — untouched by every test above, which all use a userId-bearing token.
+  const serviceAccountToken = (
+    teamId: string | null,
     organizationId: string,
   ): TokenAuthContext => ({
     tokenId: randomUUID(),
     teamId,
     isOrganizationToken: false,
+    serviceAccountId: randomUUID(),
     organizationId,
   });
 
-  test("selects the caller's team install for a team-scoped token (no userId)", async ({
+  test("selects the team install for a service account acting for that team", async ({
     makeOrganization,
     makeTeam,
     makeUser,
@@ -9886,13 +9934,13 @@ describe("pickInstallForCaller (caller-scoped install selection)", () => {
 
     const picked = await pickInstallForCaller(
       [otherTeamInstall, teamInstall],
-      teamToken(team.id, org.id),
+      serviceAccountToken(team.id, org.id),
     );
 
     expect(picked?.id).toBe(teamInstall.id);
   });
 
-  test("falls back to an org-scoped install for a team-scoped token when the team has no install", async ({
+  test("falls back to an org-scoped install for a team service account when the team has no install", async ({
     makeOrganization,
     makeTeam,
     makeUser,
@@ -9912,7 +9960,7 @@ describe("pickInstallForCaller (caller-scoped install selection)", () => {
 
     const picked = await pickInstallForCaller(
       [orgInstall],
-      teamToken(team.id, org.id),
+      serviceAccountToken(team.id, org.id),
     );
 
     expect(picked?.id).toBe(orgInstall.id);
@@ -9958,7 +10006,7 @@ describe("pickInstallForCaller (caller-scoped install selection)", () => {
     ).toBe(orgInstall.id);
   });
 
-  test("fails closed for a team-scoped token when no team or org install is reachable", async ({
+  test("fails closed for a team service account when no team or org install is reachable", async ({
     makeOrganization,
     makeTeam,
     makeUser,
@@ -9979,10 +10027,41 @@ describe("pickInstallForCaller (caller-scoped install selection)", () => {
 
     const picked = await pickInstallForCaller(
       [otherTeamInstall],
-      teamToken(team.id, org.id),
+      serviceAccountToken(team.id, org.id),
     );
 
     expect(picked).toBeUndefined();
+  });
+
+  test("a service account with no team skips team installs and uses the org install", async ({
+    makeOrganization,
+    makeTeam,
+    makeUser,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const org = await makeOrganization();
+    const creator = await makeUser();
+    const team = await makeTeam(org.id, creator.id);
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
+
+    const teamInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      teamId: team.id,
+      scope: "team",
+    });
+    const orgInstall = await makeMcpServer({
+      catalogId: catalog.id,
+      ownerId: null,
+      scope: "org",
+    });
+
+    const picked = await pickInstallForCaller(
+      [teamInstall, orgInstall],
+      serviceAccountToken(null, org.id),
+    );
+
+    expect(picked?.id).toBe(orgInstall.id);
   });
 });
 

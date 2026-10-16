@@ -29,7 +29,6 @@ import {
 import { useConfig } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useMessagingChannelCatalog } from "@/lib/integration-overrides";
-import { cn } from "@/lib/utils/tailwind";
 import { agentEditHref } from "./agent-page-config";
 
 /**
@@ -57,23 +56,22 @@ export function AgentWorkSources({
   const { data: canReadChannels } = useHasPermissions({
     organizationSettings: ["read"],
   });
-  // The setup checklist above says what is missing; until it is settled
-  // these routes lead to a run that cannot start, so they read as later.
+  // The setup section above says what is missing. Every route here still
+  // works before then (setting up a channel or a laptop is preparation, and
+  // chat explains what is missing), so they stay at full strength and only
+  // the caption says runs wait.
   const preflight = useAgentRuntimePreflight(agentId, hasRuntime);
   const awaitingSetup = hasRuntime && preflight.data?.ready === false;
   return (
     <div className="space-y-4">
-      <section
-        aria-labelledby="agent-work-sources"
-        className={cn("space-y-3", awaitingSetup && "opacity-60")}
-      >
+      <section aria-labelledby="agent-work-sources" className="space-y-3">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h2 id="agent-work-sources" className="text-base font-semibold">
             {hasRuntime ? "Give it work" : "Where people use it"}
           </h2>
           {awaitingSetup && (
             <span className="text-[13px] text-muted-foreground">
-              Available once setup above is done.
+              Runs start once setup above is done.
             </span>
           )}
         </div>

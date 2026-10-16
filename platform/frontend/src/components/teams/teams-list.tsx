@@ -62,14 +62,12 @@ export function TeamsList() {
   const setActionButton = useSetSettingsAction();
   const queryClient = useQueryClient();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const sectionParam = searchParams.get("section");
   const teamId = searchParams.get("team");
   const { data: teamFromUrl } = useTeam(teamId ?? undefined);
   const {
     entity: managedTeam,
     open: openManagementDialog,
     close: closeManagementDialog,
-    openedFromUrl,
   } = useDialogUrlParam<ManagedTeam>({
     paramName: "team",
     entityFromUrl: teamFromUrl ?? null,
@@ -443,9 +441,6 @@ export function TeamsList() {
           open={!!managedTeam}
           onOpenChange={(open) => !open && closeManagementDialog()}
           team={managedTeam}
-          initialSection={
-            openedFromUrl && sectionParam === "token" ? "token" : undefined
-          }
           readOnly={!canUpdateTeams && !isTeamAdminOf(managedTeam)}
         />
       )}

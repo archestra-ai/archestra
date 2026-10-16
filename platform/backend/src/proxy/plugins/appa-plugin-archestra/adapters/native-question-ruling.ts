@@ -95,7 +95,11 @@ function textQuestionSelection(
         return { label };
     }
   }
-  return NO_ANSWER.get(content.trim()) ?? "unrecognized";
+  const trimmed = content.trim();
+  return (
+    NO_ANSWER.get(trimmed) ??
+    (TIMED_OUT_ANSWER.test(trimmed) ? "unanswered" : "unrecognized")
+  );
 }
 
 function selectionFromValues(
@@ -129,6 +133,12 @@ const NO_ANSWER = new Map<string, "unanswered" | "declined">([
   ["The user did not answer the questions.", "unanswered"],
   ["User has declined to answer your questions.", "declined"],
 ]);
+
+// Claude Code's answer when its question auto-continue timeout
+// (askUserQuestionTimeout) ends a question nobody touched. It counts the wait in
+// seconds, so a "10m" timeout reads "No response after 600s".
+const TIMED_OUT_ANSWER =
+  /^No response after \d+s \u2014 the user may be away from keyboard\./;
 
 // What follows a selected option: the closing sentence, or the selected
 // option's preview (Claude Code).

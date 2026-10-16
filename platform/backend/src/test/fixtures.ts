@@ -24,6 +24,7 @@ import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
 import SecretModel from "@/models/secret";
+import ServiceAccountModel from "@/models/service-account";
 import SessionModel from "@/models/session";
 import SkillModel from "@/models/skill";
 import TeamModel from "@/models/team";
@@ -114,6 +115,7 @@ interface TestFixtures {
   makeConversation: typeof makeConversation;
   makeInteraction: typeof makeInteraction;
   makeSecret: typeof makeSecret;
+  makeServiceAccountToken: typeof makeServiceAccountToken;
   makeLlmProviderApiKey: typeof makeLlmProviderApiKey;
   makeIdentityProvider: typeof makeIdentityProvider;
   makeOAuthClient: typeof makeOAuthClient;
@@ -1082,6 +1084,32 @@ async function makeSecret(
 }
 
 /**
+ * Creates a service account and one key for it, the credential automation
+ * presents at the MCP gateway and A2A. `teamId` makes the account act for a
+ * team; omitted, it reaches what is shared with the whole organization.
+ */
+async function makeServiceAccountToken(params: {
+  organizationId: string;
+  teamId?: string | null;
+  role?: string;
+  name?: string;
+}) {
+  const serviceAccount = await ServiceAccountModel.create({
+    organizationId: params.organizationId,
+    name: params.name ?? `service-account-${crypto.randomUUID().slice(0, 8)}`,
+    role: params.role ?? MEMBER_ROLE_NAME,
+    teamId: params.teamId ?? null,
+    createdBy: null,
+  });
+  const { token, id } = await ServiceAccountModel.createToken({
+    serviceAccountId: serviceAccount.id,
+    organizationId: params.organizationId,
+    name: "test key",
+  });
+  return { serviceAccount, tokenId: id, value: token };
+}
+
+/**
  * Creates a test chat API key in the database.
  * Used for testing features that require LLM API keys.
  */
@@ -1618,6 +1646,9 @@ export const test = baseTest.extend<TestFixtures>({
   },
   makeSecret: async ({}, use) => {
     await use(makeSecret);
+  },
+  makeServiceAccountToken: async ({}, use) => {
+    await use(makeServiceAccountToken);
   },
   makeLlmProviderApiKey: async ({}, use) => {
     await use(makeLlmProviderApiKey);

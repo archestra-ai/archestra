@@ -66,6 +66,10 @@ it("lists consults for the URL filters with the tool name", async () => {
   renderTable();
 
   expect(await screen.findByText("fetch")).toBeInTheDocument();
+  expect(screen.getByRole("img", { name: "Answered" })).toBeInTheDocument();
+  expect(
+    screen.getByRole("img", { name: "Request duration: 812ms" }),
+  ).toBeInTheDocument();
   expect(requests[0].searchParams.get("outcome")).toBe("answered");
   expect(requests[0].searchParams.get("sessionId")).toBe("ses-1");
 });

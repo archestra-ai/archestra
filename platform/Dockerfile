@@ -121,7 +121,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go get github.com/moby/go-archive@v0.3.0 github.com/moby/profiles/seccomp@v0.2.3 github.com/moby/sys/reexec@v0.1.0 github.com/moby/sys/user@v0.4.1 && \
     # cve-2026-46680: containerd type confusion fixed in >= 2.2.4
     # cve-2026-53488/53492/53489: containerd injection/input-validation/symlink-following fixed in >= 2.2.5
-    go get github.com/containerd/containerd/v2@v2.2.5 && \
+    # GHSA-p7v4-vr35-mj6f / CVE-2026-95837: CRI checkpoint restore privilege bypass fixed in >= 2.2.7
+    go get github.com/containerd/containerd/v2@v2.2.7 && \
     # GHSA-hrxh-6v49-42gf: grpc xDS RBAC and HTTP/2 vulnerabilities fixed in >= 1.82.1.
     # CVE-2026-84304: grpc resource exhaustion fixed in >= 1.83.1.
     # CVE-2026-84445: grpc array index validation fixed in >= 1.83.2.

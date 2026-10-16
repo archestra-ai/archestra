@@ -1,6 +1,4 @@
-import { vi } from "vitest";
 import config from "@/config";
-import AgentTeamModel from "@/models/agent-team";
 import ToolModel from "@/models/tool";
 import { beforeEach, describe, expect, test } from "@/test";
 import { seedCoverage } from "@/test/openappa-coverage";
@@ -55,10 +53,6 @@ describe("openappaCoverageService.toolsForCatalog", () => {
       ),
     );
 
-    const accessibleAgentIds = vi.spyOn(
-      AgentTeamModel,
-      "getUserAccessibleAgentIds",
-    );
     for (const catalogId of Object.values(catalogIds)) {
       const scoped = await openappaCoverageService.toolsForCatalog({
         ...visibility,
@@ -67,14 +61,9 @@ describe("openappaCoverageService.toolsForCatalog", () => {
         catalogId,
       });
       expect(scoped).toEqual(
-        report.data
-          .filter((tool) => tool.catalogId === catalogId)
-          .map((tool) => ({ ...tool, agents: [] })),
+        report.data.filter((tool) => tool.catalogId === catalogId),
       );
     }
-    // Large organizations hold more agents than one query can bind.
-    expect(accessibleAgentIds).not.toHaveBeenCalled();
-    accessibleAgentIds.mockRestore();
   });
 });
 
@@ -115,25 +104,21 @@ describe("coverage server pages", () => {
     });
     expect(baseline.data.some((row) => row.id === catalogIds.acme)).toBe(false);
     expect(baseline.data.some((row) => row.toolCount === 0)).toBe(true);
-    for (const sortBy of ["name", "type"] as const) {
-      for (const sortDirection of ["asc", "desc"] as const) {
-        const ordered = [...baseline.data].sort((a, b) => {
-          const alphabetical =
-            a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
-          return sortBy === "name" && sortDirection === "desc"
-            ? -alphabetical
-            : alphabetical;
-        });
-        const result = await openappaCoverageService.entities({
-          ...params,
-          sortBy,
-          sortDirection,
-          limit: 2,
-          offset: 1,
-        });
-        expect(result.data).toEqual(ordered.slice(1, 3));
-        expect(result.pagination.total).toBe(ordered.length);
-      }
+    for (const sortDirection of ["asc", "desc"] as const) {
+      const ordered = [...baseline.data].sort((a, b) => {
+        const alphabetical =
+          a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
+        return sortDirection === "desc" ? -alphabetical : alphabetical;
+      });
+      const result = await openappaCoverageService.entities({
+        ...params,
+        sortBy: "name",
+        sortDirection,
+        limit: 2,
+        offset: 1,
+      });
+      expect(result.data).toEqual(ordered.slice(1, 3));
+      expect(result.pagination.total).toBe(ordered.length);
     }
     const searched = await openappaCoverageService.entities({
       ...params,
@@ -163,9 +148,7 @@ describe("coverage server pages", () => {
 });
 
 describe("ToolModel.findCoverageInventory", () => {
-  test("narrows catalogs, tools and assignments to one catalog", async ({
-    makeAgent,
-    makeAgentTool,
+  test("narrows catalogs and tools to one catalog", async ({
     makeInternalMcpCatalog,
     makeOrganization,
     makeTool,
@@ -187,9 +170,6 @@ describe("ToolModel.findCoverageInventory", () => {
       catalogId: otherCatalog.id,
       name: "other__lookup",
     });
-    const agent = await makeAgent({ organizationId: organization.id });
-    await makeAgentTool(agent.id, scopedTool.id);
-    await makeAgentTool(agent.id, otherTool.id);
 
     const whole = await ToolModel.findCoverageInventory(organization.id);
     const scoped = await ToolModel.findCoverageInventory(organization.id, {
@@ -203,26 +183,15 @@ describe("ToolModel.findCoverageInventory", () => {
       scopedCatalog.id,
     ]);
     expect(scoped.tools.map((tool) => tool.id)).toEqual([scopedTool.id]);
-    expect(scoped.assignments).toEqual([
-      expect.objectContaining({ toolId: scopedTool.id, agentId: agent.id }),
-    ]);
-    expect(scoped.entities).toEqual(whole.entities);
 
-    const serverOnly = await ToolModel.findCoverageInventory(organization.id, {
+    const page = await ToolModel.findCoverageInventory(organization.id, {
       catalogIds: [scopedCatalog.id],
-      includeAgentAssignments: false,
     });
-    expect(serverOnly).toEqual({
-      catalogs: scoped.catalogs,
-      tools: scoped.tools,
-      assignments: [],
-      entities: [],
-    });
+    expect(page).toEqual(scoped);
     expect(
       await ToolModel.findCoverageInventory(organization.id, {
         catalogIds: [],
-        includeAgentAssignments: false,
       }),
-    ).toEqual({ catalogs: [], tools: [], assignments: [], entities: [] });
+    ).toEqual({ catalogs: [], tools: [] });
   });
 });

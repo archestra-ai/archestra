@@ -1,6 +1,7 @@
 import { DEFAULT_INTERNAL_API_BASE_URL } from "@archestra/shared/consts";
 import { env } from "next-runtime-env";
 import type { PostHogConfig } from "posthog-js";
+import { REPLAY_BLOCK_SELECTOR } from "@/lib/telemetry-privacy";
 
 const environment: "development" | "production" =
   (process.env.NODE_ENV?.toLowerCase() as "development" | "production") ??
@@ -247,27 +248,16 @@ export default {
   posthog: {
     config: {
       person_profiles: "identified_only",
+      // Keep interaction analytics without collecting page content.
+      autocapture: false,
+      enable_recording_console_log: false,
       session_recording: {
-        recordHeaders: true,
-        recordBody: true,
-        maskCapturedNetworkRequestFn: (data) => {
-          const sensitiveHeaders = ["authorization", "cookie", "set-cookie"];
-          if (data.requestHeaders) {
-            for (const header of sensitiveHeaders) {
-              if (header in data.requestHeaders) {
-                data.requestHeaders[header] = "***REDACTED***";
-              }
-            }
-          }
-          if (data.responseHeaders) {
-            for (const header of sensitiveHeaders) {
-              if (header in data.responseHeaders) {
-                data.responseHeaders[header] = "***REDACTED***";
-              }
-            }
-          }
-          return data;
-        },
+        maskAllInputs: true,
+        maskTextSelector: "*",
+        blockSelector: REPLAY_BLOCK_SELECTOR,
+        captureCanvas: { recordCanvas: false },
+        recordHeaders: false,
+        recordBody: false,
       },
     } satisfies Partial<PostHogConfig>,
   },

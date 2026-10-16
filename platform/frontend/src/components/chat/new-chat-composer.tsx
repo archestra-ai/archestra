@@ -59,7 +59,11 @@ export function NewChatComposer({
   isProjectLoading?: boolean;
   isSubmitting?: boolean;
 }) {
-  const { data: internalAgents = [] } = useChatAgents();
+  const {
+    data: internalAgents = [],
+    isPending: isLoadingAgents,
+    resolveAgent,
+  } = useChatAgents({ ids: [projectDefaultAgentId] });
   const { data: defaultAgentId } = useDefaultAgentId();
   const { modelsByProvider, isPending: isModelsLoading } =
     useLlmModelsByProvider();
@@ -84,6 +88,8 @@ export function NewChatComposer({
     onResetModelOverride,
   } = useInitialChatModelState({
     agents: internalAgents,
+    resolveAgent,
+    isAgentsLoading: isLoadingAgents,
     organization: organization ?? null,
     defaultAgentId,
     projectDefaultAgentId,

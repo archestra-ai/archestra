@@ -18,6 +18,7 @@ import {
   DEFAULT_TABLE_LIMIT,
 } from "@/consts";
 import { toBulkOutcome } from "@/lib/bulk-action";
+import { getSavedAgent } from "@/lib/chat/use-chat-preferences";
 import { incomingEmailKeys } from "@/lib/chatops/incoming-email.query";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import { useOrganization } from "@/lib/organization.query";
@@ -55,7 +56,12 @@ const {
   unpinAgent,
 } = archestraApiSdk;
 
-const chatAgentsQueryKey = ["agents", "chat-roster", "v2"] as const;
+const chatAgentsQueryKey = [
+  "agents",
+  "chat-roster",
+  "bootstrap",
+  "v3",
+] as const;
 
 /** Metadata-only internal agents for selectors and runtime labels. */
 export async function fetchInternalAgentOptions() {
@@ -74,7 +80,9 @@ export function useInternalAgentOptions(params?: { enabled?: boolean }) {
 }
 
 async function fetchChatAgents() {
-  const { data, error } = await getChatAgentRoster();
+  const { data, error } = await getChatAgentRoster({
+    query: { bootstrap: true },
+  });
   throwOnApiError(error, { toastOnError: false });
   return data ?? [];
 }
@@ -812,11 +820,18 @@ export function useUpdateDefaultAgentId() {
  * they are missing. Only agents whose author moved them off the default
  * "allow" behavior appear here, so an empty result is the common case.
  */
-export function useAgentCredentialReadiness(params?: { enabled?: boolean }) {
+export function useAgentCredentialReadiness(params?: {
+  enabled?: boolean;
+  ids?: string[];
+}) {
+  const ids = params?.ids ? [...new Set(params.ids)].sort() : undefined;
   return useQuery({
-    queryKey: ["agents", "credential-readiness"],
+    queryKey: ["agents", "credential-readiness", ids],
     queryFn: async () => {
-      const { data, error } = await getAgentCredentialReadiness();
+      if (ids?.length === 0) return [];
+      const { data, error } = await getAgentCredentialReadiness({
+        query: { ids },
+      });
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];
     },
@@ -829,17 +844,119 @@ export function useAgentCredentialReadiness(params?: { enabled?: boolean }) {
  * editing-only fields stay out of this query; the selected/edited agent is
  * hydrated through useProfile when its full record is needed.
  */
-export function useChatAgents(params?: { enabled?: boolean }) {
+export function useChatAgentPage(params: {
+  cursor?: string;
+  search?: string;
+  enabled: boolean;
+}) {
+  const query = {
+    limit: 20,
+    cursor: params.cursor,
+    search: params.search || undefined,
+    sortBy: "name" as const,
+  };
   return useQuery({
+    queryKey: ["agents", "chat-roster", "page", query],
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getChatAgentRosterPage({
+        query,
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data;
+    },
+    enabled: params.enabled,
+  });
+}
+
+export function useChatAgentReferences(
+  ids: (string | null | undefined)[],
+  enabled = true,
+) {
+  const client = useQueryClient();
+  const stableIds = [...new Set(ids.filter((id): id is string => !!id))].sort();
+  const cachedRows = stableIds.map((id) => findCachedChatAgent(client, id));
+  const initialData = cachedRows.every((row) => row !== undefined)
+    ? cachedRows
+    : undefined;
+  return useQuery({
+    queryKey: ["agents", "chat-roster", "references", stableIds],
+    initialData,
+    queryFn: async () => {
+      const rows: archestraApiTypes.GetChatAgentRosterResponses["200"] = [];
+      for (let offset = 0; offset < stableIds.length; offset += 100) {
+        const { data, error } = await getChatAgentRoster({
+          query: { ids: stableIds.slice(offset, offset + 100) },
+        });
+        throwOnApiError(error, { toastOnError: false });
+        rows.push(...(data ?? []));
+      }
+      return rows;
+    },
+    enabled,
+    retry: BOOTSTRAP_QUERY_RETRY,
+  });
+}
+
+export function useChatAgents(params?: {
+  enabled?: boolean;
+  ids?: (string | null | undefined)[];
+}) {
+  const client = useQueryClient();
+  const organization = useOrganization();
+  const memberDefault = useDefaultAgentId();
+  const savedId = getSavedAgent();
+  const enabled = params?.enabled ?? true;
+  const bootstrap = useQuery({
     queryKey: chatAgentsQueryKey,
     queryFn: fetchChatAgents,
-    enabled: params?.enabled,
-    // The new-chat composer resolves its default agent (and, in turn, its
-    // default model) from this roster. Recover from a transient fetch failure
-    // rather than latching an empty roster into "Select agent" (T-1317).
+    enabled,
     retry: BOOTSTRAP_QUERY_RETRY,
     meta: PERSISTED_QUERY_META,
   });
+  const references = useChatAgentReferences(
+    [
+      ...(params?.ids ?? []),
+      organization.data?.defaultAgentId,
+      memberDefault.data,
+      savedId,
+    ],
+    enabled && !organization.isPending && !memberDefault.isPending,
+  );
+  const defaultsFailed =
+    (organization.isError && !organization.data) ||
+    (memberDefault.isError && memberDefault.data === undefined);
+  const isPending =
+    !defaultsFailed &&
+    (bootstrap.isPending ||
+      references.isPending ||
+      organization.isPending ||
+      memberDefault.isPending);
+  const data = useMemo(() => {
+    if (isPending || defaultsFailed || !references.data || !bootstrap.data)
+      return undefined;
+    const rows = [...(bootstrap.data ?? []), ...(references.data ?? [])];
+    return [...new Map(rows.map((row) => [row.id, row])).values()];
+  }, [bootstrap.data, references.data, isPending, defaultsFailed]);
+  return {
+    ...bootstrap,
+    data,
+    isPending,
+    isLoading: isPending,
+    isError:
+      bootstrap.isError ||
+      references.isError ||
+      organization.isError ||
+      memberDefault.isError,
+    isSuccess: !defaultsFailed && bootstrap.isSuccess && references.isSuccess,
+    resolveAgent: (id: string) => findCachedChatAgent(client, id),
+    refetch: async () =>
+      Promise.all([
+        bootstrap.refetch(),
+        references.refetch(),
+        organization.refetch(),
+        memberDefault.refetch(),
+      ]),
+  };
 }
 
 export function useOrgScopedAgents() {
@@ -953,3 +1070,16 @@ const memberAgentsQuery = {
     };
   },
 };
+
+function findCachedChatAgent(client: QueryClient, id: string) {
+  const cached = client.getQueriesData<
+    | archestraApiTypes.GetChatAgentRosterResponses["200"]
+    | { data: archestraApiTypes.GetChatAgentRosterResponses["200"] }
+  >({ queryKey: ["agents", "chat-roster"] });
+  for (const [, value] of cached) {
+    const rows = Array.isArray(value) ? value : value?.data;
+    const row = rows?.find((agent) => agent.id === id);
+    if (row) return row;
+  }
+  return undefined;
+}

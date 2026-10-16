@@ -38,6 +38,8 @@ type InitialChatMemberDefault = {
 type InitialChatModelStateParams<TAgent extends InitialChatAgent> = {
   // ---- already-fetched data, passed in by the caller (NO queries inside) ----
   agents: TAgent[];
+  resolveAgent?: (id: string) => TAgent | undefined;
+  isAgentsLoading?: boolean;
   organization: InitialChatOrganization;
   defaultAgentId: string | null | undefined;
   modelsByProvider: Record<string, LlmModel[]>;
@@ -109,6 +111,8 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
 ): InitialChatModelState {
   const {
     agents,
+    resolveAgent,
+    isAgentsLoading,
     organization,
     defaultAgentId,
     modelsByProvider,
@@ -193,7 +197,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
   // Priority: URL param > project pin > personal default > org default >
   // saved pick > first.
   useEffect(() => {
-    if (agents.length === 0) return;
+    if (isAgentsLoading || agents.length === 0) return;
     // Wait for organization data to avoid a race where agents load before org,
     // causing the org default to be skipped.
     if (isOrgLoading) return;
@@ -247,6 +251,7 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
     agentId,
     urlAgentId,
     agents,
+    isAgentsLoading,
     defaultAgentId,
     projectDefaultAgentId,
     organization?.defaultAgentId,
@@ -372,12 +377,13 @@ export function useInitialChatModelState<TAgent extends InitialChatAgent>(
 
   const onAgentChange = useCallback(
     (nextAgentId: string) => {
-      const agent = agents.find((a) => a.id === nextAgentId);
+      const agent =
+        agents.find((a) => a.id === nextAgentId) ?? resolveAgent?.(nextAgentId);
       if (!agent) return;
       applyAgentSelection(agent);
       saveAgent(agent.id);
     },
-    [agents, applyAgentSelection],
+    [agents, applyAgentSelection, resolveAgent],
   );
 
   // Reset to the agent/org default model (shown when on a custom model).

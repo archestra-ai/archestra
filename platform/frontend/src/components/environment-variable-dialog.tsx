@@ -362,6 +362,9 @@ export function EnvironmentVariableDialog({
           </div>
           <div className="space-y-2">
             <Label htmlFor="env-var-scope">Availability</Label>
+            {draft.scope === "installation" && (
+              <FieldDescription>{installationCalloutTitle}.</FieldDescription>
+            )}
             <FieldScopeSelect
               id="env-var-scope"
               value={draft.scope}
@@ -374,9 +377,6 @@ export function EnvironmentVariableDialog({
               installationDescription={installationDescription}
               staticDescription={staticDescription}
             />
-            {draft.scope === "installation" && (
-              <FieldDescription>{installationCalloutTitle}.</FieldDescription>
-            )}
           </div>
         </div>
 

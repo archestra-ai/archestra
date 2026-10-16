@@ -265,14 +265,11 @@ const {
  */
 export interface LLMProxyContext<TRequest> {
   connectionVerification?: boolean;
-  openappaSession?: OpenAppaSession;
-  connectionSetupBypass: boolean;
   sessionReceipt?: SessionReceiptOutput;
   childTrajectoryReceipt?: ChildTrajectoryReceiptOutput;
   childCompactionContext?: string;
   pluginRegistry?: LlmProxyPluginRegistry;
   pluginContext?: LlmProxyRequestContext;
-  /** Captured by the host after binding an authenticated APPA session. */
   agent: GatewayAgent;
   originalRequest: TRequest;
   actualModel: string;
@@ -1336,23 +1333,6 @@ export async function handleLLMProxy<
   // turns on: the sessions that start now, and the calls governed sessions make.
   // The records hold ids only, so they cover encrypted chats too.
   const appaObserving = appaFeatureEnabled && !appaActive;
-  // A redacted audit context cannot retain an enforceable trajectory safely.
-  if (
-    appaActive &&
-    encryptedChat.kind === "redact" &&
-    !(
-      sessionId &&
-      (await startedUnenforced({
-        organization_id: resolvedAgent.organizationId,
-        session_id: sessionId,
-      }))
-    )
-  ) {
-    throw new ApiError(
-      409,
-      "Encrypted chat key and escrow are required for policy storage",
-    );
-  }
   enterOpenappaEncryptedChat(
     encryptedChat.kind === "encrypt" && userId
       ? {
@@ -1365,8 +1345,25 @@ export async function handleLLMProxy<
 
   const attributedAppId = await resolveAttributedAppId(request, resolvedAgent);
 
-  // Check usage limits
   try {
+    // A redacted audit context cannot retain an enforceable trajectory safely.
+    if (
+      appaActive &&
+      encryptedChat.kind === "redact" &&
+      !(
+        sessionId &&
+        (await startedUnenforced({
+          organization_id: resolvedAgent.organizationId,
+          session_id: sessionId,
+        }))
+      )
+    ) {
+      throw new ApiError(
+        409,
+        "Encrypted chat key and escrow are required for policy storage",
+      );
+    }
+    // Check usage limits
     logger.debug(
       { resolvedAgentId },
       `[${providerName}Proxy] Checking usage limits`,
@@ -1698,7 +1695,7 @@ export async function handleLLMProxy<
           })
         : null;
       // A child that claims a trajectory it cannot prove must not run unbound.
-      if (subagentToken && !subagentBinding) {
+      if (appaActive && subagentToken && !subagentBinding) {
         throw new ApiError(403, "The subagent binding is invalid or expired");
       }
       // Other delegated A2A runs share the parent's logging session, but have
@@ -1997,7 +1994,7 @@ export async function handleLLMProxy<
       } else if (
         appaObserving &&
         !delegatedRun &&
-        !subagentBinding &&
+        !subagentToken &&
         (isInternalRequest ||
           authenticatedUserId ||
           authenticatedApp ||
@@ -2299,9 +2296,6 @@ export async function handleLLMProxy<
         };
       }
     }
-    // The connection-setup bypass: the approved-installer proof, settled
-    // before the guards and not mutated past them.
-    const connectionSetupBypass = installerSetupBypass;
     // Nothing OpenAPPA wrote for the client and the gateway goes on to the
     // provider, whether or not this request has a session (deployment switch
     // off, a connection-setup or unsupported-client bypass, a delegated run)
@@ -2541,8 +2535,6 @@ export async function handleLLMProxy<
 
     const ctx: LLMProxyContext<TRequest> = {
       connectionVerification,
-      openappaSession,
-      connectionSetupBypass,
       ...(sessionReceipt ? { sessionReceipt } : {}),
       ...(childTrajectoryReceipt ? { childTrajectoryReceipt } : {}),
       ...(childCompactionContext ? { childCompactionContext } : {}),

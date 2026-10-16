@@ -4,7 +4,10 @@ import { encryptedChatDekFingerprint } from "@/content-encryption/encrypted-chat
  * PostgreSQL engine is exercised separately by openappa-rs/smoke.test.cjs. */
 
 import type { ServerResponse } from "node:http";
-import { extractMcpHumanRuling } from "@archestra/shared";
+import {
+  ENCRYPTED_CHAT_REDACTED_MARKER,
+  extractMcpHumanRuling,
+} from "@archestra/shared";
 import { CONNECTION_SETUP_WINDOW_MS } from "@archestra/shared/connection-setup";
 import { eq } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -2258,6 +2261,101 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     await encrypt(sessionId);
     const fresh = await postChat();
     expect(fresh.statusCode, fresh.body).toBe(409);
+  });
+
+  test.each([
+    false,
+    true,
+  ])("records an encrypted chat refused for want of a key and escrow as a redacted failed interaction (stream=%s)", async (stream) => {
+    await db
+      .update(database.schema.conversationsTable)
+      .set({ encryptedChat: true })
+      .where(eq(database.schema.conversationsTable.id, sessionId));
+    const response = await post(payload(stream), {
+      "x-archestra-session-id": sessionId,
+    });
+
+    expect(response.statusCode, response.body).toBe(409);
+    expect(response.json()).toEqual({
+      error: {
+        message:
+          "Encrypted chat key and escrow are required for policy storage",
+        type: "api_conflict_error",
+      },
+    });
+    expect(response.headers["x-should-retry"]).toBeUndefined();
+    expect(providerRequests).toEqual([]);
+    const rows = await db
+      .select()
+      .from(database.schema.interactionsTable)
+      .where(eq(database.schema.interactionsTable.profileId, agent.id));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      sessionId,
+      request: ENCRYPTED_CHAT_REDACTED_MARKER,
+      response: ENCRYPTED_CHAT_REDACTED_MARKER,
+      processedRequest: null,
+    });
+  });
+
+  const unenforcedRecords = async () => [
+    ...(await db
+      .select()
+      .from(database.schema.openappaUnenforcedSessionsTable)
+      .where(
+        eq(
+          database.schema.openappaUnenforcedSessionsTable.organizationId,
+          agent.organizationId,
+        ),
+      )),
+    ...(await db
+      .select()
+      .from(database.schema.openappaUnenforcedCallsTable)
+      .where(
+        eq(
+          database.schema.openappaUnenforcedCallsTable.organizationId,
+          agent.organizationId,
+        ),
+      )),
+  ];
+
+  // A delegated child presents the parent's session; only a valid binding
+  // names its own trajectory.
+  const invalidSubagentBinding = { "x-archestra-appa-subagent": "expired" };
+
+  test("serves a child with an invalid subagent binding while OpenAPPA is off", async () => {
+    config.openappa.enabled = false;
+    const response = await post(payload(false), invalidSubagentBinding);
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(providerRequests).toHaveLength(1);
+    expect(events).toEqual([]);
+    expect(await unenforcedRecords()).toEqual([]);
+  });
+
+  test("serves a child with an invalid subagent binding while only observing, without observing it under its parent", async () => {
+    await GuardrailsDeploymentModel.setEnabled(false);
+    const child = await post(payload(false), invalidSubagentBinding);
+
+    expect(child.statusCode, child.body).toBe(200);
+    expect(providerRequests).toHaveLength(1);
+    expect(events).toEqual([]);
+    expect(await unenforcedRecords()).toEqual([]);
+
+    // The parent's own request is observed.
+    const parent = await post(payload(false));
+    expect(parent.statusCode, parent.body).toBe(200);
+    expect(await unenforcedRecords()).not.toEqual([]);
+  });
+
+  test("refuses a child with an invalid subagent binding while enforcing", async () => {
+    const response = await post(payload(false), invalidSubagentBinding);
+
+    expect(response.statusCode, response.body).toBe(403);
+    expect(response.json().error.message).toBe(
+      "The subagent binding is invalid or expired",
+    );
+    expect(providerRequests).toEqual([]);
   });
 
   test.each([

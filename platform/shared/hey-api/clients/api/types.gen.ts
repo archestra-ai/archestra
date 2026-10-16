@@ -70424,6 +70424,7 @@ export type GetConnectorsResponses = {
                 name: string;
                 agentType: string;
             }>;
+            totalDocsIngested: number;
         }>;
         pagination: {
             currentPage: number;

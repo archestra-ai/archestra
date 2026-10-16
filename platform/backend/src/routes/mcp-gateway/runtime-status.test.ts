@@ -8,7 +8,6 @@ import {
   A2AContextModel,
   A2ATaskModel,
   AgentRunModel,
-  TeamTokenModel,
   UserTokenModel,
 } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -91,6 +90,7 @@ describe("Agent Runtime status callback", () => {
     makeMember,
     makeOrganization,
     makeUser,
+    makeServiceAccountToken,
   }) => {
     const organization = await makeOrganization();
     const user = await makeUser();
@@ -104,11 +104,8 @@ describe("Agent Runtime status callback", () => {
       organizationId: organization.id,
       actorUserId: user.id,
     });
-    const { value: organizationToken } = await TeamTokenModel.create({
+    const { value: organizationToken } = await makeServiceAccountToken({
       organizationId: organization.id,
-      name: "Organization token",
-      teamId: null,
-      isOrganizationToken: true,
     });
 
     const response = await reportStatus({

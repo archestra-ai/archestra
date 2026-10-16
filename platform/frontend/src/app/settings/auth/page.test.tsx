@@ -50,14 +50,6 @@ vi.mock("@/lib/role.query", () => ({
   })),
 }));
 
-vi.mock("@/lib/teams/team-token.query", () => ({
-  useTokens: vi.fn(() => ({
-    data: { tokens: [] },
-    isLoading: false,
-    error: null,
-  })),
-}));
-
 import { useSearchParams } from "next/navigation";
 import {
   useAllPermissions,

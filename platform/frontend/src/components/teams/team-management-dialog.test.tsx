@@ -8,10 +8,6 @@ import { TeamManagementDialog } from "./team-management-dialog";
 
 type Team = archestraApiTypes.GetTeamsResponses["200"]["data"][number];
 
-const { useTokensMock } = vi.hoisted(() => ({
-  useTokensMock: vi.fn(),
-}));
-
 vi.mock("@/components/tabbed-dialog-shell", () => ({
   TabbedDialogShell: ({
     navItems,
@@ -38,10 +34,6 @@ vi.mock("@/lib/config/config", () => ({
 
 vi.mock("@/lib/config/config.query");
 
-vi.mock("@/lib/teams/team-token.query", () => ({
-  useTokens: useTokensMock,
-}));
-
 vi.mock("@/lib/teams/team.query", () => ({
   useTeams: () => ({ data: [] }),
 }));
@@ -55,28 +47,27 @@ describe("TeamManagementDialog", () => {
     vi.mocked(useHasPermissions).mockReturnValue({ data: false } as ReturnType<
       typeof useHasPermissions
     >);
-    useTokensMock.mockReturnValue({ data: { tokens: [] } });
   });
 
-  it("hides token and vault tabs from team admins without team:update", () => {
+  it("hides the vault tab from team admins without team:update", () => {
     renderDialog();
 
     expect(screen.getByText("Team")).toBeInTheDocument();
     expect(screen.getByText("Members")).toBeInTheDocument();
     expect(screen.getByText("External Group Sync")).toBeInTheDocument();
-    expect(screen.queryByText("MCP/A2A Gateway Token")).not.toBeInTheDocument();
     expect(screen.queryByText("Vault Folder")).not.toBeInTheDocument();
   });
 
-  it("shows token and vault tabs to users with team:update when vault is enabled", () => {
+  it("shows the vault tab to users with team:update when vault is enabled", () => {
     vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
       typeof useHasPermissions
     >);
 
     renderDialog();
 
-    expect(screen.getByText("MCP/A2A Gateway Token")).toBeInTheDocument();
     expect(screen.getByText("Vault Folder")).toBeInTheDocument();
+    // Team gateway tokens moved to service accounts linked to the team.
+    expect(screen.queryByText("MCP/A2A Gateway Token")).not.toBeInTheDocument();
   });
 
   it("hides the vault tab when vault is disabled", () => {
@@ -89,7 +80,7 @@ describe("TeamManagementDialog", () => {
 
     renderDialog();
 
-    expect(screen.getByText("MCP/A2A Gateway Token")).toBeInTheDocument();
+    expect(screen.getByText("External Group Sync")).toBeInTheDocument();
     expect(screen.queryByText("Vault Folder")).not.toBeInTheDocument();
   });
 });

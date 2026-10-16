@@ -169,6 +169,21 @@ function useSuite({
       directory: collection.directory,
     });
   }
+  /** Runs one saved file and records the result in run history. */
+  function runFile(path: string) {
+    const file = files.find((item) => item.path === path);
+    if (!runnable || !file) return;
+    runMutation.mutate({
+      files: [file],
+      sourceVersion: collection.version,
+      directory: collection.directory,
+      partial: true,
+    });
+  }
+  const runningPath =
+    runMutation.isPending && runMutation.variables?.partial
+      ? (runMutation.variables.files[0]?.path ?? null)
+      : null;
   function createFile(
     file: PolicyTestCollection["files"][number],
     expectedVersion: string,
@@ -224,6 +239,9 @@ function useSuite({
     setSelected,
     history,
     runAll,
+    runFile,
+    runningPath,
+    runningAll: runMutation.isPending && !runMutation.variables?.partial,
     save,
     createFile,
     deleteFiles,

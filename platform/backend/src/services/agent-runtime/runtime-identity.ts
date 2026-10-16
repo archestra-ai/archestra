@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import config from "@/config";
 import logger from "@/logging";
 import {
@@ -152,8 +153,17 @@ export function authenticatedRuntimeSpender(params: {
   userId?: string;
   callerId?: string;
 }): string | undefined {
+  const workload = parseWorkloadPrincipal(params.callerId)
+    ? params.callerId
+    : undefined;
+  // A service account key carrying a verified runtime binding spends as the
+  // workspace it runs, as team and organization tokens did. Without the
+  // binding it spends as itself.
+  if (workload && params.userId && isServiceAccountUserId(params.userId)) {
+    return workload;
+  }
   if (params.userId) return `user:${params.userId}`;
-  return parseWorkloadPrincipal(params.callerId) ? params.callerId : undefined;
+  return workload;
 }
 
 /**

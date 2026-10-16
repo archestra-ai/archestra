@@ -286,7 +286,9 @@ export function useDeleteLlmProviderApiKey() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (id: string) => {
+    // A subscription is disconnected rather than deleted, so the toast names
+    // what the user just did.
+    mutationFn: async ({ id }: { id: string; subscription: boolean }) => {
       const { data: responseData, error } = await deleteLlmProviderApiKey({
         path: { id },
       });
@@ -296,11 +298,15 @@ export function useDeleteLlmProviderApiKey() {
       }
       return responseData;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, { subscription }) => {
       if (!data) {
         return;
       }
-      toast.success("API key deleted successfully");
+      toast.success(
+        subscription
+          ? "Subscription disconnected"
+          : "API key deleted successfully",
+      );
       queryClient.invalidateQueries({ queryKey: ["llm-provider-api-keys"] });
       queryClient.invalidateQueries({
         queryKey: ["available-llm-provider-api-keys"],

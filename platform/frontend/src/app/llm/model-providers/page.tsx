@@ -366,13 +366,16 @@ export default function ApiKeysPage() {
   const handleDelete = useCallback(async () => {
     if (!selectedApiKey || deleteBlocked) return;
     try {
-      await deleteMutation.mutateAsync(selectedApiKey.id);
+      await deleteMutation.mutateAsync({
+        id: selectedApiKey.id,
+        subscription: deletingSubscription,
+      });
       setIsDeleteDialogOpen(false);
       setSelectedApiKey(null);
     } catch {
       // Error already handled by mutation's handleApiError
     }
-  }, [selectedApiKey, deleteBlocked, deleteMutation]);
+  }, [selectedApiKey, deleteBlocked, deletingSubscription, deleteMutation]);
 
   const openDeleteDialog = useCallback((apiKey: LlmProviderApiKeyResponse) => {
     setSelectedApiKey(apiKey);

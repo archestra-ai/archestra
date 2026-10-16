@@ -199,6 +199,7 @@ describe("member subscription disconnect", () => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
     expect(deletes).toEqual([key.id]);
+    expect(toast.success).toHaveBeenCalledWith("Subscription disconnected");
   });
 
   it("refuses disconnect while an OAuth client still uses the credential", async () => {

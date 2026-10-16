@@ -721,7 +721,10 @@ describe("ApiKeysPage", () => {
       expect(screen.queryByTestId("delete-dialog")).not.toBeInTheDocument();
     });
     expect(mockDeleteApiKey).toHaveBeenCalledTimes(1);
-    expect(mockDeleteApiKey).toHaveBeenCalledWith("provider-key-1");
+    expect(mockDeleteApiKey).toHaveBeenCalledWith({
+      id: "provider-key-1",
+      subscription: false,
+    });
   });
 
   it("opens Connect with provider-specific subscription defaults", () => {

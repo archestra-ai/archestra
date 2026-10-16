@@ -298,7 +298,7 @@ it.each([
   );
   expect(
     await screen.findByRole("button", {
-      name: new RegExp(label.replace(/[()]/g, "\\$&") + "$"),
+      name: (name) => name.endsWith(label),
     }),
   ).toBeVisible();
   expect(onModelChange).not.toHaveBeenCalled();

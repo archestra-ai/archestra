@@ -1,6 +1,6 @@
 import { BUILT_IN_AGENT_IDS, SOURCE_HEADER } from "@archestra/shared";
 import { eq } from "drizzle-orm";
-import { HttpResponse, http } from "msw";
+import { HttpResponse, http, passthrough } from "msw";
 import { takeInternalCall } from "@/clients/internal-call";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -70,28 +70,12 @@ describe("archestra annotator", () => {
     makeSecret,
     makeLlmProviderApiKey,
   }) => {
-    const secret = await makeSecret({ secret: { apiKey: "openai-key" } });
-    const key = await makeLlmProviderApiKey(organizationId, secret.id, {
-      provider: "openai",
-      name: "OpenAI",
+    await useDefaultModel({
+      organizationId,
+      keyName: "OpenAI",
+      makeSecret,
+      makeLlmProviderApiKey,
     });
-    const model = await ModelModel.create({
-      externalId: "openai/gpt-4o-mini",
-      provider: "openai",
-      modelId: "gpt-4o-mini",
-      contextLength: 128_000,
-      inputModalities: ["text"],
-      outputModalities: ["text"],
-      supportsToolCalling: true,
-      lastSyncedAt: new Date(),
-    });
-    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
-      model.id,
-    ]);
-    await db
-      .update(schema.organizationsTable)
-      .set({ defaultModelId: model.id, defaultLlmApiKeyId: key.id })
-      .where(eq(schema.organizationsTable.id, organizationId));
 
     let sent: Record<string, unknown> | undefined;
     let source: string | null = null;
@@ -150,28 +134,12 @@ describe("archestra annotator", () => {
     makeSecret,
     makeLlmProviderApiKey,
   }) => {
-    const secret = await makeSecret({ secret: { apiKey: "openai-key" } });
-    const key = await makeLlmProviderApiKey(organizationId, secret.id, {
-      provider: "openai",
-      name: "Revoked OpenAI",
+    const key = await useDefaultModel({
+      organizationId,
+      keyName: "Revoked OpenAI",
+      makeSecret,
+      makeLlmProviderApiKey,
     });
-    const model = await ModelModel.create({
-      externalId: "openai/gpt-4o-mini",
-      provider: "openai",
-      modelId: "gpt-4o-mini",
-      contextLength: 128_000,
-      inputModalities: ["text"],
-      outputModalities: ["text"],
-      supportsToolCalling: true,
-      lastSyncedAt: new Date(),
-    });
-    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [
-      model.id,
-    ]);
-    await db
-      .update(schema.organizationsTable)
-      .set({ defaultModelId: model.id, defaultLlmApiKeyId: key.id })
-      .where(eq(schema.organizationsTable.id, organizationId));
     server.use(
       http.post(
         `http://127.0.0.1:${config.api.port}/v1/openai/${agentId}/chat/completions`,
@@ -196,6 +164,56 @@ describe("archestra annotator", () => {
     );
   });
 
+  test("cancels its LLM proxy call when the runtime hangs up", async ({
+    makeSecret,
+    makeLlmProviderApiKey,
+  }) => {
+    await useDefaultModel({
+      organizationId,
+      keyName: "OpenAI",
+      makeSecret,
+      makeLlmProviderApiKey,
+    });
+    let reach = () => {};
+    const reached = new Promise<void>((resolve) => {
+      reach = resolve;
+    });
+    let abort = () => {};
+    const upstreamAborted = new Promise<void>((resolve) => {
+      abort = resolve;
+    });
+    server.use(
+      http.post(
+        `http://127.0.0.1:${config.api.port}/v1/openai/${agentId}/chat/completions`,
+        ({ request: proxied }) => {
+          reach();
+          return new Promise<Response>((_, reject) =>
+            proxied.signal.addEventListener("abort", () => {
+              abort();
+              reject(proxied.signal.reason);
+            }),
+          );
+        },
+      ),
+    );
+    const address = await app.listen({ host: "127.0.0.1", port: 0 });
+    const url = `${address}${OPENAPPA_ARCHESTRA_ANNOTATOR_PATH}`;
+    server.use(http.post(url, () => passthrough()));
+
+    const runtime = new AbortController();
+    const consult = fetch(url, {
+      method: "POST",
+      headers: { authorization: bearer(), "content-type": "application/json" },
+      body: JSON.stringify(request),
+      signal: runtime.signal,
+    }).catch(() => null);
+    await reached;
+    runtime.abort();
+
+    await upstreamAborted;
+    expect(await consult).toBeNull();
+  });
+
   test("refuses without a call when no LLM key is configured", async () => {
     // Ignore credentials inherited from a developer's .env.
     for (const entry of Object.values(config.chat)) {
@@ -207,3 +225,39 @@ describe("archestra annotator", () => {
     expect(response.statusCode).toBe(409);
   });
 });
+
+async function useDefaultModel(params: {
+  organizationId: string;
+  keyName: string;
+  makeSecret: (overrides: {
+    secret: Record<string, unknown>;
+  }) => Promise<{ id: string }>;
+  makeLlmProviderApiKey: (
+    organizationId: string,
+    secretId: string,
+    overrides: { provider: "openai"; name: string },
+  ) => Promise<{ id: string }>;
+}) {
+  const { organizationId } = params;
+  const secret = await params.makeSecret({ secret: { apiKey: "openai-key" } });
+  const key = await params.makeLlmProviderApiKey(organizationId, secret.id, {
+    provider: "openai",
+    name: params.keyName,
+  });
+  const model = await ModelModel.create({
+    externalId: "openai/gpt-4o-mini",
+    provider: "openai",
+    modelId: "gpt-4o-mini",
+    contextLength: 128_000,
+    inputModalities: ["text"],
+    outputModalities: ["text"],
+    supportsToolCalling: true,
+    lastSyncedAt: new Date(),
+  });
+  await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(key.id, [model.id]);
+  await db
+    .update(schema.organizationsTable)
+    .set({ defaultModelId: model.id, defaultLlmApiKeyId: key.id })
+    .where(eq(schema.organizationsTable.id, organizationId));
+  return key;
+}

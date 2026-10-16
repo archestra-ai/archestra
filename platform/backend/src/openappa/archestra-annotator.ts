@@ -30,10 +30,13 @@ type ArchestraAnnotationOutcome =
  * built-in OpenAPPA configuration agent, so limits, logs and cost apply.
  */
 class OpenAppaArchestraAnnotator {
-  async annotate(
-    request: ArchestraAnnotationRequest,
-    encryptedChat: OpenappaEncryptedChat | null = null,
-  ): Promise<ArchestraAnnotationOutcome> {
+  async annotate(params: {
+    request: ArchestraAnnotationRequest;
+    encryptedChat: OpenappaEncryptedChat | null;
+    /** Aborts the model work once the runtime stops waiting for the answer. */
+    abortSignal: AbortSignal;
+  }): Promise<ArchestraAnnotationOutcome> {
+    const { request, encryptedChat, abortSignal } = params;
     const organization = encryptedChat
       ? await OrganizationModel.getById(encryptedChat.organizationId)
       : await OrganizationModel.getFirst();
@@ -83,6 +86,7 @@ class OpenAppaArchestraAnnotator {
         tag: "annotation",
         system: `${request.system}\n\nThe annotation is one JSON object that matches this JSON schema:\n${JSON.stringify(request.schema)}`,
         prompt: request.input,
+        abortSignal,
       });
       const answer = text === null ? null : parseObject(text);
       if (answer === null)
@@ -92,6 +96,11 @@ class OpenAppaArchestraAnnotator {
         };
       return { kind: "answered", answer };
     } catch (error) {
+      if (abortSignal.aborted)
+        return {
+          kind: "failed",
+          reason: "The runtime stopped waiting for the annotation.",
+        };
       const apiError = APICallError.isInstance(error) ? error : null;
       const status = apiError?.statusCode;
       // 429 is the provider's rate limit; 402 is Archestra's token-cost limit.

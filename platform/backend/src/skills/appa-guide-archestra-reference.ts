@@ -22,25 +22,28 @@ A rule can use the name a client sends or the canonical ID \`<family>/<namespace
 
 - MCP tools: \`<catalog>__<tool>\`, canonical \`mcp/<catalog>/<tool>\`. Archestra splits a name at its last \`__\`; when the catalog or tool name contains another \`__\`, the name is evaluated as \`host/archestra/<full name>\` instead. Write rules with the exact name from the inventory rather than a derived canonical ID.
 - Platform tools: \`archestra__<name>\`, canonical \`mcp/archestra/<name>\`. \`archestra__execute_remedy_plan\` is \`appa/execute_remedy_plan\`.
-- A name without \`__\` is a native client tool, canonical \`host/archestra/<name>\`. Native tools never appear in an MCP inventory. Claude Code sends \`Bash\`, \`Read\`, \`Write\`, \`Edit\`, \`Grep\`, \`Task\`, and \`Agent\`; OpenCode's spawn tool is lowercase \`task\`; Codex sends \`exec_command\` and \`spawn_agent\`. OpenAPPA's own Claude Code install names them \`host/claude-code/<Name>\`; Archestra does not, so such a rule matches nothing here.
+- A name without \`__\` is a native client tool, canonical \`host/archestra/<name>\`. Native tools never appear in an MCP inventory. Claude Code sends \`Bash\`, \`Read\`, \`Write\`, \`Edit\`, \`Grep\`, \`Task\`, and \`Agent\`; OpenCode's spawn tool is lowercase \`task\`; Codex sends \`exec_command\` and \`spawn_agent\`. OpenAPPA's own Claude Code install names them \`host/claude-code/<Name>\`. A root rule spelled that way matches nothing here; a battery's rules spelled that way govern \`host/archestra/<Name>\` when \`[aliases.host]\` binds \`claude-code = ["archestra"]\`, as the default policy does for the \`claude-code\` battery.
 - \`archestra__run_command\` runs a command in the Archestra chat sandbox. It is not a client's shell: a rule on it does not govern Claude Code's \`Bash\`, and the reverse.
 - Command tools such as \`Bash\`, \`shell\`, \`exec_command\`, and \`run_command\` may send the command as \`command\` or \`cmd\`; the proxy aliases the two, so a selector on \`command\` matches either.
 - \`archestra__run_tool\` needs no rule: a call is evaluated as the target tool it runs.
 
 ## Default rules
 
-The starting policy routes unlisted tools to a catch-all annotator that adds no restrictions:
+The starting policy routes unlisted tools to a catch-all annotator that asks the organization's default model, which may rank the call \`suspicious\` or ask for \`human-approval\`:
 
 \`\`\`toml
 [[policy.annotator]]
-name = "noop"
+name = "archestra.undeclared-tool"
+builtin = "archestra"
+ranks = ["suspicious", "trusted"]
+marks = ["human-approval"]
 
 [[policy.tool]]
 name = "*"
-annotator = "noop"
+annotator = "archestra.undeclared-tool"
 \`\`\`
 
-Keep the existing \`[externals.annotators.noop]\` URL. It also declares the \`archestra.run-command\` annotator (\`builtin = "archestra"\`) and routes \`archestra__run_command\` to it, so the organization's default model ranks each sandbox command \`suspicious\` or \`trusted\`. Explicit rules take precedence over the catch-all, and the first matching rule for a tool applies, so put a narrow rule with an argument selector before the broad rule for the same tool.
+Without a configured default model the catch-all cannot answer, and an unlisted call is refused. To let unlisted tools run without restrictions, route \`*\` to the declared \`noop\` annotator instead, and keep its \`[externals.annotators.noop]\` URL. The starting policy also includes the \`claude-code\` battery for client built-ins, and re-declares its two shell annotators with \`builtin = "archestra"\` so the default model answers them instead of a local \`claude\` process. It declares the \`archestra.run-command\` annotator (\`builtin = "archestra"\`) and routes \`archestra__run_command\` to it, so the organization's default model ranks each sandbox command \`suspicious\` or \`trusted\`. Explicit rules take precedence over the catch-all, and the first matching rule for a tool applies, so put a narrow rule with an argument selector before the broad rule for the same tool.
 
 A rule declares either \`annotator\` or static fields such as \`requires\`, never both. To block \`archestra__run_command\` outright, replace its annotator rule with \`delta = {}\` and \`requires = { attention = ["blocked"] }\`; to block only some commands, put a selector rule with \`requires\` before the annotated rule.
 
@@ -48,12 +51,12 @@ Without the catch-all, declare \`archestra__search_tools\`, \`archestra__load_sk
 
 ## Batteries
 
-A battery is declared in the root policy. \`include\` names it, either \`batteries/<name>/appa.toml\` for a bundled battery or \`batteries/<name>@sha256-<hash>/appa.toml\` for an uploaded package. \`[server_aliases]\` points each battery namespace at an installed server's tool prefixes:
+A battery is declared in the root policy. \`include\` names it, either \`batteries/<name>/appa.toml\` for a bundled battery or \`batteries/<name>@sha256-<hash>/appa.toml\` for an uploaded package. \`[aliases.mcp]\` points each battery namespace at an installed server's tool prefixes:
 
 \`\`\`toml
 include = ["batteries/github/appa.toml"]
 
-[server_aliases]
+[aliases.mcp]
 github = ["github_prod"]
 \`\`\`
 

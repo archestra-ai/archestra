@@ -36,6 +36,7 @@ export function AgentRuns({ agentId }: { agentId: string }) {
     data: runs = [],
     isPending,
     isError,
+    error,
     refetch,
   } = useAgentRuns(agentId);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -78,6 +79,7 @@ export function AgentRuns({ agentId }: { agentId: string }) {
       <QueryLoadError
         className="border"
         title="Couldn't load runs"
+        error={error}
         onRetry={() => refetch()}
       />
     );

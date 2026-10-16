@@ -9,8 +9,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { INSTALLER_CLIENT_IDS } from "@archestra/shared/connection-setup";
-import { renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, renderHook } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CONNECT_CLIENTS } from "./clients";
 import {
   ALL_INCLUDED,
@@ -45,7 +45,10 @@ vi.mock("@/lib/agent.query", () => ({
     data: mocks.gateway ? { id: "gw-default" } : undefined,
     isLoading: false,
   }),
-  useProfiles: () => ({ data: [], isPending: false }),
+  useAgentOptions: () => ({ data: [], isPending: false }),
+}));
+vi.mock("@/lib/agent-options.query", () => ({
+  useAgentOptionsPage: () => ({ data: undefined, isPending: false }),
 }));
 vi.mock("@/lib/auth/auth.query", () => ({
   useHasPermissions: () => ({ data: false }),
@@ -81,7 +84,7 @@ vi.mock("@/lib/plugins/plugin.query", () => ({
   usePlugins: () => ({ data: mocks.plugins }),
 }));
 vi.mock("@/lib/skills/skill.query", () => ({
-  useAllSkills: () => ({ data: undefined }),
+  useSkillsPaginated: () => ({ data: undefined }),
 }));
 vi.mock("./use-gateway-servers", () => ({
   useGatewayServers: () => ({
@@ -184,6 +187,73 @@ describe("Connect page installer command", () => {
     );
   });
 });
+
+describe("Connect page plugins on the command's OS", () => {
+  const claudeCode = CONNECT_CLIENTS.find((c) => c.id === "claude-code");
+  if (!claudeCode) throw new Error("Missing client: claude-code");
+  // Opened in a Windows browser.
+  let platform: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    platform = vi.spyOn(navigator, "platform", "get").mockReturnValue("Win32");
+    mocks.plugins = [
+      plugin("everywhere", ["posix", "windows"]),
+      plugin("posix-only", ["posix"]),
+      plugin("windows-only", ["windows"]),
+    ];
+  });
+  afterEach(() => {
+    platform.mockRestore();
+    mocks.plugins = undefined;
+  });
+
+  it("offers the plugins the other command installs once the user picks it", () => {
+    const { result } = renderHook(() => useConnectPageData());
+    const offered = () =>
+      result.current.pluginsFor(claudeCode).map((p) => p.slug);
+    expect(result.current.windows).toBe(true);
+    expect(offered()).toEqual(["everywhere", "windows-only"]);
+
+    // "Use the macOS / Linux command"
+    act(() => result.current.setWindows(false));
+    expect(offered()).toEqual(["everywhere", "posix-only"]);
+    expect(
+      result.current.keptPlugins(claudeCode, null).map((p) => p.slug),
+    ).toEqual(["everywhere", "posix-only"]);
+  });
+
+  it("names only the kept plugins built for the command's OS", () => {
+    const origin = "http://127.0.0.1:9000";
+    // Both plugins on the Windows list kept.
+    const picks: ConnectPicks = {
+      gatewayId: null,
+      pluginIds: ["id-everywhere", "id-windows-only"],
+    };
+    const flags = (windows: boolean) =>
+      pageInstallerCommand(
+        origin,
+        "claude-code",
+        ALL_INCLUDED,
+        windows,
+        picks,
+      ).split("| node - ")[1];
+    // Every Windows plugin kept: the default, no flag.
+    expect(flags(true)).toBe(`--url ${origin} --client claude-code`);
+    // The macOS / Linux command must not install the posix plugin never kept.
+    expect(flags(false)).toBe(
+      `--url ${origin} --client claude-code --plugins everywhere`,
+    );
+  });
+});
+
+function plugin(slug: string, supportedPlatforms: string[]) {
+  return {
+    id: `id-${slug}`,
+    pluginSlug: slug,
+    displayName: slug,
+    description: null,
+    supportedPlatforms,
+  };
+}
 
 /** The command exactly as the Connect page builds it on `origin`. */
 function pageInstallerCommand(

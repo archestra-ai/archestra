@@ -1140,7 +1140,7 @@ describe("MSTeamsProvider.sendReply", () => {
   ): Promise<string> {
     const provider = createProvider();
     const sendActivity = vi.fn().mockResolvedValue({ id: "reply-1" });
-    const continueConversationAsync = vi.fn(
+    const continueConversation = vi.fn(
       async (
         _appId: string,
         _ref: unknown,
@@ -1152,7 +1152,7 @@ describe("MSTeamsProvider.sendReply", () => {
       },
     );
     // biome-ignore lint/suspicious/noExplicitAny: test-only — mock adapter
-    (provider as any).adapter = { continueConversationAsync };
+    (provider as any).adapter = { continueConversation };
 
     await provider.sendReply({
       originalMessage: {
@@ -1223,7 +1223,7 @@ describe("MSTeamsProvider.addApprovalRequestForm", () => {
   }): Promise<Card> {
     const provider = createProvider();
     const sendActivity = vi.fn().mockResolvedValue(undefined);
-    const continueConversationAsync = vi.fn(
+    const continueConversation = vi.fn(
       async (
         _appId: string,
         _ref: unknown,
@@ -1235,7 +1235,7 @@ describe("MSTeamsProvider.addApprovalRequestForm", () => {
       },
     );
     // biome-ignore lint/suspicious/noExplicitAny: test-only — mock adapter
-    (provider as any).adapter = { continueConversationAsync };
+    (provider as any).adapter = { continueConversation };
 
     await provider.addApprovalRequestForm({
       channelId: "19:abc@thread.tacv2",

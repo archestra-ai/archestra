@@ -83,6 +83,7 @@ import {
 import { taskQueueService } from "@/task-queue";
 import {
   ApiError,
+  CONNECTION_SETUP_MAX_SKILLS,
   constructResponseSchema,
   createSortingQuerySchema,
   DeleteObjectResponseSchema,
@@ -374,6 +375,12 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "List all agent skills for the organization",
         tags: ["Skills"],
         querystring: PaginationQuerySchema.extend({
+          includeContent: z
+            .preprocess((val) => val !== "false" && val !== false, z.boolean())
+            .optional()
+            .describe(
+              "Include manifest bodies (default true). False returns empty content for lightweight lists.",
+            ),
           search: z.string().optional(),
           sourceRepo: z.string().optional(),
           skillIds: z
@@ -454,6 +461,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           offset,
           search,
           sourceRepo,
+          includeContent,
           skillIds: requestedSkillIds,
           forAgentId,
           mcpGatewayEnvironment,
@@ -652,6 +660,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const [skills, total] = await Promise.all([
         SkillModel.findByOrganization({
           organizationId,
+          includeContent,
           limit,
           offset,
           search,
@@ -1026,6 +1035,52 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       return reply.send(await loadSkillDetail(updated));
+    },
+  );
+
+  fastify.get(
+    "/api/skills/names",
+    {
+      schema: {
+        operationId: RouteId.GetSkillNames,
+        description:
+          "List the ids and names of the skills the caller can read, in the " +
+          "default list order, with their total. A lightweight alternative to " +
+          "paging the full list for pickers and setups that name or send " +
+          "every visible skill.",
+        tags: ["Skills"],
+        querystring: z.object({
+          limit: z.coerce
+            .number()
+            .int()
+            .min(1)
+            .max(CONNECTION_SETUP_MAX_SKILLS)
+            .default(CONNECTION_SETUP_MAX_SKILLS),
+        }),
+        response: constructResponseSchema(
+          z.object({
+            data: z.array(z.object({ id: z.string(), name: z.string() })),
+            total: z.number().int(),
+          }),
+        ),
+      },
+    },
+    async ({ query: { limit }, organizationId, user }, reply) => {
+      // The same visibility as the default `GET /api/skills`, so a setup that
+      // sends these ids sends exactly what paging the list would have.
+      const filters = {
+        organizationId,
+        accessibleSkillIds: await SkillTeamModel.getUserAccessibleSkillIds({
+          organizationId,
+          userId: user.id,
+        }),
+        status: "active" as const,
+      };
+      const [data, total] = await Promise.all([
+        SkillModel.findNamesByOrganization({ ...filters, limit }),
+        SkillModel.countByOrganization(filters),
+      ]);
+      return reply.send({ data, total });
     },
   );
 

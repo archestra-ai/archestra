@@ -87,6 +87,31 @@ class OpenAppaSessionModel {
     return row?.root ?? null;
   }
 
+  /**
+   * The session row a runtime trajectory belongs to: a child's trajectory is
+   * its actor, a root session's trajectory is the root itself. Null when no
+   * row, or more than one, matches.
+   */
+  static async findByTrajectory(params: { root: string; trajectory: string }) {
+    const rows = await db
+      .select({
+        organizationId: table.organizationId,
+        sessionId: table.sessionId,
+        callerId: table.callerId,
+      })
+      .from(table)
+      .where(
+        and(
+          eq(table.root, params.root),
+          params.trajectory === params.root
+            ? isNull(table.parentId)
+            : eq(table.actor, params.trajectory),
+        ),
+      )
+      .limit(2);
+    return rows.length === 1 ? rows[0] : null;
+  }
+
   /** Returns a caller-scoped session record, or null before its first event. */
   static async find(params: { organizationId: string; sessionId: string }) {
     const [row] = await db

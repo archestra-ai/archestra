@@ -68,7 +68,7 @@ describe.each([
           ? await makeFastImageEntrypoint(root, "archestra-claude-code")
           : path.resolve(
               import.meta.dirname,
-              `../../../../agent_images/bin/archestra-${client}`,
+              `../../../../docker_images/agent/bin/archestra-${client}`,
             );
       const execution = exec("bash", [entrypoint], {
         cwd: root,

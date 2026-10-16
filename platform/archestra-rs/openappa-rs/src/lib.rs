@@ -322,6 +322,10 @@ enum ExecutionOutcome {
 struct PresentationInput {
     control_tool: String,
     supports_delegation: bool,
+    /// The reporting tool a block names, spelled the way the model calls it. Absent when
+    /// reporting is off, and then a block does not mention it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    yell_tool: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -412,6 +416,25 @@ fn required<'a>(value: &'a Option<String>, name: &str) -> napi::Result<&'a str> 
         .filter(|s| !s.is_empty())
         .ok_or_else(|| error(format!("missing {name}")))
 }
+/// The engine's reason for holding a child return while one of the child's
+/// calls is open (`EventError::ChildDispatchOpen`). The engine reports that
+/// hold only as text, so the binding names it here, next to the test that pins
+/// the text to the engine's output.
+const CHILD_CALL_OPEN_REASON: &str =
+    "the child has a call still open; report its outcome before the child ends";
+
+/// Marks a child return held only because the child has a call open, so the
+/// host keeps a busy runtime's file as pending instead of refusing it. Only
+/// the exact reason marks it; a ruling that quotes it stays a ruling.
+fn mark_busy_hold(mut decision: Value) -> Value {
+    let busy = decision.get("decision").and_then(Value::as_str) == Some("block")
+        && decision.get("reason").and_then(Value::as_str) == Some(CHILD_CALL_OPEN_REASON);
+    if busy && let Some(fields) = decision.as_object_mut() {
+        fields.insert("busy".into(), Value::Bool(true));
+    }
+    decision
+}
+
 fn wire(decision: &HookDecision) -> napi::Result<Value> {
     require_decision(decision)?;
     serde_json::to_value(WireDecision::of(decision)).map_err(error)
@@ -462,6 +485,7 @@ fn presentation_options(input: &Input) -> EmbeddedPresentationOptions {
                 control_tool: presentation.control_tool.clone(),
                 supports_delegation: presentation.supports_delegation,
                 include_display_plan: true,
+                yell_tool: presentation.yell_tool.clone(),
             }
         })
 }
@@ -476,6 +500,7 @@ fn result_presentation_options(input: &Input, call: &RecordedCall) -> EmbeddedPr
                 control_tool: presentation.control_tool.clone(),
                 supports_delegation: presentation.supports_delegation,
                 include_display_plan: true,
+                yell_tool: presentation.yell_tool.clone(),
             }
         })
 }
@@ -1186,6 +1211,14 @@ fn validate(input: &Input) -> napi::Result<()> {
             || presentation.control_tool.chars().any(char::is_control))
     {
         return Err(error("invalid control tool presentation"));
+    }
+    if let Some(yell) = input
+        .presentation
+        .as_ref()
+        .and_then(|presentation| presentation.yell_tool.as_ref())
+        && (yell.is_empty() || yell.len() > 1024 || yell.chars().any(char::is_control))
+    {
+        return Err(error("invalid yell tool presentation"));
     }
     for (name, value) in [
         ("tool spelling", &input.spelling),
@@ -2028,9 +2061,14 @@ impl State {
             caller_id: input.caller_id.clone(),
             withhold_content: input.withhold_consult_content,
         };
+        let child_return = input.event == HookEventKind::ChildReturn;
         let result = recording.dispatch_in_family(input, root, key).await;
         consults::store(&sql, attribution, &consults);
-        result
+        if child_return {
+            result.map(mark_busy_hold)
+        } else {
+            result
+        }
     }
 
     /// The root a top-level session governs: the one its row records once it has
@@ -4876,6 +4914,19 @@ mod runtime_child_tests {
         );
     }
 
+    #[test]
+    fn only_the_exact_open_call_hold_is_marked_busy() {
+        let hold = |reason: &str| json!({ "decision": "block", "reason": reason });
+        assert_eq!(
+            super::mark_busy_hold(hold(super::CHILD_CALL_OPEN_REASON))["busy"],
+            json!(true)
+        );
+        let quoted = format!("denied: {}", super::CHILD_CALL_OPEN_REASON);
+        assert!(super::mark_busy_hold(hold(&quoted)).get("busy").is_none());
+        let ack = json!({ "decision": "ack", "reason": super::CHILD_CALL_OPEN_REASON });
+        assert!(super::mark_busy_hold(ack).get("busy").is_none());
+    }
+
     #[tokio::test]
     async fn a_child_return_does_not_settle_an_open_call() {
         let delegate = super::canonical_tool("delegate").unwrap();
@@ -4906,10 +4957,9 @@ mod runtime_child_tests {
         let HookDecision::Block { reason } = blocked else {
             panic!("an open call must hold the return, got {blocked:?}");
         };
-        assert!(
-            reason.contains("call still open"),
-            "held reason was {reason}"
-        );
+        // The binding marks exactly this hold as busy (`mark_busy_hold`), so
+        // the host keeps a busy runtime's file pending instead of refusing it.
+        assert_eq!(reason, super::CHILD_CALL_OPEN_REASON);
         assert!(runtime.audit(&root).unwrap().iter().all(|entry| {
             entry.trajectory != child.0 || !matches!(entry.event, AuditEvent::ChildReturn { .. })
         }));

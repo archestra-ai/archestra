@@ -12,6 +12,7 @@ import {
 import { useOpenappaStatus } from "@/lib/chat/chat.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
+import { cn } from "@/lib/utils/tailwind";
 
 /** Started chats share one quiet rail for live guardrails and encrypted-chat privacy. */
 export const ChatComposerSecurity = memo(function ChatComposerSecurity({
@@ -36,7 +37,14 @@ export const ChatComposerSecurity = memo(function ChatComposerSecurity({
 
   return (
     <div className="min-w-0">
-      <div className="flex min-h-9 flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-t-md border border-b-0 border-input bg-muted/35 px-3 py-1">
+      <div
+        className={cn(
+          "mx-3 -mb-px flex min-h-8 flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-t-lg border border-b-0 px-3",
+          encrypted
+            ? "border-dashed border-muted-foreground/60 bg-muted/50"
+            : "border-input bg-muted/35",
+        )}
+      >
         {status && (
           <output
             aria-label={`Trust: ${status.trust}; audience: ${status.audience}`}
@@ -84,9 +92,7 @@ export const ChatComposerSecurity = memo(function ChatComposerSecurity({
           </Tooltip>
         )}
       </div>
-      <div className="[&_[data-slot=input-group]]:rounded-t-none [&_[data-slot=input-group]]:shadow-none">
-        {children}
-      </div>
+      {children}
     </div>
   );
 });

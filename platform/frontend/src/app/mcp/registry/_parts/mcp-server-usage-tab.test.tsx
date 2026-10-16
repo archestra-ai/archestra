@@ -1,7 +1,7 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/auth/auth.query", () => ({ useSession: vi.fn() }));
+vi.mock("@/lib/auth/auth.query");
 
 import { useSession } from "@/lib/auth/auth.query";
 import { McpServerUsageTab } from "./mcp-server-usage-tab";
@@ -41,6 +41,57 @@ const server = (assignedAgents: ReturnType<typeof agent>[]) =>
   ({ assignedAgents }) as unknown as ServerArg;
 
 describe("McpServerUsageTab", () => {
+  it("bounds rendered rows while keeping every agent reachable and full usage counts", () => {
+    const agents = Array.from({ length: 53 }, (_, index) =>
+      agent({
+        id: `agent-${index}`,
+        name: `Usage Agent ${String(index + 1).padStart(3, "0")}`,
+      }),
+    );
+    const { rerender } = render(
+      <McpServerUsageTab serversForCatalog={[]} autoModeAgents={agents} />,
+    );
+
+    expect(
+      screen.getByText(/53 agents and gateways can reach this server/),
+    ).toHaveTextContent("0 with Manual tool access, 53 with All.");
+    expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(
+      21,
+    );
+    expect(screen.getByText("Usage Agent 001")).toBeInTheDocument();
+    expect(screen.queryByText("Usage Agent 021")).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Go to next page" })[0],
+    );
+    expect(screen.getByText("Usage Agent 021")).toBeInTheDocument();
+    expect(screen.queryByText("Usage Agent 001")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(
+      21,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Go to last page" }));
+    expect(screen.getByText("Usage Agent 053")).toBeInTheDocument();
+    expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(
+      14,
+    );
+    expect(
+      screen.getAllByRole("button", { name: "Go to next page" })[0],
+    ).toBeDisabled();
+
+    rerender(
+      <McpServerUsageTab
+        serversForCatalog={[]}
+        autoModeAgents={agents.slice(0, 3)}
+      />,
+    );
+    expect(screen.getByText("Usage Agent 001")).toBeInTheDocument();
+    expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(
+      4,
+    );
+    expect(screen.getByText("Page 1 of 1")).toBeInTheDocument();
+  });
+
   it("tells same-named personal agents apart by owner", () => {
     render(
       <McpServerUsageTab

@@ -925,8 +925,7 @@ clear_reconfigure_hint() { printf '\\033[s\\n\\r\\033[2K\\033[u'; }
 offer_reconfigure_tail() {
   if [ "$PENDING_KEY_SET" = "1" ]; then
     # a key typed ahead during the probes counts as the pressed key — but only
-    # for [C]; anything else (e.g. a [U] meant for the update offer below) is
-    # left in place so that beat can read it.
+    # for [C]; unrelated input must not select a menu action.
     case "$PENDING_KEY" in
       c|C) key="$PENDING_KEY"; PENDING_KEY_SET=0 ;;
       *) key='' ;;
@@ -934,8 +933,7 @@ offer_reconfigure_tail() {
   else
     key=''
     IFS= read -rs -n 1 -t "$RECONFIG_WAIT" key </dev/tty 2>/dev/null || key=''
-    # a non-[C] key pressed here belongs to the update offer below: stash it so
-    # this closing beat doesn't swallow it.
+    # Preserve unrelated input without treating it as a menu action.
     case "$key" in
       c|C|'') ;;
       *) PENDING_KEY="$key"; PENDING_KEY_SET=1; key='' ;;
@@ -948,37 +946,28 @@ offer_reconfigure_tail() {
   return 0
 }
 
-# When the instance reports a newer guard format than this one, show a one-line
-# advisory with a timed, non-blocking [U] offer. It never blocks the launch:
-# the read has a short deadline (the same closing-beat budget as [C]), and any
-# other key — or the timeout — just lets ${client.binary} start. Pressing [U]
-# prints the concrete /connection re-run steps and dwells a beat longer so they
-# can be read. Re-connecting needs a fresh one-time link only the user can fetch
-# from the page, so [U] shows the steps rather than doing it for them.
+# The health request checks for updates on every launch. Show the reason and
+# concrete steps automatically, without requiring a menu or another keypress.
+# Keep the notice readable, but always let the client start after six seconds.
 notify_version_update() {
-  # Nothing to update if the guard just removed itself (every remote was
-  # disconnected this run), and the timed reads below already hold the advisory
-  # on screen — so no extra dwell is needed.
   [ "$GUARD_UNINSTALLED" = "1" ] && return 0
   version_is_stale || return 0
-  printf '%supdate:%s %sa newer %s setup is available.%s %s[U]%s%s for the steps to update this startup check%s\\n' "$C_WARN" "$C_RESET" "$C_DIM" "$APP_NAME" "$C_RESET" "$C_TITLE" "$C_RESET" "$C_DIM" "$C_RESET"
-  if [ "$PENDING_KEY_SET" = "1" ]; then
-    # a [U] typed ahead during the probes (stashed by the closing beat) answers here
-    key="$PENDING_KEY"; PENDING_KEY_SET=0
-  else
-    key=''
-    IFS= read -rs -n 1 -t "$RECONFIG_WAIT" key </dev/tty 2>/dev/null || key=''
+  # Flush type-ahead without waiting, including a burst beyond PENDING_KEY.
+  # MIN=0/TIME=0 makes the tty return EOF as soon as its queue is empty.
+  arch_update_tty=$(stty -g </dev/tty 2>/dev/null)
+  if [ -n "$arch_update_tty" ] && stty -icanon min 0 time 0 </dev/tty 2>/dev/null; then
+    cat </dev/tty >/dev/null 2>&1
+    stty "$arch_update_tty" </dev/tty 2>/dev/null || true
   fi
-  case "$key" in
-    u|U)
-      printf '%sTo update, re-run the %s connection setup:%s\\n' "$C_TITLE" "$APP_NAME" "$C_RESET"
-      printf '  1. Open the %s /connection page and pick %s.\\n' "$APP_NAME" ${sh(client.label)}
-      printf '  2. Copy the setup command it shows and run it in your terminal.\\n'
-      printf '     It reinstalls this startup check at the current version.\\n'
-      # a longer, still non-blocking beat so the steps can be read
-      IFS= read -rs -n 1 -t 6 key </dev/tty 2>/dev/null || true
-      ;;
-  esac
+  PENDING_KEY_SET=0
+  printf '\\n%sUpdate available%s — a newer %s setup is available.\\n' "$C_WARN" "$C_RESET" "$APP_NAME"
+  printf 'Your installed startup check is older than this deployment.\\n'
+  printf '%sTo update, re-run the %s connection setup:%s\\n' "$C_TITLE" "$APP_NAME" "$C_RESET"
+  printf '  1. Open the %s /connection page and pick %s.\\n' "$APP_NAME" ${sh(client.label)}
+  printf '  2. Copy the setup command it shows and run it in your terminal.\\n'
+  printf '     It reinstalls this startup check at the current version.\\n'
+  printf '%sContinuing in 6 seconds — press any key to continue now.%s\\n' "$C_DIM" "$C_RESET"
+  IFS= read -rs -n 1 -t 6 key </dev/tty 2>/dev/null || true
 }
 
 # When something is down: the quick (Y/n) reverses everything that failed in
@@ -1155,6 +1144,7 @@ if [ "$OPEN_MENU" = "1" ]; then
   printf '\\033[%dB\\r' "$ACTIVE_TOTAL"
   clear_reconfigure_hint
   reconfigure_menu
+  notify_version_update
   finish_guard
 fi
 if [ "$DISC_ALL" = "1" ]; then
@@ -1162,6 +1152,7 @@ if [ "$DISC_ALL" = "1" ]; then
   GUARD_DWELL=1
   disconnect_and_forget $ACTIVE_IDXS
   [ "$DISCONNECT_FAILED" = "0" ] && uninstall_guard
+  notify_version_update
   finish_guard
 fi
 if [ "$SKIP_ALL" = "1" ]; then
@@ -1295,12 +1286,12 @@ chmod 600 "${guardPath}.instructions-refresh.py"`
 }
 ${client.clientId === "codex" ? `node "${guardPath}.handoff.cjs" ${ctx.proxy ? '--install-direct "$(command -v codex)"' : "--remove-direct"}` : ""}
 # A guard installed BEFORE the version-check feature has no GUARD_FORMAT_VERSION
-# stamp and no [U] update check, so at launch it can never nudge the user to
-# re-connect on its own — the [U] launch prompt only exists in version-aware
+# stamp and no startup update check, so at launch it can never nudge the user to
+# re-connect on its own — the startup update notice only exists in version-aware
 # guards. Running connect is therefore the one moment we can lift such a user
 # onto the current guard, so we upgrade it in place, automatically, with no
 # prompt. (A guard that already carries the stamp is just refreshed silently; if
-# it was merely a version behind, its own [U] launch nudge is what sent the user
+# it was merely a version behind, its own startup update notice is what sent the user
 # here.)
 archestra_guard_pre_feature=0
 if [ -f "${guardPath}" ] && ! grep -q 'GUARD_FORMAT_VERSION=' "${guardPath}" 2>/dev/null; then

@@ -3,6 +3,7 @@ import type { AppaSessionIdentity } from "@/openappa/wire";
 import { parseClaudeMetadataSessionId } from "@/routes/proxy/utils/headers/session-id";
 import { ApiError } from "@/types";
 import type { CommonToolResult } from "@/types/common-llm-format";
+import { asRecord } from "@/utils/as-record";
 import type {
   AppaClientAdapter,
   AppaMatchContext,
@@ -22,7 +23,6 @@ import {
 } from "./claude-code-relay";
 import { structuredQuestionRuling } from "./native-question-ruling";
 import {
-  asRecord,
   bindMintedChildTrajectory,
   localToolName,
   namesChildrenFromArguments,
@@ -111,6 +111,11 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   // Claude Code connects MCP servers in the background and declares this tool
   // in the requests it sends before they are ready.
   readonly pendingServersTool = "WaitForMcpServers";
+  // A gateway that needs a sign-in is not pending, so the wait tool is not
+  // declared and never carries the denial: /mcp is where the person sees that.
+  gatewayToolsHint(serverName: string): string {
+    return `Run /mcp in Claude Code. If "${serverName}" is still connecting, wait for it. If it needs authentication, select it and sign in. If it is not listed, connect Claude Code again and start a new session. Then send your message again.`;
+  }
   matches(context: AppaMatchContext): boolean {
     const userAgent = (
       readHeader(context.headers, "user-agent") ?? ""

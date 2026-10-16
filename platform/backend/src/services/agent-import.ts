@@ -369,7 +369,10 @@ async function resolveAndAssignDelegations(
     }
 
     try {
-      await AgentToolModel.assignDelegation(agentId, targetAgentId);
+      await AgentToolModel.assignDelegation({
+        agentId: agentId,
+        targetAgentId: targetAgentId,
+      });
     } catch (error) {
       logger.warn(
         { agentId, targetAgentName: ref.targetAgentName, error: String(error) },

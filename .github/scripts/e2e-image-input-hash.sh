@@ -22,13 +22,43 @@ case "$kind" in
   platform)
     {
       printf 'context\n'
-      git ls-tree "HEAD:platform" | awk -F '\t' '$2 != "e2e-tests" && $2 != "docs-screenshots"'
+      # Hash leaf entries so Docker-excluded test changes do not invalidate
+      # the runtime image. Only omit patterns we can prove are excluded: any
+      # negation or Dockerfile-specific ignore file disables this optimization.
+      # The ignore file itself remains an input. All other files stay in the
+      # hash, including files we could theoretically also exclude.
+      python3 - <<'PY'
+import subprocess
+import sys
+
+def git(*args):
+    return subprocess.check_output(["git", *args])
+
+patterns = git("show", "HEAD:platform/.dockerignore").decode().splitlines()
+has_override = subprocess.run(
+    ["git", "cat-file", "-e", "HEAD:platform/Dockerfile.dockerignore"],
+    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+).returncode == 0
+can_exclude = not has_override and not any(p.lstrip().startswith("!") for p in patterns)
+for entry in git("ls-tree", "-rz", "HEAD:platform").split(b"\0"):
+    if not entry:
+        continue
+    _, path = entry.split(b"\t", 1)
+    excluded = (
+        ("e2e-tests" in patterns and path.startswith(b"e2e-tests/"))
+        or ("tools/docs-screenshots" in patterns and path.startswith(b"tools/docs-screenshots/"))
+        or ("**/*.test.ts" in patterns and path.endswith(b".test.ts"))
+        or ("**/*.test.tsx" in patterns and path.endswith(b".test.tsx"))
+    )
+    if not (can_exclude and excluded):
+        sys.stdout.buffer.write(entry + b"\0")
+PY
       definition
     } | git hash-object --stdin
     ;;
   mcp-base)
     {
-      printf 'context %s\n' "$(git rev-parse HEAD:platform/mcp_server_docker_image)"
+      printf 'context %s\n' "$(git rev-parse HEAD:platform/docker_images/mcp_server)"
       definition
     } | git hash-object --stdin
     ;;

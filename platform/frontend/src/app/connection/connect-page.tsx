@@ -113,7 +113,6 @@ import {
   setupModeFor,
   useManualSteps,
 } from "./manual-setup";
-import { detectPlatform } from "./platform.utils";
 import { useUpdateUrlParams } from "./use-update-url-params";
 
 // The approval panel is large; the page only needs it for Claude Desktop's
@@ -152,8 +151,12 @@ export function ConnectPage() {
   const searchParams = useSearchParams();
   const updateUrlParams = useUpdateUrlParams();
   const [pickedId, setPickedId] = useState(() => searchParams.get("clientId"));
-  const data = useConnectPageData(pickedId, picks.gatewayId);
   const [dialog, setDialog] = useState<DialogKind | null>(null);
+  const data = useConnectPageData({
+    pickedClientId: pickedId,
+    pickedGatewayId: picks.gatewayId,
+    showToolDetails: dialog === "servers",
+  });
   const [focus, setFocus] = useState<string | null>(null);
   // What the user leaves out, per agent. The copied command (or prompt, for
   // generic agents) carries it, and this browser keeps it for a while
@@ -643,8 +646,8 @@ function ConnectArea({
   const { copied, copy: copyText } = useCopy();
   const [origin, setOrigin] = useState("");
   useEffect(() => setOrigin(window.location.origin), []);
-  const [windows, setWindows] = useState(false);
-  useEffect(() => setWindows(detectPlatform() === "windows"), []);
+  // The page's OS, so the plugins it shows are the ones this command installs.
+  const { windows, setWindows } = data;
   const manual = setup === "manual";
   const script = setup === "script";
   const download = setup === "download";
@@ -1263,7 +1266,7 @@ function ProfileCard({
     });
 
   const included =
-    (skillsOn && !skillsOff ? skills.length : 0) +
+    (skillsOn && !skillsOff ? data.totalSkills : 0) +
     (pluginsOff ? 0 : plugins.length);
 
   return (
@@ -1331,7 +1334,7 @@ function ProfileCard({
                   tools === null
                     ? data.toolPreviewError
                       ? "Tool counts unavailable"
-                      : "Loading tool counts…"
+                      : "View tool counts and context cost"
                     : `${fmt(tools)} ${plural(tools, "tool")}${data.progressive ? " loaded, more on demand" : ""}`
                 }
                 // The context cost sits on the header, across from the count.
@@ -1387,7 +1390,7 @@ function ProfileCard({
                 title={
                   skillsOff
                     ? "Skills off"
-                    : `+${fmt(skills.length)} ${plural(skills.length, "skill")}`
+                    : `+${fmt(data.totalSkills)} ${plural(data.totalSkills, "skill")}`
                 }
                 sub={
                   skillsOff
@@ -1396,7 +1399,7 @@ function ProfileCard({
                 }
                 muted={skillsOff}
                 onTitle={() => onOpen("skills")}
-                seeAll={seeAllLabel(skills.length, "skill")}
+                seeAll={seeAllLabel(data.totalSkills, "skill")}
               >
                 {skills.slice(0, SKILL_ROWS).map((s) => (
                   <ListRow

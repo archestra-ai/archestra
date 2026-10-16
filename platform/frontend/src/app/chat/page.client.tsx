@@ -33,7 +33,10 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { scheduledRunContext } from "@/app/_parts/scheduled-run-sidebar.utils";
-import { AgentRuntimeCredentialPrompt } from "@/components/agent-run-credential-prompt";
+import {
+  AgentRuntimeCredentialPrompt,
+  AgentRuntimePreflightError,
+} from "@/components/agent-run-credential-prompt";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { ApiKeyLoadError } from "@/components/api-key-load-error";
 import { AppLogo } from "@/components/app-logo";
@@ -97,11 +100,13 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Version } from "@/components/version";
 import {
   useAgentDefaultSuggestedPrompts,
   useChatAgents,
   useDefaultAgentId,
+  useProfile,
 } from "@/lib/agent.query";
 import {
   runtimePreflightDisabledReason,
@@ -424,9 +429,8 @@ export function ChatPageContent({
   const canUseProviderSettings =
     canReadLlmProvider === true && canReadLlmModels === true;
 
-  // Fetch the compact roster needed to resolve the new-chat agent.
-  const { data: internalAgents = [], isPending: isLoadingAgents } =
-    useChatAgents({ enabled: hasChatAccess });
+  const { data: conversation, isLoading: isLoadingConversation } =
+    useConversation(conversationId);
   const { data: defaultAgentId } = useDefaultAgentId();
   const runtimeEnabled = useFeature("agentRuntime") === true;
   const startAgentRunMutation = useStartAgentRun();
@@ -463,9 +467,25 @@ export function ChatPageContent({
   const { data: newChatProject, isPending: isNewChatProjectPending } =
     useProject(newChatProjectId ?? undefined);
 
+  const {
+    data: internalAgents = [],
+    isPending: isLoadingAgents,
+    resolveAgent,
+  } = useChatAgents({
+    enabled: hasChatAccess,
+    ids: [
+      searchParams.get("agentId"),
+      newChatProject?.defaultAgent?.id,
+      conversation?.agentId,
+      conversation?.agent?.id,
+      forkAgentId,
+    ],
+  });
+
   // Shared new-chat initialization (agent/model/key resolution + persistence).
   const {
     agentId: initialAgentId,
+    selectedAgent: initialAgentReference,
     modelId: initialModel,
     apiKeyId: initialApiKeyId,
     provider: initialProvider,
@@ -479,6 +499,8 @@ export function ChatPageContent({
     onResetModelOverride: handleResetModelOverride,
   } = useInitialChatModelState({
     agents: internalAgents,
+    resolveAgent,
+    isAgentsLoading: isLoadingAgents,
     organization: organization ?? null,
     defaultAgentId,
     modelsByProvider,
@@ -494,11 +516,13 @@ export function ChatPageContent({
     isApiKeysLoading: isLoadingUsableApiKeys,
     routeConversationId,
   });
-  const initialRuntimeAgent = runtimeEnabled
-    ? internalAgents.find(
-        (agent) => agent.id === initialAgentId && agent.runtime !== null,
-      )
-    : undefined;
+  const initialRuntimeCandidate =
+    internalAgents.find((agent) => agent.id === initialAgentId) ??
+    initialAgentReference;
+  const initialRuntimeAgent =
+    runtimeEnabled && initialRuntimeCandidate?.runtime
+      ? initialRuntimeCandidate
+      : undefined;
   const isInitialRuntimeMode = !!initialRuntimeAgent;
   const runtimePreflight = useAgentRuntimePreflight(
     initialAgentId ?? "",
@@ -832,9 +856,6 @@ export function ChatPageContent({
     clearAllAppDiagnostics();
   }, [conversationId]);
 
-  // Fetch conversation with messages
-  const { data: conversation, isLoading: isLoadingConversation } =
-    useConversation(conversationId);
   usePageTitle(
     conversation
       ? getConversationDisplayTitle(conversation.title, conversation.messages)
@@ -971,12 +992,26 @@ export function ChatPageContent({
     }
   }, [conversationId, conversation?.artifact, isLoadingConversation]);
 
-  const conversationAgent = internalAgents.find(
+  const conversationAgentSummary = internalAgents.find(
     (agent) => agent.id === conversation?.agentId,
   );
-  const initialAgent = internalAgents.find(
-    (agent) => agent.id === initialAgentId,
-  );
+  const initialAgentSummary =
+    internalAgents.find((agent) => agent.id === initialAgentId) ??
+    initialAgentReference;
+  const selectedAgentSummary = conversationId
+    ? conversationAgentSummary
+    : initialAgentSummary;
+  // Only the active agent needs prompts, knowledge assignments, and resolved credentials.
+  const selectedAgentQuery = useProfile(selectedAgentSummary?.id, {
+    enabled: hasChatAccess,
+  });
+  const selectedAgentDetail =
+    selectedAgentQuery.data &&
+    selectedAgentQuery.data.id === selectedAgentSummary?.id
+      ? selectedAgentQuery.data
+      : undefined;
+  const conversationAgent = conversationId ? selectedAgentDetail : undefined;
+  const initialAgent = !conversationId ? selectedAgentDetail : undefined;
   const initialAgentHasOwnPrompts =
     (initialAgent?.suggestedPrompts?.length ?? 0) > 0;
   const { data: defaultSuggestedPrompts } = useAgentDefaultSuggestedPrompts(
@@ -1025,9 +1060,10 @@ export function ChatPageContent({
       // A key the viewer may use.
       usableChatApiKeys.length > 0 ||
       // Or the agent's own key, which works through the agent.
-      Boolean(activeSelectionAgent?.llmApiKeyId));
+      Boolean(selectedAgentSummary?.llmApiKeyId));
   const isAgentSubscriptionMetadataPending = Boolean(
-    activeSelectionAgent?.llmApiKeyId && isActiveAgentCredentialPending,
+    (selectedAgentSummary && !selectedAgentDetail) ||
+      (activeSelectionAgent?.llmApiKeyId && isActiveAgentCredentialPending),
   );
   // An unconnected per-user subscription is stored as a null conversation
   // model/key pair. In that state the agent's pinned model remains the effective
@@ -1159,11 +1195,11 @@ export function ChatPageContent({
   const initialToolsUnavailable = useMemo(
     () =>
       agentToolsUnavailableForModel({
-        agent: internalAgents.find((a) => a.id === initialAgentId),
+        agent: initialAgent,
         selectedModelId: initialModel,
         models: chatModels,
       }),
-    [internalAgents, initialAgentId, initialModel, chatModels],
+    [initialAgent, initialModel, chatModels],
   );
 
   const conversationToolsUnavailable = useMemo(
@@ -1182,11 +1218,11 @@ export function ChatPageContent({
   const initialNotRecommended = useMemo(
     () =>
       agentNotRecommendedForModel({
-        agent: internalAgents.find((a) => a.id === initialAgentId),
+        agent: initialAgent,
         selectedModelId: initialModel,
         models: chatModels,
       }),
-    [internalAgents, initialAgentId, initialModel, chatModels],
+    [initialAgent, initialModel, chatModels],
   );
 
   const conversationNotRecommended = useMemo(
@@ -2642,7 +2678,10 @@ export function ChatPageContent({
       onSuccess?: (newConversation: { id: string }) => void | Promise<void>,
       title?: string,
     ) => {
-      if (createConversationMutation.isPending) {
+      if (
+        createConversationMutation.isPending ||
+        isAgentSubscriptionMetadataPending
+      ) {
         return false;
       }
 
@@ -2704,6 +2743,7 @@ export function ChatPageContent({
       initialApiKeyId,
       isEncryptedChatDraft,
       initialThinkingEffort,
+      isAgentSubscriptionMetadataPending,
       createConversationMutation,
       searchParams,
       appSessionRecorder.adoptConversation,
@@ -2951,7 +2991,7 @@ export function ChatPageContent({
     // Skip if conversation already exists
     if (conversationId) return;
 
-    if (!initialAgentId) return;
+    if (!initialAgentId || isAgentSubscriptionMetadataPending) return;
     // Skip if mutation is already in progress
     if (createConversationMutation.isPending) return;
 
@@ -2985,6 +3025,7 @@ export function ChatPageContent({
     initialUserPrompt,
     conversationId,
     initialAgentId,
+    isAgentSubscriptionMetadataPending,
     createInitialConversation,
     selectConversation,
     createConversationMutation.isPending,
@@ -3310,10 +3351,32 @@ export function ChatPageContent({
             onOpenTab: openRightPanelTab,
           }}
         />
+        {selectedAgentSummary &&
+          (selectedAgentQuery.isError ||
+            (selectedAgentQuery.isSuccess && !selectedAgentQuery.data)) && (
+            <InlineNotice variant="error">
+              <AlertTriangle />
+              <InlineNoticeText>
+                Could not load the selected agent’s settings.
+              </InlineNoticeText>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void selectedAgentQuery.refetch()}
+              >
+                Retry
+              </Button>
+            </InlineNotice>
+          )}
         <div className="flex flex-1 min-h-0">
           <div className="flex-1 flex flex-col min-w-0 min-h-0">
             <div className="flex flex-col h-full min-h-0">
-              <StreamTimeoutWarning isStalled={isTransportStalled} />
+              <StreamTimeoutWarning
+                isStalled={
+                  isTransportStalled &&
+                  chatSession?.stallRecoveryExhausted === true
+                }
+              />
 
               {/* Mobile: Inline artifact/browser panel below header */}
               {isRightPanelOpen && (
@@ -3898,26 +3961,41 @@ export function ChatPageContent({
                                   runtimeMode={isInitialRuntimeMode}
                                   runtimeAgentName={initialRuntimeAgent?.name}
                                 />
-                                {isInitialRuntimeMode &&
-                                  runtimePreflight.data?.ready === false && (
-                                    <AgentRuntimeCredentialPrompt
-                                      agentId={initialAgentId ?? ""}
-                                      missing={[
-                                        ...runtimePreflight.data.missing,
-                                        ...runtimePreflight.data.misconfigured,
-                                      ]}
-                                      declarations={
-                                        initialRuntimeAgent?.runtime
-                                          ?.credentials ?? []
-                                      }
-                                      incompatible={
-                                        runtimePreflight.data.incompatible
-                                      }
-                                      onConnected={() =>
-                                        runtimePreflight.refetch()
-                                      }
-                                    />
-                                  )}
+                                {/* The runtime drawer overlays the space
+                                    under the composer, so these start below
+                                    it rather than under it. */}
+                                <div className="pt-7 empty:hidden">
+                                  {isInitialRuntimeMode &&
+                                    runtimePreflight.data?.ready === false && (
+                                      <AgentRuntimeCredentialPrompt
+                                        agentId={initialAgentId ?? ""}
+                                        missing={[
+                                          ...runtimePreflight.data.missing,
+                                          ...runtimePreflight.data
+                                            .misconfigured,
+                                        ]}
+                                        declarations={
+                                          initialRuntimeAgent?.runtime
+                                            ?.credentials ?? []
+                                        }
+                                        incompatible={
+                                          runtimePreflight.data.incompatible
+                                        }
+                                        onConnected={() =>
+                                          runtimePreflight.refetch()
+                                        }
+                                      />
+                                    )}
+                                  {isInitialRuntimeMode &&
+                                    runtimePreflight.isError && (
+                                      <AgentRuntimePreflightError
+                                        error={runtimePreflight.error}
+                                        onRetry={() =>
+                                          void runtimePreflight.refetch()
+                                        }
+                                      />
+                                    )}
+                                </div>
                               </>
                             )}
                           </div>

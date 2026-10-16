@@ -246,6 +246,20 @@ builtin = "hitl"
     assert.equal(attempts.filter((response) => response.result.isError === true).length, 1);
   });
 
+  await t.test('a block names the yell tool the presentation carries, and only then', async () => {
+    const blocked = async (presentation) => hook(scope(), {
+      event: 'tool_call', operation_id: 'call:held', tool: 'leak_partial', arguments: {}, presentation,
+    });
+    const reporting = await blocked({
+      control_tool: 'gateway.custom_remedy', supports_delegation: false, yell_tool: 'gateway.custom_yell',
+    });
+    assert.equal(reporting.decision, 'deny_call', JSON.stringify(reporting));
+    assert.match(reporting.feedback, /\nReport:\n  If a plan makes no sense, .* call gateway\.custom_yell\.$/);
+    const silent = await blocked({ control_tool: 'gateway.custom_remedy', supports_delegation: false });
+    assert.equal(silent.decision, 'deny_call', JSON.stringify(silent));
+    assert.ok(!silent.feedback.includes('Report:'), silent.feedback);
+  });
+
   await t.test('unrelated sessions overlap consult I/O instead of sharing a process lock', { timeout: 15000 }, async () => {
     const presentation = { control_tool: 'gateway.custom_remedy', supports_delegation: false };
     const prepare = async () => {
@@ -822,6 +836,8 @@ builtin = "hitl"
     assert.equal(next.decision, 'allow_call', JSON.stringify(next));
     const held = await hook(child, { event: 'child_return', operation_id: 'runtime-return:task:pending', output: 'must not settle read-next' });
     assert.equal(held.decision, 'block', JSON.stringify(held));
+    // The host keeps a busy runtime's file pending on this mark, not on the text.
+    assert.equal(held.busy, true, JSON.stringify(held));
     await result(child, 'read-next', 'private report');
     const admittedSecond = await cross('second', 'runtime result two');
     const latest = await native.loadChildReturns(organization_id, parent.session_id, {

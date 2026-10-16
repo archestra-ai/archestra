@@ -7,9 +7,10 @@ import {
   SLACK_BOT_HANDLE_PATTERN,
   TimeInMs,
 } from "@archestra/shared";
+import { ClientSecretCredential } from "@azure/identity";
+import { Activity, ActivityTypes } from "@microsoft/agents-activity";
+import type { TurnContext } from "@microsoft/agents-hosting";
 import { WebClient } from "@slack/web-api";
-import { ActivityTypes, TeamsInfo, TurnContext } from "botbuilder";
-import { MicrosoftAppCredentials } from "botframework-connector";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
@@ -32,6 +33,7 @@ import {
   SLACK_DEFAULT_CONNECTION_MODE,
   TELEGRAM_LINK_CODE_TTL_MS,
 } from "@/agents/chatops/constants";
+import { msTeamsDirectory } from "@/agents/chatops/ms-teams-directory";
 import { resolveMSTeamsUserEmail } from "@/agents/chatops/ms-teams-user";
 import { slackAppFactory } from "@/agents/chatops/slack-app-factory";
 import {
@@ -175,18 +177,18 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
   /**
    * MS Teams webhook endpoint
    *
-   * Receives Bot Framework activities from Microsoft Teams.
-   * JWT validation is handled by the Bot Framework adapter.
+   * Receives activities from Microsoft Teams.
+   * The provider validates JWTs before invoking the Agents SDK adapter.
    */
   fastify.post(
     "/api/webhooks/chatops/ms-teams",
     {
       config: {
-        // Increase body limit for Bot Framework payloads
+        // Increase body limit for Agents SDK payloads
         rawBody: true,
       },
       schema: {
-        description: "MS Teams Bot Framework webhook endpoint",
+        description: "MS Teams webhook endpoint",
         tags: ["ChatOps Webhooks"],
         body: z.unknown(),
         response: {
@@ -241,7 +243,7 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers[key] = value;
       }
 
-      // The Bot Framework SDK answers with two separate calls,
+      // The Agents SDK answers with two separate calls,
       // `res.status(code)` then `res.send(body)`, so the status must be kept
       // between them. SDK failures (auth rejections, credential errors such as
       // "Invalid appId.") are raised as ApiErrors after processing, so the
@@ -257,19 +259,21 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
             message:
               typeof data === "string" && data
                 ? data
-                : "Bot Framework rejected the activity",
+                : sdk.status === 401
+                  ? "Unauthorized MS Teams activity"
+                  : "Agents SDK rejected the activity",
           };
           return;
         }
-        // Bot Framework sends various response formats - use type assertion for passthrough
+        // Agents SDK sends various response formats - use type assertion for passthrough
         reply
           .status(sdk.status as 200)
           .send(data ? (data as never) : { status: "ok" });
       };
 
       try {
-        // Process the activity through the Bot Framework adapter
-        // This handles JWT validation automatically
+        // Process the activity through the Agents SDK adapter
+        // The provider authenticates before acknowledging the activity.
         await provider.processActivity(
           { body: request.body, headers },
           {
@@ -349,7 +353,8 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 let aadGroupId = teamData.aadGroupId;
                 if (!aadGroupId) {
                   try {
-                    const details = await TeamsInfo.getTeamDetails(context);
+                    const details =
+                      await msTeamsDirectory.getTeamDetails(context);
                     aadGroupId = details?.aadGroupId ?? undefined;
                   } catch {
                     // Non-fatal
@@ -512,57 +517,63 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
             const trimmedText = message.text.trim().toLowerCase();
 
             if (trimmedText === CHATOPS_COMMANDS.HELP) {
-              await context.sendActivity({
-                attachments: [
-                  {
-                    contentType: "application/vnd.microsoft.card.adaptive",
-                    content: {
-                      type: "AdaptiveCard",
-                      $schema:
-                        "http://adaptivecards.io/schemas/adaptive-card.json",
-                      version: "1.4",
-                      body: [
-                        {
-                          type: "TextBlock",
-                          text: "**Available commands:**",
-                          wrap: true,
-                        },
-                        {
-                          type: "FactSet",
-                          spacing: "Small",
-                          facts: [
-                            {
-                              title: "/select-agent",
-                              value: "Change the default agent",
-                            },
-                            {
-                              title: "/status",
-                              value: "Show current agent binding",
-                            },
-                            { title: "/help", value: "Show this help message" },
-                            {
-                              title: "mute",
-                              value:
-                                "Stop auto-replies in this thread (@mention me to resume)",
-                            },
-                            {
-                              title: "reset",
-                              value:
-                                "Start a new conversation (direct messages and group chats)",
-                            },
-                          ],
-                        },
-                        {
-                          type: "TextBlock",
-                          text: "Or just send a message to interact with the assigned agent.",
-                          wrap: true,
-                          spacing: "Medium",
-                        },
-                      ],
+              await context.sendActivity(
+                Activity.fromObject({
+                  type: ActivityTypes.Message,
+                  attachments: [
+                    {
+                      contentType: "application/vnd.microsoft.card.adaptive",
+                      content: {
+                        type: "AdaptiveCard",
+                        $schema:
+                          "http://adaptivecards.io/schemas/adaptive-card.json",
+                        version: "1.4",
+                        body: [
+                          {
+                            type: "TextBlock",
+                            text: "**Available commands:**",
+                            wrap: true,
+                          },
+                          {
+                            type: "FactSet",
+                            spacing: "Small",
+                            facts: [
+                              {
+                                title: "/select-agent",
+                                value: "Change the default agent",
+                              },
+                              {
+                                title: "/status",
+                                value: "Show current agent binding",
+                              },
+                              {
+                                title: "/help",
+                                value: "Show this help message",
+                              },
+                              {
+                                title: "mute",
+                                value:
+                                  "Stop auto-replies in this thread (@mention me to resume)",
+                              },
+                              {
+                                title: "reset",
+                                value:
+                                  "Start a new conversation (direct messages and group chats)",
+                              },
+                            ],
+                          },
+                          {
+                            type: "TextBlock",
+                            text: "Or just send a message to interact with the assigned agent.",
+                            wrap: true,
+                            spacing: "Medium",
+                          },
+                        ],
+                      },
                     },
-                  },
-                ],
-              });
+                  ],
+                }),
+              );
               return;
             }
 
@@ -575,64 +586,70 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
               if (binding?.agentId) {
                 const agent = await AgentModel.findById(binding.agentId);
-                await context.sendActivity({
-                  attachments: [
-                    {
-                      contentType: "application/vnd.microsoft.card.adaptive",
-                      content: {
-                        type: "AdaptiveCard",
-                        $schema:
-                          "http://adaptivecards.io/schemas/adaptive-card.json",
-                        version: "1.4",
-                        body: [
-                          {
-                            type: "TextBlock",
-                            text: `This channel is assigned to agent: **${agent?.name || binding.agentId}** which means it will handle all requests in the channel by default.`,
-                            wrap: true,
-                          },
-                          {
-                            type: "TextBlock",
-                            text: `**Tip:** You can use other agents with the syntax **AgentName >** (e.g., @${archestraMcpBranding.appName} Sales > what's the status?).`,
-                            wrap: true,
-                          },
-                          {
-                            type: "TextBlock",
-                            text: "Use **/select-agent** to change the default agent handling requests in the channel.",
-                            wrap: true,
-                            spacing: "Medium",
-                          },
-                        ],
+                await context.sendActivity(
+                  Activity.fromObject({
+                    type: ActivityTypes.Message,
+                    attachments: [
+                      {
+                        contentType: "application/vnd.microsoft.card.adaptive",
+                        content: {
+                          type: "AdaptiveCard",
+                          $schema:
+                            "http://adaptivecards.io/schemas/adaptive-card.json",
+                          version: "1.4",
+                          body: [
+                            {
+                              type: "TextBlock",
+                              text: `This channel is assigned to agent: **${agent?.name || binding.agentId}** which means it will handle all requests in the channel by default.`,
+                              wrap: true,
+                            },
+                            {
+                              type: "TextBlock",
+                              text: `**Tip:** You can use other agents with the syntax **AgentName >** (e.g., @${archestraMcpBranding.appName} Sales > what's the status?).`,
+                              wrap: true,
+                            },
+                            {
+                              type: "TextBlock",
+                              text: "Use **/select-agent** to change the default agent handling requests in the channel.",
+                              wrap: true,
+                              spacing: "Medium",
+                            },
+                          ],
+                        },
                       },
-                    },
-                  ],
-                });
+                    ],
+                  }),
+                );
               } else {
-                await context.sendActivity({
-                  attachments: [
-                    {
-                      contentType: "application/vnd.microsoft.card.adaptive",
-                      content: {
-                        type: "AdaptiveCard",
-                        $schema:
-                          "http://adaptivecards.io/schemas/adaptive-card.json",
-                        version: "1.4",
-                        body: [
-                          {
-                            type: "TextBlock",
-                            text: "No agent is assigned to this channel yet.",
-                            wrap: true,
-                          },
-                          {
-                            type: "TextBlock",
-                            text: "Send any message to set up an agent binding.",
-                            wrap: true,
-                            spacing: "Medium",
-                          },
-                        ],
+                await context.sendActivity(
+                  Activity.fromObject({
+                    type: ActivityTypes.Message,
+                    attachments: [
+                      {
+                        contentType: "application/vnd.microsoft.card.adaptive",
+                        content: {
+                          type: "AdaptiveCard",
+                          $schema:
+                            "http://adaptivecards.io/schemas/adaptive-card.json",
+                          version: "1.4",
+                          body: [
+                            {
+                              type: "TextBlock",
+                              text: "No agent is assigned to this channel yet.",
+                              wrap: true,
+                            },
+                            {
+                              type: "TextBlock",
+                              text: "Send any message to set up an agent binding.",
+                              wrap: true,
+                              spacing: "Medium",
+                            },
+                          ],
+                        },
                       },
-                    },
-                  ],
-                });
+                    ],
+                  }),
+                );
               }
               return;
             }
@@ -759,13 +776,8 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
           return reply.send({ success: true });
         }
       } catch (error) {
-        logger.error(
-          {
-            error: error instanceof Error ? error.message : String(error),
-            stack: error instanceof Error ? error.stack : undefined,
-          },
-          "[ChatOps] Error processing MS Teams webhook",
-        );
+        logger.error({ error }, "[ChatOps] Error processing MS Teams webhook");
+        if (reply.sent) return;
         throw new ApiError(500, "Internal server error");
       }
 
@@ -775,7 +787,7 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // validation with a 401, so 4xx rejections stay at debug level.
         logger[status >= 500 ? "warn" : "debug"](
           { status, error: message },
-          "[ChatOps] Bot Framework rejected MS Teams activity",
+          "[ChatOps] Agents SDK rejected MS Teams activity",
         );
         throw new ApiError(status, message);
       }
@@ -1805,12 +1817,12 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Validate credentials by requesting an OAuth token from Azure AD
       if (merged.enabled && merged.appId && merged.appSecret) {
         try {
-          const creds = new MicrosoftAppCredentials(
+          const creds = new ClientSecretCredential(
+            merged.tenantId || "botframework.com",
             merged.appId,
             merged.appSecret,
-            merged.tenantId || undefined,
           );
-          await creds.getToken();
+          await creds.getToken("https://api.botframework.com/.default");
         } catch {
           throw new ApiError(
             400,
@@ -2569,21 +2581,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "List the Slack channels an agent's bot is in or can join",
         tags: ["ChatOps"],
         params: z.object({ agentId: z.string().uuid() }),
-        response: constructResponseSchema(
-          z.object({
-            workspaceId: z.string().nullable(),
-            canJoin: z.boolean(),
-            channels: z.array(
-              z.object({
-                channelId: z.string(),
-                channelName: z.string().nullable(),
-                description: z.string().nullable(),
-                isPrivate: z.boolean(),
-                isMember: z.boolean(),
-              }),
-            ),
-          }),
-        ),
+        response: constructResponseSchema(SlackBotChannelsSchema),
       },
     },
     async (request, reply) => {
@@ -2591,25 +2589,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentId: request.params.agentId,
         organizationId: request.organizationId,
       });
-      let channels: Awaited<ReturnType<typeof provider.listJoinableChannels>>;
-      try {
-        channels = await provider.listJoinableChannels();
-      } catch (error) {
-        throw new ApiError(
-          502,
-          `Slack did not list the channels: ${errorMessage(error)}`,
-        );
-      }
-      return reply.send({
-        workspaceId: provider.getWorkspaceId(),
-        canJoin: !provider.getMissingScopes().includes("channels:join"),
-        channels: channels
-          // A private channel the bot was not invited to is not ours to show.
-          .filter((channel) => channel.isMember || !channel.isPrivate)
-          .sort((a, b) =>
-            (a.channelName ?? "").localeCompare(b.channelName ?? ""),
-          ),
-      });
+      return reply.send(await listSlackBotChannels(provider));
     },
   );
 
@@ -2626,7 +2606,7 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["ChatOps"],
         params: z.object({
           agentId: z.string().uuid(),
-          channelId: z.string().regex(/^[A-Z0-9]+$/),
+          channelId: SlackChannelIdSchema,
         }),
         response: constructResponseSchema(z.object({ success: z.boolean() })),
       },
@@ -2637,44 +2617,56 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
         agentId,
         organizationId: request.organizationId,
       });
-      let channelName: string | null;
-      try {
-        ({ channelName } = await provider.joinChannel(channelId));
-      } catch (error) {
-        const slackError = (error as { data?: { error?: string } }).data?.error;
-        throw new ApiError(
-          400,
-          slackError === "missing_scope"
-            ? "The bot needs Slack's permission to join channels. Reinstall it from the Slack settings, then try again."
-            : slackError === "method_not_supported_for_channel_type"
-              ? "A bot cannot join a private channel by itself. Invite it from the channel in Slack."
-              : `Slack did not add the bot to the channel: ${errorMessage(error)}`,
-        );
-      }
-      const workspaceId = provider.getWorkspaceId();
-      const binding = await ChatOpsChannelBindingModel.findByChannel({
-        provider: "slack",
+      await joinSlackBotChannel({
+        provider,
         channelId,
-        workspaceId,
+        agentId,
+        organizationId: request.organizationId,
       });
-      if (!binding) {
-        await ChatOpsChannelBindingModel.upsertByChannel({
-          organizationId: request.organizationId,
-          provider: "slack",
-          channelId,
-          workspaceId,
-          workspaceName: provider.getWorkspaceName() ?? undefined,
-          channelName: channelName ?? undefined,
-          agentId,
-        });
-      } else if (!binding.agentId) {
-        await ChatOpsChannelBindingModel.update(binding.id, { agentId });
-        await invalidateChannelAnswerAll({
-          provider: "slack",
-          channelId,
-          workspaceId,
-        });
-      }
+      return reply.send({ success: true });
+    },
+  );
+
+  /**
+   * The Slack channels the router bot is in, and the public ones it can join.
+   */
+  fastify.get(
+    "/api/chatops/config/slack/router/channels",
+    {
+      schema: {
+        operationId: RouteId.ListSlackRouterBotChannels,
+        description: "List the Slack channels the router bot is in or can join",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(SlackBotChannelsSchema),
+      },
+    },
+    async (_request, reply) => {
+      return reply.send(await listSlackBotChannels(requireRouterSlackBot()));
+    },
+  );
+
+  /**
+   * Add the router bot to a public Slack channel. The channel keeps its
+   * default agent, or has none until someone picks one.
+   */
+  fastify.post(
+    "/api/chatops/config/slack/router/channels/:channelId/join",
+    {
+      schema: {
+        operationId: RouteId.JoinSlackRouterBotChannel,
+        description: "Add the Slack router bot to a public channel",
+        tags: ["ChatOps"],
+        params: z.object({ channelId: SlackChannelIdSchema }),
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      await joinSlackBotChannel({
+        provider: requireRouterSlackBot(),
+        channelId: request.params.channelId,
+        agentId: null,
+        organizationId: request.organizationId,
+      });
       return reply.send({ success: true });
     },
   );
@@ -3409,9 +3401,7 @@ async function handleAgentSelection(
         isThreadReply: message.isThreadReply,
         metadata: {
           conversationType: context.activity.conversation?.conversationType,
-          conversationReference: TurnContext.getConversationReference(
-            context.activity,
-          ),
+          conversationReference: context.activity.getConversationReference(),
         },
       };
 
@@ -3459,8 +3449,8 @@ function isCommand(text: string): boolean {
  * channel bindings are stored under — assigning it onto the message and
  * returning it.
  *
- * Bot Framework frequently delivers the thread-format `team.id` instead, and
- * only a Bot Framework call can map it. The mapping never changes for a team, so
+ * Agents SDK frequently delivers the thread-format `team.id` instead, and
+ * only a Agents SDK call can map it. The mapping never changes for a team, so
  * it is cached: the channel gate consults it for every un-mentioned message, and
  * a network round trip per message would defeat the point of gating early.
  * Already-canonical ids and group chats (no team at all) short-circuit.
@@ -3495,14 +3485,14 @@ async function resolveTeamsAadGroupId(
   let resolved = raw;
   try {
     // Uses RSC permissions — no Azure AD app permissions needed.
-    const teamDetails = await TeamsInfo.getTeamDetails(context);
+    const teamDetails = await msTeamsDirectory.getTeamDetails(context);
     if (teamDetails?.aadGroupId) resolved = teamDetails.aadGroupId;
   } catch {
     // Non-fatal — group chats don't have team details
   }
 
   // A team whose details can't be read (RSC consent not granted yet) is cached
-  // too, on a much shorter TTL. Without that it would pay a Bot Framework round
+  // too, on a much shorter TTL. Without that it would pay a Agents SDK round
   // trip on every un-mentioned message; with a short window it still picks up
   // the real id soon after an owner consents.
   await cacheManager.set(
@@ -3548,7 +3538,7 @@ async function muteTeamsThreadAndNotify(
 }
 
 /**
- * Resolve sender email (TeamsInfo → Graph API fallback) and verify they are a registered Archestra user.
+ * Resolve sender email (msTeamsDirectory → Graph API fallback) and verify they are a registered Archestra user.
  * Sets message.senderEmail and returns true if verified, false if rejected.
  *
  * `announce` controls whether a rejection or a first-time auto-provision is
@@ -3569,9 +3559,12 @@ async function resolveAndVerifySenderForMSTeams(params: {
     if (announce) await context.sendActivity(text);
   };
 
-  // Try Bot Framework first (no Graph API permissions needed)
+  // Try Agents SDK first (no Graph API permissions needed)
   try {
-    const member = await TeamsInfo.getMember(context, context.activity.from.id);
+    const member = await msTeamsDirectory.getMember(
+      context,
+      context.activity.from?.id || message.senderId,
+    );
     if (member?.email || member?.userPrincipalName) {
       message.senderEmail =
         (await resolveMSTeamsUserEmail(member)) ?? undefined;
@@ -3579,11 +3572,11 @@ async function resolveAndVerifySenderForMSTeams(params: {
   } catch (error) {
     logger.debug(
       { error: error instanceof Error ? error.message : String(error) },
-      "[ChatOps] TeamsInfo.getMember failed, will fall back to Graph API if configured",
+      "[ChatOps] msTeamsDirectory.getMember failed, will fall back to Graph API if configured",
     );
   }
 
-  // Fall back to Graph API if TeamsInfo didn't resolve email
+  // Fall back to Graph API if msTeamsDirectory didn't resolve email
   if (!message.senderEmail) {
     const graphEmail = await provider.getUserEmail(message.senderId);
     if (graphEmail) {
@@ -3630,7 +3623,7 @@ async function resolveAndVerifySenderForMSTeams(params: {
       const welcomeMode =
         announce && !isDm ? await resolveSignupWelcomeMode() : "none";
       if (welcomeMode !== "none") {
-        const botId = context.activity.recipient.id;
+        const botId = context.activity.recipient?.id || "";
         const dmDeepLink = `https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(botId)}`;
         const appName = await OrganizationModel.getAppName();
         const nextStep =
@@ -3666,7 +3659,7 @@ async function resolveAndVerifySenderForMSTeams(params: {
 }
 
 /**
- * Resolve human-readable channel and workspace names via TeamsInfo.
+ * Resolve human-readable channel and workspace names via msTeamsDirectory.
  * Returns undefined for names that cannot be resolved — callers treat these as best-effort.
  */
 async function resolveTeamsNames(
@@ -3677,14 +3670,14 @@ async function resolveTeamsNames(
   let workspaceName: string | undefined;
 
   try {
-    const teamDetails = await TeamsInfo.getTeamDetails(context);
+    const teamDetails = await msTeamsDirectory.getTeamDetails(context);
     workspaceName = teamDetails?.name ?? undefined;
   } catch {
     /* non-fatal */
   }
 
   try {
-    const channels = await TeamsInfo.getTeamChannels(context);
+    const channels = await msTeamsDirectory.getTeamChannels(context);
     const matched = channels?.find((c) => c.id === targetChannelId);
     channelName = matched?.name ?? undefined;
   } catch {
@@ -3733,7 +3726,7 @@ async function refreshBindingNames(
 
 /**
  * Await channel discovery via the ChatOpsManager.
- * Must be awaited (not fire-and-forget) because Bot Framework revokes the
+ * Must be awaited (not fire-and-forget) because Agents SDK revokes the
  * TurnContext proxy once the processActivity callback returns.
  * The TTL cache makes this essentially free on cache hits.
  */
@@ -3746,12 +3739,12 @@ async function awaitDiscovery(
     | undefined;
   if (!teamData?.id) return;
 
-  // Resolve aadGroupId (UUID) via TeamsInfo if not present in channelData.
+  // Resolve aadGroupId (UUID) via msTeamsDirectory if not present in channelData.
   // This ensures stale cleanup covers bindings stored with either ID format.
   let aadGroupId = teamData.aadGroupId;
   if (!aadGroupId) {
     try {
-      const details = await TeamsInfo.getTeamDetails(context);
+      const details = await msTeamsDirectory.getTeamDetails(context);
       aadGroupId = details?.aadGroupId ?? undefined;
     } catch {
       // Non-fatal — group chats don't have team details
@@ -3814,12 +3807,109 @@ const TEAMS_AAD_GROUP_ID_TTL_MS = TimeInMs.Day;
 
 /**
  * How long an UNRESOLVED team id stays cached. Short, because the next attempt
- * may succeed — it bounds both how often a team with no readable details costs a
- * Bot Framework round trip and how long it keeps using the fallback id.
+ * may succeed — it bounds both how often a team with no readable details costs an
+ * Agents SDK round trip and how long it keeps using the fallback id.
  */
 const TEAMS_AAD_GROUP_ID_RETRY_TTL_MS = 5 * TimeInMs.Minute;
 
 /** The connected Slack bot pinned to an agent of this organization. */
+function requireRouterSlackBot() {
+  const provider = chatOpsManager.getSlackProvider();
+  if (!provider?.isConfigured()) {
+    throw new ApiError(404, "The Slack router bot is not connected");
+  }
+  return provider;
+}
+
+async function listSlackBotChannels(provider: SlackBot) {
+  let channels: Awaited<ReturnType<SlackBot["listJoinableChannels"]>>;
+  try {
+    channels = await provider.listJoinableChannels();
+  } catch (error) {
+    throw new ApiError(
+      502,
+      `Slack did not list the channels: ${errorMessage(error)}`,
+    );
+  }
+  return {
+    workspaceId: provider.getWorkspaceId(),
+    canJoin: !provider.getMissingScopes().includes("channels:join"),
+    channels: channels
+      // A private channel the bot was not invited to is not ours to show.
+      .filter((channel) => channel.isMember || !channel.isPrivate)
+      .sort((a, b) => (a.channelName ?? "").localeCompare(b.channelName ?? "")),
+  };
+}
+
+/**
+ * Add a bot to a public channel. An agent's bot claims the channel when no
+ * agent owns it yet; the router only records the channel.
+ */
+async function joinSlackBotChannel(params: {
+  provider: SlackBot;
+  channelId: string;
+  agentId: string | null;
+  organizationId: string;
+}) {
+  const { provider, channelId, agentId, organizationId } = params;
+  let channelName: string | null;
+  try {
+    ({ channelName } = await provider.joinChannel(channelId));
+  } catch (error) {
+    const slackError = (error as { data?: { error?: string } }).data?.error;
+    throw new ApiError(
+      400,
+      slackError === "missing_scope"
+        ? "The bot needs Slack's permission to join channels. Reinstall it from the Slack settings, then try again."
+        : slackError === "method_not_supported_for_channel_type"
+          ? "A bot cannot join a private channel by itself. Invite it from the channel in Slack."
+          : `Slack did not add the bot to the channel: ${errorMessage(error)}`,
+    );
+  }
+  const workspaceId = provider.getWorkspaceId();
+  const binding = await ChatOpsChannelBindingModel.findByChannel({
+    provider: "slack",
+    channelId,
+    workspaceId,
+  });
+  if (!binding) {
+    await ChatOpsChannelBindingModel.upsertByChannel({
+      organizationId,
+      provider: "slack",
+      channelId,
+      workspaceId,
+      workspaceName: provider.getWorkspaceName() ?? undefined,
+      channelName: channelName ?? undefined,
+      agentId: agentId ?? undefined,
+    });
+  } else if (!binding.agentId && agentId) {
+    await ChatOpsChannelBindingModel.update(binding.id, { agentId });
+    await invalidateChannelAnswerAll({
+      provider: "slack",
+      channelId,
+      workspaceId,
+    });
+  }
+}
+
+type SlackBot = NonNullable<ReturnType<typeof chatOpsManager.getSlackProvider>>;
+
+const SlackChannelIdSchema = z.string().regex(/^[A-Z0-9]+$/);
+
+const SlackBotChannelsSchema = z.object({
+  workspaceId: z.string().nullable(),
+  canJoin: z.boolean(),
+  channels: z.array(
+    z.object({
+      channelId: z.string(),
+      channelName: z.string().nullable(),
+      description: z.string().nullable(),
+      isPrivate: z.boolean(),
+      isMember: z.boolean(),
+    }),
+  ),
+});
+
 async function requireAgentSlackBot(params: {
   agentId: string;
   organizationId: string;

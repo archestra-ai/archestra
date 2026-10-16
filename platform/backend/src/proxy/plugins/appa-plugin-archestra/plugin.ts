@@ -29,6 +29,7 @@ import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaSpawnCorrelationModel, {
   type AllowedSpawnAlias,
 } from "@/models/openappa-spawn-correlation";
+import { reportAgentRuntimeObservedReads } from "@/observability/metrics/agent-runtime";
 import { childSessionId, clientSessionId } from "@/openappa/actor";
 import {
   type AppaChildReturnCompletion,
@@ -52,14 +53,20 @@ import { recoverDiagnosticTurn } from "@/openappa/diagnostic-recovery";
 import {
   askHitlReviewInForm,
   getHitlAskUserArguments,
+  getHitlInspectableAskUserArguments,
   getHitlReview,
   getHitlReviewResult,
+  HITL_QUESTION_TTL_MS,
   type HitlReviewOutcome,
   hitlReviewAskedInForm,
   isHitlReviewOutcome,
+  peekHitlDecision,
   recordHitlRuling,
+  renewHitlReview,
+  resolveHitlInspectableAnswer,
   sealHitlClosure,
 } from "@/openappa/hitl-review";
+import { HITL_INSPECT_LABEL } from "@/openappa/hitl-review-overview";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
 import {
   PEER_PROOF_ARGUMENT,
@@ -67,6 +74,7 @@ import {
   stripPeerProofs,
 } from "@/openappa/peer-claims";
 import {
+  isObservedRead,
   RUNTIME_TOOL_PROOF_ARGUMENT,
   signRuntimeToolProof,
   stripRuntimeToolProofs,
@@ -135,6 +143,7 @@ import type {
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
 import { collectDeclaredToolNames } from "@/routes/proxy/utils/declared-tool-names";
 import type { ToolNameResolution } from "@/routes/proxy/utils/gateway-tool-names";
+import { pendingExports } from "@/services/agent-runtime/pending-exports";
 import { readGuardrailsV2Activation } from "@/services/guardrails-deployment";
 import { ApiError, type CommonToolResult } from "@/types";
 import type {
@@ -146,6 +155,7 @@ import {
   appendPeerMessageMarker,
   escapeRelayMarkup,
 } from "./adapters/claude-code-relay";
+import { labeledQuestionRuling } from "./adapters/native-question-ruling";
 import { nativeId, referencesChildTranscriptPath } from "./adapters/trajectory";
 import { appaTrajectory } from "./session-identity";
 import {
@@ -160,7 +170,11 @@ import {
   type NativeQuestionNoAnswer,
   type NativeQuestionReading,
 } from "./types";
-import { withCallerScope, withoutCallerScope } from "./utils";
+import {
+  withCallerScope,
+  withoutCallerScope,
+  withoutRemedySections,
+} from "./utils";
 
 type AppaPluginBinding = {
   /** The request continues a provider thread that holds the system prompt. */
@@ -177,12 +191,6 @@ type AppaPluginBinding = {
   sessionInitialized?: boolean;
   /** True when the model's response contained tool calls awaiting client execution. */
   turnOpen: boolean;
-  /**
-   * Admitted return text when a native handback is the only call in the batch.
-   * A buffered stream replacement prevents the start proof from accompanying
-   * the return.
-   */
-  completedHandbackReturn: string | undefined;
   /** True on internal loopback Chat requests. */
   chat: boolean;
   compaction: boolean;
@@ -197,6 +205,8 @@ type AppaPluginBinding = {
   nativeHitlRulings: RecordedNativeHitlRuling[];
   /** Offers whose native answer could not be read; asked again in a form. */
   unreadNativeAnswerOfferIds: string[];
+  /** Offers whose native answer came after their review expired; staged again on request. */
+  expiredNativeQuestionOfferIds: string[];
   /** The native id this request's children will report as their parent. */
   spawnerNativeId: string | undefined;
   /** Server-bound child metadata needed to correlate its terminal return. */
@@ -219,17 +229,27 @@ type AppaPluginBinding = {
 type AppaPluginObserver = {
   session: OpenAppaSession;
   adapter: AppaClientAdapter | undefined;
+  identity: AppaTrustedContext["toolIdentity"];
   requestBody: unknown;
 };
 
 type NativeQuestionClaim = {
   offerIds?: string[];
+  /** The card offered Inspect details; its answers resolve inspection state. */
+  inspectable?: boolean;
+  /** The card was issued with the complete review text above it. */
+  reviewText?: boolean;
+  /** The exact staged payload the card was issued from. */
+  digest?: string;
 };
 
 type IssuedNativeQuestion = {
   id: string;
   name: string;
   offerIds: string[];
+  inspectable?: boolean;
+  reviewText?: boolean;
+  digest?: string;
 };
 
 type RecordedNativeHitlRuling = {
@@ -283,7 +303,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       runtimeSessionId: trustedContext.runtimeSessionId,
       runtimeTaskId: trustedContext.runtimeTaskId,
       turnOpen: false,
-      completedHandbackReturn: undefined,
       chat,
       compaction: trustedContext.compaction === true,
       threadContinue: trustedContext.thread === "continue",
@@ -293,6 +312,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       pendingHitlReviewOfferIds: [],
       nativeHitlRulings: [],
       unreadNativeAnswerOfferIds: [],
+      expiredNativeQuestionOfferIds: [],
       spawnerNativeId: trajectory.adapter?.nativeConversationId(
         trajectory.matchContext,
       ),
@@ -441,12 +461,48 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     binding.nativeHitlRulings = nativeAnswers.rulings;
     // An unread answer leaves its review pending. Its own guidance asks again.
     binding.unreadNativeAnswerOfferIds = nativeAnswers.unreadOfferIds;
+    // An answer whose review expired is no ruling. Its own guidance has the
+    // review staged again.
+    binding.expiredNativeQuestionOfferIds = nativeAnswers.expiredOfferIds;
+    // An inspect answer asks for the same card again. The instruction rides
+    // the answer's own result text, so the request's earlier messages stay
+    // byte-identical across turns.
+    const continuedReviewUpdates: Record<string, string> = Object.create(null);
+    for (const continuation of nativeAnswers.continued) {
+      const instruction = continuedReviewInstruction({ binding, continuation });
+      continuedReviewUpdates[continuation.resultId] = instruction;
+      // The client re-sends this answer with every later request, and its
+      // one-use claim is gone by then: the instruction it read must come from
+      // here, byte-identical, or the model's earlier history changes. The
+      // entry outlives the review, whose close deletes nothing here.
+      try {
+        await cacheManager.set(
+          hitlReviewContinuationKey({
+            session: governed,
+            resultId: continuation.resultId,
+          }),
+          instruction,
+          TimeInMs.Day,
+        );
+      } catch {
+        logger.warn("OpenAPPA could not retain a review continuation");
+      }
+    }
+    // Answers this request re-sends from its history read what they read when
+    // they were answered: replaying never claims, rules, or opens an inspection.
+    const replayedReviewUpdates = await replayedReviewContinuations({
+      binding,
+      results: toolResults,
+      answered: continuedReviewUpdates,
+    });
     binding.pendingHitlReviewOfferIds = await pendingNativeHitlOfferIds({
       binding,
       results: toolResults,
       resolvedOfferIds: new Set([
         ...binding.nativeHitlRulings.map((entry) => entry.offerId),
         ...nativeAnswers.unreadOfferIds,
+        ...nativeAnswers.continued.map((entry) => entry.offerId),
+        ...nativeAnswers.expiredOfferIds,
       ]),
     });
     // A handback's result and a message's delivery receipt are the client's
@@ -475,6 +531,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         toolCallIds: [...runtimeSpawns],
       },
     );
+    // A call whose annotator gave no answer never ran, and the runtime has no
+    // record of it. Its result is the notice the client ran in its place, so
+    // it is answered with that notice instead of being ruled on as a call.
+    const unansweredNotices = new Map<string, string>();
+    for (const answer of results) {
+      const notice = await cacheManager.get<string>(
+        unansweredNoticeKey({ session: governed, callId: answer.id }),
+      );
+      if (typeof notice === "string") unansweredNotices.set(answer.id, notice);
+    }
     // The runtime withholds the output of a spawn that failed. What the gateway
     // recorded about the launch is not that output, so it is restored after.
     const failedLaunchResults: Record<string, string> = {};
@@ -484,7 +550,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           !binding.adapter?.isChildHandbackTool?.(result.name) &&
           !binding.adapter?.isRelayTool?.(result.name) &&
           !isPeerInboxResult(binding, result.name, result.namespace) &&
-          !childReturns.ignored.has(result.id),
+          !childReturns.ignored.has(result.id) &&
+          !unansweredNotices.has(result.id),
       )
       // An answer to an issued question is recognized as the very result the
       // client sent, so a result nothing rewrote goes on as that object.
@@ -542,6 +609,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         binding.returnContract = text;
       },
     });
+    for (const [id, notice] of unansweredNotices)
+      result.toolResultUpdates[id] = {
+        content: notice,
+        outputSource: "runtime",
+        denied: true,
+      };
     for (const answer of toolResults) {
       // Read, not consumed: the client sends this result on every later
       // request, and the model must read the same text each time.
@@ -609,6 +682,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         }),
       ),
       ...failedLaunchResults,
+      // Inspect answers are the platform's own instruction to re-ask for the
+      // same card; they replace the client's answer text entirely.
+      ...continuedReviewUpdates,
+      ...replayedReviewUpdates,
     };
     if (
       binding.adapter &&
@@ -658,6 +735,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         session: this.governedSession(binding),
         request: context.request,
       });
+      if (binding.runtimeSessionId === binding.session.session_id) {
+        // A runtime has no tool call open here: its results are in and its
+        // next calls are not out. Files its parent pinned while it was busy
+        // can cross now.
+        await pendingExports.drain(this.governedSession(binding));
+      }
     }
     if (binding?.compaction) return;
     if (binding?.adapter?.id === "codex") {
@@ -704,6 +787,17 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         request: context.request,
         interactionType: context.interactionType,
         guidance: unreadNativeAnswerGuidance(offerIds),
+        onContinue: binding.threadContinue ? "turn" : undefined,
+      });
+      requireCodexToolCall({ binding, context });
+    }
+    if (binding && binding.expiredNativeQuestionOfferIds.length > 0) {
+      const offerIds = binding.expiredNativeQuestionOfferIds;
+      binding.expiredNativeQuestionOfferIds = [];
+      appendQuestionContinuation({
+        request: context.request,
+        interactionType: context.interactionType,
+        guidance: expiredNativeQuestionGuidance(offerIds),
         onContinue: binding.threadContinue ? "turn" : undefined,
       });
       requireCodexToolCall({ binding, context });
@@ -933,6 +1027,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       }
       let prepared = call;
       let offerIds: string[] = [];
+      let askedInForm = false;
+      let reviewText: string | undefined;
+      let inspectableReview = false;
+      let reviewDigest: string | undefined;
       if (
         isSpecialToolMember(binding, call, "askUser") &&
         archestraMcpBranding.getToolShortName(
@@ -946,20 +1044,31 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         );
         prepared = stamped.call;
         offerIds = stamped.offerIds;
+        // A review whose native answer could not be read stays on the gateway,
+        // whose form returns the choice as data; it never offers Inspect.
+        askedInForm =
+          offerIds.length > 0 &&
+          (await hitlReviewAskedInForm({ session: binding.session, offerIds }));
         const canonical = await canonicalizeHitlAskUserCall({
           binding,
           call: prepared,
           offerIds,
+          inspectable:
+            !askedInForm &&
+            inspectsNatively(binding, context.canShowToolCallReview === true),
         });
-        if (canonical.invalidOfferCount) {
-          const message =
-            "Submit each pending OpenAPPA HITL offer in a separate ask_user call.";
+        if (canonical.invalidOfferCount || canonical.reviewUnavailable) {
+          const message = canonical.reviewUnavailable
+            ? "The pending approval review changed or expired before its card could be issued. Request the current review again; no permission was granted."
+            : "Submit each pending OpenAPPA HITL offer in a separate ask_user call.";
           return {
             decision: "refuse",
             refusal: {
               refusalMessage: message,
               contentMessage: message,
-              reason: "openappa_hitl_offer_count",
+              reason: canonical.reviewUnavailable
+                ? "openappa_hitl_review_unavailable"
+                : "openappa_hitl_offer_count",
               blockedToolName: call.name,
               blockedToolId: call.id,
               toolInput: toolInputOf(call.arguments),
@@ -969,16 +1078,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         }
         prepared = canonical.call;
         offerIds = canonical.offerIds;
+        reviewText = canonical.reviewText;
+        inspectableReview = canonical.inspectable === true;
+        reviewDigest = canonical.digest;
         changed ||= prepared !== call;
       }
       // Before any policy sees it: the call the policies rule on is the one
-      // the client will run. A review whose native answer could not be read
-      // stays on the gateway, whose form returns the choice as data.
-      const nativeQuestion =
-        offerIds.length > 0 &&
-        (await hitlReviewAskedInForm({ session: binding.session, offerIds }))
-          ? prepared
-          : this.asNativeQuestion(binding, prepared, offerIds.length > 0);
+      // the client will run.
+      const nativeQuestion = askedInForm
+        ? prepared
+        : this.asNativeQuestion(binding, prepared, offerIds.length > 0);
       changed ||= nativeQuestion !== prepared;
       prepared = nativeQuestion;
       const issued =
@@ -987,7 +1096,16 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           : undefined;
       if (issued) {
         prepared = issued.call;
-        issuedNativeQuestions.push({ ...issued.question, offerIds });
+        // The complete review rides beside the card as server-generated
+        // assistant text; it is never part of the native question's input.
+        if (reviewText) prepared = { ...prepared, reviewDetails: reviewText };
+        issuedNativeQuestions.push({
+          ...issued.question,
+          offerIds,
+          ...(inspectableReview ? { inspectable: true } : {}),
+          ...(reviewDigest ? { digest: reviewDigest } : {}),
+          ...(reviewText ? { reviewText: true } : {}),
+        });
         changed = true;
       }
       toolCalls.push(prepared);
@@ -1060,8 +1178,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
   ): Promise<LlmProxyToolCallsOutcome | undefined> {
     const observer = this.observers.get(context.resources);
     if (observer) {
-      await recordObservedCalls(observer, context.toolCalls);
-      return;
+      // A call is signed only once the record that this session made it
+      // exists: that record is what the gateway checks an observed proof by.
+      const recorded = await recordObservedCalls(observer, context.toolCalls);
+      return signObservedRuntimeCalls(observer, context.toolCalls, recorded);
     }
     const binding = this.bindings.get(context.resources);
     if (!binding) return;
@@ -1178,7 +1298,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // message call first, then bind the peer record to that call id.
     const policy = sharedPolicy(session.organization_id);
     const runtimeCalls = await resolveRuntimeCalls({
-      binding,
+      organizationId: binding.session.organization_id,
       calls: calls.filter((call) => !blockedTranscriptCalls.has(call.id)),
       resolution: this.resolution(binding),
     });
@@ -1289,6 +1409,17 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     const decisionById = new Map(
       rest.map((call, index) => [call.id, decisions[index]]),
     );
+    for (const [id, decision] of decisionById) {
+      // Only the notice of this call runs. The runtime holds no record of the
+      // call, so the result the client sends back is answered from here and
+      // never ruled on as a call that ran.
+      if (decision.kind === "deny" && decision.unanswered)
+        await cacheManager.set(
+          unansweredNoticeKey({ session, callId: id }),
+          decision.feedback,
+          TimeInMs.Day,
+        );
+    }
     for (const [id, feedback] of notLoaded) {
       decisionById.set(id, { kind: "deny", feedback });
       // The runtime holds no record of this call, so the result the client
@@ -1336,10 +1467,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       if (handbackIds.has(call.id)) {
         const handback = await admitChildHandback({ binding, call });
         rewritten.push({ id: call.id, name: call.name });
+        // The rewritten call carries the admitted return. Claude Code takes a
+        // report only through this call, so it must reach the client as a
+        // call, streamed or not; text in its place is an undelivered report.
         released.push(handback.call);
-        if (calls.length === 1) {
-          binding.completedHandbackReturn = handback.returnText;
-        }
         continue;
       }
       const inbox = peerInbox.get(call.id);
@@ -1391,21 +1522,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             spawn: runtime.spawn,
             wrapped: runtime.wrapper !== undefined,
           });
-          const signed = {
-            ...runtime.args,
-            [RUNTIME_TOOL_PROOF_ARGUMENT]: proof,
-          };
-          released.push({
-            ...call,
-            arguments: runtime.wrapper
-              ? {
-                  ...runtime.wrapper,
-                  tool_args: runtime.stringArgs
-                    ? JSON.stringify(signed)
-                    : signed,
-                }
-              : signed,
-          });
+          released.push(signedCall({ call, runtime, proof }));
           continue;
         }
         // The runtime ruled on the call as the model wrote it; the marker is
@@ -1524,18 +1641,22 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             ruling: decision.feedback,
           });
         }
-        // A call that only needs loading gets that one instruction.
+        // A call that only needs loading gets that one instruction. A client
+        // that defers tools can still load the remedy tools and act on the
+        // plans. Any other session cannot act on them, so the ruling loses its
+        // plan and delegation sections: the model would otherwise pass them
+        // on to the person as options.
+        // A ruling with no plan can still advise a subagent route, which the
+        // runtime renders whether or not it offers a plan; here it is cut too.
         const contentMessage = notLoaded.has(call.id)
           ? decision.feedback
-          : noPlan
-            ? ruling
-            : transient
-              ? `${ruling}\n\n[appa] This request did not include the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the ruling could not be offered as a remedy and the call is refused. The gateway tools usually finish loading a moment after the session starts. Send your message again.`
-              : binding.request.defersTools
-                ? `${ruling}\n\n[appa] This client defers tools it has not loaded, and the ${archestraMcpBranding.serverName} MCP gateway remedy tools are not loaded in this session, so the ruling could not be offered as a remedy and the call is refused. Search for ${TOOL_GET_REMEDY_PLANS_SHORT_NAME} and ${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME} with your tool search, then call the denied tool again to receive the remedy.`
-                : binding.request.declaredTools.length === 0
-                  ? `${ruling}\n\n[appa] This request listed no tools, so the ruling could not be offered as a remedy and the call is refused. Remedies need the ${archestraMcpBranding.serverName} MCP gateway tools in the request. Connect the gateway, then start a new session. In Codex, also set code_mode_host = false: code mode keeps its tools out of the request.`
-                  : `${ruling}\n\n[appa] This client did not declare the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the call is refused. Connect the MCP gateway and allow both remedy tools to use approval plans.`;
+          : binding.request.defersTools
+            ? noPlan
+              ? ruling
+              : `${ruling}\n\n[appa] This client defers tools it has not loaded, and the ${archestraMcpBranding.serverName} MCP gateway remedy tools are not loaded in this session, so the ruling could not be offered as a remedy and the call is refused. Search for ${TOOL_GET_REMEDY_PLANS_SHORT_NAME} and ${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME} with your tool search, then call the denied tool again to receive the remedy.`
+            : noPlan
+              ? `${withoutRemedySections(decision.feedback)}${clarification}${NO_REMEDY_PLAN_HINT}`
+              : `${withoutRemedySections(decision.feedback)}${clarification}\n\n${remedylessRefusalNote({ binding, transient })}`;
         return {
           decision: "refuse",
           refusal: {
@@ -1626,12 +1747,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       binding.compaction = true;
     }
     if (binding?.compaction) return { decision: "release" };
-    if (binding?.completedHandbackReturn !== undefined && context.streaming) {
-      return {
-        decision: "replace",
-        responseText: binding.completedHandbackReturn,
-      };
-    }
     if (!binding || binding.turnOpen || !binding.session.parent_id) {
       return;
     }
@@ -1786,6 +1901,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       this.observers.set(context.resources, {
         session,
         adapter,
+        identity: trustedContext.toolIdentity,
         requestBody: context.requestBody,
       });
     } catch (error) {
@@ -1897,24 +2013,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     binding: AppaPluginBinding,
     call: { name: string; namespace?: string },
   ): string {
-    if (
-      !binding.identity.attestationOf(call.name, call.namespace) &&
-      binding.adapter?.classifyToolName(call.name, call.namespace) === "local"
-    ) {
-      return binding.identity.canonicalize(
-        binding.adapter.normalizeLocalToolName(call.name),
-      );
-    }
-    return binding.identity.canonicalize(call.name, call.namespace);
+    return canonicalCallName(binding, call);
   }
 
   /** The name resolution this binding's calls are ruled under. */
   private resolution(binding: AppaPluginBinding): ToolNameResolution {
-    return {
-      canonicalize: (name: string, namespace?: string) =>
-        this.canonicalize(binding, { name, namespace }),
-      looseRunToolDispatch: binding.identity.looseRunToolDispatch,
-    };
+    return toolNameResolution(binding);
   }
 
   /**
@@ -2000,6 +2104,30 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
 const NO_REMEDY_PLAN_HINT =
   "\n\n[appa] This ruling offers no remedy plan. Explain the ruling to the user and STOP this blocked action. Do not retry the same call, directly or through a wrapper.";
 
+/**
+ * Why a refused call got no remedy, and what the person does about it. The
+ * client's adapter knows where its gateway state is seen and how to sign in.
+ * Without one, the first miss in a session is read as tools still loading.
+ */
+function remedylessRefusalNote(params: {
+  binding: AppaPluginBinding;
+  transient: boolean;
+}): string {
+  const server = archestraMcpBranding.serverName;
+  // A request with no tools at all is not a gateway that is still loading or
+  // needs a sign-in. The client known to send one is Codex in code mode, which
+  // runs its tools outside the request, so the text names its setting.
+  if (params.binding.request.declaredTools.length === 0) {
+    return `[appa] This request listed no tools, so the ruling could not be offered as a remedy and the call is refused. Remedies need the ${server} MCP gateway tools in the request. Connect the gateway, then start a new session. In Codex, also set code_mode_host = false: code mode keeps its tools out of the request.`;
+  }
+  const lead = `[appa] This request did not include the ${server} MCP gateway tools, so no remedy plan can be used in this session, and a subagent started from it has the same limit. The call is refused.`;
+  const hint = params.binding.adapter?.gatewayToolsHint?.(server);
+  if (hint) return `${lead} ${hint}`;
+  return params.transient
+    ? `${lead} The gateway tools usually finish loading a moment after the session starts. Send your message again.`
+    : `${lead} Connect this client to the ${server} MCP gateway, then start a new session.`;
+}
+
 function deniedCallClarificationKey(params: {
   session: OpenAppaSession;
   callId: string;
@@ -2021,6 +2149,15 @@ function waitFailure(wait: CommonToolResult): string {
       ? wait.content
       : JSON.stringify(wait.content);
   return ` The wait itself failed, and the client reported:\n${reported}\n`;
+}
+
+function unansweredNoticeKey(params: {
+  session: OpenAppaSession;
+  callId: string;
+}): AllowedCacheKey {
+  return `${CacheKey.OpenAppaUnansweredAnnotationNotice}-${Buffer.from(
+    `${params.session.organization_id}:${params.session.session_id}:${withoutTrajectoryStamp(params.callId)}`,
+  ).toString("base64url")}`;
 }
 
 function notLoadedRulingKey(params: {
@@ -2164,8 +2301,60 @@ type RuntimeCall = {
 
 const runtimeToolActions = new Set<string>(OPENAPPA_RUNTIME_TOOL_SHORT_NAMES);
 
+/** The canonical name a call is ruled under, by the session's tool identity. */
+function canonicalCallName(
+  params: {
+    identity: AppaTrustedContext["toolIdentity"];
+    adapter: AppaClientAdapter | undefined;
+  },
+  call: { name: string; namespace?: string },
+): string {
+  if (
+    !params.identity.attestationOf(call.name, call.namespace) &&
+    params.adapter?.classifyToolName(call.name, call.namespace) === "local"
+  ) {
+    return params.identity.canonicalize(
+      params.adapter.normalizeLocalToolName(call.name),
+    );
+  }
+  return params.identity.canonicalize(call.name, call.namespace);
+}
+
+function toolNameResolution(params: {
+  identity: AppaTrustedContext["toolIdentity"];
+  adapter: AppaClientAdapter | undefined;
+}): ToolNameResolution {
+  return {
+    canonicalize: (name: string, namespace?: string) =>
+      canonicalCallName(params, { name, namespace }),
+    looseRunToolDispatch: params.identity.looseRunToolDispatch,
+  };
+}
+
+/** The call as released: its arguments, or its `run_tool` target's, carry the proof. */
+function signedCall(params: {
+  call: ToolCall;
+  runtime: RuntimeCall;
+  proof: string;
+}): ToolCall {
+  const { call, runtime } = params;
+  const signed = {
+    ...runtime.args,
+    [RUNTIME_TOOL_PROOF_ARGUMENT]: params.proof,
+  };
+  return {
+    ...call,
+    arguments: runtime.wrapper
+      ? {
+          ...runtime.wrapper,
+          tool_args: runtime.stringArgs ? JSON.stringify(signed) : signed,
+        }
+      : signed,
+  };
+}
+
 async function resolveRuntimeCalls(params: {
-  binding: AppaPluginBinding;
+  organizationId: string;
   calls: readonly ToolCall[];
   resolution: ToolNameResolution;
 }): Promise<Map<string, RuntimeCall>> {
@@ -2202,7 +2391,7 @@ async function resolveRuntimeCalls(params: {
         call.action === TOOL_START_RUN_SHORT_NAME || isAgentTool(call.action),
     )
   ) {
-    const organizationId = params.binding.session.organization_id;
+    const { organizationId } = params;
     const [runtimeTargets, spawnTargets] = await Promise.all([
       AgentModel.findRuntimeTargets(organizationId),
       AgentModel.findSpawnTargets(organizationId),
@@ -2853,7 +3042,7 @@ async function admitRelayArrivals(params: {
 async function recordObservedCalls(
   observer: AppaPluginObserver,
   calls: readonly ToolCall[],
-): Promise<void> {
+): Promise<boolean> {
   const { session } = observer;
   try {
     const launches = observer.adapter?.teammateLaunches?.(observer.requestBody);
@@ -2881,11 +3070,88 @@ async function recordObservedCalls(
         }),
       ),
     ]);
+    return true;
   } catch (error) {
     logger.warn(
       { err: error },
       "OpenAPPA could not record tool calls made while enforcement was off",
     );
+    return false;
+  }
+}
+
+/**
+ * Signs the runtime reads of a governed session while enforcement is off.
+ * Nothing rules them now, but a read can reach the gateway after enforcement
+ * turns on, and without a proof the gateway cannot tell this session from a
+ * stranger and refuses it. With one, what it reads crosses into this session
+ * as for a ruled call. Anything else stays unsigned (see `isObservedRead`).
+ * Signing never fails the request; an unsigned call behaves as before. When
+ * the calls could not be recorded nothing is signed, and the reads are
+ * counted as unsigned.
+ */
+async function signObservedRuntimeCalls(
+  observer: AppaPluginObserver,
+  calls: readonly ToolCall[],
+  recorded: boolean,
+): Promise<LlmProxyToolCallsOutcome | undefined> {
+  const secret = config.openappa.offerSigningSecret;
+  if (!secret) return undefined;
+  try {
+    const runtimeCalls = await resolveRuntimeCalls({
+      organizationId: observer.session.organization_id,
+      calls,
+      resolution: toolNameResolution(observer),
+    });
+    const toolCalls: ToolCall[] = [];
+    const runtimeProofs: LlmProxyRuntimeToolProof[] = [];
+    let unsigned = 0;
+    for (const call of calls) {
+      const runtime = runtimeCalls.get(call.id);
+      // A proof the model wrote itself is left for the gateway to refuse.
+      const read =
+        runtime !== undefined &&
+        !runtime.spawn &&
+        isObservedRead({ action: runtime.action, args: runtime.args }) &&
+        !Object.hasOwn(runtime.args, RUNTIME_TOOL_PROOF_ARGUMENT);
+      if (read && !recorded) unsigned++;
+      const proof =
+        runtime && read && recorded
+          ? signRuntimeToolProof({
+              session: observer.session,
+              toolCallId: withoutTrajectoryStamp(call.id),
+              action: runtime.action,
+              arguments: runtime.args,
+              spawn: false,
+              observed: true,
+              secret,
+            })
+          : undefined;
+      if (!runtime || !proof) {
+        toolCalls.push(call);
+        continue;
+      }
+      runtimeProofs.push({
+        id: call.id,
+        name: call.name,
+        action: runtime.action,
+        session: observer.session,
+        spawn: false,
+        wrapped: runtime.wrapper !== undefined,
+      });
+      toolCalls.push(signedCall({ call, runtime, proof }));
+    }
+    reportAgentRuntimeObservedReads("signed", runtimeProofs.length);
+    reportAgentRuntimeObservedReads("unsigned", unsigned);
+    return runtimeProofs.length > 0
+      ? { decision: "allow", toolCalls, runtimeProofs }
+      : undefined;
+  } catch (error) {
+    logger.warn(
+      { err: error },
+      "OpenAPPA could not sign runtime calls made while enforcement was off",
+    );
+    return undefined;
   }
 }
 
@@ -4430,10 +4696,19 @@ async function canonicalizeHitlAskUserCall(params: {
   binding: AppaPluginBinding;
   call: LlmProxyToolCallsContext["toolCalls"][number];
   offerIds: readonly string[];
+  /** Offer the review on the client's native card with Inspect details. */
+  inspectable?: boolean;
 }): Promise<{
   call: LlmProxyToolCallsContext["toolCalls"][number];
   invalidOfferCount: boolean;
+  reviewUnavailable?: boolean;
   offerIds: string[];
+  /** The card offers Inspect details; its answers resolve inspection state. */
+  inspectable?: boolean;
+  /** The exact staged payload the issued card is bound to. */
+  digest?: string;
+  /** The complete review to emit as assistant text immediately before the card. */
+  reviewText?: string;
 }> {
   if (params.offerIds.length !== 1) {
     const pending = await Promise.all(
@@ -4446,6 +4721,39 @@ async function canonicalizeHitlAskUserCall(params: {
       invalidOfferCount: pending.some(Boolean),
       offerIds: [],
     };
+  }
+  if (params.inspectable) {
+    const inspectable = await getHitlInspectableAskUserArguments({
+      session: params.binding.session,
+      offerIds: params.offerIds,
+    });
+    if (inspectable) {
+      return {
+        call: {
+          ...params.call,
+          arguments: JSON.stringify({
+            ...inspectable.card,
+            trajectory: currentTrajectory(params.binding.session),
+          }),
+        },
+        invalidOfferCount: false,
+        offerIds: [...params.offerIds],
+        inspectable: true,
+        digest: inspectable.digest,
+        ...(inspectable.reviewText
+          ? { reviewText: inspectable.reviewText }
+          : {}),
+      };
+    }
+    // A missing snapshot here can be a concurrent replacement, not an absent
+    // feature. Never downgrade it to the old, potentially unreadable card.
+    if (params.offerIds.length > 0)
+      return {
+        call: params.call,
+        invalidOfferCount: false,
+        reviewUnavailable: true,
+        offerIds: [],
+      };
   }
   const hitl = await getHitlAskUserArguments({
     session: params.binding.session,
@@ -4669,11 +4977,27 @@ async function rememberNativeQuestions(
           ...(question.offerIds.length > 0
             ? { offerIds: question.offerIds }
             : {}),
+          ...(question.inspectable ? { inspectable: true } : {}),
+          ...(question.reviewText ? { reviewText: true } : {}),
+          ...(question.digest ? { digest: question.digest } : {}),
         },
-        TimeInMs.Minute * 10,
+        HITL_QUESTION_TTL_MS,
       ),
     ),
   );
+  // The review a question asks about must outlive the question: an answer
+  // that still binds to its question is read against that review, and a
+  // review gone by then would turn the answer into no ruling.
+  for (const question of questions) {
+    for (const offerId of question.offerIds) {
+      if (await renewHitlReview({ session: binding.session, offerId }))
+        continue;
+      logger.warn(
+        { client: binding.adapter?.id, offerId },
+        "OpenAPPA asked a native approval question about a review that is not staged",
+      );
+    }
+  }
 }
 
 function isUserQuestionResult(params: {
@@ -4696,6 +5020,10 @@ async function claimNativeQuestionResults(params: {
   results: ReadonlyArray<{ id: string; name: string; namespace?: string }>;
 }): Promise<Map<object, NativeQuestionClaim>> {
   const candidates = params.results.flatMap((result) => {
+    // An answer without its own string id names no issued question: it is
+    // dropped before any claim key is built or looked up, never conflated
+    // with other unidentifiable answers under a placeholder id.
+    if (typeof result.id !== "string" || result.id.length === 0) return [];
     const name = nativeQuestionName(params.binding, result.name);
     if (!name || !releasesUserQuestion(params.binding, result)) return [];
     const scope = { session: params.binding.session, id: result.id };
@@ -4718,6 +5046,11 @@ async function claimNativeQuestionResults(params: {
       await cacheManager.getAndDeleteMany<{
         name?: unknown;
         offerIds?: unknown;
+        inspectable?: unknown;
+        reviewText?: unknown;
+        digest?: unknown;
+        /** A pre-upgrade page card's binding; those cards are gone. */
+        page?: unknown;
       }>(candidates.flatMap((candidate) => candidate.keys))
     ).map((entry) => [entry.key, entry.value]),
   );
@@ -4726,6 +5059,9 @@ async function claimNativeQuestionResults(params: {
       .map((key) => claimed.get(key))
       .find((value) => value?.name === candidate.name);
     if (entry?.name === candidate.name) {
+      // A card issued by the removed paged review never grants anything:
+      // its answer is unverified, and the review re-asks or stays open.
+      if (entry.page !== undefined) continue;
       const offerIds = Array.isArray(entry.offerIds)
         ? entry.offerIds.filter(
             (offerId): offerId is string =>
@@ -4734,6 +5070,11 @@ async function claimNativeQuestionResults(params: {
         : undefined;
       verified.set(candidate.result, {
         ...(offerIds && offerIds.length > 0 ? { offerIds } : {}),
+        ...(entry.inspectable === true ? { inspectable: true } : {}),
+        ...(entry.reviewText === true ? { reviewText: true } : {}),
+        ...(typeof entry.digest === "string" && entry.digest.length > 0
+          ? { digest: entry.digest }
+          : {}),
       });
     }
   }
@@ -4746,36 +5087,90 @@ async function recordNativeHitlRulings(params: {
 }): Promise<{
   rulings: RecordedNativeHitlRuling[];
   unreadOfferIds: string[];
+  continued: HitlReviewContinuation[];
+  expiredOfferIds: string[];
 }> {
   const native = params.binding.adapter?.nativeQuestion;
   const parse = native?.rulingFromResult;
-  if (!parse) return { rulings: [], unreadOfferIds: [] };
+  if (!parse)
+    return {
+      rulings: [],
+      unreadOfferIds: [],
+      continued: [],
+      expiredOfferIds: [],
+    };
   const recorded: RecordedNativeHitlRuling[] = [];
   const unreadOfferIds: string[] = [];
+  const continued: HitlReviewContinuation[] = [];
+  const expiredOfferIds: string[] = [];
   for (const [answer, claim] of params.verifiedNativeQuestionResults) {
     if (!claim.offerIds || claim.offerIds.length === 0 || !isRecord(answer))
       continue;
+    if (claim.inspectable) {
+      // An inspectable card's answer rules the review or opens its complete
+      // text, read against the card as issued and the inspection state.
+      if (claim.offerIds.length !== 1) continue;
+      const outcome = await recordInspectableHitlAnswer({
+        binding: params.binding,
+        answer,
+        offerId: claim.offerIds[0],
+        carriedReviewText: claim.reviewText === true,
+        // An inspectable claim without its payload digest matches nothing.
+        claimDigest: claim.digest ?? "",
+      });
+      if (outcome.kind === "ruling") recorded.push(outcome.ruling);
+      // A dropped answer records nothing and advances nothing.
+      else if (outcome.kind === "continued")
+        continued.push(outcome.continuation);
+      continue;
+    }
     // The question the answer is read against comes from the review this
-    // server holds, the same source the question was issued from. Without
-    // that review the answer is not a ruling.
+    // server holds, the same source the question was issued from.
     const asked = await getHitlAskUserArguments({
       session: params.binding.session,
       offerIds: claim.offerIds,
     });
-    const reading = asked
-      ? parse(
+    if (!asked) {
+      // Without the review the answer cannot be read. A decision the review
+      // already reached stands. Otherwise the review expired, and no closure
+      // is sealed: a person who answered must not read as a refusal, and the
+      // next remedy call stages the review again.
+      for (const offerId of claim.offerIds) {
+        const decision = await peekHitlDecision({
+          session: params.binding.session,
+          offerId,
+        });
+        if (
+          decision?.ruling === "deny" ||
+          (decision?.ruling === "none" && decision.closure)
+        ) {
+          recorded.push({ offerId, ruling: decision.ruling });
+          continue;
+        }
+        logger.warn(
           {
-            content:
-              typeof answer.content === "string"
-                ? answer.content
-                : JSON.stringify(answer.content ?? null),
-            ...(typeof answer.isError === "boolean"
-              ? { isError: answer.isError }
-              : {}),
+            client: params.binding.adapter?.id,
+            userAgent: params.binding.requestHeaders["user-agent"],
+            offerId,
           },
-          asked,
-        )
-      : "none";
+          "OpenAPPA native approval answer arrived after its review expired",
+        );
+        expiredOfferIds.push(offerId);
+      }
+      continue;
+    }
+    const reading = parse(
+      {
+        content:
+          typeof answer.content === "string"
+            ? answer.content
+            : JSON.stringify(answer.content ?? null),
+        ...(typeof answer.isError === "boolean"
+          ? { isError: answer.isError }
+          : {}),
+      },
+      asked,
+    );
     if (reading === "unrecognized") {
       // A client version may word its answer differently. Nothing is read
       // from it; a client with forms is asked again there. A known no-answer
@@ -4858,7 +5253,200 @@ async function recordNativeHitlRulings(params: {
       }
     }
   }
-  return { rulings: recorded, unreadOfferIds };
+  return { rulings: recorded, unreadOfferIds, continued, expiredOfferIds };
+}
+
+/**
+ * An inspect answer that asks for the complete review text (or a card answer
+ * that cannot rule): the model must re-ask for the same review. Neither is a
+ * ruling, and neither closes the review.
+ */
+type HitlReviewContinuation = {
+  offerId: string;
+  resultId: string;
+  selection: "inspect" | "shown" | "stale";
+};
+
+type InspectableHitlAnswerOutcome =
+  | { kind: "ruling"; ruling: RecordedNativeHitlRuling }
+  | { kind: "continued"; continuation: HitlReviewContinuation }
+  | { kind: "drop" };
+
+/**
+ * Reads the answer to a card that offered Inspect details. Approve and Deny
+ * record the ruling; Inspect asks for the complete review as conversation
+ * text. A known no-answer seals the review as before; an unreadable answer
+ * fails closed without the form. A stale answer — a card superseded before
+ * its inspection text was delivered, a forged marker — changes nothing. An
+ * answer without its own string id is dropped: it rules nothing, and no
+ * placeholder id may stand in for it.
+ */
+async function recordInspectableHitlAnswer(params: {
+  binding: AppaPluginBinding;
+  answer: Record<string, unknown>;
+  offerId: string;
+  carriedReviewText: boolean;
+  claimDigest: string;
+}): Promise<InspectableHitlAnswerOutcome> {
+  const { binding, offerId } = params;
+  const session = binding.session;
+  if (typeof params.answer.id !== "string" || params.answer.id.length === 0) {
+    // An unidentifiable answer claims nothing: no ruling, no continuation,
+    // and nothing cached under a placeholder id it would share with every
+    // other unidentifiable answer.
+    logger.warn(
+      { client: binding.adapter?.id, offerId },
+      "OpenAPPA dropped an unidentifiable answer to a review card",
+    );
+    return { kind: "drop" };
+  }
+  const resultId = params.answer.id;
+  const stale: InspectableHitlAnswerOutcome = {
+    kind: "continued",
+    continuation: { offerId, resultId, selection: "stale" },
+  };
+  const asked = await getHitlInspectableAskUserArguments({
+    session,
+    offerIds: [offerId],
+    emit: false,
+  });
+  if (!asked) {
+    // The review may have closed while the card was out. Then the answer is
+    // late, not stale, and the recorded ruling stands in for it.
+    if (await peekHitlDecision({ session, offerId })) {
+      return { kind: "ruling", ruling: await sealInspectableClosure(params) };
+    }
+    logger.warn(
+      { client: binding.adapter?.id, offerId },
+      "OpenAPPA refused an answer to a superseded review card",
+    );
+    return stale;
+  }
+  const reading = labeledQuestionRuling(
+    {
+      content:
+        typeof params.answer.content === "string"
+          ? params.answer.content
+          : JSON.stringify(params.answer.content ?? null),
+      ...(typeof params.answer.isError === "boolean"
+        ? { isError: params.answer.isError }
+        : {}),
+    },
+    asked.card.shortQuestion ?? asked.card.question,
+    asked.card.options.map((option) => option.label),
+  );
+  if (typeof reading === "object") {
+    const answer =
+      reading.label === "Approve"
+        ? ("approve" as const)
+        : reading.label === "Deny"
+          ? ("deny" as const)
+          : reading.label === HITL_INSPECT_LABEL
+            ? ("inspect" as const)
+            : undefined;
+    if (answer) {
+      const resolved = await resolveHitlInspectableAnswer({
+        session,
+        offerId,
+        answer,
+        carriedReviewText: params.carriedReviewText,
+        claimDigest: params.claimDigest,
+      });
+      switch (resolved.status) {
+        case "inspect-pending":
+          return {
+            kind: "continued",
+            continuation: { offerId, resultId, selection: "inspect" },
+          };
+        case "inspect-shown":
+          return {
+            kind: "continued",
+            continuation: { offerId, resultId, selection: "shown" },
+          };
+        case "stale":
+          // A pending inspection withholds approval until its text is delivered.
+          logger.warn(
+            { client: binding.adapter?.id, offerId },
+            "OpenAPPA refused an approval ahead of the requested review text",
+          );
+          return stale;
+        case "closed":
+          // A concurrent ruling won; the stored decision stands in.
+          return {
+            kind: "ruling",
+            ruling: await sealInspectableClosure(params),
+          };
+        case "recorded": {
+          const review = await getHitlReview({ session, offerId });
+          return {
+            kind: "ruling",
+            ruling: {
+              offerId,
+              ruling: resolved.ruling,
+              ...(review?.tool ? { reviewedTool: review.tool } : {}),
+              ...(review?.arguments
+                ? { reviewedArguments: review.arguments }
+                : {}),
+            },
+          };
+        }
+      }
+    }
+    // A label this card never offered is no answer at all.
+    return { kind: "ruling", ruling: await sealInspectableClosure(params) };
+  }
+  // An answer the adapter cannot read closes the review without a ruling:
+  // the gateway form would show the whole question again, and a form
+  // approval must not skip the inspection the reviewer requested.
+  return {
+    kind: "ruling",
+    ruling: await sealInspectableClosure({
+      ...params,
+      ...(reading === "unrecognized" ? {} : { closure: reading }),
+    }),
+  };
+}
+
+/** The stored decision after an inspectable review ended, as the existing path reads it. */
+async function sealInspectableClosure(params: {
+  binding: AppaPluginBinding;
+  offerId: string;
+  closure?: "declined" | "cancelled" | "unanswered" | "unavailable";
+}): Promise<RecordedNativeHitlRuling> {
+  const { binding, offerId } = params;
+  const review = await getHitlReview({ session: binding.session, offerId });
+  const sealed = await sealHitlClosure({
+    session: binding.session,
+    offerId,
+    ...(params.closure ? { closure: params.closure } : {}),
+  });
+  return {
+    offerId,
+    ruling: sealed === "approve" || sealed === "deny" ? sealed : "none",
+    ...(review?.tool ? { reviewedTool: review.tool } : {}),
+    ...(review?.arguments ? { reviewedArguments: review.arguments } : {}),
+  };
+}
+
+/**
+ * Whether an offer-backed ask_user call becomes an inspectable native card:
+ * only Claude Code's question tool on a transport that can place the complete
+ * review text before the card. Other clients keep the plain card and never
+ * offer an Inspect that could not deliver.
+ */
+function inspectsNatively(
+  binding: AppaPluginBinding,
+  canShowToolCallReview: boolean,
+): boolean {
+  const native = binding.adapter?.nativeQuestion;
+  return (
+    binding.adapter?.id === "claude-code" &&
+    !binding.runtimeSessionId &&
+    !!native?.fromAskUser &&
+    native.isAvailable?.(binding.requestHeaders) !== false &&
+    declaresNativeQuestion(binding, native.toolName) &&
+    canShowToolCallReview
+  );
 }
 
 function assertUniqueNativeQuestionResultIds(params: {
@@ -4940,6 +5528,87 @@ function nativeQuestionCacheKey(params: {
     )
     .digest("base64url");
   return `${CacheKey.OpenAppaNativeQuestion}-${scope}`;
+}
+
+/**
+ * Where the canonical result text of an answered review card lives, scoped
+ * like the one-use claim it stands in for: this session's answer to this
+ * result id. Another session's or caller's history can never name the same
+ * entry.
+ */
+function hitlReviewContinuationKey(params: {
+  session: OpenAppaSession;
+  resultId: string;
+}): AllowedCacheKey {
+  const scope = createHash("sha256")
+    .update(
+      JSON.stringify([
+        params.session.organization_id,
+        params.session.caller_id ?? "",
+        params.session.session_id,
+        params.session.parent_id ?? "",
+        params.resultId,
+      ]),
+    )
+    .digest("base64url");
+  return `${CacheKey.OpenAppaHitlReviewContinuation}-${scope}`;
+}
+
+/**
+ * The review-card instructions this request's re-sent history answers already
+ * read. Reading is not claiming: nothing here records a ruling, opens an
+ * inspection, or expires with the review, and the stored text has authority
+ * over whatever content the client carries now. A hit refreshes its lease, so
+ * a conversation that outlives a day keeps its history stable.
+ */
+async function replayedReviewContinuations(params: {
+  binding: AppaPluginBinding;
+  results: ReadonlyArray<{ id: string; name: string; namespace?: string }>;
+  answered: Readonly<Record<string, string>>;
+}): Promise<Record<string, string>> {
+  const { binding } = params;
+  const keys = new Map<string, AllowedCacheKey>();
+  for (const result of params.results) {
+    // An answer without its own string id names no continuation and looks
+    // nothing up.
+    if (typeof result.id !== "string" || result.id.length === 0) continue;
+    if (params.answered[result.id] !== undefined) continue;
+    if (!nativeQuestionName(binding, result.name)) continue;
+    if (!releasesUserQuestion(binding, result)) continue;
+    keys.set(
+      result.id,
+      hitlReviewContinuationKey({
+        session: binding.session,
+        resultId: result.id,
+      }),
+    );
+  }
+  const updates: Record<string, string> = Object.create(null);
+  if (keys.size === 0) return updates;
+  const stored = await cacheManager.getMany<string>([...keys.values()]);
+  const renewals: Promise<void>[] = [];
+  for (const [resultId, key] of keys) {
+    const instruction = stored.get(key);
+    if (instruction === undefined) continue;
+    updates[resultId] = instruction;
+    renewals.push(renewContinuationLease(key, instruction));
+  }
+  // Each renewal rewrites only its own row, so the independent keys renew
+  // together; the fan-out is bounded by this request's own result count.
+  await Promise.all(renewals);
+  return updates;
+}
+
+/** A lease renewal loses only itself on failure, never the request. */
+async function renewContinuationLease(
+  key: AllowedCacheKey,
+  instruction: string,
+): Promise<void> {
+  try {
+    await cacheManager.set(key, instruction, TimeInMs.Day);
+  } catch {
+    logger.warn("OpenAPPA could not refresh a review continuation");
+  }
 }
 
 /** Pending pre-upgrade questions expire after ten minutes. New IDs use no MAC. */
@@ -5322,6 +5991,15 @@ function unreadNativeAnswerGuidance(offerIds: readonly string[]): string {
   ].join(" ");
 }
 
+function expiredNativeQuestionGuidance(offerIds: readonly string[]): string {
+  return [
+    "The last approval question was answered after its OpenAPPA review expired, so the platform recorded no ruling and the call stays blocked.",
+    "Call execute_remedy_plan again with the plan shown earlier in the conversation; the platform then asks the user again.",
+    "Retry the blocked call only after execute_remedy_plan reports that the plan is authorized.",
+    `Offer IDs: ${JSON.stringify(offerIds)}.`,
+  ].join(" ");
+}
+
 function hitlQuestionGuidance(offerIds: readonly string[]): string {
   return [
     "The policy needs the user's approval for the last execute_remedy_plan result.",
@@ -5330,6 +6008,28 @@ function hitlQuestionGuidance(offerIds: readonly string[]): string {
     "The platform replaces the question text with the exact review, and shows it in the client's question interface when one is available.",
     `Offer IDs: ${JSON.stringify(offerIds)}.`,
   ].join(" ");
+}
+
+/** What the model reads as the result of an inspectable card's answer. */
+function continuedReviewInstruction(params: {
+  binding: AppaPluginBinding;
+  continuation: HitlReviewContinuation;
+}): string {
+  const { continuation } = params;
+  const askUser =
+    params.binding.request.tools?.askUser?.name ?? "the declared ask_user tool";
+  const reAsk = `Call ${askUser} once more with remedy_offer_ids [${JSON.stringify(continuation.offerId)}] to show the same review's card again.`;
+  const noRuling =
+    "This is not an approval and not a denial; the review stays open. Do not call execute_remedy_plan and do not retry the blocked call until the platform reports that the user approved.";
+  const platformRendered =
+    "The platform renders the review card and its review text itself; do not reconstruct, quote, or narrate their contents.";
+  if (continuation.selection === "stale") {
+    return `[appa] That review card was superseded, so its answer was not recorded. ${reAsk} ${noRuling} ${platformRendered}`;
+  }
+  if (continuation.selection === "shown") {
+    return `[appa] The reviewer opened "${HITL_INSPECT_LABEL}" again; the complete review is already in the conversation above, so it is not repeated. ${reAsk} ${noRuling} ${platformRendered}`;
+  }
+  return `[appa] The reviewer chose "${HITL_INSPECT_LABEL}" on the review card; the platform will place the complete, authoritative review as its own message immediately above the same approval card. ${reAsk} ${noRuling} ${platformRendered}`;
 }
 
 // Only remedy_offer_ids decides what is asked: the platform puts the review it

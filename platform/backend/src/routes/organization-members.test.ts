@@ -1,3 +1,4 @@
+import type { LightMyRequestResponse } from "fastify";
 import { type Mock, vi } from "vitest";
 import { autoProvisionUser } from "@/agents/chatops/auto-provision";
 import db, { schema } from "@/database";
@@ -172,6 +173,10 @@ describe("GET /api/organization/members — visibility scope", () => {
     } as unknown as SelectServiceAccount;
 
     await get();
+    await app.inject({
+      method: "GET",
+      url: "/api/organization/member-options",
+    });
 
     expect(mockHasPermission).toHaveBeenCalledWith(
       { member: ["read"] },
@@ -248,5 +253,115 @@ describe("GET /api/organization/members — visibility scope", () => {
     expect(res.statusCode).toBe(200);
     const emails = (res.json() as Array<{ email: string }>).map((m) => m.email);
     expect(emails).toEqual(["teammate@example.com"]);
+  });
+  for (const canSeeAll of [true, false]) {
+    test(`bounded options preserve directory visibility and cursor ties (all=${canSeeAll})`, async ({
+      makeUser,
+      makeMember,
+      makeTeam,
+      makeTeamMember,
+      makeOrganization,
+    }) => {
+      currentUser = await makeUser({
+        name: "Viewer",
+        email: "viewer@example.com",
+      });
+      await makeMember(currentUser.id, organizationId);
+      const team = await makeTeam(organizationId, currentUser.id);
+      await makeTeamMember(team.id, currentUser.id);
+      for (let index = 0; index < 5; index++) {
+        const candidate = await makeUser({
+          name: index < 3 ? "Same name" : `Candidate ${index}`,
+          email: `candidate-${index}@example.com`,
+        });
+        await makeMember(candidate.id, organizationId);
+        if (index < 4) await makeTeamMember(team.id, candidate.id);
+      }
+      const elsewhere = await makeOrganization();
+      const foreign = await makeUser({
+        name: "Foreign",
+        email: "foreign@example.com",
+      });
+      await makeMember(foreign.id, elsewhere.id);
+      mockHasPermission.mockResolvedValue({ success: canSeeAll, error: null });
+      const expected = (await get()).json();
+      const rows: Array<{ id: string; name: string; email: string }> = [];
+      let cursor: string | null = null;
+      do {
+        const response: LightMyRequestResponse = await app.inject({
+          method: "GET",
+          url: `/api/organization/member-options?limit=2${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        const page = response.json();
+        expect(page.data.length).toBeLessThanOrEqual(2);
+        rows.push(...page.data);
+        cursor = page.pagination.nextCursor;
+      } while (cursor);
+      expect(rows.map((row) => row.id).sort()).toEqual(
+        expected.map((row: { id: string }) => row.id).sort(),
+      );
+      expect(new Set(rows.map((row) => row.id)).size).toBe(rows.length);
+      for (const row of rows)
+        expect(Object.keys(row).sort()).toEqual(["email", "id", "name"]);
+    });
+  }
+
+  test("search and exact references stay organization- and teammate-scoped", async ({
+    makeUser,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+    makeOrganization,
+  }) => {
+    currentUser = await makeUser();
+    await makeMember(currentUser.id, organizationId);
+    const teammate = await makeUser({
+      name: "Lovelace, Ada M.",
+      email: "ada@example.com",
+    });
+    const privateUser = await makeUser({
+      name: "Ada Private",
+      email: "private@example.com",
+    });
+    await makeMember(teammate.id, organizationId);
+    await makeMember(privateUser.id, organizationId);
+    const team = await makeTeam(organizationId, currentUser.id);
+    await makeTeamMember(team.id, currentUser.id);
+    await makeTeamMember(team.id, teammate.id);
+    const elsewhere = await makeOrganization();
+    const other = await makeUser({
+      name: "Ada Other",
+      email: "other@example.com",
+    });
+    await makeMember(other.id, elsewhere.id);
+    const sharedElsewhere = await makeTeam(elsewhere.id, currentUser.id);
+    await makeTeamMember(sharedElsewhere.id, currentUser.id);
+    await makeTeamMember(sharedElsewhere.id, other.id);
+    mockHasPermission.mockResolvedValue({ success: false, error: null });
+    for (const query of [
+      "search=Ada%20Lovelace",
+      `ids=${[teammate.id, privateUser.id, other.id].join(",")}`,
+      "emails=ADA%40EXAMPLE.COM,private%40example.com,other%40example.com",
+    ]) {
+      const response: LightMyRequestResponse = await app.inject({
+        method: "GET",
+        url: `/api/organization/member-options?${query}`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().data).toEqual([
+        { id: teammate.id, name: teammate.name, email: teammate.email },
+      ]);
+    }
+    const emailSearch = await app.inject({
+      method: "GET",
+      url: "/api/organization/member-options?search=ada%40example.com&searchMode=name",
+    });
+    expect(emailSearch.json().data).toEqual([]);
+    const invalidLimit = await app.inject({
+      method: "GET",
+      url: "/api/organization/member-options?limit=101",
+    });
+    expect(invalidLimit.statusCode).toBe(400);
   });
 });

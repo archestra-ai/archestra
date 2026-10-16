@@ -75,6 +75,55 @@ describe("knowledge base routes", () => {
     await app.close();
   });
 
+  test("single-resource responses expose persisted labels and label drift", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/knowledge-bases",
+      payload: {
+        name: "Label drift fixture",
+        labels: [{ key: "stage", value: "initial" }],
+      },
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    const id = created.json().id;
+    expect(created.json().labels).toEqual([
+      expect.objectContaining({ key: "stage", value: "initial" }),
+    ]);
+    const read = await app.inject({
+      method: "GET",
+      url: `/api/knowledge-bases/${id}`,
+    });
+    expect(read.statusCode, read.body).toBe(200);
+    expect(read.json().labels).toEqual(created.json().labels);
+    const updated = await app.inject({
+      method: "PUT",
+      url: `/api/knowledge-bases/${id}`,
+      payload: { labels: [{ key: "stage", value: "changed" }] },
+    });
+    expect(updated.statusCode, updated.body).toBe(200);
+    expect(updated.json().labels).toEqual([
+      expect.objectContaining({ key: "stage", value: "changed" }),
+    ]);
+    const preserved = await app.inject({
+      method: "PUT",
+      url: `/api/knowledge-bases/${id}`,
+      payload: { description: "Unrelated update" },
+    });
+    expect(preserved.json().labels).toEqual(updated.json().labels);
+    const cleared = await app.inject({
+      method: "PUT",
+      url: `/api/knowledge-bases/${id}`,
+      payload: { labels: [] },
+    });
+    expect(cleared.statusCode, cleared.body).toBe(200);
+    expect(cleared.json().labels).toEqual([]);
+    const refreshed = await app.inject({
+      method: "GET",
+      url: `/api/knowledge-bases/${id}`,
+    });
+    expect(refreshed.json().labels).toEqual([]);
+  });
+
   // Like the author of every other resource, the creator of a knowledge base
   // or connector gets full access with no `initialGrants`. A non-admin who
   // made one could not reach it before.

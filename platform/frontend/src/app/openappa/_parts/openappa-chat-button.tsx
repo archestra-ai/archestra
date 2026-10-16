@@ -9,7 +9,7 @@ import {
 import Link from "next/link";
 import type { ButtonProps } from "@/components/ui/button";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { useChatAgents } from "@/lib/agent.query";
+import { useChatAgentBootstrap } from "@/lib/agent.query";
 import {
   type OpenAppaLaunchPromptKey,
   type OpenAppaLaunchTarget,
@@ -80,7 +80,7 @@ export function useOpenAppaChatLaunch({
   subject: OpenAppaChatSubject;
   permissions?: Permissions;
 }) {
-  const agents = useChatAgents();
+  const agents = useChatAgentBootstrap();
   const agent = agents.data?.find(
     (candidate) =>
       candidate.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,

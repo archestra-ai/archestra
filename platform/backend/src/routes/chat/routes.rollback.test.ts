@@ -1524,7 +1524,7 @@ describe("generateConversationTitle", () => {
     let capturedBody:
       | {
           messages: Array<{ role: string; content: unknown }>;
-          max_tokens?: number;
+          max_completion_tokens?: number;
         }
       | undefined;
     server.use(
@@ -1555,11 +1555,11 @@ describe("generateConversationTitle", () => {
     expect(messageText(capturedBody, "user")).toBe(
       "Chat conversation messages:\n\nUser: Hello\n\nAssistant: Hi!",
     );
-    expect(capturedBody.max_tokens).toBe(4096);
+    expect(capturedBody.max_completion_tokens).toBe(4096);
   });
 
   it("leaves room for a reasoning model's hidden thinking", async () => {
-    let capturedBody: { max_tokens?: number } | undefined;
+    let capturedBody: { max_completion_tokens?: number } | undefined;
     server.use(
       http.post(TITLE_COMPLETIONS_URL, async ({ request }) => {
         capturedBody = (await request.json()) as typeof capturedBody;
@@ -1586,10 +1586,10 @@ describe("generateConversationTitle", () => {
     // below that leaves a thinking model no room to answer after it thinks:
     // the response comes back empty and the chat keeps its first-message
     // fallback title.
-    expect(capturedBody.max_tokens).toBeGreaterThan(1024);
+    expect(capturedBody.max_completion_tokens).toBeGreaterThan(1024);
     // …and far enough under the budget that made Anthropic reject the
     // non-streaming request outright rather than answer it.
-    expect(capturedBody.max_tokens).toBeLessThanOrEqual(8192);
+    expect(capturedBody.max_completion_tokens).toBeLessThanOrEqual(8192);
   });
 
   it("normalizes a title the model wrapped in quotes or spread over lines", async () => {

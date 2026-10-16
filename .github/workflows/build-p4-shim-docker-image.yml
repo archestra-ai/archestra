@@ -1,6 +1,6 @@
 name: Build p4 Shim Docker Image
 
-# The p4 shim image (platform/p4_shim_docker_image) is the in-cluster pod used
+# The p4 shim image (platform/docker_images/p4_shim) is the in-cluster pod used
 # by Perforce permission sync. It has zero npm dependencies (no lockfiles), so
 # unlike the MCP server base image workflow there is no lockfile-drift job.
 #
@@ -34,7 +34,7 @@ on:
         required: false
   pull_request:
     paths:
-      - "platform/p4_shim_docker_image/**"
+      - "platform/docker_images/p4_shim/**"
       - ".github/workflows/build-p4-shim-docker-image.yml"
 
 permissions: {}
@@ -55,8 +55,8 @@ jobs:
       id-token: write # Required for Workload Identity Federation when pushing images.
     uses: ./.github/workflows/build-native-multi-arch-image.yml
     with:
-      image_directory: ./platform/p4_shim_docker_image
-      dockerfile: ./platform/p4_shim_docker_image/Dockerfile
+      image_directory: ./platform/docker_images/p4_shim
+      dockerfile: ./platform/docker_images/p4_shim/Dockerfile
       image_name: p4-shim
       image_registry: europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public
       version: ${{ inputs.version }}
@@ -64,7 +64,7 @@ jobs:
       auth_provider: gar
       checkout_ref: ${{ inputs.checkout_ref }}
       reuse_from_version: ${{ inputs.reuse_from_version }}
-      reuse_paths: '["platform/p4_shim_docker_image", ".github/workflows/build-p4-shim-docker-image.yml"]'
+      reuse_paths: '["platform/docker_images/p4_shim", ".github/workflows/build-p4-shim-docker-image.yml"]'
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
@@ -90,8 +90,8 @@ jobs:
       - name: Build p4 shim image
         uses: ./.github/actions/build-docker-image
         with:
-          context: ./platform/p4_shim_docker_image
-          dockerfile: ./platform/p4_shim_docker_image/Dockerfile
+          context: ./platform/docker_images/p4_shim
+          dockerfile: ./platform/docker_images/p4_shim/Dockerfile
           platforms: linux/amd64
           push: "false"
           load: "true"

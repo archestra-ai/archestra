@@ -28,6 +28,7 @@ import type {
 import { mapWithConcurrency } from "@/utils/concurrency";
 import { archestraAudience } from "./archestra-audience";
 import { type DeployedBattery, declaredCredentials } from "./battery-target";
+import { withReportingTool } from "./reporting-tool";
 
 /** How each resolved entry deploys here, by its `include` spelling. */
 export type DeployedEntries = ReadonlyMap<string, DeployedBattery>;
@@ -308,6 +309,32 @@ class OpenAppaDeclarations {
   }
 
   /**
+   * Why an authored root document may not name credentials.
+   *
+   * Temporary, until credentials and Git sync are designed together: the stored
+   * bindings are the only place a credential key is set. A `[credentials]` line
+   * in the text would let whoever writes the policy, a repository commit
+   * included, hand a credential to code. A root `token_env` would read a bound
+   * variable into an external the text points anywhere, and without
+   * `[credentials]` lines it has no other way to get a value, so the root's own
+   * externals and profiles take no token for now.
+   */
+  async credentialErrors(content: string): Promise<string[]> {
+    const native = await loadNative();
+    const declarations = await native.parseOpenappaDeclarations(content);
+    return [
+      ...declarations.credentials.map(
+        ({ variable, line }) =>
+          `[credentials] (line ${line}): remove ${variable} from the policy text and bind it with bind_guardrails_credential or on the Batteries page. Credentials are set only outside the policy text for now.`,
+      ),
+      ...declarations.tokenEnvReaders.map(
+        ({ variable, reader }) =>
+          `${reader}: remove token_env = "${variable}". The policy's own externals and profiles cannot read a credential for now; only batteries can, through bindings.`,
+      ),
+    ];
+  }
+
+  /**
    * The battery an install row serves, by the bytes the row records: a row with no
    * package hash serves the bundled battery of its name.
    */
@@ -412,7 +439,7 @@ class OpenAppaDeclarations {
   }): Promise<ComposedPolicy> {
     const native = await loadNative();
     const tokenEnv = this.publishBridgeToken();
-    return native.composeOpenappaPolicy({
+    const composed = await native.composeOpenappaPolicy({
       root: params.root,
       memberRosters: params.memberRosters,
       batteries: this.composeInputs({
@@ -426,6 +453,17 @@ class OpenAppaDeclarations {
         },
       }),
     });
+    // A check answers as the served composition does, the yell rule included.
+    const content = composed.content ?? null;
+    return content === null
+      ? composed
+      : {
+          ...composed,
+          content: await withReportingTool({
+            composed: content,
+            validate: (text) => native.validateHostedOpenappaPolicy(text),
+          }),
+        };
   }
 
   /**

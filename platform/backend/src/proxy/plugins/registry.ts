@@ -60,6 +60,8 @@ type LlmProxyToolCall = {
    * stays on `id`; only what is written to the client changes.
    */
   wireId?: string;
+  /** Server-generated review to emit as text immediately before this call. */
+  reviewDetails?: string;
 };
 
 export type LlmProxyToolCallsContext = LlmProxyRequestContext & {
@@ -69,6 +71,8 @@ export type LlmProxyToolCallsContext = LlmProxyRequestContext & {
    * If false, the client receives raw streamed calls and plugins must not alter approved calls.
    */
   canRewriteToolCalls?: boolean;
+  /** The transport emits server review details before the native form. */
+  canShowToolCallReview?: boolean;
 };
 
 /** A plugin-provided tool-call refusal rendered by the proxy's adapters. */
@@ -331,6 +335,7 @@ export class LlmProxyPluginRegistry {
             name: call.name,
             namespace: call.namespace,
             arguments: canonicalJson(call.arguments),
+            reviewDetails: call.reviewDetails,
           },
         ]),
       );
@@ -395,6 +400,18 @@ export class LlmProxyPluginRegistry {
           );
         }
         returned.add(call.id);
+        if (
+          original.reviewDetails !== call.reviewDetails &&
+          !(
+            blockedIds.has(call.id) &&
+            (original.name !== call.name ||
+              original.namespace !== call.namespace)
+          )
+        ) {
+          throw new Error(
+            `Finalizer ${plugin.id} changed protected review text: ${call.id}`,
+          );
+        }
         const untouched =
           original.name === call.name &&
           original.namespace === call.namespace &&

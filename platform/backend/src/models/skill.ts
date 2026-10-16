@@ -323,6 +323,8 @@ class SkillModel {
     limit?: number;
     offset?: number;
     search?: string;
+    /** Omit manifest bodies from list-only consumers at the SQL boundary. */
+    includeContent?: boolean;
     sourceRepo?: string;
     /** When set, restricts results to these skill IDs (scope filtering). */
     accessibleSkillIds?: string[];
@@ -362,7 +364,13 @@ class SkillModel {
     sorting?: { sortBy?: SkillSortBy; sortDirection?: SortDirection };
   }): Promise<Skill[]> {
     let query = db
-      .select()
+      .select({
+        ...getTableColumns(schema.skillsTable),
+        content:
+          params.includeContent === false
+            ? sql<string>`''`.as("content")
+            : schema.skillsTable.content,
+      })
       .from(schema.skillsTable)
       .where(and(...buildOrgFilters(params)))
       .orderBy(...buildOrderBy(params.sorting))
@@ -376,6 +384,26 @@ class SkillModel {
     }
 
     return await query;
+  }
+
+  /**
+   * Ids and names of the skills the default list shows, in its order: the
+   * same filters as `findByOrganization`, without the row bodies or the
+   * per-row metadata the list attaches. For pickers and setups that need to
+   * name or send every visible skill.
+   */
+  static async findNamesByOrganization(params: {
+    organizationId: string;
+    limit: number;
+    accessibleSkillIds?: string[];
+    status?: SkillRecordStatus;
+  }): Promise<{ id: string; name: string }[]> {
+    return await db
+      .select({ id: schema.skillsTable.id, name: schema.skillsTable.name })
+      .from(schema.skillsTable)
+      .where(and(...buildOrgFilters(params)))
+      .orderBy(...buildOrderBy())
+      .limit(params.limit);
   }
 
   static async countByOrganization(params: {

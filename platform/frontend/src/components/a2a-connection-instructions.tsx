@@ -40,7 +40,10 @@ import { useOrganization } from "@/lib/organization.query";
 import { useFetchUserTokenValue, useUserToken } from "@/lib/user-token.query";
 import { generateUuid } from "@/lib/uuid";
 
-type InternalAgent = archestraApiTypes.GetAllAgentsResponses["200"][number];
+type InternalAgent = Omit<
+  archestraApiTypes.GetAgentsResponses["200"]["data"][number],
+  "pinnedAt"
+>;
 
 interface A2AConnectionInstructionsProps {
   agent: InternalAgent;

@@ -9,12 +9,13 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-# Request-scoped encrypted PostgreSQL trajectories and Archestra annotator context,
-# preserving main's earlier-engine root identity compatibility fix.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "1ba23e6a81f6b2b675eb36dcb88741338ef5e4d9", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "1ba23e6a81f6b2b675eb36dcb88741338ef5e4d9" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "1ba23e6a81f6b2b675eb36dcb88741338ef5e4d9", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "1ba23e6a81f6b2b675eb36dcb88741338ef5e4d9" }
+# OpenAPPA main: request-scoped encrypted PostgreSQL trajectories (#658), the
+# yell Report line at the end of every block (#659), and annotator consults that
+# name the trajectory they are made for (#664).
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "3024eba8d2e948894fcfd4ffebda7bc2566ad51c", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "3024eba8d2e948894fcfd4ffebda7bc2566ad51c" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "3024eba8d2e948894fcfd4ffebda7bc2566ad51c", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "3024eba8d2e948894fcfd4ffebda7bc2566ad51c" }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"

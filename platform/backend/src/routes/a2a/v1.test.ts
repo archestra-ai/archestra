@@ -131,6 +131,31 @@ describe("a2a routes", () => {
     expect(call.userId).toBe("service-account:sa-1");
   });
 
+  test("a service account key runs as that account", async () => {
+    const agentId = (app as FastifyInstanceWithZod & { __agentId: string })
+      .__agentId;
+    const agent = await AgentModel.findById(agentId);
+    const serviceAccountId = crypto.randomUUID();
+    mockValidateMCPGatewayToken.mockResolvedValue({
+      organizationId: agent?.organizationId,
+      serviceAccountId,
+      teamId: null,
+      isOrganizationToken: false,
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/a2a/${agentId}`,
+      headers: { authorization: "Bearer test-token" },
+      payload: { event: "ping" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(mockExecuteA2AMessage.mock.calls[0][0].userId).toBe(
+      `service-account:${serviceAccountId}`,
+    );
+  });
+
   test("passes through stringified body when payload is not JSON-RPC", async () => {
     const agentId = (app as FastifyInstanceWithZod & { __agentId: string })
       .__agentId;

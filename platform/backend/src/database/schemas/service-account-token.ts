@@ -1,4 +1,3 @@
-import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -8,7 +7,6 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import secretsTable from "./secret";
 import serviceAccountsTable from "./service-account";
 
 const serviceAccountTokensTable = pgTable(
@@ -22,15 +20,6 @@ const serviceAccountTokensTable = pgTable(
     tokenHash: text("token_hash").notNull(),
     tokenStart: text("token_start").notNull(),
     disabled: boolean("disabled").notNull().default(false),
-    /**
-     * Set only on the account's platform key: the one the platform itself
-     * presents to its MCP gateway when it runs work as this account. A hash
-     * cannot be presented, so the value is also kept in the secret store.
-     * Listed like any other key; deleting it rotates it on next use.
-     */
-    secretId: uuid("secret_id").references(() => secretsTable.id, {
-      onDelete: "cascade",
-    }),
     lastUsedAt: timestamp("last_used_at", { mode: "date" }),
     expiresAt: timestamp("expires_at", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
@@ -43,9 +32,6 @@ const serviceAccountTokensTable = pgTable(
     uniqueIndex("service_account_tokens_token_hash_unique_idx").on(
       table.tokenHash,
     ),
-    uniqueIndex("service_account_tokens_platform_token_unique_idx")
-      .on(table.serviceAccountId)
-      .where(sql`${table.secretId} is not null`),
   ],
 );
 

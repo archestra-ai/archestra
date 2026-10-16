@@ -326,6 +326,75 @@ console.log(JSON.stringify({ updated: cfg.updatedGeneration, headers: output.hea
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  test.each([
+    { operation: "startup", code: "ENOENT" },
+    { operation: "installation", code: "ENOENT" },
+    { operation: "startup", code: "EACCES" },
+    { operation: "installation", code: "EACCES" },
+  ])("$operation handles $code while inspecting a contended lock", async ({
+    operation,
+    code,
+  }) => {
+    const files = await fixture();
+    const lock = path.join(files.root, "lock");
+    const marker = path.join(files.home, "lock-race-observed");
+    const preload = path.join(files.home, "lock-race.cjs");
+    // Reproduce the OS interleaving at the filesystem boundary in this child
+    // process: mkdir sees a competing owner, then inspection sees its release.
+    await writeFile(
+      preload,
+      `
+const fs = require("node:fs");
+const mkdir = fs.mkdirSync, lstat = fs.lstatSync;
+const lock = ${JSON.stringify(lock)};
+let contended = false, inspected = false;
+fs.mkdirSync = (file, options) => {
+  if (file === lock && !contended) {
+    contended = true;
+    mkdir(file, options);
+    throw Object.assign(Error("Contended lock"), { code: "EEXIST" });
+  }
+  return mkdir(file, options);
+};
+fs.lstatSync = (...args) => {
+  if (args[0] === lock && contended && !inspected) {
+    inspected = true;
+    fs.writeFileSync(${JSON.stringify(marker)}, ${JSON.stringify(code)});
+    if (${JSON.stringify(code)} === "ENOENT") fs.rmSync(lock, { recursive: true });
+    else throw Object.assign(Error("Lock inspection denied"), { code: "EACCES" });
+  }
+  return lstat(...args);
+};
+`,
+    );
+    const script =
+      operation === "installation"
+        ? files.install.script
+        : `globalThis.fetch=async()=>{throw Error("offline")}; require(${JSON.stringify(path.join(files.root, "bootstrap.cjs"))}).refresh(${JSON.stringify(files.root)}).catch(error=>{console.error(error.message);process.exitCode=1;});`;
+    const outcome = await exec(
+      process.execPath,
+      ["--require", preload, "-e", script],
+      { env: files.env },
+    ).then(
+      () => ({ status: 0, denied: false }),
+      (error) => ({
+        status: error.code,
+        denied: error.stderr.includes("Lock inspection denied"),
+      }),
+    );
+    expect(await readFile(marker, "utf8")).toBe(code);
+    expect(outcome).toEqual(
+      code === "ENOENT"
+        ? { status: 0, denied: false }
+        : { status: 1, denied: true },
+    );
+    const owner = JSON.parse(
+      await readFile(path.join(files.root, "owner.json"), "utf8"),
+    );
+    expect(owner.installation).toBe(installation);
+    expect(owner.bootstrapHash).toBe(digest(MANAGED_RUNTIME_BOOTSTRAP));
+  });
+
   test("serializes re-enrollment with concurrent startup, preserving the installation fingerprint", async () => {
     const files = await fixture();
     const script = `globalThis.fetch=async()=>{throw Error("offline")}; const loader=(await import(${JSON.stringify(path.join(files.root, "bootstrap.cjs"))})).default; await loader.refresh(${JSON.stringify(files.root)});`;
@@ -479,6 +548,66 @@ describe("pre-bind local repair", () => {
     expect(
       JSON.parse(await readFile(files.configPath, "utf8")).mcp[name],
     ).toEqual({ type: "remote", url });
+  });
+
+  test.each([
+    "launch",
+    "install",
+  ])("%s retries when the previous owner releases the lock before inspection", async (operation) => {
+    const files = await fixture();
+    const action =
+      operation === "launch"
+        ? `await require(${JSON.stringify(path.join(files.root, "bootstrap.cjs"))}).locked(root, async () => {});`
+        : `eval(${JSON.stringify(files.install.script)});`;
+    const result = await files.run(`
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+const fs = require("node:fs");
+const root = ${JSON.stringify(files.root)};
+const lock = root + "/lock";
+const mkdir = fs.mkdirSync;
+let attempts = 0;
+fs.mkdirSync = (file, ...args) => {
+  if (file === lock && ++attempts === 1) {
+    // The competing owner released its lock after mkdir observed EEXIST.
+    const error = new Error("Already held");
+    error.code = "EEXIST";
+    throw error;
+  }
+  return mkdir(file, ...args);
+};
+${action}
+console.log(JSON.stringify({ attempts, released: !fs.existsSync(lock) }));
+`);
+    expect(JSON.parse(result.stdout.trim().split("\n").at(-1) ?? "")).toEqual({
+      attempts: 2,
+      released: true,
+    });
+  });
+
+  test.each([
+    "launch",
+    "install",
+  ])("%s still rejects an unsafe existing lock", async (operation) => {
+    const files = await fixture();
+    const action =
+      operation === "launch"
+        ? `await require(${JSON.stringify(path.join(files.root, "bootstrap.cjs"))}).locked(root, async () => {});`
+        : `eval(${JSON.stringify(files.install.script)});`;
+    await expect(
+      files.run(`
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+const fs = require("node:fs");
+const root = ${JSON.stringify(files.root)};
+const lock = root + "/lock";
+fs.mkdirSync(lock, { mode: 0o700 });
+fs.chmodSync(lock, 0o777);
+${action}
+`),
+    ).rejects.toMatchObject({
+      stderr: expect.stringContaining("Unsafe managed runtime ownership"),
+    });
   });
 
   test("concurrent offline startup repairs preserve one active alias and the original snapshot", async () => {

@@ -3,7 +3,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { useMyAgentRun, useMyAgentRuns } from "./agent-runtime.query";
+import {
+  runtimePreflightDisabledReason,
+  useMyAgentRun,
+  useMyAgentRuns,
+} from "./agent-runtime.query";
 
 vi.mock("@archestra/shared", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@archestra/shared")>();
@@ -148,15 +152,18 @@ describe("useMyAgentRuns", () => {
     expect(sdk.getMyAgentRuns).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps polling while any run is active", async () => {
+  it("polls the loaded active page without walking older history", async () => {
     vi.useFakeTimers();
-    sdk.getMyAgentRuns.mockResolvedValue({
-      data: {
-        data: [{ endedAt: null }],
-        pagination: {},
-      },
-      error: undefined,
-    } as never);
+    sdk.getMyAgentRuns.mockImplementation(
+      async ({ query } = {}) =>
+        ({
+          data: {
+            data: [{ endedAt: null }],
+            pagination: { hasNext: !query?.offset },
+          },
+          error: undefined,
+        }) as never,
+    );
     const queryClient = new QueryClient();
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -164,11 +171,17 @@ describe("useMyAgentRuns", () => {
     renderHook(() => useMyAgentRuns(), { wrapper });
 
     await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(sdk.getMyAgentRuns).toHaveBeenCalledTimes(1);
     await act(() => vi.advanceTimersByTimeAsync(3_000));
-    expect(sdk.getMyAgentRuns.mock.calls.length).toBeGreaterThan(1);
+    expect(sdk.getMyAgentRuns).toHaveBeenCalledTimes(2);
+    expect(
+      sdk.getMyAgentRuns.mock.calls.every(
+        ([options]) => options?.query?.offset === 0,
+      ),
+    ).toBe(true);
   });
 
-  it("loads every bounded page so older runs remain searchable", async () => {
+  it("publishes the first bounded page before older runs are requested", async () => {
     sdk.getMyAgentRuns
       .mockResolvedValueOnce({
         data: {
@@ -190,12 +203,42 @@ describe("useMyAgentRuns", () => {
     );
     const { result } = renderHook(() => useMyAgentRuns(), { wrapper });
 
+    await vi.waitFor(() => expect(result.current.data).toHaveLength(1));
+    expect(result.current.hasNextPage).toBe(true);
+    expect(sdk.getMyAgentRuns).toHaveBeenCalledTimes(1);
+    await act(() => result.current.fetchNextPage());
     await vi.waitFor(() => expect(result.current.data).toHaveLength(2));
     expect(sdk.getMyAgentRuns).toHaveBeenNthCalledWith(1, {
-      query: { limit: 100, offset: 0 },
+      query: { limit: 100, offset: 0, sort: "recent" },
     });
     expect(sdk.getMyAgentRuns).toHaveBeenNthCalledWith(2, {
-      query: { limit: 100, offset: 100 },
+      query: { limit: 100, offset: 100, sort: "recent" },
     });
+  });
+});
+
+describe("runtimePreflightDisabledReason", () => {
+  it("names why Send is off for each preflight outcome", () => {
+    expect(
+      runtimePreflightDisabledReason({ isPending: false, isError: true }),
+    ).toBe("Can't check this agent's setup");
+    expect(
+      runtimePreflightDisabledReason({
+        isPending: false,
+        data: { ready: false, missing: [{ adminOnly: true }] },
+      }),
+    ).toBe("Only admins can run this agent");
+    expect(
+      runtimePreflightDisabledReason({
+        isPending: false,
+        data: { ready: false, missing: [{}] },
+      }),
+    ).toBe("Connect the credentials this agent needs");
+    expect(
+      runtimePreflightDisabledReason({
+        isPending: false,
+        data: { ready: true, missing: [] },
+      }),
+    ).toBeUndefined();
   });
 });

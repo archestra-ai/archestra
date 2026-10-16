@@ -1063,6 +1063,11 @@ export const AUDIT_DECISIONS = {
     reason:
       "derived from the runtime's event log once per root; read to keep or retire annotators, never edited",
   },
+  startupMigrationsTable: {
+    audited: false,
+    reason:
+      "internal completion ledger committed with application data upgrades",
+  },
 } satisfies Record<keyof typeof schema, AuditDecision>;
 
 /**

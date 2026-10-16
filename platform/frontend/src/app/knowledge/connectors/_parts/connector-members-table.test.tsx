@@ -1,11 +1,23 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 // SPDX-FileCopyrightText: 2026 Archestra Inc.
 
-import { render, screen, within } from "@testing-library/react";
+import { archestraApiClient } from "@archestra/shared";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render as rtlRender, screen, within } from "@testing-library/react";
+import { HttpResponse, http } from "msw";
+import { setupServer } from "msw/node";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { useAppName } from "@/lib/hooks/use-app-name";
-import { useOrganizationMembers } from "@/lib/organization.query";
 import { ConnectorMembersTable } from "./connector-members-table";
 
 const mockUseConnectorUserGroups = vi.fn();
@@ -26,7 +38,6 @@ vi.mock("@/lib/knowledge/connector.query", () => ({
 
 vi.mock("next/navigation");
 vi.mock("@/lib/hooks/use-app-name");
-vi.mock("@/lib/organization.query");
 
 vi.mock("@/components/ui/tooltip", () => ({
   Tooltip: ({ children }: { children: React.ReactNode }) => (
@@ -131,14 +142,6 @@ beforeEach(() => {
     replace: vi.fn(),
   } as unknown as ReturnType<typeof useRouter>);
   vi.mocked(useAppName).mockReturnValue("Archestra");
-  vi.mocked(useOrganizationMembers).mockReturnValue({
-    data: [
-      { id: "user-1", name: "Alice", email: "alice@corp.com" },
-      { id: "user-3", name: "Frank", email: "frank@corp.com" },
-    ],
-    isPending: false,
-    // biome-ignore lint/suspicious/noExplicitAny: partial query result stub
-  } as any);
   mockUpsertMutateAsync.mockResolvedValue({ success: true });
   mockDeleteMutateAsync.mockResolvedValue({ success: true });
 });
@@ -292,3 +295,42 @@ describe("ConnectorMembersTable", () => {
     expect(screen.queryByText("Erin E")).not.toBeInTheDocument();
   });
 });
+
+const memberServer = setupServer(
+  http.get(
+    "http://localhost:9000/api/organization/member-options",
+    ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      const users = [
+        { id: "user-1", name: "Alice", email: "alice@corp.com" },
+        { id: "user-2", name: "Dave", email: "dave@corp.com" },
+        { id: "user-3", name: "Frank", email: "frank@corp.com" },
+      ];
+      const ids = params.get("ids")?.split(",");
+      return HttpResponse.json({
+        data: ids ? users.filter((user) => ids.includes(user.id)) : users,
+        pagination: { limit: 20, hasNext: false, nextCursor: null },
+      });
+    },
+  ),
+);
+const clients: QueryClient[] = [];
+beforeAll(() => {
+  archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+  memberServer.listen({ onUnhandledRequest: "error" });
+});
+afterEach(() => {
+  for (const client of clients) client.clear();
+  clients.length = 0;
+  memberServer.resetHandlers();
+});
+afterAll(() => memberServer.close());
+function render(element: React.ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  clients.push(client);
+  return rtlRender(
+    <QueryClientProvider client={client}>{element}</QueryClientProvider>,
+  );
+}

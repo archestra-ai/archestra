@@ -271,21 +271,144 @@ APPA_PROVIDER_JEV_API_KEY = "other-key"
     });
   });
 
-  test("two opening policies with different bindings fail closed instead of choosing one", () => {
+  test("live opening policies that bind a name differently keep the binding a conversation was active under most recently", () => {
     const other = URL_BOUND.replace("judge-a.test", "judge-a2.test");
-    const { kept, dropped, conflicts } = retire({
-      openings: [opening("ff", other), opening("0a", URL_BOUND)],
+    const openings = [
+      opening("a1", URL_BOUND),
+      opening("b2", other),
+      opening("c3", URL_BOUND),
+    ];
+    const newest = retire({
+      openings,
       composed: JUDGED_BY_B,
+      lastActive: { a1: 100, b2: 300, c3: 200 },
     });
-
-    expect(kept).toEqual([]);
-    expect(dropped).toEqual([
+    expect(newest.dropped).toEqual([]);
+    expect(
+      newest.kept.map(({ binding, openingHashes }) => ({
+        binding,
+        openingHashes,
+      })),
+    ).toEqual([
+      { binding: "http://judge-a2.test/annotate", openingHashes: ["b2"] },
+    ]);
+    expect(newest.conflicts).toEqual([
       {
         name: "a.tool-call",
-        reason: "earlier sessions require different bindings for this name",
+        current: "http://judge-a2.test/annotate",
+        earlier: ["http://judge-a.test/annotate"],
       },
     ]);
-    expect(conflicts).toEqual(["a.tool-call"]);
+
+    // One binding is one candidate, however the ledger interleaves them.
+    const older = retire({
+      openings,
+      composed: JUDGED_BY_B,
+      lastActive: { a1: 100, b2: 200, c3: 300 },
+    });
+    expect(
+      older.kept.map(({ binding, openingHashes }) => ({
+        binding,
+        openingHashes,
+      })),
+    ).toEqual([
+      {
+        binding: "http://judge-a.test/annotate",
+        openingHashes: ["a1", "c3"],
+      },
+    ]);
+    expect(older.conflicts).toEqual([
+      {
+        name: "a.tool-call",
+        current: "http://judge-a.test/annotate",
+        earlier: ["http://judge-a2.test/annotate"],
+      },
+    ]);
+  });
+
+  test("a conversation that opened before a builtin replaced a command annotator keeps being judged once the name is removed", () => {
+    const command = JEV_BOUND.replace('builtin = "jev"\n', "").replace(
+      '[externals.jev]\napi_key_env = "APPA_PROVIDER_JEV_API_KEY"\n\n[credentials]\nAPPA_PROVIDER_JEV_API_KEY = "jev-key"\n',
+      '[externals.annotators."jev.tool-call"]\ncommand = ["python3", "jev-annotator.py"]\n',
+    );
+    const { kept, dropped, conflicts } = retire({
+      // Ledger order alone would keep the command annotator.
+      openings: [opening("a1", command), opening("b2", JEV_BOUND)],
+      composed: JUDGED_BY_B,
+      lastActive: { a1: 100, b2: 200 },
+    });
+    expect(dropped).toEqual([]);
+    expect(conflicts).toEqual([
+      {
+        name: "jev.tool-call",
+        current: 'builtin "jev" with APPA_PROVIDER_JEV_API_KEY = "jev-key"',
+        earlier: ["its own table"],
+      },
+    ]);
+    expect(
+      unservedAnnotator({
+        opening: JEV_BOUND,
+        served: withKeptAnnotators(JUDGED_BY_B, kept) ?? "",
+        helperBase: HELPER_BASE,
+      }),
+    ).toBeNull();
+  });
+
+  test("when the most recently active binding cannot be kept, the next one is", () => {
+    const unreadable = JEV_BOUND.replace('"jev-key"', '"gone-key"');
+    const { kept, dropped, conflicts } = retire({
+      openings: [opening("a1", JEV_BOUND), opening("b2", unreadable)],
+      composed: JUDGED_BY_B,
+      lastActive: { a1: 100, b2: 200 },
+    });
+    expect(dropped).toEqual([]);
+    expect(kept.map(({ credentials }) => credentials)).toEqual([
+      { APPA_PROVIDER_JEV_API_KEY: "jev-key" },
+    ]);
+    expect(conflicts).toEqual([
+      {
+        name: "jev.tool-call",
+        current: 'builtin "jev" with APPA_PROVIDER_JEV_API_KEY = "jev-key"',
+        earlier: ['builtin "jev" with APPA_PROVIDER_JEV_API_KEY = "gone-key"'],
+      },
+    ]);
+  });
+
+  test("a name no binding of which can be kept is dropped for why the most recently active one cannot be", () => {
+    const { kept, dropped, conflicts } = retire({
+      openings: [
+        opening("a1", JEV_BOUND),
+        opening("b2", JEV_BOUND.replace('"jev-key"', '"gone-key"')),
+      ],
+      composed: JUDGED_BY_B,
+      readable: [],
+      lastActive: { a1: 100, b2: 200 },
+    });
+    expect(kept).toEqual([]);
+    expect(conflicts).toEqual([]);
+    expect(dropped).toEqual([
+      {
+        name: "jev.tool-call",
+        reason:
+          'its credential APPA_PROVIDER_JEV_API_KEY is bound to "gone-key", which the organization can no longer read',
+      },
+    ]);
+  });
+
+  test("without activity, conflicting bindings rank in ledger order", () => {
+    const { kept, conflicts } = retire({
+      openings: [
+        opening("ff", URL_BOUND.replace("judge-a.test", "judge-a2.test")),
+        opening("0a", URL_BOUND),
+      ],
+      composed: JUDGED_BY_B,
+    });
+    expect(kept.map(({ binding }) => binding)).toEqual([
+      "http://judge-a.test/annotate",
+    ]);
+    expect(conflicts.map(({ earlier }) => earlier)).toEqual([
+      ["http://judge-a2.test/annotate"],
+    ]);
   });
 
   test("redeclaring a name with a different URL is reported as a rebinding, not kept or refused", () => {
@@ -639,6 +762,8 @@ function retire(params: {
   composed: string;
   readable?: string[];
   live?: string[];
+  /** When a conversation under each opening was last active, by hash. */
+  lastActive?: Record<string, number>;
 }) {
   return retiredAnnotators({
     openings: params.openings,
@@ -648,6 +773,7 @@ function retire(params: {
     helperTokenEnv: "APPA_ARCHESTRA_BRIDGE_TOKEN",
     installs: new Set(["install-1"]),
     live: params.live ? new Set(params.live) : null,
+    lastActive: new Map(Object.entries(params.lastActive ?? {})),
   });
 }
 

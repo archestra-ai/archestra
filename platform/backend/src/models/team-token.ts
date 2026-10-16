@@ -402,6 +402,35 @@ class TeamTokenModel {
   }
 
   /**
+   * Backfill missing team tokens during startup without looking up every
+   * existing token separately. Keep the normal ensure path for missing teams
+   * so a token created since this snapshot is reused.
+   */
+  static async ensureTeamTokensForOrganization(
+    organizationId: string,
+  ): Promise<number> {
+    const teamsWithoutTokens = await db
+      .select({ id: schema.teamsTable.id, name: schema.teamsTable.name })
+      .from(schema.teamsTable)
+      .leftJoin(
+        schema.teamTokensTable,
+        eq(schema.teamTokensTable.teamId, schema.teamsTable.id),
+      )
+      .where(
+        and(
+          eq(schema.teamsTable.organizationId, organizationId),
+          isNull(schema.teamTokensTable.id),
+        ),
+      );
+
+    for (const team of teamsWithoutTokens) {
+      await TeamTokenModel.ensureTeamToken(team.id, team.name);
+    }
+
+    return teamsWithoutTokens.length;
+  }
+
+  /**
    * Get token value by ID (for copying to clipboard)
    */
   static async getTokenValue(id: string): Promise<string | null> {

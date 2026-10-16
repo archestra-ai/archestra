@@ -31,6 +31,7 @@ export function LabelCard() {
       {view.isLoadingError ? (
         <QueryLoadError
           title="Could not load trust and audience"
+          error={view.error}
           onRetry={() => view.refetch()}
         />
       ) : !view.data ? (

@@ -31,6 +31,7 @@ import {
   clearHitlReview,
   closureFromReviewOutcome,
   consumeHitlRuling,
+  getHitlAskUserArguments,
   getHitlReviewResult,
   type HitlReviewOutcome,
   peekHitlDecision,
@@ -91,15 +92,16 @@ import {
   connectAppaGithubRepository,
   createAppaGithubRepository,
   getAppaGithubSync,
+  updateAppaGithubSync,
 } from "@/services/openappa-github-sync";
 import {
-  credentialLineWarnings,
   getOpenAppaPolicyChangeStatus,
   publishOpenAppaPolicyChange,
   refuseCredentialLines,
 } from "@/services/openappa-policy-change";
 import {
   getOpenAppaPolicyTests,
+  replaySavedValidations,
   runOpenAppaPolicyTests,
 } from "@/services/openappa-policy-tests";
 import {
@@ -522,6 +524,26 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
+    shortName: "sync_guardrails_repository",
+    title: "Sync OpenAPPA policy repository",
+    description:
+      "Pull the policy file from the connected Git repository now instead of waiting for the next scheduled sync, so a merged policy or validation pull request takes effect. Call it after the user says the pull request is merged. It changes nothing in the repository. Report `source.lastSyncError` when it is set. Without a connected repository it fails; point the user to Git sync setup in the guardrails settings.",
+    schema: z.strictObject({}),
+    async handler({ context }) {
+      const { organizationId } = organizationUser(context);
+      try {
+        return result(
+          await updateAppaGithubSync({ organizationId, action: "sync" }),
+        );
+      } catch (error) {
+        // No connected source is the agent's to explain, not a provider failure.
+        if (error instanceof ApiError && error.statusCode < 500)
+          return errorResult(error.message);
+        throw error;
+      }
+    },
+  }),
+  defineArchestraTool({
     shortName: "yell",
     title: "Report OpenAPPA feedback",
     description:
@@ -573,7 +595,7 @@ const registry = defineArchestraTools([
     title: "Read OpenAPPA policy",
     annotations: { readOnlyHint: true },
     description:
-      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; its `include` list names the batteries that compose into enforcement on top of it, `[server_aliases]` points each battery's namespace at the MCP servers it governs, and `effective` shows the composed result the runtime enforces, with one entry per declared battery and the status it composed under. Battery credential variables are bound with bind_guardrails_credential, outside the text, and `effective` lists each bound one under `[credentials]`. A `[credentials]` line in the text overrides that binding; do not add one. `enforcement.active` reports whether deployment enforcement is actually on; healthy composition alone does not prove enforcement. Without Git sync, `delivery.githubSyncSetupUrl` links to where the operator sets it up. Use this read to recover after a lost local publish response, without publishing again. `effective.served.kind` says what the runtime opens: `current` (the latest revision), `previous` (the latest attempt was refused and an earlier composition stays enforced; each battery's `served` is how that composition holds it, its `status` what the current text would give it), or `root_only` (nothing ever composed, so governed calls are refused). Report any battery whose status is not `active`, and any `effective.error`, to the user. Preserve unrelated rules and comments when editing.",
+      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; its `include` list names the batteries that compose into enforcement on top of it, `[server_aliases]` points each battery's namespace at the MCP servers it governs, and `effective` shows the composed result the runtime enforces, with one entry per declared battery and the status it composed under. Battery credential variables are bound with bind_guardrails_credential, outside the text, and `effective` lists each bound one under `[credentials]`. The text may not name credentials: validation refuses a `[credentials]` line and a `token_env` in the policy's own externals. `enforcement.active` reports whether deployment enforcement is actually on; healthy composition alone does not prove enforcement. Without Git sync, `delivery.githubSyncSetupUrl` links to where the operator sets it up. Use this read to recover after a lost local publish response, without publishing again. `effective.served.kind` says what the runtime opens: `current` (the latest revision), `previous` (the latest attempt was refused and an earlier composition stays enforced; each battery's `served` is how that composition holds it, its `status` what the current text would give it), or `root_only` (nothing ever composed, so governed calls are refused). Report any battery whose status is not `active`, and any `effective.error`, to the user. Preserve unrelated rules and comments when editing.",
     schema: z.strictObject({}),
     async handler({ context }) {
       const organizationId = organization(context);
@@ -747,7 +769,7 @@ const registry = defineArchestraTools([
     title: "List OpenAPPA batteries that fit",
     annotations: { readOnlyHint: true },
     description:
-      "List the batteries that fit the MCP servers you can see and are not declared yet, or only those fitting one server when mcpServerId is a catalog ID. Omit mcpServerId for all visible servers. Each fit gives the `include` entry to add, the battery's namespaces to point at the server's `toolPrefixes` in `[server_aliases]`, the credential variables to bind to a runtime credential key with bind_guardrails_credential (not with a `[credentials]` line, which would override the binding), `newlyCovered` (the server's tools no rule names today that it would judge), and every battery rule for the server's tools: its kind (`read` narrows labels, `write` requires labels and can block a call, `approval` asks a person, `neutral` does neither), delta, requires, annotator, and `currentRule`, what judges the tool today. A root rule keeps priority over the battery's. This changes nothing. Declared batteries and their status are in get_guardrails_policy.",
+      "List the batteries that fit the MCP servers you can see and are not declared yet, or only those fitting one server when mcpServerId is a catalog ID. Omit mcpServerId for all visible servers. Each fit gives the `include` entry to add, the battery's namespaces to point at the server's `toolPrefixes` in `[server_aliases]`, the credential variables to bind to a runtime credential key with bind_guardrails_credential (the policy text may not hold a `[credentials]` line), `newlyCovered` (the server's tools no rule names today that it would judge), and every battery rule for the server's tools: its kind (`read` narrows labels, `write` requires labels and can block a call, `approval` asks a person, `neutral` does neither), delta, requires, annotator, and `currentRule`, what judges the tool today. A root rule keeps priority over the battery's. This changes nothing. Declared batteries and their status are in get_guardrails_policy.",
     schema: z.strictObject({
       mcpServerId: UuidIdSchema.nullish().describe(
         "The catalog ID of one MCP server. Omit it for every server you can see.",
@@ -773,17 +795,11 @@ const registry = defineArchestraTools([
       "Validate proposed organization.appa.toml without applying changes. The batteries its `include` list names are composed into the check, so an entry no battery answers is refused unless the current revision already spells it — an entry the current revision keeps is valid with a warning instead, and `warnings` names every battery that would govern nothing. The text is also composed as this deployment would compose it, with every battery held back by a missing server, credential or package composed as empty: a refusal the text introduces is an error, and one the current revision already meets is a warning naming the held-back battery to fix. Report the warnings; do not read `valid` alone as working. Explain the intended behavior to the user before updating their policy.",
     schema: ValidateGuardrailsPolicySchema,
     async handler({ args, context }) {
-      const organizationId = organization(context);
-      const [validation, credentialWarnings] = await Promise.all([
-        guardrailsPolicyService.validate(args.content, {
-          organizationId,
+      return result(
+        await guardrailsPolicyService.validate(args.content, {
+          organizationId: organization(context),
         }),
-        credentialLineWarnings(organizationId, args.content),
-      ]);
-      return result({
-        ...validation,
-        warnings: [...validation.warnings, ...credentialWarnings],
-      });
+      );
     },
   }),
   defineArchestraTool({
@@ -791,7 +807,7 @@ const registry = defineArchestraTools([
     title: "Preview OpenAPPA policy change",
     annotations: { readOnlyHint: true },
     description:
-      "Validate a proposed change to organization.appa.toml and return its unified `diff` and `changed` line counts. This saves nothing. Read the current policy and pass its revision as expectedRevision. To change an existing policy, send `edits`: only the text being replaced and its replacement. To insert rules, replace an anchor line with the new rules followed by that same anchor line. Send `content` only for a first policy or a full rewrite. Check `diff` and `changed` to confirm only the intended lines change. Explain what the change does and its warnings to the user, then publish with update_guardrails_policy using the same edits or content and expectedRevision; show the diff when the user asks.",
+      "Validate a proposed change to organization.appa.toml and return its unified `diff` and `changed` line counts. This saves nothing. Read the current policy and pass its revision as expectedRevision. To change an existing policy, send `edits`: only the text being replaced and its replacement. To insert rules, replace an anchor line with the new rules followed by that same anchor line. Send `content` only for a first policy or a full rewrite. Check `diff` and `changed` to confirm only the intended lines change. `validations` replays the saved validations against the proposed policy, without recording a run: pass/fail/cannot-run per file, or null when there are none. Explain what the change does, its warnings and any validation it fails to the user, then publish with update_guardrails_policy using the same edits or content and expectedRevision; show the diff when the user asks.",
     schema: ProposedGuardrailsPolicySchema,
     handler: ({ args, context }) =>
       refusalAsResult(async () => {
@@ -819,10 +835,25 @@ const registry = defineArchestraTools([
           organizationId,
           previous: before.content,
         });
-        const sync = await getAppaGithubSync(organizationId);
+        const [sync, validations] = await Promise.all([
+          getAppaGithubSync(organizationId),
+          // Replay the saved validations against the unsaved policy, so the
+          // user sees which checks the change breaks before approving it.
+          validation.valid
+            ? replaySavedValidations({
+                organizationId,
+                userId,
+                proposedPolicy: {
+                  content: after,
+                  expectedRevision: before.revision,
+                },
+              })
+            : null,
+        ]);
         const delivery = sync.source?.interval ? "pull_request" : "revision";
         return policyChangeResult({
           stage: "preview",
+          validations,
           delivery,
           // Whether publishing this turns enforcement on: only the first saved
           // policy does, and only for an administrator (see turnOnForFirstPolicy).
@@ -940,7 +971,7 @@ const registry = defineArchestraTools([
     shortName: "run_openappa_policy_tests",
     title: "Run saved OpenAPPA validations",
     description:
-      "Replay saved validations offline against the current policy and record the result in validation run history. This is the only way to run validations: preview and publication check syntax but do not replay. Pass `path` to run one saved validation file, for example right after saving it; omit it to run the whole suite. Loads the authoritative saved files itself; no draft files or policy changes are accepted. This records a run only: it does not edit validations, change or enable the policy, execute business tools, or contact models or remote helpers. Report the returned run ID and pass/fail/cannot-run outcomes.",
+      "Replay saved validations offline against the current policy and record the result in validation run history. Use it to run what is saved and keep the result; preview_guardrails_validation_change already replays a draft before it is saved. Pass `path` to run one saved validation file; omit it to run the whole suite. Loads the authoritative saved files itself; no draft files or policy changes are accepted. This records a run only: it does not edit validations, change or enable the policy, execute business tools, or contact models or remote helpers. Report the returned run ID and pass/fail/cannot-run outcomes.",
     schema: z.strictObject({
       path: z
         .string()
@@ -990,11 +1021,11 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "preview_openappa_validation_change",
+    shortName: "preview_guardrails_validation_change",
     title: "Preview OpenAPPA validations",
     annotations: { readOnlyHint: true },
     description:
-      "Preview a patch of .appa validation files: checks each changed file's syntax and, when policyContent is given, the proposed policy. It does not replay or run validations; after saving, run them with run_openappa_policy_tests. Read the policy revision and specification version first. Upserts replace only named files; deletions must be explicit; unrelated files are preserved. Omit policyContent or pass null for validation-only work; never send the current policy or blank text as a placeholder. Include a complete proposed policy only when the user explicitly requested a policy change. Correct scenario syntax errors in the .appa files without changing the policy. This saves nothing and does not affect run history. Before publishing, explain the scenario in ordinary language and its expected behavior. Give the file path and provide its exact source on request. Keep specifications small and focused on the user's intended behavior.",
+      "Validate a proposed change to the .appa validation files and replay it. This saves nothing and records no run. Read the policy and the suite first and pass their revision as expectedRevision and version as expectedVersion. Send `changes`: `upsert` files to add or replace, and explicit `delete` paths; unrelated files are kept. Checks each upserted file's syntax, then replays those files offline against the saved policy; `tests` holds pass/fail/cannot-run per file, or null when a syntax check failed or nothing was upserted. Fix syntax errors in the files only. Explain the case, its expected decision and the replay result to the user, then save with update_guardrails_validation. A failed check does not authorize a policy change or weakening an expectation. This tool never changes the policy; change it with preview_guardrails_policy_change and update_guardrails_policy.",
     schema: PreviewOpenAppaValidationChangeSchema,
     async handler({ args, context }) {
       const { organizationId, userId } = organizationUser(
@@ -1011,17 +1042,14 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
-    shortName: "publish_openappa_validation_change",
-    title: "Publish OpenAPPA validations",
+    shortName: "update_guardrails_validation",
+    title: "Save OpenAPPA validations",
     description:
-      "Publish the exact validation patch explained after preview_openappa_validation_change, only when the user authorized saving it. Checks syntax and any proposed policy, then saves without replaying; run the saved files with run_openappa_policy_tests. Omit policyContent or pass null for validation-only work. Saving validations does not authorize a policy change; include a complete proposed policy only for an explicitly requested policy change. With Git sync, opens one repository PR using the configured GitHub App or PAT, containing only the changed files; nothing becomes active until merge and sync. Otherwise saves locally, atomically when policy and validations both change. Preserve existing expectations and unrelated rules. On a conflict, re-read and reconcile before retrying. Tests-only writes do not enable enforcement. A first local policy change turns enforcement on for an administrator; report enforcement and inactive batteries. Policy-only setup can continue to use update_guardrails_policy without creating tests.",
+      "Save a change to the .appa validation files. Call preview_guardrails_validation_change first, explain it, then send the same `changes`, expectedRevision and expectedVersion that were previewed, only when the user approved saving. Checks syntax again and saves without replaying. When Git sync is configured, this opens a pull request containing only the changed files; they take effect after merge and sync. Otherwise it saves locally. This tool never changes the policy or enforcement. On a conflict, read the policy and suite again and preview again.",
     schema: PublishOpenAppaValidationChangeSchema,
     async handler({ args, context }) {
       const ids = organizationUser(context, AUTHENTICATED_CONTEXT_REQUIRED);
-      const saved = await publishOpenAppaValidationChange({ ...args, ...ids });
-      if (saved.delivery !== "revision" || !saved.policyChanged)
-        return result(saved);
-      return result(await withLocalEnforcement(saved, ids));
+      return result(await publishOpenAppaValidationChange({ ...args, ...ids }));
     },
   }),
   defineArchestraTool({
@@ -1063,7 +1091,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
     title: "Execute OpenAPPA remedy plan",
     description:
-      "Apply a remedy plan that the organization's guardrails policy offers for a blocked call. Pass the offer_id and plan from the ruling. The policy decides when the user must approve a plan. In that case, the result is review_required. Ask the user with the declared ask_user tool and that offer ID. After the user approves, call execute_remedy_plan again with the same offer and plan. After the plan is authorized, retry the original call or use the admitted output. If the user denies the review, or the review is declined, canceled, unavailable, or unanswered, tell the user that the action stays blocked. A client decline is not a human denial.",
+      "Apply a remedy plan that the organization's guardrails policy offers for a blocked call. Pass the offer_id and plan from the ruling. The policy decides when the user must approve a plan. In that case, the result is review_required. Ask the user with the declared ask_user tool and that offer ID. The platform renders the approval card itself and binds it to the offer server-side; the card intentionally omits the offer ID. After the user approves, call execute_remedy_plan again with the same offer and plan. An authorized result means the policy permits the plan; a narrower policy can authorize without any human review, so authorization alone is not proof the user approved. When the reviewer did approve, their selection stands over any earlier prediction of their answer. After the plan is authorized, retry the original call with exactly the authorized arguments, never regenerated or corrected ones, or use the admitted output. If the user denies the review, or the review is declined, canceled, unavailable, or unanswered, tell the user that the action stays blocked. A client decline is not a human denial.",
     // The proxy alone writes these members. They have no `.describe()` text,
     // so no rendering of the full schema can show the model their prose:
     // - execution: retry identity and history restoration; it does not authorize.
@@ -1230,9 +1258,13 @@ const registry = defineArchestraTools([
               }
               return nativeReviewRequiredResult(remedy.offer_id);
             } else if (context.elicitation) {
+              const prepared = await getHitlAskUserArguments({
+                session: reviewSession,
+                offerIds: [remedy.offer_id],
+              });
               const outcome = await context.elicitation.elicit({
                 toolName: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
-                message: review.text,
+                message: prepared?.question ?? review.text,
                 requestedSchema: HITL_RULING_SCHEMA,
                 kind: "openappa_review",
                 ...(review.tool ? { reviewedTool: review.tool } : {}),
@@ -1345,8 +1377,19 @@ const registry = defineArchestraTools([
       if (!ruling || !byOffer.known) return byOffer.result;
       // Display-only: the chat card displays the human ruling.
       // `_meta` does not reach the model; the model reads the ruling from result text.
+      const content =
+        ruling === "approve" && Array.isArray(byOffer.result.content)
+          ? [
+              ...byOffer.result.content,
+              {
+                type: "text" as const,
+                text: "[appa] Human review receipt: the reviewer selected Approve for this exact server-held review. The approval card was platform-rendered; its native schema omits offer IDs by design. This confirms the human decision, not execution or a permission bypass. Follow the runtime outcome above and the current user instructions. If a retry is authorized and still requested, copy its exact arguments without reconstructing or changing them.",
+              },
+            ]
+          : byOffer.result.content;
       return {
         ...byOffer.result,
+        content,
         _meta: {
           ...byOffer.result._meta,
           [MCP_HUMAN_RULING_META_KEY]: ruling,
@@ -1432,7 +1475,7 @@ function organization(context: ArchestraContext): string {
 }
 
 const PREVIEW_APPROVAL_INSTRUCTION =
-  "Nothing is saved yet. In this same turn, summarize in 2-4 short bullets what the change does to agents and tools (not the TOML), then ask the user to approve it with the ask_user tool, or the client's own question tool. Do not end the turn without that question, even when the user said not to publish until they approve: the question is how they approve. After approval, call update_guardrails_policy with the same edits or content and expectedRevision.";
+  "Nothing is saved yet. In this same turn, summarize in 2-4 short bullets what the change does to agents and tools (not the TOML), and name any saved validation in `validations` that failed or could not run, then ask the user to approve it with the ask_user tool, or the client's own question tool. Do not end the turn without that question, even when the user said not to publish until they approve: the question is how they approve. After approval, call update_guardrails_policy with the same edits or content and expectedRevision.";
 
 /** What a yell tells the agent when break the glass is off. */
 const YELL_RESULT_GUARDRAILS_UNCHANGED =
@@ -1662,7 +1705,7 @@ function nativeReviewRequiredResult(offerId: string): CallToolResult {
     outcome: "review_required",
     offer_id: offerId,
     instruction:
-      "The policy needs the user's approval for this plan. Ask the user with the declared ask_user tool and this offer ID in remedy_offer_ids. The platform shows the exact review with fixed Approve and Deny choices in the client's question interface when one is available. Call execute_remedy_plan again only after the user approves.",
+      "The policy needs the user's approval for this plan. Ask the user with the declared ask_user tool and this offer ID in remedy_offer_ids. The platform replaces that call with its own approval card — fixed Approve and Deny choices, plus Inspect details where the client can show the complete review as conversation text — bound to this offer server-side; the card does not carry the offer ID, which is expected. Call execute_remedy_plan again only after the user approves.",
   });
 }
 

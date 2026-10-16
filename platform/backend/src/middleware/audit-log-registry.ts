@@ -378,6 +378,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     action: "agent.updated",
     fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
   },
+  "/api/agents/:agentId/delegations/:targetAgentId": {
+    resourceType: "agent",
+    resourceIdParam: "agentId",
+    action: "agent.updated",
+    fetchById: (id, orgId) => AgentModel.findByIdForAudit(id, orgId),
+  },
   "/api/agents/:agentId/a2a-delegations": {
     resourceType: "agent",
     resourceIdParam: "agentId",
@@ -837,12 +843,6 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) =>
       RuntimeCredentialDefinitionModel.findByIdForAudit(id, orgId),
   },
-  // A POST walk-up is discarded, so the accept action registers its own path.
-  "/api/openappa/github-sync/accept-held": {
-    resourceType: "organization",
-    action: "organization.updated",
-    resourceIdSource: "organizationContext",
-  },
   "/api/openappa/battery-installs": {
     resourceType: "openappaBatteryInstall",
     fetchById: (id, orgId) =>
@@ -1149,6 +1149,13 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   },
   // Joining a channel claims its binding for the bot's agent when unowned.
   "/api/chatops/config/slack/agents/:agentId/channels/:channelId/join": {
+    resourceType: "chatOpsBinding",
+    resourceIdSource: "organizationContext",
+    fetchById: (_id, orgId) =>
+      ChatOpsChannelBindingModel.findBindingsFingerprintForOrganization(orgId),
+  },
+  // Joining records the channel's binding, with no agent when it is new.
+  "/api/chatops/config/slack/router/channels/:channelId/join": {
     resourceType: "chatOpsBinding",
     resourceIdSource: "organizationContext",
     fetchById: (_id, orgId) =>

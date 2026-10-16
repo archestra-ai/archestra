@@ -4,7 +4,7 @@ sidebarTitle: Clients
 description: Make Guardrails check your client, with built-in support or session headers
 order: 3
 beta: "Policy syntax and behavior may change as OpenAPPA evolves."
-lastUpdated: 2026-10-14
+lastUpdated: 2026-10-15
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -31,6 +31,22 @@ Route model requests through the proxy so Guardrails can check the tool calls th
 2. For a client without built-in support, add the [session headers](#session-headers).
 
 **Other clients** under **Settings → Guardrails** sets what happens to [unrecognized ones](#unrecognized-clients).
+
+- A block that says no remedy plan can be used in this session means the client sent no gateway tools: it is not signed in to the gateway, or the gateway is not connected. The message names the fix for your client. The steps are under [Finish Setup in Your Client](/docs/get-started/connect#finish-setup-in-your-client).
+
+## Approval Cards
+
+Read the complete call and policy scope before approving. Long text arguments can have a **Generated summary** to help you find the purpose and constraints. The summary can omit details; it never replaces the exact arguments or grants permission.
+
+Archestra prepares the summary with a separate model request, without tools or your conversation history. This uses inference tokens and requires an [explicitly configured summary model](/docs/reference/configuration#ARCHESTRA_OPENAPPA_REVIEW_SUMMARY_PROVIDER); it does not use the organization's default model automatically. If no summary model is configured or summarization fails, the complete review still appears.
+
+Claude Code keeps short approvals on one card. Larger requests start with an overview showing the tool, target, policy scope, and a generated summary when available. Choose **Approve**, **Deny**, or **Inspect details**; opening the details is optional.
+
+**Inspect details** prints the complete platform review in the chat transcript, then shows the same approval card again. Prose keeps its paragraphs, commands use literal code blocks, and structured values use formatted JSON. There are no detail-page questions, and inspection never grants permission.
+
+Inspecting adds the full review to the conversation history and therefore to subsequent model requests. It does not rewrite earlier messages or change the tool arguments. Stale or mismatched answers cannot authorize a changed call; if the complete policy scope cannot fit safely in the overview, that card does not offer **Approve**.
+
+Use the chat transcript's selection and copy controls for the full review. Claude Code controls selection inside its native preview pane; Archestra cannot enable it through the question tool.
 
 ## Session Headers
 

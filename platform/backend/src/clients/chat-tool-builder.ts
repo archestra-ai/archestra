@@ -71,7 +71,8 @@ import { agentOwner } from "@/types";
 
 /** Gateway token selected for the current call (see selectMCPGatewayToken). */
 export interface McpGatewayToken {
-  tokenValue: string;
+  /** Bearer value for the loopback gateway; null when tools are listed in-process */
+  tokenValue: string | null;
   tokenId: string;
   teamId: string | null;
   isOrganizationToken: boolean;

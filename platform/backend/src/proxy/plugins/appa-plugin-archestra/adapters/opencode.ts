@@ -6,6 +6,7 @@ import {
 import type { AppaSessionIdentity } from "@/openappa/wire";
 import { ApiError } from "@/types";
 import type { CommonToolResult } from "@/types/common-llm-format";
+import { asRecord } from "@/utils/as-record";
 import type {
   AppaClientAdapter,
   AppaMatchContext,
@@ -21,7 +22,6 @@ import { openCodeQuestionRuling } from "./native-question-ruling";
 const QUESTION_HEADER_MAX_LENGTH = 30;
 
 import {
-  asRecord,
   bindMintedChildTrajectory,
   namesChildrenFromArguments,
   stringField,
@@ -38,6 +38,8 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
   readonly trajectoryPrefix: string = "opencode";
   /** The client named in errors about its session headers. */
   protected readonly clientLabel: string = "OpenCode";
+  /** The command a person runs, named in sign-in instructions. */
+  protected readonly cliBinary: string = "opencode";
   protected readonly provenance: {
     session: NonNullable<AppaSessionIdentity["provenance"]>;
     hosted: NonNullable<AppaSessionIdentity["provenance"]>;
@@ -62,6 +64,11 @@ export class AppaOpenCodeAdapter implements AppaClientAdapter {
     rulingFromResult: (result: NativeQuestionResult, asked: AskUserArguments) =>
       openCodeQuestionRuling(result, asked.question),
   };
+
+  // A running session does not pick up a sign-in or a config change.
+  gatewayToolsHint(serverName: string): string {
+    return `Run ${this.cliBinary} mcp auth ${serverName} and finish the sign-in in your browser. If "${serverName}" is not configured, connect ${this.clientLabel} again. Then start a new session.`;
+  }
 
   matches(context: AppaMatchContext): boolean {
     const userAgent = (
@@ -213,6 +220,7 @@ export class AppaKiloAdapter extends AppaOpenCodeAdapter {
   override readonly id = "kilo" as const;
   override readonly trajectoryPrefix = "kilo";
   protected override readonly clientLabel = "Kilo Code";
+  protected override readonly cliBinary = "kilo";
   protected override readonly provenance = {
     session: "kilo-session-header",
     hosted: "kilo-hosted-header",

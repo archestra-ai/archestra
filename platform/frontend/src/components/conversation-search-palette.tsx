@@ -1,6 +1,20 @@
 "use client";
 import { useDebounce } from "@uidotdev/usehooks";
-import { MessageCircle, Pencil, Pin, UsersRound } from "lucide-react";
+import {
+  AppWindow,
+  Bot,
+  Boxes,
+  Database,
+  FolderKanban,
+  type LucideIcon,
+  MessageCircle,
+  Pencil,
+  Pin,
+  Puzzle,
+  Route,
+  Sparkles,
+  UsersRound,
+} from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -9,6 +23,7 @@ import {
   isNavItemPermitted,
 } from "@/app/_parts/studio-nav";
 import { useNavPermissionMap } from "@/app/_parts/use-settings-area-access";
+import { useSettingsTabs } from "@/app/settings/settings-tabs";
 import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { RunStateIcon } from "@/components/chat/run-state-icon";
 import { ProjectBadgeButton } from "@/components/project-badge-button";
@@ -37,7 +52,9 @@ import {
   SHORTCUT_SEARCH,
   SHORTCUT_SIDEBAR,
 } from "@/consts";
+import { useAgentOptionsPage } from "@/lib/agent-options.query";
 import { useMyAgentRuns } from "@/lib/agent-runtime.query";
+import { APPS_FIRST_PAGE, useApps } from "@/lib/app.query";
 import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
@@ -53,7 +70,14 @@ import { conversationHref } from "@/lib/chat/conversation-href";
 import { getDateBucketLabel } from "@/lib/chat/group-conversations-by-date";
 import { buildPinnedSidebarItems } from "@/lib/chat/pinned-sidebar-items";
 import { useFeature } from "@/lib/config/config.query";
+import { useEnvironments } from "@/lib/environment.query";
 import { usePlatform } from "@/lib/hooks/use-platform";
+import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
+import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
+import { usePlugins } from "@/lib/plugins/plugin.query";
+import { useProjects } from "@/lib/projects/projects.query";
+import { useSkillsList } from "@/lib/skills/skill.query";
+import { useTeams } from "@/lib/teams/team.query";
 
 /**
  * Extracts all text content from messages for preview purposes.
@@ -77,6 +101,9 @@ function extractTextFromMessages(
   }
   return textParts.join(" ");
 }
+
+/** A row in a link group: settings tabs, agents, skills, MCP servers. */
+type LinkIcon = LucideIcon | React.ComponentType<{ className?: string }>;
 
 /**
  * Search synonyms, for words a reader might type that the destination's own
@@ -123,7 +150,9 @@ function useNavigationDestinations() {
   });
 
   return useMemo(() => {
-    if (!permissionMap) return [];
+    // null, not an empty list: an empty list would read as "no pages", when
+    // the permissions simply have not arrived yet.
+    if (!permissionMap) return null;
     const items = [
       // New Chat is the palette's own first row, so listing it again here
       // would offer the same destination twice.
@@ -192,33 +221,206 @@ export function ConversationSearchPalette({
   });
 
   // Agent Runtime sessions live in the same sidebar timeline as chats,
-  // so the palette lists them too (searched client-side by title — they have
-  // no message bodies for the backend conversation search to match).
+  // so the palette lists them too. Server-side title search reaches older
+  // pages without loading the entire history.
   const runtimeEnabled = useFeature("agentRuntime") === true;
-  const { data: runs = [] } = useMyAgentRuns(
-    open && isAuthenticated && canReadConversation === true && runtimeEnabled,
+  const runsEnabled =
+    open && isAuthenticated && canReadConversation === true && runtimeEnabled;
+  const runsQuery = useMyAgentRuns(
+    runsEnabled,
+    debouncedSearch.trim()
+      ? { search: debouncedSearch.trim() }
+      : { pinned: false },
+  );
+  const pinnedRunsQuery = useMyAgentRuns(
+    runsEnabled && !debouncedSearch.trim(),
+    { pinned: true },
+  );
+  const runs = useMemo(
+    () => [
+      ...new Map(
+        [...(runsQuery.data ?? []), ...(pinnedRunsQuery.data ?? [])].map(
+          (run) => [run.taskId, run],
+        ),
+      ).values(),
+    ],
+    [runsQuery.data, pinnedRunsQuery.data],
   );
 
   const navigationDestinations = useNavigationDestinations();
+  const isNavigationPending = navigationDestinations === null;
+
+  // Entities are searched by name, so the palette reaches the reader's own
+  // agents, skills and MCP servers, not only the pages that list them. Each
+  // list is fetched only while the palette is open and gated by the same
+  // permission its page needs.
+  const settingsTabs = useSettingsTabs();
+  const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
+  const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
+  const { data: canReadMcpRegistry } = useHasPermissions({
+    mcpRegistry: ["read"],
+  });
+  const agentOptions = useAgentOptionsPage({
+    filters: { searchMode: "name" },
+    search: debouncedSearch.trim(),
+    enabled:
+      open &&
+      isAuthenticated &&
+      canReadAgents === true &&
+      debouncedSearch.trim().length > 0,
+  });
+  const agents = useMemo(
+    () => agentOptions.data?.pages.flatMap((page) => page.data) ?? [],
+    [agentOptions.data],
+  );
+  const { data: mcpCatalogItems = [] } = useInternalMcpCatalog({
+    enabled: open && isAuthenticated && canReadMcpRegistry === true,
+  });
+  const isSearchingEntities = debouncedSearch.trim().length > 0;
+  // Apps are searched by the server like skills; useApps already withholds
+  // the request from readers without app:read.
+  const { data: appsPage } = useApps(
+    { ...APPS_FIRST_PAGE, search: debouncedSearch },
+    {
+      enabled: open && isAuthenticated && isSearchingEntities,
+      toastOnError: false,
+    },
+  );
+  const { data: canReadKnowledgeBases } = useHasPermissions({
+    knowledgeSource: ["read"],
+  });
+  const { data: canReadPlugins } = useHasPermissions({ plugin: ["read"] });
+  // The environments page is gated on update, not read, so match that.
+  const { data: canUpdateEnvironments } = useHasPermissions({
+    environment: ["update"],
+  });
+  const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
+  // Projects, knowledge bases and teams are searched by the server; plugins
+  // and environments are small lists, fetched once and matched here.
+  const { data: projectsPage } = useProjects({
+    search: debouncedSearch,
+    enabled: open && isAuthenticated && isSearchingEntities,
+  });
+  const { data: knowledgeBases = [] } = useKnowledgeBases({
+    query: { search: debouncedSearch },
+    enabled:
+      open &&
+      isAuthenticated &&
+      canReadKnowledgeBases === true &&
+      isSearchingEntities,
+  });
+  const { data: teams = [] } = useTeams({
+    includeRelations: false,
+    name: debouncedSearch,
+    enabled:
+      open && isAuthenticated && canReadTeams === true && isSearchingEntities,
+  });
+  const { data: plugins = [] } = usePlugins(
+    open && isAuthenticated && canReadPlugins === true,
+  );
+  const { data: environmentList } = useEnvironments(
+    open && isAuthenticated && canUpdateEnvironments === true,
+  );
+  const environments = environmentList?.environments ?? [];
+  const { data: skills = [] } = useSkillsList(
+    { search: debouncedSearch },
+    {
+      enabled:
+        open &&
+        isAuthenticated &&
+        canReadSkills === true &&
+        isSearchingEntities,
+    },
+  );
 
   // Show skeleton during typing or initial fetch
   const isSearching = searchQuery.trim().length > 0;
   const isTyping = searchQuery !== debouncedSearch;
-  const isSearchingAndFetching = isSearching && (isTyping || isFetching);
+  const isSearchingAndFetching =
+    isSearching && (isTyping || isFetching || runsQuery.isLoading);
+  // Until chats and permissions arrive, the browse view holds a skeleton in
+  // place of its lists, so the palette opens at its final height and does not
+  // swap rows in one at a time.
+  const isBrowseLoading = isLoading || isNavigationPending;
 
   const matchingNavigationItems = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
-    if (!normalizedQuery) return navigationDestinations;
+    const destinations = navigationDestinations ?? [];
+    if (!normalizedQuery) return destinations;
 
-    return navigationDestinations.filter((item) =>
+    return destinations.filter((item) =>
       `${item.label} ${item.value} ${item.keywords}`
         .toLocaleLowerCase()
         .includes(normalizedQuery),
     );
   }, [searchQuery, navigationDestinations]);
 
-  // The conversation search runs on the backend; run sessions carry no
-  // message bodies, so their titles are matched here instead.
+  // Settings tabs match on their label and on their path under /settings, so
+  // "oauth-clients" finds its tab while "settings" stays on the Settings page
+  // rather than pulling in every tab.
+  const matchingSettingsTabs = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
+    if (!normalizedQuery) return [];
+    return settingsTabs.filter((tab) =>
+      `${tab.label} ${tab.href.replace("/settings/", "")}`
+        .toLocaleLowerCase()
+        .includes(normalizedQuery),
+    );
+  }, [searchQuery, settingsTabs]);
+
+  const matchingAgents = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
+    if (!normalizedQuery) return [];
+    return agents.filter((agent) =>
+      agent.name.toLocaleLowerCase().includes(normalizedQuery),
+    );
+  }, [searchQuery, agents]);
+
+  const matchingMcpCatalogItems = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
+    if (!normalizedQuery) return [];
+    return mcpCatalogItems.filter((item) =>
+      item.name.toLocaleLowerCase().includes(normalizedQuery),
+    );
+  }, [searchQuery, mcpCatalogItems]);
+
+  // Skills are already filtered by the server's search, so no local pass.
+  const matchingSkills = isSearchingEntities ? skills : [];
+  const matchingApps = isSearchingEntities ? (appsPage?.data ?? []) : [];
+  const matchingProjects = isSearchingEntities ? (projectsPage ?? []) : [];
+  const matchingKnowledgeBases = isSearchingEntities ? knowledgeBases : [];
+  const matchingTeams = isSearchingEntities ? teams : [];
+
+  const matchingPlugins = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
+    if (!normalizedQuery) return [];
+    return plugins.filter((plugin) =>
+      plugin.displayName.toLocaleLowerCase().includes(normalizedQuery),
+    );
+  }, [searchQuery, plugins]);
+
+  const matchingEnvironments = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase();
+    if (!normalizedQuery) return [];
+    return environments.filter((environment) =>
+      environment.name.toLocaleLowerCase().includes(normalizedQuery),
+    );
+  }, [searchQuery, environments]);
+
+  const hasEntityMatches =
+    matchingSettingsTabs.length > 0 ||
+    matchingAgents.length > 0 ||
+    matchingMcpCatalogItems.length > 0 ||
+    matchingSkills.length > 0 ||
+    matchingApps.length > 0 ||
+    matchingProjects.length > 0 ||
+    matchingKnowledgeBases.length > 0 ||
+    matchingPlugins.length > 0 ||
+    matchingEnvironments.length > 0 ||
+    matchingTeams.length > 0;
+
+  // The server searches run titles. Filter cached pins too while their
+  // independent browse feed is disabled during search.
   const matchingRuns = useMemo(() => {
     const normalizedQuery = debouncedSearch.trim().toLocaleLowerCase();
     if (!normalizedQuery) return [];
@@ -492,6 +694,17 @@ export function ConversationSearchPalette({
     </div>
   );
 
+  const BrowseSkeleton = () => (
+    <div aria-hidden="true" className="space-y-2.5 px-3 py-3">
+      {SKELETON_IDS.slice(0, 4).map((id) => (
+        <div key={id} className="flex items-center gap-2 h-4">
+          <div className="h-4 w-4 shrink-0 rounded bg-muted animate-pulse" />
+          <div className="h-3.5 flex-1 rounded bg-muted animate-pulse" />
+        </div>
+      ))}
+    </div>
+  );
+
   const renderConversationItem = (
     conv: (typeof conversations)[number],
     opts?: { showPinIcon?: boolean; dateLabel?: string },
@@ -621,6 +834,29 @@ export function ConversationSearchPalette({
     </CommandItem>
   );
 
+  const renderLinkItem = (link: {
+    key: string;
+    href: string;
+    label: string;
+    icon: LinkIcon;
+  }) => {
+    const Icon = link.icon;
+    return (
+      <CommandItem
+        key={link.key}
+        value={link.key}
+        onSelect={() => {
+          router.push(link.href);
+          onOpenChange(false);
+        }}
+        className="flex min-w-0 items-center gap-2 px-3 py-2! cursor-pointer aria-selected:bg-accent rounded-sm"
+      >
+        <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="truncate text-sm">{link.label}</span>
+      </CommandItem>
+    );
+  };
+
   const renderNavigationItems = () =>
     matchingNavigationItems.map((item) => {
       const Icon = item.icon;
@@ -645,7 +881,7 @@ export function ConversationSearchPalette({
       open={open}
       onOpenChange={onOpenChange}
       title="Search or navigate"
-      description="Search chats and navigate to pages"
+      description="Search chats, pages, and the names of your agents, apps, projects and more"
       className="max-w-2xl"
       shouldFilter={false}
       value={selectedValue}
@@ -668,15 +904,156 @@ export function ConversationSearchPalette({
         )}
       </output>
       <CommandList className="max-h-[min(640px,70vh)]">
-        {isLoading && !isSearching ? (
-          <div className="py-6 text-center text-sm text-muted-foreground">
-            Loading conversations...
-          </div>
-        ) : isSearching ? (
+        {isSearching ? (
           <>
             {matchingNavigationItems.length > 0 && (
               <CommandGroup heading="Pages">
                 {renderNavigationItems()}
+              </CommandGroup>
+            )}
+
+            {matchingSettingsTabs.length > 0 && (
+              <CommandGroup heading="Settings">
+                {matchingSettingsTabs.map((tab) =>
+                  renderLinkItem({
+                    key: `settings-${tab.href}`,
+                    href: tab.href,
+                    label: tab.label,
+                    icon: tab.Icon,
+                  }),
+                )}
+              </CommandGroup>
+            )}
+
+            {matchingAgents.length > 0 && (
+              <CommandGroup heading="Agents">
+                {matchingAgents.map((agent) =>
+                  renderLinkItem({
+                    key: `agent-${agent.id}`,
+                    href: `/agents/${agent.id}`,
+                    label: agent.name,
+                    icon: Bot,
+                  }),
+                )}
+                {agentOptions.hasNextPage && (
+                  <CommandItem
+                    value="load-more-agents"
+                    disabled={agentOptions.isFetchingNextPage}
+                    onSelect={() => void agentOptions.fetchNextPage()}
+                  >
+                    <span>More agents</span>
+                  </CommandItem>
+                )}
+              </CommandGroup>
+            )}
+
+            {matchingSkills.length > 0 && (
+              <CommandGroup heading="Skills">
+                {matchingSkills.map((skill) =>
+                  renderLinkItem({
+                    key: `skill-${skill.id}`,
+                    href: `/skills/${skill.id}`,
+                    label: skill.name,
+                    icon: Sparkles,
+                  }),
+                )}
+              </CommandGroup>
+            )}
+
+            {matchingApps.length > 0 && (
+              <CommandGroup heading="Apps">
+                {matchingApps.map((app) =>
+                  renderLinkItem({
+                    key:
+                      app.source === "owned"
+                        ? `app-${app.id}`
+                        : `app-${app.mcpServerId}-${app.toolName}`,
+                    // The Apps page is the one place an app opens; its search
+                    // field shows the app.
+                    href: `/apps?search=${encodeURIComponent(app.name)}`,
+                    label: app.name,
+                    icon: AppWindow,
+                  }),
+                )}
+              </CommandGroup>
+            )}
+
+            {matchingProjects.length > 0 && (
+              <CommandGroup heading="Projects">
+                {matchingProjects.map((project) =>
+                  renderLinkItem({
+                    key: `project-${project.id}`,
+                    href: `/projects/${project.id}`,
+                    label: project.name,
+                    icon: FolderKanban,
+                  }),
+                )}
+              </CommandGroup>
+            )}
+
+            {matchingKnowledgeBases.length > 0 && (
+              <CommandGroup heading="Knowledge Bases">
+                {matchingKnowledgeBases.map((knowledgeBase) =>
+                  renderLinkItem({
+                    key: `knowledge-base-${knowledgeBase.id}`,
+                    // No per-base page exists; the list is where a base opens.
+                    href: "/knowledge/knowledge-bases",
+                    label: knowledgeBase.name,
+                    icon: Database,
+                  }),
+                )}
+              </CommandGroup>
+            )}
+
+            {matchingPlugins.length > 0 && (
+              <CommandGroup heading="Plugins">
+                {matchingPlugins.map((plugin) =>
+                  renderLinkItem({
+                    key: `plugin-${plugin.id}`,
+                    href: `/plugins/${plugin.id}`,
+                    label: plugin.displayName,
+                    icon: Puzzle,
+                  }),
+                )}
+              </CommandGroup>
+            )}
+
+            {matchingEnvironments.length > 0 && (
+              <CommandGroup heading="Environments">
+                {matchingEnvironments.map((environment) =>
+                  renderLinkItem({
+                    key: `environment-${environment.id}`,
+                    href: "/settings/environments",
+                    label: environment.name,
+                    icon: Boxes,
+                  }),
+                )}
+              </CommandGroup>
+            )}
+
+            {matchingTeams.length > 0 && (
+              <CommandGroup heading="Teams">
+                {matchingTeams.map((team) =>
+                  renderLinkItem({
+                    key: `team-${team.id}`,
+                    href: "/settings/teams",
+                    label: team.name,
+                    icon: UsersRound,
+                  }),
+                )}
+              </CommandGroup>
+            )}
+
+            {matchingMcpCatalogItems.length > 0 && (
+              <CommandGroup heading="MCP Servers">
+                {matchingMcpCatalogItems.map((item) =>
+                  renderLinkItem({
+                    key: `mcp-${item.id}`,
+                    href: `/mcp/registry/${item.id}`,
+                    label: item.name,
+                    icon: Route,
+                  }),
+                )}
               </CommandGroup>
             )}
 
@@ -689,7 +1066,7 @@ export function ConversationSearchPalette({
                 {conversations.map((conv) => renderConversationItem(conv))}
                 {matchingRuns.map((run) => renderRunItem(run))}
               </CommandGroup>
-            ) : matchingNavigationItems.length === 0 ? (
+            ) : matchingNavigationItems.length === 0 && !hasEntityMatches ? (
               <CommandEmpty>No chats or pages found.</CommandEmpty>
             ) : null}
           </>
@@ -727,57 +1104,86 @@ export function ConversationSearchPalette({
                 the New chat row and Pages. The groups below carry their own
                 headings (Pinned / Recent), so no standalone label here — a
                 "Chats" label stacked on "Pinned" read as a double heading. */}
-            {(conversations.length > 0 || runs.length > 0) && (
-              <CommandSeparator className="my-2" />
-            )}
-
-            {browseItems ? (
+            {isBrowseLoading ? (
+              <BrowseSkeleton />
+            ) : (
               <>
-                {browseItems.pinned.length > 0 && (
-                  <CommandGroup heading="Pinned">
-                    {browseItems.pinned.map((entry) =>
-                      entry.type === "chat"
-                        ? renderConversationItem(entry.item, {
-                            showPinIcon: true,
-                            dateLabel: getDateBucketLabel(
-                              entry.item.lastMessageAt,
-                            ),
-                          })
-                        : renderRunItem(entry.item, {
-                            dateLabel: getDateBucketLabel(
-                              entry.item.stateChangedAt ?? entry.item.startedAt,
-                            ),
-                          }),
-                    )}
-                  </CommandGroup>
+                {(conversations.length > 0 || runs.length > 0) && (
+                  <CommandSeparator className="my-2" />
                 )}
-                {visibleRecent.length > 0 && (
-                  <CommandGroup heading="Recent">
-                    {visibleRecent.map((entry) =>
-                      entry.kind === "conversation"
-                        ? renderConversationItem(entry.item, {
-                            dateLabel: getDateBucketLabel(entry.timestamp),
-                          })
-                        : renderRunItem(entry.item, {
-                            dateLabel: getDateBucketLabel(entry.timestamp),
-                          }),
-                    )}
-                    {hiddenRecentCount > 0 && (
-                      // Indented to the title column so it reads as part of the list.
-                      <p className="py-1 pl-9 text-xs text-muted-foreground">
-                        Type to search older chats
-                      </p>
-                    )}
-                  </CommandGroup>
-                )}
-              </>
-            ) : null}
 
-            <CommandSeparator className="my-2" />
-            <CommandGroup heading="Pages" className={PAGES_GRID_CLASS_NAME}>
-              {renderNavigationItems()}
-            </CommandGroup>
+                {browseItems ? (
+                  <>
+                    {browseItems.pinned.length > 0 && (
+                      <CommandGroup heading="Pinned">
+                        {browseItems.pinned.map((entry) =>
+                          entry.type === "chat"
+                            ? renderConversationItem(entry.item, {
+                                showPinIcon: true,
+                                dateLabel: getDateBucketLabel(
+                                  entry.item.lastMessageAt,
+                                ),
+                              })
+                            : renderRunItem(entry.item, {
+                                dateLabel: getDateBucketLabel(
+                                  entry.item.stateChangedAt ??
+                                    entry.item.startedAt,
+                                ),
+                              }),
+                        )}
+                      </CommandGroup>
+                    )}
+                    {visibleRecent.length > 0 && (
+                      <CommandGroup heading="Recent">
+                        {visibleRecent.map((entry) =>
+                          entry.kind === "conversation"
+                            ? renderConversationItem(entry.item, {
+                                dateLabel: getDateBucketLabel(entry.timestamp),
+                              })
+                            : renderRunItem(entry.item, {
+                                dateLabel: getDateBucketLabel(entry.timestamp),
+                              }),
+                        )}
+                        {hiddenRecentCount > 0 && (
+                          // Indented to the title column so it reads as part of the list.
+                          <p className="py-1 pl-9 text-xs text-muted-foreground">
+                            Type to search older chats
+                          </p>
+                        )}
+                      </CommandGroup>
+                    )}
+                  </>
+                ) : null}
+
+                <CommandSeparator className="my-2" />
+                <CommandGroup heading="Pages" className={PAGES_GRID_CLASS_NAME}>
+                  {renderNavigationItems()}
+                </CommandGroup>
+              </>
+            )}
           </>
+        )}
+        {isSearching && runsQuery.hasNextPage && (
+          <CommandGroup heading="Runs">
+            <CommandItem
+              value="load-more-runs"
+              disabled={runsQuery.isFetchingNextPage}
+              onSelect={() => void runsQuery.fetchNextPage()}
+            >
+              More runs
+            </CommandItem>
+          </CommandGroup>
+        )}
+        {pinnedRunsQuery.hasNextPage && !isSearching && (
+          <CommandGroup heading="Pinned runs">
+            <CommandItem
+              value="load-more-pinned-runs"
+              disabled={pinnedRunsQuery.isFetchingNextPage}
+              onSelect={() => void pinnedRunsQuery.fetchNextPage()}
+            >
+              More pinned runs
+            </CommandItem>
+          </CommandGroup>
         )}
       </CommandList>
 

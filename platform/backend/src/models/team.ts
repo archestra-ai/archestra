@@ -181,6 +181,7 @@ class TeamModel {
     offset: number;
     name?: string;
     labels?: Record<string, string[]>;
+    includeRelations?: boolean;
   }): Promise<{ data: Team[]; total: number }> {
     const { organizationId, limit, offset, name, labels } = params;
     logger.debug(
@@ -216,7 +217,10 @@ class TeamModel {
         .where(and(...filters)),
     ]);
 
-    const teamsWithRelations = await TeamModel.attachMembersAndLabels(teams);
+    const teamsWithRelations =
+      params.includeRelations === false
+        ? teams
+        : await TeamModel.attachMembersAndLabels(teams);
 
     const total = totalResult[0]?.count ?? 0;
     logger.debug(
@@ -638,6 +642,7 @@ class TeamModel {
     offset: number;
     name?: string;
     labels?: Record<string, string[]>;
+    includeRelations?: boolean;
   }): Promise<{ data: Team[]; total: number }> {
     const { userId, limit, offset, name, labels } = params;
     logger.debug(
@@ -684,7 +689,10 @@ class TeamModel {
         .where(and(...filters)),
     ]);
 
-    const teamsWithRelations = await TeamModel.attachMembersAndLabels(teams);
+    const teamsWithRelations =
+      params.includeRelations === false
+        ? teams
+        : await TeamModel.attachMembersAndLabels(teams);
 
     const total = totalResult[0]?.count ?? 0;
     logger.debug(

@@ -273,7 +273,8 @@ const a2aRoutes: FastifyPluginAsyncZod = async (fastify) => {
           });
         }
       } else if (tokenAuth.serviceAccountId) {
-        // Service account token - the turn runs as the account itself
+        // A service account key (or an OAuth app bound to one) runs as that
+        // account, never with the organization's reach.
         userId = serviceAccountUserId(tokenAuth.serviceAccountId);
       } else {
         // Team/org token - we don't have a specific user, use a system context

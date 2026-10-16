@@ -71,6 +71,8 @@ export type McpServerAgentUsage = z.infer<typeof McpServerAgentUsageSchema>;
  */
 export const McpServerAssignedAgentSchema = McpServerAgentUsageSchema.extend({
   pinned: z.boolean(),
+  accessAllTools: z.boolean().optional(),
+  organizationId: z.string().optional(),
 });
 
 export type McpServerAssignedAgent = z.infer<

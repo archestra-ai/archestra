@@ -17,7 +17,8 @@ import {
 } from "@archestra/shared/connection-setup";
 import { useEffect, useMemo, useState } from "react";
 import type { AgentSelectorAgent } from "@/components/agent-selector";
-import { useDefaultMcpGateway, useProfiles } from "@/lib/agent.query";
+import { useAgentOptions, useDefaultMcpGateway } from "@/lib/agent.query";
+import { useAgentOptionsPage } from "@/lib/agent-options.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -25,7 +26,10 @@ import { useLlmProxy } from "@/lib/llm-proxy.query";
 import { useGatewayToolPreview } from "@/lib/mcp/gateway-tool-preview.query";
 import { useOrganization } from "@/lib/organization.query";
 import { isDeliverablePlugin, usePlugins } from "@/lib/plugins/plugin.query";
-import { type ConnectSkill, useAllSkills } from "@/lib/skills/skill.query";
+import {
+  type ConnectSkill,
+  useSkillsPaginated,
+} from "@/lib/skills/skill.query";
 import {
   type ConnectClient,
   usesGenericInstructions,
@@ -119,7 +123,13 @@ export interface ConnectPageData {
   shownProviders: SupportedProvider[];
   skillsEnabled: boolean;
   pluginsEnabled: boolean;
-  /** Approved plugins the setup bundles for this client. */
+  /**
+   * The setup command is for Windows: the browser's OS until the user picks
+   * the other command. The plugins on offer follow it.
+   */
+  windows: boolean;
+  setWindows: (windows: boolean) => void;
+  /** Approved plugins the setup bundles for this client on that OS. */
   pluginsFor: (client: ConnectClient) => ConnectPlugin[];
   /** The plugins on offer that the user kept. */
   keptPlugins: (
@@ -205,10 +215,15 @@ export function gatewayServerName(params: {
 }
 
 /** A gateway pick that is no longer visible falls back to the default. */
-export function useConnectPageData(
-  pickedClientId?: string | null,
-  pickedGatewayId: string | null = null,
-): ConnectPageData {
+export function useConnectPageData({
+  pickedClientId,
+  pickedGatewayId = null,
+  showToolDetails = false,
+}: {
+  pickedClientId?: string | null;
+  pickedGatewayId?: string | null;
+  showToolDetails?: boolean;
+} = {}): ConnectPageData {
   const appName = useAppName();
   // A fresh read: these settings decide what a setup may include.
   const orgQuery = useOrganization(true, { fresh: true });
@@ -238,17 +253,38 @@ export function useConnectPageData(
     useDefaultMcpGateway();
   const defaultGatewayId =
     org?.connectionDefaultMcpGatewayId ?? defaultGateway?.id ?? null;
-  // The same list the browser approval offers.
-  const { data: gatewayList, isPending: gatewaysPending } = useProfiles({
-    filters: {
-      agentTypes: ["profile", "mcp_gateway"],
-      excludeOtherPersonalAgents: true,
-    },
+  const gatewayFilters = {
+    agentTypes: ["profile", "mcp_gateway"] as ("profile" | "mcp_gateway")[],
+    excludeOtherPersonalAgents: true,
+  };
+  const gatewayPage = useAgentOptionsPage({
+    filters: gatewayFilters,
+    limit: 20,
     enabled: canReadGateways === true,
   });
+  const { data: gatewayReferences, isPending: gatewaysPending } =
+    useAgentOptions({
+      filters: {
+        ...gatewayFilters,
+        ids: [pickedGatewayId, defaultGatewayId].filter(
+          (id): id is string => !!id,
+        ),
+      },
+      enabled: canReadGateways === true,
+    });
   const gateways = useMemo<ConnectGateway[]>(
-    () => (gatewayList ?? []).map((g) => ({ ...g, slug: g.slug ?? g.id })),
-    [gatewayList],
+    () => [
+      ...new Map(
+        [
+          ...(gatewayPage.data?.pages[0]?.data ?? []),
+          ...(gatewayReferences ?? []),
+        ].map((gateway) => [
+          gateway.id,
+          { ...gateway, slug: gateway.slug ?? gateway.id },
+        ]),
+      ).values(),
+    ],
+    [gatewayPage.data, gatewayReferences],
   );
   const gatewayId =
     (pickedGatewayId && gateways.some((g) => g.id === pickedGatewayId)
@@ -261,14 +297,16 @@ export function useConnectPageData(
     profileQuery: { isPending: profilePending },
     accessAll,
     servers: gatewayServers,
-  } = useGatewayServers(gatewayId, { withTools: true });
+  } = useGatewayServers(gatewayId, { withTools: showToolDetails });
   const { data: canManage } = useHasPermissions({
     organizationSettings: ["read"],
   });
   const skillsEnabled = org?.connectionSkillsEnabled === true;
-  const { data: skillList } = useAllSkills({
-    enabled: skillsEnabled && canReadSkills === true,
-  });
+  // The card shows a preview, not an eagerly downloaded catalogue.
+  const { data: skillPage } = useSkillsPaginated(
+    { limit: 10, offset: 0, includeContent: false },
+    { enabled: skillsEnabled && canReadSkills === true },
+  );
 
   const llmProxyEnabled = org?.connectionLlmProxyEnabled === true;
   const { data: llmProxy } = useLlmProxy({ enabled: llmProxyEnabled });
@@ -282,21 +320,20 @@ export function useConnectPageData(
   const { data: allPlugins } = usePlugins(
     pluginsEnabled && canDeliverPlugins === true,
   );
-  // The setup only bundles plugins built for the computer's OS.
-  const [pluginPlatform, setPluginPlatform] = useState<"posix" | "windows">(
-    "posix",
-  );
-  useEffect(
-    () =>
-      setPluginPlatform(detectPlatform() === "windows" ? "windows" : "posix"),
-    [],
-  );
-  const pluginsFor = (client: ConnectClient): ConnectPlugin[] =>
+  // The OS the setup command is for: the browser's, until the user picks the
+  // other command.
+  const [windows, setWindows] = useState(false);
+  useEffect(() => setWindows(detectPlatform() === "windows"), []);
+  // The setup only bundles plugins built for the computer it runs on.
+  const offeredPlugins = (
+    client: ConnectClient,
+    onWindows: boolean,
+  ): ConnectPlugin[] =>
     (allPlugins ?? [])
       .filter(
         (p) =>
           isDeliverablePlugin(p, client.id) &&
-          p.supportedPlatforms.includes(pluginPlatform),
+          p.supportedPlatforms.includes(onWindows ? "windows" : "posix"),
       )
       .map((p) => ({
         id: p.id,
@@ -305,16 +342,12 @@ export function useConnectPageData(
         description: p.description,
         source: p.sourceRepo,
       }));
+  const pluginsFor = (client: ConnectClient) => offeredPlugins(client, windows);
 
   const keptPlugins = (
     client: ConnectClient,
     pluginIds: ConnectPicks["pluginIds"],
-  ) => {
-    const offered = pluginsFor(client);
-    if (pluginIds === null) return offered;
-    const kept = new Set(pluginIds);
-    return offered.filter((p) => kept.has(p.id));
-  };
+  ) => keptOf(pluginsFor(client), pluginIds);
 
   const baseUrl = useConnectionBaseUrl(org?.connectionBaseUrls);
 
@@ -330,7 +363,8 @@ export function useConnectPageData(
         (c): c is ConnectClient => !!c,
       );
 
-  const skills = skillList ?? [];
+  const skills = skillPage?.data ?? [];
+  const totalSkills = skillPage?.pagination.total ?? 0;
   const skillsAvailable = skillsEnabled && skills.length > 0;
   const gateway = profile
     ? { ...profile, slug: profile.slug ?? profile.id }
@@ -343,6 +377,8 @@ export function useConnectPageData(
     clients[0];
   const { data: preview, isError: toolPreviewError } = useGatewayToolPreview({
     agentId: toolsAvailable ? gateway?.id : undefined,
+    // Counting tokens expands every served tool schema; only do it on request.
+    enabled: showToolDetails,
     client: client?.id === "claude-code" ? "claude-code" : "generic",
   });
   const listedTools = preview?.tools;
@@ -415,7 +451,7 @@ export function useConnectPageData(
   useEffect(() => setOrigin(window.location.origin), []);
 
   const footprint: ConnectFootprint = {
-    skillsInstalled: skillsEnabled ? skills.length : 0,
+    skillsInstalled: skillsEnabled ? totalSkills : 0,
   };
 
   return {
@@ -442,7 +478,7 @@ export function useConnectPageData(
     toolPreviewError,
     allServers: accessAll,
     skills,
-    totalSkills: skills.length,
+    totalSkills,
     progressive,
     toolTokens,
     llmProxyEnabled: proxyAvailable,
@@ -450,6 +486,8 @@ export function useConnectPageData(
     shownProviders: getConnectableProviders(org),
     skillsEnabled,
     pluginsEnabled,
+    windows,
+    setWindows,
     pluginsFor,
     keptPlugins,
     partsFor,
@@ -482,8 +520,10 @@ export function useConnectPageData(
       return `Read ${origin}/connect.md?${decodeURIComponent(params.toString())} and connect ${client.label}.`;
     },
     installerCommand: (client, choices, windows, picks) => {
-      const offered = pluginsFor(client);
-      const kept = keptPlugins(client, picks?.pluginIds ?? null);
+      // The plugins for the OS this command runs on, which the installer
+      // reports and bundles for.
+      const offered = offeredPlugins(client, windows);
+      const kept = keptOf(offered, picks?.pluginIds ?? null);
       // Keeping none of the plugins is leaving plugins out.
       const exclude = CONNECT_SETUP_PARTS.filter(
         (part) =>
@@ -511,4 +551,14 @@ export function useConnectPageData(
       return `${fetch} ${origin}/api/client-connections/installer ${next}\n  | node - ${flags.join(" ")}`;
     },
   };
+}
+
+/** The plugins on offer that the picks keep; null picks keep them all. */
+function keptOf(
+  offered: ConnectPlugin[],
+  pluginIds: ConnectPicks["pluginIds"],
+): ConnectPlugin[] {
+  if (pluginIds === null) return offered;
+  const kept = new Set(pluginIds);
+  return offered.filter((p) => kept.has(p.id));
 }

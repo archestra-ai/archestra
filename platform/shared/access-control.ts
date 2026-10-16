@@ -485,18 +485,17 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetGuardrailsPolicy]: { openappaPolicy: ["read"] },
   [RouteId.ValidateGuardrailsPolicy]: { openappaPolicy: ["read"] },
   [RouteId.UpdateGuardrailsPolicy]: { openappaPolicy: ["update"] },
-  // Inspecting or mutating arbitrary outbound destinations can configure
-  // credential-bearing egress, so those operations remain settings-manager
-  // only. Credential-redacted registry summaries require Agent read and are
-  // visibility-filtered unless the caller can update Agent settings. Run
-  // history includes caller and conversation identifiers, so it requires
-  // Agent-settings read and intentionally permits organization-wide access.
+  // Connecting an external agent, and inspecting a URL before connecting it,
+  // needs Agent create, like building any other agent. The list and detail
+  // reads need Agent read and return only the external agents the caller can
+  // see. Run history needs the same: the caller must see that external agent,
+  // and then gets its recent runs from everyone in the organization.
+  // Each external agent's own permission policy decides who may change it.
   [RouteId.InspectA2aRemoteAgent]: { agent: ["create"] },
   [RouteId.ListA2aRemoteAgents]: { agent: ["read"] },
   [RouteId.GetA2aRemoteAgent]: { agent: ["read"] },
   [RouteId.ListA2aRemoteAgentRuns]: { agent: ["read"] },
   [RouteId.CreateA2aRemoteAgent]: { agent: ["create"] },
-  // Each external agent's own permission policy decides who may change it.
   [RouteId.UpdateA2aRemoteAgent]: { agent: ["read"] },
   [RouteId.DeleteA2aRemoteAgent]: { agent: ["read"] },
 
@@ -602,7 +601,11 @@ export const requiredEndpointPermissionsMap: Partial<
   // based on agentType (agent, mcp_gateway, llm_proxy map to agent, mcpGateway, llmProxy resources)
   [RouteId.GetAgents]: {},
   [RouteId.GetAgentCatalog]: {},
-  [RouteId.GetAllAgents]: {},
+  [RouteId.GetAgentOptions]: {},
+  [RouteId.GetAgentOptionsPage]: {},
+  [RouteId.GetAgentOptionIds]: {},
+  [RouteId.GetChatAgentRoster]: {},
+  [RouteId.GetChatAgentRosterPage]: {},
   [RouteId.GetAgentCredentialReadiness]: {},
   [RouteId.GetAgent]: {},
   // Agent read access is checked in the handler (requireReadableAgent).
@@ -758,6 +761,9 @@ export const requiredEndpointPermissionsMap: Partial<
     mcpRegistry: ["read"],
   },
   [RouteId.GetMcpServers]: {
+    mcpServerInstallation: ["read"],
+  },
+  [RouteId.GetMcpServerAutoModeAgentPage]: {
     mcpServerInstallation: ["read"],
   },
   [RouteId.GetMcpServerAutoModeAgents]: {
@@ -1146,6 +1152,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // Delegation routes: agent-type permission checked dynamically in handler
   [RouteId.GetAgentDelegations]: {},
   [RouteId.SyncAgentDelegations]: {},
+  [RouteId.CreateAgentDelegation]: {},
   [RouteId.DeleteAgentDelegation]: {},
   [RouteId.GetAgentA2aDelegations]: {},
   [RouteId.SyncAgentA2aDelegations]: {},
@@ -1210,6 +1217,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.ListEnvironments]: {
     environment: ["read"],
   },
+  [RouteId.GetEnvironment]: { environment: ["read"] },
   [RouteId.GetEnvironmentLabelKeys]: { environment: ["read"] },
   [RouteId.GetEnvironmentLabelValues]: { environment: ["read"] },
   [RouteId.CreateEnvironment]: {
@@ -1362,6 +1370,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // everyone else only the users they share a team with (the chat share
   // recipient picker), so the route itself is open to any authenticated user.
   [RouteId.GetOrganizationMembers]: {},
+  [RouteId.GetOrganizationMemberOptions]: {},
   [RouteId.GetOrganizationMember]: { member: ["read"] }, // Get organization member by ID or email
   [RouteId.DeletePendingSignupMember]: { member: ["delete"] }, // Delete auto-provisioned member who hasn't signed up
   [RouteId.GetUserPermissionSources]: {},
@@ -1525,6 +1534,12 @@ export const requiredEndpointPermissionsMap: Partial<
     organizationSettings: ["read"],
   },
   [RouteId.JoinSlackAgentBotChannel]: {
+    organizationSettings: ["update"],
+  },
+  [RouteId.ListSlackRouterBotChannels]: {
+    organizationSettings: ["read"],
+  },
+  [RouteId.JoinSlackRouterBotChannel]: {
     organizationSettings: ["update"],
   },
   [RouteId.UpdateTelegramChatOpsConfig]: {
@@ -1711,8 +1726,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOpenappaPolicyDeclarations]: { openappaPolicy: ["read"] },
   // Publishing a held pull is a policy write; each reason it names carries its
   // own permission on top, checked where the pull's changes are known.
-  [RouteId.AcceptHeldAppaGithubPull]: { openappaPolicy: ["update"] },
-  [RouteId.GetHeldAppaGithubPull]: { openappaPolicy: ["read"] },
   // Loopback-only helper bridge for the APPA runtime; authenticated by the
   // per-process bridge bearer inside the route, not by a session.
   [RouteId.ConsultOpenappaBatteryHelper]: {},
@@ -1767,6 +1780,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.PreviewGithubSkill]: { skill: ["read"] },
   [RouteId.ImportGithubSkills]: { skill: ["create"] },
   [RouteId.GetSkillSourceRepos]: { skill: ["read"] },
+  [RouteId.GetSkillNames]: { skill: ["read"] },
   [RouteId.GetSkillUsageStatistics]: {},
   [RouteId.GetSkillVersions]: {},
   [RouteId.GetSkillVersion]: {},

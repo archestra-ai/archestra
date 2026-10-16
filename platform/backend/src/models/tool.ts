@@ -44,7 +44,7 @@ import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
 import config from "@/config";
-import db, { schema, type Transaction } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import { ARCHESTRA_TOOL_NAME_UNIQUE_INDEX } from "@/database/schemas/tool";
 import { restore, softDelete } from "@/database/soft-delete";
@@ -1611,6 +1611,9 @@ class ToolModel {
     }
   }
 
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   /**
    * When OpenAPPA is on, every existing agent gets the notice and control
    * tools. New agents inherit them via {@link assignDefaultArchestraToolsToAgent}.
@@ -1625,13 +1628,19 @@ class ToolModel {
         REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
       );
       if (toolIds.length === 0) continue;
-      const agentIds =
-        await AgentModel.findNonBuiltInIdsByOrganizationId(organizationId);
+      const agentIds = await AgentModel.findNonBuiltInIdsMissingToolAssignments(
+        {
+          organizationId,
+          toolIds,
+        },
+      );
       for (const agentId of agentIds) {
         await AgentToolModel.createManyIfNotExists(agentId, toolIds);
       }
     }
   }
+
+  // SPDX-SnippetEnd
 
   /**
    * Assign skill tools to a single agent if its org has opted in
@@ -2411,6 +2420,31 @@ class ToolModel {
     );
   }
 
+  /** Tool-picker metadata without parameter bodies or assignment fan-out. */
+  static async findPickerToolsByCatalogId(catalogId: string) {
+    const tools = await db
+      .select({
+        id: schema.toolsTable.id,
+        name: schema.toolsTable.name,
+        description: schema.toolsTable.description,
+        createdAt: schema.toolsTable.createdAt,
+      })
+      .from(schema.toolsTable)
+      .where(
+        and(
+          eq(schema.toolsTable.catalogId, catalogId),
+          ToolModel.listableCatalogToolPredicate(),
+        ),
+      )
+      .orderBy(desc(schema.toolsTable.createdAt));
+    return tools.map((tool) => ({
+      ...tool,
+      group: getArchestraToolGroupId(
+        archestraMcpBranding.getToolShortName(tool.name),
+      ),
+    }));
+  }
+
   static async findByCatalogId(catalogId: string): Promise<
     Array<{
       id: string;
@@ -2507,6 +2541,20 @@ class ToolModel {
     return toolsWithAgents;
   }
 
+  /** Lightweight targets for choosing a coverage page before loading its tools. */
+  static async findCoverageCatalogs(params: {
+    organizationId: string;
+    catalogIds: string[];
+  }): Promise<Array<{ id: string; name: string }>> {
+    return db
+      .select({
+        id: schema.internalMcpCatalogTable.id,
+        name: schema.internalMcpCatalogTable.name,
+      })
+      .from(schema.internalMcpCatalogTable)
+      .where(coverageCatalogCondition(params));
+  }
+
   /**
    * Catalog entries, tools, and visible entities used by the OpenAPPA overview.
    * The built-in catalog is included because its tools can be assigned.
@@ -2523,6 +2571,10 @@ class ToolModel {
       };
       includeAppCatalogs?: boolean;
       catalogId?: string;
+      /** Bound server-only reports to visible catalogs or the selected page. */
+      catalogIds?: string[];
+      /** Server counts and summary totals do not use agent assignments. */
+      includeAgentAssignments?: boolean;
     } = {},
   ): Promise<{
     catalogs: Array<Pick<InternalMcpCatalog, "id" | "name" | "scope" | "icon">>;
@@ -2548,61 +2600,71 @@ class ToolModel {
       accessAllTools: boolean;
     }>;
   }> {
-    const { visibility, includeAppCatalogs = false, catalogId } = options;
-    const principals = visibility
-      ? await ResourcePermissionSubjectModel.resolvePrincipals({
-          userId: visibility.userId,
-          organizationId,
-        })
+    const {
+      visibility,
+      includeAppCatalogs = false,
+      catalogId,
+      catalogIds: selectedCatalogIds,
+      includeAgentAssignments = true,
+    } = options;
+    const principals =
+      visibility && includeAgentAssignments
+        ? await ResourcePermissionSubjectModel.resolvePrincipals({
+            userId: visibility.userId,
+            organizationId,
+          })
+        : [];
+    const accessibleIds =
+      visibility && includeAgentAssignments
+        ? await AgentTeamModel.getUserAccessibleAgentIds(
+            visibility.userId,
+            false,
+            principals,
+          )
+        : undefined;
+    const entityRows = includeAgentAssignments
+      ? await db
+          .select({
+            id: schema.agentsTable.id,
+            organizationId: schema.agentsTable.organizationId,
+            name: schema.agentsTable.name,
+            agentType: schema.agentsTable.agentType,
+            scope: schema.agentsTable.scope,
+            icon: schema.agentsTable.icon,
+            accessAllTools: schema.agentsTable.accessAllTools,
+          })
+          .from(schema.agentsTable)
+          .where(
+            and(
+              eq(schema.agentsTable.organizationId, organizationId),
+              inArray(
+                schema.agentsTable.agentType,
+                visibility?.agentTypes ?? ["agent", "mcp_gateway"],
+              ),
+              eq(schema.agentsTable.builtIn, false),
+              notDeleted(schema.agentsTable),
+              ...(visibility
+                ? [
+                    inArray(schema.agentsTable.id, accessibleIds ?? []),
+                    ...((visibility.excludeOtherPersonalTypes?.length ?? 0) > 0
+                      ? [
+                          or(
+                            AgentModel.notOthersPersonalCondition({
+                              userId: visibility.userId,
+                              principals,
+                            }),
+                            notInArray(
+                              schema.agentsTable.agentType,
+                              visibility.excludeOtherPersonalTypes ?? [],
+                            ),
+                          ),
+                        ]
+                      : []),
+                  ]
+                : []),
+            ),
+          )
       : [];
-    const accessibleIds = visibility
-      ? await AgentTeamModel.getUserAccessibleAgentIds(
-          visibility.userId,
-          false,
-          principals,
-        )
-      : undefined;
-    const entityRows = await db
-      .select({
-        id: schema.agentsTable.id,
-        organizationId: schema.agentsTable.organizationId,
-        name: schema.agentsTable.name,
-        agentType: schema.agentsTable.agentType,
-        scope: schema.agentsTable.scope,
-        icon: schema.agentsTable.icon,
-        accessAllTools: schema.agentsTable.accessAllTools,
-      })
-      .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.organizationId, organizationId),
-          inArray(
-            schema.agentsTable.agentType,
-            visibility?.agentTypes ?? ["agent", "mcp_gateway"],
-          ),
-          eq(schema.agentsTable.builtIn, false),
-          notDeleted(schema.agentsTable),
-          ...(visibility
-            ? [
-                inArray(schema.agentsTable.id, accessibleIds ?? []),
-                ...((visibility.excludeOtherPersonalTypes?.length ?? 0) > 0
-                  ? [
-                      or(
-                        AgentModel.notOthersPersonalCondition({
-                          userId: visibility.userId,
-                          principals,
-                        }),
-                        notInArray(
-                          schema.agentsTable.agentType,
-                          visibility.excludeOtherPersonalTypes ?? [],
-                        ),
-                      ),
-                    ]
-                  : []),
-              ]
-            : []),
-        ),
-      );
     // The stored scope is retired; the audience comes from grants.
     await AgentModel.populateGrantedScope(entityRows);
     const entities = entityRows.flatMap(({ organizationId: _, ...row }) =>
@@ -2622,20 +2684,12 @@ class ToolModel {
       })
       .from(schema.internalMcpCatalogTable)
       .where(
-        and(
-          or(
-            eq(schema.internalMcpCatalogTable.organizationId, organizationId),
-            isNull(schema.internalMcpCatalogTable.organizationId),
-          ),
-          includeAppCatalogs
-            ? undefined
-            : ne(schema.internalMcpCatalogTable.serverType, "app"),
-          catalogId
-            ? eq(schema.internalMcpCatalogTable.id, catalogId)
-            : undefined,
-          isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
-          notDeleted(schema.internalMcpCatalogTable),
-        ),
+        coverageCatalogCondition({
+          organizationId,
+          includeAppCatalogs,
+          catalogId,
+          catalogIds: selectedCatalogIds,
+        }),
       );
     await InternalMcpCatalogModel.populateGrantedScope(catalogRows);
     const catalogs = catalogRows.map(({ id, name, scope, icon }) => ({
@@ -2666,23 +2720,27 @@ class ToolModel {
         })
         .from(schema.toolsTable)
         .where(toolConditions),
-      db
-        .select({
-          toolId: schema.agentToolsTable.toolId,
-          agentId: schema.agentsTable.id,
-          agentName: schema.agentsTable.name,
-          agentType: schema.agentsTable.agentType,
-        })
-        .from(schema.agentToolsTable)
-        .innerJoin(
-          schema.toolsTable,
-          eq(schema.toolsTable.id, schema.agentToolsTable.toolId),
-        )
-        .innerJoin(
-          schema.agentsTable,
-          eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
-        )
-        .where(and(toolConditions, inArray(schema.agentsTable.id, entityIds))),
+      entityIds.length > 0
+        ? db
+            .select({
+              toolId: schema.agentToolsTable.toolId,
+              agentId: schema.agentsTable.id,
+              agentName: schema.agentsTable.name,
+              agentType: schema.agentsTable.agentType,
+            })
+            .from(schema.agentToolsTable)
+            .innerJoin(
+              schema.toolsTable,
+              eq(schema.toolsTable.id, schema.agentToolsTable.toolId),
+            )
+            .innerJoin(
+              schema.agentsTable,
+              eq(schema.agentsTable.id, schema.agentToolsTable.agentId),
+            )
+            .where(
+              and(toolConditions, inArray(schema.agentsTable.id, entityIds)),
+            )
+        : Promise.resolve([]),
     ]);
     return {
       catalogs,
@@ -3340,48 +3398,56 @@ class ToolModel {
    */
   static async findOrCreateDelegationTool(
     targetAgentId: string,
+    transaction?: Transaction,
   ): Promise<Tool> {
-    // Check if delegation tool already exists
-    const [existingTool] = await db
-      .select()
-      .from(schema.toolsTable)
-      .where(eq(schema.toolsTable.delegateToAgentId, targetAgentId))
-      .limit(1);
+    const run = async (tx: Transaction): Promise<Tool> => {
+      await AgentModel.lockRowForUpdate(targetAgentId, tx);
+      // Check if delegation tool already exists
+      const [existingTool] = await tx
+        .select()
+        .from(schema.toolsTable)
+        .where(eq(schema.toolsTable.delegateToAgentId, targetAgentId))
+        .limit(1);
 
-    if (existingTool) {
-      return existingTool;
-    }
+      if (existingTool) {
+        return existingTool;
+      }
 
-    const targetAgent = await AgentModel.findDelegationTarget(targetAgentId);
+      const targetAgent = await AgentModel.findDelegationTarget(
+        targetAgentId,
+        tx,
+      );
 
-    if (!targetAgent) {
-      throw new Error(`Target agent not found: ${targetAgentId}`);
-    }
+      if (!targetAgent) {
+        throw new Error(`Target agent not found: ${targetAgentId}`);
+      }
 
-    // Create delegation tool
-    const toolName = `${AGENT_TOOL_PREFIX}${slugify(targetAgent.name)}`;
-    const [tool] = await db
-      .insert(schema.toolsTable)
-      .values({
-        name: toolName,
-        description: `Delegate task to agent: ${targetAgent.name}`,
-        delegateToAgentId: targetAgentId,
-        agentId: null,
-        catalogId: null,
-        parameters: {
-          type: "object",
-          properties: {
-            message: {
-              type: "string",
-              description: "The task or message to send to the agent",
+      // Create delegation tool
+      const toolName = `${AGENT_TOOL_PREFIX}${slugify(targetAgent.name)}`;
+      const [tool] = await tx
+        .insert(schema.toolsTable)
+        .values({
+          name: toolName,
+          description: `Delegate task to agent: ${targetAgent.name}`,
+          delegateToAgentId: targetAgentId,
+          agentId: null,
+          catalogId: null,
+          parameters: {
+            type: "object",
+            properties: {
+              message: {
+                type: "string",
+                description: "The task or message to send to the agent",
+              },
             },
+            required: ["message"],
           },
-          required: ["message"],
-        },
-      })
-      .returning();
+        })
+        .returning();
 
-    return tool;
+      return tool;
+    };
+    return transaction ? run(transaction) : withDbTransaction(run);
   }
 
   /**
@@ -4142,4 +4208,25 @@ export function toolUiResourceUriSql(): SQL<string | null> {
     case when ${meta}->'_meta'->'ui'->>'resourceUri' like 'ui://%' then ${meta}->'_meta'->'ui'->>'resourceUri' end,
     case when ${meta}->'_meta'->>'ui/resourceUri' like 'ui://%' then ${meta}->'_meta'->>'ui/resourceUri' end
   )`;
+}
+
+/** Identical catalog fences for coverage page candidates and hydrated inventory. */
+function coverageCatalogCondition(params: {
+  organizationId: string;
+  includeAppCatalogs?: boolean;
+  catalogId?: string;
+  catalogIds?: string[];
+}) {
+  const table = schema.internalMcpCatalogTable;
+  return and(
+    or(
+      eq(table.organizationId, params.organizationId),
+      isNull(table.organizationId),
+    ),
+    params.includeAppCatalogs ? undefined : ne(table.serverType, "app"),
+    params.catalogId ? eq(table.id, params.catalogId) : undefined,
+    params.catalogIds ? inArray(table.id, params.catalogIds) : undefined,
+    isNull(table.parentCatalogItemId),
+    notDeleted(table),
+  );
 }

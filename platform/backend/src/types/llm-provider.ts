@@ -284,8 +284,12 @@ export interface LLMResponseAdapter<TResponse> {
       arguments: string;
       /** Written to the client in place of `id` (OpenAPPA's trajectory stamp). */
       wireId?: string;
+      /** Server-generated review to emit as text immediately before this call. */
+      reviewDetails?: string;
     }>,
   ): TResponse;
+  /** The adapter can emit a call's review details as text before the call. */
+  readonly supportsToolCallReview?: boolean;
 
   /**
    * Calls the provider ran inside the inference call, each with what it
@@ -346,6 +350,8 @@ export interface StreamAccumulatorState {
     namespace?: string;
     /** Written to the client in place of `id` (OpenAPPA's trajectory stamp). */
     wireId?: string;
+    /** Server-generated review to emit as text immediately before this call. */
+    reviewDetails?: string;
   }>;
   /** Raw tool call events stored for replay after policy approval */
   rawToolCallEvents: unknown[];
@@ -470,6 +476,8 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
   formatToolCallsSSE?(
     toolCalls: StreamAccumulatorState["toolCalls"],
   ): (string | Uint8Array)[];
+  /** The adapter can emit a call's review details as text before the call. */
+  readonly supportsToolCallReview?: boolean;
 
   /**
    * Asks the adapter to withhold every chunk from the first hosted call on, so

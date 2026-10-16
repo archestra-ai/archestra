@@ -1253,9 +1253,6 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod<{
         ...(tokenAuth.serviceAccountId && {
           serviceAccountId: tokenAuth.serviceAccountId,
         }),
-        ...(tokenAuth.isSystemServiceAccount && {
-          isSystemServiceAccount: true,
-        }),
         ...(tokenAuth.isExternalIdp && { isExternalIdp: true }),
         ...(tokenAuth.rawToken && { rawToken: tokenAuth.rawToken }),
         ...(tokenAuth.oauthClientId && {
@@ -1385,16 +1382,11 @@ function runtimeTokenMatchesRun(params: {
     case "oauthClient":
       return (
         params.tokenAuth.oauthClientId === params.run.actorId ||
-        params.tokenAuth.isOrganizationToken ||
-        Boolean(params.tokenAuth.isSystemServiceAccount)
+        params.tokenAuth.isOrganizationToken
       );
     case "organization":
     case "system":
-      // The built-in system account stands in for the organization token.
-      return (
-        params.tokenAuth.isOrganizationToken ||
-        Boolean(params.tokenAuth.isSystemServiceAccount)
-      );
+      return params.tokenAuth.isOrganizationToken;
   }
 }
 

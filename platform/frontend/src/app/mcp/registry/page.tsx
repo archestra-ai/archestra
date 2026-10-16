@@ -30,7 +30,11 @@ export default async function McpRegistryPage() {
     const headers = await getServerApiHeaders();
     const [catalogResponse, serversResponse] = await Promise.all([
       archestraApiSdk.getInternalMcpCatalog({ headers }),
-      archestraApiSdk.getMcpServers({ headers }),
+      // The same compact list the page's queries ask for, so it seeds them.
+      archestraApiSdk.getMcpServers({
+        headers,
+        query: { includeAssignedAgents: false },
+      }),
     ]);
     if (catalogResponse.error) {
       handleApiError(catalogResponse.error);

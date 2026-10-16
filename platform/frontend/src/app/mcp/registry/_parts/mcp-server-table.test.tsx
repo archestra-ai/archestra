@@ -45,6 +45,11 @@ const {
 vi.mock("@/lib/mcp/mcp-server.query", () => ({
   useBulkUninstallMcpServers: () => ({ mutate: vi.fn(), isPending: false }),
   useMcpServers: useMcpServersMock,
+  useMcpServersAssignedAgents: () => ({
+    agentsByServerId: new Map(),
+    isPending: false,
+    isError: false,
+  }),
   useDismissMcpServerAlerts: () => ({
     mutateAsync: dismissMutateAsync,
     isPending: false,

@@ -448,6 +448,27 @@ export const handlers: HttpHandler[] = [
     pagination: { limit: 20, hasNext: false, nextCursor: null },
   }),
   ...getJson("/api/mcp_server/auto_mode_agents", []),
+  // One install with its agents, which the list leaves out. The uninstall
+  // confirmation reads it to name the agents that lose access. After the
+  // literal `auto_mode_agents` paths so they are never read as an id.
+  ...paths("/api/mcp_server/:id").map((url) =>
+    http.get(url, ({ params }) => {
+      const server = installedServersSeed.find(
+        (candidate) => candidate.id === params.id,
+      );
+      return server
+        ? HttpResponse.json(server)
+        : HttpResponse.json(
+            {
+              error: {
+                message: "MCP server not found",
+                type: "api_not_found_error",
+              },
+            },
+            { status: 404 },
+          );
+    }),
+  ),
   ...getJson("/api/secrets/type", { type: "DB", meta: {} }),
   ...getJson("/api/k8s/image-pull-secrets", []),
   ...getJson("/api/k8s/capabilities", {

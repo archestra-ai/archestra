@@ -234,8 +234,17 @@ export class ResourcePermissions {
   /** Load scoped capabilities once for a request that touches several targets. */
   static async resolveAll(
     params:
-      | { organizationId: string; userId: string; lookups?: PrincipalSource }
-      | { organizationId: string; subjects: PermissionSubject[] },
+      | {
+          organizationId: string;
+          userId: string;
+          lookups?: PrincipalSource;
+          resources?: ScopedResource[];
+        }
+      | {
+          organizationId: string;
+          subjects: PermissionSubject[];
+          resources?: ScopedResource[];
+        },
   ): Promise<ManagedScopedPermission[]> {
     const subjects =
       "subjects" in params
@@ -244,6 +253,7 @@ export class ResourcePermissions {
     const policies = await ResourcePermissionPolicyModel.findForSubjects({
       organizationId: params.organizationId,
       subjects,
+      resources: params.resources,
     });
     const keys = new Set(subjects.map(subjectKey));
     return expandScopedGrants({ policies, subjectKeys: keys });

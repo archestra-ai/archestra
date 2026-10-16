@@ -462,8 +462,10 @@ export default class ResourcePermissionPolicyModel {
   static async findForSubjects(params: {
     organizationId: string;
     subjects: PermissionSubject[];
+    resources?: ScopedResource[];
   }) {
-    if (params.subjects.length === 0) return [];
+    if (params.subjects.length === 0 || params.resources?.length === 0)
+      return [];
     const table = schema.resourcePermissionPoliciesTable;
     const policies = await db
       .select()
@@ -471,6 +473,9 @@ export default class ResourcePermissionPolicyModel {
       .where(
         and(
           eq(table.organizationId, params.organizationId),
+          params.resources
+            ? inArray(table.resource, params.resources)
+            : undefined,
           or(
             ...params.subjects.map(
               (subject) =>

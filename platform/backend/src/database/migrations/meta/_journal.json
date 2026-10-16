@@ -3907,6 +3907,13 @@
       "when": 1792169057965,
       "tag": "0557_service_account_sandbox_owner",
       "breakpoints": true
+    },
+    {
+      "idx": 558,
+      "version": "7",
+      "when": 1792176806888,
+      "tag": "0558_resource_permission_grants_index",
+      "breakpoints": true
     }
   ]
 }

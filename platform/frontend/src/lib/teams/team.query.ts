@@ -28,6 +28,8 @@ export function useTeams(params?: {
    * membership determines which teams can be assigned.
    */
   mine?: boolean;
+  /** Omit members, labels and descendants when only team metadata is needed. */
+  includeRelations?: boolean;
   /** Server-side name filter (case-insensitive substring match). */
   name?: string;
   /** Server-side label filter, serialized as `key:val1|val2;key2:val3`. */
@@ -40,6 +42,7 @@ export function useTeams(params?: {
     queryKey: [
       "teams",
       ...(mine ? ["mine"] : []),
+      ...(params?.includeRelations === false ? ["metadata"] : []),
       ...(name || labels ? [{ name, labels }] : []),
     ],
     queryFn: async () => {
@@ -47,6 +50,9 @@ export function useTeams(params?: {
         query: {
           limit: 100,
           offset: 0,
+          ...(params?.includeRelations === false
+            ? { includeRelations: false }
+            : {}),
           ...(mine ? { mine: true } : {}),
           ...(name ? { name } : {}),
           ...(labels ? { labels } : {}),
@@ -144,13 +150,20 @@ export function useTeamsPaginated(params: TeamsPaginatedParams) {
   });
 }
 
+// SPDX-SnippetBegin
+// SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+// SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 /**
  * Hook to get teams with their vault folder paths
  * Fetches teams first, then fetches vault folders for each team in parallel
  */
-export function useTeamsWithVaultFolders() {
+export function useTeamsWithVaultFolders(params?: { enabled?: boolean }) {
   const byosEnabled = useFeature("byosEnabled");
-  const { data: teams, isLoading: isLoadingTeams } = useTeams();
+  const enabled = (params?.enabled ?? true) && byosEnabled === true;
+  const { data: teams, isLoading: isLoadingTeams } = useTeams({
+    includeRelations: false,
+    enabled,
+  });
 
   const vaultFolderQueries = useQueries({
     queries: (teams || []).map((team) => ({
@@ -161,7 +174,7 @@ export function useTeamsWithVaultFolders() {
         });
         return { teamId: team.id, vaultPath: data?.vaultPath ?? null };
       },
-      enabled: byosEnabled && !!teams,
+      enabled: enabled && !!teams,
     })),
   });
 
@@ -184,3 +197,5 @@ export function useTeamsWithVaultFolders() {
     isLoading,
   };
 }
+
+// SPDX-SnippetEnd

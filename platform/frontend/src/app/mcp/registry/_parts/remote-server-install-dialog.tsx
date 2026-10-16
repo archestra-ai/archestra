@@ -135,7 +135,9 @@ export function RemoteServerInstallDialog({
   >({});
 
   const byosEnabled = useFeature("byosEnabled");
-  const { data: teamsWithVault } = useTeamsWithVaultFolders();
+  const { data: teamsWithVault } = useTeamsWithVaultFolders({
+    enabled: isOpen,
+  });
   const vaultTeams = teamsWithVault?.filter((t) => t.vaultPath);
   const { data: environmentList } = useEnvironments();
   const defaultEnvironment = useDefaultEnvironment();

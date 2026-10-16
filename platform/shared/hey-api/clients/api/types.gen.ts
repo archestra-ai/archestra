@@ -114464,6 +114464,10 @@ export type GetTeamsData = {
         limit?: number;
         offset?: number;
         name?: string;
+        /**
+         * Include team members, labels and descendant teams (default true). Disable for metadata-only pickers.
+         */
+        includeRelations?: boolean;
         labels?: string;
         mine?: boolean;
     };

@@ -433784,6 +433784,15 @@
           },
           {
             "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "includeRelations",
+            "required": false,
+            "description": "Include team members, labels and descendant teams (default true). Disable for metadata-only pickers."
+          },
+          {
+            "schema": {
               "type": "string"
             },
             "in": "query",

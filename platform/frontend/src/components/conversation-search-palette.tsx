@@ -300,6 +300,7 @@ export function ConversationSearchPalette({
       isSearchingEntities,
   });
   const { data: teams = [] } = useTeams({
+    includeRelations: false,
     name: debouncedSearch,
     enabled:
       open && isAuthenticated && canReadTeams === true && isSearchingEntities,

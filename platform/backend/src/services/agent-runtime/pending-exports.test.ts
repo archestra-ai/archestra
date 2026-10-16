@@ -506,17 +506,18 @@ describe("files pinned while their runtime is mid-call", () => {
     expect(pod.discarded).toEqual([]);
     expect(counted).toHaveBeenCalledWith("discard_failed");
     // The mocked admission does not write the native runtime's return store.
-    const drained = crossing.mock.calls[1][0];
+    const admitted = crossing.mock.calls[1][0];
     vi.spyOn(openappa, "loadChildReturns").mockResolvedValue([
       {
-        childSessionId: seeded.child.session_id,
-        operationId: drained.operationId,
-        value: "final report",
+        childSessionId: admitted.session.session_id,
+        operationId: admitted.operationId,
+        value: admitted.value,
       },
     ]);
     const served = await readFile(seeded);
     expect(served.isError).not.toBe(true);
     expect(served.structuredContent).toMatchObject({ content: "final report" });
+    expect(crossing).toHaveBeenCalledTimes(2);
     expect(served.structuredContent).toHaveProperty(
       "pinned_at",
       expect.any(String),

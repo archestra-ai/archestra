@@ -61,7 +61,7 @@ A specification is a UTF-8 .appa file with an ordered scenario. Every file start
 
 ## Resolve names and contracts once
 
-Scenario tool names must be canonical \`<family>/<namespace>/<tool>\` IDs, even when a policy rule uses a raw client name. For an ordinary Archestra MCP name, \`crm__search_records\` becomes \`mcp/crm/search_records\`. Never put the raw double-underscore name in a scenario.
+Scenario tool names must be canonical \`<family>/<namespace>/<tool>\` IDs, even when a policy rule uses a raw client name. The one exception is the replay-only \`appa/do_something\`. For an ordinary Archestra MCP name, \`crm__search_records\` becomes \`mcp/crm/search_records\`. Never put the raw double-underscore name in a scenario.
 
 Use the installed catalog namespace, not a battery's alias: if \`[server_aliases]\` maps \`mail = ["mail_prod"]\`, an installed \`mail_prod__send\` call is \`mcp/mail_prod/send\`, even though its battery rule is \`mcp/mail/send\`. Match it against the effective policy in declaration order: root rules first, then batteries. For native names or names containing additional \`__\` separators, load **Tool names** in \`references/archestra.md\` instead of guessing.
 
@@ -83,7 +83,7 @@ expect deny
 
 Once the relevant contracts and arguments are known, preview the file to replay its decisions instead of simulating the engine in prose. Do not invent a state-changing prerequisite: a tool's name or imagined result does not establish a label.
 
-Add a matched control when claiming that a particular event caused a decision to change. For a read that restricts later sharing or lowers trust, load \`references/validation-read-restriction.md\` for a worked example. Otherwise this reference is sufficient.
+Add a matched control when claiming that a particular event caused a decision to change. For a read that restricts later sharing or lowers trust, load \`references/validation-read-restriction.md\` for a worked example. It also covers a requirement that names no later action, which uses the replay-only \`appa/do_something\` call. Otherwise this reference is sufficient.
 
 Argument blocks are not JSON objects: put each unquoted name on its own line, followed by a colon and one JSON value, without commas between argument lines. Inside a value, use ordinary JSON: quote object keys and keep arrays or objects on one line. Start with one file or a small pair. Preserve existing expectations; explain conflicts rather than rewriting them to force a pass. Do not invent call arguments from a Yell archive.
 
@@ -136,4 +136,27 @@ mcp/mail_prod/send {
 expect deny
 \`\`\`
 
+## When the requirement names no later action
+
+A requirement such as "Slack data stays private" names the read but no later action. Do not choose a policy tool for the operator. Check the restriction with \`appa/do_something\`, a replay-only call. Its one argument, \`requires\`, is a contract's \`requires\` table written as JSON. The call never changes the session, so it can appear before and after the read.
+
+\`appa/do_something\` is less preferred than a real tool from the effective policy. A real tool also checks that its own contract enforces the restriction; \`appa/do_something\` shows only what the session allows at that point. Use a real tool whenever the requirement names the action. When reviewing an \`appa/do_something\` check, say that it does not prove every sending tool checks the restriction.
+
+\`\`\`appa
+# Channel content must not reach the public; the first call is the fresh-session control.
+appa/do_something {
+  requires: {"audience": {"contains": ["public"]}}
+}
+expect allow
+mcp/slack/read_channel {
+  channel_id: "C0123456789"
+}
+expect allow
+appa/do_something {
+  requires: {"audience": {"contains": ["public"]}}
+}
+expect deny
+\`\`\`
+
+For a trust restriction, use \`requires: {"trust": "trusted"}\` with the rank the requirement names. \`requires\` can name only \`public\`, \`self\`, \`internal\`, and the audiences, trust ranks, effects, and attention marks the policy names; it cannot read an argument such as \`$to\`. Anything else reports cannot_run, so check a concrete reader or group with a real tool instead.
 `;

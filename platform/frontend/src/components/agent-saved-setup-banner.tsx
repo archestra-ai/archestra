@@ -69,8 +69,9 @@ export function AgentSavedSetupBanner({
   }
   const missing = [...preflight.data.missing, ...preflight.data.misconfigured];
   // An organization credential this person may not run with blocks the agent
-  // whatever else they set up, so it is the only thing worth showing.
-  const adminOnlyLabels = missing
+  // whatever else they set up, so it is the only thing worth showing. The
+  // setup check reports these under `missing` only.
+  const adminOnlyLabels = preflight.data.missing
     .filter((credential) => credential.adminOnly)
     .map(({ label }) => label);
   if (adminOnlyLabels.length > 0) {

@@ -294,7 +294,9 @@ export default function ValidationPage() {
         <CollectionFilters>
           <FilterBar
             leading
-            actions={<ValidationLastRun />}
+            actions={
+              <ValidationLastRun files={filtered.map((row) => row.file)} />
+            }
             onClearFilters={hasFilters ? clearFilters : undefined}
             search={
               <SearchInput

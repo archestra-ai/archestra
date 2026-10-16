@@ -200,11 +200,16 @@ const summaryTextColor = {
 } as const;
 
 /**
- * One line adding up the per-file statuses, linking to run history. It reads
- * the same results as the Status column, so the two always agree.
+ * One line adding up the per-file statuses of the rows shown, linking to run
+ * history. It reads the same results as the Status column, so the two always
+ * agree, also under a search or status filter.
  */
-export function ValidationLastRun() {
-  const { files, history } = useValidation();
+export function ValidationLastRun({
+  files,
+}: {
+  files: { path: string; content: string }[];
+}) {
+  const { history } = useValidation();
   const hashes = useValidationFileHashes(files);
   const summary =
     hashes.data && history.data

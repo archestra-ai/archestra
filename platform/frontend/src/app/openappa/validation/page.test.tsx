@@ -976,7 +976,7 @@ test("duplicate filenames block saving until repaired, and a saved rename update
   ).toHaveValue("second contents");
 });
 
-test("list retains full totals across search and pagination", async () => {
+test("the last-run line adds up the searched rows, not just the current page", async () => {
   const files = Array.from({ length: 12 }, (_, i) => ({
     path: `scenario-${String(i + 1).padStart(3, "0")}.appa`,
     content: scenario.content,
@@ -1012,6 +1012,7 @@ test("list retains full totals across search and pagination", async () => {
       screen.getByRole("link", { name: "scenario-011.appa" }),
     ).toBeVisible(),
   );
+  expect(await findLastRun()).toHaveTextContent("6 of 12 passed");
   fireEvent.change(screen.getByPlaceholderText("Search validations…"), {
     target: { value: "scenario-001" },
   });
@@ -1020,7 +1021,9 @@ test("list retains full totals across search and pagination", async () => {
       screen.getByRole("link", { name: "scenario-001.appa" }),
     ).toBeVisible(),
   );
-  expect(await findLastRun()).toHaveTextContent("6 of 12 passed");
+  await waitFor(async () =>
+    expect(await findLastRun()).toHaveTextContent("1 of 1 passed"),
+  );
   expect(screen.getAllByText("Page 1 of 1")[0]).toBeVisible();
   expect(
     screen.getAllByRole("button", { name: "Go to next page" })[0],

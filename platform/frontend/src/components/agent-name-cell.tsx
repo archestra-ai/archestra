@@ -1,10 +1,10 @@
 "use client";
 
 import type { archestraApiTypes } from "@archestra/shared";
-import Link from "next/link";
 import type { ReactNode } from "react";
 import { RowClickShield } from "@/components/agent-pages/row-click-shield";
 import { BuiltInAgentBadge } from "@/components/built-in-agent-badge";
+import { IntentPrefetchLink } from "@/components/intent-prefetch-link";
 import { LabelTags } from "@/components/label-tags";
 import { PersonalResourceOwner } from "@/components/personal-resource-owner";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
@@ -63,15 +63,16 @@ export function AgentNameCell({
         {href ? (
           // The row itself navigates to the same page; the link stays for
           // keyboard users and open-in-new-tab, and keeps its click to
-          // itself so the row handler does not fire a second navigation.
-          <Link
+          // itself so the row handler does not fire a second navigation. It
+          // prefetches on hover or focus, not for every row in view.
+          <IntentPrefetchLink
             href={href}
             className="max-w-full shrink-0 truncate leading-tight hover:underline"
             title={name}
             onClick={(e) => e.stopPropagation()}
           >
             {name}
-          </Link>
+          </IntentPrefetchLink>
         ) : onClick ? (
           <UnstyledButton
             type="button"

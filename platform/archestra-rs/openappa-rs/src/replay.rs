@@ -230,7 +230,8 @@ fn replay_runtime(request: &Request, defaults: HostDefaults) -> Result<Replaying
     }
     let store = Arc::new(LogStore::open(Backend::Memory).map_err(|error| error.to_string())?);
     let unanswered = Arc::new(Unanswered::default());
-    let runtime = crate::policy::open(config, store)?.recording(unanswered.clone());
+    let runtime =
+        crate::policy::open(config.with_do_something(), store)?.recording(unanswered.clone());
     let runtime = match &request.annotator_context {
         Some(context) => runtime.with_archestra_context(context.clone()),
         None => runtime,
@@ -382,11 +383,11 @@ async fn run_with(request: Request, defaults: HostDefaults) -> Response {
         assertions += trace.steps.len();
         let runtime = if trace.steps.is_empty() || assertions > MAX_ASSERTIONS {
             Err("Scenarios need at least one assertion and at most 1000 assertions per run".into())
-        } else if let Some(step) = trace
-            .steps
-            .iter()
-            .find(|step| (crate::adapter::adapter().spell)(&step.tool).is_none())
-        {
+        } else if let Some(step) = trace.steps.iter().find(|step| {
+            step.tool
+                .canonical()
+                .is_some_and(|tool| (crate::adapter::adapter().spell)(tool).is_none())
+        }) {
             Err(format!(
                 "Line {}: {} cannot be dispatched through the Archestra adapter",
                 step.line, step.tool

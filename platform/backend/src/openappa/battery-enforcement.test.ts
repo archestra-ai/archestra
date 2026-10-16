@@ -186,7 +186,9 @@ ${catchAllRules()}`,
         catchAllMismatches: calls
           .filter(
             ({ rule }, index) =>
-              (governed[index].actual === CATCH_ALL_MARK) !== (rule === null),
+              (governed[index].actual === CATCH_ALL_MARK &&
+                !asksApproval(policies, rule)) !==
+              (rule === null),
           )
           .map(({ label }) => label),
         misdecided: calls.flatMap(({ label, rule, arguments: args }, index) => {
@@ -585,6 +587,23 @@ function ruleHelper(
       ),
     ],
   };
+}
+
+/**
+ * Whether a rule itself requires the attention mark the root's `hitl` authority
+ * permits: its call then gets the same decision as the catch-all.
+ */
+function asksApproval(policies: string[], rule: string | null): boolean {
+  if (rule === null) return false;
+  const requires = policies
+    .flatMap(toolEntries)
+    .find(({ name }) => name === rule)?.requires as
+    | { attention?: unknown }
+    | undefined;
+  return (
+    Array.isArray(requires?.attention) &&
+    requires.attention.includes("human-approval")
+  );
 }
 
 /** The annotator a step's error names when its consult went unanswered. */

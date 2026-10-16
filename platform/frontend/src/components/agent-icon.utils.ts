@@ -24,15 +24,17 @@ export const CATALOG_AGENT_ICONS: Record<AgentCatalogId, string> = {
   openclaw: "/agent-logos/openclaw.svg",
 };
 
+const CATALOG_AGENT_ID_BY_ICON = new Map(
+  Object.entries(CATALOG_AGENT_ICONS).map(
+    ([id, icon]) => [icon, id as AgentCatalogId] as const,
+  ),
+);
+
 /** The catalog template whose saved icon this is, if any. */
 export function getCatalogAgentId(
   icon: string | null | undefined,
 ): AgentCatalogId | null {
-  if (!icon) return null;
-  const match = Object.entries(CATALOG_AGENT_ICONS).find(
-    ([, value]) => value === icon,
-  );
-  return match ? (match[0] as AgentCatalogId) : null;
+  return icon ? (CATALOG_AGENT_ID_BY_ICON.get(icon) ?? null) : null;
 }
 
 export function getBuiltInServiceIconPath(

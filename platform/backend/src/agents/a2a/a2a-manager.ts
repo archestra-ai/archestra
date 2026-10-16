@@ -700,8 +700,7 @@ export class A2AManager {
                   : undefined,
               messages: requestMessages,
               organizationId: actor.organizationId,
-              userId: executorUserId(actor),
-              actorTeamId: actor.kind === "team" ? actor.id : undefined,
+              userId: a2aActorUserId(actor),
               sessionId,
               source: systemParams?.source,
               // A chat posts a paused review to the requester (see ChatOps).
@@ -1390,7 +1389,7 @@ export class A2AManager {
         approvalDecisions = await decideCallerHitlReviews({
           organizationId: params.actor.organizationId,
           taskId: task.id,
-          userId: executorUserId(params.actor),
+          userId: a2aActorUserId(params.actor),
           approvalDecisions,
           now: new Date(),
         });
@@ -1815,22 +1814,6 @@ export class A2AManager {
         kind: "user",
         organizationId,
       };
-    } else if (tokenAuth.teamId) {
-      const team = await TeamModel.findById(tokenAuth.teamId);
-      if (!team) {
-        throw new A2AError(A2AErrorKind.TeamNotFound);
-      }
-      return {
-        id: tokenAuth.teamId,
-        kind: "team",
-        organizationId,
-      };
-    } else if (tokenAuth.isOrganizationToken) {
-      return {
-        id: tokenAuth.organizationId,
-        kind: "organization",
-        organizationId,
-      };
     }
 
     if (tokenAuth.oauthClientId) {
@@ -1848,6 +1831,22 @@ export class A2AManager {
       kind: "system",
       organizationId,
     };
+  }
+}
+
+/**
+ * The principal a turn runs as. A service account acts under its synthetic
+ * user id so the run is authorized against the account's own grants; every
+ * other non-user actor runs as the headless "system" sentinel.
+ */
+function a2aActorUserId(actor: A2AActor): string {
+  switch (actor.kind) {
+    case "user":
+      return actor.id;
+    case "serviceAccount":
+      return serviceAccountUserId(actor.id);
+    default:
+      return "system";
   }
 }
 
@@ -1915,17 +1914,6 @@ function toProtocolPushConfig(config: {
         : {}),
     },
   };
-}
-
-/** TaskStatus.message carrying a terminal reason (same shape GetTask serves). */
-/**
- * The user id a run executes as. A service account runs as itself; team and
- * organization tokens have no principal of their own.
- */
-function executorUserId(actor: A2AActor): string {
-  if (actor.kind === "user") return actor.id;
-  if (actor.kind === "serviceAccount") return serviceAccountUserId(actor.id);
-  return "system";
 }
 
 function extractApprovalRequestsFromUiMessage(

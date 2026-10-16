@@ -352,7 +352,8 @@ describe("delegation tool execution", () => {
         tokenAuth: {
           tokenId: crypto.randomUUID(),
           teamId: null,
-          isOrganizationToken: true,
+          isOrganizationToken: false,
+          serviceAccountId: crypto.randomUUID(),
           organizationId: organization.id,
           isUserToken: false,
         },

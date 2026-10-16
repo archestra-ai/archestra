@@ -1,6 +1,8 @@
 import {
+  ADMIN_ROLE_NAME,
   archestraApiSdk,
   getManageCredentialsButtonTestId,
+  MEMBER_ROLE_NAME,
 } from "@archestra/shared";
 import {
   type APIRequestContext,
@@ -175,29 +177,14 @@ export async function makeApiRequest(params: {
   return response;
 }
 
+/**
+ * A gateway key that reaches every agent the organization may use, the way the
+ * retired organization token did: an admin service account's key.
+ */
 export async function getOrgTokenForProfile(
   request: APIRequestContext,
 ): Promise<string> {
-  const tokensResponse = await makeApiRequest({
-    request,
-    method: "get",
-    urlSuffix: "/api/tokens",
-  });
-  const tokensData = await tokensResponse.json();
-  const orgToken = tokensData.tokens.find(
-    (token: { isOrganizationToken: boolean }) => token.isOrganizationToken,
-  );
-
-  if (!orgToken) {
-    throw new Error("No organization token found");
-  }
-
-  const valueResponse = await makeApiRequest({
-    request,
-    method: "get",
-    urlSuffix: `/api/tokens/${orgToken.id}/value`,
-  });
-  return (await valueResponse.json()).value;
+  return await getServiceAccountKey(request, { teamName: null });
 }
 
 export async function initializeMcpSession(
@@ -308,31 +295,61 @@ export async function callMcpTool(
   return callResult.result;
 }
 
+/**
+ * A gateway key that acts for one team, the way the retired team token did: a
+ * member service account linked to that team.
+ */
 export async function getTeamTokenForProfile(
   request: APIRequestContext,
   teamName: string,
 ): Promise<string> {
-  const tokensResponse = await makeApiRequest({
-    request,
-    method: "get",
-    urlSuffix: "/api/tokens",
-  });
-  const tokensData = await tokensResponse.json();
-  const teamToken = tokensData.tokens.find(
-    (token: { isOrganizationToken: boolean; team?: { name: string } }) =>
-      !token.isOrganizationToken && token.team?.name === teamName,
-  );
+  return await getServiceAccountKey(request, { teamName });
+}
 
-  if (!teamToken) {
-    throw new Error(`No team token found for team ${teamName}`);
+/**
+ * A fresh service account (linked to the named team, or an admin account for
+ * the organization) and one key for it.
+ */
+async function getServiceAccountKey(
+  request: APIRequestContext,
+  params: { teamName: string | null },
+): Promise<string> {
+  let teamId: string | null = null;
+  if (params.teamName) {
+    const teamsResponse = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: "/api/teams",
+    });
+    const body = await teamsResponse.json();
+    const teams: { id: string; name: string }[] = Array.isArray(body)
+      ? body
+      : body.data;
+    const team = teams.find((t) => t.name === params.teamName);
+    if (!team) throw new Error(`Team '${params.teamName}' not found`);
+    teamId = team.id;
   }
 
-  const valueResponse = await makeApiRequest({
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const accountResponse = await makeApiRequest({
     request,
-    method: "get",
-    urlSuffix: `/api/tokens/${teamToken.id}/value`,
+    method: "post",
+    urlSuffix: "/api/service-accounts",
+    data: {
+      name: `e2e ${params.teamName ?? "organization"} ${suffix}`,
+      role: teamId ? MEMBER_ROLE_NAME : ADMIN_ROLE_NAME,
+      teamId,
+    },
   });
-  return (await valueResponse.json()).value;
+  const account = await accountResponse.json();
+
+  const tokenResponse = await makeApiRequest({
+    request,
+    method: "post",
+    urlSuffix: `/api/service-accounts/${account.id}/tokens`,
+    data: { name: "e2e gateway key" },
+  });
+  return (await tokenResponse.json()).token;
 }
 
 type McpTool = {

@@ -87,6 +87,15 @@ export function useAgentOptionsByIds({
   });
 }
 
+/** Complete ID lookup for explicit bulk-selection/filtering actions only. */
+export async function fetchAgentOptionIds(filters?: AgentOptionFilters) {
+  const { data, error } = await archestraApiSdk.getAgentOptionIds({
+    query: { excludeBuiltIn: true, ...filters },
+  });
+  throwOnApiError(error, { toastOnError: false });
+  return data ?? [];
+}
+
 /** Explicit Select all needs IDs, never presentation data for the entire set. */
 export function useAgentOptionIds({
   filters,
@@ -97,13 +106,7 @@ export function useAgentOptionIds({
 }) {
   return useQuery({
     queryKey: ["agents", "options", "all-ids", filters],
-    queryFn: async () => {
-      const { data, error } = await archestraApiSdk.getAgentOptionIds({
-        query: { excludeBuiltIn: true, ...filters },
-      });
-      throwOnApiError(error, { toastOnError: false });
-      return data ?? [];
-    },
+    queryFn: () => fetchAgentOptionIds(filters),
     enabled,
   });
 }

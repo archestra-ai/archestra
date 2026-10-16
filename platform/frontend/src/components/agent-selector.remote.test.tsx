@@ -138,6 +138,37 @@ describe("server-backed agent choices", () => {
     expect(selected).toEqual(["owner-match"]);
   });
 
+  it("fetches complete IDs only after explicitly selecting all from an empty value", async () => {
+    let idReads = 0;
+    const selections: string[][] = [];
+    server.use(
+      http.get(`${ORIGIN}/api/agents/options/page`, () =>
+        HttpResponse.json(page([option("first")], "next")),
+      ),
+      http.get(`${ORIGIN}/api/agents/options/ids`, () => {
+        idReads += 1;
+        return HttpResponse.json(["first", "unseen"]);
+      }),
+    );
+    mount(
+      <AgentSelector
+        mode="multiple"
+        flat
+        remote={{ filters: { agentType: "agent" } }}
+        value={[]}
+        onValueChange={(ids) => selections.push(ids)}
+        allOption={{ label: "All agents" }}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("combobox"));
+    expect(await screen.findByText("first")).toBeVisible();
+    expect(idReads).toBe(0);
+    await user.click(screen.getByRole("option", { name: "All agents" }));
+    await waitFor(() => expect(selections).toEqual([["first", "unseen"]]));
+    expect(idReads).toBe(1);
+  });
+
   it("retains unseen selected IDs, bounds chip lookups, and Select all includes later candidates", async () => {
     const ids = Array.from({ length: 45 }, (_, i) => `saved-${i}`);
     const referenceSizes: number[] = [];

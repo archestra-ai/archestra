@@ -364,6 +364,9 @@ function MultiAgentSelector({
       flat: flat === true,
     });
   const allAgentIds = remoteState?.allIds ?? agents.map((agent) => agent.id);
+  const hasAllCandidates = remoteState
+    ? remoteState.hasCandidates
+    : allAgentIds.length > 0;
   const allSelected =
     !!allOption &&
     allAgentIds.length > 0 &&
@@ -385,9 +388,11 @@ function MultiAgentSelector({
     setSearch("");
   };
 
-  const handleSelectAll = () => {
+  const handleSelectAll = async () => {
     if (remoteState?.selectionPending) return;
-    onValueChange(allSelected ? [] : allAgentIds);
+    const ids = remoteState ? await remoteState.loadAllIds() : allAgentIds;
+    if (!ids) return;
+    onValueChange(allSelected ? [] : ids);
     setSearch("");
   };
 
@@ -511,7 +516,7 @@ function MultiAgentSelector({
             {flat ? (
               <>
                 {allOption &&
-                  allAgentIds.length > 0 &&
+                  hasAllCandidates &&
                   matchesSearch(allOption.label, search) && (
                     <CommandGroup>
                       <CommandItem
@@ -546,7 +551,7 @@ function MultiAgentSelector({
               <AgentSelectorGroups
                 allOption={
                   allOption &&
-                  allAgentIds.length > 0 &&
+                  hasAllCandidates &&
                   matchesSearch(allOption.label, search)
                     ? {
                         label: allOption.label,
@@ -882,7 +887,7 @@ function RemoteAgentSelector(props: AgentSelectorProps) {
   const needsAllIds = props.mode === "multiple" && !!props.allOption;
   const allIds = useAgentOptionIds({
     filters,
-    enabled: enabled && open && needsAllIds,
+    enabled: enabled && open && needsAllIds && selectedIds.length > 0,
   });
   const queryKey = JSON.stringify([filters, debouncedSearch]);
   const [requested, setRequested] = useState({ key: queryKey, page: 0 });
@@ -906,6 +911,12 @@ function RemoteAgentSelector(props: AgentSelectorProps) {
     search,
     setSearch,
     selectedAgents: selected.data ?? props.agents ?? [],
+    hasCandidates: (pages[0]?.data.length ?? 0) > 0,
+    loadAllIds: async () => {
+      if (allIds.isSuccess) return allIds.data;
+      const result = await allIds.refetch();
+      return result.isSuccess ? result.data : undefined;
+    },
     allIds: needsAllIds ? (allIds.data ?? []) : undefined,
     selectionPending:
       needsAllIds && selectedIds.length > 0 && !allIds.isSuccess,
@@ -941,6 +952,8 @@ type RemoteAgentChoices = {
   setSearch: (search: string) => void;
   selectedAgents: AgentSelectorAgent[];
   allIds?: string[];
+  hasCandidates: boolean;
+  loadAllIds: () => Promise<string[] | undefined>;
   selectionPending: boolean;
   page: number;
   hasNext: boolean;

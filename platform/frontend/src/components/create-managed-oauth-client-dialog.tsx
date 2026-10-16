@@ -18,9 +18,9 @@ import {
   type OAuthClientFormValues,
   OAuthClientScopePicker,
   oauthCapabilities,
-  oauthClientFormBody,
   oauthClientFormReady,
-  setOauthClientScopes,
+  resolveOauthClientFormBody,
+  useOauthClientScopeChange,
 } from "@/components/oauth-client/configuration-fields";
 import {
   Accordion,
@@ -33,6 +33,7 @@ import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
+import { useAgentOptionsByIds } from "@/lib/agent-options.query";
 import { useServiceAccounts } from "@/lib/service-account.query";
 import { useTeams } from "@/lib/teams/team.query";
 
@@ -44,7 +45,7 @@ const steps = [
 export function CreateManagedOAuthClientDialog({
   open,
   onOpenChange,
-  gateways,
+  gateways: providedGateways,
   providerApiKeys,
   onSubmit,
   isSubmitting,
@@ -53,7 +54,7 @@ export function CreateManagedOAuthClientDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  gateways: AgentSelectorAgent[];
+  gateways?: AgentSelectorAgent[];
   providerApiKeys: archestraApiTypes.GetLlmProviderApiKeysResponses["200"];
   onSubmit: (
     body: archestraApiTypes.CreateOauthClientData["body"],
@@ -82,6 +83,12 @@ export function CreateManagedOAuthClientDialog({
   const [step, setStep] = useState(0);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const values = form.watch();
+  const selectedTargets = useAgentOptionsByIds({
+    ids: (values.allowedGatewayIds ?? []).slice(0, 20),
+    enabled: providedGateways === undefined && open,
+  });
+  const gateways = providedGateways ?? selectedTargets.data ?? [];
+  const scopeChange = useOauthClientScopeChange(form, providedGateways);
   useEffect(() => {
     if (open) {
       setStep(0);
@@ -102,7 +109,7 @@ export function CreateManagedOAuthClientDialog({
       });
     }
   }, [open, form, defaultClientType, defaultTargetIds]);
-  const ready = oauthClientFormReady(values);
+  const ready = oauthClientFormReady(values) && !scopeChange.isPending;
   const hasAdvanced =
     values.grantType === "client_credentials" ||
     values.scopes.includes("llm:proxy");
@@ -127,7 +134,10 @@ export function CreateManagedOAuthClientDialog({
             setStep(step + 1);
             return;
           }
-          if (ready) await onSubmit(oauthClientFormBody(values, gateways));
+          if (ready)
+            await onSubmit(
+              await resolveOauthClientFormBody(values, providedGateways),
+            );
         })}
       >
         <DialogBody className="space-y-5 pb-0">
@@ -156,9 +166,8 @@ export function CreateManagedOAuthClientDialog({
               </div>
               <OAuthClientScopePicker
                 value={values.scopes}
-                onChange={(scopes) =>
-                  setOauthClientScopes(form, scopes, gateways)
-                }
+                onChange={scopeChange.change}
+                disabled={scopeChange.isPending || form.formState.isSubmitting}
               />
               <ChoiceCards
                 label="How does it sign in?"
@@ -190,6 +199,7 @@ export function CreateManagedOAuthClientDialog({
               <OAuthClientAccessFields
                 form={form}
                 gateways={gateways}
+                remoteGateways={providedGateways === undefined}
                 providerApiKeys={providerApiKeys}
                 showServiceAccount={false}
                 providerAccessSurface="create"
@@ -323,6 +333,8 @@ export function CreateManagedOAuthClientDialog({
             type="submit"
             disabled={
               isSubmitting ||
+              form.formState.isSubmitting ||
+              scopeChange.isPending ||
               (step === 0
                 ? !values.name.trim() || !values.scopes.length
                 : !ready)
